@@ -1,4 +1,2 @@
-{% include [x](_includes/index/intro.md) %}
-
-{% include [x](_includes/index/list.md) %}
-
+{% include [intro](_includes/index/intro.md) %}
+{% include [list](_includes/index/list.md) %}

@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "flat_part_scheme.h"
 #include "flat_page_btree_index.h"
-#include "flat_page_index.h"
+#include "flat_page_flat_index.h"
 #include "flat_page_data.h"
 #include "flat_page_blobs.h"
 #include "flat_page_frames.h"
@@ -11,7 +11,6 @@
 #include "flat_page_gstat.h"
 #include "flat_page_txidstat.h"
 #include "flat_page_txstatus.h"
-#include "util_basics.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -49,11 +48,40 @@ namespace NTable {
 
         struct TIndexPages {
             using TPageId = NPage::TPageId;
+            using TGroupId = NPage::TGroupId;
             using TBtreeIndexMeta = NPage::TBtreeIndexMeta;
-            const TVector<TPageId> Groups;
-            const TVector<TPageId> Historic;
+            const TVector<TPageId> FlatGroups;
+            const TVector<TPageId> FlatHistoric;
             const TVector<TBtreeIndexMeta> BTreeGroups;
             const TVector<TBtreeIndexMeta> BTreeHistoric;
+
+            bool HasBTree() const noexcept {
+                return !BTreeGroups.empty();
+            }
+
+            bool HasFlat() const noexcept {
+                return !FlatGroups.empty();
+            }
+
+            const TBtreeIndexMeta& GetBTree(TGroupId groupId) const noexcept {
+                if (groupId.IsHistoric()) {
+                    Y_ABORT_UNLESS(groupId.Index < BTreeHistoric.size());
+                    return BTreeHistoric[groupId.Index];
+                } else {
+                    Y_ABORT_UNLESS(groupId.Index < BTreeGroups.size());
+                    return BTreeGroups[groupId.Index];
+                }
+            }
+
+            TPageId GetFlat(TGroupId groupId) const noexcept {
+                if (groupId.IsHistoric()) {
+                    Y_ABORT_UNLESS(groupId.Index < FlatHistoric.size());
+                    return FlatHistoric[groupId.Index];
+                } else {
+                    Y_ABORT_UNLESS(groupId.Index < FlatGroups.size());
+                    return FlatGroups[groupId.Index];
+                }
+            }
         };
 
         struct TParams {
@@ -92,8 +120,8 @@ namespace NTable {
             , GarbageStats(std::move(params.GarbageStats))
             , TxIdStats(std::move(params.TxIdStats))
             , Stat(stat)
-            , GroupsCount(IndexPages.Groups.size())
-            , HistoricGroupsCount(IndexPages.Historic.size())
+            , GroupsCount(Max(IndexPages.FlatGroups.size(), IndexPages.BTreeGroups.size()))
+            , HistoricGroupsCount(Max(IndexPages.FlatHistoric.size(), IndexPages.BTreeHistoric.size()))
             , IndexesRawSize(params.IndexesRawSize)
             , MinRowVersion(params.MinRowVersion)
             , MaxRowVersion(params.MaxRowVersion)
@@ -127,9 +155,10 @@ namespace NTable {
 
         virtual ui64 DataSize() const = 0;
         virtual ui64 BackingSize() const = 0;
-        virtual ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
-        virtual NPage::EPage GetPageType(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
-        virtual ui8 GetGroupChannel(NPage::TGroupId groupId = { }) const = 0;
+        virtual ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
+        virtual ui64 GetPageSize(ELargeObj lob, ui64 ref) const = 0;
+        virtual NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
+        virtual ui8 GetGroupChannel(NPage::TGroupId groupId) const = 0;
         virtual ui8 GetPageChannel(ELargeObj lob, ui64 ref) const = 0;
 
     protected:

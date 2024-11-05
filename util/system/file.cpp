@@ -297,7 +297,7 @@ TFileHandle::TFileHandle(const std::filesystem::path& path, EOpenMode oMode) noe
     }
     #endif
 
-    //temp file
+    // temp file
     if (Fd_ >= 0 && (oMode & Transient)) {
         std::filesystem::remove(path);
     }
@@ -446,6 +446,12 @@ bool TFileHandle::FallocateNoResize(i64 length) noexcept {
     }
 #if defined(_linux_) && (!defined(_android_) || __ANDROID_API__ >= 21)
     return !fallocate(Fd_, FALLOC_FL_KEEP_SIZE, 0, length);
+#elif defined(_win_)
+    FILE_ALLOCATION_INFO allocInfo = {};
+    allocInfo.AllocationSize.QuadPart = length;
+
+    return SetFileInformationByHandle(Fd_, FileAllocationInfo, &allocInfo,
+                                      sizeof(FILE_ALLOCATION_INFO));
 #else
     Y_UNUSED(length);
     return true;
@@ -664,7 +670,7 @@ bool TFileHandle::LinkTo(const TFileHandle& fh) const noexcept {
         return false;
     }
 
-    //not thread-safe
+    // not thread-safe
     nh.Swap(*const_cast<TFileHandle*>(this));
 
     return true;
@@ -832,51 +838,63 @@ TString DecodeOpenMode(ui32 mode0) {
 
     TStringBuilder r;
 
-#define F(flag)                   \
-    if ((mode & flag) == flag) {  \
-        mode &= ~flag;            \
-        if (r) {                  \
-            r << TStringBuf("|"); \
-        }                         \
-        r << TStringBuf(#flag);   \
-    }
+    struct TFlagCombo {
+        ui32 Value;
+        TStringBuf Name;
+    };
 
-    F(RdWr)
-    F(RdOnly)
-    F(WrOnly)
+    static constexpr TFlagCombo knownFlagCombos[]{
 
-    F(CreateAlways)
-    F(CreateNew)
-    F(OpenAlways)
-    F(TruncExisting)
-    F(ForAppend)
-    F(Transient)
-    F(CloseOnExec)
+#define F(flag) {flag, #flag}
 
-    F(Temp)
-    F(Sync)
-    F(Direct)
-    F(DirectAligned)
-    F(Seq)
-    F(NoReuse)
-    F(NoReadAhead)
+        F(RdWr),
+        F(RdOnly),
+        F(WrOnly),
 
-    F(AX)
-    F(AR)
-    F(AW)
-    F(ARW)
+        F(CreateAlways),
+        F(CreateNew),
+        F(OpenAlways),
+        F(TruncExisting),
+        F(ForAppend),
+        F(Transient),
+        F(CloseOnExec),
 
-    F(AXOther)
-    F(AWOther)
-    F(AROther)
-    F(AXGroup)
-    F(AWGroup)
-    F(ARGroup)
-    F(AXUser)
-    F(AWUser)
-    F(ARUser)
+        F(Temp),
+        F(Sync),
+        F(Direct),
+        F(DirectAligned),
+        F(Seq),
+        F(NoReuse),
+        F(NoReadAhead),
+
+        F(AX),
+        F(AR),
+        F(AW),
+        F(ARW),
+
+        F(AXOther),
+        F(AWOther),
+        F(AROther),
+        F(AXGroup),
+        F(AWGroup),
+        F(ARGroup),
+        F(AXUser),
+        F(AWUser),
+        F(ARUser),
 
 #undef F
+
+    };
+
+    for (const auto& [flag, name] : knownFlagCombos) {
+        if ((mode & flag) == flag) {
+            mode &= ~flag;
+            if (r) {
+                r << '|';
+            }
+            r << name;
+        }
+    }
 
     if (mode != 0) {
         if (r) {
@@ -890,7 +908,7 @@ TString DecodeOpenMode(ui32 mode0) {
         return "0";
     }
 
-    return r;
+    return std::move(r);
 }
 
 class TFile::TImpl: public TAtomicRefCount<TImpl> {
@@ -1318,7 +1336,7 @@ void TFile::LinkTo(const TFile& f) const {
 }
 
 TFile TFile::Temporary(const TString& prefix) {
-    //TODO - handle impossible case of name collision
+    // TODO - handle impossible case of name collision
     return TFile(prefix + ToString(MicroSeconds()) + "-" + ToString(RandomNumber<ui64>()), CreateNew | RdWr | Seq | Temp | Transient);
 }
 

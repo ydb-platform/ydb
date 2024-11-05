@@ -11,11 +11,14 @@ PEERDIR(
     ydb/core/blobstorage/pdisk
     ydb/core/control
     ydb/core/keyvalue
+    ydb/core/jaeger_tracing
     ydb/core/kqp/common
     ydb/core/kqp/rm_service
     ydb/core/tx/columnshard
     ydb/core/tx/datashard
-    ydb/library/workload
+    ydb/library/workload/abstract
+    ydb/library/workload/kv
+    ydb/library/workload/stock
     ydb/public/lib/base
     ydb/public/lib/operation_id
     ydb/public/sdk/cpp/client/ydb_proto
@@ -59,5 +62,6 @@ GENERATE_ENUM_SERIALIZATION(percentile.h)
 END()
 
 RECURSE_FOR_TESTS(
+    ut
     ut_ycsb
 )

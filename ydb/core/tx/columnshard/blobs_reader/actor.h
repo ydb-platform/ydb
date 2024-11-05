@@ -22,7 +22,7 @@ public:
     void Bootstrap();
 
     STFUNC(StateWait) {
-        TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD);
+        TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("event_type", ev->GetTypeName());
         switch (ev->GetTypeRewrite()) {
             hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, Handle);
             default:

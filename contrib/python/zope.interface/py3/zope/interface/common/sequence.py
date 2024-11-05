@@ -33,6 +33,7 @@ __docformat__ = 'restructuredtext'
 from zope.interface import Interface
 from zope.interface.common import collections
 
+
 class IMinimalSequence(collections.IIterable):
     """Most basic sequence interface.
 
@@ -54,6 +55,7 @@ class IMinimalSequence(collections.IIterable):
         Declaring this interface does not specify whether `__getitem__`
         supports slice objects."""
 
+
 class IFiniteSequence(collections.ISized, IMinimalSequence):
     """
     A sequence of bound size.
@@ -61,6 +63,7 @@ class IFiniteSequence(collections.ISized, IMinimalSequence):
     .. versionchanged:: 5.0.0
        Extend ``ISized``
     """
+
 
 class IReadSequence(collections.IContainer, IFiniteSequence):
     """
@@ -119,6 +122,7 @@ class IExtendedReadSequence(IReadSequence):
         Return first index of *value*
         """
 
+
 class IUniqueMemberWriteSequence(Interface):
     """The write contract for a sequence that may enforce unique members"""
 
@@ -160,11 +164,13 @@ class IUniqueMemberWriteSequence(Interface):
     def extend(iterable):
         """Extend list by appending elements from the iterable"""
 
+
 class IWriteSequence(IUniqueMemberWriteSequence):
     """Full write contract for sequences"""
 
     def __imul__(n):
         """``x.__imul__(n) <==> x *= n``"""
+
 
 class ISequence(IReadSequence, IWriteSequence):
     """

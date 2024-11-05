@@ -3,6 +3,10 @@
 #include <ydb/core/tx/columnshard/data_sharing/common/session/common.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 
+namespace NKikimr::NIceDb {
+class TNiceDb;
+}
+
 namespace NKikimr::NOlap::NDataSharing {
 
 class TSharedBlobsManager;
@@ -15,7 +19,7 @@ private:
     YDB_READONLY_DEF(std::set<ui64>, PathIds);
     TTabletId DestinationTabletId = TTabletId(0);
 protected:
-    virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) override;
+    virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) override;
     virtual THashSet<ui64> GetPathIdsForStart() const override {
         THashSet<ui64> result;
         for (auto&& i : PathIds) {
@@ -59,20 +63,22 @@ public:
         return Cursor;
     }
 
-    bool TryNextCursor(const ui32 packIdx, const std::shared_ptr<TSharedBlobsManager>& sharedBlobsManager, const TVersionedIndex& index) {
+    void SaveCursorToDatabase(NIceDb::TNiceDb& db);
+    /*
+    bool TryNextCursor(const ui32 packIdx, const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index) {
         AFL_VERIFY(Cursor);
         if (packIdx != Cursor->GetPackIdx()) {
             return false;
         }
-        Cursor->Next(sharedBlobsManager, index);
+        Cursor->Next(storagesManager, index);
         return true;
     }
-
+*/
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& selfPtr);
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckData(NColumnShard::TColumnShard* self, const ui32 receivedPackIdx, const std::shared_ptr<TSourceSession>& selfPtr);
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckLinks(NColumnShard::TColumnShard* self, const TTabletId tabletId, const ui32 packIdx, const std::shared_ptr<TSourceSession>& selfPtr);
 
-    void ActualizeDestination(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
+    void ActualizeDestination(const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
 
     NKikimrColumnShardDataSharingProto::TSourceSession SerializeDataToProto() const {
         NKikimrColumnShardDataSharingProto::TSourceSession result;

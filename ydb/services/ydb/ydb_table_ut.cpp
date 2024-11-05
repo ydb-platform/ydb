@@ -325,6 +325,80 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         }
     }
 
+    Y_UNIT_TEST(TestDecimal1) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+        auto session = CreateSession(connection);
+
+        auto result = session.ExecuteDataQuery(R"___(
+            SELECT CAST("9" as Decimal(1,0));
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        TVector<TResultSet> resultSets = result.GetResultSets();
+        UNIT_ASSERT_EQUAL(resultSets.size(), 1);
+        UNIT_ASSERT_EQUAL(resultSets[0].ColumnsCount(), 1);
+        UNIT_ASSERT_EQUAL(resultSets[0].GetColumnsMeta().size(), 1);
+        auto column = resultSets[0].GetColumnsMeta()[0];
+        TTypeParser typeParser(column.Type);
+        typeParser.OpenOptional();
+        UNIT_ASSERT_EQUAL(typeParser.GetKind(), TTypeParser::ETypeKind::Decimal);
+
+        TResultSetParser rsParser(resultSets[0]);
+        while (rsParser.TryNextRow()) {
+            auto columnParser = std::move(rsParser.ColumnParser(0));
+            columnParser.OpenOptional();
+            auto decimalString = columnParser.GetDecimal().ToString();
+            UNIT_ASSERT_EQUAL(decimalString, "9");
+            UNIT_ASSERT_VALUES_EQUAL(columnParser.GetDecimal().DecimalType_.Precision, 1);
+            UNIT_ASSERT_VALUES_EQUAL(columnParser.GetDecimal().DecimalType_.Scale, 0);
+        }
+    }
+
+    Y_UNIT_TEST(TestDecimal35) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+        auto session = CreateSession(connection);
+
+        auto result = session.ExecuteDataQuery(R"___(
+            SELECT CAST("155555555555555.12345678" as Decimal(35,10));
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        TVector<TResultSet> resultSets = result.GetResultSets();
+        UNIT_ASSERT_EQUAL(resultSets.size(), 1);
+        UNIT_ASSERT_EQUAL(resultSets[0].ColumnsCount(), 1);
+        UNIT_ASSERT_EQUAL(resultSets[0].GetColumnsMeta().size(), 1);
+        auto column = resultSets[0].GetColumnsMeta()[0];
+        TTypeParser typeParser(column.Type);
+        typeParser.OpenOptional();
+        UNIT_ASSERT_EQUAL(typeParser.GetKind(), TTypeParser::ETypeKind::Decimal);
+
+        TResultSetParser rsParser(resultSets[0]);
+        while (rsParser.TryNextRow()) {
+            auto columnParser = std::move(rsParser.ColumnParser(0));
+            columnParser.OpenOptional();
+            auto decimalString = columnParser.GetDecimal().ToString();
+            UNIT_ASSERT_EQUAL(decimalString, "155555555555555.12345678");
+            UNIT_ASSERT_VALUES_EQUAL(columnParser.GetDecimal().DecimalType_.Precision, 35);
+            UNIT_ASSERT_VALUES_EQUAL(columnParser.GetDecimal().DecimalType_.Scale, 10);
+        }
+    }    
+
     Y_UNIT_TEST(TestDecimalFullStack) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
@@ -345,7 +419,9 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             auto tableBuilder = client.GetTableBuilder();
             tableBuilder
                 .AddNullableColumn("Key", EPrimitiveType::Int32)
-                .AddNullableColumn("Value", TDecimalType(22,9));
+                .AddNullableColumn("Value1", TDecimalType(1,0))
+                .AddNullableColumn("Value22", TDecimalType(22,9))
+                .AddNullableColumn("Value35", TDecimalType(35,10));
             tableBuilder.SetPrimaryKeyColumn("Key");
             auto result = session.CreateTable("/Root/FooTable", tableBuilder.Build()).ExtractValueSync();
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
@@ -354,20 +430,36 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
 
         {
             TString query = R"___(
-                DECLARE $Value AS Decimal(22,9);
+                DECLARE $Value1 AS Decimal(1,0);
+                DECLARE $Value22 AS Decimal(22,9);
+                DECLARE $Value35 AS Decimal(35,10);
                 DECLARE $Key AS Int32;
-                UPSERT INTO `Root/FooTable` (Key, Value) VALUES
-                    ($Key, $Value);
+                UPSERT INTO `Root/FooTable` (Key, Value1, Value22, Value35) VALUES
+                    ($Key, $Value1, $Value22, $Value35);
              )___";
 
             constexpr int records = 5;
             int count = records;
-            const TString decimalParams[records] = {
+            const TString decimalParams1[records] = {
+                "1",
+                "4",
+                "0",
+                "-4",
+                "-1"
+            };
+            const TString decimalParams22[records] = {
                 "123",
                 "4.56",
                 "0",
                 "-4.56",
                 "-123"
+            };
+            const TString decimalParams35[records] = {
+                "155555555555555.12345678",
+                "4.56",
+                "0",
+                "-4.56",
+                "-155555555555555.12345678"
             };
             while (count--) {
                 auto paramsBuilder = client.GetParamsBuilder();
@@ -375,8 +467,14 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                     .AddParam("$Key")
                         .Int32(count)
                         .Build()
-                    .AddParam("$Value")
-                        .Decimal(TDecimalValue(decimalParams[count]))
+                    .AddParam("$Value1")
+                        .Decimal(TDecimalValue(decimalParams1[count], 1, 0))
+                        .Build()
+                    .AddParam("$Value22")
+                        .Decimal(TDecimalValue(decimalParams22[count], 22, 9))
+                        .Build()
+                    .AddParam("$Value35")
+                        .Decimal(TDecimalValue(decimalParams35[count], 35, 10))
                         .Build()
                     .Build();
                 auto result = session
@@ -384,36 +482,42 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                         .CommitTx(), std::move(params))
                     .ExtractValueSync();
 
-                UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             }
 
         }
 
         {
-            TString query = R"___(SELECT SUM(Value),MIN(Value),MAX(Value) FROM `Root/FooTable`)___";
+            TString query = R"___(SELECT SUM(Value1),MIN(Value1),MAX(Value1),SUM(Value22),MIN(Value22),MAX(Value22),SUM(Value35),MIN(Value35),MAX(Value35) FROM `Root/FooTable`)___";
             auto result = session
                 .ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW())
                     .CommitTx())
                 .ExtractValueSync();
 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             TVector<TResultSet> resultSets = result.GetResultSets();
-            UNIT_ASSERT_EQUAL(resultSets.size(), 1);
-            UNIT_ASSERT_EQUAL(resultSets[0].ColumnsCount(), 3);
-            UNIT_ASSERT_EQUAL(resultSets[0].GetColumnsMeta().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resultSets[0].ColumnsCount(), 9);
+            UNIT_ASSERT_VALUES_EQUAL(resultSets[0].GetColumnsMeta().size(), 9);
 
             for (auto column : resultSets[0].GetColumnsMeta()) {
                 TTypeParser typeParser(column.Type);
-                UNIT_ASSERT_EQUAL(typeParser.GetKind(), TTypeParser::ETypeKind::Optional);
+                UNIT_ASSERT_VALUES_EQUAL(typeParser.GetKind(), TTypeParser::ETypeKind::Optional);
                 typeParser.OpenOptional();
-                UNIT_ASSERT_EQUAL(typeParser.GetKind(), TTypeParser::ETypeKind::Decimal);
+                UNIT_ASSERT_VALUES_EQUAL(typeParser.GetKind(), TTypeParser::ETypeKind::Decimal);
             }
 
             TResultSetParser rsParser(resultSets[0]);
-            const TString expected[3] = {
+            const TString expected[9] = {
+                "0",
+                "-4",
+                "4",
                 "0",
                 "-123",
-                "123"
+                "123",
+                "0",
+                "-155555555555555.12345678",
+                "155555555555555.12345678",
             };
             while (rsParser.TryNextRow()) {
                 for (size_t i = 0; i < resultSets[0].ColumnsCount(); i++) {
@@ -428,10 +532,10 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         {
             auto res = session.DescribeTable("Root/FooTable").ExtractValueSync();
             UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
-            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
-            UNIT_ASSERT_EQUAL(res.GetTableDescription().GetColumns().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetColumns().size(), 4);
 
-            TTypeParser::ETypeKind kinds[2] = {TTypeParser::ETypeKind::Primitive, TTypeParser::ETypeKind::Decimal};
+            TTypeParser::ETypeKind kinds[4] = {TTypeParser::ETypeKind::Primitive, TTypeParser::ETypeKind::Decimal, TTypeParser::ETypeKind::Decimal, TTypeParser::ETypeKind::Decimal};
             int i = 0;
             for (const auto& column : res.GetTableDescription().GetColumns()) {
                 auto tParser = TTypeParser(column.Type);
@@ -590,9 +694,6 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 .UseSecureConnection(NYdbSslTestData::CaCrt)
                 .SetEndpoint(location));
 
-        auto& tableSettings = server.GetServer().GetSettings().AppConfig->GetTableServiceConfig();
-        bool useSchemeCacheMeta = tableSettings.GetUseSchemeCacheMetadata();
-
         {
             auto session = CreateSession(connection, "root@builtin");
             {
@@ -648,8 +749,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 )__",TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
                 UNIT_ASSERT_EQUAL(status.IsTransportError(), false);
-                UNIT_ASSERT_EQUAL(status.GetStatus(),
-                    useSchemeCacheMeta ? EStatus::SCHEME_ERROR : EStatus::UNAUTHORIZED);
+                UNIT_ASSERT_EQUAL(status.GetStatus(), EStatus::SCHEME_ERROR);
             }
         }
     }
@@ -1057,80 +1157,6 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         }
     }
 
-    Y_UNIT_TEST(TestExecError) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
-        TKikimrWithGrpcAndRootSchema server(appConfig);
-        ui16 grpc = server.GetPort();
-
-        TString location = TStringBuilder() << "localhost:" << grpc;
-
-        auto connection = NYdb::TDriver(
-            TDriverConfig()
-                .SetEndpoint(location));
-        NYdb::NTable::TTableClient client(connection);
-        auto session = client.CreateSession().ExtractValueSync().GetSession();
-
-        {
-            auto status = session.ExecuteSchemeQuery(R"___(
-                CREATE TABLE `Root/Test` (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )___").ExtractValueSync();
-            UNIT_ASSERT_EQUAL(status.GetStatus(), EStatus::SUCCESS);
-        }
-
-        auto fillQueryResult = session.PrepareDataQuery(R"___(
-            DECLARE $Data AS List<Struct<Key:Uint64, Value:String>>;
-
-            REPLACE INTO `Root/Test`
-            SELECT data.Key AS Key, data.Value AS Value FROM (SELECT $Data AS data) FLATTEN BY data;
-        )___").ExtractValueSync();
-        UNIT_ASSERT_EQUAL(fillQueryResult.GetStatus(), EStatus::SUCCESS);
-        auto query = fillQueryResult.GetQuery();
-
-        const ui32 BATCH_NUM = 5;
-        const ui32 BATCH_ROWS = 100;
-        const ui32 BLOB_SIZE = 100 * 1024; // 100 Kb
-
-        for (ui64 i = 0; i < BATCH_NUM ; ++i) {
-            TParamsBuilder paramsBuilder = client.GetParamsBuilder();
-
-            auto& paramBuilder = paramsBuilder.AddParam("$Data");
-
-            paramBuilder.BeginList();
-            for (ui64 j = 0; j < BATCH_ROWS; ++j) {
-                auto key = i * BATCH_ROWS + j;
-                auto val = TString(BLOB_SIZE, '0' + key % 10);
-                paramBuilder.AddListItem()
-                    .BeginStruct()
-                        .AddMember("Key")
-                            .Uint64(key)
-                        .AddMember("Value")
-                            .String(val)
-                    .EndStruct();
-            }
-            paramBuilder.EndList();
-            paramBuilder.Build();
-
-            auto result = query.Execute(TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-                paramsBuilder.Build()).ExtractValueSync();
-            UNIT_ASSERT_EQUAL(result.GetStatus(),  EStatus::SUCCESS);
-        }
-
-        auto result = session.ExecuteDataQuery(R"___(
-            SELECT * FROM `Root/Test` WHERE Key != 1;
-        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_EQUAL(result.GetStatus(),  EStatus::UNDETERMINED);
-
-        UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_RESULT_UNAVAILABLE,
-            "Result of Kikimr query didn't meet requirements and isn't available"sv), result.GetIssues().ToString());
-
-        UNIT_ASSERT_C(result.GetIssues().ToString().Contains("REPLY_SIZE_EXCEEDED"), result.GetIssues().ToString());
-    }
-
     Y_UNIT_TEST(TestDoubleKey) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();
@@ -1521,6 +1547,238 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
             // Attempt to call ReadNext on finished iterator causes ContractViolation
             UNIT_ASSERT_EXCEPTION(it.ReadNext().GetValueSync().EOS(), NYdb::TContractViolation);
+        }
+    }
+
+    Y_UNIT_TEST(TestReadTableNotNullBorder) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"___(
+            CREATE TABLE `Root/Test` (
+                Key Uint64 NOT NULL,
+                Value String,
+                Amount Decimal(22,9) NOT NULL,
+                PRIMARY KEY (Key)
+            );
+        )___").ExtractValueSync();
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        result = session.ExecuteDataQuery(R"___(
+            UPSERT INTO `Root/Test` (Key, Value, Amount) VALUES (0u, "Zero", UNWRAP(CAST("0.11" AS Decimal(22, 9))));
+            UPSERT INTO `Root/Test` (Key, Value, Amount) VALUES (1u, "One", UNWRAP(CAST("1.11" AS Decimal(22, 9))));
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        {
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .Uint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .From(TKeyBound::Inclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[[1u];[\"One\"];[\"1.11\"]]]");
+        }
+
+        {
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .Uint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .ReturnNotNullAsOptional(false)
+                .From(TKeyBound::Inclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[1u;[\"One\"];\"1.11\"]]");
+        }
+
+        {
+            // Allow to use Optional values for NOT NULL columns
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .OptionalUint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .From(TKeyBound::Inclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::SUCCESS, streamPart.GetIssues().ToString());
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[[1u];[\"One\"];[\"1.11\"]]]");
+        }
+
+        {
+            // Allow to use Optional values for NOT NULL columns
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .OptionalUint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .From(TKeyBound::Inclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::SUCCESS, streamPart.GetIssues().ToString());
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[[1u];[\"One\"];[\"1.11\"]]]");
+        }
+
+        {
+            // Allow to use Optional values for NOT NULL columns
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .OptionalUint64(Nothing())
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .From(TKeyBound::Inclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::SUCCESS, streamPart.GetIssues().ToString());
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[[0u];[\"Zero\"];[\"0.11\"]];[[1u];[\"One\"];[\"1.11\"]]]");
+        }
+
+        {
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .Uint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .From(TKeyBound::Exclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[]");
+        }
+
+        {
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .Uint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .ReturnNotNullAsOptional(false)
+                .From(TKeyBound::Exclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[]");
+        }
+    }
+
+    // Same but use reverce order of column in tuple
+    Y_UNIT_TEST(TestReadTableNotNullBorder2) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"___(
+            CREATE TABLE `Root/Test` (
+                aaa String,
+                zzz Uint64 NOT NULL,
+                PRIMARY KEY (zzz)
+            );
+        )___").ExtractValueSync();
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        result = session.ExecuteDataQuery(R"___(
+            UPSERT INTO `Root/Test` (zzz, aaa) VALUES (1u, "One");
+        )___", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        {
+            auto selectResult = session.ExecuteDataQuery(R"(
+                SELECT zzz, aaa FROM `Root/Test`;
+            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(selectResult.GetStatus(), EStatus::SUCCESS);
+            auto text = FormatResultSetYson(selectResult.GetResultSet(0));
+            UNIT_ASSERT_VALUES_EQUAL("[[1u;[\"One\"]]]", text);
+        }
+
+        {
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .Uint64(1)
+                .EndTuple();
+
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .From(TKeyBound::Inclusive(valueFrom.Build()));
+
+            auto it = session.ReadTable("Root/Test", settings).ExtractValueSync();
+
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
+
+            auto str = NYdb::FormatResultSetYson(streamPart.ExtractPart());
+            UNIT_ASSERT_VALUES_EQUAL(str, "[[[\"One\"];[1u]]]");
         }
     }
 
@@ -3163,7 +3421,6 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     Y_UNIT_TEST(SimpleColumnFamilies) {
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
-        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true;
         InitSubDomain(server);
 
         auto connection = NYdb::TDriver(
@@ -3421,7 +3678,6 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     Y_UNIT_TEST(ColumnFamiliesWithStorageAndIndex) {
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
-        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true;
         InitSubDomain(server);
 
         auto connection = NYdb::TDriver(
@@ -3463,7 +3719,6 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     Y_UNIT_TEST(ColumnFamiliesDescriptionWithStorageAndIndex) {
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
-        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true;
         InitSubDomain(server);
 
         auto connection = NYdb::TDriver(
@@ -3520,7 +3775,6 @@ R"___(<main>: Error: Transaction not found: , code: 2015
     Y_UNIT_TEST(ColumnFamiliesExternalBlobsWithoutDefaultProfile) {
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
-        server.Server_->GetRuntime()->GetAppData().AllowColumnFamiliesForTest = true;
         server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnablePublicApiExternalBlobs(true);
         InitSubDomain(server, EDefaultTableProfile::Disabled);
 
@@ -3589,6 +3843,8 @@ R"___(<main>: Error: Transaction not found: , code: 2015
 
     Y_UNIT_TEST(TestDescribeTableWithShardStats) {
         TKikimrWithGrpcAndRootSchema server;
+        auto nodeId = server.Server_->GetRuntime()->GetNodeId(0);
+        UNIT_ASSERT(nodeId > 0);
 
         auto connection = NYdb::TDriver(
             TDriverConfig()
@@ -3648,7 +3904,26 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionsCount(), 2);
             UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats()[0].LeaderNodeId, 0);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats()[1].LeaderNodeId, 0);
         }
+
+        {
+            TDescribeTableSettings describeTableSettings =
+                TDescribeTableSettings()
+                    .WithTableStatistics(true)
+                    .WithPartitionStatistics(true)
+                    .WithShardNodesInfo(true);
+
+            auto res = session.DescribeTable("Root/Foo", describeTableSettings).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(res.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionsCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats()[0].LeaderNodeId, nodeId);
+            UNIT_ASSERT_VALUES_EQUAL(res.GetTableDescription().GetPartitionStats()[1].LeaderNodeId, nodeId);
+        }
+
     }
 
     Y_UNIT_TEST(TestExplicitPartitioning) {

@@ -1,11 +1,11 @@
 /* ----------
- * progress.c
+ * backend_progress.c
  *
  *	Command progress reporting infrastructure.
  *
- *	Copyright (c) 2001-2021, PostgreSQL Global Development Group
+ *	Copyright (c) 2001-2023, PostgreSQL Global Development Group
  *
- *	src/backend/postmaster/progress.c
+ *	src/backend/utils/activity/backend_progress.c
  * ----------
  */
 #include "postgres.h"
@@ -55,6 +55,27 @@ pgstat_progress_update_param(int index, int64 val)
 
 	PGSTAT_BEGIN_WRITE_ACTIVITY(beentry);
 	beentry->st_progress_param[index] = val;
+	PGSTAT_END_WRITE_ACTIVITY(beentry);
+}
+
+/*-----------
+ * pgstat_progress_incr_param() -
+ *
+ * Increment index'th member in st_progress_param[] of own backend entry.
+ *-----------
+ */
+void
+pgstat_progress_incr_param(int index, int64 incr)
+{
+	volatile PgBackendStatus *beentry = MyBEEntry;
+
+	Assert(index >= 0 && index < PGSTAT_NUM_PROGRESS_PARAM);
+
+	if (!beentry || !pgstat_track_activities)
+		return;
+
+	PGSTAT_BEGIN_WRITE_ACTIVITY(beentry);
+	beentry->st_progress_param[index] += incr;
 	PGSTAT_END_WRITE_ACTIVITY(beentry);
 }
 

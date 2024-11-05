@@ -3,7 +3,9 @@ BridgeCreateYqlPlugin
 BridgeStartYqlPlugin
 BridgeFreeYqlPlugin
 BridgeFreeQueryResult
+BridgeFreeClustersResult
 BridgeRun
+BridgeGetUsedClusters
 BridgeGetProgress
 BridgeGetAbiVersion
 BridgeAbort
@@ -15,3 +17,6 @@ UdfFreeWithSize
 UdfRegisterObject
 UdfTerminate
 UdfUnregisterObject
+UdfArrowAllocate
+UdfArrowReallocate
+UdfArrowFree

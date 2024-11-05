@@ -14,7 +14,7 @@ def main(argv):
     print("name:",name)
     print("input_dir:",input_dir)
     print("output_dir:",output_dir)
-    
+
     in_h=os.path.join(input_dir,name + ".pb.h")
     in_cpp=os.path.join(input_dir,name + ".pb.cc")
     out_h=os.path.join(output_dir,name + ".pb.main.h")
@@ -24,7 +24,7 @@ def main(argv):
        with open(in_h,"r") as in_file:
            for line in in_file:
               line = line.replace("inline void RegisterArenaDtor","void RegisterArenaDtor")
-              out_file.write(line) 
+              out_file.write(line)
 
     for i in range(0,2 + NSPLIT):
         with open(out_cpp_template.replace("I","code" + str(i) + ".cc" if i<NSPLIT else "data.cc" if i==NSPLIT else "classes.h"),"w") as out_file:
@@ -48,6 +48,8 @@ def main(argv):
                     out_file.write(line)
                 for line in in_file:
                     line=line.replace("inline ","")
+                    if 'Generated::' in line and line.endswith('_default_instance_._instance,\n'):
+                        line = 'reinterpret_cast<const ::_pb::Message*>(' + line.removesuffix('._instance,\n') + '),'
                     if line.startswith("#"):
                         out_file.write(line)
                         continue
@@ -66,11 +68,12 @@ def main(argv):
                            in_class_def=False
                         continue
                     if line.startswith("PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT"):
-                        type_name=line.split(" ")[2]
+                        # MOD1 MOD2 MOD3 ... type_name varibale_name;
+                        type_name=line.split(" ")[-2]
                         if type_name in current_types:
                             out_file.write(line)
                         continue
-                    if line.startswith("static ") or (line.startswith("const ") and ("[]" in line or "=" in line)) or line.startswith("PROTOBUF_ATTRIBUTE_WEAK"):
+                    if line.startswith("static ") or (line.startswith("const ") and ("[]" in line or "=" in line)) or line.startswith("PROTOBUF_ATTRIBUTE_WEAK") or line.startswith("PROTOBUF_ATTRIBUTE_INIT_PRIORITY2"):
                         is_data_stmt = True
                         extern_data = "file_level_metadata" in line or ("descriptor_table" in line and "once" in line)
                         extern_code = line.startswith("PROTOBUF_ATTRIBUTE_WEAK")

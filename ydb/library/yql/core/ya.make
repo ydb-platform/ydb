@@ -28,6 +28,7 @@ SRCS(
     yql_join.cpp
     yql_join.h
     yql_library_compiler.cpp
+    yql_opt_hopping.cpp
     yql_opt_match_recognize.cpp
     yql_opt_match_recognize.h
     yql_opt_proposed_by_data.cpp
@@ -72,6 +73,7 @@ PEERDIR(
     ydb/library/yql/core/url_preprocessing/interface
     ydb/library/yql/minikql
     ydb/library/yql/minikql/jsonpath
+    ydb/library/minsketch
     ydb/library/yql/protos
     ydb/library/yql/public/udf
     ydb/library/yql/public/udf/tz
@@ -90,6 +92,8 @@ GENERATE_ENUM_SERIALIZATION(yql_atom_enums.h)
 
 GENERATE_ENUM_SERIALIZATION(yql_type_annotation.h)
 
+GENERATE_ENUM_SERIALIZATION(yql_cost_function.h)
+
 YQL_LAST_ABI_VERSION()
 
 END()
@@ -105,7 +109,9 @@ RECURSE(
     facade
     file_storage
     issue
+    pg_ext
     peephole_opt
+    qplayer
     services
     spilling
     sql_types

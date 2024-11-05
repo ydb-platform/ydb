@@ -127,7 +127,9 @@ void WriteProviders(const TString& tag, const TProviderInfoMap& providers, NYson
             writer.OnListItem();
             writer.OnBeginMap();
             writer.OnKeyedItem("Id");
-            writer.OnUint64Scalar(p.second.Pin.find(pin)->second);
+            const auto found = p.second.Pin.find(pin);
+            YQL_ENSURE(found != p.second.Pin.cend());
+            writer.OnUint64Scalar(found->second);
             p.second.Provider->GetPlanFormatter().WritePinDetails(*pin, writer);
             writer.OnEndMap();
         }
@@ -218,31 +220,21 @@ public:
             if (info.Provider) {
                 TVector<TPinInfo> inputs;
                 TVector<TPinInfo> outputs;
-                info.Provider->GetPlanFormatter().GetInputs(*node, inputs);
-                info.Provider->GetPlanFormatter().GetOutputs(*node, outputs);
-                if (inputs.size()) {
+                info.InputsCount = info.Provider->GetPlanFormatter().GetInputs(*node, inputs, settings.WithLimits);
+                info.OutputsCount = info.Provider->GetPlanFormatter().GetOutputs(*node, outputs, settings.WithLimits);
+                if (info.InputsCount) {
                     writer.OnKeyedItem("InputsCount");
-                    writer.OnUint64Scalar(inputs.size());
+                    writer.OnUint64Scalar(info.InputsCount);
                 }
 
-                if (outputs.size()) {
+                if (info.OutputsCount) {
                     writer.OnKeyedItem("OutputsCount");
-                    writer.OnUint64Scalar(outputs.size());
-                }
-
-                info.InputsCount = inputs.size();
-                info.OutputsCount = outputs.size();
-                if (settings.LimitInputPins && inputs.size() > *settings.LimitInputPins) {
-                    inputs.resize(*settings.LimitInputPins, TPinInfo(nullptr, nullptr, nullptr, "", true));
-                }
-
-                if (settings.LimitOutputPins && outputs.size() > *settings.LimitOutputPins) {
-                    outputs.resize(*settings.LimitOutputPins, TPinInfo(nullptr, nullptr, nullptr, "", true));
+                    writer.OnUint64Scalar(info.OutputsCount);
                 }
 
                 WritePins("Inputs", inputs, writer, info.Inputs, providers);
                 WritePins("Outputs", outputs, writer, info.Outputs, providers);
-                info.Provider->GetPlanFormatter().WritePlanDetails(*info.Node, writer);
+                info.Provider->GetPlanFormatter().WritePlanDetails(*info.Node, writer, settings.WithLimits);
             }
 
             TSet<ui64> dependsOn;
@@ -422,7 +414,9 @@ public:
         THashMap<TPinKey, ui32, TPinKey::THash> allInputs;
         THashMap<TPinKey, ui32, TPinKey::THash> allOutputs;
         for (auto node : order) {
-            auto& info = nodes.find(node.Get())->second;
+            const auto found = nodes.find(node.Get());
+            YQL_ENSURE(found != nodes.cend());
+            auto& info = found->second;
             if (!info.IsVisible) {
                 continue;
             }

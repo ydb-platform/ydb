@@ -46,7 +46,8 @@ void FillSpec(NYT::TNode& spec,
     const TTransactionCache::TEntry::TPtr& entry,
     double extraCpu,
     const TMaybe<double>& secondExtraCpu,
-    EYtOpProps opProps = 0);
+    EYtOpProps opProps = 0,
+    const TSet<TString>& addSecTags = {});
 
 void FillSecureVault(NYT::TNode& spec, const IYtGateway::TSecureParams& secureParams);
 
@@ -67,6 +68,7 @@ void FillOperationOptionsImpl(NYT::TOperationOptions& opOpts,
 
 namespace NPrivate {
     Y_HAS_MEMBER(SecureParams);
+    Y_HAS_MEMBER(AdditionalSecurityTags);
 }
 
 template <class TOptions>
@@ -77,7 +79,11 @@ inline void FillSpec(NYT::TNode& spec,
     const TMaybe<double>& secondExtraCpu,
     EYtOpProps opProps = 0)
 {
-    FillSpec(spec, execCtx, execCtx.Options_.Config(), entry, extraCpu, secondExtraCpu, opProps);
+    TSet<TString> addSecTags = {};
+    if constexpr (NPrivate::THasAdditionalSecurityTags<TOptions>::value) {
+        addSecTags = execCtx.Options_.AdditionalSecurityTags();
+    }
+    FillSpec(spec, execCtx, execCtx.Options_.Config(), entry, extraCpu, secondExtraCpu, opProps, addSecTags);
     if constexpr (NPrivate::THasSecureParams<TOptions>::value) {
         FillSecureVault(spec, execCtx.Options_.SecureParams());
     }
@@ -91,6 +97,7 @@ inline void FillOperationSpec(NYT::TUserOperationSpecBase<TDerived>& spec, const
     if (auto val = execCtx->Options_.Config()->CoreDumpPath.Get()) {
         spec.CoreTablePath(*val);
     }
+    
 }
 
 template <class TExecParamsPtr>

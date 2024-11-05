@@ -26,7 +26,7 @@ public:
     {
 #define HNDL(name) "Peephole-"#name, Hndl(&TYtPeepholeTransformer::name)
         AddHandler(0, &TYtLength::Match, HNDL(OptimizeLength));
-        AddHandler(0, &TYtDqWideWrite::Match, HNDL(OptimizeYtDqWideWrite));
+        AddHandler(0, &TYtDqWrite::Match, HNDL(OptimizeYtDqWrite));
 #undef HNDL
     }
 
@@ -59,9 +59,37 @@ private:
         return node;
     }
 
-    TMaybeNode<TExprBase> OptimizeYtDqWideWrite(TExprBase node, TExprContext& ctx) {
+    TMaybeNode<TExprBase> OptimizeYtDqWrite(TExprBase node, TExprContext& ctx) {
+        const auto write = node.Cast<TYtDqWrite>();
+
+        const auto& items = GetSeqItemType(write.Input().Ref().GetTypeAnn())->Cast<TStructExprType>()->GetItems();
+        auto expand = ctx.Builder(write.Pos())
+            .Callable("ExpandMap")
+                .Add(0, write.Input().Ptr())
+                .Lambda(1)
+                    .Param("item")
+                    .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& {
+                        ui32 i = 0U;
+                        for (const auto& item : items) {
+                            lambda.Callable(i++, "Member")
+                                .Arg(0, "item")
+                                .Atom(1, item->GetName())
+                            .Seal();
+                        }
+                        return lambda;
+                    })
+                .Seal()
+            .Seal().Build();
+
+        TYtDqWideWrite wideWrite = Build<TYtDqWideWrite>(ctx, write.Pos())
+            .Input(std::move(expand))
+            .Settings(write.Settings())
+            .Done();
+
         if (Settings_.empty()) {
-            return node;
+            return Build<TCoDiscard>(ctx, write.Pos())
+                .Input(wideWrite)
+                .Done();
         }
 
         auto cluster = Settings_.at("yt_cluster");
@@ -73,11 +101,7 @@ private:
         auto outSpec = Settings_.at("yt_outSpec");
         auto tx = Settings_.at("yt_tx");
 
-        // Check that we optimize only single YtDqWideWrite
-        if (auto setting = GetSetting(TYtDqWideWrite(&node.Ref()).Settings().Ref(), "table")) {
-            YQL_ENSURE(setting->Child(1)->Content() == table);
-            return node;
-        }
+        YQL_ENSURE(!HasSetting(wideWrite.Settings().Ref(), "table"));
 
         TMaybeNode<TCoSecureParam> secParams;
         if (State_->Configuration->Auth.Get().GetOrElse(TString())) {
@@ -119,7 +143,9 @@ private:
             .Build()
             .Done().Ptr();
 
-        return ctx.ChangeChild(node.Ref(), TYtDqWideWrite::idx_Settings, std::move(settings));
+        return Build<TCoDiscard>(ctx, write.Pos())
+            .Input(ctx.ChangeChild(wideWrite.Ref(), TYtDqWideWrite::idx_Settings, std::move(settings)))
+            .Done();
     }
 
     const TYtState::TPtr State_;

@@ -31,9 +31,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
                     Self->State == TShardState::SplitSrcWaitForNoTxInFlight ||
                     Self->State == TShardState::SplitSrcMakeSnapshot);
 
-            const bool needFutureCleanup = (
-                    Self->TxInFly() > 0 ||
-                    (expireSnapshotsAllowed && Self->GetSnapshotManager().HasExpiringSnapshots()));
+            const bool needFutureCleanup = Self->TxInFly() > 0 || expireSnapshotsAllowed;
 
             if (needFutureCleanup) {
                 Self->PlanCleanup(ctx);
@@ -151,7 +149,6 @@ void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
     }
 
     Self->CheckSplitCanStart(ctx);
-    Self->CheckMvccStateChangeCanStart(ctx);
 }
 
 }}

@@ -11,7 +11,7 @@ namespace NFq {
 ////////////////////////////////////////////////////////////////////////////////
 
 TStateStoragePtr NewYdbStateStorage(
-    const NConfig::TYdbStorageConfig& config,
+    const NConfig::TCheckpointCoordinatorConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TYqSharedResources::TPtr& yqSharedResources);
 

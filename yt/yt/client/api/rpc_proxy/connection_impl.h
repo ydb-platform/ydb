@@ -9,7 +9,7 @@
 #include <yt/yt/core/rpc/public.h>
 
 // TODO(prime@): Create HTTP endpoint for discovery that works without authentication.
-#include <yt/yt/core/misc/atomic_object.h>
+#include <library/cpp/yt/threading/atomic_object.h>
 
 #include <yt/yt/core/service_discovery/public.h>
 
@@ -35,7 +35,7 @@ public:
     TClusterTag GetClusterTag() const override;
     const TString& GetLoggingTag() const override;
     const TString& GetClusterId() const override;
-    const std::optional<TString>& GetClusterName() const override;
+    const std::optional<std::string>& GetClusterName() const override;
 
     bool IsSameCluster(const IConnectionPtr& other) const override;
 
@@ -77,8 +77,8 @@ private:
 
     NServiceDiscovery::IServiceDiscoveryPtr ServiceDiscovery_;
 
-    std::vector<TString> DiscoverProxiesViaHttp();
-    std::vector<TString> DiscoverProxiesViaServiceDiscovery();
+    std::vector<std::string> DiscoverProxiesViaHttp();
+    std::vector<std::string> DiscoverProxiesViaServiceDiscovery();
 
     void OnProxyListUpdate();
 };

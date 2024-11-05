@@ -284,7 +284,7 @@ namespace NKikimr::NBlobDepot {
                 Y_ABORT_UNLESS(!WrittenBeyondBarrier);
 
                 TBlobStorageQuery::EndWithSuccess(std::make_unique<TEvBlobStorage::TEvPutResult>(NKikimrProto::OK, Request.Id,
-                    Agent.GetStorageStatusFlags(), Agent.VirtualGroupId, Agent.GetApproximateFreeSpaceShare()));
+                    Agent.GetStorageStatusFlags(), TGroupId::FromValue(Agent.VirtualGroupId), Agent.GetApproximateFreeSpaceShare()));
             }
 
             ui64 GetTabletId() const override {

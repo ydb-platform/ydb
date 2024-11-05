@@ -56,7 +56,6 @@ public:
     class TTxUpdateDiskMetrics;
     class TTxUpdateGroupLatencies;
     class TTxGroupMetricsExchange;
-    class TTxGroupReconfigureWipe;
     class TTxNodeReport;
     class TTxUpdateSeenOperational;
     class TTxConfigCmd;
@@ -91,7 +90,7 @@ public:
 
         const TVSlotId VSlotId;
         TIndirectReferable<TPDiskInfo>::TPtr PDisk; // PDisk this slot resides on
-        TGroupId GroupId = 0;
+        TGroupId GroupId = TGroupId::Zero();
         Table::GroupGeneration::Type GroupPrevGeneration = 0;
         Table::GroupGeneration::Type GroupGeneration = 0;
         Table::Category::Type Kind = NKikimrBlobStorage::TVDiskKind::Default;
@@ -125,16 +124,17 @@ public:
         TVSlotReadyTimestampQ::iterator VSlotReadyTimestampIter;
 
     public:
-        NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
+        std::optional<NKikimrBlobStorage::EVDiskStatus> VDiskStatus;
+        TMonotonic VDiskStatusTimestamp;
         bool IsReady = false;
         bool OnlyPhantomsRemain = false;
 
     public:
         void SetStatus(NKikimrBlobStorage::EVDiskStatus status, TMonotonic now, TInstant instant, bool onlyPhantomsRemain) {
-            if (status != Status) {
+            if (status != VDiskStatus) {
                 if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // became "replicating"
                     LastGotReplicating = instant;
-                } else if (Status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // was "replicating"
+                } else if (VDiskStatus == NKikimrBlobStorage::EVDiskStatus::REPLICATING) { // was "replicating"
                     Y_DEBUG_ABORT_UNLESS(LastGotReplicating != TInstant::Zero());
                     ReplicationTime += instant - LastGotReplicating;
                     LastGotReplicating = {};
@@ -146,7 +146,7 @@ public:
                     LastSeenReady = instant;
                 }
 
-                Status = status;
+                VDiskStatus = status;
                 IsReady = false;
                 if (status == NKikimrBlobStorage::EVDiskStatus::READY) {
                     PutInVSlotReadyTimestampQ(now);
@@ -158,6 +158,10 @@ public:
             if (status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
                 OnlyPhantomsRemain = onlyPhantomsRemain;
             }
+        }
+
+        NKikimrBlobStorage::EVDiskStatus GetStatus() const {
+            return VDiskStatus.value_or(NKikimrBlobStorage::EVDiskStatus::ERROR);
         }
 
         void PutInVSlotReadyTimestampQ(TMonotonic now) {
@@ -292,15 +296,16 @@ public:
 
         TString GetStatusString() const {
             TStringStream s;
-            s << NKikimrBlobStorage::EVDiskStatus_Name(Status);
-            if (Status == NKikimrBlobStorage::REPLICATING && OnlyPhantomsRemain) {
+            const auto status = GetStatus();
+            s << NKikimrBlobStorage::EVDiskStatus_Name(status);
+            if (status == NKikimrBlobStorage::REPLICATING && OnlyPhantomsRemain) {
                 s << "/p";
             }
             return s.Str();
         }
 
         bool IsOperational() const {
-            return Status >= NKikimrBlobStorage::REPLICATING;
+            return GetStatus() >= NKikimrBlobStorage::REPLICATING;
         }
 
         void OnCommit();
@@ -334,6 +339,7 @@ public:
         NKikimrBlobStorage::EDriveStatus Status;
         TInstant StatusTimestamp;
         NKikimrBlobStorage::EDecommitStatus DecommitStatus;
+        Table::Mood::Type Mood;
         TString ExpectedSerial;
         TString LastSeenSerial;
         TString LastSeenPath;
@@ -351,6 +357,7 @@ public:
                     Table::PDiskConfig,
                     Table::Status,
                     Table::Timestamp,
+                    Table::Mood,
                     Table::ExpectedSerial,
                     Table::LastSeenSerial,
                     Table::LastSeenPath,
@@ -365,6 +372,7 @@ public:
                     &TPDiskInfo::PDiskConfig,
                     &TPDiskInfo::Status,
                     &TPDiskInfo::StatusTimestamp,
+                    &TPDiskInfo::Mood,
                     &TPDiskInfo::ExpectedSerial,
                     &TPDiskInfo::LastSeenSerial,
                     &TPDiskInfo::LastSeenPath,
@@ -386,6 +394,7 @@ public:
                    NKikimrBlobStorage::EDriveStatus status,
                    TInstant statusTimestamp,
                    NKikimrBlobStorage::EDecommitStatus decommitStatus,
+                   Table::Mood::Type mood,
                    const TString& expectedSerial,
                    const TString& lastSeenSerial,
                    const TString& lastSeenPath,
@@ -402,6 +411,7 @@ public:
             , Status(status)
             , StatusTimestamp(statusTimestamp)
             , DecommitStatus(decommitStatus)
+            , Mood(mood)
             , ExpectedSerial(expectedSerial)
             , LastSeenSerial(lastSeenSerial)
             , LastSeenPath(lastSeenPath)
@@ -467,8 +477,8 @@ public:
                 || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE;
         }
 
-        std::tuple<bool, bool> GetSelfHealStatusTuple() const {
-            return {ShouldBeSettledBySelfHeal(), BadInTermsOfSelfHeal()};
+        auto GetSelfHealStatusTuple() const {
+            return std::make_tuple(ShouldBeSettledBySelfHeal(), BadInTermsOfSelfHeal(), Decommitted(), IsSelfHealReasonDecommit());
         }
 
         bool AcceptsNewSlots() const {
@@ -495,12 +505,12 @@ public:
             switch (Status) {
                 case NKikimrBlobStorage::EDriveStatus::UNKNOWN:
                 case NKikimrBlobStorage::EDriveStatus::BROKEN:
-                    return false;
-
-                case NKikimrBlobStorage::EDriveStatus::ACTIVE:
                 case NKikimrBlobStorage::EDriveStatus::INACTIVE:
                 case NKikimrBlobStorage::EDriveStatus::FAULTY:
                 case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
+                    return false;
+
+                case NKikimrBlobStorage::EDriveStatus::ACTIVE:
                     return true;
 
                 case NKikimrBlobStorage::EDriveStatus::EDriveStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
@@ -862,7 +872,8 @@ public:
     public:
         using Table = Schema::Node;
 
-        ui32 ConnectedCount = 0;
+        TActorId ConnectedServerId; // the latest ServerId who sent RegisterNode
+        TActorId InterconnectSessionId;
         Table::NextPDiskID::Type NextPDiskID;
         TInstant LastConnectTimestamp;
         TInstant LastDisconnectTimestamp;
@@ -870,6 +881,7 @@ public:
         std::map<TString, NPDisk::TDriveData> KnownDrives;
         THashSet<TGroupId> WaitingForGroups;
         THashSet<TGroupId> GroupsRequested;
+        bool DeclarativePDiskManagement = false;
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -1404,6 +1416,11 @@ public:
             : NodeId(nodeInfo.NodeId)
             , Location(std::move(nodeInfo.Location))
         {}
+
+        THostRecord(const NKikimrBlobStorage::TNodeIdentifier& node)
+            : NodeId(node.GetNodeId())
+            , Location(node.GetLocation())
+        {}
     };
 
     class THostRecordMapImpl {
@@ -1416,6 +1433,15 @@ public:
                 const THostId hostId(nodeInfo.Host, nodeInfo.Port);
                 NodeIdToHostId.emplace(nodeInfo.NodeId, hostId);
                 HostIdToRecord.emplace(hostId, std::move(nodeInfo));
+            }
+        }
+
+        THostRecordMapImpl(const NKikimrBlobStorage::TStorageConfig& config) {
+            for (const auto& item : config.GetAllNodes()) {
+                const THostId hostId(item.GetHost(), item.GetPort());
+                const TNodeId nodeId = item.GetNodeId();
+                NodeIdToHostId.emplace(nodeId, hostId);
+                HostIdToRecord.emplace(hostId, item);
             }
         }
 
@@ -1470,8 +1496,8 @@ private:
     THashMap<TGroupId, TGroupInfo*> GroupLookup;
     TMap<TGroupSpecies, TVector<TGroupId>> IndexGroupSpeciesToGroup;
     TMap<TNodeId, TNodeInfo> Nodes;
-    Schema::Group::ID::Type NextGroupID = 0;
-    Schema::Group::ID::Type NextVirtualGroupId = 0;
+    Schema::Group::ID::Type NextGroupID = Schema::Group::ID::Type::Zero();
+    Schema::Group::ID::Type NextVirtualGroupId = Schema::Group::ID::Type::Zero();
     Schema::State::NextStoragePoolId::Type NextStoragePoolId = 0;
     ui32 DefaultMaxSlots = 0;
     ui32 PDiskSpaceMarginPromille = 0;
@@ -1504,6 +1530,7 @@ private:
     bool AllowMultipleRealmsOccupation = true;
     bool StorageConfigObtained = false;
     bool Loaded = false;
+    std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
 
     std::set<std::tuple<TGroupId, TNodeId>> GroupToNode;
 
@@ -1566,7 +1593,8 @@ private:
     void UpdateSystemViews();
 
     bool CommitConfigUpdates(TConfigState& state, bool suppressFailModelChecking, bool suppressDegradedGroupsChecking,
-        bool suppressDisintegratedGroupsChecking, TTransactionContext& txc, TString *errorDescription);
+        bool suppressDisintegratedGroupsChecking, TTransactionContext& txc, TString *errorDescription,
+        NKikimrBlobStorage::TConfigResponse *response = nullptr);
 
     void CommitSelfHealUpdates(TConfigState& state);
     void CommitScrubUpdates(TConfigState& state, TTransactionContext& txc);
@@ -1575,6 +1603,7 @@ private:
 
     void InitializeSelfHealState();
     void FillInSelfHealGroups(TEvControllerUpdateSelfHealInfo& msg, TConfigState *state);
+    void PushStaticGroupsToSelfHeal();
     void ProcessVDiskStatus(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus>& s);
 
     void UpdateSelfHealCounters();
@@ -1773,6 +1802,7 @@ private:
 
     THostRecordMap HostRecords;
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
+    void OnHostRecordsInitiate();
 
 public:
     // Self-heal actor's main purpose is to monitor FAULTY pdisks and to slightly move groups out of them; every move
@@ -1808,7 +1838,6 @@ private:
     void Handle(TEvBlobStorage::TEvControllerUpdateNodeDrives::TPtr &ev);
     void Handle(TEvControllerCommitGroupLatencies::TPtr &ev);
     void Handle(TEvBlobStorage::TEvRequestControllerInfo::TPtr &ev);
-    void Handle(TEvBlobStorage::TEvControllerGroupReconfigureWipe::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerNodeReport::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerConfigRequest::TPtr &ev);
     void Handle(TEvBlobStorage::TEvControllerProposeGroupKey::TPtr &ev);
@@ -1981,9 +2010,66 @@ public:
         }
     }
 
+    bool ValidateIncomingNodeWardenEvent(const IEventHandle& ev) {
+        auto makeError = [&](TString message) {
+            STLOG(PRI_ERROR, BS_CONTROLLER, BSC16, "ValidateIncomingNodeWardenEvent error",
+                (Sender, ev.Sender), (PipeServerId, ev.Recipient), (InterconnectSessionId, ev.InterconnectSession),
+                (Type, ev.GetTypeRewrite()), (Message, message));
+            return false;
+        };
+
+        switch (ev.GetTypeRewrite()) {
+            case TEvBlobStorage::EvControllerRegisterNode: {
+                if (const auto pipeIt = PipeServerToNode.find(ev.Recipient); pipeIt == PipeServerToNode.end()) {
+                    return makeError("incorrect pipe server");
+                } else if (pipeIt->second) {
+                    return makeError("duplicate RegisterNode event");
+                }
+                break;
+            }
+
+            case TEvBlobStorage::EvControllerGetGroup:
+                if (ev.Sender == SelfId()) {
+                    break;
+                } else if (ev.Cookie == Max<ui64>()) {
+                    break; // for testing purposes
+                }
+                [[fallthrough]];
+            case TEvBlobStorage::EvControllerUpdateDiskStatus:
+            case TEvBlobStorage::EvControllerProposeGroupKey:
+            case TEvBlobStorage::EvControllerUpdateGroupStat:
+            case TEvBlobStorage::EvControllerScrubQueryStartQuantum:
+            case TEvBlobStorage::EvControllerScrubQuantumFinished:
+            case TEvBlobStorage::EvControllerScrubReportQuantumInProgress:
+            case TEvBlobStorage::EvControllerUpdateNodeDrives:
+            case TEvBlobStorage::EvControllerNodeReport: {
+                if (const auto pipeIt = PipeServerToNode.find(ev.Recipient); pipeIt == PipeServerToNode.end()) {
+                    return makeError("incorrect pipe server");
+                } else if (const auto& nodeId = pipeIt->second; !nodeId) {
+                    return makeError("no RegisterNode event received");
+                } else if (*nodeId != ev.Sender.NodeId()) {
+                    return makeError("NodeId mismatch");
+                } else if (TNodeInfo *node = FindNode(*nodeId); !node) {
+                    return makeError("no TNodeInfo record for node");
+                } else if (node->InterconnectSessionId != ev.InterconnectSession) {
+                    return makeError("InterconnectSession mismatch");
+                } else if (node->ConnectedServerId != ev.Recipient) {
+                    return makeError("pipe server mismatch");
+                }
+                break;
+            }
+        }
+
+        return true;
+    }
+
     void ProcessControllerEvent(TAutoPtr<IEventHandle> ev) {
         const ui32 type = ev->GetTypeRewrite();
         THPTimer timer;
+
+        if (!ValidateIncomingNodeWardenEvent(*ev)) {
+            return;
+        }
 
         switch (type) {
             hFunc(TEvBlobStorage::TEvControllerRegisterNode, Handle);
@@ -1995,7 +2081,6 @@ public:
             hFunc(TEvBlobStorage::TEvControllerUpdateNodeDrives, Handle);
             hFunc(TEvControllerCommitGroupLatencies, Handle);
             hFunc(TEvBlobStorage::TEvRequestControllerInfo, Handle);
-            hFunc(TEvBlobStorage::TEvControllerGroupReconfigureWipe, Handle);
             hFunc(TEvBlobStorage::TEvControllerNodeReport, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigRequest, Handle);
             hFunc(TEvBlobStorage::TEvControllerProposeGroupKey, Handle);
@@ -2030,7 +2115,6 @@ public:
             fFunc(TEvBlobStorage::EvControllerUpdateNodeDrives, EnqueueIncomingEvent);
             fFunc(TEvControllerCommitGroupLatencies::EventType, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvRequestControllerInfo, EnqueueIncomingEvent);
-            fFunc(TEvBlobStorage::EvControllerGroupReconfigureWipe, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerNodeReport, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerConfigRequest, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerProposeGroupKey, EnqueueIncomingEvent);
@@ -2143,7 +2227,7 @@ public:
     void CommitVirtualGroupUpdates(TConfigState& state);
 
     void StartVirtualGroupSetupMachine(TGroupInfo *group);
-    void StartVirtualGroupDeleteMachine(ui32 groupId, TBlobDepotDeleteQueueInfo& info);
+    void StartVirtualGroupDeleteMachine(TGroupId groupId, TBlobDepotDeleteQueueInfo& info);
 
     void Handle(TEvBlobStorage::TEvControllerGroupDecommittedNotify::TPtr ev);
 
@@ -2162,12 +2246,15 @@ public:
         const TMonotonic now = TActivationContext::Monotonic();
         THashSet<TGroupInfo*> groups;
 
-        auto sh = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+        std::vector<TEvControllerUpdateSelfHealInfo::TVDiskStatusUpdate> updates;
         for (auto it = VSlotReadyTimestampQ.begin(); it != VSlotReadyTimestampQ.end() && it->first <= now;
                 it = VSlotReadyTimestampQ.erase(it)) {
             Y_DEBUG_ABORT_UNLESS(!it->second->IsReady);
             
-            sh->VDiskIsReadyUpdate.emplace_back(it->second->GetVDiskId(), true);
+            updates.push_back({
+                .VDiskId = it->second->GetVDiskId(),
+                .IsReady = true,
+            });
             it->second->IsReady = true;
             it->second->ResetVSlotReadyTimestampIter();
             if (const TGroupInfo *group = it->second->Group) {
@@ -2185,8 +2272,8 @@ public:
         if (!timingQ.empty()) {
             Execute(CreateTxUpdateLastSeenReady(std::move(timingQ)));
         }
-        if (sh->VDiskIsReadyUpdate) {
-            Send(SelfHealId, sh.release());
+        if (!updates.empty()) {
+            Send(SelfHealId, new TEvControllerUpdateSelfHealInfo(std::move(updates)));
         }
     }
 
@@ -2211,7 +2298,7 @@ public:
                 histo.IncrementFor(passed.Seconds());
 
                 TDuration timeBeingReplicating = slot->ReplicationTime;
-                if (slot->Status == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                if (slot->GetStatus() == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
                     timeBeingReplicating += now - slot->LastGotReplicating;
                 }
 
@@ -2236,13 +2323,27 @@ public:
         const NKikimrBlobStorage::TVDiskKind::EVDiskKind VDiskKind;
 
         std::optional<NKikimrBlobStorage::TVDiskMetrics> VDiskMetrics;
-        NKikimrBlobStorage::EVDiskStatus VDiskStatus = NKikimrBlobStorage::EVDiskStatus::ERROR;
+        std::optional<NKikimrBlobStorage::EVDiskStatus> VDiskStatus;
+        TMonotonic VDiskStatusTimestamp;
         TMonotonic ReadySince = TMonotonic::Max(); // when IsReady becomes true for this disk; Max() in non-READY state
 
-        TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk)
+        TStaticVSlotInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk& vdisk,
+                std::map<TVSlotId, TStaticVSlotInfo>& prev, TMonotonic mono)
             : VDiskId(VDiskIDFromVDiskID(vdisk.GetVDiskID()))
             , VDiskKind(vdisk.GetVDiskKind())
-        {}
+        {
+            const auto& loc = vdisk.GetVDiskLocation();
+            const TVSlotId vslotId(loc.GetNodeID(), loc.GetPDiskID(), loc.GetVDiskSlotID());
+            if (const auto it = prev.find(vslotId); it != prev.end()) {
+                TStaticVSlotInfo& item = it->second;
+                VDiskMetrics = std::move(item.VDiskMetrics);
+                VDiskStatus = item.VDiskStatus;
+                VDiskStatusTimestamp = item.VDiskStatusTimestamp;
+                ReadySince = item.ReadySince;
+            } else {
+                VDiskStatusTimestamp = mono;
+            }
+        }
     };
 
     std::map<TVSlotId, TStaticVSlotInfo> StaticVSlots;
@@ -2261,7 +2362,8 @@ public:
         ui32 StaticSlotUsage = 0;
         std::optional<NKikimrBlobStorage::TPDiskMetrics> PDiskMetrics;
 
-        TStaticPDiskInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk)
+        TStaticPDiskInfo(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk,
+                std::map<TPDiskId, TStaticPDiskInfo>& prev)
             : NodeId(pdisk.GetNodeID())
             , PDiskId(pdisk.GetPDiskID())
             , Path(pdisk.GetPath())
@@ -2273,6 +2375,12 @@ public:
                 bool success = cfg.SerializeToString(&PDiskConfig);
                 Y_ABORT_UNLESS(success);
                 ExpectedSlotCount = cfg.GetExpectedSlotCount();
+            }
+
+            const TPDiskId pdiskId(NodeId, PDiskId);
+            if (const auto it = prev.find(pdiskId); it != prev.end()) {
+                TStaticPDiskInfo& item = it->second;
+                PDiskMetrics = std::move(item.PDiskMetrics);
             }
         }
     };
@@ -2286,10 +2394,12 @@ public:
 
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev);
-    bool OnRegisterNode(const TActorId& serverId, TNodeId nodeId);
-    void OnWardenConnected(TNodeId nodeId);
-    void OnWardenDisconnected(TNodeId nodeId);
+    bool OnRegisterNode(const TActorId& serverId, TNodeId nodeId, TActorId interconnectSessionId);
+    void OnWardenConnected(TNodeId nodeId, TActorId serverId, TActorId interconnectSessionId);
+    void OnWardenDisconnected(TNodeId nodeId, TActorId serverId);
     void EraseKnownDrivesOnDisconnected(TNodeInfo *nodeInfo);
+    void SendToWarden(TNodeId nodeId, std::unique_ptr<IEventBase> ev, ui64 cookie);
+    void SendInReply(const IEventHandle& query, std::unique_ptr<IEventBase> ev);
 
     using TVSlotFinder = std::function<void(TVSlotId, const std::function<void(const TVSlotInfo&)>&)>;
 
@@ -2307,6 +2417,8 @@ public:
         const TGroupInfo& group, const TVSlotFinder& finder);
     static void SerializeGroupInfo(NKikimrBlobStorage::TGroupInfo *group, const TGroupInfo& groupInfo,
         const TString& storagePoolName, const TMaybe<TKikimrScopeId>& scopeId);
+
+    void SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings);
 
     static NKikimrBlobStorage::TGroupStatus::E DeriveStatus(const TBlobStorageGroupInfo::TTopology *topology,
         const TBlobStorageGroupInfo::TGroupVDisks& failed);

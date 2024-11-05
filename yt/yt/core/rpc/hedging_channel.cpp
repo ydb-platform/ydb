@@ -22,7 +22,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = RpcClientLogger;
+static constexpr auto& Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -44,8 +44,8 @@ public:
 
     // IClientResponseHandler implementation.
     void HandleAcknowledgement() override;
-    void HandleResponse(TSharedRefArray message, TString address) override;
-    void HandleError(const TError& error) override;
+    void HandleResponse(TSharedRefArray message, const std::string& address) override;
+    void HandleError(TError error) override;
     void HandleStreamingPayload(const TStreamingPayload& /*payload*/) override;
     void HandleStreamingFeedback(const TStreamingFeedback& /*feedback*/) override;
 
@@ -114,7 +114,7 @@ public:
         responseHandler->HandleAcknowledgement();
     }
 
-    void HandleResponse(TSharedRefArray message, TString address, bool backup)
+    void HandleResponse(TSharedRefArray message, const std::string& address, bool backup)
     {
         IClientResponseHandlerPtr responseHandler;
         {
@@ -146,10 +146,10 @@ public:
             message = SetResponseHeader(std::move(message), header);
         }
 
-        responseHandler->HandleResponse(std::move(message), std::move(address));
+        responseHandler->HandleResponse(std::move(message), address);
     }
 
-    void HandleError(const TError& error, bool backup)
+    void HandleError(TError error, bool backup)
     {
         IClientResponseHandlerPtr responseHandler;
         {
@@ -168,10 +168,10 @@ public:
         YT_LOG_DEBUG_IF(backup, "Request failed at backup (RequestId: %v)",
             Request_->GetRequestId());
 
-        responseHandler->HandleError(
-            backup
-            ? error << TErrorAttribute(BackupFailedKey, true)
-            : error);
+        if (backup) {
+            error <<= TErrorAttribute(BackupFailedKey, true);
+        }
+        responseHandler->HandleError(std::move(error));
     }
 
     // IClientRequestControl implementation.
@@ -302,14 +302,14 @@ void THedgingResponseHandler::HandleAcknowledgement()
     Session_->HandleAcknowledgement(Backup_);
 }
 
-void THedgingResponseHandler::HandleError(const TError& error)
+void THedgingResponseHandler::HandleError(TError error)
 {
-    Session_->HandleError(error, Backup_);
+    Session_->HandleError(std::move(error), Backup_);
 }
 
-void THedgingResponseHandler::HandleResponse(TSharedRefArray message, TString address)
+void THedgingResponseHandler::HandleResponse(TSharedRefArray message, const std::string& address)
 {
-    Session_->HandleResponse(std::move(message), std::move(address), Backup_);
+    Session_->HandleResponse(std::move(message), address, Backup_);
 }
 
 void THedgingResponseHandler::HandleStreamingPayload(const TStreamingPayload& /*payload*/)
@@ -345,7 +345,7 @@ public:
             .EndMap()))
     { }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return EndpointDescription_;
     }
@@ -392,13 +392,18 @@ public:
         YT_UNIMPLEMENTED();
     }
 
+    const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
+    {
+        return PrimaryChannel_->GetChannelMemoryTracker();
+    }
+
 private:
     const IChannelPtr PrimaryChannel_;
     const IChannelPtr BackupChannel_;
 
     const THedgingChannelOptions Options_;
 
-    const TString EndpointDescription_;
+    const std::string EndpointDescription_;
     const IAttributeDictionaryPtr EndpointAttributes_;
 };
 

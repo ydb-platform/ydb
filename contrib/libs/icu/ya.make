@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(73.2)
+VERSION(75.1)
 
-ORIGINAL_SOURCE(https://github.com/unicode-org/icu/releases/download/release-73-2/icu4c-73_2-src.tgz)
+ORIGINAL_SOURCE(https://github.com/unicode-org/icu/releases/download/release-75-1/icu4c-75_1-src.tgz)
 
 ADDINCL(
     GLOBAL contrib/libs/icu/include
@@ -185,6 +185,8 @@ SRCS(
     common/uloc.cpp
     common/uloc_keytype.cpp
     common/uloc_tag.cpp
+    common/ulocale.cpp
+    common/ulocbuilder.cpp
     common/umapfile.cpp
     common/umath.cpp
     common/umutablecptrie.cpp
@@ -338,6 +340,17 @@ SRCS(
     i18n/measunit.cpp
     i18n/measunit_extra.cpp
     i18n/measure.cpp
+    i18n/messageformat2.cpp
+    i18n/messageformat2_arguments.cpp
+    i18n/messageformat2_checker.cpp
+    i18n/messageformat2_data_model.cpp
+    i18n/messageformat2_errors.cpp
+    i18n/messageformat2_evaluation.cpp
+    i18n/messageformat2_formattable.cpp
+    i18n/messageformat2_formatter.cpp
+    i18n/messageformat2_function_registry.cpp
+    i18n/messageformat2_parser.cpp
+    i18n/messageformat2_serializer.cpp
     i18n/msgfmt.cpp
     i18n/name2uni.cpp
     i18n/nfrs.cpp
@@ -486,7 +499,7 @@ SRCS(
     i18n/zonemeta.cpp
     i18n/zrule.cpp
     i18n/ztrans.cpp
-    icudt73_dat.rodata
+    icudt75_dat.rodata
     io/locbund.cpp
     io/sprintf.cpp
     io/sscanf.cpp

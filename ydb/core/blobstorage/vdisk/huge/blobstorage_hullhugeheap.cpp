@@ -138,7 +138,7 @@ namespace NKikimr {
             Y_VERIFY_S(chunkId, VDiskLogPrefix << "chunkId# " << chunkId);
             TFreeSpace::iterator it;
 
-            auto freeFoundSlot = [&] (TFreeSpace &container, const char *containerName) {
+            auto freeFoundSlot = [&] (TFreeSpace &container, const char *containerName, bool inLockedChunks) {
                 TMask &mask = it->second;
                 Y_VERIFY_S(!mask.Get(slotId), VDiskLogPrefix << "TChain::Free: containerName# " << containerName
                         << " id# " << id.ToString() << " State# " << ToString());
@@ -148,15 +148,15 @@ namespace NKikimr {
                     // free chunk
                     container.erase(it);
                     FreeSlotsInFreeSpace -= SlotsInChunk;
-                    return TFreeRes(chunkId, ConstMask, SlotsInChunk);
+                    return TFreeRes(chunkId, ConstMask, SlotsInChunk, inLockedChunks);
                 } else
-                    return TFreeRes(0, mask, SlotsInChunk);
+                    return TFreeRes(0, mask, SlotsInChunk, false);
             };
 
             if ((it = FreeSpace.find(chunkId)) != FreeSpace.end()) {
-                return freeFoundSlot(FreeSpace, "FreeSpace");
+                return freeFoundSlot(FreeSpace, "FreeSpace", false);
             } else if ((it = LockedChunks.find(chunkId)) != LockedChunks.end()) {
-                return freeFoundSlot(LockedChunks, "LockedChunks");
+                return freeFoundSlot(LockedChunks, "LockedChunks", true);
             } else {
                 // chunk is neither in FreeSpace nor in LockedChunks
                 TDynBitMap mask;
@@ -166,13 +166,13 @@ namespace NKikimr {
                 ++FreeSlotsInFreeSpace;
 
                 FreeSpace.emplace(chunkId, mask);
-                return TFreeRes(0, mask, SlotsInChunk); // no empty chunk
+                return TFreeRes(0, mask, SlotsInChunk, false); // no empty chunk
             }
         }
 
         bool TChain::LockChunkForAllocation(TChunkID chunkId) {
-            if (TFreeSpace::iterator it = FreeSpace.find(chunkId); it != FreeSpace.end()) {
-                LockedChunks.insert(FreeSpace.extract(it));
+            if (auto nh = FreeSpace.extract(chunkId)) {
+                LockedChunks.insert(std::move(nh));
                 return true;
             } else {
                 // chunk is already freed
@@ -181,8 +181,8 @@ namespace NKikimr {
         }
 
         void TChain::UnlockChunk(TChunkID chunkId) {
-            if (auto it = LockedChunks.find(chunkId); it != LockedChunks.end()) {
-                FreeSpace.insert(LockedChunks.extract(it));
+            if (auto nh = LockedChunks.extract(chunkId)) {
+                FreeSpace.insert(std::move(nh));
             }
         }
 
@@ -211,15 +211,20 @@ namespace NKikimr {
             ui32 chunkId = id.GetChunkId();
             ui32 slotId = id.GetSlotId();
 
-            TFreeSpace::iterator it = FreeSpace.find(chunkId);
-            if (it != FreeSpace.end()) {
+            TFreeSpace *map = &FreeSpace;
+            TFreeSpace::iterator it = map->find(chunkId);
+            if (it == map->end()) {
+                map = &LockedChunks;
+                it = map->find(chunkId);
+            }
+            if (it != map->end()) {
                 TMask &mask = it->second;
                 Y_VERIFY_S(mask.Get(slotId), VDiskLogPrefix << "RecoveryModeAllocate:"
                         << " id# " << id.ToString() << " State# " << ToString());
                 mask.Reset(slotId);
 
                 if (mask.Empty()) {
-                    FreeSpace.erase(it);
+                    map->erase(it);
                 }
 
                 --FreeSlotsInFreeSpace;
@@ -230,11 +235,11 @@ namespace NKikimr {
             }
         }
 
-        void TChain::RecoveryModeAllocate(const NPrivate::TChunkSlot &id, TChunkID chunkId) {
-            Y_VERIFY_S(id.GetChunkId() == chunkId && FreeSpace.find(chunkId) == FreeSpace.end(),
+        void TChain::RecoveryModeAllocate(const NPrivate::TChunkSlot &id, TChunkID chunkId, bool inLockedChunks) {
+            Y_VERIFY_S(id.GetChunkId() == chunkId && !FreeSpace.contains(chunkId) && !LockedChunks.contains(chunkId),
                     VDiskLogPrefix << " id# " << id.ToString() << " chunkId# " << chunkId << " State# " << ToString());
 
-            FreeSpace.emplace(chunkId, ConstMask);
+            (inLockedChunks ? LockedChunks : FreeSpace).emplace(chunkId, ConstMask);
             FreeSlotsInFreeSpace += SlotsInChunk;
             bool res = RecoveryModeAllocate(id);
 
@@ -358,6 +363,10 @@ namespace NKikimr {
             return NPrivate::TChunkSlot(addr.ChunkIdx, slotId);
         }
 
+        NPrivate::TChunkSlot TChainDelegator::Convert(const THugeSlot &slot) const {
+            return Convert(slot.GetDiskPart());
+        }
+
         void TChainDelegator::Save(IOutputStream *s) const {
             ::Save(s, *ChainPtr);
         }
@@ -409,31 +418,28 @@ namespace NKikimr {
                 ui32 chunkSize,
                 ui32 appendBlockSize,
                 ui32 minHugeBlobInBytes,
+                ui32 oldMinHugeBlobSizeInBytes,
                 ui32 milestoneBlobInBytes,
                 ui32 maxBlobInBytes,
-                ui32 overhead,
-                bool oldMapCompatible)
+                ui32 overhead)
             : VDiskLogPrefix(vdiskLogPrefix)
             , ChunkSize(chunkSize)
             , AppendBlockSize(appendBlockSize)
             , MinHugeBlobInBytes(minHugeBlobInBytes)
+            , OldMinHugeBlobSizeInBytes(oldMinHugeBlobSizeInBytes)
             , MilestoneBlobInBytes(milestoneBlobInBytes)
             , MaxBlobInBytes(maxBlobInBytes)
             , Overhead(overhead)
-            , OldMapCompatible(oldMapCompatible)
         {
             Y_VERIFY_S(MinHugeBlobInBytes != 0 &&
+                    MinHugeBlobInBytes >= AppendBlockSize &&
                     MinHugeBlobInBytes <= MilestoneBlobInBytes &&
+                    MinHugeBlobInBytes <= OldMinHugeBlobSizeInBytes &&
                     MilestoneBlobInBytes < MaxBlobInBytes, "INVALID CONFIGURATION! (SETTINGS ARE:"
-                            << " MaxBlobInBytes# " << MaxBlobInBytes << " MinHugeBlobInBytes# " << MinHugeBlobInBytes
+                            << " MaxBlobInBytes# " << MaxBlobInBytes << " MinHugeBlobInBytes# " << MinHugeBlobInBytes << " OldMinHugeBlobSizeInBytes# " << OldMinHugeBlobSizeInBytes
                             << " MilestoneBlobInBytes# " << MilestoneBlobInBytes << " ChunkSize# " << ChunkSize
                             << " AppendBlockSize# " << AppendBlockSize << ")");
-            BuildLayout(OldMapCompatible);
-        }
-
-        ui32 TAllChains::GetMinREALHugeBlobInBytes() const {
-            Y_ABORT_UNLESS(MinREALHugeBlobInBlocks);
-            return MinREALHugeBlobInBlocks * AppendBlockSize + 1;
+            BuildLayout();
         }
 
         TChainDelegator *TAllChains::GetChain(ui32 size) {
@@ -476,29 +482,25 @@ namespace NKikimr {
         }
 
         void TAllChains::Save(IOutputStream *s) const {
-            if (OldMapCompatible && (StartMode == EStartMode::Empty || StartMode == EStartMode::Migrated)) {
-                // this branch takes place when:
-                // 1. OldMapCompatible = true, i.e. we are in 19-1 stable branch
-                // 2. we didn't rollback from 19-2, i.e. we read empty db or migrated on start
-                // => save only second part of data
-                TBuiltChainDelegators b = BuildChains(MilestoneBlobInBytes);
-                ui32 size = b.ChainDelegators.size();
-                ::Save(s, size);
-                ui32 skip = ChainDelegators.size() - size;
-                for (auto &x : ChainDelegators) {
-                    if (skip > 0) {
-                        Y_ABORT_UNLESS(!x.HaveBeenUsed());
-                        --skip;
-                        continue;
-                    }
-                    ::Save(s, x);
-                }
-            } else {
-                // save all
+            if (StartMode == EStartMode::Loaded) {
                 ui32 size = ChainDelegators.size();
                 ::Save(s, size);
+                for (auto& d : ChainDelegators) {
+                    ::Save(s, d);
+                }
+            } else { 
+                std::vector<const TChainDelegator*> delegators;
                 for (auto &x : ChainDelegators) {
-                    ::Save(s, x);
+                    if (!x.HaveBeenUsed() && x.SlotSize < FirstLoadedSlotSize) { 
+                        continue; // preserving backward compatibility until no allocations
+                    }
+                    delegators.emplace_back(&x);
+                }
+
+                ui32 size = delegators.size();
+                ::Save(s, size);
+                for (auto x : delegators) {
+                    ::Save(s, *x);
                 }
             }
         }
@@ -516,19 +518,20 @@ namespace NKikimr {
             } else if (size < ChainDelegators.size()) {
                 // map size has been changed, run migration
                 StartMode = EStartMode::Migrated;
-                TBuiltChainDelegators b = BuildChains(MilestoneBlobInBytes);
-                Y_VERIFY_S(size == b.ChainDelegators.size(), "size# " << size
-                        << " b.ChainDelegators.size()# " << b.ChainDelegators.size());
+                TAllChainDelegators chainDelegators = BuildChains(OldMinHugeBlobSizeInBytes);
+                Y_VERIFY_S(size > 0 && size == chainDelegators.size(), "size# " << size
+                        << " chainDelegators.size()# " << chainDelegators.size());
 
                 // load into temporary delegators
-                for (auto &x : b.ChainDelegators) {
+                for (auto &x : chainDelegators) {
                     ::Load(s, x);
                 }
 
                 // migrate
                 using TIt = TAllChainDelegators::iterator;
-                TIt loadedIt = b.ChainDelegators.begin();
-                TIt loadedEnd = b.ChainDelegators.end();
+                TIt loadedIt = chainDelegators.begin();
+                TIt loadedEnd = chainDelegators.end();
+                FirstLoadedSlotSize = loadedIt->SlotSize;
                 for (TIt it = ChainDelegators.begin(); it != ChainDelegators.end(); ++it) {
                     Y_ABORT_UNLESS(loadedIt != loadedEnd);
                     if (loadedIt->SlotSize == it->SlotSize) {
@@ -633,7 +636,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TAllChains: Private
         ////////////////////////////////////////////////////////////////////////////
-        TAllChains::TBuiltChainDelegators TAllChains::BuildChains(ui32 minHugeBlobInBytes) const {
+        TAllChains::TAllChainDelegators TAllChains::BuildChains(ui32 minHugeBlobInBytes) const {
             // minHugeBlobInBytes -- is the only variable parameter, used for migration
             const ui32 startBlocks = minHugeBlobInBytes / AppendBlockSize;
             const ui32 mileStoneBlocks = MilestoneBlobInBytes / AppendBlockSize;
@@ -642,14 +645,11 @@ namespace NKikimr {
             NPrivate::TChainLayoutBuilder builder(startBlocks, mileStoneBlocks, endBlocks, Overhead);
             Y_ABORT_UNLESS(!builder.GetLayout().empty());
 
-            TBuiltChainDelegators result;
+            TAllChainDelegators result;
             for (auto x : builder.GetLayout()) {
-                result.ChainDelegators.emplace_back(VDiskLogPrefix, x.Left, x.Right - x.Left,
+                result.emplace_back(VDiskLogPrefix, x.Left, x.Right - x.Left,
                     ChunkSize, AppendBlockSize);
             }
-
-            result.MinREALHugeBlobInBlocks = builder.GetLayout()[0].Left;
-            result.MilestoneREALHugeBlobInBlocks = builder.GetMilestoneSegment().Left;
             return result;
         }
 
@@ -673,20 +673,11 @@ namespace NKikimr {
             }
         }
 
-        void TAllChains::BuildLayout(bool oldMapCompatible)
+        void TAllChains::BuildLayout()
         {
-            TBuiltChainDelegators b = BuildChains(MinHugeBlobInBytes);
-            ChainDelegators = std::move(b.ChainDelegators);
-            MinREALHugeBlobInBlocks = oldMapCompatible ? b.MilestoneREALHugeBlobInBlocks : b.MinREALHugeBlobInBlocks;
-
+            ChainDelegators = BuildChains(MinHugeBlobInBytes);
             Y_ABORT_UNLESS(!ChainDelegators.empty());
             BuildSearchTable();
-
-            Y_VERIFY_S(GetMinREALHugeBlobInBytes() != 0, "INVALID CONFIGURATION: MinREALHugeBlobInBytes IS 0"
-                    << " (SETTINGS ARE: MaxBlobInBytes# " << MaxBlobInBytes
-                    << " MinHugeBlobInBytes# " << MinHugeBlobInBytes
-                    << " ChunkSize# " << ChunkSize
-                    << " AppendBlockSize# " << AppendBlockSize << ')');
         }
 
         inline ui32 TAllChains::SizeToBlocks(ui32 size) const {
@@ -710,16 +701,16 @@ namespace NKikimr {
                 ui32 chunkSize,
                 ui32 appendBlockSize,
                 ui32 minHugeBlobInBytes,
+                ui32 oldMinHugeBlobSizeInBytes,
                 ui32 mileStoneBlobInBytes,
                 ui32 maxBlobInBytes,
                 ui32 overhead,
-                ui32 freeChunksReservation,
-                bool oldMapCompatible)
+                ui32 freeChunksReservation)
             : VDiskLogPrefix(vdiskLogPrefix)
             , FreeChunksReservation(freeChunksReservation)
             , FreeChunks()
-            , Chains(vdiskLogPrefix, chunkSize, appendBlockSize, minHugeBlobInBytes, mileStoneBlobInBytes,
-                    maxBlobInBytes, overhead, oldMapCompatible)
+            , Chains(vdiskLogPrefix, chunkSize, appendBlockSize, minHugeBlobInBytes, oldMinHugeBlobSizeInBytes,
+                    mileStoneBlobInBytes, maxBlobInBytes, overhead)
         {}
 
         //////////////////////////////////////////////////////////////////////////////////////////
@@ -809,7 +800,7 @@ namespace NKikimr {
                 TFreeChunks::iterator it = FreeChunks.find(chunkId);
                 Y_VERIFY_S(it != FreeChunks.end(), VDiskLogPrefix << "addr# " << addr.ToString() << " State# " << ToString());
                 FreeChunks.erase(it);
-                chainD->ChainPtr->RecoveryModeAllocate(id, chunkId);
+                chainD->ChainPtr->RecoveryModeAllocate(id, chunkId, false);
             }
         }
 
@@ -822,6 +813,26 @@ namespace NKikimr {
                 TFreeChunks::iterator it = FreeChunks.find(x);
                 Y_VERIFY_S(it != FreeChunks.end(), VDiskLogPrefix << "chunkId# " << x << " State# " << ToString());
                 FreeChunks.erase(it);
+            }
+        }
+
+        bool THeap::ReleaseSlot(THugeSlot slot) {
+            TChainDelegator* const chain = Chains.GetChain(slot.GetSize());
+            Y_VERIFY_S(chain, VDiskLogPrefix << "State# " << ToString() << " slot# " << slot.ToString());
+            if (TFreeRes res = chain->ChainPtr->Free(chain->Convert(slot)); res.ChunkId) {
+                PutChunkIdToFreeChunks(res.ChunkId);
+                return res.InLockedChunks;
+            }
+            return false;
+        }
+
+        void THeap::OccupySlot(THugeSlot slot, bool inLockedChunks) {
+            TChainDelegator* const chain = Chains.GetChain(slot.GetSize());
+            Y_VERIFY_S(chain, VDiskLogPrefix << "State# " << ToString() << " slot# " << slot.ToString());
+            if (!chain->ChainPtr->RecoveryModeAllocate(chain->Convert(slot))) {
+                const size_t numErased = FreeChunks.erase(slot.GetChunkId());
+                Y_VERIFY_S(numErased, VDiskLogPrefix << "State# " << ToString() << " slot# " << slot.ToString());
+                chain->ChainPtr->RecoveryModeAllocate(chain->Convert(slot), slot.GetChunkId(), inLockedChunks);
             }
         }
 

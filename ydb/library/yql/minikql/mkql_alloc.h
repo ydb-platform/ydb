@@ -1,6 +1,7 @@
 #pragma once
 #include "aligned_page_pool.h"
 #include "mkql_mem_info.h"
+#include <ydb/library/yql/core/pg_settings/guc_settings.h>
 #include <ydb/library/yql/parser/pg_wrapper/interface/context.h>
 #include <ydb/library/yql/public/udf/udf_allocator.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
@@ -49,6 +50,8 @@ struct TAllocState : public TAlignedPagePool
         void Link(TListEntry* root) noexcept;
         void Unlink() noexcept;
         void InitLinks() noexcept { Left = Right = this; }
+        void Clear() noexcept { Left = Right = nullptr; }
+        bool IsUnlinked() const noexcept { return !Left && !Right; }
     };
 
 #ifndef NDEBUG
@@ -73,7 +76,10 @@ struct TAllocState : public TAlignedPagePool
     TListEntry OffloadedBlocksRoot;
     TListEntry GlobalPAllocList;
     TListEntry* CurrentPAllocList;
-    std::shared_ptr<std::atomic<size_t>> ArrowMemoryUsage = std::make_shared<std::atomic<size_t>>();
+    TListEntry ArrowBlocksRoot;
+    std::unordered_set<const void*> ArrowBuffers;
+    bool EnableArrowTracking = true;
+
     void* MainContext = nullptr;
     void* CurrentContext = nullptr;
 
@@ -96,6 +102,7 @@ struct TAllocState : public TAlignedPagePool
     void InvalidateMemInfo();
     size_t GetDeallocatedInPages() const;
     static void CleanupPAllocList(TListEntry* root);
+    static void CleanupArrowList(TListEntry* root);
 
     void LockObject(::NKikimr::NUdf::TUnboxedValuePod value);
     void UnlockObject(::NKikimr::NUdf::TUnboxedValuePod value);
@@ -154,13 +161,22 @@ struct TMkqlPAllocHeader {
     } U;
 
     size_t Size;
-    void* Self; // should be placed right before pointer to allocated area, see GetMemoryChunkContext
+    ui64 Self; // should be placed right before pointer to allocated area, see GetMemoryChunkContext
 };
 
 static_assert(sizeof(TMkqlPAllocHeader) == 
     sizeof(size_t) +
     sizeof(TAllocState::TListEntry) +
     sizeof(void*), "Padding is not allowed");
+
+constexpr size_t ArrowAlignment = 64;
+struct TMkqlArrowHeader {
+    TAllocState::TListEntry Entry;
+    ui64 Size;
+    char Padding[ArrowAlignment - sizeof(TAllocState::TListEntry) - sizeof(ui64)];
+};
+
+static_assert(sizeof(TMkqlArrowHeader) == ArrowAlignment);
 
 class TScopedAlloc {
 public:
@@ -205,6 +221,16 @@ public:
     void InvalidateMemInfo() { MyState_.InvalidateMemInfo(); }
 
     bool IsAttached() const { return AttachedCount_ > 0; }
+
+    void SetGUCSettings(const TGUCSettings::TPtr& GUCSettings) {
+        Acquire();
+        PgSetGUCSettings(MyState_.MainContext, GUCSettings);
+        Release();
+    }
+
+    void SetMaximumLimitValueReached(bool IsReached) {
+        MyState_.SetMaximumLimitValueReached(IsReached);
+    }
 
 private:
     const bool InitiallyAcquired_;
@@ -395,6 +421,11 @@ inline void MKQLRegisterObject(NUdf::TBoxedValue* value) noexcept {
 inline void MKQLUnregisterObject(NUdf::TBoxedValue* value) noexcept {
     value->Unlink();
 }
+
+void* MKQLArrowAllocate(ui64 size);
+void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size);
+void MKQLArrowFree(const void* mem, ui64 size);
+void MKQLArrowUntrack(const void* mem);
 
 template <const EMemorySubPool MemoryPoolExt = EMemorySubPool::Default>
 struct TWithMiniKQLAlloc {

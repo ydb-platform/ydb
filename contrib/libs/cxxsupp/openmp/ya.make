@@ -50,6 +50,7 @@ ENDIF()
 # Instead, we make this opt-in via a `ymake` variable to avoid accidentally releasing a relwithdebinfo binary
 # with KMP_DEBUG enabled. Note that the `ymake` variable is called OPENMP_DEBUG for clarity, since no one
 # really knows what KMP is.
+
 IF (OPENMP_DEBUG)
     CFLAGS(
         -DKMP_DEBUG=1

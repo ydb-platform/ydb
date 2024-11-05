@@ -27,8 +27,8 @@ public:
     TTransformationPipeline& AddPreTypeAnnotation(EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
     TTransformationPipeline& AddExpressionEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
         IGraphTransformer* calcTransfomer = nullptr, EYqlIssueCode issueCode = TIssuesIds::CORE_EXPR_EVALUATION);
-    TTransformationPipeline& AddPreIOAnnotation(EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
-    TTransformationPipeline& AddIOAnnotation(EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
+    TTransformationPipeline& AddPreIOAnnotation(bool withEpochsTransformer = true, EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
+    TTransformationPipeline& AddIOAnnotation(bool withEpochsTransformer = true, EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
     TTransformationPipeline& AddTypeAnnotation(EYqlIssueCode issueCode = TIssuesIds::CORE_TYPE_ANN);
     TTransformationPipeline& AddPostTypeAnnotation(bool forSubGraph = false, bool disableConstraintCheck = false, EYqlIssueCode issueCode = TIssuesIds::CORE_POST_TYPE_ANN);
     TTransformationPipeline& AddCommonOptimization(EYqlIssueCode issueCode = TIssuesIds::CORE_OPTIMIZATION);

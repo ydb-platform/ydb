@@ -1,5 +1,6 @@
 #include "crypto.h"
 #include "secured_block.h"
+#include "util/system/cpu_id.h"
 
 // ifunc is broken at least under msan and tsan, so disable it
 // There is no need to use fastest resolved function since specific
@@ -162,7 +163,30 @@ template class TT1ha0HasherBase<ET1haFunc::T1HA0_AVX2>;
 // StreamCypher
 ////////////////////////////////////////////////////////////////////////////
 #define CYPHER_ROUNDS 8
-#define BLOCK_BYTES (64 * CHACHA_BPI)
+
+const bool TStreamCypher::HasAVX512 = NX86::HaveAVX512F();
+
+Y_FORCE_INLINE void TStreamCypher::Encipher(const ui8* plaintext, ui8* ciphertext, size_t len) { 
+#ifdef __AVX512F__
+    std::visit([&](auto&& chacha) {
+        chacha.Encipher(plaintext, ciphertext, len);
+    }, *Cypher);
+#else
+    Cypher->Encipher(plaintext, ciphertext, len);
+#endif
+}
+
+Y_FORCE_INLINE void TStreamCypher::SetKeyAndIV(const ui64 blockIdx) {
+#ifdef __AVX512F__
+    std::visit([&](auto&& chacha) {
+        chacha.SetKey((ui8*)&Key[0], sizeof(Key));
+        chacha.SetIV((ui8*)&Nonce, (ui8*)&blockIdx);
+    }, *Cypher);
+#else
+    Cypher->SetKey((ui8*)&Key[0], sizeof(Key));
+    Cypher->SetIV((ui8*)&Nonce, (ui8*)&blockIdx);
+#endif
+}
 
 TStreamCypher::TStreamCypher()
     : Nonce(0)
@@ -170,7 +194,19 @@ TStreamCypher::TStreamCypher()
 {
 #if ENABLE_ENCRYPTION
     memset(Key, 0, sizeof(Key));
+
+#ifdef __AVX512F__
+    auto* chacha = new std::variant<ChaChaVec, ChaCha512>;
+    
+    if (HasAVX512) {
+        chacha->emplace<ChaCha512>(CYPHER_ROUNDS);
+    } else {
+        chacha->emplace<ChaChaVec>(CYPHER_ROUNDS);
+    }
+    Cypher.reset(chacha);
+#else
     Cypher.reset(new ChaChaVec(CYPHER_ROUNDS));
+#endif
 #else
     Y_UNUSED(Leftover);
     Y_UNUSED(Key);
@@ -224,8 +260,7 @@ void TStreamCypher::StartMessage(ui64 nonce, ui64 offsetBytes) {
     Nonce = nonce;
     UnusedBytes = 0;
     ui64 blockIdx = offsetBytes / ChaChaVec::BLOCK_SIZE;
-    Cypher->SetKey((ui8*)&Key[0], sizeof(Key));
-    Cypher->SetIV((ui8*)&Nonce, (ui8*)&blockIdx);
+    SetKeyAndIV(blockIdx);
     ui64 bytesToSkip = offsetBytes - blockIdx * ChaChaVec::BLOCK_SIZE;
     if (bytesToSkip) {
         alignas(16) ui8 padding[BLOCK_BYTES] = {0};
@@ -252,12 +287,12 @@ void TStreamCypher::EncryptZeroes(void* destination, ui32 size) {
     }
     alignas(16) ui8 zero[BLOCK_BYTES] = {0};
     while (size >= BLOCK_BYTES) {
-        Cypher->Encipher((const ui8*)zero, (ui8*)destination, BLOCK_BYTES);
+        Encipher((const ui8*)zero, (ui8*)destination, BLOCK_BYTES);
         destination = (ui8*)destination + BLOCK_BYTES;
         size -= BLOCK_BYTES;
     }
     if (size) {
-        Cypher->Encipher((const ui8*)zero, (ui8*)Leftover, BLOCK_BYTES);
+        Encipher((const ui8*)zero, (ui8*)Leftover, BLOCK_BYTES);
         memcpy(destination, Leftover, size);
         UnusedBytes = BLOCK_BYTES - size;
     }
@@ -271,6 +306,22 @@ static void Xor(void* destination, const void* a, const void* b, ui32 size) {
     ui8 *dst = (ui8*)destination;
     const ui8 *srcA = (const ui8*)a;
     const ui8 *srcB = (const ui8*)b;
+
+#ifdef __AVX512F__
+    // Process 64 bytes at a time with AVX-512
+    size_t i;
+    for (i = 0; i + 63 < size; i += 64) {
+        __m512i vA = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(srcA + i));
+        __m512i vB = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(srcB + i));
+        __m512i vXor = _mm512_xor_si512(vA, vB);
+        _mm512_storeu_si512(reinterpret_cast<__m512i*>(dst + i), vXor);
+    }
+
+    // Process remaining bytes
+    for (; i < size; ++i) {
+        dst[i] = srcA[i] ^ srcB[i];
+    }
+#else
     ui8 *endDst = dst + size;
     while (dst != endDst) {
         *dst = *srcA ^ *srcB;
@@ -278,6 +329,7 @@ static void Xor(void* destination, const void* a, const void* b, ui32 size) {
         ++srcA;
         ++srcB;
     }
+#endif
 }
 
 static void Xor(TRope::TIterator destination, TRope::TConstIterator a, const void* b, ui32 size) {
@@ -321,13 +373,13 @@ void TStreamCypher::Encrypt(void* destination, const void* source, ui32 size) {
     if (largePart) {
         if ((intptr_t)(const ui8*)source % 8 == 0) {
             if ((intptr_t)(ui8*)destination % 16 == 0) {
-                Cypher->Encipher((const ui8*)source, (ui8*)destination, largePart);
+                Encipher((const ui8*)source, (ui8*)destination, largePart);
                 destination = (ui8*)destination + largePart;
                 source = (const ui8*)source + largePart;
             } else {
                 alignas(16) ui8 data[BLOCK_BYTES] = {0};
                 while (size >= BLOCK_BYTES) {
-                    Cypher->Encipher((const ui8*)source, (ui8*)data, BLOCK_BYTES);
+                    Encipher((const ui8*)source, (ui8*)data, BLOCK_BYTES);
                     memcpy(destination, data, BLOCK_BYTES);
                     destination = (ui8*)destination + BLOCK_BYTES;
                     source = (ui8*)source + BLOCK_BYTES;
@@ -340,7 +392,7 @@ void TStreamCypher::Encrypt(void* destination, const void* source, ui32 size) {
                 alignas(16) ui8 data[BLOCK_BYTES] = {0};
                 while (size >= BLOCK_BYTES) {
                     memcpy(data, source, BLOCK_BYTES);
-                    Cypher->Encipher((const ui8*)data, (ui8*)destination, BLOCK_BYTES);
+                    Encipher((const ui8*)data, (ui8*)destination, BLOCK_BYTES);
                     destination = (ui8*)destination + BLOCK_BYTES;
                     source = (ui8*)source + BLOCK_BYTES;
                     size -= BLOCK_BYTES;
@@ -350,7 +402,7 @@ void TStreamCypher::Encrypt(void* destination, const void* source, ui32 size) {
                 alignas(16) ui8 data[BLOCK_BYTES] = {0};
                 while (size >= BLOCK_BYTES) {
                     memcpy(data, source, BLOCK_BYTES);
-                    Cypher->Encipher((const ui8*)data, (ui8*)data, BLOCK_BYTES);
+                    Encipher((const ui8*)data, (ui8*)data, BLOCK_BYTES);
                     memcpy(destination, data, BLOCK_BYTES);
                     destination = (ui8*)destination + BLOCK_BYTES;
                     source = (ui8*)source + BLOCK_BYTES;
@@ -362,7 +414,7 @@ void TStreamCypher::Encrypt(void* destination, const void* source, ui32 size) {
     }
     if (tail) {
         alignas(16) ui8 zero[BLOCK_BYTES] = {0};
-        Cypher->Encipher((const ui8*)zero, (ui8*)Leftover, BLOCK_BYTES);
+        Encipher((const ui8*)zero, (ui8*)Leftover, BLOCK_BYTES);
         Xor(destination, source, Leftover, tail);
         UnusedBytes = BLOCK_BYTES - tail;
         SecureWipeBuffer(zero, BLOCK_BYTES);

@@ -16,13 +16,14 @@ class TKqpExplainPreparedTransformer : public NYql::TGraphTransformerBase {
 public:
     TKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
         TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
-        TTypeAnnotationContext& typeCtx)
+        TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
         : Gateway(gateway)
         , Cluster(cluster)
         , TransformCtx(transformCtx)
         , FuncRegistry(funcRegistry)
         , CurrentTxIndex(0)
         , TypeCtx(typeCtx)
+        , OptimizeCtx(optCtx)
     {
         TxAlloc = TransformCtx->QueryCtx->QueryData->GetAllocState();
     }
@@ -64,8 +65,8 @@ public:
         }
 
         PhyQuerySetTxPlans(query, TKqpPhysicalQuery(TransformCtx->ExplainTransformerInput), std::move(TxResults),
-            ctx, Cluster, TransformCtx->Tables, TransformCtx->Config, TypeCtx);
-        query.SetQueryAst(KqpExprToPrettyString(*TransformCtx->ExplainTransformerInput, ctx));
+            ctx, Cluster, TransformCtx->Tables, TransformCtx->Config, TypeCtx, OptimizeCtx);
+        query.SetQueryAst(KqpExprToPrettyString(*input, ctx));
 
         TransformCtx->ExplainTransformerInput = nullptr;
         return TStatus::Ok;
@@ -121,14 +122,15 @@ private:
     NThreading::TPromise<void> Promise;
     TTxAllocatorState::TPtr TxAlloc;
     TTypeAnnotationContext& TypeCtx;
+    TIntrusivePtr<NOpt::TKqpOptimizeContext> OptimizeCtx;
 };
 
 
 TAutoPtr<IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx, const NMiniKQL::IFunctionRegistry* funcRegistry,
-    TTypeAnnotationContext& typeCtx)
+    TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optimizeCtx)
 {
-    return new TKqpExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry, typeCtx);
+    return new TKqpExplainPreparedTransformer(gateway, cluster, transformCtx, funcRegistry, typeCtx, optimizeCtx);
 }
 
 } // namespace NKqp

@@ -18,26 +18,33 @@ GRANT {{permission_name} [, ...] | ALL [PRIVILEGES]} ON {path_to_scheme_object [
 {% include [x](_includes/permissions/permissions_list.md) %}
 
 ## Примеры
+
 * Назначить право `ydb.generic.read` на таблицу `/shop_db/orders` для пользователя `user1`:
-  ```
+
+  ```yql
   GRANT 'ydb.generic.read' ON `/shop_db/orders` TO user1;
   ```
+
   Та же команда, с использованием ключевого слова
-  ```
+
+  ```yql
   GRANT SELECT ON `/shop_db/orders` TO user1;
   ```
 
 * Назначить права `ydb.database.connect`, `ydb.generic.list` на корень базы `/shop_db` для пользователя `user2` и группы `group1`:
-  ```
+
+  ```yql
   GRANT LIST, CONNECT ON `/shop_db` TO user2, group1;
   ```
 
 * Назначить право `ydb.generic.use` на таблицы `/shop_db/orders` и `/shop_db/sellers` для пользователей `user1@domain`, `user2@domain`:
-  ```
+
+  ```yql
   GRANT 'ydb.generic.use' ON `/shop_db/orders`, `/shop_db/sellers` TO `user1@domain`, `user2@domain`;
   ```
 
 * Назначить все права на таблицу `/shop_db/sellers` для пользователя `admin_user`:
-  ```
+
+  ```yql
   GRANT ALL ON `/shop_db/sellers` TO admin_user;
   ```

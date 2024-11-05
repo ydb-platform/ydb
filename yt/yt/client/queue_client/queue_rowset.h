@@ -13,7 +13,6 @@ namespace NYT::NQueueClient {
 struct TQueueRowBatchReadOptions
 {
     i64 MaxRowCount = 1000;
-    //! Currently only used if DataWeightPerRowHint is set.
     i64 MaxDataWeight = 16_MB;
 
     //! If set, this value is used to compute the number of rows to read considering the given MaxDataWeight.

@@ -117,7 +117,8 @@ namespace NYql {
                 return false;
             }
 
-            void GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override {
+            ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs, bool withLimits) override {
+                Y_UNUSED(withLimits);
                 if (auto maybeRead = TMaybeNode<TGenReadTable>(&node)) {
                     if (auto maybeTable = maybeRead.Table()) {
                         TStringBuilder tableNameBuilder;
@@ -128,8 +129,10 @@ namespace NYql {
                         tableNameBuilder << '`' << maybeTable.Cast().Value() << '`';
                         inputs.push_back(
                             TPinInfo(maybeRead.DataSource().Raw(), nullptr, maybeTable.Cast().Raw(), tableNameBuilder, false));
+                        return 1;
                     }
                 }
+                return 0;
             }
 
             IDqIntegration* GetDqIntegration() override {
@@ -153,7 +156,7 @@ namespace NYql {
             const THolder<IDqIntegration> DqIntegration_;
         };
 
-    }
+    } // namespace
 
     TIntrusivePtr<IDataProvider> CreateGenericDataSource(TGenericState::TPtr state) {
         return new TGenericDataSource(std::move(state));

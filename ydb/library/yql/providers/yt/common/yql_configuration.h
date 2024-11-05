@@ -1,8 +1,11 @@
 #pragma once
 
+#include <ydb/library/yql/public/udf/udf_data_type.h>
+
 #include <util/system/types.h>
 #include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
+#include <util/generic/set.h>
 
 namespace NYql {
 
@@ -19,7 +22,7 @@ constexpr bool DEFAULT_USE_FLOW = true;
 
 constexpr bool DEFAULT_USE_NATIVE_YT_TYPES = false;
 
-constexpr bool DEFAULT_USE_INTERMEDIATE_SCHEMA = true;
+constexpr bool DEFAULT_USE_INTERMEDIATE_STREAMS = false;
 
 constexpr bool DEFAULT_USE_SKIFF = true;
 
@@ -55,6 +58,28 @@ constexpr bool DEFAULT_JOIN_COMMON_USE_MULTI_OUT = false;
 constexpr bool DEFAULT_USE_RPC_READER_IN_DQ = false;
 constexpr size_t DEFAULT_RPC_READER_INFLIGHT = 1;
 constexpr TDuration DEFAULT_RPC_READER_TIMEOUT = TDuration::Seconds(120);
+const TSet<TString> DEFAULT_BLOCK_READER_SUPPORTED_TYPES = {"pg", "tuple"};
+const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES =
+    {
+        NUdf::EDataSlot::Int8, NUdf::EDataSlot::Uint8,
+        NUdf::EDataSlot::Int16, NUdf::EDataSlot::Uint16,
+        NUdf::EDataSlot::Int32, NUdf::EDataSlot::Uint32,
+        NUdf::EDataSlot::Int64, NUdf::EDataSlot::Uint64,
+        NUdf::EDataSlot::Bool, NUdf::EDataSlot::Double,
+        NUdf::EDataSlot::String, NUdf::EDataSlot::Json,
+        NUdf::EDataSlot::Yson, NUdf::EDataSlot::Utf8
+    };
+const TSet<TString> DEFAULT_BLOCK_INPUT_SUPPORTED_TYPES = {"tuple"};
+const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_INPUT_SUPPORTED_DATA_TYPES =
+    {
+        NUdf::EDataSlot::Int8, NUdf::EDataSlot::Uint8,
+        NUdf::EDataSlot::Int16, NUdf::EDataSlot::Uint16,
+        NUdf::EDataSlot::Int32, NUdf::EDataSlot::Uint32,
+        NUdf::EDataSlot::Int64, NUdf::EDataSlot::Uint64,
+        NUdf::EDataSlot::Bool, NUdf::EDataSlot::Double,
+        NUdf::EDataSlot::String, NUdf::EDataSlot::Utf8,
+        NUdf::EDataSlot::Yson
+    };
 
 constexpr auto DEFAULT_SWITCH_MEMORY_LIMIT = 128_MB;
 
@@ -62,10 +87,19 @@ constexpr ui32 DEFAULT_MAX_INPUT_TABLES = 3000;
 constexpr ui32 DEFAULT_MAX_OUTPUT_TABLES = 100;
 constexpr ui64 DEFAULT_APPLY_STORED_CONSTRAINTS = 0ULL;
 
-constexpr bool DEFAULT_TABLE_CONTENT_LOCAL_EXEC = false;
+constexpr ui64 DEFAULT_TABLE_CONTENT_LOCAL_EXEC = 0;
 
 constexpr ui32 DEFAULT_BATCH_LIST_FOLDER_CONCURRENCY = 5;
 
 constexpr bool DEFAULT_PARTITION_BY_CONSTANT_KEYS_VIA_MAP = false;
+
+constexpr ui64 DEFAULT_LLVM_NODE_COUNT_LIMIT = 200000;
+
+constexpr ui16 DEFAULT_MIN_COLUMN_GROUP_SIZE = 2;
+constexpr ui16 DEFAULT_MAX_COLUMN_GROUPS = 64;
+
+constexpr bool DEFAULT_DISABLE_FUSE_OPERATIONS = false;
+
+constexpr bool DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS = false;
 
 } // NYql

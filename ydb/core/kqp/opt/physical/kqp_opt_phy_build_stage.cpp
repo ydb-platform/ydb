@@ -744,6 +744,10 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStages(NYql::NNodes::TExprBas
 
     const auto& idxLookupJoin = node.Cast<TKqlIndexLookupJoin>();
 
+    if (!idxLookupJoin.Input().Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
     return Build<TDqCnUnionAll>(ctx, node.Pos())
         .Output()
             .Stage<TDqStage>()

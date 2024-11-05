@@ -7,6 +7,7 @@
 namespace NKikimr {
 namespace NTable {
     using EPage = NPage::EPage;
+    using TPageId = NPage::TPageId;
 
 namespace NFwd {
 
@@ -16,7 +17,7 @@ namespace NFwd {
     public:
         virtual ~IPageLoadingQueue() = default;
 
-        virtual ui64 AddToQueue(ui32 page, EPage type) noexcept = 0;
+        virtual ui64 AddToQueue(TPageId pageId, EPage type) noexcept = 0;
     };
 
     class IPageLoadingLogic {
@@ -29,9 +30,9 @@ namespace NFwd {
 
         virtual ~IPageLoadingLogic() = default;
 
-        virtual TResult Handle(IPageLoadingQueue *head, ui32 page, ui64 lower) noexcept = 0;
+        virtual TResult Get(IPageLoadingQueue *head, TPageId pageId, EPage type, ui64 lower) noexcept = 0;
         virtual void Forward(IPageLoadingQueue *head, ui64 upper) noexcept = 0;
-        virtual void Apply(TArrayRef<NPageCollection::TLoadedPage> loaded) noexcept = 0;
+        virtual void Fill(NPageCollection::TLoadedPage& page, EPage type) noexcept = 0;
 
         IPageLoadingQueue* Head = nullptr; /* will be set outside of IPageLoadingLogic impl */
         TStat Stat;

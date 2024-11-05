@@ -2,7 +2,7 @@
 
 Getting the entire table row as a structure. No arguments{% if feature_join %}. `JoinTableRow` in case of `JOIN` always returns a structure with table prefixes{% endif %}.
 
-**Example**
+### Example
 
 ```yql
 SELECT TableRow() FROM my_table;

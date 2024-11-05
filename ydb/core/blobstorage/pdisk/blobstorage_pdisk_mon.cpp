@@ -1,6 +1,7 @@
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_requestimpl.h"
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
+#include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
 
@@ -16,15 +17,45 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     , BandwidthGroup(Counters->GetSubgroup("subsystem", "bandwidth"))
     , PDiskGroup(Counters->GetSubgroup("subsystem", "pdisk"))
 {
+    using EVisibility = NMonitoring::TCountableBase::EVisibility;
+
+    bool extendedPDiskSensors = NActors::TlsActivationContext
+        && NActors::TlsActivationContext->ExecutorThread.ActorSystem
+        && AppData()->FeatureFlags.GetExtendedPDiskSensors();
+
+    EVisibility visibilityForExtended = extendedPDiskSensors
+        ? EVisibility::Public : EVisibility::Private;
+
+#define COUNTER_INIT(group, name, derivative) \
+    name = group->GetCounter(#name, derivative) \
+
+#define COUNTER_INIT_IF_EXTENDED(group, name, derivative) \
+    name = group->GetCounter(#name, derivative, visibilityForExtended) \
+
+#define NAMED_DER_COUNTER_INIT_IF_EXTENDED(group, field, name) \
+    field = group->GetCounter(#name, true, visibilityForExtended) \
+
+#define IO_REQ_INIT(group, field, name) \
+    field.Setup(group, #name, EVisibility::Public) \
+
+#define IO_REQ_INIT_IF_EXTENDED(group, field, name) \
+    field.Setup(group, #name, visibilityForExtended) \
+
+#define TRACKER_INIT_IF_EXTENDED(field, subgroup, name) \
+    field.Initialize(counters, "subsystem", #subgroup, #name, percentiles, visibilityForExtended) \
+
+#define HISTOGRAM_INIT(field, name) \
+    field.Initialize(counters, #name, deviceType) \
+
     // chunk states subgroup
-    UntrimmedFreeChunks = ChunksGroup->GetCounter("UntrimmedFreeChunks");
-    FreeChunks = ChunksGroup->GetCounter("FreeChunks");
-    LogChunks = ChunksGroup->GetCounter("LogChunks");
-    UncommitedDataChunks = ChunksGroup->GetCounter("UncommitedDataChunks");
-    CommitedDataChunks = ChunksGroup->GetCounter("CommitedDataChunks");
-    LockedChunks = ChunksGroup->GetCounter("LockedChunks");
-    QuarantineChunks = ChunksGroup->GetCounter("QuarantineChunks");
-    QuarantineOwners = ChunksGroup->GetCounter("QuarantineOwners");
+    COUNTER_INIT(ChunksGroup, UntrimmedFreeChunks, false);
+    COUNTER_INIT(ChunksGroup, FreeChunks, false);
+    COUNTER_INIT(ChunksGroup, LogChunks, false);
+    COUNTER_INIT(ChunksGroup, UncommitedDataChunks, false);
+    COUNTER_INIT(ChunksGroup, CommitedDataChunks, false);
+    COUNTER_INIT(ChunksGroup, LockedChunks, false);
+    COUNTER_INIT(ChunksGroup, QuarantineChunks, false);
+    COUNTER_INIT(ChunksGroup, QuarantineOwners, false);
 
     // stats subgroup
     StatsGroup = (cfg && cfg->PDiskCategory.IsSolidState())
@@ -32,74 +63,75 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
         : Counters->GetSubgroup("type", "hdd_excl");
     StatsGroup = StatsGroup->GetSubgroup("subsystem", "stats");
 
-    FreeSpacePerMile = StatsGroup->GetCounter("FreeSpacePerMile");
-    UsedSpacePerMile = StatsGroup->GetCounter("UsedSpacePerMile");
-    SplicedLogChunks = StatsGroup->GetCounter("SplicedLogChunks", true);
+    COUNTER_INIT_IF_EXTENDED(StatsGroup, FreeSpacePerMile, false);
+    COUNTER_INIT_IF_EXTENDED(StatsGroup, UsedSpacePerMile, false);
+    COUNTER_INIT_IF_EXTENDED(StatsGroup, SplicedLogChunks, true);
 
-    TotalSpaceBytes = StatsGroup->GetCounter("TotalSpaceBytes");
-    FreeSpaceBytes = StatsGroup->GetCounter("FreeSpaceBytes");
-    UsedSpaceBytes = StatsGroup->GetCounter("UsedSpaceBytes");
-    SectorMapAllocatedBytes = StatsGroup->GetCounter("SectorMapAllocatedBytes");
+    COUNTER_INIT(StatsGroup, TotalSpaceBytes, false);
+    COUNTER_INIT(StatsGroup, FreeSpaceBytes, false);
+    COUNTER_INIT(StatsGroup, UsedSpaceBytes, false);
+    COUNTER_INIT(StatsGroup, SectorMapAllocatedBytes, false);
 
     // states subgroup
-    PDiskState = StateGroup->GetCounter("PDiskState");
-    PDiskBriefState = StateGroup->GetCounter("PDiskBriefState");
-    PDiskDetailedState = StateGroup->GetCounter("PDiskDetailedState");
-    AtLeastOneVDiskNotLogged = StateGroup->GetCounter("AtLeastOneVDiskNotLogged");
-    TooMuchLogChunks = StateGroup->GetCounter("TooMuchLogChunks");
-    SerialNumberMismatched = StateGroup->GetCounter("SerialNumberMismatched");
+    COUNTER_INIT(StateGroup, PDiskState, false);
+    COUNTER_INIT(StateGroup, PDiskBriefState, false);
+    COUNTER_INIT(StateGroup, PDiskDetailedState, false);
+    COUNTER_INIT(StateGroup, AtLeastOneVDiskNotLogged, false);
+    COUNTER_INIT(StateGroup, TooMuchLogChunks, false);
+    COUNTER_INIT(StateGroup, SerialNumberMismatched, false);
     L6. Initialize(StateGroup, "L6");
     L7. Initialize(StateGroup, "L7");
     IdleLight.Initialize(StateGroup, "DeviceBusyPeriods", "DeviceIdleTimeMsPerSec", "DeviceBusyTimeMsPerSec");
 
-    OwnerIdsIssued = StateGroup->GetCounter("OwnerIdsIssued");
-    LastOwnerId = StateGroup->GetCounter("LastOwnerId");
-    PendingYardInits = StateGroup->GetCounter("PendingYardInits");
+    COUNTER_INIT_IF_EXTENDED(StateGroup, OwnerIdsIssued, false);
+    COUNTER_INIT_IF_EXTENDED(StateGroup, LastOwnerId, false);
+    COUNTER_INIT_IF_EXTENDED(StateGroup, PendingYardInits, false);
 
     SeqnoL6 = 0;
     LastDoneOperationTimestamp = 0;
 
     // device subgroup
-    DeviceBytesRead = DeviceGroup->GetCounter("DeviceBytesRead", true);
-    DeviceBytesWritten = DeviceGroup->GetCounter("DeviceBytesWritten", true);
-    DeviceReads = DeviceGroup->GetCounter("DeviceReads", true);
-    DeviceWrites = DeviceGroup->GetCounter("DeviceWrites", true);
-    DeviceInFlightBytesRead = DeviceGroup->GetCounter("DeviceInFlightBytesRead");
-    DeviceInFlightBytesWrite = DeviceGroup->GetCounter("DeviceInFlightBytesWrite");
-    DeviceInFlightReads = DeviceGroup->GetCounter("DeviceInFlightReads");
-    DeviceInFlightWrites = DeviceGroup->GetCounter("DeviceInFlightWrites");
-    DeviceTakeoffs = DeviceGroup->GetCounter("DeviceTakeoffs");
-    DeviceLandings = DeviceGroup->GetCounter("DeviceLandings");
-    DeviceHaltDetected = DeviceGroup->GetCounter("DeviceHaltDetected");
-    DeviceExpectedSeeks = DeviceGroup->GetCounter("DeviceExpectedSeeks", true);
-    DeviceReadCacheHits = DeviceGroup->GetCounter("DeviceReadCacheHits", true);
-    DeviceReadCacheMisses = DeviceGroup->GetCounter("DeviceReadCacheMisses", true);
-    DeviceWriteCacheIsValid = DeviceGroup->GetCounter("DeviceWriteCacheIsValid");
-    DeviceWriteCacheIsEnabled = DeviceGroup->GetCounter("DeviceWriteCacheIsEnabled");
-    DeviceOperationPoolTotalAllocations = DeviceGroup->GetCounter("DeviceOperationPoolTotalAllocations");
-    DeviceOperationPoolFreeObjectsMin = DeviceGroup->GetCounter("DeviceOperationPoolFreeObjectsMin");
-    DeviceBufferPoolFailedAllocations = DeviceGroup->GetCounter("DeviceBufferPoolFailedAllocations");
-    DeviceErasureSectorRestorations = DeviceGroup->GetCounter("DeviceErasureSectorRestorations");
-    DeviceEstimatedCostNs = DeviceGroup->GetCounter("DeviceEstimatedCostNs", true);
-    DeviceActualCostNs = DeviceGroup->GetCounter("DeviceActualCostNs", true);
-    DeviceOverestimationRatio = DeviceGroup->GetCounter("DeviceOverestimationRatio");
-    DeviceNonperformanceMs = DeviceGroup->GetCounter("DeviceNonperformanceMs");
-    DeviceInterruptedSystemCalls = DeviceGroup->GetCounter("DeviceInterruptedSystemCalls", true);
-    DeviceSubmitThreadBusyTimeNs = DeviceGroup->GetCounter("DeviceSubmitThreadBusyTimeNs", true);
-    DeviceCompletionThreadBusyTimeNs = DeviceGroup->GetCounter("DeviceCompletionThreadBusyTimeNs", true);
-    DeviceIoErrors = DeviceGroup->GetCounter("DeviceIoErrors", true);
-    DeviceWaitTimeMs = DeviceGroup->GetCounter("DeviceWaitTimeMs", true);
+    COUNTER_INIT(DeviceGroup, DeviceBytesRead, true);
+    COUNTER_INIT(DeviceGroup, DeviceBytesWritten, true);
+    COUNTER_INIT(DeviceGroup, DeviceReads, true);
+    COUNTER_INIT(DeviceGroup, DeviceWrites, true);
+    COUNTER_INIT(DeviceGroup, DeviceInFlightBytesRead, false);
+    COUNTER_INIT(DeviceGroup, DeviceInFlightBytesWrite, false);
+    COUNTER_INIT(DeviceGroup, DeviceInFlightReads, false);
+    COUNTER_INIT(DeviceGroup, DeviceInFlightWrites, false);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceTakeoffs, false);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceLandings, false);
+    COUNTER_INIT(DeviceGroup, DeviceHaltDetected, false);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceExpectedSeeks, true);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceReadCacheHits, true);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceReadCacheMisses, true);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceWriteCacheIsValid, false);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceWriteCacheIsEnabled, false);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceOperationPoolTotalAllocations, false);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceOperationPoolFreeObjectsMin, false);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceBufferPoolFailedAllocations, false);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceErasureSectorRestorations, false);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceEstimatedCostNs, true);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceActualCostNs, true);
+    COUNTER_INIT(DeviceGroup, DeviceOverestimationRatio, false);
+    COUNTER_INIT(DeviceGroup, DeviceNonperformanceMs, false);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceInterruptedSystemCalls, true);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceSubmitThreadBusyTimeNs, true);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceCompletionThreadBusyTimeNs, true);
+    COUNTER_INIT(DeviceGroup, DeviceIoErrors, true);
+    COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceWaitTimeMs, true);
 
+    UpdateDurationTracker.SetPDiskId(PDiskId);
     UpdateDurationTracker.SetCounter(DeviceGroup->GetCounter("PDiskThreadBusyTimeNs", true));
 
     // queue subgroup
-    QueueRequests = QueueGroup->GetCounter("QueueRequests", true);
-    QueueBytes = QueueGroup->GetCounter("QueueBytes", true);
+    COUNTER_INIT(QueueGroup, QueueRequests, true);
+    COUNTER_INIT(QueueGroup, QueueBytes, true);
 
     auto deviceType = cfg ? cfg->PDiskCategory.Type() : NPDisk::DEVICE_TYPE_UNKNOWN;
 
     // scheduler subgroup
-    ForsetiCbsNotFound = SchedulerGroup->GetCounter("ForsetiCbsNotFound");
+    COUNTER_INIT_IF_EXTENDED(SchedulerGroup, ForsetiCbsNotFound, false);
 
     TVector<float> percentiles;
     percentiles.push_back(0.50f);
@@ -107,117 +139,116 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     percentiles.push_back(0.99f);
     percentiles.push_back(1.00f);
 
-    UpdateDurationTracker.UpdateCycleTime.Initialize(counters, "subsystem", "updateCycle", "Time in millisec", percentiles);
+    TRACKER_INIT_IF_EXTENDED(UpdateDurationTracker.UpdateCycleTime, updateCycle, Time in millisec);
 
-    DeviceReadDuration.Initialize(counters, "deviceReadDuration", deviceType);
-    DeviceWriteDuration.Initialize(counters, "deviceWriteDuration", deviceType);
-    DeviceTrimDuration.Initialize(counters, "deviceTrimDuration", deviceType);
+    HISTOGRAM_INIT(DeviceReadDuration, deviceReadDuration);
+    HISTOGRAM_INIT(DeviceWriteDuration, deviceWriteDuration);
+    HISTOGRAM_INIT(DeviceTrimDuration, deviceTrimDuration);
+    HISTOGRAM_INIT(DeviceFlushDuration, deviceFlushDuration);
 
-    LogQueueTime.Initialize(counters, "subsystem", "logQueueTime", "Time in millisec", percentiles);
-    GetQueueSyncLog.Initialize(counters, "subsystem", "getQueueSyncLog", "Time in millisec", percentiles);
-    GetQueueHullComp.Initialize(counters, "subsystem", "getQueueHullComp", "Time in millisec", percentiles);
-    GetQueueHullOnlineRt.Initialize(counters, "subsystem", "getQueueHullOnlineRt", "Time in millisec", percentiles);
-    GetQueueHullOnlineOther.Initialize(counters, "subsystem", "getQueueHullOnlineOther",
-            "Time in millisec", percentiles);
-    GetQueueHullLoad.Initialize(counters, "subsystem", "getQueueHullLoad", "Time in millisec", percentiles);
-    GetQueueHullLow.Initialize(counters, "subsystem", "getQueueHullLow", "Time in millisec", percentiles);
-    WriteQueueSyncLog.Initialize(counters, "subsystem", "writeQueueSyncLog", "Time in millisec", percentiles);
-    WriteQueueHullFresh.Initialize(counters, "subsystem", "writeQueueHullFresh", "Time in millisec", percentiles);
-    WriteQueueHullHuge.Initialize(counters, "subsystem", "writeQueueHullHuge", "Time in millisec", percentiles);
-    WriteQueueHullComp.Initialize(counters, "subsystem", "writeQueueHullComp", "Time in millisec", percentiles);
+    TRACKER_INIT_IF_EXTENDED(LogQueueTime, logQueueTime, Time in millisec);
+    TRACKER_INIT_IF_EXTENDED(GetQueueSyncLog, getQueueSyncLog, Time in millisec);
+    TRACKER_INIT_IF_EXTENDED(GetQueueHullComp, getQueueHullComp, Time in millisec);
+    TRACKER_INIT_IF_EXTENDED(GetQueueHullOnlineRt, getQueueHullOnlineRt, Time in millisec);
+    TRACKER_INIT_IF_EXTENDED(GetQueueHullOnlineOther, getQueueHullOnlineOther, Time in millisec);
+    TRACKER_INIT_IF_EXTENDED(GetQueueHullLoad, getQueueHullLoad, Time in millisec);
+    TRACKER_INIT_IF_EXTENDED(GetQueueHullLow, getQueueHullLow, Time in millisec);
+    TRACKER_INIT_IF_EXTENDED(WriteQueueSyncLog, writeQueueSyncLog, Time in millisec);
+    TRACKER_INIT_IF_EXTENDED(WriteQueueHullFresh, writeQueueHullFresh, Time in millisec);
+    TRACKER_INIT_IF_EXTENDED(WriteQueueHullHuge, writeQueueHullHuge, Time in millisec);
+    TRACKER_INIT_IF_EXTENDED(WriteQueueHullComp, writeQueueHullComp, Time in millisec);
 
-    SensitiveBurst.Initialize(counters, "subsystem", "sensitiveBurst", "Time in millisec", percentiles);
-    BestEffortBurst.Initialize(counters, "subsystem", "bestEffortBurst", "Time in millisec", percentiles);
+    TRACKER_INIT_IF_EXTENDED(SensitiveBurst, sensitiveBurst, Time in millisec);
+    TRACKER_INIT_IF_EXTENDED(BestEffortBurst, bestEffortBurst, Time in millisec);
 
-    InputQLA.Initialize(counters, "subsystem", "inputQLA", "Queue length seen by arrivals", percentiles);
-    InputQCA.Initialize(counters, "subsystem", "inputQCA", "Queue cost seen by arrivals", percentiles);
+    TRACKER_INIT_IF_EXTENDED(InputQLA, inputQLA, Queue length seen by arrivals);
+    TRACKER_INIT_IF_EXTENDED(InputQCA, inputQCA, Queue cost seen by arrivals);
 
-    LogOperationSizeBytes.Initialize(counters, "subsystem", "logOperationSize", "Size in bytes", percentiles);
-    GetSyncLogSizeBytes.Initialize(counters, "subsystem", "getSyncLogSize", "Size in bytes", percentiles);
+    TRACKER_INIT_IF_EXTENDED(LogOperationSizeBytes, logOperationSize, Size in bytes);
+    TRACKER_INIT_IF_EXTENDED(GetSyncLogSizeBytes, getSyncLogSize, Size in bytes);
 
-    GetHullCompSizeBytes.Initialize(counters, "subsystem", "getHullCompSize", "Size in bytes", percentiles);
-    GetHullOnlineRtSizeBytes.Initialize(counters, "subsystem", "getHullOnlineRtSize", "Size in bytes", percentiles);
-    GetHullOnlineOtherSizeBytes.Initialize(counters, "subsystem", "getHullOnlineOtherSize", "Size in bytes",
-        percentiles);
-    GetHullLoadSizeBytes.Initialize(counters, "subsystem", "getHullLoadSize", "Size in bytes", percentiles);
-    GetHullLowSizeBytes.Initialize(counters, "subsystem", "getHullLowSize", "Size in bytes", percentiles);
+    TRACKER_INIT_IF_EXTENDED(GetHullCompSizeBytes, getHullCompSize, Size in bytes);
+    TRACKER_INIT_IF_EXTENDED(GetHullOnlineRtSizeBytes, getHullOnlineRtSize, Size in bytes);
+    TRACKER_INIT_IF_EXTENDED(GetHullOnlineOtherSizeBytes, getHullOnlineOtherSize, Size in bytes);
+    TRACKER_INIT_IF_EXTENDED(GetHullLoadSizeBytes, getHullLoadSize, Size in bytes);
+    TRACKER_INIT_IF_EXTENDED(GetHullLowSizeBytes, getHullLowSize, Size in bytes);
 
-    WriteSyncLogSizeBytes.Initialize(counters, "subsystem", "writeSyncLogSize", "Size in bytes", percentiles);
-    WriteHullFreshSizeBytes.Initialize(counters, "subsystem", "writeHullFreshSize", "Size in bytes", percentiles);
-    WriteHullHugeSizeBytes.Initialize(counters, "subsystem", "writeHullHugeSize", "Size in bytes", percentiles);
-    WriteHullCompSizeBytes.Initialize(counters, "subsystem", "writeHullCompSize", "Size in bytes", percentiles);
+    TRACKER_INIT_IF_EXTENDED(WriteSyncLogSizeBytes, writeSyncLogSize, Size in bytes);
+    TRACKER_INIT_IF_EXTENDED(WriteHullFreshSizeBytes, writeHullFreshSize, Size in bytes);
+    TRACKER_INIT_IF_EXTENDED(WriteHullHugeSizeBytes, writeHullHugeSize, Size in bytes);
+    TRACKER_INIT_IF_EXTENDED(WriteHullCompSizeBytes, writeHullCompSize, Size in bytes);
 
-    LogResponseTime.Initialize(counters, "logresponse", deviceType);
-    GetResponseSyncLog.Initialize(counters, "getResponseSyncLog", deviceType);
+    HISTOGRAM_INIT(LogResponseTime, logresponse);
+    HISTOGRAM_INIT(GetResponseSyncLog, getResponseSyncLog);
 
-    GetResponseHullComp.Initialize(counters, "getResponseHullComp", deviceType);
-    GetResponseHullOnlineRt.Initialize(counters, "getResponseHullOnlineRt", deviceType);
-    GetResponseHullOnlineOther.Initialize(counters, "getResponseHullOnlineOther", deviceType);
-    GetResponseHullLoad.Initialize(counters, "getResponseHullLoad", deviceType);
-    GetResponseHullLow.Initialize(counters, "getResponseHullLow", deviceType);
+    HISTOGRAM_INIT(GetResponseHullComp, getResponseHullComp);
+    HISTOGRAM_INIT(GetResponseHullOnlineRt, getResponseHullOnlineRt);
+    HISTOGRAM_INIT(GetResponseHullOnlineOther, getResponseHullOnlineOther);
+    HISTOGRAM_INIT(GetResponseHullLoad, getResponseHullLoad);
+    HISTOGRAM_INIT(GetResponseHullLow, getResponseHullLow);
 
-    WriteResponseSyncLog.Initialize(counters, "writeResponseSyncLog", deviceType);
-    WriteResponseHullFresh.Initialize(counters, "writeResponseHullFresh", deviceType);
-    WriteResponseHullHuge.Initialize(counters, "writeResponseHullHuge", deviceType);
-    WriteResponseHullComp.Initialize(counters, "writeResponseHullComp", deviceType);
+    HISTOGRAM_INIT(WriteResponseSyncLog, writeResponseSyncLog);
+    HISTOGRAM_INIT(WriteResponseHullFresh, writeResponseHullFresh);
+    HISTOGRAM_INIT(WriteResponseHullHuge, writeResponseHullHuge);
+    HISTOGRAM_INIT(WriteResponseHullComp, writeResponseHullComp);
 
     // bandwidth
-    BandwidthPLogPayload = BandwidthGroup->GetCounter("Bandwidth/PDisk/Log/Payload", true);
-    BandwidthPLogCommit = BandwidthGroup->GetCounter("Bandwidth/PDisk/Log/Commit", true);
-    BandwidthPLogSectorFooter = BandwidthGroup->GetCounter("Bandwidth/PDisk/Log/SectorFooter", true);
-    BandwidthPLogRecordHeader = BandwidthGroup->GetCounter("Bandwidth/PDisk/Log/RecordHeader", true);
-    BandwidthPLogPadding = BandwidthGroup->GetCounter("Bandwidth/PDisk/Log/Padding", true);
-    BandwidthPLogErasure = BandwidthGroup->GetCounter("Bandwidth/PDisk/Log/Erasure", true);
-    BandwidthPLogChunkPadding = BandwidthGroup->GetCounter("Bandwidth/PDisk/Log/ChunkPadding", true);
-    BandwidthPLogChunkFooter = BandwidthGroup->GetCounter("Bandwidth/PDisk/Log/ChunkFooter", true);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPLogPayload, Bandwidth/PDisk/Log/Payload);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPLogCommit, Bandwidth/PDisk/Log/Commit);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPLogSectorFooter, Bandwidth/PDisk/Log/SectorFooter);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPLogRecordHeader, Bandwidth/PDisk/Log/RecordHeader);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPLogPadding, Bandwidth/PDisk/Log/Padding);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPLogErasure, Bandwidth/PDisk/Log/Erasure);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPLogChunkPadding, Bandwidth/PDisk/Log/ChunkPadding);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPLogChunkFooter, Bandwidth/PDisk/Log/ChunkFooter);
 
-    BandwidthPSysLogPayload = BandwidthGroup->GetCounter("Bandwidth/PDisk/SysLog/Payload", true);
-    BandwidthPSysLogSectorFooter = BandwidthGroup->GetCounter("Bandwidth/PDisk/SysLog/SectorFooter", true);
-    BandwidthPSysLogRecordHeader = BandwidthGroup->GetCounter("Bandwidth/PDisk/SysLog/RecordHeader", true);
-    BandwidthPSysLogPadding = BandwidthGroup->GetCounter("Bandwidth/PDisk/SysLog/Padding", true);
-    BandwidthPSysLogErasure = BandwidthGroup->GetCounter("Bandwidth/PDisk/SysLog/Erasure", true);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPSysLogPayload, Bandwidth/PDisk/SysLog/Payload);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPSysLogSectorFooter, Bandwidth/PDisk/SysLog/SectorFooter);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPSysLogRecordHeader, Bandwidth/PDisk/SysLog/RecordHeader);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPSysLogPadding, Bandwidth/PDisk/SysLog/Padding);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPSysLogErasure, Bandwidth/PDisk/SysLog/Erasure);
 
-    BandwidthPChunkPayload = BandwidthGroup->GetCounter("Bandwidth/PDisk/Chunk/Payload", true);
-    BandwidthPChunkSectorFooter = BandwidthGroup->GetCounter("Bandwidth/PDisk/Chunk/SectorFooter", true);
-    BandwidthPChunkPadding = BandwidthGroup->GetCounter("Bandwidth/PDisk/Chunk/Padding", true);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPChunkPayload, Bandwidth/PDisk/Chunk/Payload);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPChunkSectorFooter, Bandwidth/PDisk/Chunk/SectorFooter);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPChunkPadding, Bandwidth/PDisk/Chunk/Padding);
 
-    BandwidthPChunkReadPayload = BandwidthGroup->GetCounter("Bandwidth/PDisk/ChunkRead/Payload", true);
-    BandwidthPChunkReadSectorFooter = BandwidthGroup->GetCounter("Bandwidth/PDisk/ChunkRead/SectorFooter", true);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPChunkReadPayload, Bandwidth/PDisk/ChunkRead/Payload);
+    NAMED_DER_COUNTER_INIT_IF_EXTENDED(BandwidthGroup, BandwidthPChunkReadSectorFooter, Bandwidth/PDisk/ChunkRead/SectorFooter);
 
     // pdisk (interface)
-    YardInit.Setup(PDiskGroup, "YardInit");
-    CheckSpace.Setup(PDiskGroup, "YardCheckSpace");
-    YardConfigureScheduler.Setup(PDiskGroup, "YardConfigureScheduler");
-    ChunkReserve.Setup(PDiskGroup, "YardChunkReserve");
-    ChunkForget.Setup(PDiskGroup, "YardChunkForget");
-    Harakiri.Setup(PDiskGroup, "YardHarakiri");
-    YardSlay.Setup(PDiskGroup, "YardSlay");
-    YardControl.Setup(PDiskGroup, "YardControl");
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardInit, YardInit);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, CheckSpace, YardCheckSpace);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardConfigureScheduler, YardConfigureScheduler);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ChunkReserve, YardChunkReserve);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ChunkForget, YardChunkForget);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, Harakiri, YardHarakiri);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardSlay, YardSlay);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardControl, YardControl);
 
-    WriteSyncLog.Setup(PDiskGroup, "WriteSyncLog");
-    WriteFresh.Setup(PDiskGroup, "WriteFresh");
-    WriteHuge.Setup(PDiskGroup, "WriteHuge");
-    WriteComp.Setup(PDiskGroup, "WriteComp");
-    Trim.Setup(PDiskGroup, "WriteTrim");
+    IO_REQ_INIT(PDiskGroup, WriteSyncLog, WriteSyncLog);
+    IO_REQ_INIT(PDiskGroup, WriteFresh, WriteFresh);
+    IO_REQ_INIT(PDiskGroup, WriteHuge, WriteHuge);
+    IO_REQ_INIT(PDiskGroup, WriteComp, WriteComp);
+    IO_REQ_INIT(PDiskGroup, Trim, WriteTrim);
 
-    ReadSyncLog.Setup(PDiskGroup, "ReadSyncLog");
-    ReadComp.Setup(PDiskGroup, "ReadComp");
-    ReadOnlineRt.Setup(PDiskGroup, "ReadOnlineRt");
-    ReadOnlineOther.Setup(PDiskGroup, "ReadOnlineOther");
-    ReadLoad.Setup(PDiskGroup,"ReadLoad");
-    ReadLow.Setup(PDiskGroup, "ReadLow");
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ReadSyncLog, ReadSyncLog);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ReadComp, ReadComp);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ReadOnlineRt, ReadOnlineRt);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ReadOnlineOther, ReadOnlineOther);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ReadLoad, ReadLoad);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ReadLow, ReadLow);
 
-    Unknown.Setup(PDiskGroup,"Unknown");
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, Unknown, Unknown);
 
-    WriteLog.Setup(PDiskGroup, "WriteLog");
-    WriteHugeLog.Setup(PDiskGroup, "WriteHugeLog");
-    LogRead.Setup(PDiskGroup, "ReadLog");
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, WriteLog, WriteLog);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, WriteHugeLog, WriteHugeLog);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, LogRead, ReadLog);
 
-    PDiskThreadCPU = PDiskGroup->GetCounter("PDiskThreadCPU", true);
-    SubmitThreadCPU = PDiskGroup->GetCounter("SubmitThreadCPU", true);
-    GetThreadCPU = PDiskGroup->GetCounter("GetThreadCPU", true);
-    TrimThreadCPU = PDiskGroup->GetCounter("TrimThreadCPU", true);
-    CompletionThreadCPU = PDiskGroup->GetCounter("CompletionThreadCPU", true);
+    COUNTER_INIT(PDiskGroup, PDiskThreadCPU, true);
+    COUNTER_INIT(PDiskGroup, SubmitThreadCPU, true);
+    COUNTER_INIT(PDiskGroup, GetThreadCPU, true);
+    COUNTER_INIT(PDiskGroup, TrimThreadCPU, true);
+    COUNTER_INIT(PDiskGroup, CompletionThreadCPU, true);
 }
 
 ::NMonitoring::TDynamicCounters::TCounterPtr TPDiskMon::GetBusyPeriod(const TString& owner, const TString& queue) {

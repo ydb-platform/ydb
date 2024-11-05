@@ -32,8 +32,9 @@ public:
     TDqYtReadWrapperBase(const TComputationNodeFactoryContext& ctx, const TString& clusterName,
         const TString& token, const NYT::TNode& inputSpec, const NYT::TNode& samplingSpec,
         const TVector<ui32>& inputGroups,
-        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables, NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight,
-        size_t timeout) : TBaseComputation(ctx.Mutables, this, EValueRepresentation::Boxed, EValueRepresentation::Boxed)
+        TType* itemType, const TVector<TString>& tableNames, TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout, const TVector<ui64>& tableOffsets)
+        : TBaseComputation(ctx.Mutables, this, EValueRepresentation::Boxed, EValueRepresentation::Boxed)
         , Width(AS_TYPE(TStructType, itemType)->GetMembersCount())
         , CodecCtx(ctx.Env, ctx.FunctionRegistry, &ctx.HolderFactory)
         , ClusterName(clusterName)
@@ -45,6 +46,7 @@ public:
     {
         Specs.SetUseSkiff("", TMkqlIOSpecs::ESystemField::RowIndex | TMkqlIOSpecs::ESystemField::RangeIndex);
         Specs.Init(CodecCtx, inputSpec, inputGroups, tableNames, itemType, {}, {}, jobStats);
+        Specs.SetTableOffsets(tableOffsets);
     }
 
     class TState: public TComputationValue<TState>, public IS {
@@ -90,7 +92,7 @@ public:
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (!state.HasValue()) {
+        if (state.IsInvalid()) {
             MakeState(ctx, state);
         }
 
@@ -136,7 +138,7 @@ public:
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        BranchInst::Create(main, make, HasValue(statePtr, block), block);
+        BranchInst::Create(make, main, IsInvalid(statePtr, block), block);
         block = make;
 
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(static_cast<const TDqYtReadWrapperBase<T, IS>*>(this))), structPtrType, "self", block);

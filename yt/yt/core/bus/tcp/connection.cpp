@@ -63,8 +63,11 @@ static constexpr i64 PendingOutBytesFlushThreshold = 1_MBs;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TTcpConnectionReadBufferTag { };
-struct TTcpConnectionWriteBufferTag { };
+struct TTcpServerConnectionReadBufferTag { };
+struct TTcpServerConnectionWriteBufferTag { };
+
+struct TTcpClientConnectionReadBufferTag { };
+struct TTcpClientConnectionWriteBufferTag { };
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -103,14 +106,15 @@ TTcpConnection::TTcpConnection(
     TConnectionId id,
     SOCKET socket,
     EMultiplexingBand multiplexingBand,
-    const TString& endpointDescription,
+    const std::string& endpointDescription,
     const IAttributeDictionary& endpointAttributes,
     const TNetworkAddress& endpointNetworkAddress,
-    const std::optional<TString>& endpointAddress,
-    const std::optional<TString>& unixDomainSocketPath,
+    const std::optional<std::string>& endpointAddress,
+    const std::optional<std::string>& unixDomainSocketPath,
     IMessageHandlerPtr handler,
     IPollerPtr poller,
-    IPacketTranscoderFactory* packetTranscoderFactory)
+    IPacketTranscoderFactory* packetTranscoderFactory,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
     : Config_(std::move(config))
     , ConnectionType_(connectionType)
     , Id_(id)
@@ -127,7 +131,7 @@ TTcpConnection::TTcpConnection(
         EndpointDescription_,
         Config_->EncryptionMode,
         Config_->VerificationMode))
-    , Logger(BusLogger.WithTag(LoggingTag_.c_str()))
+    , Logger(BusLogger().WithRawTag(LoggingTag_))
     , GenerateChecksums_(Config_->GenerateChecksums)
     , Socket_(socket)
     , MultiplexingBand_(multiplexingBand)
@@ -137,6 +141,7 @@ TTcpConnection::TTcpConnection(
     , WriteStallTimeout_(NProfiling::DurationToCpuDuration(Config_->WriteStallTimeout))
     , EncryptionMode_(Config_->EncryptionMode)
     , VerificationMode_(Config_->VerificationMode)
+    , MemoryUsageTracker_(std::move(memoryUsageTracker))
 { }
 
 TTcpConnection::~TTcpConnection()
@@ -191,7 +196,10 @@ void TTcpConnection::Close()
 
     EncodedFragments_.clear();
 
-    FlushStatistics();
+    {
+        auto guard = Guard(Lock_);
+        FlushStatistics();
+    }
 }
 
 void TTcpConnection::Start()
@@ -206,12 +214,25 @@ void TTcpConnection::Start()
     }
 
     if (!Poller_->TryRegister(this)) {
-        Abort(TError(NBus::EErrorCode::TransportError, "Cannot register connection pollable"));
+        auto error = TError(NBus::EErrorCode::TransportError, "Cannot register connection pollable");
+        Abort(error, NLogging::ELogLevel::Warning);
         return;
     }
 
     TTcpDispatcher::TImpl::Get()->RegisterConnection(this);
-    InitBuffers();
+
+    try {
+        InitBuffers();
+    } catch (const std::exception& ex) {
+        auto error = TError(NBus::EErrorCode::TransportError, "I/O buffers allocation error") << ex;
+        Abort(error, NLogging::ELogLevel::Warning);
+        return;
+    }
+
+    if (Config_->ConnectionStartDelay) {
+        YT_LOG_WARNING("Delay in opening activation of the test connection (Delay: %v)", Config_->ConnectionStartDelay);
+        TDelayedExecutor::WaitForDuration(Config_->ConnectionStartDelay.value());
+    }
 
     switch (ConnectionType_) {
         case EConnectionType::Client:
@@ -225,8 +246,7 @@ void TTcpConnection::Start()
             YT_VERIFY(Socket_ != INVALID_SOCKET);
             State_ = EState::Opening;
             SetupNetwork(EndpointNetworkAddress_);
-            Open();
-            guard.Release();
+            Open(guard);
             break;
         }
 
@@ -241,7 +261,10 @@ void TTcpConnection::RunPeriodicCheck()
         return;
     }
 
-    FlushStatistics();
+    {
+        auto guard = Guard(Lock_);
+        FlushStatistics();
+    }
 
     auto now = NProfiling::GetCpuInstant();
 
@@ -266,16 +289,6 @@ void TTcpConnection::RunPeriodicCheck()
     }
 }
 
-EPollablePriority TTcpConnection::GetPriority() const
-{
-    switch (MultiplexingBand_.load(std::memory_order::relaxed)) {
-        case EMultiplexingBand::RealTime:
-            return EPollablePriority::RealTime;
-        default:
-            return EPollablePriority::Normal;
-    }
-}
-
 const TString& TTcpConnection::GetLoggingTag() const
 {
     return LoggingTag_;
@@ -290,10 +303,10 @@ void TTcpConnection::TryEnqueueHandshake()
     NProto::THandshake handshake;
     ToProto(handshake.mutable_connection_id(), Id_);
     if (ConnectionType_ == EConnectionType::Client) {
-        handshake.set_multiplexing_band(ToProto<int>(MultiplexingBand_.load()));
+        handshake.set_multiplexing_band(ToProto(MultiplexingBand_.load()));
     }
-    handshake.set_encryption_mode(ToProto<int>(EncryptionMode_));
-    handshake.set_verification_mode(ToProto<int>(VerificationMode_));
+    handshake.set_encryption_mode(ToProto(EncryptionMode_));
+    handshake.set_verification_mode(ToProto(VerificationMode_));
 
     auto message = MakeHandshakeMessage(handshake);
     auto messageSize = GetByteSize(message);
@@ -312,7 +325,7 @@ void TTcpConnection::TryEnqueueHandshake()
 
 TSharedRefArray TTcpConnection::MakeHandshakeMessage(const NProto::THandshake& handshake)
 {
-    auto protoSize = handshake.ByteSize();
+    auto protoSize = handshake.ByteSizeLong();
     auto totalSize = sizeof(HandshakeMessageSignature) + protoSize;
 
     TSharedRefArrayBuilder builder(1, totalSize);
@@ -395,7 +408,7 @@ TConnectionId TTcpConnection::GetId() const
     return Id_;
 }
 
-void TTcpConnection::Open()
+void TTcpConnection::Open(TGuard<NThreading::TSpinLock>& guard)
 {
     State_ = EState::Open;
 
@@ -413,6 +426,8 @@ void TTcpConnection::Open()
     auto previousPendingControl = static_cast<EPollControl>(PendingControl_.fetch_and(~static_cast<ui64>(EPollControl::Offline)));
 
     ArmPoller();
+
+    guard.Release();
 
     // Something might be pending already, for example Terminate.
     if (Any(previousPendingControl & ~EPollControl::Offline)) {
@@ -490,7 +505,7 @@ void TTcpConnection::SetupNetwork(const TNetworkAddress& address)
     }
 }
 
-void TTcpConnection::Abort(const TError& error)
+void TTcpConnection::Abort(const TError& error, NLogging::ELogLevel logLevel)
 {
     AbortSslSession();
 
@@ -528,7 +543,7 @@ void TTcpConnection::Abort(const TError& error)
         PendingControl_.fetch_or(static_cast<ui64>(EPollControl::Shutdown));
     }
 
-    YT_LOG_DEBUG(detailedError, "Connection aborted");
+    YT_LOG_EVENT(Logger, logLevel, detailedError, "Connection aborted");
 
     // OnShutdown() will be called after draining events from thread pools.
     YT_UNUSED_FUTURE(Poller_->Unregister(this));
@@ -550,10 +565,26 @@ bool TTcpConnection::AbortIfNetworkingDisabled()
 
 void TTcpConnection::InitBuffers()
 {
-    ReadBuffer_ = TBlob(GetRefCountedTypeCookie<TTcpConnectionReadBufferTag>(), ReadBufferSize, /*initializeStorage*/ false);
+    ReadBuffer_ = TMemoryTrackedBlob::Build(
+        MemoryUsageTracker_,
+        ConnectionType_ == EConnectionType::Server
+            ? GetRefCountedTypeCookie<TTcpServerConnectionReadBufferTag>()
+            : GetRefCountedTypeCookie<TTcpClientConnectionReadBufferTag>());
+    ReadBuffer_
+        .TryResize(
+            ReadBufferSize,
+            /*initializeStorage*/ false)
+        .ThrowOnError();
 
-    WriteBuffers_.push_back(std::make_unique<TBlob>(GetRefCountedTypeCookie<TTcpConnectionWriteBufferTag>()));
-    WriteBuffers_[0]->Reserve(WriteBufferSize);
+    auto trackedBlob = TMemoryTrackedBlob::Build(
+        MemoryUsageTracker_,
+        ConnectionType_ == EConnectionType::Server
+            ? GetRefCountedTypeCookie<TTcpServerConnectionWriteBufferTag>()
+            : GetRefCountedTypeCookie<TTcpClientConnectionWriteBufferTag>());
+    trackedBlob
+        .TryReserve(WriteBufferSize)
+        .ThrowOnError();
+    WriteBuffers_.push_back(std::move(trackedBlob));
 }
 
 int TTcpConnection::GetSocketPort()
@@ -590,18 +621,18 @@ void TTcpConnection::ConnectSocket(const TNetworkAddress& address)
     DialerSession_->Dial();
 }
 
-void TTcpConnection::OnDialerFinished(const TErrorOr<SOCKET>& socketOrError)
+void TTcpConnection::OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError)
 {
     YT_LOG_DEBUG("Dialer finished");
 
     DialerSession_.Reset();
 
-    if (!socketOrError.IsOK()) {
+    if (!fdOrError.IsOK()) {
         Abort(TError(
             NBus::EErrorCode::TransportError,
             "Error connecting to %v",
             EndpointDescription_)
-            << socketOrError);
+            << fdOrError);
         return;
     }
 
@@ -612,18 +643,18 @@ void TTcpConnection::OnDialerFinished(const TErrorOr<SOCKET>& socketOrError)
             return;
         }
 
-        Socket_ = socketOrError.Value();
+        Socket_ = fdOrError.Value();
 
         auto tosLevel = TosLevel_.load();
         if (tosLevel != DefaultTosLevel) {
             InitSocketTosLevel(tosLevel);
         }
 
-        Open();
+        Open(guard);
     }
 }
 
-const TString& TTcpConnection::GetEndpointDescription() const
+const std::string& TTcpConnection::GetEndpointDescription() const
 {
     return EndpointDescription_;
 }
@@ -633,12 +664,12 @@ const IAttributeDictionary& TTcpConnection::GetEndpointAttributes() const
     return *EndpointAttributes_;
 }
 
-const TString& TTcpConnection::GetEndpointAddress() const
+const std::string& TTcpConnection::GetEndpointAddress() const
 {
     if (EndpointAddress_) {
         return *EndpointAddress_;
     } else {
-        static const TString EmptyAddress;
+        static const std::string EmptyAddress;
         return EmptyAddress;
     }
 }
@@ -781,6 +812,8 @@ void TTcpConnection::Terminate(const TError& error)
 
     // Arm calling OnTerminate() from OnEvent().
     auto previousPendingControl = static_cast<EPollControl>(PendingControl_.fetch_or(static_cast<ui64>(EPollControl::Terminate)));
+
+    guard.Release();
 
     // To recover from bogus state always retry processing unless socket is offline
     if (None(previousPendingControl & EPollControl::Offline)) {
@@ -1090,6 +1123,11 @@ bool TTcpConnection::AdvanceDecoder(size_t size)
         UpdateBusCounter(&TBusNetworkBandCounters::DecoderErrors, 1);
         Abort(TError(NBus::EErrorCode::TransportError, "Error decoding incoming packet"));
         return false;
+    }
+
+    if (Config_->PacketDecoderDelay) {
+        YT_LOG_WARNING("Test delay in tcp connection packet decoder (Delay: %v)", Config_->PacketDecoderDelay);
+        TDelayedExecutor::WaitForDuration(Config_->PacketDecoderDelay.value());
     }
 
     if (Decoder_->IsFinished()) {
@@ -1428,13 +1466,13 @@ bool TTcpConnection::MaybeEncodeFragments()
 
     // Discard all buffers except for a single one.
     WriteBuffers_.resize(1);
-    auto* buffer = WriteBuffers_.back().get();
+    auto* buffer = &WriteBuffers_.back();
     buffer->Clear();
 
     size_t encodedSize = 0;
     size_t coalescedSize = 0;
 
-    auto flushCoalesced = [&] () {
+    auto flushCoalesced = [&] {
         if (coalescedSize > 0) {
             EncodedFragments_.push(TRef(buffer->End() - coalescedSize, coalescedSize));
             coalescedSize = 0;
@@ -1445,10 +1483,20 @@ bool TTcpConnection::MaybeEncodeFragments()
         if (buffer->Size() + fragment.Size() > buffer->Capacity()) {
             // Make sure we never reallocate.
             flushCoalesced();
-            WriteBuffers_.push_back(std::make_unique<TBlob>(GetRefCountedTypeCookie<TTcpConnectionWriteBufferTag>()));
-            buffer = WriteBuffers_.back().get();
-            buffer->Reserve(std::max(WriteBufferSize, fragment.Size()));
+
+            auto size = std::max(WriteBufferSize, fragment.Size());
+
+            auto trackedBlob = TMemoryTrackedBlob::Build(
+                MemoryUsageTracker_,
+                ConnectionType_ == EConnectionType::Server
+                    ? GetRefCountedTypeCookie<TTcpServerConnectionWriteBufferTag>()
+                    : GetRefCountedTypeCookie<TTcpClientConnectionWriteBufferTag>());
+            trackedBlob.Reserve(size);
+
+            WriteBuffers_.push_back(std::move(trackedBlob));
+            buffer = &WriteBuffers_.back();
         }
+
         buffer->Append(fragment);
         coalescedSize += fragment.Size();
     };
@@ -1738,6 +1786,7 @@ void TTcpConnection::InitSocketTosLevel(TTosLevel tosLevel)
 
 void TTcpConnection::FlushStatistics()
 {
+    VERIFY_SPINLOCK_AFFINITY(Lock_);
     UpdateTcpStatistics();
     FlushBusStatistics();
 }
@@ -2012,7 +2061,7 @@ void TTcpConnection::TryEstablishSslSession()
     switch (VerificationMode_) {
         case EVerificationMode::Full:
             // Because of the implementation of check_id() from libs/openssl/crypto/x509/x509_vfy.c,
-            // we can not set both ip and host checks. So we separate them as follows.
+            // we can not set both IP and host checks. So we separate them as follows.
             if (Config_->PeerAlternativeHostName) {
                 // Set hostname for peer certificate verification.
                 if (SSL_set1_host(Ssl_.get(), EndpointHostName_.c_str()) != 1) {
@@ -2026,10 +2075,10 @@ void TTcpConnection::TryEstablishSslSession()
                     return;
                 }
             } else if (auto networkAddress = TNetworkAddress::TryParse(EndpointHostName_); networkAddress.IsOK() && networkAddress.Value().IsIP()) {
-                // Set ip address for peer certificate verification.
+                // Set IP address for peer certificate verification.
                 auto address = ToString(networkAddress.Value(), {.IncludePort = false, .IncludeTcpProtocol = false});
                 if (X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(Ssl_.get()), address.c_str()) != 1) {
-                    Abort(TError(NBus::EErrorCode::SslError, "Failed to set ip address %v for peer certificate verification", address));
+                    Abort(TError(NBus::EErrorCode::SslError, "Failed to set IP address %v for peer certificate verification", address));
                     return;
                 }
             } else {

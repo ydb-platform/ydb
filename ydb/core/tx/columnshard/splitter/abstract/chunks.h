@@ -1,8 +1,10 @@
 #pragma once
-#include "chunk_meta.h"
 #include <ydb/core/tx/columnshard/engines/portions/common.h>
-#include <ydb/core/tx/columnshard/engines/scheme/abstract/saver.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
+
+#include <ydb/library/actors/core/log.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 
 namespace NKikimr::NColumnShard {
 class TSplitterCounters;
@@ -11,13 +13,14 @@ class TSplitterCounters;
 namespace NKikimr::NOlap {
 
 class TPortionInfo;
+class TPortionInfoConstructor;
+class TSimpleColumnInfo;
 
 class IPortionDataChunk {
 private:
     YDB_READONLY(ui32, EntityId, 0);
 
     std::optional<ui32> ChunkIdx;
-
 protected:
     ui64 DoGetPackedSize() const {
         return GetData().size();
@@ -27,9 +30,18 @@ protected:
     virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const = 0;
     virtual bool DoIsSplittable() const = 0;
     virtual std::optional<ui32> DoGetRecordsCount() const = 0;
+    virtual std::optional<ui64> DoGetRawBytes() const = 0;
+
     virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const = 0;
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const = 0;
-    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const = 0;
+    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfoConstructor& portionInfo) const = 0;
+    virtual void DoAddInplaceIntoPortion(TPortionInfoConstructor& /*portionInfo*/) const {
+        AFL_VERIFY(false)("problem", "implemented only in index chunks");
+    }
+    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& /*data*/, const TSimpleColumnInfo& /*columnInfo*/) const {
+        AFL_VERIFY(false);
+        return nullptr;
+    }
 public:
     IPortionDataChunk(const ui32 entityId, const std::optional<ui16>& chunkIdx = {})
         : EntityId(entityId)
@@ -54,6 +66,12 @@ public:
         return DoGetRecordsCount();
     }
 
+    ui64 GetRawBytesVerified() const {
+        auto result = DoGetRawBytes();
+        AFL_VERIFY(result);
+        return *result;
+    }
+
     ui32 GetRecordsCountVerified() const {
         auto result = DoGetRecordsCount();
         AFL_VERIFY(result);
@@ -68,33 +86,53 @@ public:
         return DoIsSplittable();
     }
 
-    ui16 GetChunkIdx() const {
+    ui16 GetChunkIdxVerified() const {
         AFL_VERIFY(!!ChunkIdx);
         return *ChunkIdx;
+    }
+
+    std::optional<ui16> GetChunkIdxOptional() const {
+        return ChunkIdx;
     }
 
     void SetChunkIdx(const ui16 value) {
         ChunkIdx = value;
     }
 
+    std::shared_ptr<IPortionDataChunk> CopyWithAnotherBlob(TString&& data, const TSimpleColumnInfo& columnInfo) const {
+        return DoCopyWithAnotherBlob(std::move(data), columnInfo);
+    }
+
     std::shared_ptr<arrow::Scalar> GetFirstScalar() const {
         auto result = DoGetFirstScalar();
-        Y_ABORT_UNLESS(result);
+        AFL_VERIFY(result);
         return result;
     }
     std::shared_ptr<arrow::Scalar> GetLastScalar() const {
         auto result = DoGetLastScalar();
-        Y_ABORT_UNLESS(result);
+        AFL_VERIFY(result);
         return result;
     }
 
-    TChunkAddress GetChunkAddress() const {
-        return TChunkAddress(GetEntityId(), GetChunkIdx());
+    TChunkAddress GetChunkAddressVerified() const {
+        return TChunkAddress(GetEntityId(), GetChunkIdxVerified());
     }
 
-    void AddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfo& portionInfo) const {
+    std::optional<TChunkAddress> GetChunkAddressOptional() const {
+        if (ChunkIdx) {
+            return TChunkAddress(GetEntityId(), GetChunkIdxVerified());
+        } else {
+            return {};
+        }
+    }
+
+    void AddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfoConstructor& portionInfo) const {
         AFL_VERIFY(!bRange.IsValid());
         return DoAddIntoPortionBeforeBlob(bRange, portionInfo);
+    }
+
+    void AddInplaceIntoPortion(TPortionInfoConstructor& portionInfo) const {
+        return DoAddInplaceIntoPortion(portionInfo);
     }
 };
 

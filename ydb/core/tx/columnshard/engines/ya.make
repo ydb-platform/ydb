@@ -7,13 +7,12 @@ LIBRARY()
 SRCS(
     column_engine_logs.cpp
     column_engine.cpp
-    column_features.cpp
     db_wrapper.cpp
-    index_info.cpp
     filter.cpp
-    portion_info.cpp
-    tier_info.cpp
+    defs.cpp
 )
+
+GENERATE_ENUM_SERIALIZATION(column_engine_logs.h)
 
 PEERDIR(
     contrib/libs/apache/arrow
@@ -29,6 +28,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/insert_table
     ydb/core/tx/columnshard/engines/changes
     ydb/core/tx/columnshard/engines/portions
+    ydb/core/tx/columnshard/engines/protos
     ydb/core/tx/program
     ydb/core/tx/columnshard/common
 

@@ -6,9 +6,10 @@ Python scripts."""
 # contributed by Bastian Kleineidam
 
 import os
-from ..core import Command
 from distutils._log import log
 from stat import ST_MODE
+
+from ..core import Command
 
 
 class install_scripts(Command):
@@ -25,7 +26,7 @@ class install_scripts(Command):
 
     def initialize_options(self):
         self.install_dir = None
-        self.force = 0
+        self.force = False
         self.build_dir = None
         self.skip_build = None
 

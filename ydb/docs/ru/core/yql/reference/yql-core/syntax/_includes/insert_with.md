@@ -4,8 +4,9 @@
 
 {% include [s3_with](select/s3_with.md) %}
 
-**Пример**
-```sql
+## Пример
+
+```yql
 INSERT INTO `connection`.`test/`
 WITH
 (

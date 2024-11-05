@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:6:20: Error: At function: YtWriteTable!, Setting column_groups
+    	with column_groups="[abc]"
+	                   ^
+        <tmp_path>/program.sql:<main>:6:20: Error: Expected Yson map, got: list_node
+        	with column_groups="[abc]"
+	                   ^

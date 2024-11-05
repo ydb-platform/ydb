@@ -1,22 +1,28 @@
-#include "columnshard_ut_common.h"
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/base/blobstorage.h>
-#include <util/string/printf.h>
-#include <arrow/api.h>
-#include <arrow/ipc/reader.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
-#include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
-#include <ydb/core/tx/columnshard/engines/changes/cleanup.h>
-#include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <ydb/core/tx/columnshard/common/tests/shard_reader.h>
+#include <ydb/core/tx/columnshard/operations/write_data.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
+#include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
+#include <ydb/core/tx/columnshard/test_helper/shard_writer.h>
+
 #include <ydb/library/actors/protos/unittests.pb.h>
-#include <ydb/core/formats/arrow/simple_builder/filler.h>
-#include <ydb/core/formats/arrow/simple_builder/array.h>
-#include <ydb/core/formats/arrow/simple_builder/batch.h>
+#include <ydb/library/formats/arrow/simple_builder/array.h>
+#include <ydb/library/formats/arrow/simple_builder/batch.h>
+#include <ydb/library/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
+#include <arrow/api.h>
+#include <arrow/ipc/reader.h>
 #include <util/string/join.h>
+#include <util/string/printf.h>
 
 namespace NKikimr {
 
@@ -24,26 +30,17 @@ using namespace NColumnShard;
 using namespace Tests;
 using namespace NTxUT;
 
-namespace
-{
+namespace {
 
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 
 using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
-class TDisableCompactionController: public NKikimr::NYDBTest::NColumnShard::TController {
-protected:
-    virtual bool DoOnStartCompaction(std::shared_ptr<NOlap::TColumnEngineChanges>& changes) {
-        changes = nullptr;
-        return true;
-    }
-public:
-};
 
 template <typename TKey = ui64>
-bool DataHas(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::pair<ui64, ui64> range,
-             bool requireUniq = false, const std::string& columnName = "timestamp") {
+bool DataHas(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::pair<ui64, ui64> range, bool requireUniq = false,
+    const std::string& columnName = "timestamp") {
     static constexpr const bool isStrKey = std::is_same_v<TKey, std::string>;
 
     THashMap<TKey, ui32> keys;
@@ -99,9 +96,8 @@ bool DataHas(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, st
 }
 
 template <typename TKey = ui64>
-bool DataHas(const std::vector<TString>& blobs, const TString& srtSchema, std::pair<ui64, ui64> range,
-    bool requireUniq = false, const std::string& columnName = "timestamp") {
-
+bool DataHas(const std::vector<TString>& blobs, const TString& srtSchema, std::pair<ui64, ui64> range, bool requireUniq = false,
+    const std::string& columnName = "timestamp") {
     auto schema = NArrow::DeserializeSchema(srtSchema);
     std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
     for (auto& blob : blobs) {
@@ -338,6 +334,7 @@ bool CheckColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const std::v
 void TestWrite(const TestTableDescription& table) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -354,7 +351,7 @@ void TestWrite(const TestTableDescription& table) {
 
     const auto& ydbSchema = table.Schema;
 
-    bool ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, ydbSchema), ydbSchema);
+    bool ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 100 }, ydbSchema), ydbSchema);
     UNIT_ASSERT(ok);
 
     auto schema = ydbSchema;
@@ -368,13 +365,13 @@ void TestWrite(const TestTableDescription& table) {
 
     TTestBlobOptions optsNulls;
     optsNulls.NullColumns.emplace("timestamp");
-    ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, ydbSchema, optsNulls), ydbSchema);
+    ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 100 }, ydbSchema, optsNulls), ydbSchema);
     UNIT_ASSERT(!ok);
 
     // missing columns
 
     schema = NArrow::NTest::TTestColumn::CropSchema(schema, 4);
-    ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema);
+    ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 100 }, schema), schema);
     UNIT_ASSERT(ok);
 
     // wrong first key column type (with supported layout: Int64 vs Timestamp)
@@ -382,8 +379,7 @@ void TestWrite(const TestTableDescription& table) {
 
     schema = ydbSchema;
     schema[0].SetType(TTypeInfo(NTypeIds::Int64));
-    ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema),
-                   schema);
+    ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 100 }, schema), schema);
     UNIT_ASSERT(!ok);
 
     // wrong type (no additional schema - fails in case of wrong layout)
@@ -391,7 +387,7 @@ void TestWrite(const TestTableDescription& table) {
     for (size_t i = 0; i < ydbSchema.size(); ++i) {
         schema = ydbSchema;
         schema[i].SetType(TTypeInfo(NTypeIds::Int8));
-        ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema);
+        ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 100 }, schema), schema);
         UNIT_ASSERT(!ok);
     }
 
@@ -400,14 +396,14 @@ void TestWrite(const TestTableDescription& table) {
     for (size_t i = 0; i < ydbSchema.size(); ++i) {
         schema = ydbSchema;
         schema[i].SetType(TTypeInfo(NTypeIds::Int64));
-        ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema);
+        ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 100 }, schema), schema);
         UNIT_ASSERT(ok == (ydbSchema[i].GetType() == TTypeInfo(NTypeIds::Int64)));
     }
 
     schema = ydbSchema;
     schema[1].SetType(TTypeInfo(NTypeIds::Utf8));
     schema[5].SetType(TTypeInfo(NTypeIds::Int32));
-    ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema);
+    ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 100 }, schema), schema);
     UNIT_ASSERT(!ok);
 
     // reordered columns
@@ -419,12 +415,12 @@ void TestWrite(const TestTableDescription& table) {
         schema.push_back(NArrow::NTest::TTestColumn(name, typeInfo));
     }
 
-    ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema);
+    ok = WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 100 }, schema), schema);
     UNIT_ASSERT(ok);
 
     // too much data
 
-    TString bigData = MakeTestBlob({0, 150 * 1000}, ydbSchema);
+    TString bigData = MakeTestBlob({ 0, 150 * 1000 }, ydbSchema);
     UNIT_ASSERT(bigData.size() > NColumnShard::TLimits::GetMaxBlobSize());
     UNIT_ASSERT(bigData.size() < NColumnShard::TLimits::GetMaxBlobSize() + 2 * 1024 * 1024);
     ok = WriteData(runtime, sender, writeId++, tableId, bigData, ydbSchema);
@@ -434,6 +430,7 @@ void TestWrite(const TestTableDescription& table) {
 void TestWriteOverload(const TestTableDescription& table) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -448,7 +445,7 @@ void TestWriteOverload(const TestTableDescription& table) {
 
     SetupSchema(runtime, sender, tableId, table);
 
-    TString testBlob = MakeTestBlob({0, 100 * 1000}, table.Schema);
+    TString testBlob = MakeTestBlob({ 0, 100 * 1000 }, table.Schema);
     UNIT_ASSERT(testBlob.size() > NOlap::TCompactionLimits::MAX_BLOB_SIZE / 2);
     UNIT_ASSERT(testBlob.size() < NOlap::TCompactionLimits::MAX_BLOB_SIZE);
 
@@ -492,7 +489,7 @@ void TestWriteOverload(const TestTableDescription& table) {
         UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrTxColumnShard::EResultStatus::SUCCESS);
     }
 
-    UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testBlob, table.Schema)); // OK after overload
+    UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testBlob, table.Schema));   // OK after overload
 }
 
 // TODO: Improve test. It does not catch KIKIMR-14890
@@ -517,7 +514,7 @@ void TestWriteReadDup(const TestTableDescription& table = {}) {
     SetupSchema(runtime, sender, tableId);
 
     constexpr ui32 numRows = 10;
-    std::pair<ui64, ui64> portion = {10, 10 + numRows};
+    std::pair<ui64, ui64> portion = { 10, 10 + numRows };
     auto testData = MakeTestBlob(portion, ydbSchema);
     TAutoPtr<IEventHandle> handle;
 
@@ -535,12 +532,12 @@ void TestWriteReadDup(const TestTableDescription& table = {}) {
 
         // read
         if (planStep != initPlanStep) {
-            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep - 1, Max<ui64>()));
-            reader.SetReplyColumns({"timestamp"});
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep - 1, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
             auto rb = reader.ReadAll();
             UNIT_ASSERT(reader.IsCorrectlyFinished());
             UNIT_ASSERT(CheckOrdered(rb));
-            UNIT_ASSERT(DataHas({rb}, portion, true));
+            UNIT_ASSERT(DataHas({ rb }, portion, true));
         }
     }
 }
@@ -564,7 +561,7 @@ void TestWriteReadLongTxDup() {
     SetupSchema(runtime, sender, tableId);
 
     constexpr ui32 numRows = 10;
-    std::pair<ui64, ui64> portion = {10, 10 + numRows};
+    std::pair<ui64, ui64> portion = { 10, 10 + numRows };
 
     NLongTxService::TLongTxId longTxId;
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
@@ -576,7 +573,7 @@ void TestWriteReadLongTxDup() {
     // Only the first blob with dedup pair {longTx, dedupId} should be inserted
     // Others should return OK (write retries emulation)
     for (ui32 i = 0; i < 4; ++i) {
-        auto data = MakeTestBlob({portion.first + i, portion.second + i}, ydbSchema);
+        auto data = MakeTestBlob({ portion.first + i, portion.second + i }, ydbSchema);
         UNIT_ASSERT(data.size() < NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
 
         auto writeIdOpt = WriteData(runtime, sender, longTxId, tableId, 1, data, ydbSchema);
@@ -587,29 +584,31 @@ void TestWriteReadLongTxDup() {
         UNIT_ASSERT_EQUAL(*writeIdOpt, *writeId);
     }
 
-    ProposeCommit(runtime, sender, ++txId, {*writeId});
-    TSet<ui64> txIds = {txId};
+    ProposeCommit(runtime, sender, ++txId, { *writeId });
+    TSet<ui64> txIds = { txId };
     PlanCommit(runtime, sender, planStep, txIds);
 
     // read
     TAutoPtr<IEventHandle> handle;
     {
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumns(TTestSchema::ExtractNames(ydbSchema));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
         UNIT_ASSERT(rb);
         UNIT_ASSERT(rb->num_rows());
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(CheckOrdered(rb));
-        UNIT_ASSERT(DataHas({rb}, portion, true));
-        UNIT_ASSERT(DataHasOnly({rb}, portion));
+        UNIT_ASSERT(DataHas({ rb }, portion, true));
+        UNIT_ASSERT(DataHasOnly({ rb }, portion));
     }
 }
 
 void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString codec = "") {
-    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDisableCompactionController>();
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    csControllerGuard->SetOverrideReadTimeoutClean(TDuration::Max());
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
 
@@ -623,8 +622,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
     runtime.DispatchEvents(options);
 
-    auto write = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 writeId, ui64 tableId,
-                     const TString& data, const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>& intWriteIds) {
+    auto write = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 writeId, ui64 tableId, const TString& data,
+                     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>& intWriteIds) {
         bool ok = WriteData(runtime, sender, writeId, tableId, data, ydbSchema, true, &intWriteIds);
         if (reboots) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -632,8 +631,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         return ok;
     };
 
-    auto proposeCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 txId,
-                             const std::vector<ui64>& writeIds) {
+    auto proposeCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds) {
         ProposeCommit(runtime, sender, txId, writeIds);
         if (reboots) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -661,12 +659,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // -----xx..
     // xx----
     // -xxxxx
-    std::vector<std::pair<ui64, ui64>> portion = {
-        {200, 300},
-        {250, 250 + 80 * 1000}, // committed -> index
-        {0, 100},
-        {50, 300}
-    };
+    std::vector<std::pair<ui64, ui64>> portion = { { 200, 300 }, { 250, 250 + 80 * 1000 },   // committed -> index
+        { 0, 100 }, { 50, 300 } };
 
     // write 1: ins:1, cmt:0, idx:0
 
@@ -678,8 +672,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 1);
 
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 0));
-        reader.SetReplyColumns({"resource_type"});
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 1));
+        reader.SetReplyColumns({ "resource_type" });
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
         UNIT_ASSERT_EQUAL(rb, nullptr);
@@ -695,8 +689,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 2);
 
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 0));
-        reader.SetReplyColumns({"resource_type"});
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 1));
+        reader.SetReplyColumns({ "resource_type" });
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
         UNIT_ASSERT_EQUAL(rb, nullptr);
@@ -705,46 +699,46 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // read 3 (committed)
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 3);
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetReplyColumns(TTestSchema::ExtractNames(ydbSchema));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(reader.IsCorrectlyFinished());
         UNIT_ASSERT(CheckOrdered(rb));
-        UNIT_ASSERT(DataHas({rb}, portion[0]));
+        UNIT_ASSERT(DataHas({ rb }, portion[0]));
     }
 
     // read 4 (column by id)
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 4);
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
-        reader.SetReplyColumnIds({1});
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+        reader.SetReplyColumnIds({ 1 });
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
-        NArrow::ExtractColumnsValidate(rb, {"timestamp"});
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, std::vector<TString>({ "timestamp" })));
         UNIT_ASSERT((ui32)rb->num_columns() == 1);
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(reader.IsCorrectlyFinished());
         UNIT_ASSERT(CheckOrdered(rb));
-        UNIT_ASSERT(DataHas({rb}, portion[0]));
+        UNIT_ASSERT(DataHas({ rb }, portion[0]));
     }
     // read 5 (2 columns by name)
 
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 5);
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
-        reader.SetReplyColumns({"timestamp", "message"});
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+        reader.SetReplyColumns({ "timestamp", "message" });
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
-        NArrow::ExtractColumnsValidate(rb, {"timestamp", "message"});
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, std::vector<TString>({ "timestamp", "message" })));
         UNIT_ASSERT((ui32)rb->num_columns() == 2);
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(reader.IsCorrectlyFinished());
         UNIT_ASSERT(CheckOrdered(rb));
-        UNIT_ASSERT(DataHas({rb}, portion[0]));
+        UNIT_ASSERT(DataHas({ rb }, portion[0]));
     }
 
     // write 2 (big portion of data): ins:1, cmt:1, idx:0
@@ -773,8 +767,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // read 6, planstep 0
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 6);
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 0));
-        reader.SetReplyColumns({"timestamp", "message"});
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 1));
+        reader.SetReplyColumns({ "timestamp", "message" });
         auto rb = reader.ReadAll();
         UNIT_ASSERT(!rb);
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -783,35 +777,35 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // read 7, planstep 21 (part of index)
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 7);
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(21, txId));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(21, txId));
         reader.SetReplyColumns(TTestSchema::ExtractNames(ydbSchema));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(CheckOrdered(rb));
-        UNIT_ASSERT(DataHas({rb}, portion[0]));
-        UNIT_ASSERT(!DataHas({rb}, portion[1]));
-        UNIT_ASSERT(!DataHas({rb}, portion[2]));
+        UNIT_ASSERT(DataHas({ rb }, portion[0]));
+        UNIT_ASSERT(!DataHas({ rb }, portion[1]));
+        UNIT_ASSERT(!DataHas({ rb }, portion[2]));
     }
 
     // read 8, planstep 22 (full index)
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 8);
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(22, txId));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(22, txId));
         reader.SetReplyColumns(TTestSchema::ExtractNames(ydbSchema));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(CheckOrdered(rb));
-        UNIT_ASSERT(DataHas({rb}, portion[0]));
-        UNIT_ASSERT(DataHas({rb}, portion[1]));
-        UNIT_ASSERT(!DataHas({rb}, portion[2]));
+        UNIT_ASSERT(DataHas({ rb }, portion[0]));
+        UNIT_ASSERT(DataHas({ rb }, portion[1]));
+        UNIT_ASSERT(!DataHas({ rb }, portion[2]));
     }
 
     // commit 3: ins:0, cmt:1, idx:1
@@ -830,19 +824,19 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // read 9 (committed, indexed)
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 9);
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(23, txId));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(23, txId));
         reader.SetReplyColumns(TTestSchema::ExtractNames(ydbSchema));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(CheckOrdered(rb));
-        UNIT_ASSERT(DataHas({rb}, portion[0]));
-        UNIT_ASSERT(DataHas({rb}, portion[1]));
-        UNIT_ASSERT(DataHas({rb}, portion[2]));
-        UNIT_ASSERT(!DataHas({rb}, portion[3]));
+        UNIT_ASSERT(DataHas({ rb }, portion[0]));
+        UNIT_ASSERT(DataHas({ rb }, portion[1]));
+        UNIT_ASSERT(DataHas({ rb }, portion[2]));
+        UNIT_ASSERT(!DataHas({ rb }, portion[3]));
     }
 
     // commit 4: ins:0, cmt:2, idx:1 (with duplicates in PK)
@@ -855,28 +849,28 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     // read 10
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 10);
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(24, txId));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(24, txId));
         reader.SetReplyColumns(TTestSchema::ExtractNames(ydbSchema));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(CheckOrdered(rb));
-        UNIT_ASSERT(DataHas({rb}, portion[0]));
-        UNIT_ASSERT(DataHas({rb}, portion[1]));
-        UNIT_ASSERT(DataHas({rb}, portion[2]));
-        UNIT_ASSERT(DataHas({rb}, portion[3]));
-        UNIT_ASSERT(DataHas({rb}, {0, 500}, true));
+        UNIT_ASSERT(DataHas({ rb }, portion[0]));
+        UNIT_ASSERT(DataHas({ rb }, portion[1]));
+        UNIT_ASSERT(DataHas({ rb }, portion[2]));
+        UNIT_ASSERT(DataHas({ rb }, portion[3]));
+        UNIT_ASSERT(DataHas({ rb }, { 0, 500 }, true));
 
         const ui64 compactedBytes = reader.GetReadStat("compacted_bytes");
         const ui64 insertedBytes = reader.GetReadStat("inserted_bytes");
         const ui64 committedBytes = reader.GetReadStat("committed_bytes");
         Cerr << codec << "/" << compactedBytes << "/" << insertedBytes << "/" << committedBytes << Endl;
         if (insertedBytes) {
-            UNIT_ASSERT_GE(insertedBytes / 100000, 40);
-            UNIT_ASSERT_LE(insertedBytes / 100000, 50);
+            UNIT_ASSERT_GE(insertedBytes / 100000, 50);
+            UNIT_ASSERT_LE(insertedBytes / 100000, 60);
         }
         if (committedBytes) {
             UNIT_ASSERT_LE(committedBytes / 100000, 1);
@@ -897,39 +891,38 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         }
     }
 
-
     // read 11 (range predicate: closed interval)
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 11);
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(24, txId));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(24, txId));
         reader.SetReplyColumns(TTestSchema::ExtractNames(ydbSchema));
-        reader.AddRange(MakeTestRange({10, 42}, true, true, testYdbPk));
+        reader.AddRange(MakeTestRange({ 10, 42 }, true, true, testYdbPk));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(CheckOrdered(rb));
-        UNIT_ASSERT(DataHas({rb}, {10, 42 + 1}));
-        UNIT_ASSERT(DataHasOnly({rb}, {10, 42 + 1}));
+        UNIT_ASSERT(DataHas({ rb }, { 10, 42 + 1 }));
+        UNIT_ASSERT(DataHasOnly({ rb }, { 10, 42 + 1 }));
     }
 
     // read 12 (range predicate: open interval)
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 11);
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(24, txId));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(24, txId));
         reader.SetReplyColumns(TTestSchema::ExtractNames(ydbSchema));
-        reader.AddRange(MakeTestRange({10, 42}, false, false, testYdbPk));
+        reader.AddRange(MakeTestRange({ 10, 42 }, false, false, testYdbPk));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
         UNIT_ASSERT(reader.IsCorrectlyFinished());
-        NArrow::ExtractColumnsValidate(rb, TTestSchema::ExtractNames(ydbSchema));
+        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
         UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(CheckOrdered(rb));
-        UNIT_ASSERT(DataHas({rb}, {10 + 1, 41 + 1}));
-        UNIT_ASSERT(DataHasOnly({rb}, {10 + 1, 41 + 1}));
+        UNIT_ASSERT(DataHas({ rb }, { 10 + 1, 41 + 1 }));
+        UNIT_ASSERT(DataHasOnly({ rb }, { 10 + 1, 41 + 1 }));
     }
 }
 
@@ -945,8 +938,8 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
     runtime.DispatchEvents(options);
 
-    auto write = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 writeId, ui64 tableId,
-                     const TString& data, const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>& writeIds) {
+    auto write = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 writeId, ui64 tableId, const TString& data,
+                     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>& writeIds) {
         bool ok = WriteData(runtime, sender, writeId, tableId, data, ydbSchema, true, &writeIds);
         if (reboots) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -954,8 +947,7 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
         return ok;
     };
 
-    auto proposeCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 txId,
-                             const std::vector<ui64>& writeIds) {
+    auto proposeCommit = [&](TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds) {
         ProposeCommit(runtime, sender, txId, writeIds);
         if (reboots) {
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -984,14 +976,14 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
     // Write same keys: merge on compaction
 
     static const ui32 triggerPortionSize = 75 * 1000;
-    std::pair<ui64, ui64> triggerPortion = {0, triggerPortionSize};
+    std::pair<ui64, ui64> triggerPortion = { 0, triggerPortionSize };
     TString triggerData = MakeTestBlob(triggerPortion, ydbSchema);
     UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
     UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::GetMaxBlobSize());
 
     static const ui32 portionSize = 1;
 
-    ui32 numWrites = NColumnShard::TLimits::MIN_SMALL_BLOBS_TO_INSERT; // trigger InsertTable -> Index
+    ui32 numWrites = NColumnShard::TLimits::MIN_SMALL_BLOBS_TO_INSERT;   // trigger InsertTable -> Index
 
     // inserts triggered by count
     ui32 pos = triggerPortionSize;
@@ -999,7 +991,7 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
         std::vector<ui64> ids;
         ids.reserve(numWrites);
         for (ui32 w = 0; w < numWrites; ++w, ++writeId, pos += portionSize) {
-            std::pair<ui64, ui64> portion = {pos, pos + portionSize};
+            std::pair<ui64, ui64> portion = { pos, pos + portionSize };
             TString data = MakeTestBlob(portion, ydbSchema);
 
             UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, ydbSchema, true, &ids));
@@ -1012,7 +1004,7 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
         proposeCommit(runtime, sender, txId, ids);
         planCommit(runtime, sender, planStep, txId);
     }
-    std::pair<ui64, ui64> smallWrites = {triggerPortionSize, pos};
+    std::pair<ui64, ui64> smallWrites = { triggerPortionSize, pos };
 
     // inserts triggered by size
     NOlap::TCompactionLimits engineLimits;
@@ -1031,18 +1023,18 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
     --txId;
 
     for (ui32 i = 0; i < 2; ++i) {
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
-        reader.SetReplyColumns({"timestamp", "message"});
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+        reader.SetReplyColumns({ "timestamp", "message" });
         auto rb = reader.ReadAll();
         UNIT_ASSERT(rb);
         UNIT_ASSERT(reader.IsCorrectlyFinished());
 
         if (ydbPk[0].GetType() == TTypeInfo(NTypeIds::String) || ydbPk[0].GetType() == TTypeInfo(NTypeIds::Utf8)) {
-            UNIT_ASSERT(DataHas<std::string>({rb}, triggerPortion, true));
-            UNIT_ASSERT(DataHas<std::string>({rb}, smallWrites, true));
+            UNIT_ASSERT(DataHas<std::string>({ rb }, triggerPortion, true));
+            UNIT_ASSERT(DataHas<std::string>({ rb }, smallWrites, true));
         } else {
-            UNIT_ASSERT(DataHas({rb}, triggerPortion, true));
-            UNIT_ASSERT(DataHas({rb}, smallWrites, true));
+            UNIT_ASSERT(DataHas({ rb }, triggerPortion, true));
+            UNIT_ASSERT(DataHas({ rb }, smallWrites, true));
         }
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
     }
@@ -1055,7 +1047,7 @@ using TAggAssignment = NKikimrSSA::TProgram::TAggregateAssignment;
 static NKikimrSSA::TProgram MakeSelect(TAssignment::EFunction compareId = TAssignment::FUNC_CMP_EQUAL) {
     NKikimrSSA::TProgram ssa;
 
-    std::vector<ui32> columnIds = {1, 9, 5};
+    std::vector<ui32> columnIds = { 1, 9, 5 };
     ui32 tmpColumnId = 100;
 
     auto* line1 = ssa.AddCommand();
@@ -1079,7 +1071,7 @@ static NKikimrSSA::TProgram MakeSelect(TAssignment::EFunction compareId = TAssig
 static NKikimrSSA::TProgram MakeSelectLike(TAssignment::EFunction likeId, const TString& pattern) {
     NKikimrSSA::TProgram ssa;
 
-    std::vector<ui32> columnIds = {6}; // message
+    std::vector<ui32> columnIds = { 6 };   // message
 
     auto* line1 = ssa.AddCommand();
     auto* l1_assign = line1->MutableAssign();
@@ -1103,9 +1095,7 @@ static NKikimrSSA::TProgram MakeSelectLike(TAssignment::EFunction likeId, const 
 }
 
 // SELECT min(x), max(x), some(x), count(x) FROM t [GROUP BY key[0], key[1], ...]
-NKikimrSSA::TProgram MakeSelectAggregates(ui32 columnId, const std::vector<ui32>& keys = {},
-                                          bool addProjection = true)
-{
+NKikimrSSA::TProgram MakeSelectAggregates(ui32 columnId, const std::vector<ui32>& keys = {}, bool addProjection = true) {
     NKikimrSSA::TProgram ssa;
 
     auto* line1 = ssa.AddCommand();
@@ -1151,10 +1141,8 @@ NKikimrSSA::TProgram MakeSelectAggregates(ui32 columnId, const std::vector<ui32>
 }
 
 // SELECT min(x), max(x), some(x), count(x) FROM t WHERE y = 1 [GROUP BY key[0], key[1], ...]
-NKikimrSSA::TProgram MakeSelectAggregatesWithFilter(ui32 columnId, ui32 filterColumnId,
-                                                    const std::vector<ui32>& keys = {},
-                                                    bool addProjection = true)
-{
+NKikimrSSA::TProgram MakeSelectAggregatesWithFilter(
+    ui32 columnId, ui32 filterColumnId, const std::vector<ui32>& keys = {}, bool addProjection = true) {
     NKikimrSSA::TProgram ssa;
 
     auto* line1 = ssa.AddCommand();
@@ -1219,10 +1207,10 @@ NKikimrSSA::TProgram MakeSelectAggregatesWithFilter(ui32 columnId, ui32 filterCo
     return ssa;
 }
 
-void TestReadWithProgram(const TestTableDescription& table = {})
-{
+void TestReadWithProgram(const TestTableDescription& table = {}) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -1238,9 +1226,9 @@ void TestReadWithProgram(const TestTableDescription& table = {})
 
     SetupSchema(runtime, sender, tableId, table);
 
-    { // write some data
+    {   // write some data
         std::vector<ui64> writeIds;
-        bool ok = WriteData(runtime, sender, writeId, tableId, MakeTestBlob({0, 100}, table.Schema), table.Schema, true, &writeIds);
+        bool ok = WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ 0, 100 }, table.Schema), table.Schema, true, &writeIds);
         UNIT_ASSERT(ok);
 
         ProposeCommit(runtime, sender, txId, writeIds);
@@ -1275,7 +1263,7 @@ void TestReadWithProgram(const TestTableDescription& table = {})
 
     ui32 i = 0;
     for (auto& programText : programs) {
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetProgram(programText);
         auto rb = reader.ReadAll();
         if (i < numWrong) {
@@ -1288,9 +1276,9 @@ void TestReadWithProgram(const TestTableDescription& table = {})
                 case 1:
                     UNIT_ASSERT(rb);
                     UNIT_ASSERT(rb->num_rows());
-                    NArrow::ExtractColumnsValidate(rb, {"level", "timestamp"});
+                    Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, std::vector<TString>({ "level", "timestamp" })));
                     UNIT_ASSERT(rb->num_columns() == 2);
-                    UNIT_ASSERT(DataHas({rb}, {0, 100}, true));
+                    UNIT_ASSERT(DataHas({ rb }, { 0, 100 }, true));
                     break;
                 case 2:
                     UNIT_ASSERT(!rb || !rb->num_rows());
@@ -1306,74 +1294,7 @@ void TestReadWithProgram(const TestTableDescription& table = {})
 void TestReadWithProgramLike(const TestTableDescription& table = {}) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
-
-    TActorId sender = runtime.AllocateEdgeActor();
-    CreateTestBootstrapper(runtime,
-        CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-    runtime.DispatchEvents(options);
-
-    ui64 writeId = 0;
-    ui64 tableId = 1;
-    ui64 planStep = 100;
-    ui64 txId = 100;
-
-    SetupSchema(runtime, sender, tableId, table);
-
-    { // write some data
-        std::vector<ui64> writeIds;
-        bool ok = WriteData(runtime, sender, writeId, tableId, MakeTestBlob({0, 100}, table.Schema), table.Schema, true, &writeIds);
-        UNIT_ASSERT(ok);
-
-        ProposeCommit(runtime, sender, txId, writeIds);
-        PlanCommit(runtime, sender, planStep, txId);
-    }
-
-    TString pattern = "1";
-    std::vector<NKikimrSSA::TProgram> ssas = {
-        MakeSelectLike(TAssignment::FUNC_STR_MATCH, pattern),
-        MakeSelectLike(TAssignment::FUNC_STR_MATCH_IGNORE_CASE, pattern),
-        MakeSelectLike(TAssignment::FUNC_STR_STARTS_WITH, pattern),
-        MakeSelectLike(TAssignment::FUNC_STR_STARTS_WITH_IGNORE_CASE, pattern),
-        MakeSelectLike(TAssignment::FUNC_STR_ENDS_WITH, pattern),
-        MakeSelectLike(TAssignment::FUNC_STR_ENDS_WITH_IGNORE_CASE, pattern)
-    };
-
-    ui32 i = 0;
-    for (auto& ssa : ssas) {
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
-        reader.SetProgram(ssa);
-        auto rb = reader.ReadAll();
-
-        UNIT_ASSERT(reader.IsCorrectlyFinished());
-        UNIT_ASSERT(rb);
-        UNIT_ASSERT(rb->num_rows());
-
-        switch (i) {
-            case 0:
-            case 1:
-                UNIT_ASSERT(CheckColumns(rb, {"message"}, 19));
-                break;
-            case 2:
-            case 3:
-                UNIT_ASSERT(CheckColumns(rb, {"message"}, 11));
-                break;
-            case 4:
-            case 5:
-                UNIT_ASSERT(CheckColumns(rb, {"message"}, 10));
-                break;
-            default:
-                break;
-        }
-        ++i;
-    }
-}
-
-void TestSomePrograms(const TestTableDescription& table) {
-    TTestBasicRuntime runtime;
-    TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -1389,9 +1310,73 @@ void TestSomePrograms(const TestTableDescription& table) {
 
     SetupSchema(runtime, sender, tableId, table);
 
-    { // write some data
+    {   // write some data
         std::vector<ui64> writeIds;
-        bool ok = WriteData(runtime, sender, writeId, tableId, MakeTestBlob({0, 100}, table.Schema), table.Schema, true, &writeIds);
+        bool ok = WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ 0, 100 }, table.Schema), table.Schema, true, &writeIds);
+        UNIT_ASSERT(ok);
+
+        ProposeCommit(runtime, sender, txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
+    }
+
+    TString pattern = "1";
+    std::vector<NKikimrSSA::TProgram> ssas = { MakeSelectLike(TAssignment::FUNC_STR_MATCH, pattern),
+        MakeSelectLike(TAssignment::FUNC_STR_MATCH_IGNORE_CASE, pattern), MakeSelectLike(TAssignment::FUNC_STR_STARTS_WITH, pattern),
+        MakeSelectLike(TAssignment::FUNC_STR_STARTS_WITH_IGNORE_CASE, pattern), MakeSelectLike(TAssignment::FUNC_STR_ENDS_WITH, pattern),
+        MakeSelectLike(TAssignment::FUNC_STR_ENDS_WITH_IGNORE_CASE, pattern) };
+
+    ui32 i = 0;
+    for (auto& ssa : ssas) {
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+        reader.SetProgram(ssa);
+        auto rb = reader.ReadAll();
+
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        UNIT_ASSERT(rb);
+        UNIT_ASSERT(rb->num_rows());
+
+        switch (i) {
+            case 0:
+            case 1:
+                UNIT_ASSERT(CheckColumns(rb, { "message" }, 19));
+                break;
+            case 2:
+            case 3:
+                UNIT_ASSERT(CheckColumns(rb, { "message" }, 11));
+                break;
+            case 4:
+            case 5:
+                UNIT_ASSERT(CheckColumns(rb, { "message" }, 10));
+                break;
+            default:
+                break;
+        }
+        ++i;
+    }
+}
+
+void TestSomePrograms(const TestTableDescription& table) {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 planStep = 100;
+    ui64 txId = 100;
+
+    SetupSchema(runtime, sender, tableId, table);
+
+    {   // write some data
+        std::vector<ui64> writeIds;
+        bool ok = WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ 0, 100 }, table.Schema), table.Schema, true, &writeIds);
         UNIT_ASSERT(ok);
 
         ProposeCommit(runtime, sender, txId, writeIds);
@@ -1414,7 +1399,7 @@ void TestSomePrograms(const TestTableDescription& table) {
     // TODO: add programs with bugs here
 
     for (auto& ssaText : programs) {
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetProgram(ssaText);
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsError());
@@ -1424,17 +1409,17 @@ void TestSomePrograms(const TestTableDescription& table) {
 struct TReadAggregateResult {
     ui32 NumRows = 1;
 
-    std::vector<int64_t> MinValues = {0};
-    std::vector<int64_t> MaxValues = {99};
-    std::vector<int64_t> Counts = {100};
+    std::vector<int64_t> MinValues = { 0 };
+    std::vector<int64_t> MaxValues = { 99 };
+    std::vector<int64_t> Counts = { 100 };
 };
 
-void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const TString& testDataBlob,
-                       bool addProjection, const std::vector<ui32>& aggKeys = {},
-                       const TReadAggregateResult& expectedResult = {},
-                       const TReadAggregateResult& expectedFiltered = {1, {1}, {1}, {1}}) {
+void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const TString& testDataBlob, bool addProjection,
+    const std::vector<ui32>& aggKeys = {}, const TReadAggregateResult& expectedResult = {},
+    const TReadAggregateResult& expectedFiltered = { 1, { 1 }, { 1 }, { 1 } }) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -1449,10 +1434,10 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
     ui64 txId = 100;
 
     auto pk = NArrow::NTest::TTestColumn::CropSchema(ydbSchema, 4);
-    TestTableDescription table{.Schema = ydbSchema, .Pk = pk};
+    TestTableDescription table{ .Schema = ydbSchema, .Pk = pk };
     SetupSchema(runtime, sender, tableId, table);
 
-    { // write some data
+    {   // write some data
         std::vector<ui64> writeIds;
         bool ok = WriteData(runtime, sender, writeId, tableId, testDataBlob, table.Schema, true, &writeIds);
         UNIT_ASSERT(ok);
@@ -1466,11 +1451,9 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
     std::vector<TString> programs;
     THashSet<ui32> isFiltered;
     THashSet<ui32> checkResult;
-    THashSet<NScheme::TTypeId> intTypes = {
-        NTypeIds::Int8, NTypeIds::Int16, NTypeIds::Int32, NTypeIds::Int64,
-        NTypeIds::Uint8, NTypeIds::Uint16, NTypeIds::Uint32, NTypeIds::Uint64,
-        NTypeIds::Timestamp
-    };
+    THashSet<NScheme::TTypeId> intTypes = { NTypeIds::Int8, NTypeIds::Int16, NTypeIds::Int32, NTypeIds::Int64, NTypeIds::Uint8, NTypeIds::Uint16,
+        NTypeIds::Uint32, NTypeIds::Uint64, NTypeIds::Timestamp, NTypeIds::Date32, NTypeIds::Datetime64, NTypeIds::Timestamp64,
+        NTypeIds::Interval64 };
     THashSet<NScheme::TTypeId> strTypes = {
         NTypeIds::Utf8, NTypeIds::String
         //NTypeIds::Yson, NTypeIds::Json, NTypeIds::JsonDocument
@@ -1478,8 +1461,7 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
 
     ui32 prog = 0;
     for (ui32 i = 0; i < ydbSchema.size(); ++i, ++prog) {
-        if (intTypes.contains(ydbSchema[i].GetType().GetTypeId()) ||
-            strTypes.contains(ydbSchema[i].GetType().GetTypeId())) {
+        if (intTypes.contains(ydbSchema[i].GetType().GetTypeId()) || strTypes.contains(ydbSchema[i].GetType().GetTypeId())) {
             checkResult.insert(prog);
         }
 
@@ -1495,8 +1477,7 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
 
     for (ui32 i = 0; i < ydbSchema.size(); ++i, ++prog) {
         isFiltered.insert(prog);
-        if (intTypes.contains(ydbSchema[i].GetType().GetTypeId()) ||
-            strTypes.contains(ydbSchema[i].GetType().GetTypeId())) {
+        if (intTypes.contains(ydbSchema[i].GetType().GetTypeId()) || strTypes.contains(ydbSchema[i].GetType().GetTypeId())) {
             checkResult.insert(prog);
         }
 
@@ -1510,8 +1491,8 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
         UNIT_ASSERT(program.SerializeToString(&programs.back()));
     }
 
-    std::vector<TString> namedColumns = {"res_min", "res_max", "res_some", "res_count"};
-    std::vector<TString> unnamedColumns = {"100", "101", "102", "103"};
+    std::vector<TString> namedColumns = { "res_min", "res_max", "res_some", "res_count" };
+    std::vector<TString> unnamedColumns = { "100", "101", "102", "103" };
     if (!addProjection) {
         for (auto& key : aggKeys) {
             namedColumns.push_back(ydbSchema[key].GetName());
@@ -1523,7 +1504,7 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
     for (auto& programText : programs) {
         Cerr << "-- select program: " << prog << " is filtered: " << (int)isFiltered.count(prog) << "\n";
 
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
         reader.SetProgram(programText);
         auto batch = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -1531,7 +1512,7 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
         if (checkResult.contains(prog)) {
             if (isFiltered.contains(prog)) {
                 UNIT_ASSERT(CheckColumns(batch, namedColumns, expectedFiltered.NumRows));
-                if (aggKeys.empty()) { // TODO: ORDER BY for compare
+                if (aggKeys.empty()) {   // TODO: ORDER BY for compare
                     UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("res_min"), expectedFiltered.MinValues));
                     UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("res_max"), expectedFiltered.MaxValues));
                     UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("res_some"), expectedFiltered.MinValues));
@@ -1539,7 +1520,7 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
                 UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("res_count"), expectedFiltered.Counts));
             } else {
                 UNIT_ASSERT(CheckColumns(batch, unnamedColumns, expectedResult.NumRows));
-                if (aggKeys.empty()) { // TODO: ORDER BY for compare
+                if (aggKeys.empty()) {   // TODO: ORDER BY for compare
                     UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("100"), expectedResult.MinValues));
                     UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("101"), expectedResult.MaxValues));
                     UNIT_ASSERT(CheckIntValues(batch->GetColumnByName("102"), expectedResult.MinValues));
@@ -1552,58 +1533,47 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
     }
 }
 
-}
+}   // namespace
 
 Y_UNIT_TEST_SUITE(EvWrite) {
-
     Y_UNIT_TEST(WriteInTransaction) {
         using namespace NArrow;
 
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
-        const ui64 ownerId = 0;
         const ui64 tableId = 1;
-        const ui64 schemaVersion = 1;
-        const std::vector<NArrow::NTest::TTestColumn> schema = {
-            NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
-                                                                };
-        const std::vector<ui32> columnsIds = {1, 2};
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
+        const std::vector<ui32> columnsIds = { 1, 2 };
         PrepareTablet(runtime, tableId, schema);
         const ui64 txId = 111;
 
-        NConstruction::IArrayBuilder::TPtr keyColumn = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+        NConstruction::IArrayBuilder::TPtr keyColumn =
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
         NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
             "field", NConstruction::TStringPoolFiller(8, 100));
 
         auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
-        TString blobData = NArrow::SerializeBatchNoCompression(batch);
-        UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
 
-        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-        evWrite->SetTxId(txId);
-        ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
-        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
-
-        TActorId sender = runtime.AllocateEdgeActor();
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
+        NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
+        AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        AFL_VERIFY(writer.StartCommit(txId) == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
 
         {
-            TAutoPtr<NActors::IEventHandle> handle;
-            auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
-            UNIT_ASSERT(event);
-            UNIT_ASSERT_VALUES_EQUAL(event->Record.GetOrigin(), TTestTxConfig::TxTablet0);
-            UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), txId);
-            UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+            NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 444);
+            AFL_VERIFY(writer.StartCommit(444) == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        }
 
+        {
             auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(10, txId), schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
 
-            PlanWriteTx(runtime, sender, NOlap::TSnapshot(11, txId));
+            PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(11, txId));
         }
 
-        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot::MaxForPlanStep(11), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2048);
     }
 
@@ -1612,46 +1582,28 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
-        const ui64 ownerId = 0;
         const ui64 tableId = 1;
-        const ui64 schemaVersion = 1;
-        const std::vector<NArrow::NTest::TTestColumn> schema = {
-            NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
-        };
-        const std::vector<ui32> columnsIds = {1, 2};
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
+        const std::vector<ui32> columnsIds = { 1, 2 };
         PrepareTablet(runtime, tableId, schema);
         const ui64 txId = 111;
 
-        NConstruction::IArrayBuilder::TPtr keyColumn = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+        NConstruction::IArrayBuilder::TPtr keyColumn =
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
         NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
             "field", NConstruction::TStringPoolFiller(8, 100));
 
         auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
-        TString blobData = NArrow::SerializeBatchNoCompression(batch);
-        UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
+        NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
+        AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        AFL_VERIFY(writer.Abort(txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
-        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-        evWrite->SetTxId(txId);
-        ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
-        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
+        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(10, txId + 1), false);
 
-        TActorId sender = runtime.AllocateEdgeActor();
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
-
-        ui64 outdatedStep = 11;
-        {
-            TAutoPtr<NActors::IEventHandle> handle;
-            auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
-            UNIT_ASSERT(event);
-            UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
-
-            outdatedStep = event->Record.GetMaxStep() + 1;
-            PlanWriteTx(runtime, sender, NOlap::TSnapshot(outdatedStep, txId + 1), false);
-        }
-
-        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(outdatedStep, txId), schema);
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot::MaxForPlanStep(10), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
     }
 
@@ -1660,19 +1612,16 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
-        const ui64 ownerId = 0;
         const ui64 tableId = 1;
-        const ui64 schemaVersion = 1;
-        const std::vector<NArrow::NTest::TTestColumn> schema = {
-            NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
-            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8))
-        };
-        const std::vector<ui32> columnsIds = {1, 2};
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
         PrepareTablet(runtime, tableId, schema);
         const ui64 txId = 111;
 
-        NConstruction::IArrayBuilder::TPtr keyColumn = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+        NConstruction::IArrayBuilder::TPtr keyColumn =
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
         NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
             "field", NConstruction::TStringPoolFiller(8, TLimits::GetMaxBlobSize() / 1024));
 
@@ -1680,23 +1629,13 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         TString blobData = NArrow::SerializeBatchNoCompression(batch);
         UNIT_ASSERT(blobData.size() > TLimits::GetMaxBlobSize());
 
-        auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-        evWrite->SetTxId(txId);
-        ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
-        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
+        NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
+        AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        AFL_VERIFY(writer.StartCommit(txId) == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
 
-        TActorId sender = runtime.AllocateEdgeActor();
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
+        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(11, txId));
 
-        {
-            TAutoPtr<NActors::IEventHandle> handle;
-            auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
-            UNIT_ASSERT(event);
-            UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
-            PlanWriteTx(runtime, sender, NOlap::TSnapshot(11, txId));
-        }
-
-        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot::MaxForPlanStep(11), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2048);
     }
 
@@ -1705,92 +1644,46 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
-        const ui64 ownerId = 0;
         const ui64 tableId = 1;
-        const ui64 schemaVersion = 1;
-        const std::vector<NArrow::NTest::TTestColumn> schema = {
-                                                                    NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64) ),
-                                                                    NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8) )
-                                                                };
-        const std::vector<ui32> columnsIds = {1, 2};
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
+        const std::vector<ui32> columnIds = { 1, 2 };
         PrepareTablet(runtime, tableId, schema);
         const ui64 txId = 111;
-        const ui64 lockId = 110;
 
+        NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
         {
-            NConstruction::IArrayBuilder::TPtr keyColumn = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
-            NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>("field", NConstruction::TStringPoolFiller(8, 100));
+            NConstruction::IArrayBuilder::TPtr keyColumn =
+                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+            NConstruction::IArrayBuilder::TPtr column =
+                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
+                    "field", NConstruction::TStringPoolFiller(8, 100));
             auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
-            TString blobData = NArrow::SerializeBatchNoCompression(batch);
-            UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
-            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-            evWrite->SetLockId(lockId, 1);
-
-            ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
-            evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
-
-            TActorId sender = runtime.AllocateEdgeActor();
-            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
-
+            AFL_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
             {
-                TAutoPtr<NActors::IEventHandle> handle;
-                auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
-                UNIT_ASSERT(event);
-                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetOrigin(), TTestTxConfig::TxTablet0);
-                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), lockId);
-                UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-
-                auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(10, lockId), schema);
-                UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
-            }
-        }
-        {
-            NConstruction::IArrayBuilder::TPtr keyColumn = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key", 2049);
-            NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>("field", NConstruction::TStringPoolFiller(8, 100));
-            auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
-            TString blobData = NArrow::SerializeBatchNoCompression(batch);
-            UNIT_ASSERT(blobData.size() < TLimits::GetMaxBlobSize());
-            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-            evWrite->SetLockId(lockId, 1);
-
-            ui64 payloadIndex = NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
-            evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, {ownerId, tableId, schemaVersion}, columnsIds, payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
-
-            TActorId sender = runtime.AllocateEdgeActor();
-            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
-
-            {
-                TAutoPtr<NActors::IEventHandle> handle;
-                auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
-                UNIT_ASSERT(event);
-                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetOrigin(), TTestTxConfig::TxTablet0);
-                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), lockId);
-                UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-
                 auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(10, txId), schema);
                 UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
             }
         }
         {
-            auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_PREPARE);
-            evWrite->SetLockId(lockId, 1);
-            evWrite->SetTxId(txId);
-            evWrite->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-
-            TActorId sender = runtime.AllocateEdgeActor();
-            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evWrite.release());
+            NConstruction::IArrayBuilder::TPtr keyColumn =
+                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key", 2049);
+            NConstruction::IArrayBuilder::TPtr column =
+                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
+                    "field", NConstruction::TStringPoolFiller(8, 100));
+            auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
+            AFL_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
             {
-                TAutoPtr<NActors::IEventHandle> handle;
-                auto event = runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
-                UNIT_ASSERT(event);
-                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetOrigin(), TTestTxConfig::TxTablet0);
-                UNIT_ASSERT_VALUES_EQUAL((ui64)event->Record.GetStatus(), (ui64)NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
-                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), txId);
+                auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(10, txId), schema);
+                UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
             }
-
-            PlanWriteTx(runtime, sender, NOlap::TSnapshot(11, txId));
+        }
+        {
+            AFL_VERIFY(writer.StartCommit(txId) == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+            PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(11, txId));
         }
 
         auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
@@ -1837,6 +1730,125 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     Y_UNIT_TEST(WriteReadDuplicate) {
         TestWriteReadDup();
         TestWriteReadLongTxDup();
+    }
+
+    Y_UNIT_TEST(WriteReadModifications) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        const TestTableDescription table = {};
+        //
+
+        ui64 writeId = 0;
+        ui64 tableId = 1;
+
+        auto ydbSchema = table.Schema;
+        SetupSchema(runtime, sender, tableId);
+
+        constexpr ui32 numRows = 10;
+        std::pair<ui64, ui64> portion = { 10, 10 + numRows };
+        auto testData = MakeTestBlob(portion, ydbSchema);
+        TAutoPtr<IEventHandle> handle;
+
+        ui64 txId = 0;
+        ui64 planStep = 100;
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(
+                WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Update));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            UNIT_ASSERT(!rb || rb->num_rows() == 0);
+            ++planStep;
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(
+                WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Insert));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            UNIT_ASSERT(CheckOrdered(rb));
+            UNIT_ASSERT(DataHas({ rb }, portion, true));
+            ++planStep;
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(
+                WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Upsert));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            UNIT_ASSERT(CheckOrdered(rb));
+            UNIT_ASSERT(DataHas({ rb }, portion, true));
+            ++planStep;
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(
+                WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Update));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            UNIT_ASSERT(CheckOrdered(rb));
+            UNIT_ASSERT(DataHas({ rb }, portion, true));
+            ++planStep;
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(
+                !WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Insert));
+        }
+        {
+            TSet<ui64> txIds;
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(
+                WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Delete));
+            ProposeCommit(runtime, sender, ++txId, writeIds);
+            txIds.insert(txId);
+            PlanCommit(runtime, sender, planStep, txIds);
+
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp" });
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(reader.IsCorrectlyFinished());
+            AFL_VERIFY(!rb || rb->num_rows() == 0)("count", rb->num_rows());
+            ++planStep;
+        }
     }
 
     Y_UNIT_TEST(WriteRead) {
@@ -1887,7 +1899,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         schema[0].SetType(TTypeInfo(typeId));
         pk[0].SetType(TTypeInfo(typeId));
-        TestTableDescription table{.Schema = schema, .Pk = pk};
+        TestTableDescription table{ .Schema = schema, .Pk = pk };
         TestCompactionInGranuleImpl(reboot, table);
     }
 
@@ -1922,7 +1934,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     Y_UNIT_TEST(CompactionInGranule_PKDatetime) {
         TestCompactionInGranule(false, NTypeIds::Datetime);
     }
-
 
     Y_UNIT_TEST(CompactionInGranule_PKString_Reboot) {
         TestCompactionInGranule(true, NTypeIds::String);
@@ -1966,16 +1977,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(ReadSomePrograms) {
         TestTableDescription table;
-        table.Schema = {
-            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
-            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
-            NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ),
-            NArrow::NTest::TTestColumn("level", TTypeInfo(NTypeIds::Int32) ),
-            NArrow::NTest::TTestColumn("message", TTypeInfo(NTypeIds::Utf8) )
-        };
-        table.Pk = {
-            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) )
-        };
+        table.Schema = { NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
+            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)), NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("level", TTypeInfo(NTypeIds::Int32)), NArrow::NTest::TTestColumn("message", TTypeInfo(NTypeIds::Utf8)) };
+        table.Pk = { NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)) };
 
         TestSomePrograms(table);
     }
@@ -1998,14 +2003,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             counts.push_back(1);
         }
 
-        THashSet<NScheme::TTypeId> sameValTypes = {
-            NTypeIds::Yson, NTypeIds::Json, NTypeIds::JsonDocument
-        };
+        THashSet<NScheme::TTypeId> sameValTypes = { NTypeIds::Yson, NTypeIds::Json, NTypeIds::JsonDocument };
 
         // TODO: query needs normalization to compare with expected
         TReadAggregateResult resDefault = { 100, {}, {}, counts };
-        TReadAggregateResult resFiltered = { 1, {}, {}, {1} };
-        TReadAggregateResult resGrouped = { 1, {}, {}, {100} };
+        TReadAggregateResult resFiltered = { 1, {}, {}, { 1 } };
+        TReadAggregateResult resGrouped = { 1, {}, {}, { 100 } };
 
         for (ui32 key = 0; key < schema.size(); ++key) {
             Cerr << "-- group by key: " << key << "\n";
@@ -2019,8 +2022,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
         for (ui32 key = 0; key < schema.size() - 1; ++key) {
             Cerr << "-- group by key: " << key << ", " << key + 1 << "\n";
-            if (sameValTypes.contains(schema[key].GetType().GetTypeId()) &&
-                sameValTypes.contains(schema[key + 1].GetType().GetTypeId())) {
+            if (sameValTypes.contains(schema[key].GetType().GetTypeId()) && sameValTypes.contains(schema[key + 1].GetType().GetTypeId())) {
                 TestReadAggregate(schema, testBlob, (key % 2), { key, key + 1 }, resGrouped, resFiltered);
             } else {
                 TestReadAggregate(schema, testBlob, (key % 2), { key, key + 1 }, resDefault, resFiltered);
@@ -2028,8 +2030,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
         for (ui32 key = 0; key < schema.size() - 2; ++key) {
             Cerr << "-- group by key: " << key << ", " << key + 1 << ", " << key + 2 << "\n";
-            if (sameValTypes.contains(schema[key].GetType().GetTypeId()) &&
-                sameValTypes.contains(schema[key + 1].GetType().GetTypeId()) &&
+            if (sameValTypes.contains(schema[key].GetType().GetTypeId()) && sameValTypes.contains(schema[key + 1].GetType().GetTypeId()) &&
                 sameValTypes.contains(schema[key + 1].GetType().GetTypeId())) {
                 TestReadAggregate(schema, testBlob, (key % 2), { key, key + 1, key + 2 }, resGrouped, resFiltered);
             } else {
@@ -2046,12 +2047,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         const std::vector<NArrow::NTest::TTestColumn> YdbPk;
 
     public:
-        TTabletReadPredicateTest(TTestBasicRuntime& runtime, const ui64 planStep, const ui64 txId, const std::vector<NArrow::NTest::TTestColumn>& ydbPk)
+        TTabletReadPredicateTest(
+            TTestBasicRuntime& runtime, const ui64 planStep, const ui64 txId, const std::vector<NArrow::NTest::TTestColumn>& ydbPk)
             : Runtime(runtime)
             , PlanStep(planStep)
             , TxId(txId)
-            , YdbPk(ydbPk)
-        {}
+            , YdbPk(ydbPk) {
+        }
 
         class TBorder {
         private:
@@ -2061,14 +2063,15 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         public:
             TBorder(const std::vector<ui32>& values, const bool include = false)
                 : Border(values)
-                , Include(include)
-            {}
+                , Include(include) {
+            }
 
-            bool GetInclude() const noexcept { return Include; }
+            bool GetInclude() const noexcept {
+                return Include;
+            }
 
-            std::vector<TCell> GetCellVec(const std::vector<NArrow::NTest::TTestColumn>& pk,
-                                        std::vector<TString>& mem, bool trailingNulls = false) const
-            {
+            std::vector<TCell> GetCellVec(
+                const std::vector<NArrow::NTest::TTestColumn>& pk, std::vector<TString>& mem, bool trailingNulls = false) const {
                 UNIT_ASSERT(Border.size() <= pk.size());
                 std::vector<TCell> cells;
                 size_t i = 0;
@@ -2089,16 +2092,25 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
             TTestCaseOptions() = default;
 
-            TTestCaseOptions& SetFrom(const TBorder& border) { From = border; return *this; }
-            TTestCaseOptions& SetTo(const TBorder& border) { To = border; return *this; }
-            TTestCaseOptions& SetExpectedCount(ui32 count) { ExpectedCount = count; return *this; }
+            TTestCaseOptions& SetFrom(const TBorder& border) {
+                From = border;
+                return *this;
+            }
+            TTestCaseOptions& SetTo(const TBorder& border) {
+                To = border;
+                return *this;
+            }
+            TTestCaseOptions& SetExpectedCount(ui32 count) {
+                ExpectedCount = count;
+                return *this;
+            }
 
             TSerializedTableRange MakeRange(const std::vector<NArrow::NTest::TTestColumn>& pk) const {
                 std::vector<TString> mem;
                 auto cellsFrom = From ? From->GetCellVec(pk, mem, false) : std::vector<TCell>();
                 auto cellsTo = To ? To->GetCellVec(pk, mem) : std::vector<TCell>();
                 return TSerializedTableRange(TConstArrayRef<TCell>(cellsFrom), (From ? From->GetInclude() : false),
-                                             TConstArrayRef<TCell>(cellsTo), (To ? To->GetInclude(): false));
+                    TConstArrayRef<TCell>(cellsTo), (To ? To->GetInclude() : false));
             }
         };
 
@@ -2109,17 +2121,17 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
             void Execute() {
                 const ui64 tableId = 1;
-                std::set<TString> useFields = {"timestamp", "message"};
-                { // read with predicate (FROM)
-                    NOlap::NTests::TShardReader reader(Owner.Runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(Owner.PlanStep, Owner.TxId));
-                    reader.SetReplyColumns({"timestamp", "message"});
+                std::set<TString> useFields = { "timestamp", "message" };
+                {   // read with predicate (FROM)
+                    TShardReader reader(Owner.Runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(Owner.PlanStep, Owner.TxId));
+                    reader.SetReplyColumns({ "timestamp", "message" });
                     reader.AddRange(MakeRange(Owner.YdbPk));
                     auto rb = reader.ReadAll();
                     UNIT_ASSERT(reader.IsCorrectlyFinished());
                     if (ExpectedCount) {
                         if (*ExpectedCount) {
                             UNIT_ASSERT(CheckOrdered(rb));
-                            UNIT_ASSERT(CheckColumns(rb, {"timestamp", "message"}, ExpectedCount));
+                            UNIT_ASSERT(CheckColumns(rb, { "timestamp", "message" }, ExpectedCount));
                         } else {
                             UNIT_ASSERT(!rb || !rb->num_rows());
                         }
@@ -2131,8 +2143,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             TTestCase(TTabletReadPredicateTest& owner, const TString& testCaseName, const TTestCaseOptions& opts = {})
                 : TTestCaseOptions(opts)
                 , Owner(owner)
-                , TestCaseName(testCaseName)
-            {
+                , TestCaseName(testCaseName) {
                 Cerr << "TEST CASE " << TestCaseName << " START..." << Endl;
             }
 
@@ -2155,7 +2166,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     void TestCompactionSplitGranuleImpl(const TestTableDescription& table, const TTestBlobOptions& testBlobOptions = {}) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
-        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_NOTICE);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csDefaultControllerGuard->SetSmallSizeDetector(1LLU << 20);
 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -2204,19 +2217,18 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         for (ui32 i = 0; i < 2; ++i) {
             {
-                NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
-                reader.SetReplyColumns({"timestamp", "message"});
+                TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+                reader.SetReplyColumns({ "timestamp", "message" });
                 auto rb = reader.ReadAll();
                 UNIT_ASSERT(reader.IsCorrectlyFinished());
                 UNIT_ASSERT(CheckOrdered(rb));
 
                 if (testBlobOptions.SameValueColumns.contains("timestamp")) {
                     UNIT_ASSERT(!testBlobOptions.SameValueColumns.contains("message"));
-                    UNIT_ASSERT(DataHas<std::string>({rb}, {0, fullNumRows}, true, "message"));
+                    UNIT_ASSERT(DataHas<std::string>({ rb }, { 0, fullNumRows }, true, "message"));
                 } else {
-                    UNIT_ASSERT(isStrPk0
-                        ? DataHas<std::string>({rb}, {0, fullNumRows}, true, "timestamp")
-                        : DataHas({rb}, {0, fullNumRows}, true, "timestamp"));
+                    UNIT_ASSERT(isStrPk0 ? DataHas<std::string>({ rb }, { 0, fullNumRows }, true, "timestamp")
+                                         : DataHas({ rb }, { 0, fullNumRows }, true, "timestamp"));
                 }
             }
             std::vector<ui32> val0 = { 0 };
@@ -2225,9 +2237,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             std::vector<ui32> val9999 = { 99999 };
             std::vector<ui32> val1M = { 1000000000 };
             std::vector<ui32> val1M_1 = { 1000000001 };
-            std::vector<ui32> valNumRows = {fullNumRows};
-            std::vector<ui32> valNumRows_1 = {fullNumRows - 1 };
-            std::vector<ui32> valNumRows_2 = {fullNumRows - 2 };
+            std::vector<ui32> valNumRows = { fullNumRows };
+            std::vector<ui32> valNumRows_1 = { fullNumRows - 1 };
+            std::vector<ui32> valNumRows_2 = { fullNumRows - 2 };
 
             {
                 UNIT_ASSERT(table.Pk.size() >= 2);
@@ -2239,7 +2251,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 val9999 = { sameValue, 99999 };
                 val1M = { sameValue, 1000000000 };
                 val1M_1 = { sameValue, 1000000001 };
-                valNumRows = { sameValue, fullNumRows};
+                valNumRows = { sameValue, fullNumRows };
                 valNumRows_1 = { sameValue, fullNumRows - 1 };
                 valNumRows_2 = { sameValue, fullNumRows - 2 };
             }
@@ -2256,8 +2268,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             testAgent.Test("[0:1)").SetFrom(TBorder(val0, true)).SetTo(TBorder(val1, false)).SetExpectedCount(1);
             testAgent.Test("(0:1)").SetFrom(TBorder(val0, false)).SetTo(TBorder(val1, false)).SetExpectedCount(0);
             testAgent.Test("outscope1").SetFrom(TBorder(val1M, true)).SetTo(TBorder(val1M_1, true)).SetExpectedCount(0);
-//            VERIFIED AS INCORRECT INTERVAL (its good)
-//            testAgent.Test("[0-0)").SetFrom(TTabletReadPredicateTest::TBorder(0, true)).SetTo(TBorder(0, false)).SetExpectedCount(0);
+            //            VERIFIED AS INCORRECT INTERVAL (its good)
+            //            testAgent.Test("[0-0)").SetFrom(TTabletReadPredicateTest::TBorder(0, true)).SetTo(TBorder(0, false)).SetExpectedCount(0);
 
             if (isStrPk0) {
                 testAgent.Test("(99990:").SetFrom(TBorder(val9990, false)).SetExpectedCount(109);
@@ -2273,8 +2285,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         }
-        { // Get index stats
-            ScanIndexStats(runtime, sender, {tableId, 42}, NOlap::TSnapshot(planStep, txId), 0);
+        const TInstant start = TInstant::Now();
+        bool success = false;
+        while (!success && TInstant::Now() - start < TDuration::Seconds(30)) {   // Get index stats
+            ScanIndexStats(runtime, sender, { tableId, 42 }, NOlap::TSnapshot(planStep, txId), 0);
             auto scanInited = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanInitActor>(handle);
             auto& msg = scanInited->Record;
             auto scanActorId = ActorIdFromProto(msg.GetScanActorId());
@@ -2283,26 +2297,22 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             ui64 sumCompactedRows = 0;
             ui64 sumInsertedBytes = 0;
             ui64 sumInsertedRows = 0;
-            std::optional<ui32> keyColumnId;
             while (true) {
                 ui32 resultLimit = 1024 * 1024;
                 runtime.Send(new IEventHandle(scanActorId, sender, new NKqp::TEvKqpCompute::TEvScanDataAck(resultLimit, 0, 1)));
                 auto scan = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanData>(handle);
-                auto batchStats = scan->ArrowBatch;
                 if (scan->Finished) {
                     AFL_VERIFY(!scan->ArrowBatch || !scan->ArrowBatch->num_rows());
                     break;
                 }
-                UNIT_ASSERT(batchStats);
-//                Cerr << batchStats->ToString() << Endl;
-
+                UNIT_ASSERT(scan->ArrowBatch);
+                auto batchStats = NArrow::ToBatch(scan->ArrowBatch, true);
                 for (ui32 i = 0; i < batchStats->num_rows(); ++i) {
                     auto paths = batchStats->GetColumnByName("PathId");
                     auto kinds = batchStats->GetColumnByName("Kind");
                     auto rows = batchStats->GetColumnByName("Rows");
-                    auto bytes = batchStats->GetColumnByName("BlobRangeSize");
-                    auto rawBytes = batchStats->GetColumnByName("RawBytes");
-                    auto internalColumnIds = batchStats->GetColumnByName("InternalEntityId");
+                    auto bytes = batchStats->GetColumnByName("ColumnBlobBytes");
+                    auto rawBytes = batchStats->GetColumnByName("ColumnRawBytes");
                     auto activities = batchStats->GetColumnByName("Activity");
                     AFL_VERIFY(activities);
 
@@ -2312,30 +2322,22 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     ui64 numRows = static_cast<arrow::UInt64Array&>(*rows).Value(i);
                     ui64 numBytes = static_cast<arrow::UInt64Array&>(*bytes).Value(i);
                     ui64 numRawBytes = static_cast<arrow::UInt64Array&>(*rawBytes).Value(i);
-                    ui32 internalColumnId = static_cast<arrow::UInt32Array&>(*internalColumnIds).Value(i);
-                    bool activity = static_cast<arrow::BooleanArray&>(*activities).Value(i);
+                    bool activity = static_cast<arrow::UInt8Array&>(*activities).Value(i);
                     if (!activity) {
                         continue;
                     }
-                    if (!keyColumnId) {
-                        keyColumnId = internalColumnId;
-                    }
-                    Cerr << "[" << __LINE__ << "] " << activity << " " << table.Pk[0].GetType().GetTypeId() << " "
-                        << pathId << " " << kindStr << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
+                    Cerr << "[" << __LINE__ << "] " << activity << " " << table.Pk[0].GetType().GetTypeId() << " " << pathId << " " << kindStr
+                         << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
 
                     if (pathId == tableId) {
-                        if (kindStr == ::ToString(NOlap::NPortion::EProduced::COMPACTED) || kindStr == ::ToString(NOlap::NPortion::EProduced::SPLIT_COMPACTED)) {
+                        if (kindStr == ::ToString(NOlap::NPortion::EProduced::COMPACTED) ||
+                            kindStr == ::ToString(NOlap::NPortion::EProduced::SPLIT_COMPACTED) || numBytes > (4LLU << 20)) {
                             sumCompactedBytes += numBytes;
-                            if (*keyColumnId == internalColumnId) {
-                                sumCompactedRows += numRows;
-                            }
+                            sumCompactedRows += numRows;
                             //UNIT_ASSERT(numRawBytes > numBytes);
-                        }
-                        if (kindStr == ::ToString(NOlap::NPortion::EProduced::INSERTED)) {
+                        } else if (kindStr == ::ToString(NOlap::NPortion::EProduced::INSERTED)) {
                             sumInsertedBytes += numBytes;
-                            if (*keyColumnId == internalColumnId) {
-                                sumInsertedRows += numRows;
-                            }
+                            sumInsertedRows += numRows;
                             //UNIT_ASSERT(numRawBytes > numBytes);
                         }
                     } else {
@@ -2346,12 +2348,16 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 }
             }
             Cerr << "compacted=" << sumCompactedRows << ";inserted=" << sumInsertedRows << ";expected=" << fullNumRows << ";" << Endl;
-            RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
-            AFL_VERIFY(sumCompactedRows == fullNumRows)("sum", sumCompactedRows)("full", fullNumRows);
-            UNIT_ASSERT(sumCompactedRows < sumCompactedBytes);
-            UNIT_ASSERT(sumInsertedRows == 0);
-            UNIT_ASSERT(sumInsertedBytes == 0);
+            if (sumCompactedRows && sumInsertedRows + sumCompactedRows == fullNumRows) {
+                success = true;
+                RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+                UNIT_ASSERT(sumCompactedRows < sumCompactedBytes);
+                UNIT_ASSERT(sumInsertedRows <= sumInsertedBytes);
+            } else {
+                Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
+            }
         }
+        AFL_VERIFY(success);
     }
 
     void TestCompactionSplitGranule(const TTypeId typeId) {
@@ -2364,7 +2370,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         pk[0].SetType(TTypeInfo(typeId));
         schema[1].SetType(TTypeInfo(typeId));
         pk[1].SetType(TTypeInfo(typeId));
-        TestTableDescription table{.Schema = schema, .Pk = pk};
+        TestTableDescription table{ .Schema = schema, .Pk = pk };
         TestCompactionSplitGranuleImpl(table, opts);
     }
 
@@ -2403,6 +2409,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     Y_UNIT_TEST(ReadStale) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
@@ -2422,7 +2429,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         // Write some test data to advance the time
         {
-            std::pair<ui64, ui64> triggerPortion = {1, 1000};
+            std::pair<ui64, ui64> triggerPortion = { 1, 1000 };
             TString triggerData = MakeTestBlob(triggerPortion, ydbSchema);
 
             std::vector<ui64> writeIds;
@@ -2460,18 +2467,19 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         // Try to read snapshot that is too old
         {
-            NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep - staleness.MilliSeconds(), Max<ui64>()));
-            reader.SetReplyColumns({"timestamp", "message"});
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep - staleness.MilliSeconds(), Max<ui64>()));
+            reader.SetReplyColumns({ "timestamp", "message" });
             reader.ReadAll();
             UNIT_ASSERT(reader.IsError());
         }
-
     }
 
     void TestCompactionGC() {
         TTestBasicRuntime runtime;
-        TTester::Setup(runtime);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csDefaultControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
+        csDefaultControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        TTester::Setup(runtime);
 
         runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_INFO);
 
@@ -2501,7 +2509,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvReadFinished>(ev)) {
-                Cerr <<  "EvReadFinished " << msg->RequestCookie << Endl;
+                Cerr << (TStringBuilder() << "EvReadFinished " << msg->RequestCookie << Endl);
                 inFlightReads.insert(msg->RequestCookie);
                 if (blockReadFinished) {
                     return true;
@@ -2511,74 +2519,70 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
                 if (auto append = dynamic_pointer_cast<NOlap::TChangesWithAppend>(msg->IndexChanges)) {
                     Y_ABORT_UNLESS(append->AppendedPortions.size());
-                    Cerr << "Added portions:";
+                    TStringBuilder sb;
+                    sb << "Added portions:";
                     for (const auto& portion : append->AppendedPortions) {
+                        Y_UNUSED(portion);
                         ++addedPortions;
-                        ui64 portionId = addedPortions;
-                        Cerr << " " << portionId << "(" << portion.GetPortionInfo().GetPortion() << ")";
+                        sb << " " << addedPortions;
                     }
-                    Cerr << Endl;
+                    sb << Endl;
+                    Cerr << sb;
                 }
                 if (auto compact = dynamic_pointer_cast<NOlap::TCompactColumnEngineChanges>(msg->IndexChanges)) {
                     Y_ABORT_UNLESS(compact->SwitchedPortions.size());
                     ++compactionsHappened;
-                    Cerr << "Compaction old portions:";
-                    ui64 srcPathId{0};
+                    TStringBuilder sb;
+                    sb << "Compaction old portions:";
+                    ui64 srcPathId{ 0 };
                     for (const auto& portionInfo : compact->SwitchedPortions) {
-                        const ui64 pathId = portionInfo.GetPathId();
+                        const ui64 pathId = portionInfo.GetPortionInfo().GetPathId();
                         UNIT_ASSERT(!srcPathId || srcPathId == pathId);
                         srcPathId = pathId;
-                        oldPortions.insert(portionInfo.GetPortion());
+                        oldPortions.insert(portionInfo.GetPortionInfo().GetPortionId());
+                        sb << portionInfo.GetPortionInfo().GetPortionId() << ",";
                     }
-                    Cerr << Endl;
+                    sb << Endl;
+                    Cerr << sb;
                 }
-                if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupColumnEngineChanges>(msg->IndexChanges)) {
+                if (auto cleanup = dynamic_pointer_cast<NOlap::TCleanupPortionsColumnEngineChanges>(msg->IndexChanges)) {
                     Y_ABORT_UNLESS(cleanup->PortionsToDrop.size());
                     ++cleanupsHappened;
-                    Cerr << "Cleanup old portions:";
+                    TStringBuilder sb;
+                    sb << "Cleanup old portions:";
                     for (const auto& portion : cleanup->PortionsToDrop) {
-                        Cerr << " " << portion.GetPortion();
-                        deletedPortions.insert(portion.GetPortion());
+                        sb << " " << portion.GetPortionInfo().GetPortionId();
+                        deletedPortions.insert(portion.GetPortionInfo().GetPortionId());
                     }
-                    Cerr << Endl;
+                    sb << Endl;
+                    Cerr << sb;
                 }
             } else if (auto* msg = TryGetPrivateEvent<NActors::NLog::TEvLog>(ev)) {
-                bool matchedEvent = false;
                 {
-                    TString prefixes[2] = {"Delay Delete Blob ", "Delay Delete Small Blob "};
+                    const std::vector<TString> prefixes = { "Delay Delete Blob " };
                     for (TString prefix : prefixes) {
                         size_t pos = msg->Line.find(prefix);
                         if (pos != TString::npos) {
                             TString blobId = msg->Line.substr(pos + prefix.size());
-                            Cerr << "Delayed delete: " << blobId << Endl;
+                            Cerr << (TStringBuilder() << "Delayed delete: " << blobId << Endl);
                             delayedBlobs.insert(blobId);
-                            matchedEvent = true;
                             break;
                         }
                     }
                 }
-                if (!matchedEvent){
-                    TString prefix = "Delete Small Blob ";
-                    size_t pos = msg->Line.find(prefix);
-                    if (pos != TString::npos) {
-                        TString blobId = msg->Line.substr(pos + prefix.size());
-                        Cerr << "Delete small blob: " << blobId << Endl;
-                        deletedBlobs.insert(blobId);
-                        delayedBlobs.erase(blobId);
-                        matchedEvent = true;
-                    }
-                }
             } else if (auto* msg = TryGetPrivateEvent<NKikimr::TEvBlobStorage::TEvCollectGarbage>(ev)) {
                 // Extract and save all DoNotKeep blobIds
-                Cerr << "GC for channel " << msg->Channel;
+                TStringBuilder sb;
+                sb << "GC for channel " << msg->Channel;
                 if (msg->DoNotKeep) {
-                    Cerr << " deletes blobs: " << JoinStrings(msg->DoNotKeep->begin(), msg->DoNotKeep->end(), " ");
+                    sb << " deletes blobs: " << JoinStrings(msg->DoNotKeep->begin(), msg->DoNotKeep->end(), " ");
                     for (const auto& blobId : *msg->DoNotKeep) {
                         deletedBlobs.insert(blobId.ToString());
                         delayedBlobs.erase(NOlap::TUnifiedBlobId(0, blobId).ToStringNew());
                     }
                 }
-                Cerr << Endl;
+                sb << Endl;
+                Cerr << sb;
             }
             return false;
         };
@@ -2598,7 +2602,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         // Write different keys: grow on compaction
 
         static const ui32 triggerPortionSize = 75 * 1000;
-        std::pair<ui64, ui64> triggerPortion = {0, triggerPortionSize};
+        std::pair<ui64, ui64> triggerPortion = { 0, triggerPortionSize };
         TString triggerData = MakeTestBlob(triggerPortion, ydbSchema);
         UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
         UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::GetMaxBlobSize());
@@ -2618,7 +2622,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         // Do a small write that is not indexed so that we will get a committed blob in read request
         {
-            TString smallData = MakeTestBlob({0, 2}, ydbSchema);
+            TString smallData = MakeTestBlob({ 0, 2 }, ydbSchema);
             UNIT_ASSERT(smallData.size() < 100 * 1024);
             std::vector<ui64> writeIds;
             UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, smallData, ydbSchema, true, &writeIds));
@@ -2633,7 +2637,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         --planStep;
         --txId;
         Cerr << compactionsHappened << Endl;
-        UNIT_ASSERT_GE(compactionsHappened, 3); // we catch it three times per action
+        //        UNIT_ASSERT_GE(compactionsHappened, 3); // we catch it three times per action
 
         ui64 previousCompactionsHappened = compactionsHappened;
         ui64 previousCleanupsHappened = cleanupsHappened;
@@ -2641,12 +2645,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         // Send a request that reads the latest version
         // This request is expected to read at least 1 committed blob and several index portions
         // These committed blob and portions must not be deleted by the BlobManager until the read request finishes
-        NOlap::NTests::TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep - 1, Max<ui64>()));
-        reader.SetReplyColumns({"timestamp", "message"});
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep - 1, Max<ui64>()));
+        reader.SetReplyColumns({ "timestamp", "message" });
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
         UNIT_ASSERT(CheckOrdered(rb));
         UNIT_ASSERT(reader.GetIterationsCount() < 10);
+        csDefaultControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Indexation);
 
         // We captured EvReadFinished event and dropped is so the columnshard still thinks that
         // read request is in progress and keeps the portions
@@ -2662,15 +2667,21 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             ProposeCommit(runtime, sender, txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
+        {
+            auto read = std::make_unique<NColumnShard::TEvPrivate::TEvPingSnapshotsUsage>();
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
+        }
 
-        Cerr << "Compactions happened: " << compactionsHappened << Endl;
-        Cerr << "Cleanups happened: " << cleanupsHappened << Endl;
+        Cerr << "Compactions happened: " << csDefaultControllerGuard->GetCompactionStartedCounter().Val() << Endl;
+        Cerr << "Indexations happened: " << csDefaultControllerGuard->GetInsertStartedCounter().Val() << Endl;
+        Cerr << "Cleanups happened: " << csDefaultControllerGuard->GetCleaningStartedCounter().Val() << Endl;
         Cerr << "Old portions: " << JoinStrings(oldPortions.begin(), oldPortions.end(), " ") << Endl;
         Cerr << "Cleaned up portions: " << JoinStrings(deletedPortions.begin(), deletedPortions.end(), " ") << Endl;
+        Cerr << "delayedBlobs: " << JoinStrings(delayedBlobs.begin(), delayedBlobs.end(), " ") << Endl;
 
         // Check that GC happened but it didn't collect some old portions
         UNIT_ASSERT_GT(compactionsHappened, previousCompactionsHappened);
-        UNIT_ASSERT_GT(cleanupsHappened, previousCleanupsHappened);
+        UNIT_ASSERT_EQUAL(cleanupsHappened, 0);
         UNIT_ASSERT_GT_C(oldPortions.size(), deletedPortions.size(), "Some old portions must not be deleted because the are in use by read");
         UNIT_ASSERT_GT_C(delayedBlobs.size(), 0, "Read request is expected to have at least one committed blob, which deletion must be delayed");
         previousCompactionsHappened = compactionsHappened;
@@ -2685,9 +2696,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
 
         // Advance the time and trigger some more cleanups withno compactions
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDisableCompactionController>();
-        planStep += 2 * delay.MilliSeconds();
-        numWrites = 2;
+        csDefaultControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        {
+            auto read = std::make_unique<NColumnShard::TEvPrivate::TEvPingSnapshotsUsage>();
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
+        }
+        planStep += (2 * delay).MilliSeconds();
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
             std::vector<ui64> writeIds;
             UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
@@ -2695,9 +2709,25 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             ProposeCommit(runtime, sender, txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
+        UNIT_ASSERT_EQUAL(cleanupsHappened, 0);
+        csDefaultControllerGuard->SetOverrideRequestsTracePingCheckPeriod(TDuration::Zero());
+        {
+            auto read = std::make_unique<NColumnShard::TEvPrivate::TEvPingSnapshotsUsage>();
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
+        }
+        for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++planStep, ++txId) {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
 
-        Cerr << "Compactions happened: " << compactionsHappened << Endl;
-        Cerr << "Cleanups happened: " << cleanupsHappened << Endl;
+            ProposeCommit(runtime, sender, txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+        AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val() == 1);
+        AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val() == 1);
+
+        Cerr << "Compactions happened: " << csDefaultControllerGuard->GetCompactionStartedCounter().Val() << Endl;
+        Cerr << "Indexations happened: " << csDefaultControllerGuard->GetInsertStartedCounter().Val() << Endl;
+        Cerr << "Cleanups happened: " << csDefaultControllerGuard->GetCleaningStartedCounter().Val() << Endl;
         Cerr << "Old portions: " << JoinStrings(oldPortions.begin(), oldPortions.end(), " ") << Endl;
         Cerr << "Cleaned up portions: " << JoinStrings(deletedPortions.begin(), deletedPortions.end(), " ") << Endl;
 
@@ -2705,12 +2735,23 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         UNIT_ASSERT_GE(compactionsHappened, previousCompactionsHappened);
         UNIT_ASSERT_GT(cleanupsHappened, previousCleanupsHappened);
         UNIT_ASSERT_VALUES_EQUAL_C(oldPortions.size(), deletedPortions.size(), "All old portions must be deleted after read has finished");
-        UNIT_ASSERT_VALUES_EQUAL_C(delayedBlobs.size(), 0, "All previously delayed deletions must now happen " + JoinSeq(",", delayedBlobs));
     }
 
     Y_UNIT_TEST(CompactionGC) {
         TestCompactionGC();
     }
+
+    Y_UNIT_TEST(PortionInfoSize) {
+        Cerr << sizeof(NOlap::TPortionInfo) << Endl;
+        Cerr << sizeof(NOlap::TPortionMeta) << Endl;
+        Cerr << sizeof(NOlap::TColumnRecord) << Endl;
+        Cerr << sizeof(NOlap::TIndexChunk) << Endl;
+        Cerr << sizeof(std::optional<NArrow::TReplaceKey>) << Endl;
+        Cerr << sizeof(std::optional<NOlap::TSnapshot>) << Endl;
+        Cerr << sizeof(NOlap::TSnapshot) << Endl;
+        Cerr << sizeof(NArrow::TReplaceKey) << Endl;
+        Cerr << sizeof(NArrow::NMerger::TSortableBatchPosition) << Endl;
+    }
 }
 
-}
+}   // namespace NKikimr

@@ -3,7 +3,7 @@
  * reinit.c
  *	  Reinitialization of unlogged relations
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "common/relpath.h"
+#include "postmaster/startup.h"
 #include "storage/copydir.h"
 #include "storage/fd.h"
 #include "storage/reinit.h"
@@ -64,6 +65,9 @@ ResetUnloggedRelations(int op)
 								   "ResetUnloggedRelations",
 								   ALLOCSET_DEFAULT_SIZES);
 	oldctx = MemoryContextSwitchTo(tmpctx);
+
+	/* Prepare to report progress resetting unlogged relations. */
+	begin_startup_progress_phase();
 
 	/*
 	 * First process unlogged files in pg_default ($PGDATA/base)
@@ -136,6 +140,14 @@ ResetUnloggedRelationsInTablespaceDir(const char *tsdirname, int op)
 
 		snprintf(dbspace_path, sizeof(dbspace_path), "%s/%s",
 				 tsdirname, de->d_name);
+
+		if (op & UNLOGGED_RELATION_INIT)
+			ereport_startup_progress("resetting unlogged relations (init), elapsed time: %ld.%02d s, current path: %s",
+									 dbspace_path);
+		else if (op & UNLOGGED_RELATION_CLEANUP)
+			ereport_startup_progress("resetting unlogged relations (cleanup), elapsed time: %ld.%02d s, current path: %s",
+									 dbspace_path);
+
 		ResetUnloggedRelationsInDbspaceDir(dbspace_path, op);
 	}
 
@@ -183,11 +195,11 @@ ResetUnloggedRelationsInDbspaceDir(const char *dbspacedirname, int op)
 		while ((de = ReadDir(dbspace_dir, dbspacedirname)) != NULL)
 		{
 			ForkNumber	forkNum;
-			int			oidchars;
+			int			relnumchars;
 			unlogged_relation_entry ent;
 
 			/* Skip anything that doesn't look like a relation data file. */
-			if (!parse_filename_for_nontemp_relation(de->d_name, &oidchars,
+			if (!parse_filename_for_nontemp_relation(de->d_name, &relnumchars,
 													 &forkNum))
 				continue;
 
@@ -223,11 +235,11 @@ ResetUnloggedRelationsInDbspaceDir(const char *dbspacedirname, int op)
 		while ((de = ReadDir(dbspace_dir, dbspacedirname)) != NULL)
 		{
 			ForkNumber	forkNum;
-			int			oidchars;
+			int			relnumchars;
 			unlogged_relation_entry ent;
 
 			/* Skip anything that doesn't look like a relation data file. */
-			if (!parse_filename_for_nontemp_relation(de->d_name, &oidchars,
+			if (!parse_filename_for_nontemp_relation(de->d_name, &relnumchars,
 													 &forkNum))
 				continue;
 
@@ -273,13 +285,13 @@ ResetUnloggedRelationsInDbspaceDir(const char *dbspacedirname, int op)
 		while ((de = ReadDir(dbspace_dir, dbspacedirname)) != NULL)
 		{
 			ForkNumber	forkNum;
-			int			oidchars;
-			char		oidbuf[OIDCHARS + 1];
+			int			relnumchars;
+			char		relnumbuf[OIDCHARS + 1];
 			char		srcpath[MAXPGPATH * 2];
 			char		dstpath[MAXPGPATH];
 
 			/* Skip anything that doesn't look like a relation data file. */
-			if (!parse_filename_for_nontemp_relation(de->d_name, &oidchars,
+			if (!parse_filename_for_nontemp_relation(de->d_name, &relnumchars,
 													 &forkNum))
 				continue;
 
@@ -292,10 +304,10 @@ ResetUnloggedRelationsInDbspaceDir(const char *dbspacedirname, int op)
 					 dbspacedirname, de->d_name);
 
 			/* Construct destination pathname. */
-			memcpy(oidbuf, de->d_name, oidchars);
-			oidbuf[oidchars] = '\0';
+			memcpy(relnumbuf, de->d_name, relnumchars);
+			relnumbuf[relnumchars] = '\0';
 			snprintf(dstpath, sizeof(dstpath), "%s/%s%s",
-					 dbspacedirname, oidbuf, de->d_name + oidchars + 1 +
+					 dbspacedirname, relnumbuf, de->d_name + relnumchars + 1 +
 					 strlen(forkNames[INIT_FORKNUM]));
 
 			/* OK, we're ready to perform the actual copy. */
@@ -316,12 +328,12 @@ ResetUnloggedRelationsInDbspaceDir(const char *dbspacedirname, int op)
 		while ((de = ReadDir(dbspace_dir, dbspacedirname)) != NULL)
 		{
 			ForkNumber	forkNum;
-			int			oidchars;
-			char		oidbuf[OIDCHARS + 1];
+			int			relnumchars;
+			char		relnumbuf[OIDCHARS + 1];
 			char		mainpath[MAXPGPATH];
 
 			/* Skip anything that doesn't look like a relation data file. */
-			if (!parse_filename_for_nontemp_relation(de->d_name, &oidchars,
+			if (!parse_filename_for_nontemp_relation(de->d_name, &relnumchars,
 													 &forkNum))
 				continue;
 
@@ -330,10 +342,10 @@ ResetUnloggedRelationsInDbspaceDir(const char *dbspacedirname, int op)
 				continue;
 
 			/* Construct main fork pathname. */
-			memcpy(oidbuf, de->d_name, oidchars);
-			oidbuf[oidchars] = '\0';
+			memcpy(relnumbuf, de->d_name, relnumchars);
+			relnumbuf[relnumchars] = '\0';
 			snprintf(mainpath, sizeof(mainpath), "%s/%s%s",
-					 dbspacedirname, oidbuf, de->d_name + oidchars + 1 +
+					 dbspacedirname, relnumbuf, de->d_name + relnumchars + 1 +
 					 strlen(forkNames[INIT_FORKNUM]));
 
 			fsync_fname(mainpath, false);
@@ -360,13 +372,13 @@ ResetUnloggedRelationsInDbspaceDir(const char *dbspacedirname, int op)
  * for a non-temporary relation and false otherwise.
  *
  * NB: If this function returns true, the caller is entitled to assume that
- * *oidchars has been set to the a value no more than OIDCHARS, and thus
- * that a buffer of OIDCHARS+1 characters is sufficient to hold the OID
- * portion of the filename.  This is critical to protect against a possible
- * buffer overrun.
+ * *relnumchars has been set to a value no more than OIDCHARS, and thus
+ * that a buffer of OIDCHARS+1 characters is sufficient to hold the
+ * RelFileNumber portion of the filename.  This is critical to protect against
+ * a possible buffer overrun.
  */
 bool
-parse_filename_for_nontemp_relation(const char *name, int *oidchars,
+parse_filename_for_nontemp_relation(const char *name, int *relnumchars,
 									ForkNumber *fork)
 {
 	int			pos;
@@ -376,7 +388,7 @@ parse_filename_for_nontemp_relation(const char *name, int *oidchars,
 		;
 	if (pos == 0 || pos > OIDCHARS)
 		return false;
-	*oidchars = pos;
+	*relnumchars = pos;
 
 	/* Check for a fork name. */
 	if (name[pos] != '_')

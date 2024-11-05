@@ -261,7 +261,7 @@ void TSourceIdStorage::DeregisterSourceId(const TString& sourceId) {
         ExplicitSourceIds.erase(sourceId);
     }
 
-    SourceIdsByOffset.erase(std::make_pair(it->second.Offset, sourceId));
+    SourceIdsByOffset[it->second.Explicit].erase(std::make_pair(it->second.Offset, sourceId));
     InMemorySourceIds.erase(it);
 
     auto jt = SourceIdOwners.find(sourceId);
@@ -285,7 +285,7 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
     const auto ttl = TDuration::Seconds(config.GetSourceIdLifetimeSeconds());
     ui32 size = request->Record.ByteSize();
 
-    for (const auto& [offset, sourceId] : SourceIdsByOffset) {
+    for (const auto& [offset, sourceId] : SourceIdsByOffset[0]) {
         if (offset >= startOffset && toDelOffsets.size() >= maxDeleteSourceIds) {
             break;
         }
@@ -331,7 +331,7 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
         size_t res = InMemorySourceIds.erase(t.second);
         Y_ABORT_UNLESS(res == 1);
         // delete sourceID from offsets
-        res = SourceIdsByOffset.erase(t);
+        res = SourceIdsByOffset[0].erase(t);
         Y_ABORT_UNLESS(res == 1);
         // save owners to drop and delete records from map
         auto it = SourceIdOwners.find(t.second);
@@ -380,14 +380,14 @@ void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdIn
     auto it = InMemorySourceIds.find(sourceId);
     if (it != InMemorySourceIds.end()) {
         if (!load || it->second.Offset < sourceIdInfo.Offset) {
-            const auto res = SourceIdsByOffset.erase(std::make_pair(it->second.Offset, sourceId));
+            const auto res = SourceIdsByOffset[sourceIdInfo.Explicit].erase(std::make_pair(it->second.Offset, sourceId));
             Y_ABORT_UNLESS(res == 1);
         } else {
             return;
         }
     }
 
-    const bool res = SourceIdsByOffset.emplace(sourceIdInfo.Offset, sourceId).second;
+    const bool res = SourceIdsByOffset[sourceIdInfo.Explicit].emplace(sourceIdInfo.Offset, sourceId).second;
     Y_ABORT_UNLESS(res);
 
     if (sourceIdInfo.Explicit) {
@@ -429,10 +429,12 @@ void TSourceIdStorage::MarkOwnersForDeletedSourceId(THashMap<TString, TOwnerInfo
 
 TInstant TSourceIdStorage::MinAvailableTimestamp(TInstant now) const {
     TInstant ds = now;
-    if (!SourceIdsByOffset.empty()) {
-        auto it = InMemorySourceIds.find(SourceIdsByOffset.begin()->second);
-        Y_ABORT_UNLESS(it != InMemorySourceIds.end());
-        ds = Min(ds, it->second.WriteTimestamp);
+    for (ui32 i = 0 ; i < 2; ++i) {
+        if (!SourceIdsByOffset[i].empty()) {
+            auto it = InMemorySourceIds.find(SourceIdsByOffset[i].begin()->second);
+            Y_ABORT_UNLESS(it != InMemorySourceIds.end());
+            ds = Min(ds, it->second.WriteTimestamp);
+        }
     }
 
     return ds;
@@ -528,55 +530,60 @@ void THeartbeatEmitter::Process(const TString& sourceId, THeartbeat&& heartbeat)
 
 TMaybe<THeartbeat> THeartbeatEmitter::CanEmit() const {
     if (Storage.ExplicitSourceIds.size() != (Storage.SourceIdsWithHeartbeat.size() + NewSourceIdsWithHeartbeat.size())) {
+        // there is no quorum
         return Nothing();
     }
 
     if (SourceIdsByHeartbeat.empty()) {
+        // there is no new heartbeats, nothing to emit
         return Nothing();
     }
 
-    if (!NewSourceIdsWithHeartbeat.empty()) { // just got quorum
-        if (!Storage.SourceIdsByHeartbeat.empty() && Storage.SourceIdsByHeartbeat.begin()->first < SourceIdsByHeartbeat.begin()->first) {
+    if (Storage.SourceIdsByHeartbeat.empty()) {
+        // got quorum, memory state
+        return GetFromDiff(SourceIdsByHeartbeat.begin());
+    }
+
+    if (!NewSourceIdsWithHeartbeat.empty()) {
+        // got quorum, mixed state
+        if (Storage.SourceIdsByHeartbeat.begin()->first < SourceIdsByHeartbeat.begin()->first) {
             return GetFromStorage(Storage.SourceIdsByHeartbeat.begin());
         } else {
             return GetFromDiff(SourceIdsByHeartbeat.begin());
         }
-    } else if (SourceIdsByHeartbeat.begin()->first > Storage.SourceIdsByHeartbeat.begin()->first) {
-        auto storage = Storage.SourceIdsByHeartbeat.begin();
-        auto diff = SourceIdsByHeartbeat.begin();
+    }
 
-        TMaybe<TRowVersion> newVersion;
-        while (storage != Storage.SourceIdsByHeartbeat.end()) {
-            const auto& [version, sourceIds] = *storage;
+    TMaybe<TRowVersion> emitVersion;
 
-            auto rest = sourceIds.size();
-            for (const auto& sourceId : sourceIds) {
-                auto it = Heartbeats.find(sourceId);
-                if (it != Heartbeats.end() && it->second.Version > version && version <= diff->first) {
-                    --rest;
-                } else {
-                    break;
-                }
-            }
+    for (auto it = Storage.SourceIdsByHeartbeat.begin(), end = Storage.SourceIdsByHeartbeat.end(); it != end; ++it) {
+        const auto& [version, sourceIds] = *it;
+        auto rest = sourceIds.size();
 
-            if (!rest) {
-                if (++storage != Storage.SourceIdsByHeartbeat.end()) {
-                    newVersion = storage->first;
-                } else {
-                    newVersion = diff->first;
-                }
+        for (const auto& sourceId : sourceIds) {
+            if (Heartbeats.contains(sourceId) && Heartbeats.at(sourceId).Version > version) {
+                --rest;
             } else {
                 break;
             }
         }
 
-        if (newVersion) {
-            storage = Storage.SourceIdsByHeartbeat.find(*newVersion);
-            if (storage != Storage.SourceIdsByHeartbeat.end()) {
-                return GetFromStorage(storage);
-            } else {
-                return GetFromDiff(diff);
-            }
+        if (rest) {
+            break;
+        }
+
+        if (auto next = std::next(it); next != end && next->first < SourceIdsByHeartbeat.begin()->first) {
+            emitVersion = next->first;
+        } else {
+            emitVersion = SourceIdsByHeartbeat.begin()->first;
+            break;
+        }
+    }
+
+    if (emitVersion) {
+        if (auto it = Storage.SourceIdsByHeartbeat.find(*emitVersion); it != Storage.SourceIdsByHeartbeat.end()) {
+            return GetFromStorage(it);
+        } else {
+            return GetFromDiff(SourceIdsByHeartbeat.begin());
         }
     }
 

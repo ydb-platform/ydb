@@ -1,20 +1,12 @@
 #pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/mon.h>
+#include "browse.h"
+#include "viewer.h"
+#include "wb_aggregate.h"
 #include <ydb/core/base/tablet.h>
-#include <ydb/core/base/tablet_pipe.h>
-#include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/viewer/protos/viewer.pb.h>
-#include <ydb/core/viewer/json/json.h>
-#include "viewer.h"
-#include "browse.h"
-#include "wb_aggregate.h"
 
-namespace NKikimr {
-namespace NViewerDB {
+namespace NKikimr::NViewerDB {
 
 using namespace NViewer;
 using namespace NActors;
@@ -199,5 +191,4 @@ public:
     }
 };
 
-}
 }

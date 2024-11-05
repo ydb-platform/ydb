@@ -25,7 +25,7 @@
 
 Вызов `CREATE TABLE` создает {% if concept_table %}[таблицу]({{ concept_table }}){% else %}таблицу{% endif %} с указанной схемой данных{% if feature_map_tables %}  и ключевыми колонками (`PRIMARY KEY`){% endif %}. {% if feature_secondary_index == true %}Позволяет определить вторичные индексы на создаваемой таблице.{% endif %}
 
-    CREATE TABLE table_name (
+    CREATE [TEMP | TEMPORARY] TABLE table_name (
         column1 type1,
 {% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
         ...
@@ -48,25 +48,40 @@
 {% if feature_olap_tables %}#{%endif%}## Колонки {#row-columns}
 
 {% if feature_column_container_type == true %}
+
 Для неключевых колонок допускаются любые типы данных, для ключевых - только [примитивные](../../types/primitive.md). При указании сложных типов (например, `List<String>`) тип заключается в двойные кавычки.
+
 {% else %}
+
 Для ключевых и неключевых колонок допускаются только [примитивные](../../types/primitive.md) типы данных.
+
 {% endif %}
 
 {% if feature_not_null == true %}
+
 Без дополнительных модификаторов колонка приобретает [опциональный тип](../../types/optional.md) тип, и допускает запись `NULL` в качестве значений. Для получения неопционального типа необходимо использовать `NOT NULL`.
+
 {% else %}
+
 {% if feature_not_null_for_pk %}
+
 По умолчанию все колонки [опциональные](../../types/optional.md) и могут иметь значение NULL. Ограничение `NOT NULL` можно указать только для колонок, входящих в первичный ключ.
+
 {% else %}
+
 Все колонки допускают запись `NULL` в качестве значений, то есть являются [опциональными](../../types/optional.md).
-{% endif %}
-{% endif %}
-{% if feature_map_tables %}
-Обязательно указание `PRIMARY KEY` с непустым списком колонок. Эти колонки становятся частью ключа в порядке перечисления.
+
 {% endif %}
 
-**Пример**
+{% endif %}
+
+{% if feature_map_tables %}
+
+Обязательно указание `PRIMARY KEY` с непустым списком колонок. Эти колонки становятся частью ключа в порядке перечисления.
+
+{% endif %}
+
+### Пример
 
     CREATE TABLE my_table (
 {% if feature_not_null_for_pk %}        a Uint64 NOT NULL,{% else %}        a Uint64,{% endif %}
@@ -78,30 +93,31 @@
 {% endif %}
     )
 
-
-
 {% if feature_secondary_index %}
+
 {% if feature_olap_tables %}#{%endif%}## Вторичные индексы {#secondary_index}
 
 Конструкция INDEX используется для определения {% if concept_secondary_index %}[вторичного индекса]({{ concept_secondary_index }}){% else %}вторичного индекса{% endif %} на таблице:
 
-```sql
-CREATE TABLE table_name ( 
+```yql
+CREATE TABLE table_name (
     ...
-    INDEX <index_name> GLOBAL [SYNC|ASYNC] ON ( <index_columns> ) COVER ( <cover_columns> ),
+    INDEX <index_name> GLOBAL [UNIQUE] [SYNC|ASYNC] ON ( <index_columns> ) COVER ( <cover_columns> )
     ...
 )
 ```
 
 где:
+
 * **index_name** — уникальное имя индекса, по которому будет возможно обращение к данным.
 * **SYNC/ASYNC** — синхронная или асинхронная запись в индекс, если не указано — синхронная.
+* **UNIQUE** — создаёт индекс с гарантией уникальности для вставляемых значений.
 * **index_columns** — имена колонок создаваемой таблицы через запятую, по которым возможен поиск в индексе.
 * **cover_columns** — имена колонок создаваемой таблицы через запятую, которые будет сохранены в индексе дополнительно к колонкам поиска, давая возможность получить дополнительные данные без обращения за ними в таблицу.
 
-**Пример**
+### Пример
 
-```sql
+```yql
 CREATE TABLE my_table (
     a Uint64,
     b Bool,
@@ -109,17 +125,34 @@ CREATE TABLE my_table (
     d Date,
     INDEX idx_d GLOBAL ON (d),
     INDEX idx_ba GLOBAL ASYNC ON (b, a) COVER (c),
+    INDEX idx_bc GLOBAL UNIQUE SYNC ON (b, c),
     PRIMARY KEY (a)
 )
 ```
+
+{% endif %}
+
+{% if feature_temp_tables %}
+
+{% if feature_olap_tables %}#{%endif%}## Создание временных таблиц {#temporary_tables}
+
+```yql
+CREATE TEMPORARY TABLE table_name (
+    ...
+);
+```
+
+{% include [temp-table-description.md](../../../../_includes/temp-table-description.md) %}
+
 {% endif %}
 
 {% if feature_map_tables and concept_table %}
+
 {% if feature_olap_tables %}#{%endif%}## Дополнительные параметры {#row-additional}
 
-Для таблицы может быть указан ряд специфичных для {{ backend_name }} параметров. При создании таблицы такие параметры перечисляются в блоке ```WITH```:
+Для таблицы может быть указан ряд специфичных для {{ backend_name }} параметров. При создании таблицы такие параметры перечисляются в блоке `WITH`:
 
-```sql
+```yql
 CREATE TABLE table_name (...)
 WITH (
     key1 = value1,
@@ -134,9 +167,7 @@ WITH (
 
 Например, такой код создаст таблицу с включенным автоматическим партиционированием по размеру партиции и предпочитаемым размером каждой партиции 512 мегабайт:
 
-<small>Листинг 4</small>
-
-```sql
+```yql
 CREATE TABLE my_table (
     id Uint64,
     title Utf8,
@@ -152,14 +183,14 @@ WITH (
 
 Колонки одной таблицы можно объединять в группы, для того чтобы задать следующие параметры:
 
-* `DATA` — тип устройства хранения для данных колонок этой группы. Допустимые значения: ```"ssd"```, ```"rot"```.
-* `COMPRESSION` — кодек сжатия данных. Допустимые значения: ```"off"```, ```"lz4"```.
+* `DATA` — тип устройства хранения для данных колонок этой группы. Допустимые значения: `"ssd"`, `"rot"`.
+* `COMPRESSION` — кодек сжатия данных. Допустимые значения: `"off"`, `"lz4"`.
 
-По умолчанию все колонки находятся в одной группе с именем ```default```.  При желании, параметры этой группы тоже можно переопределить.
+По умолчанию все колонки находятся в одной группе с именем `default`.  При желании, параметры этой группы тоже можно переопределить.
 
-В примере ниже для создаваемой таблицы добавляется группа колонок ```family_large``` и устанавливается для колонки ```series_info```, а также переопределяются параметры для группы ```default```, которая по умолчанию установлена для всех остальных колонок.
+В примере ниже для создаваемой таблицы добавляется группа колонок `family_large` и устанавливается для колонки `series_info`, а также переопределяются параметры для группы `default`, которая по умолчанию установлена для всех остальных колонок.
 
-```sql
+```yql
 CREATE TABLE series_with_families (
     series_id Uint64,
     title Utf8,
@@ -199,7 +230,7 @@ CREATE TABLE series_with_families (
 
 Вызов `CREATE TABLE` создает [колоночную таблицу](../../../../concepts/datamodel/table.md#column-tables) с указанной схемой данных и ключевыми колонками (`PRIMARY KEY`).
 
-```sql
+```yql
 CREATE TABLE table_name (
     column1 type1,
     column2 type2 NOT NULL,
@@ -210,10 +241,10 @@ CREATE TABLE table_name (
     ...
 )
 PARTITION BY HASH(column1, column2, ...)
-WITH ( 
+WITH (
     STORE = COLUMN,
-    key = value, 
-    ... 
+    key = value,
+    ...
 )
 ```
 
@@ -225,9 +256,9 @@ WITH (
 
 Без дополнительных модификаторов колонка приобретает [опциональный](../../types/optional.md) тип и допускает запись `NULL` в качестве значений. Для получения неопционального типа необходимо использовать `NOT NULL`.
 
-**Пример**
+#### Пример
 
-```sql
+```yql
 CREATE TABLE my_table (
     a Uint64 NOT NULL,
     b String,
@@ -242,9 +273,9 @@ STORE = COLUMN
 
 ### Дополнительные параметры {#olap-additional}
 
-Для таблицы может быть указан ряд специфичных для {{ backend_name }} параметров. При создании таблицы такие параметры перечисляются в блоке ```WITH```:
+Для таблицы может быть указан ряд специфичных для {{ backend_name }} параметров. При создании таблицы такие параметры перечисляются в блоке `WITH`:
 
-```sql
+```yql
 CREATE TABLE table_name (...)
 WITH (
     key1 = value1,
@@ -261,7 +292,7 @@ WITH (
 
 Например, следующий код создает колоночную таблицу с 10-ю партициями:
 
-```sql
+```yql
 CREATE TABLE my_table (
     id Uint64,
     title Utf8,

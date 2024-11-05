@@ -2,8 +2,6 @@
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
-TAtomicCounter TReadCoordinatorActor::WaitingBlobsCount = 0;
-
 void TReadCoordinatorActor::Handle(TEvStartReadTask::TPtr& ev) {
     const auto& externalTaskId = ev->Get()->GetTask()->GetExternalTaskId();
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("external_task_id", externalTaskId);
@@ -25,7 +23,6 @@ void TReadCoordinatorActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeRes
             i->AddData(event.DataSourceId, event.BlobRange, event.Data);
         }
     }
-    WaitingBlobsCount.Dec();
 }
 
 TReadCoordinatorActor::TReadCoordinatorActor(ui64 tabletId, const TActorId& parent)

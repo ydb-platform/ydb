@@ -13,6 +13,9 @@ private:
     const NWrappers::NExternalStorage::IExternalStorageOperator::TPtr ExternalStorageOperator;
     std::shared_ptr<TGCInfo> GCInfo;
     const ui64 TabletId;
+    const ui32 Generation;
+    const ui32 Step;
+    mutable ui32 BlobIdsCounter = 0;
 protected:
     virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) override;
 
@@ -34,11 +37,14 @@ public:
 
     virtual TUnifiedBlobId AllocateNextBlobId(const TString& data) override;
 
-    TWriteAction(const TString& storageId, const NWrappers::NExternalStorage::IExternalStorageOperator::TPtr& storageOperator, const ui64 tabletId, const std::shared_ptr<TGCInfo>& gcInfo)
+    TWriteAction(const TString& storageId, const NWrappers::NExternalStorage::IExternalStorageOperator::TPtr& storageOperator,
+        const ui64 tabletId, const ui32 generation, const ui32 step, const std::shared_ptr<TGCInfo>& gcInfo)
         : TBase(storageId)
         , ExternalStorageOperator(storageOperator)
         , GCInfo(gcInfo)
         , TabletId(tabletId)
+        , Generation(generation)
+        , Step(step)
     {
 
     }

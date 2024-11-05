@@ -245,6 +245,14 @@ namespace NYql {
             /// LLVM settings. Assign "OFF" to disable LLVM, empty string for default settings.
             TString LLVMSettings;
 
+            /// Block engine settings. Assign "force" to unconditionally enable
+            /// it, "disable" for turn it off and "auto" to left the final
+            /// decision to the platform heuristics.
+            TString BlockEngineSettings;
+
+            /// Output stream to dump the compiled and optimized expressions.
+            IOutputStream* ExprOutputStream;
+
             /// Provider for generic counters which can be used to export statistics from UDFs.
             NKikimr::NUdf::ICountersProvider* CountersProvider;
 
@@ -312,6 +320,20 @@ namespace NYql {
             TProgramFactoryOptions& SetLLVMSettings(TStringBuf llvm_settings);
 
             /**
+             * Set new block engine settings.
+             *
+             * @return reference to self, to allow method chaining.
+             */
+            TProgramFactoryOptions& SetBlockEngineSettings(TStringBuf blockEngineSettings);
+
+            /**
+             * Set the stream to dump the compiled and optimized expressions.
+             *
+             * @return reference to self, to allow method chaining.
+             */
+            TProgramFactoryOptions& SetExprOutputStream(IOutputStream* exprOutputStream);
+
+            /**
              * Set new counters provider. Passed pointer should stay alive for as long as the processor factory
              * stays alive.
              *
@@ -363,7 +385,8 @@ namespace NYql {
         enum class ETranslationMode {
             SQL   /* "SQL" */,
             SExpr /* "s-expression" */,
-            Mkql  /* "mkql" */
+            Mkql  /* "mkql" */,
+            PG    /* PostgreSQL */
         };
 
         /**
@@ -569,10 +592,26 @@ namespace NYql {
             virtual const NKikimr::NMiniKQL::TStructType* GetInputType(bool original = false) const = 0;
 
             /**
+             * MiniKQL input struct type of the specified input for this program.
+             * The returned type is the actual type of the specified input node.
+             */
+            virtual const NKikimr::NMiniKQL::TStructType* GetRawInputType(ui32) const = 0;
+            /**
+             * Overload for single-input programs.
+             */
+            virtual const NKikimr::NMiniKQL::TStructType* GetRawInputType() const = 0;
+
+            /**
              * MiniKQL output struct type for this program. The returned type is equivalent to the deduced output
              * schema (see IWorker::MakeFullOutputSchema()).
              */
             virtual const NKikimr::NMiniKQL::TType* GetOutputType() const = 0;
+
+            /**
+             * MiniKQL output struct type for this program. The returned type is
+             * the actual type of the root node.
+             */
+            virtual const NKikimr::NMiniKQL::TType* GetRawOutputType() const = 0;
 
             /**
              * Make input type schema for specified input as deduced by program optimizer. This schema is equivalent
@@ -771,6 +810,8 @@ namespace NYql {
 
                 return AllVirtualColumns_;
             }
+
+            virtual bool ProvidesBlocks() const { return false; }
         };
 
         /**
@@ -814,6 +855,8 @@ namespace NYql {
             void SetOutputColumnsFilter(const TMaybe<THashSet<TString>>& outputColumnsFilter) {
                 OutputColumnsFilter_ = outputColumnsFilter;
             }
+
+            virtual bool AcceptsBlocks() const { return false; }
         };
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////

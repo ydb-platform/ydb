@@ -43,15 +43,18 @@ public:
         TBusServerConfigPtr config,
         IPollerPtr poller,
         IMessageHandlerPtr handler,
-        IPacketTranscoderFactory* packetTranscoderFactory)
+        IPacketTranscoderFactory* packetTranscoderFactory,
+        IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(std::move(config))
         , Poller_(std::move(poller))
         , Handler_(std::move(handler))
         , PacketTranscoderFactory_(std::move(packetTranscoderFactory))
+        , MemoryUsageTracker_(std::move(memoryUsageTracker))
     {
         YT_VERIFY(Config_);
         YT_VERIFY(Poller_);
         YT_VERIFY(Handler_);
+        YT_VERIFY(MemoryUsageTracker_);
 
         if (Config_->Port) {
             Logger.AddTag("ServerPort: %v", *Config_->Port);
@@ -123,13 +126,15 @@ protected:
 
     IPacketTranscoderFactory* const PacketTranscoderFactory_;
 
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
+
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ControlSpinLock_);
     SOCKET ServerSocket_ = INVALID_SOCKET;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ConnectionsSpinLock_);
     THashSet<TTcpConnectionPtr> Connections_;
 
-    NLogging::TLogger Logger = BusLogger;
+    NLogging::TLogger Logger = BusLogger();
 
     virtual void CreateServerSocket() = 0;
 
@@ -253,7 +258,8 @@ protected:
                 std::nullopt,
                 Handler_,
                 std::move(poller),
-                PacketTranscoderFactory_);
+                PacketTranscoderFactory_,
+                MemoryUsageTracker_);
 
             {
                 auto guard = WriterGuard(ConnectionsSpinLock_);
@@ -279,7 +285,7 @@ protected:
                 if (attempt == Config_->BindRetryCount) {
                     CloseServerSocket();
 
-                    THROW_ERROR_EXCEPTION(NRpc::EErrorCode::TransportError, errorMessage)
+                    THROW_ERROR_EXCEPTION(NRpc::EErrorCode::TransportError, TRuntimeFormat(errorMessage))
                         << ex;
                 } else {
                     YT_LOG_WARNING(ex, "Error binding socket, starting %v retry", attempt + 1);
@@ -347,12 +353,14 @@ public:
         TBusServerConfigPtr config,
         IPollerPtr poller,
         IMessageHandlerPtr handler,
-        IPacketTranscoderFactory* packetTranscoderFactory)
+        IPacketTranscoderFactory* packetTranscoderFactory,
+        IMemoryUsageTrackerPtr memoryUsageTracker)
         : TTcpBusServerBase(
             std::move(config),
             std::move(poller),
             std::move(handler),
-            packetTranscoderFactory)
+            packetTranscoderFactory,
+            std::move(memoryUsageTracker))
     { }
 
 private:
@@ -364,7 +372,8 @@ private:
             TNetworkAddress netAddress;
             if (Config_->UnixDomainSocketPath) {
                 // NB(gritukan): Unix domain socket path cannot be longer than 108 symbols, so let's try to shorten it.
-                netAddress = TNetworkAddress::CreateUnixDomainSocketAddress(NFS::GetShortestPath(*Config_->UnixDomainSocketPath));
+                // TODO(babenko): switch to std::string
+                netAddress = TNetworkAddress::CreateUnixDomainSocketAddress(NFS::GetShortestPath(TString(*Config_->UnixDomainSocketPath)));
             } else {
                 netAddress = GetLocalBusAddress(*Config_->Port);
             }
@@ -390,11 +399,14 @@ class TTcpBusServerProxy
 public:
     explicit TTcpBusServerProxy(
         TBusServerConfigPtr config,
-        IPacketTranscoderFactory* packetTranscoderFactory)
+        IPacketTranscoderFactory* packetTranscoderFactory,
+        IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(std::move(config))
         , PacketTranscoderFactory_(packetTranscoderFactory)
+        , MemoryUsageTracker_(std::move(memoryUsageTracker))
     {
         YT_VERIFY(Config_);
+        YT_VERIFY(MemoryUsageTracker_);
     }
 
     ~TTcpBusServerProxy()
@@ -408,7 +420,8 @@ public:
             Config_,
             TTcpDispatcher::TImpl::Get()->GetAcceptorPoller(),
             std::move(handler),
-            PacketTranscoderFactory_);
+            PacketTranscoderFactory_,
+            MemoryUsageTracker_);
 
         Server_.Store(server);
         server->Start();
@@ -427,6 +440,8 @@ private:
     const TBusServerConfigPtr Config_;
 
     IPacketTranscoderFactory* const PacketTranscoderFactory_;
+
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
 
     TAtomicIntrusivePtr<TServer> Server_;
 };
@@ -467,7 +482,8 @@ private:
 
 IBusServerPtr CreateBusServer(
     TBusServerConfigPtr config,
-    IPacketTranscoderFactory* packetTranscoderFactory)
+    IPacketTranscoderFactory* packetTranscoderFactory,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
 {
     std::vector<IBusServerPtr> servers;
 
@@ -475,14 +491,16 @@ IBusServerPtr CreateBusServer(
         servers.push_back(
             New<TTcpBusServerProxy<TRemoteTcpBusServer>>(
                 config,
-                packetTranscoderFactory));
+                packetTranscoderFactory,
+                memoryUsageTracker));
     }
 #ifdef _linux_
     // Abstract unix sockets are supported only on Linux.
     servers.push_back(
         New<TTcpBusServerProxy<TLocalTcpBusServer>>(
             config,
-            packetTranscoderFactory));
+            packetTranscoderFactory,
+            memoryUsageTracker));
 #endif
 
     return New<TCompositeBusServer>(std::move(servers));

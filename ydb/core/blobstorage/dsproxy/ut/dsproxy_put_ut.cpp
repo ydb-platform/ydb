@@ -66,7 +66,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
     TEvBlobStorage::TEvPut ev(blobId, data, TInstant::Max(), NKikimrBlobStorage::TabletLog,
             TEvBlobStorage::TEvPut::TacticDefault);
 
-    TPutImpl putImpl(group.GetInfo(), groupQueues, &ev, mon, false, TActorId(), 0, NWilson::TTraceId());
+    TPutImpl putImpl(group.GetInfo(), groupQueues, &ev, mon, false, TActorId(), 0, NWilson::TTraceId(), TAccelerationParams{});
 
     for (ui32 idx = 0; idx < domainCount; ++idx) {
         group.SetPredictedDelayNs(idx, 1);
@@ -76,7 +76,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
     TPutImpl::TPutResultVec putResults;
 
     putImpl.GenerateInitialRequests(logCtx, partSetSingleton);
-    putImpl.Step(logCtx, putResults, {&group.GetInfo()->GetTopology()});
+    putImpl.Step(logCtx, putResults, {&group.GetInfo()->GetTopology()}, false);
     auto vPuts = putImpl.GeneratePutRequests();
     group.SetError(0, NKikimrProto::ERROR);
 
@@ -119,7 +119,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
         vPutResult.MakeError(status, TString(), vPut.Record);
 
         putImpl.ProcessResponse(vPutResult);
-        putImpl.Step(logCtx, putResults, {&group.GetInfo()->GetTopology()});
+        putImpl.Step(logCtx, putResults, {&group.GetInfo()->GetTopology()}, false);
         auto nextVPuts = putImpl.GeneratePutRequests();
 
         if (putResults.size()) {
@@ -273,7 +273,7 @@ struct TTestPutAllOk {
             }
 
             std::visit([&](auto &ev) { putImpl.ProcessResponse(*ev); }, vPutResults[resIdx]);
-            putImpl.Step(LogCtx, putResults, &Group.GetInfo()->GetTopology());
+            putImpl.Step(LogCtx, putResults, &Group.GetInfo()->GetTopology(), false);
             auto vPuts = putImpl.GeneratePutRequests();
             if (putResults.size() == BlobCount) {
                 break;
@@ -302,14 +302,15 @@ struct TTestPutAllOk {
             TMaybe<TPutImpl> putImpl;
             TPutImpl::TPutResultVec putResults;
             if constexpr (IsVPut) {
-                putImpl.ConstructInPlace(Group.GetInfo(), GroupQueues, events[0]->Get(), Mon, false, TActorId(), 0, NWilson::TTraceId());
+                putImpl.ConstructInPlace(Group.GetInfo(), GroupQueues, events[0]->Get(), Mon, false, TActorId(), 0, NWilson::TTraceId(),
+                        TAccelerationParams{});
             } else {
                 putImpl.ConstructInPlace(Group.GetInfo(), GroupQueues, events, Mon,
-                        NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticDefault, false);
+                        NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticDefault, false, TAccelerationParams{});
             }
 
             putImpl->GenerateInitialRequests(LogCtx, PartSets);
-            putImpl->Step(LogCtx, putResults, &Group.GetInfo()->GetTopology());
+            putImpl->Step(LogCtx, putResults, &Group.GetInfo()->GetTopology(), false);
             auto vPuts = putImpl->GeneratePutRequests();
             UNIT_ASSERT(vPuts.size() == 6 || !IsVPut);
             TDeque<TPutResultEvent> vPutResults;
@@ -352,7 +353,7 @@ Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
     TString data = AlphaData(size);
     TEvBlobStorage::TEvPut ev(blobId, data, TInstant::Max(), NKikimrBlobStorage::TabletLog,
             TEvBlobStorage::TEvPut::TacticMinLatency);
-    TPutImpl putImpl(env.Info, env.GroupQueues, &ev, env.Mon, true, TActorId(), 0, NWilson::TTraceId());
+    TPutImpl putImpl(env.Info, env.GroupQueues, &ev, env.Mon, true, TActorId(), 0, NWilson::TTraceId(), TAccelerationParams{});
 
     TLogContext logCtx(NKikimrServices::BS_PROXY_PUT, false);
     logCtx.LogAcc.IsLogEnabled = false;
@@ -367,7 +368,7 @@ Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
     ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), env.Info->Type, TRope(encryptedData), partSetSingleton[0]);
     putImpl.GenerateInitialRequests(logCtx, partSetSingleton);
     TPutImpl::TPutResultVec putResults;
-    putImpl.Step(logCtx, putResults, &env.Info->GetTopology());
+    putImpl.Step(logCtx, putResults, &env.Info->GetTopology(), false);
     auto vPuts = putImpl.GeneratePutRequests();
 
     UNIT_ASSERT_VALUES_EQUAL(vPuts.size(), 9);

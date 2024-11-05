@@ -103,7 +103,12 @@ void TTxCoordinator::Handle(TEvTxProxy::TEvAcquireReadStep::TPtr& ev, const TAct
         return;
     }
 
-    if (ReadOnlyLeaseEnabled()) {
+    // Note: when volatile state is preserved we don't want to update the last
+    // acquired step, because the new generation might miss that and invariants
+    // not read-step not going back would be violated. Run the code below using
+    // the normal tx, which will almost certainly fail (the storage is supposed
+    // to be blocked already), or successfully persist the new read step.
+    if (ReadOnlyLeaseEnabled() && !VolatileState.Preserved) {
         // We acquire read step using a read-only lease from executor
         // It is guaranteed that any future generation was not running at
         // the time ConfirmReadOnlyLease was called.

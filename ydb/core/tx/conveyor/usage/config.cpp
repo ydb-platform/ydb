@@ -12,7 +12,9 @@ bool TConfig::DeserializeFromProto(const NKikimrConfig::TConveyorConfig& config)
     if (config.HasQueueSizeLimit()) {
         QueueSizeLimit = config.GetQueueSizeLimit();
     }
-    if (config.HasWorkersCount()) {
+    if (config.HasWorkersCountDouble()) {
+        WorkersCount = config.GetWorkersCountDouble();
+    } else if (config.HasWorkersCount()) {
         WorkersCount = config.GetWorkersCount();
     }
     if (config.HasDefaultFractionOfThreadsCount()) {
@@ -23,7 +25,7 @@ bool TConfig::DeserializeFromProto(const NKikimrConfig::TConveyorConfig& config)
 
 ui32 TConfig::GetWorkersCountForConveyor(const ui32 poolThreadsCount) const {
     if (WorkersCount) {
-        return *WorkersCount;
+        return std::ceil(*WorkersCount);
     } else if (DefaultFractionOfThreadsCount) {
         return Min<ui32>(poolThreadsCount, Max<ui32>(1, *DefaultFractionOfThreadsCount * poolThreadsCount));
     } else {
@@ -42,6 +44,19 @@ TString TConfig::DebugString() const {
     sb << "QueueSizeLimit=" << QueueSizeLimit << ";";
     sb << "Enabled=" << EnabledFlag << ";";
     return sb;
+}
+
+double TConfig::GetWorkerCPUUsage(const ui32 workerIdx) const {
+    if (!WorkersCount) {
+        return 1;
+    }
+    double wholePart;
+    const double fractionalPart = std::modf(*WorkersCount, &wholePart);
+    if (workerIdx + 1 <= wholePart) {
+        return 1;
+    } else {
+        return fractionalPart;
+    }
 }
 
 }

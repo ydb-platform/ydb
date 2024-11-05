@@ -757,8 +757,12 @@ lexescape(struct vars *v)
 			RETV(PLAIN, c);
 			break;
 		default:
-			assert(iscalpha(c));
-			FAILW(REG_EESCAPE); /* unknown alphabetic escape */
+
+			/*
+			 * Throw an error for unrecognized ASCII alpha escape sequences,
+			 * which reserves them for future use if needed.
+			 */
+			FAILW(REG_EESCAPE);
 			break;
 	}
 	assert(NOTREACHED);

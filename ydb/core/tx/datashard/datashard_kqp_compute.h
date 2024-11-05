@@ -57,25 +57,25 @@ public:
         const TSmallVec<NTable::TTag>& systemColumnTags, const THolderFactory& holderFactory,
         NUdf::TUnboxedValue& result, TKqpTableStats& stats);
 
-    TAutoPtr<NTable::TTableIt> CreateIterator(const TTableId& tableId, const TTableRange& range,
+    TAutoPtr<NTable::TTableIter> CreateIterator(const TTableId& tableId, const TTableRange& range,
         const TSmallVec<NTable::TTag>& columnTags);
 
-    TAutoPtr<NTable::TTableReverseIt> CreateReverseIterator(const TTableId& tableId, const TTableRange& range,
+    TAutoPtr<NTable::TTableReverseIter> CreateReverseIterator(const TTableId& tableId, const TTableRange& range,
         const TSmallVec<NTable::TTag>& columnTags);
 
-    bool ReadRow(const TTableId& tableId, NTable::TTableIt& iterator,
+    bool ReadRow(const TTableId& tableId, NTable::TTableIter& iterator,
         const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
         const THolderFactory& holderFactory, NUdf::TUnboxedValue& result, TKqpTableStats& stats);
 
-    bool ReadRow(const TTableId& tableId, NTable::TTableReverseIt& iterator,
+    bool ReadRow(const TTableId& tableId, NTable::TTableReverseIter& iterator,
         const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
         const THolderFactory& holderFactory, NUdf::TUnboxedValue& result, TKqpTableStats& stats);
 
-    bool ReadRowWide(const TTableId& tableId, NTable::TTableIt& iterator,
+    bool ReadRowWide(const TTableId& tableId, NTable::TTableIter& iterator,
         const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
         NUdf::TUnboxedValue* const* result, TKqpTableStats& stats);
 
-    bool ReadRowWide(const TTableId& tableId, NTable::TTableReverseIt& iterator,
+    bool ReadRowWide(const TTableId& tableId, NTable::TTableReverseIter& iterator,
         const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
         NUdf::TUnboxedValue* const* result, TKqpTableStats& stats);
 

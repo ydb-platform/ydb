@@ -64,8 +64,8 @@ private:
     TVector<TActivateShardCreated> PendingActivateShardCreated;
     TDeque<TWaitPublication> WaitPublications;
     TDeque<TBarrierRec> Barriers;
-    THashMap<TActorId, TVector<TPathId>> TempTablesToCreateState;
-    THashMap<TActorId, TVector<TPathId>> TempTablesToDropState;
+    THashMap<TActorId, TVector<TPathId>> TempDirsToMakeState;
+    THashMap<TActorId, TVector<TPathId>> TempDirsToRemoveState;
 
 public:
     using TPtr = TIntrusivePtr<TSideEffects>;
@@ -102,8 +102,8 @@ public:
     void UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TShardIdx shardIdx);
     void UnbindMsgFromPipe(TOperationId opId, TTabletId dst, TPipeMessageId cookie);
 
-    void UpdateTempTablesToCreateState(const TActorId& ownerActorId, const TPathId& pathId);
-    void UpdateTempTablesToDropState(const TActorId& ownerActorId, const TPathId& pathId);
+    void UpdateTempDirsToMakeState(const TActorId& ownerActorId, const TPathId& pathId);
+    void UpdateTempDirsToRemoveState(const TActorId& ownerActorId, const TPathId& pathId);
 
     void RouteByTabletsFromOperation(TOperationId opId);
     void RouteByTablet(TOperationId opId, TTabletId dst);
@@ -164,8 +164,8 @@ private:
 
     void DoPersistDeleteShards(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);
 
-    void DoUpdateTempTablesToCreateState(TSchemeShard* ss, const TActorContext &ctx);
-    void DoUpdateTempTablesToDropState(TSchemeShard* ss, const TActorContext &ctx);
+    void DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorContext &ctx);
+    void DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorContext &ctx);
 
     void ResumeLongOps(TSchemeShard* ss, const TActorContext& ctx);
     void SetupRoutingLongOps(TSchemeShard* ss, const TActorContext& ctx);

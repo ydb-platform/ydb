@@ -2,7 +2,7 @@
  * origin.h
  *	   Exports from replication/logical/origin.c
  *
- * Copyright (c) 2013-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2013-2023, PostgreSQL Global Development Group
  *
  * src/include/replication/origin.h
  *-------------------------------------------------------------------------
@@ -38,8 +38,8 @@ extern __thread PGDLLIMPORT XLogRecPtr replorigin_session_origin_lsn;
 extern __thread PGDLLIMPORT TimestampTz replorigin_session_origin_timestamp;
 
 /* API for querying & manipulating replication origins */
-extern RepOriginId replorigin_by_name(const char *name, bool missing_ok);
-extern RepOriginId replorigin_create(const char *name);
+extern RepOriginId replorigin_by_name(const char *roname, bool missing_ok);
+extern RepOriginId replorigin_create(const char *roname);
 extern void replorigin_drop_by_name(const char *name, bool missing_ok, bool nowait);
 extern bool replorigin_by_oid(RepOriginId roident, bool missing_ok,
 							  char **roname);
@@ -53,7 +53,7 @@ extern XLogRecPtr replorigin_get_progress(RepOriginId node, bool flush);
 
 extern void replorigin_session_advance(XLogRecPtr remote_commit,
 									   XLogRecPtr local_commit);
-extern void replorigin_session_setup(RepOriginId node);
+extern void replorigin_session_setup(RepOriginId node, int acquired_by);
 extern void replorigin_session_reset(void);
 extern XLogRecPtr replorigin_session_get_progress(bool flush);
 
@@ -62,9 +62,9 @@ extern void CheckPointReplicationOrigin(void);
 extern void StartupReplicationOrigin(void);
 
 /* WAL logging */
-void		replorigin_redo(XLogReaderState *record);
-void		replorigin_desc(StringInfo buf, XLogReaderState *record);
-const char *replorigin_identify(uint8 info);
+extern void replorigin_redo(XLogReaderState *record);
+extern void replorigin_desc(StringInfo buf, XLogReaderState *record);
+extern const char *replorigin_identify(uint8 info);
 
 /* shared memory allocation */
 extern Size ReplicationOriginShmemSize(void);

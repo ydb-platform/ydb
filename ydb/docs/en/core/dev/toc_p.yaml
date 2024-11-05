@@ -1,0 +1,36 @@
+items:
+- name: Getting started
+  href: getting-started.md
+- name: YQL tutorial
+  href: yql-tutorial/index.md
+  include:
+    mode: link
+    path: yql-tutorial/toc_p.yaml
+- name: Example applications
+  href: example-app/index.md
+  include:
+    mode: link
+    path: example-app/toc_p.yaml
+- name: Primary keys
+  href: primary-key/index.md
+  include:
+    mode: link
+    path: primary-key/toc_p.yaml
+- name: Secondary indexes
+  href: secondary-indexes.md
+- name: Query plans optimization
+  href: query-plans-optimization.md
+- name: Batch upload
+  href: batch-upload.md
+- name: Paging
+  href: paging.md
+- name: Timeouts
+  href: timeouts.md
+- name: System views
+  href: system-views.md
+- name: Change Data Capture
+  href: cdc.md
+- name: Terraform
+  href: terraform.md
+- name: Custom attributes
+  href: custom-attributes.md

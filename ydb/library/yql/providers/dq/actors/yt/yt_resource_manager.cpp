@@ -29,6 +29,7 @@ namespace NYql {
     namespace NCommonJobVars {
         const TString ACTOR_PORT("ACTOR_PORT");
         const TString ACTOR_NODE_ID("ACTOR_NODE_ID");
+        const TString ADDRESS_RESOLVER_CONFIG("ADDRESS_RESOLVER_CONFIG");
         const TString UDFS_PATH("UDFS_PATH");
         const TString OPERATION_SIZE("OPERATION_SIZE");
         const TString YT_COORDINATOR("YT_COORDINATOR");
@@ -655,6 +656,9 @@ namespace NYql {
                                                 .Item(NCommonJobVars::OPERATION_SIZE).Value(ToString(nodes.size()))
                                                 .Item(NCommonJobVars::UDFS_PATH).Value(fileCache)
                                                 .Item(NCommonJobVars::ACTOR_NODE_ID).Value(ToString(nodeId))
+                                                .DoIf(!!Options.AddressResolverConfig, [&](NYT::TFluentMap fluent) {
+                                                    fluent.Item(NCommonJobVars::ADDRESS_RESOLVER_CONFIG).Value(ToString(NYT::NYson::ConvertToYsonString(Options.AddressResolverConfig, NYT::NYson::EYsonFormat::Text)));
+                                                })
                                                 .DoIf(!!GetEnv("YQL_DETERMINISTIC_MODE"), [&](NYT::TFluentMap fluent) {
                                                     fluent.Item("YQL_DETERMINISTIC_MODE").Value("1");
                                                 })
@@ -682,6 +686,16 @@ namespace NYql {
                                         })
                                         .DoIf(Options.YtBackend.HasUseTmpFs() && Options.YtBackend.GetUseTmpFs(), [&] (NYT::TFluentMap fluent) {
                                             fluent.Item("tmpfs_path").Value(fileCache);
+                                        })
+                                        .DoIf(Options.YtBackend.HasDiskRequest(), [&] (NYT::TFluentMap fluent) {
+                                            auto& diskRequest = Options.YtBackend.GetDiskRequest();
+                                            fluent.Item("disk_request")
+                                                .BeginMap()
+                                                    .DoIf(diskRequest.HasDiskSpace(), [&] (NYT::TFluentMap fluent) { fluent.Item("disk_space").Value(diskRequest.GetDiskSpace()); } )
+                                                    .DoIf(diskRequest.HasInodeCount(), [&] (NYT::TFluentMap fluent) { fluent.Item("inode_count").Value(diskRequest.GetInodeCount()); } )
+                                                    .DoIf(diskRequest.HasAccount(), [&] (NYT::TFluentMap fluent) { fluent.Item("account").Value(diskRequest.GetAccount()); } )
+                                                    .DoIf(diskRequest.HasMediumName(), [&] (NYT::TFluentMap fluent) { fluent.Item("medium_name").Value(diskRequest.GetMediumName()); } )
+                                                .EndMap();
                                         })
                                     .EndMap();
                             })

@@ -22,6 +22,11 @@ INSERT INTO DATE_TBL VALUES ('2038-04-08');
 INSERT INTO DATE_TBL VALUES ('2039-04-09');
 INSERT INTO DATE_TBL VALUES ('2040-04-10');
 INSERT INTO DATE_TBL VALUES ('2040-04-10 BC');
+--
+-- Check all the documented input formats
+--
+SET datestyle TO iso;  -- display results in ISO
+SET datestyle TO ymd;
 SELECT date 'January 8, 1999';
     date    
 ------------
@@ -143,6 +148,7 @@ SELECT date '1999 08 01';
  1999-08-01
 (1 row)
 
+SET datestyle TO dmy;
 SELECT date 'January 8, 1999';
     date    
 ------------
@@ -318,6 +324,7 @@ SELECT date '1999 08 01';
  1999-08-01
 (1 row)
 
+SET datestyle TO mdy;
 SELECT date 'January 8, 1999';
     date    
 ------------
@@ -589,6 +596,7 @@ SELECT date '5874898-01-01';  -- out of range
 ERROR:  date out of range: "5874898-01-01"
 LINE 1: SELECT date '5874898-01-01';
                     ^
+RESET datestyle;
 --
 -- Simple math
 -- Leave most of it for the horology tests

@@ -2909,6 +2909,40 @@ private:
     TKeyPayloadPairVector Items_;
 };
 
+///////////////////////////////////////////////////////////////////////////////
+// TListValueBuilder
+///////////////////////////////////////////////////////////////////////////////
+class TListValueBuilder: public NUdf::IListValueBuilder {
+public:
+    explicit TListValueBuilder(const THolderFactory& HolderFactory)
+        : HolderFactory_(HolderFactory) 
+    {}
+
+    // Destroys (moves out from) the element
+    IListValueBuilder& Add(NUdf::TUnboxedValue&& element) final {
+        List_.emplace_back(element);
+        return *this;
+    }
+
+    // Destroys (moves out from) the elements
+    IListValueBuilder& AddMany(const NUdf::TUnboxedValue* elements, size_t count) final {
+        std::copy_n(std::make_move_iterator(elements), count, std::back_inserter(List_));
+        return *this;
+    }
+
+    NUdf::TUnboxedValue Build() final {
+        if (List_.empty()) {
+            return HolderFactory_.GetEmptyContainerLazy();
+        }
+
+        return HolderFactory_.VectorAsVectorHolder(std::move(List_));
+    }
+
+private:
+    const NMiniKQL::THolderFactory& HolderFactory_;
+    TUnboxedValueVector List_;
+};
+
 //////////////////////////////////////////////////////////////////////////////
 // THolderFactory
 //////////////////////////////////////////////////////////////////////////////
@@ -3450,6 +3484,10 @@ NUdf::IDictValueBuilder::TPtr THolderFactory::NewDict(
         GetCompare(*keyType, useIHash));
 }
 
+NUdf::IListValueBuilder::TPtr THolderFactory::NewList() const {
+    return new TListValueBuilder(*this);
+}
+
 #define DEFINE_HASHED_SINGLE_FIXED_MAP_OPT(xType) \
     template NUdf::TUnboxedValuePod THolderFactory::CreateDirectHashedSingleFixedMapHolder<xType, true> \
     (TValuesDictHashSingleFixedMap<xType>&& map, std::optional<NUdf::TUnboxedValue>&& nullPayload) const;
@@ -3496,7 +3534,7 @@ KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP_OPT)
 KNOWN_PRIMITIVE_VALUE_TYPES(DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP_NONOPT)
 #undef DEFINE_HASHED_SINGLE_FIXED_COMPACT_MULTI_MAP_NONOPT
 
-void GetDictionaryKeyTypes(TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash, bool expandTuple) {
+void GetDictionaryKeyTypes(const TType* keyType, TKeyTypes& types, bool& isTuple, bool& encoded, bool& useIHash, bool expandTuple) {
     isTuple = false;
     encoded = false;
     useIHash = false;

@@ -9,6 +9,7 @@
 #include <ydb/core/mind/tenant_pool.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 #include <util/system/hostname.h>
 #include <util/generic/ptr.h>
 
@@ -48,7 +49,8 @@ public:
             bool processYaml,
             ui64 version,
             const TString &yamlConfig,
-            const TMap<ui64, TString> &volatileYamlConfigs)
+            const TMap<ui64, TString> &volatileYamlConfigs,
+            const std::optional<TNodeInfo> explicitNodeInfo)
         : OwnerId(ownerId)
         , Cookie(cookie)
         , Kinds(kinds)
@@ -67,6 +69,15 @@ public:
                 VolatileYamlConfigHashes[id] = THash<TString>()(config);
             }
         }
+
+        if (explicitNodeInfo) {
+            if (explicitNodeInfo->Tenant) {
+                Tenant = explicitNodeInfo->Tenant;
+            } else {
+                Tenant = "<none>";
+            }
+            NodeType = explicitNodeInfo->NodeType;
+        }
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -82,7 +93,11 @@ public:
             return;
         }
 
-        SendPoolStatusRequest(ctx);
+        if (!Tenant) {
+            SendPoolStatusRequest(ctx);
+        } else {
+            Subscribe(ctx);
+        }
         Become(&TThis::StateWork);
     }
 
@@ -246,11 +261,16 @@ public:
         auto *reflection = CurrentConfig.GetReflection();
         for (auto kind : rec.GetAffectedKinds()) {
             auto *field = desc1->FindFieldByNumber(kind);
-            if (field && reflection->HasField(CurrentConfig, field))
+            if (field && reflection->HasField(CurrentConfig, field)) {
                 reflection->ClearField(&CurrentConfig, field);
+            }
+            if (field && reflection->HasField(CurrentDynConfig, field)) {
+                reflection->ClearField(&CurrentDynConfig, field);
+            }
         }
 
         CurrentConfig.MergeFrom(rec.GetConfig());
+        CurrentDynConfig.MergeFrom(rec.GetConfig());
         if (newVersion.GetItems().empty())
             CurrentConfig.ClearVersion();
         else
@@ -259,7 +279,13 @@ public:
         notChanged &= changes.empty();
 
         if (!notChanged || !FirstUpdateSent) {
-            Send(OwnerId, new TEvConsole::TEvConfigSubscriptionNotification(Generation, CurrentConfig, changes, YamlConfig, VolatileYamlConfigs),
+            Send(OwnerId, new TEvConsole::TEvConfigSubscriptionNotification(
+                     Generation,
+                     CurrentConfig,
+                     changes,
+                     YamlConfig,
+                     VolatileYamlConfigs,
+                     CurrentDynConfig),
                 IEventHandle::FlagTrackDelivery, Cookie);
 
             FirstUpdateSent = true;
@@ -383,6 +409,7 @@ private:
     ui64 LastOrder;
 
     NKikimrConfig::TAppConfig CurrentConfig;
+    NKikimrConfig::TAppConfig CurrentDynConfig;
 
     bool ServeYaml = false;
     ui64 Version;
@@ -405,9 +432,19 @@ IActor *CreateConfigsSubscriber(
     bool processYaml,
     ui64 version,
     const TString &yamlConfig,
-    const TMap<ui64, TString> &volatileYamlConfigs)
+    const TMap<ui64, TString> &volatileYamlConfigs,
+    const std::optional<TNodeInfo> explicitNodeInfo)
 {
-    return new TConfigsSubscriber(ownerId, cookie, kinds, currentConfig, processYaml, version, yamlConfig, volatileYamlConfigs);
+    return new TConfigsSubscriber(
+        ownerId,
+        cookie,
+        kinds,
+        currentConfig,
+        processYaml,
+        version,
+        yamlConfig,
+        volatileYamlConfigs,
+        explicitNodeInfo);
 }
 
 } // namespace NKikimr::NConsole

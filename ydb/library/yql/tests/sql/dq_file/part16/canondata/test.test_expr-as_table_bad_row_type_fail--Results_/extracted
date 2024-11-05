@@ -1,11 +1,8 @@
 <tmp_path>/program.sql:<main>: Error: Type annotation
 
-    <tmp_path>/program.sql:<main>:5:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject
+    <tmp_path>/program.sql:<main>:5:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
     	SELECT Key, Value3 FROM AS_TABLE($data);
 	^
-        <tmp_path>/program.sql:<main>:5:34: Error: At function: OrderedMap, At function: SelectMembers
+        <tmp_path>/program.sql:<main>:5:1: Error: Expected struct type, but got: Uint32
         	SELECT Key, Value3 FROM AS_TABLE($data);
-	                                 ^
-            <tmp_path>/program.sql:<main>:5:34: Error: Expected either struct or optional of struct, but got: Uint32
-            	SELECT Key, Value3 FROM AS_TABLE($data);
-	                                 ^
+	^

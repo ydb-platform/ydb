@@ -1,6 +1,6 @@
 PY3TEST()
 
-OWNER(g:frontend-build-platform)
+SUBSCRIBER(g:frontend_build_platform)
 
 TEST_SRCS(
     test_ts_config.py

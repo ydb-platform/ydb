@@ -83,6 +83,7 @@ NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst,
     TAstParseResult res;
     TContext ctx(settings, hints, res.Issues);
     SqlASTToYqlImpl(res, protoAst, ctx);
+    res.ActualSyntaxType = NYql::ESyntaxType::YQLv1;
     return res;
 }
 
@@ -92,16 +93,16 @@ NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTra
     const TString queryName = "query";
 
     NSQLTranslation::TSQLHints hints;
-    auto lexer = MakeLexer(settings.AnsiLexer);
+    auto lexer = MakeLexer(settings.AnsiLexer, settings.Antlr4Parser);
     YQL_ENSURE(lexer);
-    if (!CollectSqlHints(*lexer, query, queryName, settings.File, hints, res.Issues, settings.MaxErrors)) {
+    if (!CollectSqlHints(*lexer, query, queryName, settings.File, hints, res.Issues, settings.MaxErrors, settings.Antlr4Parser)) {
         return res;
     }
 
     TContext ctx(settings, hints, res.Issues);
     NSQLTranslation::TErrorCollectorOverIssues collector(res.Issues, settings.MaxErrors, settings.File);
 
-    google::protobuf::Message* ast(SqlAST(query, queryName, collector, settings.AnsiLexer, settings.Arena));
+    google::protobuf::Message* ast(SqlAST(query, queryName, collector, settings.AnsiLexer,  settings.Antlr4Parser, settings.TestAntlr4, settings.Arena));
     if (ast) {
         SqlASTToYqlImpl(res, *ast, ctx);
     } else {
@@ -111,6 +112,7 @@ NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTra
         *warningRules = ctx.WarningPolicy.GetRules();
         ctx.WarningPolicy.Clear();
     }
+    res.ActualSyntaxType = NYql::ESyntaxType::YQLv1;
     return res;
 }
 
@@ -161,41 +163,58 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore41: // upsert object
         case TRule_sql_stmt_core::kAltSqlStmtCore42: // create view
         case TRule_sql_stmt_core::kAltSqlStmtCore43: // drop view
+        case TRule_sql_stmt_core::kAltSqlStmtCore44: // alter replication
+        case TRule_sql_stmt_core::kAltSqlStmtCore45: // create resource pool
+        case TRule_sql_stmt_core::kAltSqlStmtCore46: // alter resource pool
+        case TRule_sql_stmt_core::kAltSqlStmtCore47: // drop resource pool
+        case TRule_sql_stmt_core::kAltSqlStmtCore48: // create backup collection
+        case TRule_sql_stmt_core::kAltSqlStmtCore49: // alter backup collection
+        case TRule_sql_stmt_core::kAltSqlStmtCore50: // drop backup collection
+        case TRule_sql_stmt_core::kAltSqlStmtCore51: // analyze
+        case TRule_sql_stmt_core::kAltSqlStmtCore52: // create resource pool classifier
+        case TRule_sql_stmt_core::kAltSqlStmtCore53: // alter resource pool classifier
+        case TRule_sql_stmt_core::kAltSqlStmtCore54: // drop resource pool classifier
+        case TRule_sql_stmt_core::kAltSqlStmtCore55: // backup
+        case TRule_sql_stmt_core::kAltSqlStmtCore56: // restore
             return false;
     }
 }
 
-TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules)
+TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TWarningRules* warningRules,
+    TVector<NYql::TStmtParseInfo>* stmtParseInfo)
 {
-    TVector<TAstParseResult> res;
+    TVector<TAstParseResult> result;
     const TString queryName = "query";
     TIssues issues;
 
     NSQLTranslation::TSQLHints hints;
-    auto lexer = MakeLexer(settings.AnsiLexer);
+    auto lexer = MakeLexer(settings.AnsiLexer, settings.Antlr4Parser);
     YQL_ENSURE(lexer);
-    if (!CollectSqlHints(*lexer, query, queryName, settings.File, hints, issues, settings.MaxErrors)) {
-        return res;
+    if (!CollectSqlHints(*lexer, query, queryName, settings.File, hints, issues, settings.MaxErrors, settings.Antlr4Parser)) {
+        return result;
     }
 
     TContext ctx(settings, hints, issues);
     NSQLTranslation::TErrorCollectorOverIssues collector(issues, settings.MaxErrors, settings.File);
 
-    google::protobuf::Message* astProto(SqlAST(query, queryName, collector, settings.AnsiLexer, settings.Arena));
+    google::protobuf::Message* astProto(SqlAST(query, queryName, collector, settings.AnsiLexer, settings.Antlr4Parser, settings.TestAntlr4, settings.Arena));
     if (astProto) {
         auto ast = static_cast<const TSQLv1ParserAST&>(*astProto);
         const auto& query = ast.GetRule_sql_query();
         if (query.Alt_case() == NSQLv1Generated::TRule_sql_query::kAltSqlQuery1) {
             std::vector<::NSQLv1Generated::TRule_sql_stmt_core> commonStates;
-            std::vector<::NSQLv1Generated::TRule_sql_stmt_core> result;
+            std::vector<::NSQLv1Generated::TRule_sql_stmt_core> statementResult;
             const auto& statements = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
             if (NeedUseForAllStatements(statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2().Alt_case())) {
                 commonStates.push_back(statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
             } else {
                 TContext ctx(settings, hints, issues);
-                res.emplace_back();
-                SqlASTsToYqlsImpl(res.back(), {statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2()}, ctx);
-                res.back().Issues = std::move(issues);
+                result.emplace_back();
+                if (stmtParseInfo) {
+                    stmtParseInfo->push_back({});
+                }
+                SqlASTsToYqlsImpl(result.back(), {statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2()}, ctx);
+                result.back().Issues = std::move(issues);
                 issues.Clear();
             }
             for (auto block: statements.GetBlock3()) {
@@ -204,11 +223,14 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NS
                     continue;
                 }
                 TContext ctx(settings, hints, issues);
-                res.emplace_back();
-                result = commonStates;
-                result.push_back(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
-                SqlASTsToYqlsImpl(res.back(), result, ctx);
-                res.back().Issues = std::move(issues);
+                result.emplace_back();
+                if (stmtParseInfo) {
+                    stmtParseInfo->push_back({});
+                }
+                statementResult = commonStates;
+                statementResult.push_back(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
+                SqlASTsToYqlsImpl(result.back(), statementResult, ctx);
+                result.back().Issues = std::move(issues);
                 issues.Clear();
             }
         }
@@ -219,7 +241,7 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const NS
         *warningRules = ctx.WarningPolicy.GetRules();
         ctx.WarningPolicy.Clear();
     }
-    return res;
+    return result;
 }
 
 } // namespace NSQLTranslationV1

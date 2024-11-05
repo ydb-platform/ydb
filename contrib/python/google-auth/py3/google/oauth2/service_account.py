@@ -77,6 +77,7 @@ from google.auth import _helpers
 from google.auth import _service_account_info
 from google.auth import credentials
 from google.auth import exceptions
+from google.auth import iam
 from google.auth import jwt
 from google.auth import metrics
 from google.oauth2 import _client
@@ -172,6 +173,7 @@ class Credentials(
         """
         super(Credentials, self).__init__()
 
+        self._cred_file_path = None
         self._scopes = scopes
         self._default_scopes = default_scopes
         self._signer = signer
@@ -219,7 +221,7 @@ class Credentials(
                 "universe_domain", credentials.DEFAULT_UNIVERSE_DOMAIN
             ),
             trust_boundary=info.get("trust_boundary"),
-            **kwargs
+            **kwargs,
         )
 
     @classmethod
@@ -293,6 +295,7 @@ class Credentials(
             always_use_jwt_access=self._always_use_jwt_access,
             universe_domain=self._universe_domain,
         )
+        cred._cred_file_path = self._cred_file_path
         return cred
 
     @_helpers.copy_docstring(credentials.Scoped)
@@ -502,6 +505,16 @@ class Credentials(
     def signer_email(self):
         return self._service_account_email
 
+    @_helpers.copy_docstring(credentials.Credentials)
+    def get_cred_info(self):
+        if self._cred_file_path:
+            return {
+                "credential_source": self._cred_file_path,
+                "credential_type": "service account credentials",
+                "principal": self.service_account_email,
+            }
+        return None
+
 
 class IDTokenCredentials(
     credentials.Signing,
@@ -595,8 +608,11 @@ class IDTokenCredentials(
             self._universe_domain = credentials.DEFAULT_UNIVERSE_DOMAIN
         else:
             self._universe_domain = universe_domain
+        self._iam_id_token_endpoint = iam._IAM_IDTOKEN_ENDPOINT.replace(
+            "googleapis.com", self._universe_domain
+        )
 
-        if universe_domain != credentials.DEFAULT_UNIVERSE_DOMAIN:
+        if self._universe_domain != credentials.DEFAULT_UNIVERSE_DOMAIN:
             self._use_iam_endpoint = True
 
         if additional_claims is not None:
@@ -792,6 +808,7 @@ class IDTokenCredentials(
         jwt_credentials.refresh(request)
         self.token, self.expiry = _client.call_iam_generate_id_token_endpoint(
             request,
+            self._iam_id_token_endpoint,
             self.signer_email,
             self._target_audience,
             jwt_credentials.token.decode(),

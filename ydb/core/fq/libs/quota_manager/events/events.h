@@ -11,6 +11,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <ydb/core/fq/libs/quota_manager/proto/quota_internal.pb.h>
 
@@ -207,9 +208,15 @@ struct TEvQuotaService {
         TString SubjectType;
         TString SubjectId;
         TString MetricName;
-        ui64 Usage;
+        ui64 Usage = 0;
+        bool Success = true;
+        NYql::TIssues Issues;
         TQuotaUsageResponse(const TString& subjectType, const TString& subjectId, const TString& metricName, ui64 usage)
             : SubjectType(subjectType), SubjectId(subjectId), MetricName(metricName), Usage(usage)
+        {}
+
+        TQuotaUsageResponse(const TString& subjectType, const TString& subjectId, const TString& metricName, const NYql::TIssues& issues)
+            : SubjectType(subjectType), SubjectId(subjectId), MetricName(metricName), Success(false), Issues(issues)
         {}
     };
 

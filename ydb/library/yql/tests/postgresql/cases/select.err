@@ -1,6 +1,9 @@
 Registering pre-existing tables
 	onek
 	onek2
+	emp
+	student
+	stud_emp
 	int8_tbl
 <sql-statement>
 --
@@ -264,6 +267,14 @@ select * from onek,
     -stdin-:<main>:4:12: Error: SubLinks are not allowed in: VALUES
     	  (values ((select i from
 	           ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	-- a more complex case
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	-- a more complex case
+	^
 <sql-statement>
 -- try VALUES in a subquery
 select * from onek
@@ -286,8 +297,6 @@ SELECT 2+2, 57
 UNION ALL
 TABLE int8_tbl;
 </sql-statement>
--stdin-:<main>: Fatal: ydb/library/yql/core/yql_expr_type_annotation.cpp:6766  CheckExpectedTypeAndColumnOrder(): requirement IsSameAnnotation(*node.GetTypeAnn(), *it->second) failed, message: Rewrite error, type should be : List<Struct<'column0':pgint8,'column1':pgnumeric>>, but it is: List<Struct<'column0':Error<'<main>':1:1:'Uncompatible member column0 types: pgint4 and pgint8'>,'column1':pgnumeric>> for node AssumeColumnOrder
-
 <sql-statement>
 -- corner case: VALUES with no columns
 CREATE TEMP TABLE nocols();

@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Fatal: Execution
+
+    <tmp_path>/program.sql:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:2:5: Fatal: Timestamp 1970-01-01T23:59:59.000000,Europe/Moscow cannot be casted to TzDate
+        	    CAST(AddTimezone(
+	    ^

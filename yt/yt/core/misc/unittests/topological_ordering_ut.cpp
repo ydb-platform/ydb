@@ -39,7 +39,8 @@ protected:
         }
     }
 
-    void Clear() {
+    void Clear()
+    {
         CurrentEdges_.clear();
         IncrementalOrdering_ = TIncrementalTopologicalOrdering<int>();
     }

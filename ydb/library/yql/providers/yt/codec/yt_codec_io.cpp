@@ -1,9 +1,13 @@
 #include "yt_codec_io.h"
 
-#include <ydb/library/yql/providers/common/codec/yql_restricted_yson.h>
+#include <ydb/library/yql/public/result_format/yql_restricted_yson.h>
+#include <ydb/library/yql/public/udf/arrow/args_dechunker.h>
+#include <ydb/library/yql/providers/common/codec/arrow/yql_codec_buf_input_stream.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
+#include <ydb/library/yql/providers/yt/codec/yt_arrow_converter.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
+#include <exception>
 #ifndef MKQL_DISABLE_CODEGEN
 #include <ydb/library/yql/providers/yt/codec/codegen/yt_codec_cg.h>
 #endif
@@ -16,6 +20,7 @@
 #include <ydb/library/yql/utils/swap_bytes.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
+#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/detail.h>
@@ -32,6 +37,8 @@
 #include <util/system/mutex.h>
 #include <util/system/thread.h>
 #include <util/stream/file.h>
+
+#include <arrow/util/key_value_metadata.h>
 
 #include <functional>
 
@@ -156,7 +163,7 @@ public:
         CondFill_.Signal();
     }
 
-    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex) override {
+    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex, const std::exception_ptr& error) override {
         auto guard = Guard(Mutex_);
 
         // Clean all filled blocks
@@ -168,7 +175,7 @@ public:
             BufMan_.FreeBlocks_.push(block);
         }
 
-        if (!Source_.Retry(rangeIndex, rowIndex)) {
+        if (!Source_.Retry(rangeIndex, rowIndex, error)) {
             Shutdown_ = true;
             CondRestore_.Signal();
             return false;
@@ -265,9 +272,9 @@ public:
         Block_.Avail_ = 0;
     }
 
-    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex) override {
+    bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex, const std::exception_ptr& error) override {
         Block_.Avail_ = 0;
-        return Source_.Retry(rangeIndex, rowIndex);
+        return Source_.Retry(rangeIndex, rowIndex, error);
     }
 
 private:
@@ -663,6 +670,7 @@ public:
     NKikimr::NUdf::TUnboxedValue Row_;
     bool IgnoreStreamTableIndex = false;
     bool KeySwitch_ = true;
+    bool HandlesSysColumns_ = false;
 
 protected:
     TInputBuf& Buf_;
@@ -885,12 +893,13 @@ protected:
             if (cmd == EntitySymbol) {
                 return NUdf::TUnboxedValue();
             }
-
-            auto val = ReadYsonValue(uwrappedType, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
-            return val.Release().MakeOptional();
+            auto& decoder = *SpecsCache_.GetSpecs().Inputs[TableIndex_];
+            auto val = ReadYsonValue((decoder.NativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) ? type : uwrappedType, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
+            return (decoder.NativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) ? val : val.Release().MakeOptional();
         } else {
             if (Y_LIKELY(cmd != EntitySymbol)) {
-                return ReadYsonValue(type, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
+                auto& decoder = *SpecsCache_.GetSpecs().Inputs[TableIndex_];
+                return ReadYsonValue(type, decoder.NativeYtTypeFlags, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
             }
 
             if (type->GetKind() == TType::EKind::Data && static_cast<TDataType*>(type)->GetSchemeType() == NUdf::TDataType<NUdf::TYson>::Id) {
@@ -993,6 +1002,9 @@ protected:
             case NUdf::TDataType<NUdf::TTzDate>::Id:
             case NUdf::TDataType<NUdf::TTzDatetime>::Id:
             case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+            case NUdf::TDataType<NUdf::TTzDate32>::Id:
+            case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+            case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
             case NUdf::TDataType<NUdf::TDyNumber>::Id:
             case NUdf::TDataType<NUdf::TUuid>::Id:
             case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
@@ -1359,7 +1371,7 @@ protected:
             // parse binary yson...
             YQL_ENSURE(size > 0);
             char cmd = Buf_.Read();
-            auto value = ReadYsonValue(uwrappedType, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
+            auto value = ReadYsonValue(uwrappedType, 0, SpecsCache_.GetHolderFactory(), cmd, Buf_, true);
             return isOptional ? value.Release().MakeOptional() : value;
         }
     }
@@ -1431,6 +1443,163 @@ protected:
 
 #endif
 
+class TArrowDecoder : public TMkqlReaderImpl::TDecoder {
+public:
+    TArrowDecoder(
+        TInputBuf& buf,
+        const TMkqlIOSpecs& specs,
+        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        arrow::MemoryPool* pool
+    )
+        : TMkqlReaderImpl::TDecoder(buf, specs, holderFactory)
+        , Specs_(specs)
+        , Pool_(pool)
+    {
+        InputStream_ = std::make_unique<TInputBufArrowInputStream>(buf, pool);
+        ResetColumnConverters();
+
+        HandlesSysColumns_ = true;
+    }
+
+    bool DecodeNext(NKikimr::NUdf::TUnboxedValue*& items, TMaybe<NKikimr::NMiniKQL::TValuesDictHashMap>&) override {
+        YQL_ENSURE(!RangeIndex_);
+        AtStart_ = false;
+        
+        if (Chunks_.empty()) {
+            bool read = ReadNext();
+            if (!read) {
+                EndStream();
+                return false;
+            }
+
+            YQL_ENSURE(!Chunks_.empty());
+        }
+
+        auto& inputFields = SpecsCache_.GetSpecs().Inputs[TableIndex_]->FieldsVec;
+        Row_ = SpecsCache_.NewRow(TableIndex_, items, true);
+
+        auto& [chunkRowIndex, chunkLen, chunk] = Chunks_.front();
+        for (size_t i = 0; i < inputFields.size(); i++) {
+            items[inputFields[i].StructIndex] = SpecsCache_.GetHolderFactory().CreateArrowBlock(std::move(chunk[i]));
+        }
+        items[inputFields.size()] = SpecsCache_.GetHolderFactory().CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(chunkLen)));
+        RowIndex_ = chunkRowIndex;
+
+        Chunks_.pop_front();
+        return true;
+    }
+
+    bool ReadNext() {
+        if (!StreamReader_) {
+            StreamReader_ = ARROW_RESULT(arrow::ipc::RecordBatchStreamReader::Open(InputStream_.get()));
+
+            auto oldTableIndex = TableIndex_;     
+            if (!IgnoreStreamTableIndex) {
+                auto tableIdKey = StreamReader_->schema()->metadata()->Get("TableId");
+                if (tableIdKey.ok()) {
+                    TableIndex_ = std::stoi(tableIdKey.ValueOrDie());
+                    YQL_ENSURE(TableIndex_ < Specs_.Inputs.size());
+                }
+            }
+
+            if (TableIndex_ != oldTableIndex) {
+                ResetColumnConverters();
+            }
+        }
+
+        std::shared_ptr<arrow::RecordBatch> batch;
+        ARROW_OK(StreamReader_->ReadNext(&batch));
+        if (!batch) {
+            if (InputStream_->EOSReached()) {
+                return false;
+            }
+
+            // InputStream EOS hasn't reached yet - next Arrow IPC stream must be present
+            StreamReader_.reset();
+            return ReadNext();
+        }
+
+        auto& decoder = *Specs_.Inputs[TableIndex_];
+        auto& inputFields = decoder.FieldsVec;
+        YQL_ENSURE(inputFields.size() == ColumnConverters_.size());
+
+        auto rowIndices = batch->GetColumnByName("$row_index");
+        YQL_ENSURE(rowIndices || decoder.Dynamic);
+
+        arrow::compute::ExecContext execContext(Pool_);
+        std::vector<arrow::Datum> convertedBatch;
+        for (size_t i = 0; i < inputFields.size(); i++) {
+            auto batchColumn = batch->GetColumnByName(inputFields[i].Name);
+            if (!batchColumn) {
+                arrow::Datum convertedColumn;
+
+                if (decoder.FillSysColumnPath == inputFields[i].StructIndex) {
+                    auto tableName = Specs_.TableNames.at(TableIndex_).AsStringRef();
+                    auto tableNameScalar = arrow::BinaryScalar(std::make_shared<arrow::Buffer>(reinterpret_cast<const uint8_t*>(tableName.Data()), tableName.Size()));
+                    convertedColumn = ARROW_RESULT(arrow::MakeArrayFromScalar(tableNameScalar, batch->num_rows(), Pool_));
+
+                } else if (decoder.FillSysColumnRecord == inputFields[i].StructIndex || decoder.FillSysColumnNum == inputFields[i].StructIndex) {
+                    if (rowIndices) {
+                        auto addFirst = ARROW_RESULT(arrow::compute::Cast(rowIndices, arrow::uint64(), arrow::compute::CastOptions::Safe(), &execContext));
+                        auto addSecond = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(1));
+                        convertedColumn = ARROW_RESULT(arrow::compute::Add(addFirst, addSecond, arrow::compute::ArithmeticOptions(), &execContext));
+
+                        if (decoder.FillSysColumnNum == inputFields[i].StructIndex) {
+                            auto addThird = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Specs_.TableOffsets.at(TableIndex_)));
+                            convertedColumn = ARROW_RESULT(arrow::compute::Add(convertedColumn, addThird, arrow::compute::ArithmeticOptions(), &execContext));
+                        }
+                    } else {
+                        convertedColumn = ARROW_RESULT(arrow::MakeArrayFromScalar(arrow::UInt64Scalar(0), batch->num_rows(), Pool_));
+                    }
+                } else if (decoder.FillSysColumnIndex == inputFields[i].StructIndex) {
+                    convertedColumn = ARROW_RESULT(arrow::MakeArrayFromScalar(arrow::UInt32Scalar(TableIndex_), batch->num_rows()));
+                } else {
+                    YQL_ENSURE(false, "unexpected column: " << inputFields[i].Name);
+                }
+
+                convertedBatch.emplace_back(convertedColumn);
+                continue;
+            }
+
+            convertedBatch.emplace_back(ColumnConverters_[i]->Convert(batchColumn->data()));
+        }
+
+        // index of the first row in the block
+        ui64 blockRowIndex = rowIndices ? std::dynamic_pointer_cast<arrow::Int64Scalar>(ARROW_RESULT(rowIndices->GetScalar(0)))->value : 0;
+
+        NUdf::TArgsDechunker dechunker(std::move(convertedBatch));
+        std::vector<arrow::Datum> chunk;
+        ui64 chunkLen = 0;
+        while (dechunker.Next(chunk, chunkLen)) {
+            Chunks_.emplace_back(rowIndices ? blockRowIndex : 0, chunkLen, std::move(chunk));
+            blockRowIndex += chunkLen;
+        }
+
+        return true;
+    }
+
+    void ResetColumnConverters() {
+        auto& fields = Specs_.Inputs[TableIndex_]->FieldsVec;
+        ColumnConverters_.clear();
+        ColumnConverters_.reserve(fields.size());
+        for (auto& field: fields) {
+            YQL_ENSURE(!field.Type->IsPg());
+            bool native = Specs_.Inputs[TableIndex_]->NativeYtTypeFlags && !field.ExplicitYson;
+            ColumnConverters_.emplace_back(MakeYtColumnConverter(field.Type, nullptr, *Pool_, native));
+        }
+    }
+
+private:
+    std::unique_ptr<TInputBufArrowInputStream> InputStream_;
+    std::shared_ptr<arrow::ipc::RecordBatchStreamReader> StreamReader_;
+    std::vector<std::unique_ptr<IYtColumnConverter>> ColumnConverters_;
+
+    TDeque<std::tuple<ui64, ui64, std::vector<arrow::Datum>>> Chunks_;
+
+    const TMkqlIOSpecs& Specs_;
+    arrow::MemoryPool* Pool_;
+};
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TMkqlReaderImpl::TMkqlReaderImpl(NYT::TRawTableReader& source, size_t blockCount, size_t blockSize, ui32 tableIndex, bool ignoreStreamTableIndex)
@@ -1471,7 +1640,9 @@ void TMkqlReaderImpl::SetSpecs(const TMkqlIOSpecs& specs, const NKikimr::NMiniKQ
     HolderFactoryPtr = &holderFactory;
     JobStats_ = specs.JobStats_;
     Buf_.SetStats(JobStats_);
-    if (Specs_->UseSkiff_) {
+    if (Specs_->UseBlockInput_) {
+        Decoder_.Reset(new TArrowDecoder(Buf_, *Specs_, holderFactory, NUdf::GetYqlMemoryPool()));
+    } else if (Specs_->UseSkiff_) {
 #ifndef MKQL_DISABLE_CODEGEN
         if (Specs_->OptLLVM_ != "OFF" && NCodegen::ICodegen::IsCodegenAvailable()) {
             Decoder_.Reset(new TSkiffLLVMDecoder(Buf_, *Specs_, holderFactory));
@@ -1497,10 +1668,10 @@ void TMkqlReaderImpl::Finish() {
     TimerRead_.Report(JobStats_);
 }
 
-void TMkqlReaderImpl::OnError(TStringBuf msg) {
+void TMkqlReaderImpl::OnError(const std::exception_ptr& error, TStringBuf msg) {
     YQL_LOG(ERROR) << "Reader error: " << msg;
     Buf_.Reset();
-    if (!Reader_->Retry(Decoder_->RangeIndex_, Decoder_->RowIndex_)) {
+    if (!Reader_->Retry(Decoder_->RangeIndex_, Decoder_->RowIndex_, error)) {
         ythrow yexception() << "Failed to read row, table index: " << Decoder_->TableIndex_ << ", row index: " <<
             (Decoder_->RowIndex_.Defined() ? ToString(*Decoder_->RowIndex_) : "?") << "\n" << msg;
     }
@@ -1551,7 +1722,7 @@ void TMkqlReaderImpl::Next() {
         return;
     }
 
-    if (Decoder_->RowIndex_) {
+    if (Decoder_->RowIndex_ && !Decoder_->HandlesSysColumns_) {
         ++*Decoder_->RowIndex_;
     }
 
@@ -1572,9 +1743,9 @@ void TMkqlReaderImpl::Next() {
         } catch (const TTimeoutException&) {
             throw;
         } catch (const yexception& e) {
-            OnError(e.AsStrBuf());
+            OnError(std::make_exception_ptr(e), e.AsStrBuf());
         } catch (...) {
-            OnError(CurrentExceptionMessage());
+            OnError(std::current_exception(), CurrentExceptionMessage());
         }
     }
 
@@ -1618,6 +1789,11 @@ void TMkqlReaderImpl::Next() {
             items[index] = defVal;
         }
     }
+
+    if (Decoder_->HandlesSysColumns_) {
+        return;
+    }
+
     if (decoder.FillSysColumnPath) {
         items[*decoder.FillSysColumnPath] = Specs_->TableNames.at(Decoder_->TableIndex_);
     }
@@ -1734,6 +1910,7 @@ public:
         : TMkqlWriterImpl::TEncoder(buf, specs)
     {
         Fields_ = GetFields(Specs_.Outputs[tableIndex].RowType);
+        NativeYtTypeFlags_ = Specs_.Outputs[tableIndex].NativeYtTypeFlags;
     }
 
     void EncodeNext(const NUdf::TUnboxedValuePod row) final {
@@ -1742,7 +1919,7 @@ public:
         for (size_t index = 0; index < Fields_.size(); ++index) {
             const TField& field = Fields_[index];
             auto value = row.GetElement(index);
-            if (field.Optional) {
+            if (field.Optional || field.Type->GetKind() == TTypeBase::EKind::Pg) {
                 if (!value) {
                     continue;
                 }
@@ -1753,8 +1930,20 @@ public:
             Buf_.WriteVarI32(field.Name.size());
             Buf_.WriteMany(field.Name.data(), field.Name.size());
             Buf_.Write(KeyValueSeparatorSymbol);
+            
+            bool isOptionalFieldTypeV3 = field.Optional && (NativeYtTypeFlags_ & ENativeTypeCompatFlags::NTCF_COMPLEX);
+            bool wrapOptionalTypeV3 = isOptionalFieldTypeV3 &&
+                (field.Type->GetKind() == TTypeBase::EKind::Optional || field.Type->GetKind() == TTypeBase::EKind::Pg);
+            if (wrapOptionalTypeV3) {
+                Buf_.Write(BeginListSymbol);
+            }
 
-            WriteYsonValueInTableFormat(Buf_, field.Type, std::move(value), true);
+            WriteYsonValueInTableFormat(Buf_, field.Type, NativeYtTypeFlags_, std::move(value), true);
+
+            if (wrapOptionalTypeV3) {
+                Buf_.Write(ListItemSeparatorSymbol);
+                Buf_.Write(EndListSymbol);
+            }
 
             Buf_.Write(KeyedItemSeparatorSymbol);
         }
@@ -1781,7 +1970,7 @@ public:
             Buf_.WriteMany(field.Name.data(), field.Name.size());
             Buf_.Write(KeyValueSeparatorSymbol);
 
-            WriteYsonValueInTableFormat(Buf_, field.Type, std::move(value), true);
+            WriteYsonValueInTableFormat(Buf_, field.Type, NativeYtTypeFlags_, std::move(value), true);
 
             Buf_.Write(KeyedItemSeparatorSymbol);
         }
@@ -1791,6 +1980,7 @@ public:
     }
 private:
     TVector<TField> Fields_;
+    ui64 NativeYtTypeFlags_;
 };
 
 class TSkiffEncoderBase: public TMkqlWriterImpl::TEncoder {
@@ -1869,7 +2059,7 @@ protected:
         } else if (!wasOptional && type->IsPg()) {
             NCommon::WriteSkiffPg(static_cast<TPgType*>(type), value, Buf_);
         } else {
-            WriteYsonContainerValue(type, value, Buf_);
+            WriteYsonContainerValue(type, 0, value, Buf_);
         }
     }
 
@@ -2206,7 +2396,7 @@ void DecodeToYson(TMkqlIOCache& specsCache, size_t tableIndex, const NYT::TNode&
             }
             if (res.GetType() != NYT::TNode::Undefined) {
                 if (dataType->GetKind() == TType::EKind::Data && static_cast<TDataType*>(dataType)->GetSchemeType() == NUdf::TDataType<NUdf::TYson>::Id) {
-                    items[field->StructIndex] = NCommon::EncodeRestrictedYson(res, NYT::NYson::EYsonFormat::Binary);
+                    items[field->StructIndex] = NResult::EncodeRestrictedYson(res, NYT::NYson::EYsonFormat::Binary);
                 } else {
                     items[field->StructIndex] = NYT::NodeToYsonString(res, NYT::NYson::EYsonFormat::Binary);
                 }

@@ -169,16 +169,33 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TGetPipelineStatusCommand
-    : public TTypedCommand<NApi::TGetPipelineStatusOptions>
+class TGetPipelineStateCommand
+    : public TTypedCommand<NApi::TGetPipelineStateOptions>
     , public TPipelineCommandBase
 {
 public:
-    REGISTER_YSON_STRUCT_LITE(TGetPipelineStatusCommand);
+    REGISTER_YSON_STRUCT_LITE(TGetPipelineStateCommand);
 
     static void Register(TRegistrar registrar);
 
 private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TGetFlowViewCommand
+    : public TTypedCommand<NApi::TGetFlowViewOptions>
+    , public TPipelineCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetFlowViewCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYPath::TYPath ViewPath;
+
     void DoExecute(ICommandContextPtr context) override;
 };
 

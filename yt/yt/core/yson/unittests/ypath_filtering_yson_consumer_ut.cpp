@@ -36,7 +36,7 @@ public:
 private:
     TString ValueString_;
     TStringOutput Output_;
-    std::unique_ptr<IYsonConsumer> Consumer_;
+    const std::unique_ptr<IYsonConsumer> Consumer_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -46,7 +46,7 @@ TEST_F(TYPathFilteringConsumerTest, BlacklistMap1)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/forbidden_key"},
-        EPathFilteringMode::Blacklist);
+        EYPathFilteringMode::Blacklist);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -61,7 +61,7 @@ TEST_F(TYPathFilteringConsumerTest, BlacklistMap2)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/forbidden_key"},
-        EPathFilteringMode::Blacklist);
+        EYPathFilteringMode::Blacklist);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -76,7 +76,7 @@ TEST_F(TYPathFilteringConsumerTest, BlacklistMap3)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/forbidden_key"},
-        EPathFilteringMode::Blacklist);
+        EYPathFilteringMode::Blacklist);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -92,7 +92,7 @@ TEST_F(TYPathFilteringConsumerTest, BlacklistList)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/1/key"},
-        EPathFilteringMode::Blacklist);
+        EYPathFilteringMode::Blacklist);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginList()
@@ -118,7 +118,7 @@ TEST_F(TYPathFilteringConsumerTest, BlacklistListNested)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/1/key"},
-        EPathFilteringMode::Blacklist);
+        EYPathFilteringMode::Blacklist);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginList()
@@ -146,7 +146,7 @@ TEST_F(TYPathFilteringConsumerTest, BlacklistAttributes)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/@"},
-        EPathFilteringMode::Blacklist);
+        EYPathFilteringMode::Blacklist);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginAttributes()
@@ -162,7 +162,7 @@ TEST_F(TYPathFilteringConsumerTest, BlacklistAttribute)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/@forbidden_attr"},
-        EPathFilteringMode::Blacklist);
+        EYPathFilteringMode::Blacklist);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginAttributes()
@@ -179,7 +179,7 @@ TEST_F(TYPathFilteringConsumerTest, BlacklistNestedMap)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/forbidden_key", "/nested_map/forbidden_key"},
-        EPathFilteringMode::Blacklist);
+        EYPathFilteringMode::Blacklist);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -200,7 +200,7 @@ TEST_F(TYPathFilteringConsumerTest, BlacklistNestedAsterisk)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/*/forbidden_key"},
-        EPathFilteringMode::Blacklist);
+        EYPathFilteringMode::Blacklist);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -224,7 +224,7 @@ TEST_F(TYPathFilteringConsumerTest, WhitelistMap1)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {""},
-        EPathFilteringMode::Whitelist);
+        EYPathFilteringMode::Whitelist);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -239,7 +239,7 @@ TEST_F(TYPathFilteringConsumerTest, WhitelistMap2)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/allowed_key"},
-        EPathFilteringMode::Whitelist);
+        EYPathFilteringMode::Whitelist);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -255,7 +255,7 @@ TEST_F(TYPathFilteringConsumerTest, WhitelistNestedMap)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/allowed_key", "/nested/allowed_key"},
-        EPathFilteringMode::Whitelist);
+        EYPathFilteringMode::Whitelist);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -276,7 +276,7 @@ TEST_F(TYPathFilteringConsumerTest, ForcedSimple)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/forced_key"},
-        EPathFilteringMode::WhitelistWithForcedEntities);
+        EYPathFilteringMode::WhitelistWithForcedEntities);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -290,7 +290,7 @@ TEST_F(TYPathFilteringConsumerTest, ForcedNested)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/data/forced_key"},
-        EPathFilteringMode::WhitelistWithForcedEntities);
+        EYPathFilteringMode::WhitelistWithForcedEntities);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -299,12 +299,26 @@ TEST_F(TYPathFilteringConsumerTest, ForcedNested)
     ASSERT_EQ(FlushOutput(), R"({"data"={"forced_key"=#;};})");
 }
 
+TEST_F(TYPathFilteringConsumerTest, ForcedNestedMultiple)
+{
+    auto consumer = CreateYPathFilteringConsumer(
+        GetConsumer(),
+        /*paths*/ {"/data/forced_key1", "/data/forced_key2"},
+        EYPathFilteringMode::WhitelistWithForcedEntities);
+
+    NYTree::BuildYsonFluently(consumer.get())
+        .BeginMap()
+        .EndMap();
+
+    ASSERT_EQ(FlushOutput(), R"({"data"={"forced_key1"=#;"forced_key2"=#;};})");
+}
+
 TEST_F(TYPathFilteringConsumerTest, ForcedWhitelistMixedNested)
 {
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/data/forced_key"},
-        EPathFilteringMode::WhitelistWithForcedEntities);
+        EYPathFilteringMode::WhitelistWithForcedEntities);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -322,7 +336,7 @@ TEST_F(TYPathFilteringConsumerTest, ForcedMixedNested)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/data/forced_key"},
-        EPathFilteringMode::ForcedEntities);
+        EYPathFilteringMode::ForcedEntities);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -340,7 +354,7 @@ TEST_F(TYPathFilteringConsumerTest, ForcedAttribute)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/data/@forced_attr"},
-        EPathFilteringMode::ForcedEntities);
+        EYPathFilteringMode::ForcedEntities);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -360,7 +374,7 @@ TEST_F(TYPathFilteringConsumerTest, ForcedAttributes1)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/data/@"},
-        EPathFilteringMode::ForcedEntities);
+        EYPathFilteringMode::ForcedEntities);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -378,7 +392,7 @@ TEST_F(TYPathFilteringConsumerTest, ForcedAttributes2)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/data/@forced_key"},
-        EPathFilteringMode::ForcedEntities);
+        EYPathFilteringMode::ForcedEntities);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -396,7 +410,7 @@ TEST_F(TYPathFilteringConsumerTest, ForcedMultiplePaths)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/forced_key1", "/forced_key2"},
-        EPathFilteringMode::WhitelistWithForcedEntities);
+        EYPathFilteringMode::WhitelistWithForcedEntities);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -410,7 +424,7 @@ TEST_F(TYPathFilteringConsumerTest, ForcedMultiplePathsNested)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/data/forced_key","/forced_key"},
-        EPathFilteringMode::WhitelistWithForcedEntities);
+        EYPathFilteringMode::WhitelistWithForcedEntities);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -424,7 +438,7 @@ TEST_F(TYPathFilteringConsumerTest, ForcedFilteringSimple)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/forced_key"},
-        EPathFilteringMode::WhitelistWithForcedEntities);
+        EYPathFilteringMode::WhitelistWithForcedEntities);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -439,7 +453,7 @@ TEST_F(TYPathFilteringConsumerTest, ForcedFilteringSimplePrefix)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/forced_key"},
-        EPathFilteringMode::WhitelistWithForcedEntities);
+        EYPathFilteringMode::WhitelistWithForcedEntities);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -457,7 +471,7 @@ TEST_F(TYPathFilteringConsumerTest, ForcedFilteringNested)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/data/forced_key"},
-        EPathFilteringMode::WhitelistWithForcedEntities);
+        EYPathFilteringMode::WhitelistWithForcedEntities);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()
@@ -476,7 +490,7 @@ TEST_F(TYPathFilteringConsumerTest, ForcedFilteringMultiplePathsNested)
     auto consumer = CreateYPathFilteringConsumer(
         GetConsumer(),
         /*paths*/ {"/forced_key", "/data/forced_key"},
-        EPathFilteringMode::WhitelistWithForcedEntities);
+        EYPathFilteringMode::WhitelistWithForcedEntities);
 
     NYTree::BuildYsonFluently(consumer.get())
         .BeginMap()

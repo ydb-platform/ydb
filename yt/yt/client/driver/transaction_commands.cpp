@@ -17,6 +17,7 @@ using namespace NTransactionClient;
 using namespace NCypressClient;
 using namespace NObjectClient;
 using namespace NConcurrency;
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -173,10 +174,26 @@ void TPingTransactionCommand::DoExecute(ICommandContextPtr context)
 void TCommitTransactionCommand::DoExecute(ICommandContextPtr context)
 {
     auto transaction = AttachTransaction(context, true);
-    WaitFor(transaction->Commit(Options))
-        .ThrowOnError();
+    auto transactionCommitResult = WaitFor(transaction->Commit(Options))
+        .ValueOrThrow();
 
-    ProduceEmptyOutput(context);
+    if (context->GetConfig()->ApiVersion >= ApiVersion4) {
+        ProduceOutput(
+            context,
+            [&] (IYsonConsumer* consumer) {
+                BuildYsonFluently(consumer)
+                    .BeginMap()
+                        .Item("primary_commit_timestamp").Value(transactionCommitResult.PrimaryCommitTimestamp)
+                        .Item("commit_timestamps").DoMapFor(
+                            transactionCommitResult.CommitTimestamps.Timestamps,
+                            [&] (auto fluent, const auto& pair) {
+                                fluent.Item(ToString(pair.first)).Value(pair.second);
+                            })
+                    .EndMap();
+            });
+    } else {
+        ProduceEmptyOutput(context);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -202,10 +219,21 @@ void TAbortTransactionCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TGenerateTimestampCommand::Register(TRegistrar registrar)
+{
+    registrar.ParameterWithUniversalAccessor<std::optional<TCellTag>>(
+        "clock_cluster_tag",
+        [] (TThis* command) -> auto& {
+            return command->Options.ClockClusterTag;
+        })
+        .Optional(/*init*/ false);
+}
+
 void TGenerateTimestampCommand::DoExecute(ICommandContextPtr context)
 {
     auto timestampProvider = context->GetClient()->GetTimestampProvider();
-    auto timestamp = WaitFor(timestampProvider->GenerateTimestamps())
+    auto clockClusterTag = Options.ClockClusterTag.value_or(InvalidCellTag);
+    auto timestamp = WaitFor(timestampProvider->GenerateTimestamps(1, clockClusterTag))
         .ValueOrThrow();
 
     ProduceSingleOutputValue(context, "timestamp", timestamp);

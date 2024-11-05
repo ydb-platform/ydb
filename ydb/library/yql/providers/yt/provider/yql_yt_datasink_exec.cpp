@@ -13,6 +13,7 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/transform/yql_exec.h>
+#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
 #include <ydb/library/yql/core/yql_execution.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
@@ -124,14 +125,18 @@ public:
     }
 
 private:
+    static void PushHybridStats(const TYtState::TPtr& state, TStringBuf statName, TStringBuf opName, const TStringBuf& folderName = "") {
+        with_lock(state->StatisticsMutex) {
+            state->HybridStatistics[folderName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
+            state->HybridOpStatistics[opName][folderName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
+        }
+    }
+
     static TExprNode::TPtr FinalizeOutputOp(const TYtState::TPtr& state, const TString& operationHash,
         const IYtGateway::TRunResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, bool markFinished)
     {
         if (markFinished && !TYtDqProcessWrite::Match(input.Get())) {
-            with_lock(state->StatisticsMutex) {
-                state->HybridStatistics[input->Content()].Entries.emplace_back(TString{"YtExecution"}, 0, 0, 0, 0, 1);
-                state->Statistics[Max<ui32>()].Entries.emplace_back(TString{"YtExecution"}, 0, 0, 0, 0, 1);
-            }
+            PushHybridStats(state, "YtExecution", input->Content());
         }
         auto outSection = TYtOutputOpBase(input).Output();
         YQL_ENSURE(outSection.Size() == res.OutTableStats.size(), "Invalid output table count in IYtGateway::TRunResult");
@@ -222,7 +227,7 @@ private:
         }
 
         bool hasNonDeterministicFunctions = false;
-        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {
+        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx, false); status.Level != TStatus::Ok) {
             return SyncStatus(status);
         }
 
@@ -248,6 +253,35 @@ private:
                 << ", cache mode: " << queryCacheMode;
         }
 
+        TSet<TString> addSecTags;
+        if (settings->TableContentDeliveryMode.Get(cluster) == ETableContentDeliveryMode::File || TYtFill::Match(input.Get())) {
+            for (size_t pos = 0; pos < optimizedNode->ChildrenSize(); pos++) {
+                auto childPtr = optimizedNode->ChildPtr(pos);
+                if (childPtr->Type() == TExprNode::Lambda) {
+                    VisitExpr(childPtr->TailPtr(), [&addSecTags](const TExprNode::TPtr& node) -> bool {
+                        if (TYtTableContent::Match(node.Get())) {
+                            auto tableContent = TYtTableContent(node.Get());
+                            if (auto readTable = tableContent.Input().Maybe<TYtReadTable>()) {
+                                for (auto section : readTable.Cast().Input()) {
+                                    for (auto path : section.Paths()) {
+                                        if (auto tableBase = path.Table().Maybe<TYtTableBase>()) {
+                                            if (auto stat = TYtTableBaseInfo::GetStat(tableBase.Cast())) {
+                                                for (const auto& tag : stat->SecurityTags) {
+                                                    addSecTags.insert(tag);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            return false;
+                        }
+                        return true;
+                    });
+                }
+            }
+        }
+
         YQL_CLOG(DEBUG, ProviderYt) << "Executing " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
 
         return State_->Gateway->Run(optimizedNode, ctx,
@@ -261,6 +295,7 @@ private:
                 .OptLLVM(State_->Types->OptLLVM.GetOrElse(TString()))
                 .OperationHash(operationHash)
                 .SecureParams(secureParams)
+                .AdditionalSecurityTags(addSecTags)
             );
     }
 
@@ -289,26 +324,14 @@ private:
     }
 
     TStatusCallbackPair HandleTryFirst(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext&) {
-        auto statWriter = [this](TStringBuf name) {
-            with_lock(State_->StatisticsMutex) {
-                State_->Statistics[Max<ui32>()].Entries.emplace_back(TString{name}, 0, 0, 0, 0, 1);
-            }
-        };
-        auto hybridStatWriter = [this](TStringBuf statName, TStringBuf opName) {
-            with_lock(State_->StatisticsMutex) {
-                State_->HybridStatistics[opName].Entries.emplace_back(TString{statName}, 0, 0, 0, 0, 1);
-            }
-        };
 
         switch (input->Head().GetState()) {
             case TExprNode::EState::ExecutionComplete:
-                statWriter("HybridExecution");
-                hybridStatWriter("Execution", input->TailPtr()->Content());
+                PushHybridStats(State_, "Execution", input->TailPtr()->Content());
                 output = input->HeadPtr();
                 break;
             case TExprNode::EState::Error: {
-                statWriter("HybridFallback");
-                hybridStatWriter("Fallback", input->TailPtr()->Content());
+                PushHybridStats(State_, "Fallback", input->TailPtr()->Content());
                 if (State_->Configuration->HybridDqExecutionFallback.Get().GetOrElse(true)) {
                     output = input->TailPtr();
                 } else {
@@ -458,7 +481,7 @@ private:
             }
         }
         nextDescription.Hash = nextHash;
-        if (!nextDescription.Hash->Empty()) {
+        if (!nextDescription.Hash->empty()) {
             YQL_CLOG(INFO, ProviderYt) << "Using publish hash \"" << HexEncode(*nextDescription.Hash) << "\" for table " << cluster << "." << path << "#" << commitEpoch;
         }
 
@@ -629,7 +652,7 @@ private:
         }
 
         bool hasNonDeterministicFunctions = false;
-        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {
+        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx, false); status.Level != TStatus::Ok) {
             return SyncStatus(status);
         }
 
@@ -650,6 +673,19 @@ private:
             YQL_CLOG(DEBUG, ProviderYt) << "Operation hash: " << HexEncode(operationHash).Quote() << ", cache mode: " << queryCacheMode;
         }
 
+        TSet<TString> securityTags;
+        VisitExpr(optimizedNode->ChildPtr(TYtDqProcessWrite::idx_Input), [&securityTags](const TExprNode::TPtr& node) -> bool {
+            if (TYtTableBase::Match(node.Get())) {
+                if (auto stat = TYtTableBaseInfo::GetStat(TExprBase(node))) {
+                    for (const auto& tag : stat->SecurityTags) {
+                        securityTags.insert(tag);
+                    }
+                }
+                return false;
+            }
+            return true;
+        });
+
         YQL_CLOG(DEBUG, ProviderYt) << "Preparing " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
 
         auto future = State_->Gateway->Prepare(input, ctx,
@@ -657,6 +693,7 @@ private:
                 .PublicId(State_->Types->TranslateOperationId(input->UniqueId()))
                 .Config(std::move(config))
                 .OperationHash(operationHash)
+                .SecurityTags(securityTags)
             );
 
         return WrapModifyFuture(future, [operationHash, state = State_](const IYtGateway::TRunResult& res,
@@ -706,7 +743,7 @@ private:
                 NYT::TNode spec;
                 rowSpec.FillCodecNode(spec[YqlRowSpecAttribute]);
                 outSpec = NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, NYT::TNode::CreateList().Add(spec));
-                type = rowSpec.GetTypeNode();
+                type = NCommon::TypeToYsonNode(rowSpec.GetExtendedType(ctx));
             }
 
             // These settings will be passed to YT peephole callback from DQ

@@ -20,6 +20,9 @@ SRCS(
     event_filter.cpp
     event_filter.h
     events.h
+    feature_flags.h
+    feature_flags_service.cpp
+    feature_flags_service.h
     group_stat.cpp
     group_stat.h
     hive.h
@@ -29,7 +32,7 @@ SRCS(
     location.h
     logoblob.cpp
     logoblob.h
-    memobserver.h
+    memory_controller_iface.h
     nameservice.h
     path.cpp
     pool_stats_collector.cpp
@@ -37,6 +40,7 @@ SRCS(
     resource_profile.h
     row_version.cpp
     row_version.h
+    runtime_feature_flags.h
     services_assert.cpp
     shared_quota.h
     statestorage.cpp
@@ -48,8 +52,6 @@ SRCS(
     statestorage_monitoring.cpp
     statestorage_proxy.cpp
     statestorage_replica.cpp
-    statestorage_replica_probe.cpp
-    statestorage_warden.cpp
     storage_pools.cpp
     storage_pools.h
     subdomain.h
@@ -85,6 +87,7 @@ PEERDIR(
     library/cpp/lwtrace/mon
     library/cpp/random_provider
     library/cpp/time_provider
+    ydb/core/base/generated
     ydb/core/base/services
     ydb/core/debug
     ydb/core/erasure
@@ -107,7 +110,13 @@ PEERDIR(
 )
 ENDIF()
 
+GENERATE_ENUM_SERIALIZATION(memory_controller_iface.h)
+
 END()
+
+RECURSE(
+    generated
+)
 
 RECURSE_FOR_TESTS(
     ut

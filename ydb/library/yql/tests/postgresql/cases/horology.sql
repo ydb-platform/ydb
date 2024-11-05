@@ -1,5 +1,13 @@
+--
+-- HOROLOGY
+--
+SET DateStyle = 'Postgres, MDY';
 -- should fail in mdy mode:
 SELECT timestamp with time zone '27/12/2001 04:05:06.789-08';
+set datestyle to dmy;
+reset datestyle;
+SET DateStyle = 'German';
+SET DateStyle = 'ISO';
 -- As of 7.4, allow time without time zone having a time zone specified
 SELECT time without time zone '040506.789+08';
 SELECT time without time zone '040506.789-08';
@@ -11,6 +19,7 @@ SELECT time with time zone 'T040506.789+08';
 SELECT time with time zone 'T040506.789-08';
 SELECT time with time zone 'T040506.789 +08';
 SELECT time with time zone 'T040506.789 -08';
+SET DateStyle = 'Postgres, MDY';
 -- Shorthand values
 -- Not directly usable for regression testing since these are not constants.
 -- So, just try to test parser and hope for the best - thomas 97/04/26
@@ -28,6 +37,10 @@ SELECT (timestamp with time zone 'today' = (timestamp with time zone 'yesterday'
 SELECT (timestamp with time zone 'today' = (timestamp with time zone 'tomorrow' - interval '1 day')) as "True";
 SELECT (timestamp with time zone 'tomorrow' = (timestamp with time zone 'yesterday' + interval '2 days')) as "True";
 SELECT (timestamp with time zone 'tomorrow' > 'now') as "True";
+-- timestamp with time zone, interval arithmetic around DST change
+-- (just for fun, let's use an intentionally nonstandard POSIX zone spec)
+SET TIME ZONE 'CST7CDT,M4.1.0,M10.5.0';
+RESET TIME ZONE;
 SELECT CAST(interval '02:03' AS time) AS "02:03:00";
 SELECT time '01:30' + interval '02:01' AS "03:31:00";
 SELECT time '01:30' - interval '02:01' AS "23:29:00";
@@ -74,11 +87,23 @@ SELECT '2020-10-05'::timestamp > '2202020-10-05'::date as f;
 SELECT '2202020-10-05'::date::timestamptz;  -- fail
 SELECT '2202020-10-05'::date > '2020-10-05'::timestamptz as t;
 SELECT '2020-10-05'::timestamptz > '2202020-10-05'::date as f;
+SET TimeZone = 'UTC-2';
 SELECT '4714-11-24 BC'::date < '2020-10-05'::timestamptz as t;
 SELECT '2020-10-05'::timestamptz >= '4714-11-24 BC'::date as t;
 SELECT '4714-11-24 BC'::timestamp < '2020-10-05'::timestamptz as t;
 SELECT '2020-10-05'::timestamptz >= '4714-11-24 BC'::timestamp as t;
+RESET TimeZone;
+--
+-- Formats
+--
+SET DateStyle TO 'US,Postgres';
+SET DateStyle TO 'US,ISO';
 SELECT d1 AS us_iso FROM TIMESTAMP_TBL;
+SET DateStyle TO 'US,SQL';
+SET DateStyle TO 'European,Postgres';
+SET DateStyle TO 'European,ISO';
+SET DateStyle TO 'European,SQL';
+RESET DateStyle;
 SELECT to_timestamp('97/Feb/16', 'YYMonDD');
 SELECT to_timestamp('2011-12-18 11:38 PST', 'YYYY-MM-DD HH12:MI TZ');  -- NYI
 SELECT to_timestamp('2000 + + JUN', 'YYYY  MON');
@@ -116,5 +141,11 @@ SELECT to_date('2016-02-30', 'YYYY-MM-DD');
 SELECT to_date('2015-02-29', 'YYYY-MM-DD');
 SELECT to_date('2015 366', 'YYYY DDD');
 SELECT to_date('2016 367', 'YYYY DDD');
+--
+-- Check behavior with SQL-style fixed-GMT-offset time zone (cf bug #8572)
+--
+SET TIME ZONE 'America/New_York';
+SET TIME ZONE '-1.5';
 SELECT to_char('2012-12-12 12:00'::timestamptz, 'YYYY-MM-DD SSSS');
 SELECT to_char('2012-12-12 12:00'::timestamptz, 'YYYY-MM-DD SSSSS');
+RESET TIME ZONE;

@@ -1,12 +1,14 @@
 #pragma once
 
 #include "actorsystem.h"
+#include "config.h"
 #include "executor_thread.h"
 #include "executor_thread_ctx.h"
 #include "executor_pool_basic_feature_flags.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
 #include "harmonizer.h"
+#include <memory>
 #include <ydb/library/actors/actor_type/indexes.h>
 #include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
@@ -19,6 +21,9 @@
 #include <queue>
 
 namespace NActors {
+
+    class TExecutorPoolJail;
+    class TBasicExecutorPoolSanitizer;
 
     struct TWaitingStatsConstants {
         static constexpr ui64 BucketCount = 128;
@@ -123,7 +128,11 @@ namespace NActors {
         }
     };
 
+
+
     class TBasicExecutorPool: public TExecutorPoolBase {
+        friend class TBasicExecutorPoolSanitizer;
+
         NThreading::TPadded<std::atomic_bool> AllThreadsSleep = true;
         const ui64 DefaultSpinThresholdCycles;
         std::atomic<ui64> SpinThresholdCycles;
@@ -142,31 +151,37 @@ namespace NActors {
         const TString PoolName;
         const TDuration TimePerMailbox;
         const ui32 EventsPerMailbox;
-        EASProfile ActorSystemProfile;
 
         const int RealtimePriority;
 
-        TAtomic ThreadUtilization;
-        TAtomic MaxUtilizationCounter;
-        TAtomic MaxUtilizationAccumulator;
-        TAtomic WrongWakenedThreadCount;
+        TAtomic ThreadUtilization = 0;
+        TAtomic MaxUtilizationCounter = 0;
+        TAtomic MaxUtilizationAccumulator = 0;
+        TAtomic WrongWakenedThreadCount = 0;
         std::atomic<ui64> SpinningTimeUs;
 
         TAtomic ThreadCount;
         TMutex ChangeThreadsLock;
 
-        i16 MinThreadCount;
-        i16 MaxThreadCount;
-        i16 DefaultThreadCount;
+        float MinThreadCount;
+        i16 MinFullThreadCount;
+        float MaxThreadCount;
+        i16 MaxFullThreadCount;
+        float DefaultThreadCount;
+        i16 DefaultFullThreadCount;
         IHarmonizer *Harmonizer;
         ui64 SoftProcessingDurationTs = 0;
+        bool HasOwnSharedThread = false;
 
         const i16 Priority = 0;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
+        TExecutorPoolJail *Jail = nullptr;
 
         static constexpr ui64 MaxSharedThreadsForPool = 2;
         NThreading::TPadded<std::atomic_uint64_t> SharedThreadsCount = 0;
         NThreading::TPadded<std::atomic<TSharedExecutorThreadCtx*>> SharedThreads[MaxSharedThreadsForPool] = {nullptr, nullptr};
+
+        std::unique_ptr<TBasicExecutorPoolSanitizer> Sanitizer;
 
     public:
         struct TSemaphore {
@@ -192,6 +207,7 @@ namespace NActors {
             }
         };
 
+        const EASProfile ActorSystemProfile;
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
         static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
 
@@ -208,8 +224,10 @@ namespace NActors {
                            i16 minThreadCount = 0,
                            i16 maxThreadCount = 0,
                            i16 defaultThreadCount = 0,
-                           i16 priority = 0);
-        explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer);
+                           i16 priority = 0,
+                           bool hasOwnSharedThread = false,
+                           TExecutorPoolJail *jail = nullptr);
+        explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer, TExecutorPoolJail *jail=nullptr);
         ~TBasicExecutorPool();
 
         void Initialize(TWorkerContext& wctx) override;
@@ -233,17 +251,23 @@ namespace NActors {
         void Shutdown() override;
 
         void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const override;
+        void GetExecutorPoolState(TExecutorPoolState &poolState) const override;
         TString GetName() const override {
             return PoolName;
         }
 
         void SetRealTimeMode() const override;
 
-        i16 GetThreadCount() const override;
-        void SetThreadCount(i16 threads) override;
-        i16 GetDefaultThreadCount() const override;
-        i16 GetMinThreadCount() const override;
-        i16 GetMaxThreadCount() const override;
+        ui32 GetThreads() const override;
+        float GetThreadCount() const override;
+        i16 GetFullThreadCount() const override;
+        void SetFullThreadCount(i16 threads) override;
+        float GetDefaultThreadCount() const override;
+        i16 GetDefaultFullThreadCount() const override;
+        float GetMinThreadCount() const override;
+        i16 GetMinFullThreadCount() const override;
+        float GetMaxThreadCount() const override;
+        i16 GetMaxFullThreadCount() const override;
         TCpuConsumption GetThreadCpuConsumption(i16 threadIdx) override;
         i16 GetBlockingThreadCount() const override;
         i16 GetPriority() const override;

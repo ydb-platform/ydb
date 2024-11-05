@@ -43,10 +43,10 @@ private:
         THashSet<std::pair<ESensorType, TTagIdList>> UsedTags;
     };
 
-    THashMap<TString, TRemoteSensorSet> Sensors_;
+    THashMap<std::string, TRemoteSensorSet> Sensors_;
 
     TTagIdList RenameTags(const TTagIdList& tags);
-    void DoDetach(const THashMap<TString, TRemoteSensorSet>& sensors);
+    void DoDetach(const THashMap<std::string, TRemoteSensorSet>& sensors);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

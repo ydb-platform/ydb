@@ -83,7 +83,9 @@ This library provides one such mapping that was developed by the
 Unicode Consortium. Known as `Unicode IDNA Compatibility Processing
 <https://unicode.org/reports/tr46/>`_, it provides for both a regular
 mapping for typical applications, as well as a transitional mapping to
-help migrate from older IDNA 2003 applications.
+help migrate from older IDNA 2003 applications. Strings are
+preprocessed according to Section 4.4 “Preprocessing for IDNA2008”
+prior to the IDNA operations.
 
 For example, “Königsgäßchen” is not a permissible label as *LATIN
 CAPITAL LETTER K* is not allowed (nor are capital letters in general).
@@ -183,7 +185,7 @@ Additional Notes
 * **Packages**. The latest tagged release version is published in the
   `Python Package Index <https://pypi.org/project/idna/>`_.
 
-* **Version support**. This library supports Python 3.5 and higher.
+* **Version support**. This library supports Python 3.6 and higher.
   As this library serves as a low-level toolkit for a variety of
   applications, many of which strive for broad compatibility with older
   Python versions, there is no rush to remove older interpreter support.
@@ -191,9 +193,9 @@ Additional Notes
   maintenance burden has become too high.
 
 * **Python 2**. Python 2 is supported by version 2.x of this library.
-  While active development of the version 2.x series has ended, notable
-  issues being corrected may be backported to 2.x. Use "idna<3" in your
-  requirements file if you need this library for a Python 2 application.
+  Use "idna<3" in your requirements file if you need this library for
+  a Python 2 application. Be advised that these versions are no longer
+  actively developed.
 
 * **Testing**. The library has a test suite based on each rule of the
   IDNA specification, as well as tests that are provided as part of the

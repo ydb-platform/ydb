@@ -1,6 +1,7 @@
 #include "key_bound.h"
 
 #include "helpers.h"
+#include "private.h"
 #include "row_buffer.h"
 #include "serialize.h"
 
@@ -15,7 +16,7 @@ using namespace NLogging;
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Used only for YT_LOG_FATAL below.
-static const TLogger Logger("TableClientKey");
+[[maybe_unused]] static constexpr auto& Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -251,14 +252,9 @@ TOwningKeyBound::operator TKeyBound() const
     return result;
 }
 
-void FormatValue(TStringBuilderBase* builder, const TOwningKeyBound& keyBound, TStringBuf /*format*/)
+void FormatValue(TStringBuilderBase* builder, const TOwningKeyBound& keyBound, TStringBuf /*spec*/)
 {
     return keyBound.FormatValue(builder);
-}
-
-TString ToString(const TOwningKeyBound& keyBound)
-{
-    return ToStringViaBuilder(keyBound);
 }
 
 void PrintTo(const TOwningKeyBound& keyBound, ::std::ostream* os)
@@ -282,14 +278,9 @@ TOwningKeyBound TKeyBound::ToOwning() const
     return result;
 }
 
-void FormatValue(TStringBuilderBase* builder, const TKeyBound& keyBound, TStringBuf /*format*/)
+void FormatValue(TStringBuilderBase* builder, const TKeyBound& keyBound, TStringBuf /*spec*/)
 {
     return keyBound.FormatValue(builder);
-}
-
-TString ToString(const TKeyBound& keyBound)
-{
-    return ToStringViaBuilder(keyBound);
 }
 
 void PrintTo(const TKeyBound& keyBound, ::std::ostream* os)
@@ -431,7 +422,7 @@ TKeyBound KeyBoundFromLegacyRow(TUnversionedRow row, bool isUpper, int keyLength
 
     auto [prefixLength, isInclusive] = GetBoundPrefixAndInclusiveness(row, isUpper, keyLength);
     YT_VERIFY(prefixLength <= static_cast<int>(row.GetCount()));
-    row = rowBuffer->CaptureRow(MakeRange(row.Begin(), prefixLength));
+    row = rowBuffer->CaptureRow(TRange(row.Begin(), prefixLength));
 
     return TKeyBound::FromRow(
         row,
@@ -490,7 +481,7 @@ TKeyBound ShortenKeyBound(TKeyBound keyBound, int length, const TRowBufferPtr& r
     // If we do perform shortening, resulting key bound is going to be inclusive despite the original inclusiveness.
 
     auto result = TKeyBound::FromRowUnchecked(
-        rowBuffer->CaptureRow(MakeRange(keyBound.Prefix.Begin(), length)),
+        rowBuffer->CaptureRow(TRange(keyBound.Prefix.Begin(), length)),
         /* isInclusive */ true,
         keyBound.IsUpper);
 

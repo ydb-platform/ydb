@@ -47,7 +47,8 @@ public:
         AddHandler({TYtReadTableScheme::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleReadTableScheme));
         AddHandler({TYtTableContent::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableContent));
         AddHandler({TYtLength::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleLength));
-        AddHandler({TYtConfigure::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleConfigure));
+        AddHandler({TCoConfigure::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleConfigure));
+        AddHandler({TYtConfigure::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleYtConfigure));
         AddHandler({TYtTablePath::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTablePath));
         AddHandler({TYtTableRecord::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableRecord));
         AddHandler({TYtRowNumber::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableRecord));
@@ -109,7 +110,7 @@ public:
             TVector<const TItemExprType*> items;
             for (auto& name : YAMR_FIELDS) {
                 items.push_back(ctx.MakeType<TItemExprType>(name, ctx.MakeType<TDataExprType>(EDataSlot::String)));
-                columnOrder->push_back(TString(name));
+                columnOrder->AddColumn(TString(name));
             }
             itemType = ctx.MakeType<TStructExprType>(items);
         } else {
@@ -326,22 +327,26 @@ public:
             if (pathInfo.Columns) {
                 auto& renames = pathInfo.Columns->GetRenames();
                 if (renames) {
-                    for (auto &col : *columnOrder) {
+                    TColumnOrder renamedOrder;
+                    for (auto& [col, gen_col] : *columnOrder) {
                         if (auto renamed = renames->FindPtr(col)) {
-                            col = *renamed;
+                            renamedOrder.AddColumn(*renamed);
+                        } else {
+                            renamedOrder.AddColumn(col);
                         }
                     }
+                    *columnOrder = renamedOrder;
                 }
             }
 
             // sync with output type (add weak columns, etc.)
             TSet<TStringBuf> allColumns = GetColumnsOfStructOrSequenceOfStruct(*itemType);
-            EraseIf(*columnOrder, [&](const TString& col) { return !allColumns.contains(col); });
-            for (auto& col : *columnOrder) {
-                allColumns.erase(allColumns.find(col));
+            columnOrder->EraseIf([&](const TString& col) { return !allColumns.contains(col); });
+            for (auto& [col, gen_col] : *columnOrder) {
+                allColumns.erase(allColumns.find(gen_col));
             }
             for (auto& col : allColumns) {
-                columnOrder->push_back(TString(col));
+                columnOrder->AddColumn(TString(col));
             }
 
             return State_->Types->SetColumnOrder(input.Ref(), *columnOrder, ctx);
@@ -646,7 +651,7 @@ public:
 
         for (ui32 i = 1; i < paths.size(); ++i) {
             auto current = State_->Types->LookupColumnOrder(*paths[i]);
-            if (!current || common != current) {
+            if (!current || *common != *current) {
                 return TStatus::Ok;
             }
         }
@@ -657,8 +662,9 @@ public:
             sys = TString(YqlSysColumnPrefix).append(sys);
         }
         Sort(extraColumns);
-
-        common->insert(common->end(), extraColumns.begin(), extraColumns.end());
+        for (auto &e: extraColumns) {
+            common->AddColumn(e);
+        }
         return State_->Types->SetColumnOrder(input.Ref(), *common,  ctx);
     }
 
@@ -840,7 +846,8 @@ public:
             return TStatus::Error;
         }
 
-        if (!ValidateSettings(tableContent.Settings().Ref(), EYtSettingType::MemUsage | EYtSettingType::ItemsCount | EYtSettingType::RowFactor | EYtSettingType::Split, ctx)) {
+        const EYtSettingTypes allowed = EYtSettingType::MemUsage | EYtSettingType::ItemsCount | EYtSettingType::RowFactor | EYtSettingType::Split | EYtSettingType::Small;
+        if (!ValidateSettings(tableContent.Settings().Ref(), allowed, ctx)) {
             return TStatus::Error;
         }
 
@@ -878,6 +885,23 @@ public:
     }
 
     TStatus HandleConfigure(TExprBase input, TExprContext& ctx) {
+        if (!EnsureMinArgsCount(input.Ref(), 2, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureWorldType(*input.Ptr()->Child(TCoConfigure::idx_World), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureSpecificDataSource(*input.Ptr()->Child(TCoConfigure::idx_DataSource), YtProviderName, ctx)) {
+            return TStatus::Error;
+        }
+
+        input.Ptr()->SetTypeAnn(input.Ref().Child(TCoConfigure::idx_World)->GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleYtConfigure(TExprBase input, TExprContext& ctx) {
         if (!EnsureMinArgsCount(input.Ref(), 2, ctx)) {
             return TStatus::Error;
         }

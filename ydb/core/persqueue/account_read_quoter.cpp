@@ -77,7 +77,7 @@ void TBasicAccountQuoter::HandleUpdateCounters(TEvPQ::TEvUpdateCounters::TPtr&, 
 
 void TBasicAccountQuoter::HandleQuotaRequest(NAccountQuoterEvents::TEvRequest::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_RATE_LIMITER,
-        LimiterDescription() << " quota required for cookie=" << ev->Get()->Cookie
+        LimiterDescription() << ": quota required for cookie=" << ev->Get()->Cookie
     );
     InitCounters(ctx);
     bool hasActualErrors = ctx.Now() - LastReportedErrorTime < DoNotQuoteAfterErrorPeriod;
@@ -91,7 +91,7 @@ void TBasicAccountQuoter::HandleQuotaRequest(NAccountQuoterEvents::TEvRequest::T
 void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed::TPtr& ev, const TActorContext& ctx) {
     ConsumedBytesInCredit += ev->Get()->BytesConsumed;
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_RATE_LIMITER, LimiterDescription()
-        << "consumed read quota " << ev->Get()->BytesConsumed
+        << "consumed quota " << ev->Get()->BytesConsumed
         << " bytes by cookie=" << ev->Get()->RequestCookie
         << ", consumed in credit " << ConsumedBytesInCredit << "/" << CreditBytes
     );
@@ -148,7 +148,8 @@ void TBasicAccountQuoter::ApproveQuota(NAccountQuoterEvents::TEvRequest::TPtr& e
     InProcessQuotaRequestCookies.insert(ev->Get()->Cookie);
 
     auto waitTime = ctx.Now() - startWait;
-    TThis::Send(Recepient, new NAccountQuoterEvents::TEvResponse(ev->Release(), waitTime));
+    auto released = ev->Release();
+    TThis::Send(Recepient, new NAccountQuoterEvents::TEvResponse(std::move(released), waitTime));
 
     if (QuotaWaitCounter) {
         QuotaWaitCounter->IncFor(waitTime.MilliSeconds());
@@ -156,9 +157,9 @@ void TBasicAccountQuoter::ApproveQuota(NAccountQuoterEvents::TEvRequest::TPtr& e
 }
 
 TQuoterParams TAccountReadQuoter::GetQuoterParams(const TString& user) {
-    ConsumerPath = NPersQueue::ConvertOldConsumerName(user);
+    auto consumerPath = NPersQueue::ConvertOldConsumerName(user);
     TQuoterParams ret;
-    auto userParts = SplitString(ConsumerPath, "/"); // account/folder/topic // account is first element
+    auto userParts = SplitString(consumerPath, "/"); // account/folder/topic // account is first element
 
     const TString account = userParts[0];
     userParts[0] = READ_QUOTA_ROOT_PATH; // read-quota/folder/topic
@@ -184,6 +185,7 @@ TAccountReadQuoter::TAccountReadQuoter(
 {
     LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_RATE_LIMITER,
         LimiterDescription() <<" kesus=" << KesusPath << " resource_path=" << ResourcePath);
+    ConsumerPath = NPersQueue::ConvertOldConsumerName(user);
 }
 
 

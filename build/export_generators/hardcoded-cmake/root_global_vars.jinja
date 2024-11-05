@@ -1,8 +1,0 @@
-
-{% include '[generator]/disclaimer.jinja' -%}
-
-{% for i in range(platform_vars|length) %}
-if({{ platform_flags[i] }})
-{% for var in platform_vars[i] %}  set({% for arg in var %}{{arg}}{% if not loop.last %} {% endif %}{% endfor %})
-{% endfor %}endif()
-{% endfor %}

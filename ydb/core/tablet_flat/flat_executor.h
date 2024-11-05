@@ -362,6 +362,7 @@ class TExecutor
     TAutoPtr<NUtil::ILogger> Logger;
 
     ui32 FollowerId = 0;
+    THashSet<ui32> PreloadTablesData;
 
     // This becomes true when executor enables the use of leases, e.g. starts persisting them
     // This may become false again when leases are not actively used for some time
@@ -440,6 +441,7 @@ class TExecutor
     TAutoPtr<TCommitManager> CommitManager;
     TAutoPtr<TScans> Scans;
     TAutoPtr<TMemory> Memory;
+    TAutoPtr<NTable::IMemTableMemoryConsumersCollection> MemTableMemoryConsumersCollection;
     TAutoPtr<TLogicSnap> LogicSnap;
     TAutoPtr<TLogicRedo> LogicRedo;
     TAutoPtr<TLogicAlter> LogicAlter;
@@ -483,6 +485,7 @@ class TExecutor
     TActorContext OwnerCtx() const;
 
     TControlWrapper LogFlushDelayOverrideUsec;
+    TControlWrapper MaxCommitRedoMB;
 
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
@@ -612,17 +615,17 @@ class TExecutor
     void CommitCompactionChanges(
             ui32 tableId,
             const NTable::TCompactionChanges& changes,
-            NKikimrSchemeOp::ECompactionStrategy strategy);
+            NKikimrCompaction::ECompactionStrategy strategy);
     void ApplyCompactionChanges(
             TCompactionChangesCtx& ctx,
             const NTable::TCompactionChanges& changes,
-            NKikimrSchemeOp::ECompactionStrategy strategy);
+            NKikimrCompaction::ECompactionStrategy strategy);
 
 public:
     void Describe(IOutputStream &out) const noexcept override
     {
         out
-            << (Stats->IsFollower ? "Follower" : "Leader")
+            << (Stats->IsFollower() ? "Follower" : "Leader")
             << "{" << Owner->TabletID()
             << ":" << Generation() << ":" << Step() << "}";
     }
@@ -654,8 +657,8 @@ public:
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
 
-    void Handle(NSharedCache::TEvMemTableRegistered::TPtr &ev);
-    void Handle(NSharedCache::TEvMemTableCompact::TPtr &ev);
+    void Handle(NMemory::TEvMemTableRegistered::TPtr &ev);
+    void Handle(NMemory::TEvMemTableCompact::TPtr &ev);
 
     void AllowBorrowedGarbageCompaction(ui32 tableId) override;
 
@@ -685,6 +688,8 @@ public:
     NMetrics::TResourceMetrics* GetResourceMetrics() const override;
 
     void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) override;
+
+    virtual void SetPreloadTablesData(THashSet<ui32> tables) override;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FLAT_EXECUTOR;

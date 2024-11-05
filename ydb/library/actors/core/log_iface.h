@@ -83,19 +83,21 @@ namespace NActors {
             , public TIntrusiveListItem<TEvLog, TEvLogBufferLevelListTag>
         {
         public:
-            TEvLog(TInstant stamp, TLevel level, EComponent comp, const TString &line)
+            TEvLog(TInstant stamp, TLevel level, EComponent comp, const TString &line, bool json = false)
                 : Stamp(stamp)
                 , Level(level)
                 , Component(comp)
                 , Line(line)
+                , Json(json)
             {
             }
 
-            TEvLog(TInstant stamp, TLevel level, EComponent comp, TString &&line)
+            TEvLog(TInstant stamp, TLevel level, EComponent comp, TString &&line, bool json = false)
                 : Stamp(stamp)
                 , Level(level)
                 , Component(comp)
                 , Line(std::move(line))
+                , Json(json)
             {
             }
 
@@ -104,6 +106,16 @@ namespace NActors {
                 , Level(EPrio(prio))
                 , Component(comp)
                 , Line(std::move(line))
+                , Json(false)
+            {
+            }
+
+            TEvLog(EPriority prio, EComponent comp, TString line, bool json, TInstant time = TInstant::Now())
+                : Stamp(time)
+                , Level(EPrio(prio))
+                , Component(comp)
+                , Line(std::move(line))
+                , Json(json)
             {
             }
 
@@ -111,6 +123,7 @@ namespace NActors {
             const TLevel Level;
             const EComponent Component = 0;
             TString Line;
+            const bool Json;
         };
 
     }

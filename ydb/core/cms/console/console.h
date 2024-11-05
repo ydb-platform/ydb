@@ -1,9 +1,8 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/library/yaml_config/yaml_config.h>
-
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/console.pb.h>
 #include <ydb/core/protos/console_base.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -13,7 +12,7 @@
 
 namespace NKikimr::NConsole {
 
-struct TEvConsole {
+namespace TEvConsole {
     enum EEv {
         // requests
         EvCreateTenantRequest = EventSpaceBegin(TKikimrEvents::ES_CONSOLE),
@@ -358,10 +357,12 @@ struct TEvConsole {
             const NKikimrConfig::TAppConfig &config,
             const THashSet<ui32> &affectedKinds,
             const TString &yamlConfig = {},
-            const TMap<ui64, TString> &volatileYamlConfigs = {})
+            const TMap<ui64, TString> &volatileYamlConfigs = {},
+            const NKikimrConfig::TAppConfig &rawConfig = {})
         {
             Record.SetGeneration(generation);
             Record.MutableConfig()->CopyFrom(config);
+            Record.MutableRawConsoleConfig()->CopyFrom(rawConfig);
             for (ui32 kind : affectedKinds)
                 Record.AddAffectedKinds(kind);
 

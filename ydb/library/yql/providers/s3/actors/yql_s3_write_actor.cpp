@@ -178,7 +178,7 @@ public:
             Become(&TS3FileWriteActor::StateFuncWrapper<&TS3FileWriteActor::MultipartInitialStateFunc>);
             Gateway->Upload(Url + "?uploads",
                 IHTTPGateway::MakeYcHeaders(RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
-                0,
+                "",
                 std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, RequestId, std::placeholders::_1),
                 false,
                 RetryPolicy);
@@ -524,7 +524,7 @@ public:
     static constexpr char ActorName[] = "S3_WRITE_ACTOR";
 private:
     void CommitState(const NDqProto::TCheckpoint&) final {};
-    void LoadState(const NDqProto::TSinkState&) final {};
+    void LoadState(const TSinkState&) final {};
 
     ui64 GetOutputIndex() const final {
         return OutputIndex;
@@ -578,7 +578,7 @@ private:
                 Gateway,
                 Credentials,
                 key,
-                UrlEscapeRet(Url + Path + key + MakeOutputName() + Extension, true),
+                NS3Util::UrlEscapeRet(Url + Path + key + MakeOutputName() + Extension),
                 Compression,
                 RetryPolicy, DirtyWrite, Token);
             keyIt->second.emplace_back(fileWrite.get());

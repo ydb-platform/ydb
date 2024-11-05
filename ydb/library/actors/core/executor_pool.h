@@ -1,6 +1,7 @@
 #pragma once
 
 #include "event.h"
+#include "executor_pool_jail.h"
 #include "scheduler_queue.h"
 
 namespace NActors {
@@ -8,7 +9,9 @@ namespace NActors {
     struct TMailboxHeader;
     struct TWorkerContext;
     struct TExecutorPoolStats;
+    struct TExecutorPoolState;
     struct TExecutorThreadStats;
+    class TExecutorPoolJail;
     class ISchedulerCookie;
 
     struct TCpuConsumption {
@@ -106,6 +109,10 @@ namespace NActors {
             Y_UNUSED(statsCopy);
         }
 
+        virtual void GetExecutorPoolState(TExecutorPoolState &poolState) const {
+            Y_UNUSED(poolState);
+        }
+
         virtual TString GetName() const {
             return TString();
         }
@@ -123,11 +130,15 @@ namespace NActors {
 
         virtual void SetRealTimeMode() const {}
 
-        virtual i16 GetThreadCount() const {
+        virtual float GetThreadCount() const {
             return 1;
         }
 
-        virtual void SetThreadCount(i16 threads) {
+        virtual i16 GetFullThreadCount() const {
+            return 1;
+        }
+
+        virtual void SetFullThreadCount(i16 threads) {
             Y_UNUSED(threads);
         }
 
@@ -139,15 +150,28 @@ namespace NActors {
             return 0;
         }
 
-        virtual i16 GetDefaultThreadCount() const {
+        virtual float GetDefaultThreadCount() const {
             return 1;
         }
 
-        virtual i16 GetMinThreadCount() const {
+        virtual i16 GetDefaultFullThreadCount() const {
             return 1;
         }
 
-        virtual i16 GetMaxThreadCount() const {
+        virtual float GetMinThreadCount() const {
+            return 1;
+        }
+
+
+        virtual i16 GetMinFullThreadCount() const {
+            return 1;
+        }
+
+        virtual float GetMaxThreadCount() const {
+            return 1;
+        }
+
+        virtual i16 GetMaxFullThreadCount() const {
             return 1;
         }
 

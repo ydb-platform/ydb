@@ -8,15 +8,10 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
     REQUIREMENTS(
-        cpu:4
         ram:32
     )
     TAG(ya:fat)
 ELSE()
-    REQUIREMENTS(
-        cpu:4
-        ram:16
-    )
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
@@ -26,6 +21,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/client/scheme_cache_lib
+    ydb/core/tablet_flat
     ydb/core/tablet_flat/test/libs/rows
     ydb/core/testlib/default
 )
@@ -40,6 +36,7 @@ SRCS(
     flat_ut.cpp
     locks_ut.cpp
     query_stats_ut.cpp
+    object_storage_listing_ut.cpp
 )
 
 END()

@@ -14,7 +14,5 @@ inline TActorId MakeGraphServiceId(ui32 node = 0) {
 
 IActor* CreateGraphService(const TString& database);
 
-double GetTimingForPercentile(double percentile, const TVector<ui64>& values, const TVector<ui64>& /*upper*/bounds, ui64 total);
-
 } // NGraph
 } // NKikimr

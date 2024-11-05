@@ -1,16 +1,18 @@
 #pragma once
 
 #include "node.h"
-#include "yson_struct_enum.h"
+#include "yson_struct_public.h"
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/mpl.h>
 #include <yt/yt/core/misc/property.h>
 
 #include <yt/yt/core/yson/public.h>
+
 #include <yt/yt/library/syncmap/map.h>
 
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/tls.h>
 
 #include <util/generic/algorithm.h>
 
@@ -56,10 +58,12 @@ public:
     using TPostprocessor = std::function<void()>;
     using TPreprocessor = std::function<void()>;
 
+    TYsonStructBase();
+
     virtual ~TYsonStructBase() = default;
 
     void Load(
-        NYTree::INodePtr node,
+        INodePtr node,
         bool postprocess = true,
         bool setDefaults = true,
         const NYPath::TYPath& path = {});
@@ -77,6 +81,12 @@ public:
     void SetDefaults();
 
     void Save(NYson::IYsonConsumer* consumer) const;
+
+    // Doesn't call OnBeginMap/OnEndMap.
+    // Can be used to inject extra data into the serialized format
+    // by some kind of wrapper to be parsed in the wrapper
+    // of the |Load| call.
+    void SaveAsMapFragment(NYson::IYsonConsumer* consumer) const;
 
     void Save(IOutputStream* output) const;
 
@@ -96,6 +106,13 @@ public:
     std::vector<TString> GetAllParameterAliases(const TString& key) const;
 
     void WriteSchema(NYson::IYsonConsumer* consumer) const;
+
+    // always returns |true| for itself
+    // else always returns |false| if one of the fields
+    // is not equality comparable.
+    // See templated operator== for explanation why it was not
+    // a member method.
+    bool IsEqual(const TYsonStructBase& rhs) const;
 
 private:
     template <class TValue>
@@ -177,6 +194,35 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class T, class S>
+concept CYsonStructFieldFor =
+    CYsonStructSource<S> &&
+    requires (
+        T& parameter,
+        S source,
+        bool postprocess,
+        bool setDefaults,
+        const NYPath::TYPath& path,
+        std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy)
+    {
+        // NB(arkady-e1ppa): This alias serves no purpose other
+        // than an easy way to grep for every implementation.
+        typename T::TImplementsYsonStructField;
+
+        // For YsonStruct.
+        parameter.Load(
+            source,
+            postprocess,
+            setDefaults,
+            path,
+            recursiveUnrecognizedStrategy);
+    };
+
+////////////////////////////////////////////////////////////////////////////////
+
+YT_DECLARE_THREAD_LOCAL(IYsonStructMeta*, CurrentlyInitializingYsonMeta);
+YT_DECLARE_THREAD_LOCAL(i64, YsonMetaRegistryDepth);
+
 class TYsonStructRegistry
 {
 public:
@@ -187,9 +233,11 @@ public:
     template <class TStruct>
     void InitializeStruct(TStruct* target);
 
-private:
-    static inline YT_THREAD_LOCAL(IYsonStructMeta*) CurrentlyInitializingMeta_ = nullptr;
+    void OnBaseCtorCalled();
 
+    void OnFinalCtorCalled();
+
+private:
     template <class TStruct>
     friend class TYsonStructRegistrar;
 
@@ -285,24 +333,9 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-concept CExternalizedYsonStructTraits = requires {
-    typename T::TExternalSerializer;
-};
-
+TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj, bool postprocess = true, bool setDefaults = true);
 template <class T>
-concept CExternallySerializable = requires (T t) {
-    { GetExternalizedYsonStructTraits(t) } -> CExternalizedYsonStructTraits;
-};
-
-template <CExternallySerializable T>
-using TGetExternalizedYsonStructTraits = decltype(GetExternalizedYsonStructTraits(std::declval<T>()));
-
-////////////////////////////////////////////////////////////////////////////////
-
-template <class T>
-TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<const T>& obj);
-template <class T>
-TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj);
+TIntrusivePtr<T> CloneYsonStruct(const TIntrusivePtr<T>& obj, bool postprocess = true, bool setDefaults = true);
 template <class T>
 std::vector<TIntrusivePtr<T>> CloneYsonStructs(const std::vector<TIntrusivePtr<T>>& objs);
 template <class T>
@@ -312,15 +345,10 @@ void Serialize(const TYsonStructBase& value, NYson::IYsonConsumer* consumer);
 void Deserialize(TYsonStructBase& value, INodePtr node);
 void Deserialize(TYsonStructBase& value, NYson::TYsonPullParserCursor* cursor);
 
-template <class T>
-    requires CExternallySerializable<T>
+template <CExternallySerializable T>
 void Serialize(const T& value, NYson::IYsonConsumer* consumer);
-template <class T>
-    requires CExternallySerializable<T>
-void Deserialize(T& value, INodePtr node);
-template <class T>
-    requires CExternallySerializable<T>
-void Deserialize(T& value, NYson::TYsonPullParserCursor* cursor);
+template <CExternallySerializable T, CYsonStructSource TSource>
+void Deserialize(T& value, TSource source, bool postprocess = true, bool setDefaults = true);
 
 template <class T>
 TIntrusivePtr<T> UpdateYsonStruct(
@@ -351,6 +379,18 @@ template <class TSrc, class TDst>
 void UpdateYsonStructField(TDst& dst, const std::optional<TSrc>& src);
 template <class TSrc, class TDst>
 void UpdateYsonStructField(TIntrusivePtr<TDst>& dst, const TIntrusivePtr<TSrc>& src);
+
+// NB(arkady-e1ppa): Double templated parameter is chosen so that
+// templated constrained free function with 1 parameter
+// (which is the sanest use case) would always win over this one.
+// Specific overloads (for concrete type) would also win obviously.
+// Overloads which come from bases would always lose.
+// Because some people actually try using equality comparable bases
+// with trivial comparisons overload below is a free function and not
+// a member method of the TYsonStructBase.
+template <CYsonStructDerived T, CYsonStructDerived U>
+    requires std::same_as<T, U>
+bool operator==(const T& lhs, const U& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 

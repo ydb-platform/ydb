@@ -127,6 +127,8 @@ public:
         Tenant->IsExternalHive = Self->FeatureFlags.GetEnableExternalHive();
         Tenant->IsExternalSysViewProcessor = Self->FeatureFlags.GetEnableSystemViews();
         Tenant->IsExternalStatisticsAggregator = Self->FeatureFlags.GetEnableStatistics();
+        Tenant->IsExternalBackupController = Self->FeatureFlags.GetEnableBackupService();
+        Tenant->IsGraphShardEnabled = Self->FeatureFlags.GetEnableGraphShard();
 
         if (rec.options().disable_external_subdomain()) {
             Tenant->IsExternalSubdomain = false;
@@ -145,11 +147,13 @@ public:
             Tenant->IsExternalHive = false;
             Tenant->IsExternalSysViewProcessor = false;
             Tenant->IsExternalStatisticsAggregator = false;
+            Tenant->IsExternalBackupController = false;
         }
 
         Tenant->IsExternalHive &= Tenant->IsExternalSubdomain; // external hive without external sub domain is pointless
         Tenant->IsExternalSysViewProcessor &= Tenant->IsExternalSubdomain;
         Tenant->IsExternalStatisticsAggregator &= Tenant->IsExternalSubdomain;
+        Tenant->IsExternalBackupController &= Tenant->IsExternalSubdomain;
 
         Tenant->StorageUnitsQuota = Self->Config.DefaultStorageUnitsQuota;
         Tenant->ComputationalUnitsQuota = Self->Config.DefaultComputationalUnitsQuota;
@@ -246,6 +250,7 @@ public:
                     tenant->HostedTenants.emplace(Tenant);
 
                     Tenant->IsExternalHive = false;
+                    Tenant->IsGraphShardEnabled = false;
                     Tenant->Coordinators = 1;
                     Tenant->SlotsAllocationConfirmed = true;
                 } else {
@@ -270,7 +275,27 @@ public:
             auto hardQuota = quotas.data_size_hard_quota();
             auto softQuota = quotas.data_size_soft_quota();
             if (hardQuota && softQuota && hardQuota < softQuota) {
-                return Error(Ydb::StatusIds::BAD_REQUEST, "Data size soft quota cannot be larger than hard quota", ctx);
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                    TStringBuilder() << "Overall data size soft quota (" << softQuota << ")"
+                                     << " of the database " << path
+                                     << " must be less than or equal to the hard quota (" << hardQuota << ")",
+                    ctx
+                );
+            }
+            for (const auto& storageUnitQuota : quotas.storage_quotas()) {
+                const auto unitHardQuota = storageUnitQuota.data_size_hard_quota();
+                const auto unitSoftQuota = storageUnitQuota.data_size_soft_quota();
+                if (unitHardQuota && unitSoftQuota && unitHardQuota < unitSoftQuota) {
+                    return Error(Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "Data size soft quota (" << unitSoftQuota << ")"
+                                         << " for a " << storageUnitQuota.unit_kind() << " storage unit "
+                                         << " of the database " << path
+                                         << " must be less than or equal to"
+                                         << " the corresponding hard quota (" << unitHardQuota << ")",
+                        ctx
+                    );
+                }
+
             }
             Tenant->DatabaseQuotas.ConstructInPlace(quotas);
         }

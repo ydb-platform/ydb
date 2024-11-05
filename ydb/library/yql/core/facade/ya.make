@@ -18,6 +18,8 @@ PEERDIR(
     ydb/library/yql/core/url_lister/interface
     ydb/library/yql/core/url_preprocessing/interface
     ydb/library/yql/core/credentials
+    ydb/library/yql/core/qplayer/storage/interface
+    ydb/library/yql/core/qplayer/udf_resolver
     ydb/library/yql/sql
     ydb/library/yql/utils/log
     ydb/library/yql/core

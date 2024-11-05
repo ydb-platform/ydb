@@ -2,12 +2,11 @@
 #include "logging.h"
 #include "private_events.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
-
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr::NReplication::NController {
 
@@ -44,6 +43,8 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         case TReplication::ETargetKind::Table:
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
             break;
+        case TReplication::ETargetKind::IndexTable:
+            Y_ABORT("unreachable");
         }
 
         Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), SchemeShardId, true));
@@ -157,7 +158,13 @@ public:
         if (!DstPathId) {
             Success();
         } else {
-            AllocateTxId();
+            switch (Kind) {
+            case TReplication::ETargetKind::Table:
+                return AllocateTxId();
+            case TReplication::ETargetKind::IndexTable:
+                // indexed table will be removed along with its indexes
+                return Success();
+            }
         }
     }
 
@@ -183,6 +190,13 @@ private:
     TActorId PipeCache;
 
 }; // TDstRemover
+
+IActor* CreateDstRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
+    const auto* target = replication->FindTarget(targetId);
+    Y_ABORT_UNLESS(target);
+    return CreateDstRemover(ctx.SelfID, replication->GetSchemeShardId(), replication->GetYdbProxy(),
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId());
+}
 
 IActor* CreateDstRemover(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId)

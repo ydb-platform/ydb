@@ -100,6 +100,18 @@ namespace NTi {
     class TUuidType;
     using TUuidTypePtr = TIntrusiveConstPtr<TUuidType>;
 
+    class TDate32Type;
+    using TDate32TypePtr = TIntrusiveConstPtr<TDate32Type>;
+
+    class TDatetime64Type;
+    using TDatetime64TypePtr = TIntrusiveConstPtr<TDatetime64Type>;
+
+    class TTimestamp64Type;
+    using TTimestamp64TypePtr = TIntrusiveConstPtr<TTimestamp64Type>;
+
+    class TInterval64Type;
+    using TInterval64TypePtr = TIntrusiveConstPtr<TInterval64Type>;
+
     class TOptionalType;
     using TOptionalTypePtr = TIntrusiveConstPtr<TOptionalType>;
 

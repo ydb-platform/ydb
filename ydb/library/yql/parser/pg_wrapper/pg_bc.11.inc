@@ -3,17 +3,24 @@ LLVM_BC(
     postgresql/src/backend/tsearch/dict.c
     postgresql/src/backend/utils/adt/array_typanalyze.c
     postgresql/src/backend/utils/adt/array_userfuncs.c
-    postgresql/src/backend/utils/adt/tid.c
+    postgresql/src/backend/utils/adt/partitionfuncs.c
+    postgresql/src/backend/utils/adt/timestamp.c
+    postgresql/src/backend/utils/adt/varbit.c
     postgresql/src/backend/utils/adt/xid8funcs.c
-    postgresql/src/backend/utils/misc/rls.c
     pg_kernels.11.cpp
 
     NAME PgFuncs11
 
     SYMBOLS
+    arrow_array_agg_array_combine
+    arrow_array_agg_array_deserialize
     arrow_array_agg_array_finalfn
+    arrow_array_agg_array_serialize
     arrow_array_agg_array_transfn
+    arrow_array_agg_combine
+    arrow_array_agg_deserialize
     arrow_array_agg_finalfn
+    arrow_array_agg_serialize
     arrow_array_agg_transfn
     arrow_array_append
     arrow_array_cat
@@ -21,11 +28,94 @@ LLVM_BC(
     arrow_array_position_start
     arrow_array_positions
     arrow_array_prepend
+    arrow_array_sample
+    arrow_array_shuffle
     arrow_array_typanalyze
-    arrow_bttidcmp
-    arrow_currtid_byrelname
-    arrow_hashtid
-    arrow_hashtidextended
+    arrow_bit
+    arrow_bit_and
+    arrow_bit_bit_count
+    arrow_bit_in
+    arrow_bit_or
+    arrow_bit_out
+    arrow_bit_recv
+    arrow_bit_send
+    arrow_bitcat
+    arrow_bitcmp
+    arrow_biteq
+    arrow_bitfromint4
+    arrow_bitfromint8
+    arrow_bitge
+    arrow_bitgetbit
+    arrow_bitgt
+    arrow_bitle
+    arrow_bitlength
+    arrow_bitlt
+    arrow_bitne
+    arrow_bitnot
+    arrow_bitoctetlength
+    arrow_bitoverlay
+    arrow_bitoverlay_no_len
+    arrow_bitposition
+    arrow_bitsetbit
+    arrow_bitshiftleft
+    arrow_bitshiftright
+    arrow_bitsubstr
+    arrow_bitsubstr_no_len
+    arrow_bittoint4
+    arrow_bittoint8
+    arrow_bittypmodin
+    arrow_bittypmodout
+    arrow_bitxor
+    arrow_clock_timestamp
+    arrow_extract_interval
+    arrow_extract_timestamp
+    arrow_extract_timestamptz
+    arrow_float8_timestamptz
+    arrow_in_range_interval_interval
+    arrow_in_range_timestamp_interval
+    arrow_in_range_timestamptz_interval
+    arrow_interval_accum
+    arrow_interval_accum_inv
+    arrow_interval_avg
+    arrow_interval_cmp
+    arrow_interval_combine
+    arrow_interval_div
+    arrow_interval_eq
+    arrow_interval_finite
+    arrow_interval_ge
+    arrow_interval_gt
+    arrow_interval_hash
+    arrow_interval_hash_extended
+    arrow_interval_in
+    arrow_interval_justify_days
+    arrow_interval_justify_hours
+    arrow_interval_justify_interval
+    arrow_interval_larger
+    arrow_interval_le
+    arrow_interval_lt
+    arrow_interval_mi
+    arrow_interval_mul
+    arrow_interval_ne
+    arrow_interval_out
+    arrow_interval_part
+    arrow_interval_pl
+    arrow_interval_recv
+    arrow_interval_scale
+    arrow_interval_send
+    arrow_interval_smaller
+    arrow_interval_support
+    arrow_interval_trunc
+    arrow_interval_um
+    arrow_intervaltypmodin
+    arrow_intervaltypmodout
+    arrow_make_interval
+    arrow_make_timestamp
+    arrow_make_timestamptz
+    arrow_make_timestamptz_at_timezone
+    arrow_mul_d_interval
+    arrow_now
+    arrow_overlaps_timestamp
+    arrow_pg_conf_load_time
     arrow_pg_current_snapshot
     arrow_pg_current_xact_id
     arrow_pg_current_xact_id_if_assigned
@@ -33,6 +123,8 @@ LLVM_BC(
     arrow_pg_get_object_address
     arrow_pg_identify_object
     arrow_pg_identify_object_as_address
+    arrow_pg_partition_root
+    arrow_pg_postmaster_start_time
     arrow_pg_snapshot_in
     arrow_pg_snapshot_out
     arrow_pg_snapshot_recv
@@ -41,19 +133,79 @@ LLVM_BC(
     arrow_pg_snapshot_xmin
     arrow_pg_visible_in_snapshot
     arrow_pg_xact_status
-    arrow_row_security_active
-    arrow_row_security_active_name
-    arrow_tideq
-    arrow_tidge
-    arrow_tidgt
-    arrow_tidin
-    arrow_tidlarger
-    arrow_tidle
-    arrow_tidlt
-    arrow_tidne
-    arrow_tidout
-    arrow_tidrecv
-    arrow_tidsend
-    arrow_tidsmaller
+    arrow_statement_timestamp
+    arrow_timeofday
+    arrow_timestamp_age
+    arrow_timestamp_bin
+    arrow_timestamp_cmp
+    arrow_timestamp_cmp_timestamptz
+    arrow_timestamp_eq
+    arrow_timestamp_eq_timestamptz
+    arrow_timestamp_finite
+    arrow_timestamp_ge
+    arrow_timestamp_ge_timestamptz
+    arrow_timestamp_gt
+    arrow_timestamp_gt_timestamptz
+    arrow_timestamp_hash
+    arrow_timestamp_hash_extended
+    arrow_timestamp_in
+    arrow_timestamp_izone
+    arrow_timestamp_larger
+    arrow_timestamp_le
+    arrow_timestamp_le_timestamptz
+    arrow_timestamp_lt
+    arrow_timestamp_lt_timestamptz
+    arrow_timestamp_mi
+    arrow_timestamp_mi_interval
+    arrow_timestamp_ne
+    arrow_timestamp_ne_timestamptz
+    arrow_timestamp_out
+    arrow_timestamp_part
+    arrow_timestamp_pl_interval
+    arrow_timestamp_recv
+    arrow_timestamp_scale
+    arrow_timestamp_send
+    arrow_timestamp_smaller
+    arrow_timestamp_sortsupport
+    arrow_timestamp_support
+    arrow_timestamp_timestamptz
+    arrow_timestamp_trunc
+    arrow_timestamp_zone
+    arrow_timestamptypmodin
+    arrow_timestamptypmodout
+    arrow_timestamptz_age
+    arrow_timestamptz_bin
+    arrow_timestamptz_cmp_timestamp
+    arrow_timestamptz_eq_timestamp
+    arrow_timestamptz_ge_timestamp
+    arrow_timestamptz_gt_timestamp
+    arrow_timestamptz_in
+    arrow_timestamptz_izone
+    arrow_timestamptz_le_timestamp
+    arrow_timestamptz_lt_timestamp
+    arrow_timestamptz_mi_interval
+    arrow_timestamptz_mi_interval_at_zone
+    arrow_timestamptz_ne_timestamp
+    arrow_timestamptz_out
+    arrow_timestamptz_part
+    arrow_timestamptz_pl_interval
+    arrow_timestamptz_pl_interval_at_zone
+    arrow_timestamptz_recv
+    arrow_timestamptz_scale
+    arrow_timestamptz_send
+    arrow_timestamptz_timestamp
+    arrow_timestamptz_trunc
+    arrow_timestamptz_trunc_zone
+    arrow_timestamptz_zone
+    arrow_timestamptztypmodin
+    arrow_timestamptztypmodout
     arrow_ts_lexize
+    arrow_varbit
+    arrow_varbit_in
+    arrow_varbit_out
+    arrow_varbit_recv
+    arrow_varbit_send
+    arrow_varbit_support
+    arrow_varbittypmodin
+    arrow_varbittypmodout
 )

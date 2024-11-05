@@ -2,6 +2,8 @@
 
 #include <util/stream/output.h>
 #include <util/string/builder.h>
+#include <util/system/src_location.h>
+
 #include <unordered_map>
 
 #ifndef NDEBUG
@@ -59,140 +61,33 @@ class TMemoryUsageInfo : public TThrRefBase
         bool IsDeleted;
     };
 public:
-    inline explicit TMemoryUsageInfo(const TStringBuf& title)
-        : Title_(title)
-        , Allocated_(0)
-        , Freed_(0)
-        , Peak_(0)
-        , AllowMissing_(false)
-        , CheckOnExit_(true)
-    {
-    }
+    explicit TMemoryUsageInfo(const TStringBuf& title);
+    ~TMemoryUsageInfo();
 
-    inline ~TMemoryUsageInfo() {
-        if (CheckOnExit_ && !UncaughtException()) {
-            VerifyDebug();
-        }
-    }
-
-    void AllowMissing() {
-        AllowMissing_ = true;
-    }
-
-    void CheckOnExit(bool check) {
-        CheckOnExit_ = check;
-    }
+    void AllowMissing();
+    void CheckOnExit(bool check);
 
 #ifndef NDEBUG
-    inline void Take(const void* mem, ui64 size, TMkqlLocation location) {
-        Allocated_ += size;
-        Peak_ = Max(Peak_, Allocated_ - Freed_);
-        if (size == 0) {
-            return;
-        }
-        if (AllowMissing_) {
-            auto it = AllocationsMap_.find(mem);
-            if (it != AllocationsMap_.end() && it->second.IsDeleted) {
-                AllocationsMap_.erase(it);
-            }
-        }
-        auto res = AllocationsMap_.insert({mem, { size, std::move(location), false }});
-        Y_DEBUG_ABORT_UNLESS(res.second, "Duplicate allocation at: %p, "
-                                   "already allocated at: %s", mem, (TStringBuilder() << res.first->second.Location).c_str());
-        //Clog << Title_ << " take: " << size << " -> " << mem << " " << AllocationsMap_.size() << Endl;
-    }
+    void Take(const void* mem, ui64 size, TMkqlLocation location);
 #endif
 
 #ifndef NDEBUG
-    inline void Return(const void* mem, ui64 size) {
-        Freed_ += size;
-        if (size == 0) {
-            return;
-        }
-        //Clog << Title_ << " free: " << size << " -> " << mem << " " << AllocationsMap_.size() << Endl;
-        auto it = AllocationsMap_.find(mem);
-        if (AllowMissing_ && it == AllocationsMap_.end()) {
-            return;
-        }
-
-        if (AllowMissing_) {
-            Y_DEBUG_ABORT_UNLESS(!it->second.IsDeleted, "Double free at: %p", mem);
-        } else {
-            Y_DEBUG_ABORT_UNLESS(it != AllocationsMap_.end(), "Double free at: %p", mem);
-        }
-
-        Y_DEBUG_ABORT_UNLESS(size == it->second.Size,
-                    "Deallocating wrong size at: %p, "
-                    "allocated at: %s", mem, (TStringBuilder() << it->second.Location).c_str());
-        if (AllowMissing_) {
-            it->second.IsDeleted = true;
-        } else {
-            AllocationsMap_.erase(it);
-        }
-    }
+    void Return(const void* mem, ui64 size);
 #endif
 
 #ifndef NDEBUG
-    inline void Return(const void* mem) {
-        //Clog << Title_ << " free: " << size << " -> " << mem << " " << AllocationsMap_.size() << Endl;
-        auto it = AllocationsMap_.find(mem);
-        if (AllowMissing_ && it == AllocationsMap_.end()) {
-            return;
-        }
-
-        if (AllowMissing_) {
-            Y_DEBUG_ABORT_UNLESS(!it->second.IsDeleted, "Double free at: %p", mem);
-        } else {
-            Y_DEBUG_ABORT_UNLESS(it != AllocationsMap_.end(), "Double free at: %p", mem);
-        }
-
-        Freed_ += it->second.Size;
-        if (AllowMissing_) {
-            it->second.IsDeleted = true;
-        } else {
-            AllocationsMap_.erase(it);
-        }
-    }
+    void Return(const void* mem);
 #endif
 
-    inline i64 GetUsage() const {
-        return static_cast<i64>(Allocated_) - static_cast<i64>(Freed_);
-    }
+    i64 GetUsage() const;
 
-    inline ui64 GetAllocated() const { return Allocated_; }
-    inline ui64 GetFreed() const { return Freed_; }
-    inline ui64 GetPeak() const { return Peak_; }
+    ui64 GetAllocated() const;
+    ui64 GetFreed() const;
+    ui64 GetPeak() const;
 
-    inline void PrintTo(IOutputStream& out) const {
-        out << Title_ << TStringBuf(": usage=") << GetUsage()
-            << TStringBuf(" (allocated=") << GetAllocated()
-            << TStringBuf(", freed=") << GetFreed()
-            << TStringBuf(", peak=") << GetPeak()
-            << ')';
-    }
+    void PrintTo(IOutputStream& out) const;
 
-    inline void VerifyDebug() const {
-#ifndef NDEBUG
-        size_t leakCount = 0;
-        for (const auto& it: AllocationsMap_) {
-            if (it.second.IsDeleted) {
-                continue;
-            }
-            ++leakCount;
-            Cerr << TStringBuf("Not freed ")
-                << it.first << TStringBuf(" size: ") << it.second.Size
-                << TStringBuf(", location: ") << it.second.Location
-                << Endl;
-        }
-
-        if (!AllowMissing_) {
-            Y_DEBUG_ABORT_UNLESS(GetUsage() == 0,
-                    "Allocated: %ld, Freed: %ld, Peak: %ld",
-                    GetAllocated(), GetFreed(), GetPeak());
-        }
-        Y_DEBUG_ABORT_UNLESS(!leakCount, "Has no freed memory");
-#endif
-    }
+    void VerifyDebug() const;
 
 private:
     const TString Title_;

@@ -4,6 +4,8 @@
 # Copyright (c) 2005-2020, Ilya Etingof <etingof@gmail.com>
 # License: https://pyasn1.readthedocs.io/en/latest/license.html
 #
+import warnings
+
 from pyasn1 import debug
 from pyasn1 import error
 from pyasn1.compat import _MISSING
@@ -72,6 +74,7 @@ TAG_MAP = {
     univ.OctetString.tagSet: AbstractScalarPayloadDecoder(),
     univ.Null.tagSet: AbstractScalarPayloadDecoder(),
     univ.ObjectIdentifier.tagSet: AbstractScalarPayloadDecoder(),
+    univ.RelativeOID.tagSet: AbstractScalarPayloadDecoder(),
     univ.Enumerated.tagSet: AbstractScalarPayloadDecoder(),
     univ.Real.tagSet: AbstractScalarPayloadDecoder(),
     univ.Sequence.tagSet: SequenceOrSetPayloadDecoder(),  # conflicts with SequenceOf
@@ -103,6 +106,7 @@ TYPE_MAP = {
     univ.OctetString.typeId: AbstractScalarPayloadDecoder(),
     univ.Null.typeId: AbstractScalarPayloadDecoder(),
     univ.ObjectIdentifier.typeId: AbstractScalarPayloadDecoder(),
+    univ.RelativeOID.typeId: AbstractScalarPayloadDecoder(),
     univ.Enumerated.typeId: AbstractScalarPayloadDecoder(),
     univ.Real.typeId: AbstractScalarPayloadDecoder(),
     # ambiguous base types
@@ -129,10 +133,6 @@ TYPE_MAP = {
     useful.GeneralizedTime.typeId: AbstractScalarPayloadDecoder(),
     useful.UTCTime.typeId: AbstractScalarPayloadDecoder()
 }
-
-# deprecated aliases, https://github.com/pyasn1/pyasn1/issues/9
-tagMap = TAG_MAP
-typeMap = TYPE_MAP
 
 
 class SingleItemDecoder(object):
@@ -236,3 +236,9 @@ class Decoder(object):
 #:     1 2 3
 #:
 decode = Decoder()
+
+def __getattr__(attr: str):
+    if newAttr := {"tagMap": "TAG_MAP", "typeMap": "TYPE_MAP"}.get(attr):
+        warnings.warn(f"{attr} is deprecated. Please use {newAttr} instead.", DeprecationWarning)
+        return globals()[newAttr]
+    raise AttributeError(attr)

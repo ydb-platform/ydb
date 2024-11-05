@@ -15,23 +15,6 @@ enum class ERowsPerMatch {
     AllRows
 };
 
-enum class EAfterMatchSkipTo {
-    NextRow,
-    PastLastRow,
-    ToFirst,
-    ToLast,
-    To
-};
-
-struct TAfterMatchSkipTo {
-    TAfterMatchSkipTo(EAfterMatchSkipTo to, const TStringBuf var = TStringBuf())
-        : To(to)
-        , Var(var)
-    {}
-    EAfterMatchSkipTo To;
-    TString Var;
-};
-
 class TMatchRecognizeBuilder: public TSimpleRefCount<TMatchRecognizeBuilder> {
 public:
     TMatchRecognizeBuilder(
@@ -40,7 +23,7 @@ public:
             std::pair<TPosition, TVector<TSortSpecificationPtr>>&& sortSpecs,
             std::pair<TPosition, TVector<TNamedFunction>>&& measures,
             std::pair<TPosition, ERowsPerMatch>&& rowsPerMatch,
-            std::pair<TPosition, TAfterMatchSkipTo>&& skipTo,
+            std::pair<TPosition, NYql::NMatchRecognize::TAfterMatchSkipTo>&& skipTo,
             std::pair<TPosition, NYql::NMatchRecognize::TRowPattern>&& pattern,
             std::pair<TPosition, TNodePtr>&& subset,
             std::pair<TPosition, TVector<TNamedFunction>>&& definitions
@@ -63,7 +46,7 @@ private:
     std::pair<TPosition, TVector<TSortSpecificationPtr>> SortSpecs;
     std::pair<TPosition, TVector<TNamedFunction>> Measures;
     std::pair<TPosition, ERowsPerMatch> RowsPerMatch;
-    std::pair<TPosition, TAfterMatchSkipTo> SkipTo;
+    std::pair<TPosition, NYql::NMatchRecognize::TAfterMatchSkipTo> SkipTo;
     std::pair<TPosition, NYql::NMatchRecognize::TRowPattern> Pattern;
     std::pair<TPosition, TNodePtr> Subset;
     std::pair<TPosition, TVector<TNamedFunction>> Definitions;
@@ -133,7 +116,7 @@ public:
 
 private:
     TNodePtr DoClone() const override {
-        return new TMatchRecognizeNavigate(GetPos(), Name, Args);
+        return new TMatchRecognizeNavigate(GetPos(), Name, CloneContainer(Args));
     }
 
     bool DoInit(TContext& ctx, ISource* src) override;

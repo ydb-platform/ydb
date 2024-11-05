@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/base/events.h>
-#include <ydb/library/yql/dq/actors/dq_events_ids.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -41,6 +40,14 @@ struct TKqpEvents {
         EvParseRequest,
         EvParseResponse,
         EvSplitResponse,
+        EvListSessionsRequest,
+        EvListSessionsResponse,
+        EvListProxyNodesRequest,
+        EvListProxyNodesResponse,
+        EvUpdateDatabaseInfo,
+        EvDelayedRequestError,
+        EvBufferWrite,
+        EvBufferWriteResult,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);
@@ -144,7 +151,7 @@ struct TKqpScriptExecutionEvents {
         EvSaveScriptResultFinished,
         EvCheckAliveRequest,
         EvCheckAliveResponse,
-        EvFetchScriptResultsQueryResponse,
+        EvFetchScriptResultsResponse,
         EvSaveScriptExternalEffectRequest,
         EvSaveScriptExternalEffectResponse,
         EvScriptFinalizeRequest,
@@ -152,6 +159,8 @@ struct TKqpScriptExecutionEvents {
         EvSaveScriptFinalStatusResponse,
         EvGetScriptExecutionOperationQueryResponse,
         EvDescribeSecretsResponse,
+        EvSaveScriptResultPartFinished,
+        EvScriptExecutionsTableCreationFinished,
     };
 };
 
@@ -159,6 +168,30 @@ struct TKqpResourceInfoExchangerEvents {
     enum EKqpResourceInfoExchangerEvents {
         EvPublishResource = EventSpaceBegin(TKikimrEvents::ES_KQP) + 600,
         EvSendResources,
+    };
+};
+
+struct TKqpWorkloadServiceEvents {
+    enum EKqpWorkloadServiceEvents {
+        EvPlaceRequestIntoPool = EventSpaceBegin(TKikimrEvents::ES_KQP) + 700,
+        EvContinueRequest,
+        EvCleanupRequest,
+        EvCleanupResponse,
+        EvUpdatePoolInfo,
+        EvSubscribeOnPoolChanges,
+        EvFetchDatabaseResponse,
+    };
+};
+
+struct TKqpBufferWriterEvents {
+    enum EKqpBufferWriterEvents {
+        EvPrepare = EventSpaceBegin(TKikimrEvents::ES_KQP) + 800,
+        EvCommit,
+        EvRollback,
+        EvFlush,
+        EvResult,
+        EvError,
+        EvTerminate,
     };
 };
 

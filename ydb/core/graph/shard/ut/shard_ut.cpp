@@ -5,7 +5,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <util/stream/output.h>
 #include <ydb/core/graph/shard/backends.h>
-#include <ydb/core/graph/api/service.h>
 
 #ifdef NDEBUG
 #define Ctest Cnull
@@ -298,19 +297,19 @@ Y_UNIT_TEST_SUITE(GraphShard) {
         TVector<ui64> values = {10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0};
         ui64 total = std::accumulate(values.begin(), values.end(), 0);
         UNIT_ASSERT(total == 100);
-        auto p50 = NGraph::GetTimingForPercentile(50, values, bounds, total);
+        auto p50 = NGraph::TBaseBackend::GetTimingForPercentile(.50, values, bounds, total);
         Ctest << "p50=" << p50 << Endl;
         UNIT_ASSERT(!isnan(p50));
         UNIT_ASSERT(abs(p50 - 32) < 0.01); // 32ms
-        auto p75 = NGraph::GetTimingForPercentile(75, values, bounds, total);
+        auto p75 = NGraph::TBaseBackend::GetTimingForPercentile(.75, values, bounds, total);
         Ctest << "p75=" << p75 << Endl;
         UNIT_ASSERT(!isnan(p75));
         UNIT_ASSERT(abs(p75 - 192) < 0.01); // 192ms
-        auto p90 = NGraph::GetTimingForPercentile(90, values, bounds, total);
+        auto p90 = NGraph::TBaseBackend::GetTimingForPercentile(.90, values, bounds, total);
         Ctest << "p90=" << p90 << Endl;
         UNIT_ASSERT(!isnan(p90));
         UNIT_ASSERT(abs(p90 - 512) < 0.01); // 512ms
-        auto p99 = NGraph::GetTimingForPercentile(99, values, bounds, total);
+        auto p99 = NGraph::TBaseBackend::GetTimingForPercentile(.99, values, bounds, total);
         Ctest << "p99=" << p99 << Endl;
         UNIT_ASSERT(!isnan(p99));
         UNIT_ASSERT(abs(p99 - 972.8) < 0.01); // 972.8ms

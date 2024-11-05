@@ -3,7 +3,7 @@
  * pg_depend.c
  *	  routines to support manipulation of the pg_depend relation
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -17,6 +17,7 @@
 #include "access/genam.h"
 #include "access/htup_details.h"
 #include "access/table.h"
+#include "catalog/catalog.h"
 #include "catalog/dependency.h"
 #include "catalog/indexing.h"
 #include "catalog/pg_constraint.h"
@@ -29,7 +30,7 @@
 #include "utils/rel.h"
 
 
-static bool isObjectPinned(const ObjectAddress *object, Relation rel);
+static bool isObjectPinned(const ObjectAddress *object);
 
 
 /*
@@ -69,8 +70,11 @@ recordMultipleDependencies(const ObjectAddress *depender,
 		return;					/* nothing to do */
 
 	/*
-	 * During bootstrap, do nothing since pg_depend may not exist yet. initdb
-	 * will fill in appropriate pg_depend entries after bootstrap.
+	 * During bootstrap, do nothing since pg_depend may not exist yet.
+	 *
+	 * Objects created during bootstrap are most likely pinned, and the few
+	 * that are not do not have dependencies on each other, so that there
+	 * would be no need to make a pg_depend entry anyway.
 	 */
 	if (IsBootstrapProcessingMode())
 		return;
@@ -99,7 +103,7 @@ recordMultipleDependencies(const ObjectAddress *depender,
 		 * need to record dependencies on it.  This saves lots of space in
 		 * pg_depend, so it's worth the time taken to check.
 		 */
-		if (isObjectPinned(referenced, dependDesc))
+		if (isObjectPinned(referenced))
 			continue;
 
 		if (slot_init_count < max_slots)
@@ -166,22 +170,23 @@ recordMultipleDependencies(const ObjectAddress *depender,
 
 /*
  * If we are executing a CREATE EXTENSION operation, mark the given object
- * as being a member of the extension.  Otherwise, do nothing.
+ * as being a member of the extension, or check that it already is one.
+ * Otherwise, do nothing.
  *
  * This must be called during creation of any user-definable object type
  * that could be a member of an extension.
  *
- * If isReplace is true, the object already existed (or might have already
- * existed), so we must check for a pre-existing extension membership entry.
- * Passing false is a guarantee that the object is newly created, and so
- * could not already be a member of any extension.
+ * isReplace must be true if the object already existed, and false if it is
+ * newly created.  In the former case we insist that it already be a member
+ * of the current extension.  In the latter case we can skip checking whether
+ * it is already a member of any extension.
  *
  * Note: isReplace = true is typically used when updating an object in
- * CREATE OR REPLACE and similar commands.  The net effect is that if an
- * extension script uses such a command on a pre-existing free-standing
- * object, the object will be absorbed into the extension.  If the object
- * is already a member of some other extension, the command will fail.
- * This behavior is desirable for cases such as replacing a shell type.
+ * CREATE OR REPLACE and similar commands.  We used to allow the target
+ * object to not already be an extension member, instead silently absorbing
+ * it into the current extension.  However, this was both error-prone
+ * (extensions might accidentally overwrite free-standing objects) and
+ * a security hazard (since the object would retain its previous ownership).
  */
 void
 recordDependencyOnCurrentExtension(const ObjectAddress *object,
@@ -199,6 +204,12 @@ recordDependencyOnCurrentExtension(const ObjectAddress *object,
 		{
 			Oid			oldext;
 
+			/*
+			 * Side note: these catalog lookups are safe only because the
+			 * object is a pre-existing one.  In the not-isReplace case, the
+			 * caller has most likely not yet done a CommandCounterIncrement
+			 * that would make the new object visible.
+			 */
 			oldext = getExtensionOfObject(object->classId, object->objectId);
 			if (OidIsValid(oldext))
 			{
@@ -212,6 +223,13 @@ recordDependencyOnCurrentExtension(const ObjectAddress *object,
 								getObjectDescription(object, false),
 								get_extension_name(oldext))));
 			}
+			/* It's a free-standing object, so reject */
+			ereport(ERROR,
+					(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+					 errmsg("%s is not a member of extension \"%s\"",
+							getObjectDescription(object, false),
+							get_extension_name(CurrentExtensionObject)),
+					 errdetail("An extension is not allowed to replace an object that it does not own.")));
 		}
 
 		/* OK, record it as a member of CurrentExtensionObject */
@@ -220,6 +238,49 @@ recordDependencyOnCurrentExtension(const ObjectAddress *object,
 		extension.objectSubId = 0;
 
 		recordDependencyOn(object, &extension, DEPENDENCY_EXTENSION);
+	}
+}
+
+/*
+ * If we are executing a CREATE EXTENSION operation, check that the given
+ * object is a member of the extension, and throw an error if it isn't.
+ * Otherwise, do nothing.
+ *
+ * This must be called whenever a CREATE IF NOT EXISTS operation (for an
+ * object type that can be an extension member) has found that an object of
+ * the desired name already exists.  It is insecure for an extension to use
+ * IF NOT EXISTS except when the conflicting object is already an extension
+ * member; otherwise a hostile user could substitute an object with arbitrary
+ * properties.
+ */
+void
+checkMembershipInCurrentExtension(const ObjectAddress *object)
+{
+	/*
+	 * This is actually the same condition tested in
+	 * recordDependencyOnCurrentExtension; but we want to issue a
+	 * differently-worded error, and anyway it would be pretty confusing to
+	 * call recordDependencyOnCurrentExtension in these circumstances.
+	 */
+
+	/* Only whole objects can be extension members */
+	Assert(object->objectSubId == 0);
+
+	if (creating_extension)
+	{
+		Oid			oldext;
+
+		oldext = getExtensionOfObject(object->classId, object->objectId);
+		/* If already a member of this extension, OK */
+		if (oldext == CurrentExtensionObject)
+			return;
+		/* Else complain */
+		ereport(ERROR,
+				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
+				 errmsg("%s is not a member of extension \"%s\"",
+						getObjectDescription(object, false),
+						get_extension_name(CurrentExtensionObject)),
+				 errdetail("An extension may only use CREATE ... IF NOT EXISTS to skip object creation if the conflicting object is one that it already owns.")));
 	}
 }
 
@@ -406,8 +467,6 @@ changeDependencyFor(Oid classId, Oid objectId,
 	bool		oldIsPinned;
 	bool		newIsPinned;
 
-	depRel = table_open(DependRelationId, RowExclusiveLock);
-
 	/*
 	 * Check to see if either oldRefObjectId or newRefObjectId is pinned.
 	 * Pinned objects should not have any dependency entries pointing to them,
@@ -418,16 +477,14 @@ changeDependencyFor(Oid classId, Oid objectId,
 	objAddr.objectId = oldRefObjectId;
 	objAddr.objectSubId = 0;
 
-	oldIsPinned = isObjectPinned(&objAddr, depRel);
+	oldIsPinned = isObjectPinned(&objAddr);
 
 	objAddr.objectId = newRefObjectId;
 
-	newIsPinned = isObjectPinned(&objAddr, depRel);
+	newIsPinned = isObjectPinned(&objAddr);
 
 	if (oldIsPinned)
 	{
-		table_close(depRel, RowExclusiveLock);
-
 		/*
 		 * If both are pinned, we need do nothing.  However, return 1 not 0,
 		 * else callers will think this is an error case.
@@ -446,6 +503,8 @@ changeDependencyFor(Oid classId, Oid objectId,
 
 		return 1;
 	}
+
+	depRel = table_open(DependRelationId, RowExclusiveLock);
 
 	/* There should be existing dependency record(s), so search. */
 	ScanKeyInit(&key[0],
@@ -581,7 +640,7 @@ changeDependenciesOn(Oid refClassId, Oid oldRefObjectId,
 	objAddr.objectId = oldRefObjectId;
 	objAddr.objectSubId = 0;
 
-	if (isObjectPinned(&objAddr, depRel))
+	if (isObjectPinned(&objAddr))
 		ereport(ERROR,
 				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 				 errmsg("cannot remove dependency on %s because it is a system object",
@@ -593,7 +652,7 @@ changeDependenciesOn(Oid refClassId, Oid oldRefObjectId,
 	 */
 	objAddr.objectId = newRefObjectId;
 
-	newIsPinned = isObjectPinned(&objAddr, depRel);
+	newIsPinned = isObjectPinned(&objAddr);
 
 	/* Now search for dependency records */
 	ScanKeyInit(&key[0],
@@ -641,50 +700,14 @@ changeDependenciesOn(Oid refClassId, Oid oldRefObjectId,
  * isObjectPinned()
  *
  * Test if an object is required for basic database functionality.
- * Caller must already have opened pg_depend.
  *
  * The passed subId, if any, is ignored; we assume that only whole objects
  * are pinned (and that this implies pinning their components).
  */
 static bool
-isObjectPinned(const ObjectAddress *object, Relation rel)
+isObjectPinned(const ObjectAddress *object)
 {
-	bool		ret = false;
-	SysScanDesc scan;
-	HeapTuple	tup;
-	ScanKeyData key[2];
-
-	ScanKeyInit(&key[0],
-				Anum_pg_depend_refclassid,
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(object->classId));
-
-	ScanKeyInit(&key[1],
-				Anum_pg_depend_refobjid,
-				BTEqualStrategyNumber, F_OIDEQ,
-				ObjectIdGetDatum(object->objectId));
-
-	scan = systable_beginscan(rel, DependReferenceIndexId, true,
-							  NULL, 2, key);
-
-	/*
-	 * Since we won't generate additional pg_depend entries for pinned
-	 * objects, there can be at most one entry referencing a pinned object.
-	 * Hence, it's sufficient to look at the first returned tuple; we don't
-	 * need to loop.
-	 */
-	tup = systable_getnext(scan);
-	if (HeapTupleIsValid(tup))
-	{
-		Form_pg_depend foundDep = (Form_pg_depend) GETSTRUCT(tup);
-
-		if (foundDep->deptype == DEPENDENCY_PIN)
-			ret = true;
-	}
-
-	systable_endscan(scan);
-
-	return ret;
+	return IsPinnedObject(object->classId, object->objectId);
 }
 
 
@@ -924,7 +947,7 @@ getIdentitySequence(Oid relid, AttrNumber attnum, bool missing_ok)
 
 	if (list_length(seqlist) > 1)
 		elog(ERROR, "more than one owned sequence found");
-	else if (list_length(seqlist) < 1)
+	else if (seqlist == NIL)
 	{
 		if (missing_ok)
 			return InvalidOid;

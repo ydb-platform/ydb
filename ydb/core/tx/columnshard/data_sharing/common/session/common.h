@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/data_sharing/common/context/context.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -12,6 +13,7 @@ class TColumnShard;
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
+class TPortionDataAccessor;
 namespace NDataLocks {
 class TManager;
 }
@@ -20,6 +22,14 @@ class TManager;
 namespace NKikimr::NOlap::NDataSharing {
 
 class TCommonSession {
+public:
+    enum class EState {
+        Created,
+        Prepared,
+        InProgress,
+        Finished
+    };
+
 private:
     static ui64 GetNextRuntimeId() {
         static TAtomicCounter Counter = 0;
@@ -29,12 +39,11 @@ private:
     YDB_READONLY_DEF(TString, SessionId);
     const TString Info;
     YDB_READONLY(ui64, RuntimeId, GetNextRuntimeId());
-    bool IsStartedFlag = false;
-    bool IsStartingFlag = false;
-    bool IsFinishedFlag = false;
+    std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
+    EState State = EState::Created;
 protected:
     TTransferContext TransferContext;
-    virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<std::shared_ptr<TPortionInfo>>>& portions) = 0;
+    virtual bool DoStart(const NColumnShard::TColumnShard& shard, const THashMap<ui64, std::vector<TPortionDataAccessor>>& portions) = 0;
     virtual THashSet<ui64> GetPathIdsForStart() const = 0;
 public:
     virtual ~TCommonSession() = default;
@@ -49,29 +58,39 @@ public:
         : SessionId(sessionId)
         , Info(info)
         , TransferContext(transferContext) {
+        AFL_VERIFY(!!SessionId);
+    }
+
+    const TTransferContext& GetTransferContext() const {
+        return TransferContext;
+    }
+
+    bool IsReadyForStarting() const {
+        return State == EState::Created;
+    }
+
+    bool IsPrepared() const {
+        return State == EState::Prepared;
     }
 
     bool IsFinished() const {
-        return IsFinishedFlag;
+        return State == EState::Finished;
     }
 
-    bool IsStarted() const {
-        return IsStartedFlag;
-    }
-
-    bool IsStarting() const {
-        return IsStartingFlag;
+    bool IsInProgress() const {
+        return State == EState::InProgress;
     }
 
     bool IsEqualTo(const TCommonSession& item) const {
         return SessionId == item.SessionId && TransferContext.IsEqualTo(item.TransferContext);
     }
 
-    bool Start(const NColumnShard::TColumnShard& shard);
-    void Finish(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
+    void PrepareToStart(const NColumnShard::TColumnShard& shard);
+    bool TryStart(const NColumnShard::TColumnShard& shard);
+    void Finish(const NColumnShard::TColumnShard& shard, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
 
     const TSnapshot& GetSnapshotBarrier() const {
-        return TransferContext.GetSnapshotBarrier();
+        return TransferContext.GetSnapshotBarrierVerified();
     }
 
     TString DebugString() const;

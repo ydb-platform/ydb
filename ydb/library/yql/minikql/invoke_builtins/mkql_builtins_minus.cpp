@@ -25,7 +25,7 @@ struct TMinus : public TSimpleArithmeticUnary<TInput, TOutput, TMinus<TInput, TO
 #endif
 };
 
-struct TDecimalMinus {
+struct TDecimalMinus: TDecimalUnary<TDecimalMinus> {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         const auto v = arg.GetInt128();
         return NYql::NDecimal::IsComparable(v) ? NUdf::TUnboxedValuePod(-v) : arg;
@@ -48,10 +48,13 @@ void RegisterMinus(IBuiltinFunctionRegistry& registry) {
     RegisterUnaryNumericFunctionOpt<TMinus, TUnaryArgsOpt>(registry, "Minus");
     NDecimal::RegisterUnaryFunction<TDecimalMinus, TUnaryArgsOpt>(registry, "Minus");
     RegisterFunctionUnOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>, TMinus, TUnaryArgsOpt>(registry, "Minus");
+    RegisterFunctionUnOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>, TMinus, TUnaryArgsOpt>(registry, "Minus");
 }
 
 void RegisterMinus(TKernelFamilyMap& kernelFamilyMap) {
-    kernelFamilyMap["Minus"] = std::make_unique<TUnaryNumericKernelFamily<TMinus>>();
+    auto family = std::make_unique<TUnaryNumericKernelFamily<TMinus>>();
+    AddUnaryDecimalKernels<TDecimalMinus>(*family);
+    kernelFamilyMap["Minus"] = std::move(family);
 }
 
 } // namespace NMiniKQL

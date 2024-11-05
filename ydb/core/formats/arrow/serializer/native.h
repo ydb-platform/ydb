@@ -23,6 +23,26 @@ private:
     TConclusion<std::shared_ptr<arrow::util::Codec>> BuildCodec(const arrow::Compression::type& cType, const std::optional<ui32> level) const;
     static const inline TFactory::TRegistrator<TNativeSerializer> Registrator = TFactory::TRegistrator<TNativeSerializer>(GetClassNameStatic());
 protected:
+    virtual bool IsCompatibleForExchangeWithSameClass(const ISerializer& /*item*/) const override {
+        return true;
+    }
+
+    virtual bool IsEqualToSameClass(const ISerializer& item) const override {
+        auto& itemOptions = static_cast<const TNativeSerializer&>(item).Options;
+        if (!!itemOptions.codec != !!Options.codec) {
+            return false;
+        }
+        if (!itemOptions.codec) {
+            return true;
+        }
+        if (itemOptions.codec->name() != Options.codec->name()) {
+            return false;
+        }
+        if (itemOptions.codec->compression_level() != Options.codec->compression_level()) {
+            return false;
+        }
+        return true;
+    }
     virtual TString DoSerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
     virtual TString DoSerializePayload(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
     virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(const TString& data) const override;
@@ -42,6 +62,18 @@ protected:
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerializer& proto) const override;
 
 public:
+    static std::shared_ptr<ISerializer> GetUncompressed() {
+        static std::shared_ptr<ISerializer> result =
+            std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::UNCOMPRESSED);
+        return result;
+    }
+
+    static std::shared_ptr<ISerializer> GetFast() {
+        static std::shared_ptr<ISerializer> result =
+            std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::LZ4_FRAME);
+        return result;
+    }
+
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
@@ -65,7 +97,11 @@ public:
     TNativeSerializer(const arrow::ipc::IpcWriteOptions& options = GetDefaultOptions())
         : Options(options) {
         Options.use_threads = false;
+    }
 
+    TNativeSerializer(arrow::MemoryPool* pool) {
+        Options.use_threads = false;
+        Options.memory_pool = pool;
     }
 };
 

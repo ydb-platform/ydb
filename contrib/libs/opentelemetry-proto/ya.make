@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.1.0)
+VERSION(1.3.2)
 
-ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-proto/archive/v1.1.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-proto/archive/v1.3.2.tar.gz)
 
 PY_NAMESPACE(.)
 
@@ -22,10 +22,13 @@ GRPC()
 SRCS(
     opentelemetry/proto/collector/logs/v1/logs_service.proto
     opentelemetry/proto/collector/metrics/v1/metrics_service.proto
+    opentelemetry/proto/collector/profiles/v1experimental/profiles_service.proto
     opentelemetry/proto/collector/trace/v1/trace_service.proto
     opentelemetry/proto/common/v1/common.proto
     opentelemetry/proto/logs/v1/logs.proto
     opentelemetry/proto/metrics/v1/metrics.proto
+    opentelemetry/proto/profiles/v1experimental/pprofextended.proto
+    opentelemetry/proto/profiles/v1experimental/profiles.proto
     opentelemetry/proto/resource/v1/resource.proto
     opentelemetry/proto/trace/v1/trace.proto
 )

@@ -1,0 +1,224 @@
+Index: yajl_parse.h
+===================================================================
+--- yajl_parse.h	(revision 767861)
++++ yajl_parse.h	(revision 767862)
+@@ -75,6 +75,7 @@
+         int (* yajl_null)(void * ctx);
+         int (* yajl_boolean)(void * ctx, int boolVal);
+         int (* yajl_integer)(void * ctx, long long integerVal);
++        int (* yajl_uinteger)(void * ctx, unsigned long long uintegerVal);
+         int (* yajl_double)(void * ctx, double doubleVal);
+         /** A callback which passes the string representation of the number
+          *  back to the client.  Will be used for all numbers when present */
+Index: yajl_parser.c
+===================================================================
+--- yajl_parser.c	(revision 767861)
++++ yajl_parser.c	(revision 767862)
+@@ -30,6 +30,7 @@
+ #include <math.h>
+ 
+ #define MAX_VALUE_TO_MULTIPLY ((LLONG_MAX / 10) + (LLONG_MAX % 10))
++#define MAX_UVALUE_TO_MULTIPLY ((ULLONG_MAX / 10) + (ULLONG_MAX % 10))
+ 
+  /* same semantics as strtol */
+ long long
+@@ -57,6 +58,35 @@
+     return sign * ret;
+ }
+ 
++unsigned long long
++yajl_parse_uinteger(const unsigned char *number, unsigned int length)
++{
++    unsigned long long ret  = 0;
++    const unsigned char *pos = number;
++    if (*pos == '-') {
++        errno = ERANGE;
++        return 0;
++    }
++
++    if (*pos == '+') { pos++; }
++
++    while (pos < number + length) {
++        if ( ret > MAX_UVALUE_TO_MULTIPLY ) {
++            errno = ERANGE;
++            return ULLONG_MAX;
++        }
++        ret *= 10ull;
++        if (ULLONG_MAX - ret < (unsigned long long)(*pos - '0')) {
++            errno = ERANGE;
++            return ULLONG_MAX;
++        }
++        ret += (unsigned long long)(*pos++ - '0');
++    }
++
++    return ret;
++}
++
++
+ unsigned char *
+ yajl_render_error_string(yajl_handle hand, const unsigned char * jsonText,
+                          size_t jsonTextLen, int verbose)
+@@ -283,6 +313,37 @@
+                             if ((i == LLONG_MIN || i == LLONG_MAX) &&
+                                 errno == ERANGE)
+                             {
++                                unsigned long long ui = 0;
++                                int parsing_failed = 1;
++                                if (hand->callbacks->yajl_uinteger) {
++                                    errno = 0;
++                                    ui = yajl_parse_uinteger(buf, bufLen);
++                                    if ((ui == 0 || ui == ULLONG_MAX) && errno == ERANGE)
++                                        parsing_failed = 1;
++                                    else
++                                        parsing_failed = 0;
++                                }
++
++                                if (parsing_failed) {
++                                    yajl_bs_set(hand->stateStack,
++                                                yajl_state_parse_error);
++                                    hand->parseError = "integer overflow" ;
++                                    /* try to restore error offset */
++                                    if (*offset >= bufLen) *offset -= bufLen;
++                                    else *offset = 0;
++                                    goto around_again;
++                                } else {
++                                    _CC_CHK(hand->callbacks->yajl_uinteger(hand->ctx,
++                                                                           ui));
++                                }
++                            } else {
++                                _CC_CHK(hand->callbacks->yajl_integer(hand->ctx,
++                                                                      i));
++                            }
++                        } else if (hand->callbacks->yajl_uinteger) {
++                            unsigned long long ui = 0;
++                            ui = yajl_parse_uinteger(buf, bufLen);
++                            if ((ui == 0 || ui == ULLONG_MAX) && errno == ERANGE) {
+                                 yajl_bs_set(hand->stateStack,
+                                             yajl_state_parse_error);
+                                 hand->parseError = "integer overflow" ;
+@@ -291,8 +352,8 @@
+                                 else *offset = 0;
+                                 goto around_again;
+                             }
+-                            _CC_CHK(hand->callbacks->yajl_integer(hand->ctx,
+-                                                                  i));
++                            _CC_CHK(hand->callbacks->yajl_uinteger(hand->ctx,
++                                                                   ui));
+                         }
+                     }
+                     break;
+Index: yajl_tree.c
+===================================================================
+--- yajl_tree.c	(revision 767861)
++++ yajl_tree.c	(revision 767862)
+@@ -318,6 +318,14 @@
+ 
+     endptr = NULL;
+     errno = 0;
++    v->u.number.ui = yajl_parse_uinteger((const unsigned char *) v->u.number.r,
++                                         strlen(v->u.number.r));
++
++    if ((errno == 0) && (endptr != NULL) && (*endptr == 0))
++        v->u.number.flags |= YAJL_NUMBER_UINT_VALID;
++
++    endptr = NULL;
++    errno = 0;
+     v->u.number.d = strtod(v->u.number.r, &endptr);
+     if ((errno == 0) && (endptr != NULL) && (*endptr == 0))
+         v->u.number.flags |= YAJL_NUMBER_DOUBLE_VALID;
+@@ -409,6 +417,7 @@
+             /* null        = */ handle_null,
+             /* boolean     = */ handle_boolean,
+             /* integer     = */ NULL,
++            /* unsigned integer = */ NULL,
+             /* double      = */ NULL,
+             /* number      = */ handle_number,
+             /* string      = */ handle_string,
+Index: yajl_parser.h
+===================================================================
+--- yajl_parser.h	(revision 767861)
++++ yajl_parser.h	(revision 767862)
+@@ -74,5 +74,8 @@
+ long long
+ yajl_parse_integer(const unsigned char *number, unsigned int length);
+ 
++unsigned long long
++yajl_parse_uinteger(const unsigned char *number, unsigned int length);
+ 
++
+ #endif
+Index: yajl_tree.h
+===================================================================
+--- yajl_tree.h	(revision 767861)
++++ yajl_tree.h	(revision 767862)
+@@ -50,6 +50,7 @@
+ 
+ #define YAJL_NUMBER_INT_VALID    0x01
+ #define YAJL_NUMBER_DOUBLE_VALID 0x02
++#define YAJL_NUMBER_UINT_VALID   0x04
+ 
+ /** A pointer to a node in the parse tree */
+ typedef struct yajl_val_s * yajl_val;
+@@ -73,6 +74,7 @@
+         char * string;
+         struct {
+             long long i; /*< integer value, if representable. */
++            unsigned long long ui; /*< unsigned integer value, if representable.  */
+             double  d;   /*< double value, if representable. */
+             /** Signals whether the \em i and \em d members are
+              * valid. See \c YAJL_NUMBER_INT_VALID and
+@@ -145,6 +147,7 @@
+ #define YAJL_IS_STRING(v) (((v) != NULL) && ((v)->type == yajl_t_string))
+ #define YAJL_IS_NUMBER(v) (((v) != NULL) && ((v)->type == yajl_t_number))
+ #define YAJL_IS_INTEGER(v) (YAJL_IS_NUMBER(v) && ((v)->u.flags & YAJL_NUMBER_INT_VALID))
++#define YAJL_IS_UINTEGER(v) (YAJL_IS_NUMBER(v) && ((v)->u.flags & YAJL_NUMBER_UINT_VALID))
+ #define YAJL_IS_DOUBLE(v) (YAJL_IS_NUMBER(v) && ((v)->u.flags & YAJL_NUMBER_DOUBLE_VALID))
+ #define YAJL_IS_OBJECT(v) (((v) != NULL) && ((v)->type == yajl_t_object))
+ #define YAJL_IS_ARRAY(v)  (((v) != NULL) && ((v)->type == yajl_t_array ))
+@@ -168,6 +171,10 @@
+  *  check type first, perhaps using YAJL_IS_INTEGER */
+ #define YAJL_GET_INTEGER(v) ((v)->u.number.i)
+ 
++/** Get the 64bit (unsigned long long) unsigned integer representation of a number.  You should
++ *  check type first, perhaps using YAJL_IS_UINTEGER */
++#define YAJL_GET_UINTEGER(v) ((v)->u.number.ui)
++
+ /** Get a pointer to a yajl_val_object or NULL if the value is not an object. */
+ #define YAJL_GET_OBJECT(v) (YAJL_IS_OBJECT(v) ? &(v)->u.object : NULL)
+ 
+Index: yajl_gen.c
+===================================================================
+--- yajl_gen.c	(revision 767861)
++++ yajl_gen.c	(revision 767862)
+@@ -208,6 +208,19 @@
+     return yajl_gen_status_ok;
+ }
+ 
++yajl_gen_status
++yajl_gen_uinteger(yajl_gen g, unsigned long long number)
++{
++    char i[32];
++    ENSURE_VALID_STATE; ENSURE_NOT_KEY; INSERT_SEP; INSERT_WHITESPACE;
++    sprintf(i, "%llu", number);
++    g->print(g->ctx, i, (unsigned int)strlen(i));
++    APPENDED_ATOM;
++    FINAL_NEWLINE;
++    return yajl_gen_status_ok;
++}
++
++
+ #ifdef WIN32
+ #include <float.h>
+ #define isnan _isnan
+Index: yajl_gen.h
+===================================================================
+--- yajl_gen.h	(revision 767861)
++++ yajl_gen.h	(revision 767862)
+@@ -121,6 +121,7 @@
+     YAJL_API void yajl_gen_free(yajl_gen handle);
+ 
+     YAJL_API yajl_gen_status yajl_gen_integer(yajl_gen hand, long long int number);
++    YAJL_API yajl_gen_status yajl_gen_uinteger(yajl_gen hand, unsigned long long number);
+     /** generate a floating point number.  number may not be infinity or
+      *  NaN, as these have no representation in JSON.  In these cases the
+      *  generator will return 'yajl_gen_invalid_number' */

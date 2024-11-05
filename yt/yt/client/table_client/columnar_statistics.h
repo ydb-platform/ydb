@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/core/misc/hyperloglog.h>
+
 namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -19,13 +21,32 @@ struct TLightweightColumnarStatistics
 struct TNamedColumnarStatistics
 {
     //! Per-column total data weight for chunks whose meta contains columnar statistics.
-    THashMap<TString, i64> ColumnDataWeights;
+    THashMap<std::string, i64> ColumnDataWeights;
     //! Total weight of all write and delete timestamps.
     std::optional<i64> TimestampTotalWeight;
     //! Total data weight of legacy chunks whose meta misses columnar statistics.
     i64 LegacyChunkDataWeight = 0;
 
     TNamedColumnarStatistics& operator +=(const TNamedColumnarStatistics& other);
+};
+
+typedef THyperLogLog<
+    // Precision = 4, or 16 registers
+    4
+> TColumnarHyperLogLogDigest;
+
+//! This struct includes large per-column statistics too big to fit together with basic stats
+struct TLargeColumnarStatistics
+{
+    //! Per-column HyperLogLog digest to approximate number of unique values in the column.
+    std::vector<TColumnarHyperLogLogDigest> ColumnHyperLogLogDigests;
+
+    bool Empty() const;
+    void Clear();
+    void Resize(int columnCount);
+
+    bool operator==(const TLargeColumnarStatistics& other) const = default;
+    TLargeColumnarStatistics& operator+=(const TLargeColumnarStatistics& other);
 };
 
 //! TColumnarStatistics stores per-column statistics of data stored in a chunk/table.
@@ -65,24 +86,32 @@ struct TColumnarStatistics
     //! Can be missing only if the cluster version is 23.1 or older.
     std::optional<i64> LegacyChunkRowCount = 0;
 
+    //! Large per-column statistics, including columnar HLL.
+    TLargeColumnarStatistics LargeStatistics;
+
     TColumnarStatistics& operator+=(const TColumnarStatistics& other);
     bool operator==(const TColumnarStatistics& other) const = default;
 
-    static TColumnarStatistics MakeEmpty(int columnCount, bool hasValueStatistics = true);
+    static TColumnarStatistics MakeEmpty(int columnCount, bool hasValueStatistics = true, bool hasLargeStatistics = true);
     static TColumnarStatistics MakeLegacy(int columnCount, i64 legacyChunkDataWeight, i64 legacyChunkRowCount);
 
     TLightweightColumnarStatistics MakeLightweightStatistics() const;
 
-    TNamedColumnarStatistics MakeNamedStatistics(const std::vector<TString>& names) const;
+    TNamedColumnarStatistics MakeNamedStatistics(const std::vector<std::string>& names) const;
 
     //! Checks if there are minimum, maximum, and non-null value statistics.
     bool HasValueStatistics() const;
+    bool HasLargeStatistics() const;
+
     //! Clears minimum, maximum, and non-null value statistics.
     void ClearValueStatistics();
 
     int GetColumnCount() const;
 
-    void Resize(int columnCount, bool keepValueStatistics = true);
+    //! Changes column count.
+    //! Existing value statistics are kept or erased depending on now keepValueStatistics/keepHyperLogLogDigests flags are set.
+    //! keepHyperLogLogDigests only has effect when keepValueStatistics set to true.
+    void Resize(int columnCount, bool keepValueStatistics = true, bool keepLargeStatistics = true);
 
     void Update(TRange<TUnversionedRow> rows);
     void Update(TRange<TVersionedRow> rows);

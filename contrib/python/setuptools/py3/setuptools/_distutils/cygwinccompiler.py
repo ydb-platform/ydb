@@ -6,25 +6,25 @@ the Mingw32CCompiler class which handles the mingw32 port of GCC (same as
 cygwin in no-cygwin mode).
 """
 
-import os
-import re
-import sys
 import copy
+import os
+import pathlib
+import re
 import shlex
+import sys
 import warnings
 from subprocess import check_output
 
-from .unixccompiler import UnixCCompiler
-from .file_util import write_file
+from ._collections import RangeMap
 from .errors import (
-    DistutilsExecError,
-    DistutilsPlatformError,
     CCompilerError,
     CompileError,
+    DistutilsExecError,
+    DistutilsPlatformError,
 )
+from .file_util import write_file
+from .unixccompiler import UnixCCompiler
 from .version import LooseVersion, suppress_known_deprecation
-from ._collections import RangeMap
-
 
 _msvcr_lookup = RangeMap.left(
     {
@@ -57,11 +57,11 @@ def get_msvcr():
     try:
         msc_ver = int(match.group(1))
     except AttributeError:
-        return
+        return []
     try:
         return _msvcr_lookup[msc_ver]
     except KeyError:
-        raise ValueError("Unknown MS Compiler version %s " % msc_ver)
+        raise ValueError(f"Unknown MS Compiler version {msc_ver} ")
 
 
 _runtime_library_dirs_msg = (
@@ -83,18 +83,16 @@ class CygwinCCompiler(UnixCCompiler):
     dylib_lib_format = "cyg%s%s"
     exe_extension = ".exe"
 
-    def __init__(self, verbose=0, dry_run=0, force=0):
+    def __init__(self, verbose=False, dry_run=False, force=False):
         super().__init__(verbose, dry_run, force)
 
         status, details = check_config_h()
-        self.debug_print(
-            "Python's GCC status: {} (details: {})".format(status, details)
-        )
+        self.debug_print(f"Python's GCC status: {status} (details: {details})")
         if status is not CONFIG_H_OK:
             self.warn(
                 "Python's pyconfig.h doesn't seem to support your compiler. "
-                "Reason: %s. "
-                "Compiling may fail because of undefined preprocessor macros." % details
+                f"Reason: {details}. "
+                "Compiling may fail because of undefined preprocessor macros."
             )
 
         self.cc = os.environ.get('CC', 'gcc')
@@ -104,11 +102,11 @@ class CygwinCCompiler(UnixCCompiler):
         shared_option = "-shared"
 
         self.set_executables(
-            compiler='%s -mcygwin -O -Wall' % self.cc,
-            compiler_so='%s -mcygwin -mdll -O -Wall' % self.cc,
-            compiler_cxx='%s -mcygwin -O -Wall' % self.cxx,
-            linker_exe='%s -mcygwin' % self.cc,
-            linker_so=('{} -mcygwin {}'.format(self.linker_dll, shared_option)),
+            compiler=f'{self.cc} -mcygwin -O -Wall',
+            compiler_so=f'{self.cc} -mcygwin -mdll -O -Wall',
+            compiler_cxx=f'{self.cxx} -mcygwin -O -Wall',
+            linker_exe=f'{self.cc} -mcygwin',
+            linker_so=(f'{self.linker_dll} -mcygwin {shared_option}'),
         )
 
         # Include the appropriate MSVC runtime library if Python was built
@@ -156,7 +154,7 @@ class CygwinCCompiler(UnixCCompiler):
         library_dirs=None,
         runtime_library_dirs=None,
         export_symbols=None,
-        debug=0,
+        debug=False,
         extra_preargs=None,
         extra_postargs=None,
         build_temp=None,
@@ -197,10 +195,10 @@ class CygwinCCompiler(UnixCCompiler):
             def_file = os.path.join(temp_dir, dll_name + ".def")
 
             # Generate .def file
-            contents = ["LIBRARY %s" % os.path.basename(output_filename), "EXPORTS"]
+            contents = [f"LIBRARY {os.path.basename(output_filename)}", "EXPORTS"]
             for sym in export_symbols:
                 contents.append(sym)
-            self.execute(write_file, (def_file, contents), "writing %s" % def_file)
+            self.execute(write_file, (def_file, contents), f"writing {def_file}")
 
             # next add options for def-file
 
@@ -267,7 +265,7 @@ class Mingw32CCompiler(CygwinCCompiler):
 
     compiler_type = 'mingw32'
 
-    def __init__(self, verbose=0, dry_run=0, force=0):
+    def __init__(self, verbose=False, dry_run=False, force=False):
         super().__init__(verbose, dry_run, force)
 
         shared_option = "-shared"
@@ -276,11 +274,11 @@ class Mingw32CCompiler(CygwinCCompiler):
             raise CCompilerError('Cygwin gcc cannot be used with --compiler=mingw32')
 
         self.set_executables(
-            compiler='%s -O -Wall' % self.cc,
-            compiler_so='%s -mdll -O -Wall' % self.cc,
-            compiler_cxx='%s -O -Wall' % self.cxx,
-            linker_exe='%s' % self.cc,
-            linker_so='{} {}'.format(self.linker_dll, shared_option),
+            compiler=f'{self.cc} -O -Wall',
+            compiler_so=f'{self.cc} -shared -O -Wall',
+            compiler_cxx=f'{self.cxx} -O -Wall',
+            linker_exe=f'{self.cc}',
+            linker_so=f'{self.linker_dll} {shared_option}',
         )
 
     def runtime_library_dir_option(self, dir):
@@ -331,20 +329,21 @@ def check_config_h():
     # let's see if __GNUC__ is mentioned in python.h
     fn = sysconfig.get_config_h_filename()
     try:
-        config_h = open(fn)
-        try:
-            if "__GNUC__" in config_h.read():
-                return CONFIG_H_OK, "'%s' mentions '__GNUC__'" % fn
-            else:
-                return CONFIG_H_NOTOK, "'%s' does not mention '__GNUC__'" % fn
-        finally:
-            config_h.close()
+        config_h = pathlib.Path(fn).read_text(encoding='utf-8')
+        substring = '__GNUC__'
+        if substring in config_h:
+            code = CONFIG_H_OK
+            mention_inflected = 'mentions'
+        else:
+            code = CONFIG_H_NOTOK
+            mention_inflected = 'does not mention'
+        return code, f"{fn!r} {mention_inflected} {substring!r}"
     except OSError as exc:
-        return (CONFIG_H_UNCERTAIN, "couldn't read '{}': {}".format(fn, exc.strerror))
+        return (CONFIG_H_UNCERTAIN, f"couldn't read '{fn}': {exc.strerror}")
 
 
 def is_cygwincc(cc):
-    '''Try to determine if the compiler that would be used is from cygwin.'''
+    """Try to determine if the compiler that would be used is from cygwin."""
     out_string = check_output(shlex.split(cc) + ['-dumpmachine'])
     return out_string.strip().endswith(b'cygwin')
 

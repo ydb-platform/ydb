@@ -3,7 +3,7 @@
  * pg_ts_parser_d.h
  *    Macro definitions for pg_ts_parser
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,8 @@
 #define PG_TS_PARSER_D_H
 
 #define TSParserRelationId 3601
+#define TSParserNameNspIndexId 3606
+#define TSParserOidIndexId 3607
 
 #define Anum_pg_ts_parser_oid 1
 #define Anum_pg_ts_parser_prsname 2

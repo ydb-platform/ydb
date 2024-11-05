@@ -1,6 +1,29 @@
 #line 2 "bootscanner.c"
+/*-------------------------------------------------------------------------
+ *
+ * bootscanner.l
+ *	  a lexical scanner for the bootstrap parser
+ *
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1994, Regents of the University of California
+ *
+ *
+ * IDENTIFICATION
+ *	  src/backend/bootstrap/bootscanner.l
+ *
+ *-------------------------------------------------------------------------
+ */
+#include "postgres.h"
 
-#line 4 "bootscanner.c"
+/*
+ * NB: include bootparse.h only AFTER including bootstrap.h, because bootstrap.h
+ * includes node definitions needed for YYSTYPE.
+ */
+#include "bootstrap/bootstrap.h"
+#include "bootparse.h"
+#include "utils/guc.h"
+
+#line 27 "bootscanner.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -785,28 +808,8 @@ __thread int yy_flex_debug = 0;
 #define YY_RESTORE_YY_MORE_OFFSET
 __thread char *yytext;
 #line 1 "bootscanner.l"
-#line 2 "bootscanner.l"
-/*-------------------------------------------------------------------------
- *
- * bootscanner.l
- *	  a lexical scanner for the bootstrap parser
- *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
- * Portions Copyright (c) 1994, Regents of the University of California
- *
- *
- * IDENTIFICATION
- *	  src/backend/bootstrap/bootscanner.l
- *
- *-------------------------------------------------------------------------
- */
-#include "postgres.h"
 
-#include "bootstrap/bootstrap.h"
-#include "utils/guc.h"
-
-/* Not needed now that this file is compiled as part of bootparse. */
-/* #include "bootparse.h" */
+#line 29 "bootscanner.l"
 
 /* LCOV_EXCL_START */
 
@@ -823,10 +826,10 @@ fprintf_to_ereport(const char *fmt, const char *msg)
 
 static __thread int	yyline = 1;			/* line number for error reporting */
 
-#line 827 "bootscanner.c"
+#line 830 "bootscanner.c"
 #define YY_NO_INPUT 1
 /*
- * Keyword tokens return the keyword text (as a constant string) in yylval.kw,
+ * Keyword tokens return the keyword text (as a constant string) in boot_yylval.kw,
  * just in case that's needed because we want to treat the keyword as an
  * unreserved identifier.  Note that _null_ is not treated as a keyword
  * for this purpose; it's the one "reserved word" in the bootstrap syntax.
@@ -834,9 +837,9 @@ static __thread int	yyline = 1;			/* line number for error reporting */
  * Notice that all the keywords are case-sensitive, and for historical
  * reasons some must be upper case.
  *
- * String tokens return a palloc'd string in yylval.str.
+ * String tokens return a palloc'd string in boot_yylval.str.
  */
-#line 840 "bootscanner.c"
+#line 843 "bootscanner.c"
 
 #define INITIAL 0
 
@@ -1054,10 +1057,10 @@ YY_DECL
 		}
 
 	{
-#line 66 "bootscanner.l"
+#line 72 "bootscanner.l"
 
 
-#line 1061 "bootscanner.c"
+#line 1064 "bootscanner.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1113,171 +1116,171 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 68 "bootscanner.l"
-{ yylval.kw = "open"; return OPEN; }
+#line 74 "bootscanner.l"
+{ boot_yylval.kw = "open"; return OPEN; }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 70 "bootscanner.l"
-{ yylval.kw = "close"; return XCLOSE; }
+#line 76 "bootscanner.l"
+{ boot_yylval.kw = "close"; return XCLOSE; }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 72 "bootscanner.l"
-{ yylval.kw = "create"; return XCREATE; }
+#line 78 "bootscanner.l"
+{ boot_yylval.kw = "create"; return XCREATE; }
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 74 "bootscanner.l"
-{ yylval.kw = "OID"; return OBJ_ID; }
+#line 80 "bootscanner.l"
+{ boot_yylval.kw = "OID"; return OBJ_ID; }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 75 "bootscanner.l"
-{ yylval.kw = "bootstrap"; return XBOOTSTRAP; }
+#line 81 "bootscanner.l"
+{ boot_yylval.kw = "bootstrap"; return XBOOTSTRAP; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 76 "bootscanner.l"
-{ yylval.kw = "shared_relation"; return XSHARED_RELATION; }
+#line 82 "bootscanner.l"
+{ boot_yylval.kw = "shared_relation"; return XSHARED_RELATION; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 77 "bootscanner.l"
-{ yylval.kw = "rowtype_oid"; return XROWTYPE_OID; }
+#line 83 "bootscanner.l"
+{ boot_yylval.kw = "rowtype_oid"; return XROWTYPE_OID; }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 79 "bootscanner.l"
-{ yylval.kw = "insert"; return INSERT_TUPLE; }
+#line 85 "bootscanner.l"
+{ boot_yylval.kw = "insert"; return INSERT_TUPLE; }
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 81 "bootscanner.l"
+#line 87 "bootscanner.l"
 { return NULLVAL; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 83 "bootscanner.l"
+#line 89 "bootscanner.l"
 { return COMMA; }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 84 "bootscanner.l"
+#line 90 "bootscanner.l"
 { return EQUALS; }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 85 "bootscanner.l"
+#line 91 "bootscanner.l"
 { return LPAREN; }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 86 "bootscanner.l"
+#line 92 "bootscanner.l"
 { return RPAREN; }
 	YY_BREAK
 case 14:
 /* rule 14 can match eol */
 YY_RULE_SETUP
-#line 88 "bootscanner.l"
+#line 94 "bootscanner.l"
 { yyline++; }
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 89 "bootscanner.l"
+#line 95 "bootscanner.l"
 ;
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 91 "bootscanner.l"
+#line 97 "bootscanner.l"
 ;		/* drop everything after "#" for comments */
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 93 "bootscanner.l"
-{ yylval.kw = "declare"; return XDECLARE; }
+#line 99 "bootscanner.l"
+{ boot_yylval.kw = "declare"; return XDECLARE; }
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 94 "bootscanner.l"
-{ yylval.kw = "build"; return XBUILD; }
+#line 100 "bootscanner.l"
+{ boot_yylval.kw = "build"; return XBUILD; }
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 95 "bootscanner.l"
-{ yylval.kw = "indices"; return INDICES; }
+#line 101 "bootscanner.l"
+{ boot_yylval.kw = "indices"; return INDICES; }
 	YY_BREAK
 case 20:
 YY_RULE_SETUP
-#line 96 "bootscanner.l"
-{ yylval.kw = "unique"; return UNIQUE; }
+#line 102 "bootscanner.l"
+{ boot_yylval.kw = "unique"; return UNIQUE; }
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 97 "bootscanner.l"
-{ yylval.kw = "index"; return INDEX; }
+#line 103 "bootscanner.l"
+{ boot_yylval.kw = "index"; return INDEX; }
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 98 "bootscanner.l"
-{ yylval.kw = "on"; return ON; }
+#line 104 "bootscanner.l"
+{ boot_yylval.kw = "on"; return ON; }
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 99 "bootscanner.l"
-{ yylval.kw = "using"; return USING; }
+#line 105 "bootscanner.l"
+{ boot_yylval.kw = "using"; return USING; }
 	YY_BREAK
 case 24:
 YY_RULE_SETUP
-#line 100 "bootscanner.l"
-{ yylval.kw = "toast"; return XTOAST; }
+#line 106 "bootscanner.l"
+{ boot_yylval.kw = "toast"; return XTOAST; }
 	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 101 "bootscanner.l"
-{ yylval.kw = "FORCE"; return XFORCE; }
+#line 107 "bootscanner.l"
+{ boot_yylval.kw = "FORCE"; return XFORCE; }
 	YY_BREAK
 case 26:
 YY_RULE_SETUP
-#line 102 "bootscanner.l"
-{ yylval.kw = "NOT"; return XNOT; }
+#line 108 "bootscanner.l"
+{ boot_yylval.kw = "NOT"; return XNOT; }
 	YY_BREAK
 case 27:
 YY_RULE_SETUP
-#line 103 "bootscanner.l"
-{ yylval.kw = "NULL"; return XNULL; }
+#line 109 "bootscanner.l"
+{ boot_yylval.kw = "NULL"; return XNULL; }
 	YY_BREAK
 case 28:
 YY_RULE_SETUP
-#line 105 "bootscanner.l"
+#line 111 "bootscanner.l"
 {
-					yylval.str = pstrdup(yytext);
+					boot_yylval.str = pstrdup(yytext);
 					return ID;
 				}
 	YY_BREAK
 case 29:
 /* rule 29 can match eol */
 YY_RULE_SETUP
-#line 109 "bootscanner.l"
+#line 115 "bootscanner.l"
 {
 					/* strip quotes and escapes */
-					yylval.str = DeescapeQuotedString(yytext);
+					boot_yylval.str = DeescapeQuotedString(yytext);
 					return ID;
 				}
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 115 "bootscanner.l"
+#line 121 "bootscanner.l"
 {
 					elog(ERROR, "syntax error at line %d: unexpected character \"%s\"", yyline, yytext);
 				}
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 119 "bootscanner.l"
+#line 125 "bootscanner.l"
 YY_FATAL_ERROR( "flex scanner jammed" );
 	YY_BREAK
-#line 1281 "bootscanner.c"
+#line 1284 "bootscanner.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 
@@ -2249,13 +2252,13 @@ void yyfree (void * ptr )
 
 #define YYTABLES_NAME "yytables"
 
-#line 119 "bootscanner.l"
+#line 125 "bootscanner.l"
 
 
 /* LCOV_EXCL_STOP */
 
 void
-yyerror(const char *message)
+boot_yyerror(const char *message)
 {
 	elog(ERROR, "%s at line %d", message, yyline);
 }

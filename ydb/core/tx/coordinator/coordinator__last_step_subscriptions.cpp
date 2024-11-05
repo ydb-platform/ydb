@@ -141,7 +141,7 @@ namespace NKikimr::NFlatTxCoordinator {
 
     void TTxCoordinator::SubscribeToSibling(TSiblingState& state) {
         if (!state.Subscribed) {
-            auto pipeCache = MakePipePeNodeCacheID(false);
+            auto pipeCache = MakePipePerNodeCacheID(false);
             Send(pipeCache, new TEvPipeCache::TEvForward(
                     new TEvTxProxy::TEvSubscribeLastStep(state.CoordinatorId, ++state.SeqNo),
                     state.CoordinatorId,
@@ -153,7 +153,7 @@ namespace NKikimr::NFlatTxCoordinator {
     void TTxCoordinator::UnsubscribeFromSiblings() {
         for (auto& pr : Siblings) {
             if (pr.second.Subscribed) {
-                auto pipeCache = MakePipePeNodeCacheID(false);
+                auto pipeCache = MakePipePerNodeCacheID(false);
                 Send(pipeCache, new TEvPipeCache::TEvForward(
                         new TEvTxProxy::TEvUnsubscribeLastStep(pr.first, pr.second.SeqNo),
                         pr.first,
@@ -185,10 +185,17 @@ namespace NKikimr::NFlatTxCoordinator {
     }
 
     void TTxCoordinator::Handle(TEvTxProxy::TEvRequirePlanSteps::TPtr& ev) {
+        ui64 volatileLeaseMs = VolatilePlanLeaseMs;
+        bool usesVolatilePlanning = volatileLeaseMs > 0;
+
         auto* msg = ev->Get();
         for (ui64 step : msg->Record.GetPlanSteps()) {
-            // Note: we could schedule an exact volatile step here in the future
-            step = AlignPlanStep(step);
+            if (!usesVolatilePlanning) {
+                // Note: we want to align requested steps to plan resolution
+                // when volatile planning is not used. Otherwise extra steps
+                // are cheap and reduce latency.
+                step = AlignPlanStep(step);
+            }
             // Note: this is not a sibling step, but it behaves similar enough
             // so we reuse the same queue here.
             if (step > VolatileState.LastPlanned && PendingSiblingSteps.insert(step).second) {

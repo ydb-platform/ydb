@@ -1,6 +1,7 @@
 /* postgres can not */
 /* multirun can not */
 /* syntax version 1 */
+/* hybridfile can not YQL-17743 */
 USE plato;
 
 insert into Output

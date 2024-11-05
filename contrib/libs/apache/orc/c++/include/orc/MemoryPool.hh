@@ -19,15 +19,13 @@
 #ifndef MEMORYPOOL_HH_
 #define MEMORYPOOL_HH_
 
-#include "orc/orc-config.hh"
-#include "orc/Int128.hh"
-
 #include <memory>
-
+#include "orc/Int128.hh"
+#include "orc/orc-config.hh"
 namespace orc {
 
   class MemoryPool {
-  public:
+   public:
     virtual ~MemoryPool();
 
     virtual char* malloc(uint64_t size) = 0;
@@ -37,7 +35,7 @@ namespace orc {
 
   template <class T>
   class DataBuffer {
-  private:
+   private:
     MemoryPool& memoryPool;
     T* buf;
     // current size
@@ -49,10 +47,10 @@ namespace orc {
     DataBuffer(DataBuffer& buffer);
     DataBuffer& operator=(DataBuffer& buffer);
 
-  public:
+   public:
     DataBuffer(MemoryPool& pool, uint64_t _size = 0);
 
-    DataBuffer(DataBuffer<T>&& buffer) ORC_NOEXCEPT;
+    DataBuffer(DataBuffer<T>&& buffer) noexcept;
 
     virtual ~DataBuffer();
 
@@ -64,12 +62,16 @@ namespace orc {
       return buf;
     }
 
-    uint64_t size() {
+    uint64_t size() const {
       return currentSize;
     }
 
-    uint64_t capacity() {
+    uint64_t capacity() const {
       return currentCapacity;
+    }
+
+    const T& operator[](uint64_t i) const {
+      return buf[i];
     }
 
     T& operator[](uint64_t i) {
@@ -78,6 +80,7 @@ namespace orc {
 
     void reserve(uint64_t _size);
     void resize(uint64_t _size);
+    void zeroOut();
   };
 
   // Specializations for char
@@ -104,6 +107,14 @@ namespace orc {
   template <>
   void DataBuffer<double>::resize(uint64_t newSize);
 
+  // Specializations for float
+
+  template <>
+  DataBuffer<float>::~DataBuffer();
+
+  template <>
+  void DataBuffer<float>::resize(uint64_t newSize);
+
   // Specializations for int64_t
 
   template <>
@@ -111,6 +122,30 @@ namespace orc {
 
   template <>
   void DataBuffer<int64_t>::resize(uint64_t newSize);
+
+  // Specializations for int32_t
+
+  template <>
+  DataBuffer<int32_t>::~DataBuffer();
+
+  template <>
+  void DataBuffer<int32_t>::resize(uint64_t newSize);
+
+  // Specializations for int16_t
+
+  template <>
+  DataBuffer<int16_t>::~DataBuffer();
+
+  template <>
+  void DataBuffer<int16_t>::resize(uint64_t newSize);
+
+  // Specializations for int8_t
+
+  template <>
+  DataBuffer<int8_t>::~DataBuffer();
+
+  template <>
+  void DataBuffer<int8_t>::resize(uint64_t newSize);
 
   // Specializations for uint64_t
 
@@ -128,23 +163,31 @@ namespace orc {
   template <>
   void DataBuffer<unsigned char>::resize(uint64_t newSize);
 
-  #ifdef __clang__
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wweak-template-vtables"
-  #endif
+  // Specializations for Int128
+
+  template <>
+  void DataBuffer<Int128>::zeroOut();
+
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wweak-template-vtables"
+#endif
 
   extern template class DataBuffer<char>;
   extern template class DataBuffer<char*>;
   extern template class DataBuffer<double>;
+  extern template class DataBuffer<float>;
   extern template class DataBuffer<Int128>;
   extern template class DataBuffer<int64_t>;
+  extern template class DataBuffer<int32_t>;
+  extern template class DataBuffer<int16_t>;
+  extern template class DataBuffer<int8_t>;
   extern template class DataBuffer<uint64_t>;
   extern template class DataBuffer<unsigned char>;
 
-  #ifdef __clang__
-    #pragma clang diagnostic pop
-  #endif
-} // namespace orc
-
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+}  // namespace orc
 
 #endif /* MEMORYPOOL_HH_ */

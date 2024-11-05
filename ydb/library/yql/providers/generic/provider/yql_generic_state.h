@@ -9,7 +9,7 @@
 
 namespace NKikimr::NMiniKQL {
     class IFunctionRegistry;
-}
+} // namespace NKikimr::NMiniKQL
 
 namespace NYql {
     struct TGenericState: public TThrRefBase {
@@ -68,4 +68,4 @@ namespace NYql {
     private:
         THashMap<TTableAddress, TTableMeta> Tables_;
     };
-}
+} // namespace NYql

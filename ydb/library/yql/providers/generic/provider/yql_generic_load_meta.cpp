@@ -313,6 +313,27 @@ namespace NYql {
             *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";
         }
 
+        template <typename T>
+        void SetSchema(T& request, const TGenericClusterConfig& clusterConfig) {
+            TString schema;
+            const auto it = clusterConfig.GetDataSourceOptions().find("schema");
+            if (it != clusterConfig.GetDataSourceOptions().end()) {
+                schema = it->second;
+            }
+            if (!schema) {
+                schema = "public";
+            }
+
+            request.set_schema(schema);
+        }
+
+        void GetServiceName(NYql::NConnector::NApi::TOracleDataSourceOptions& request, const TGenericClusterConfig& clusterConfig) {
+            const auto it = clusterConfig.GetDataSourceOptions().find("service_name");
+            if (it != clusterConfig.GetDataSourceOptions().end()) {
+                request.set_service_name(it->second);
+            }
+        }
+
         void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
             const auto dataSourceKind = clusterConfig.GetKind();
             switch (dataSourceKind) {
@@ -320,19 +341,21 @@ namespace NYql {
                     break;
                 case NYql::NConnector::NApi::YDB:
                     break;
+                case NYql::NConnector::NApi::MYSQL:
+                    break;
+                case NYql::NConnector::NApi::GREENPLUM: {
+                    auto* options = request.mutable_data_source_instance()->mutable_gp_options();
+                    SetSchema(*options, clusterConfig);
+                } break;
+                case NYql::NConnector::NApi::MS_SQL_SERVER:
+                    break;
                 case NYql::NConnector::NApi::POSTGRESQL: {
-                    // for backward compability set schema "public" by default
-                    // TODO: simplify during https://st.yandex-team.ru/YQ-2494
-                    TString schema;
-                    const auto it = clusterConfig.GetDataSourceOptions().find("schema");
-                    if (it != clusterConfig.GetDataSourceOptions().end()) {
-                        schema = it->second;
-                    }
-                    if (!schema) {
-                        schema = "public";
-                    }
-
-                    request.mutable_data_source_instance()->mutable_pg_options()->set_schema(schema);
+                    auto* options = request.mutable_data_source_instance()->mutable_pg_options();
+                    SetSchema(*options, clusterConfig);
+                } break;
+                case NYql::NConnector::NApi::ORACLE: {
+                    auto* options = request.mutable_data_source_instance()->mutable_oracle_options();
+                    GetServiceName(*options, clusterConfig);
                 } break;
 
                 default:
@@ -355,35 +378,8 @@ namespace NYql {
 
         void FillTablePath(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig,
                            const TString& tablePath) {
-            // for backward compability full path can be used (cluster_name.`db_name.table`)
-            // TODO: simplify during https://st.yandex-team.ru/YQ-2494
-            const auto dataSourceKind = clusterConfig.GetKind();
-            const auto& dbNameFromConfig = clusterConfig.GetDatabaseName();
-            TStringBuf dbNameTarget, tableName;
-            auto isFullPath = TStringBuf(tablePath).TrySplit('.', dbNameTarget, tableName);
-
-            if (!dbNameFromConfig.empty()) {
-                dbNameTarget = dbNameFromConfig;
-                if (!isFullPath) {
-                    tableName = tablePath;
-                }
-            } else if (!isFullPath) {
-                tableName = tablePath;
-                switch (dataSourceKind) {
-                    case NYql::NConnector::NApi::CLICKHOUSE:
-                        dbNameTarget = "default";
-                        break;
-                    case NYql::NConnector::NApi::POSTGRESQL:
-                        dbNameTarget = "postgres";
-                        break;
-                    default:
-                        ythrow yexception() << "You must provide database name explicitly for data source kind: '"
-                                            << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind) << "'";
-                }
-            } // else take database name from table path
-
-            request.mutable_data_source_instance()->set_database(TString(dbNameTarget));
-            request.set_table(TString(tableName));
+            request.mutable_data_source_instance()->set_database(clusterConfig.GetDatabaseName());
+            request.set_table(tablePath);
         }
 
     private:

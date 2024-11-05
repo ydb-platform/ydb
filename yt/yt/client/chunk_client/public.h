@@ -84,6 +84,18 @@ YT_DEFINE_ERROR_ENUM(
     ((LocationDisabled)                      (755))
     ((DiskFailed)                            (756))
     ((DiskWaitingReplacement)                (757))
+    ((LockFileIsFound)                       (758))
+    ((DiskHealthCheckFailed)                 (759))
+    ((TooManyChunksToFetch)                  (760))
+    ((TotalMemoryLimitExceeded)              (761))
+    ((ForbiddenErasureCodec)                 (762))
+    ((ReadMetaTimeout)                       (763))
+);
+
+DEFINE_ENUM(EUpdateMode,
+    ((None)                     (0))
+    ((Append)                   (1))
+    ((Overwrite)                (2))
 );
 
 using TChunkId = NObjectClient::TObjectId;
@@ -137,6 +149,8 @@ using TChunkReplicaWithMediumList = TCompactVector<TChunkReplicaWithMedium, Typi
 
 class TChunkReplicaWithLocation;
 using TChunkReplicaWithLocationList = TCompactVector<TChunkReplicaWithLocation, TypicalReplicaCount>;
+
+struct TWrittenChunkReplicasInfo;
 
 class TChunkReplica;
 using TChunkReplicaList = TCompactVector<TChunkReplica, TypicalReplicaCount>;

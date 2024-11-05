@@ -6,13 +6,20 @@ VERSION(1.1.1t)
 
 ORIGINAL_SOURCE(https://github.com/openssl/openssl/archive/OpenSSL_1_1_1t.tar.gz)
 
-# TODO(YMAKE-92) Move this information out of ya.make and allow per project configuration
-IF (OPENSOURCE_PROJECT == "catboost")
+IF (OPENSOURCE_REPLACE_OPENSSL AND EXPORT_CMAKE)
+
     OPENSOURCE_EXPORT_REPLACEMENT(
         CMAKE OpenSSL
         CMAKE_TARGET OpenSSL::OpenSSL
-        CONAN openssl/1.1.1t
+        CONAN openssl/${OPENSOURCE_REPLACE_OPENSSL}
     )
+
+ELSE()
+
+    ADDINCL(
+        GLOBAL contrib/libs/openssl/include
+    )
+
 ENDIF()
 
 LICENSE(
@@ -33,12 +40,10 @@ PEERDIR(
 )
 
 ADDINCL(
-    GLOBAL contrib/libs/openssl/include
     contrib/libs/openssl
 )
 
-# TODO(YMAKE-92) Move this information out of ya.make and allow per project configuration
-IF (NOT EXPORT_CMAKE OR OPENSOURCE_PROJECT != "catboost")
+IF (NOT EXPORT_CMAKE OR NOT OPENSOURCE_REPLACE_OPENSSL)
 
 IF (OS_LINUX)
     IF (ARCH_ARM64)
@@ -210,6 +215,7 @@ SRCS(
     ssl/ssl_sess.c
     ssl/ssl_stat.c
     ssl/ssl_txt.c
+    ssl/ssl_quic.c
     ssl/ssl_utst.c
     ssl/statem/extensions.c
     ssl/statem/extensions_clnt.c
@@ -219,6 +225,7 @@ SRCS(
     ssl/statem/statem_clnt.c
     ssl/statem/statem_dtls.c
     ssl/statem/statem_lib.c
+    ssl/statem/statem_quic.c
     ssl/statem/statem_srvr.c
     ssl/t1_enc.c
     ssl/t1_lib.c
@@ -335,7 +342,7 @@ IF (OS_ANDROID AND ARCH_ARM64)
     )
 ENDIF()
 
-ENDIF()
+ENDIF() # IF (NOT EXPORT_CMAKE OR NOT OPENSOURCE_REPLACE_OPENSSL)
 
 END()
 

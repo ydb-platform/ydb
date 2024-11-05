@@ -15,13 +15,11 @@ class IDqChannelStorage : public TSimpleRefCount<IDqChannelStorage> {
 public:
     using TPtr = TIntrusivePtr<IDqChannelStorage>;
 
-    using TWakeUpCallback = std::function<void()>;
-
 public:
     virtual ~IDqChannelStorage() = default;
 
-    virtual bool IsEmpty() const = 0;
-    virtual bool IsFull() const = 0;
+    virtual bool IsEmpty() = 0;
+    virtual bool IsFull() = 0;
 
     // methods Put/Get can throw `TDqChannelStorageException`
 

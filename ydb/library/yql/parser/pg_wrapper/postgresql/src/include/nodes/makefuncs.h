@@ -4,7 +4,7 @@
  *	  prototypes for the creator functions of various nodes
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * src/include/nodes/makefuncs.h
@@ -24,18 +24,18 @@ extern A_Expr *makeA_Expr(A_Expr_Kind kind, List *name,
 extern A_Expr *makeSimpleA_Expr(A_Expr_Kind kind, char *name,
 								Node *lexpr, Node *rexpr, int location);
 
-extern Var *makeVar(Index varno,
+extern Var *makeVar(int varno,
 					AttrNumber varattno,
 					Oid vartype,
 					int32 vartypmod,
 					Oid varcollid,
 					Index varlevelsup);
 
-extern Var *makeVarFromTargetEntry(Index varno,
+extern Var *makeVarFromTargetEntry(int varno,
 								   TargetEntry *tle);
 
 extern Var *makeWholeRowVar(RangeTblEntry *rte,
-							Index varno,
+							int varno,
 							Index varlevelsup,
 							bool allowScalar);
 
@@ -96,7 +96,9 @@ extern List *make_ands_implicit(Expr *clause);
 
 extern IndexInfo *makeIndexInfo(int numattrs, int numkeyattrs, Oid amoid,
 								List *expressions, List *predicates,
-								bool unique, bool isready, bool concurrent);
+								bool unique, bool nulls_not_distinct,
+								bool isready, bool concurrent,
+								bool summarizing);
 
 extern DefElem *makeDefElem(char *name, Node *arg, int location);
 extern DefElem *makeDefElemExtended(char *nameSpace, char *name, Node *arg,
@@ -105,5 +107,15 @@ extern DefElem *makeDefElemExtended(char *nameSpace, char *name, Node *arg,
 extern GroupingSet *makeGroupingSet(GroupingSetKind kind, List *content, int location);
 
 extern VacuumRelation *makeVacuumRelation(RangeVar *relation, Oid oid, List *va_cols);
+
+extern JsonFormat *makeJsonFormat(JsonFormatType type, JsonEncoding encoding,
+								  int location);
+extern JsonValueExpr *makeJsonValueExpr(Expr *raw_expr, Expr *formatted_expr,
+										JsonFormat *format);
+extern Node *makeJsonKeyValue(Node *key, Node *value);
+extern Node *makeJsonIsPredicate(Node *expr, JsonFormat *format,
+								 JsonValueType item_type, bool unique_keys,
+								 int location);
+extern JsonEncoding makeJsonEncoding(char *name);
 
 #endif							/* MAKEFUNC_H */

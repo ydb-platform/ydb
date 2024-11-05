@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
-from ydb.tests.library.common import yatest_common
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.oss.canonical import set_canondata_root
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -9,6 +8,8 @@ import pytest
 import logging
 import pyarrow as pa
 import pyarrow.parquet as pq
+
+import yatest
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +124,7 @@ ONLY_CSV_TSV_PARAMS = [("csv", []), ("csv", ["--newline-delimited"]), ("tsv", []
 
 def ydb_bin():
     if os.getenv("YDB_CLI_BINARY"):
-        return yatest_common.binary_path(os.getenv("YDB_CLI_BINARY"))
+        return yatest.common.binary_path(os.getenv("YDB_CLI_BINARY"))
     raise RuntimeError("YDB_CLI_BINARY enviroment variable is not specified")
 
 
@@ -152,7 +153,7 @@ class BaseTestTableService(object):
     def setup_class(cls):
         set_canondata_root('ydb/tests/functional/ydb_cli/canondata')
 
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.root_dir = "/Root"
         driver_config = ydb.DriverConfig(
@@ -168,7 +169,7 @@ class BaseTestTableService(object):
 
     @classmethod
     def execute_ydb_cli_command(cls, args, stdin=None, stdout=None):
-        execution = yatest_common.execute(
+        execution = yatest.common.execute(
             [
                 ydb_bin(),
                 "--endpoint", "grpc://localhost:%d" % cls.cluster.nodes[1].grpc_port,
@@ -273,13 +274,13 @@ class TestImpex(BaseTestTableService):
         query = "SELECT `key`, `id`, `value` FROM `{}` ORDER BY `key`".format(self.table_path)
         output_file_name = str(self.tmp_path / "result.output")
         self.execute_ydb_cli_command(["table", "query", "execute", "-q", query, "-t", "scan", "--format", format], stdout=output_file_name)
-        return yatest_common.canonical_file(output_file_name, local=True, universal_lines=True)
+        return yatest.common.canonical_file(output_file_name, local=True, universal_lines=True)
 
     def validate_gen_data(self):
         query = "SELECT count(*) FROM `{}`".format(self.table_path)
         output_file_name = str(self.tmp_path / "result.output")
         self.execute_ydb_cli_command(["table", "query", "execute", "-q", query, "-t", "scan"], stdout=output_file_name)
-        return yatest_common.canonical_file(output_file_name, local=True, universal_lines=True)
+        return yatest.common.canonical_file(output_file_name, local=True, universal_lines=True)
 
     @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
     def test_simple(self, tmp_path, request, table_type, ftype, additional_args):

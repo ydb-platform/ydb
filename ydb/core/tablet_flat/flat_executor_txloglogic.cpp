@@ -107,6 +107,18 @@ bool TLogicRedo::CommitROTransaction(TAutoPtr<TSeat> seat, const TActorContext &
 void TLogicRedo::FlushBatchedLog()
 {
     if (TAutoPtr<TLogCommit> commit = Batch->Commit) {
+        if (commit->TraceId) {
+            i64 batchSize = Batch->Bodies.size();
+
+            for (TSeat* curSeat = commit->FirstTx; curSeat != nullptr; curSeat = curSeat->NextCommitTx) {
+                // Update batch size of the transaction, whose TraceId the commit uses (first transaction in batch, that has TraceId).
+                if (curSeat->Self->TxSpan) {
+                    curSeat->Self->TxSpan.Attribute("BatchSize", batchSize);
+                    break;
+                }
+            }
+        }
+
         auto affects = Batch->Affects();
         MakeLogEntry(*commit, Batch->Flush(), affects, true);
         CommitManager->Commit(commit);
@@ -191,22 +203,9 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
                 // but if a new transaction of a batch has TraceId, use it for the whole batch
                 // (and consequent traced transactions).
                 Batch->Commit->TraceId = seat->GetTxTraceId();
-            } else {
+            } else if (Batch->Commit->TraceId) {
                 tx->TxSpan.Link(Batch->Commit->TraceId, {});
             }
-
-            i64 batchSize = Batch->Bodies.size() + 1;
-
-            for (TSeat* curSeat = Batch->Commit->FirstTx; curSeat != nullptr; curSeat = curSeat->NextCommitTx) {
-                // Update batch size of the transaction, whose TraceId the commit uses (first transaction in batch, that has TraceId).
-                if (curSeat->Self->TxSpan) {
-                    curSeat->Self->TxSpan.Attribute("BatchSize", batchSize);
-                    break;
-                }
-            }
-
-            tx->TxSpan.Attribute("Batched", true)
-                      .Attribute("BatchSize", batchSize);
         }
         
         Batch->Commit->PushTx(seat.Get());

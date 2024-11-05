@@ -1,7 +1,6 @@
 #pragma once
 
 #include "defs.h"
-#include "grpc_request_proxy.h"
 #include "cancelation/cancelation.h"
 #include "cancelation/cancelation_event.h"
 #include "rpc_common/rpc_common.h"
@@ -62,10 +61,6 @@ public:
 
     const typename TRequest::TRequest* GetProtoRequest() const {
         return TRequest::GetProtoRequest(Request_);
-    }
-
-    typename TRequest::TRequest* GetProtoRequestMut() {
-        return TRequest::GetProtoRequestMut(Request_);
     }
 
     Ydb::Operations::OperationParams::OperationMode GetOperationMode() const {
@@ -202,7 +197,10 @@ protected:
     void Reply(Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext& ctx)
     {
-        Request_->SendResult(status, message);
+        NYql::TIssues issues;
+        IssuesFromMessage(message, issues);
+        Request_->RaiseIssues(issues);
+        Request_->ReplyWithYdbStatus(status);
         NWilson::EndSpanWithStatus(Span_, status);
         this->Die(ctx);
     }
@@ -222,14 +220,6 @@ protected:
 
     void Reply(Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
         Request_->ReplyWithYdbStatus(status);
-        NWilson::EndSpanWithStatus(Span_, status);
-        this->Die(ctx);
-    }
-
-    void ReplyWithResult(Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, const TActorContext &ctx)
-    {
-        Request_->SendResult(status, message);
         NWilson::EndSpanWithStatus(Span_, status);
         this->Die(ctx);
     }

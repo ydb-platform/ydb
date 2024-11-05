@@ -3,23 +3,27 @@
 В этой статье приведены примеры чтения и записи в [топики](../../concepts/topic.md) с использованием Kafka API.
 
 Перед выполнением примеров:
+
 1. [Создайте топик](../ydb-cli/topic-create.md).
 1. [Добавьте читателя](../ydb-cli/topic-consumer-add.md).
-1. [Создайте пользователя](../../cluster/access.md#users).
+1. [Создайте пользователя](../../security/access-management.md#users).
 
 В примерах используются:
 
- * `<ydb-endpoint>` — эндпоинт {{ ydb-short-name }}.
- * `<topic-name>` — имя топика. Допускается указывать как полное имя (вместе с путем базы данных), так и только имя топика.
- * `<sasl.username>` — имя пользователя SASL. Подробности читайте в разделе [Аутентификация](./auth.md).
- * `<sasl.password>` — пароль пользователя SASL. Подробности читайте в разделе [Аутентификация](./auth.md).
- * `<consumer-name>` — [имя читателя](../../concepts/topic#consumer).
+* `<ydb-endpoint>` — эндпоинт {{ ydb-short-name }}.
+* `<topic-name>` — имя топика. Допускается указывать как полное имя (вместе с путем базы данных), так и только имя топика.
+* `<sasl.username>` — имя пользователя SASL. Подробности читайте в разделе [Аутентификация](./auth.md).
+* `<sasl.password>` — пароль пользователя SASL. Подробности читайте в разделе [Аутентификация](./auth.md).
+* `<consumer-name>` — [имя читателя](../../concepts/topic#consumer).
 
 
 ## Запись данных в топик
+
 {% list tabs %}
+
 - kcat
-  ```ini
+
+  ```bash
   echo "test message" | kcat -P \
     -b <ydb-endpoint> \
     -t <topic-name> \
@@ -31,6 +35,7 @@
   ```
 
 - Java
+
   ```java
   String HOST = "<ydb-endpoint>";
   String TOPIC = "<topic-name>";
@@ -59,7 +64,8 @@
   ```
 
 - Logstash
-  ```
+
+  ```ruby
   output {
     kafka {
       codec => json
@@ -75,7 +81,7 @@
 
 - Fluent Bit
 
-  ```
+  ```ini
   [OUTPUT]
     name                          kafka
     match                         *
@@ -89,12 +95,16 @@
     rdkafka.sasl.username         <sasl.username>
     rdkafka.sasl.password         <sasl.password>
   ```
+
 {% endlist %}
+
 ## Чтение данных из топика
+
 {% list tabs %}
 
 - kcat
-  ```ini
+
+  ```bash
   kcat -C \
       -b <ydb-endpoint> \
       -X security.protocol=SASL_SSL \
@@ -106,6 +116,7 @@
   ```
 
 - Java
+
   ```java
   String HOST = "<ydb-endpoint>";
   String TOPIC = "<topic-name>";
@@ -138,4 +149,5 @@
       }
   }
   ```
+
 {% endlist %}

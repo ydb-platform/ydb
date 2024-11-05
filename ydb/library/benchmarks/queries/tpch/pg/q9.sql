@@ -13,7 +13,7 @@ from
         select
             n_name as nation,
             extract(year from o_orderdate) as o_year,
-            l_extendedprice * (1::numeric - l_discount) - ps_supplycost * l_quantity as amount
+            l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount
         from
             {{part}},
             {{supplier}},
@@ -28,7 +28,7 @@ from
             and p_partkey = l_partkey
             and o_orderkey = l_orderkey
             and s_nationkey = n_nationkey
-            and p_name like '%rose%'
+            and p_name like '%green%'
     ) as profit
 group by
     nation,

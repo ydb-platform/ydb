@@ -1,0 +1,13 @@
+--- a/cpp/src/arrow/filesystem/mockfs.cc
++++ b/cpp/src/arrow/filesystem/mockfs.cc
+@@ -322,7 +322,9 @@ class MockFileSystem::Impl {
+       return nullptr;
+     }
+     size_t consumed;
+-    auto entry = FindEntry(parts.begin(), --parts.end(), &consumed);
++    auto last = parts.end();
++    last--;
++    auto entry = FindEntry(parts.begin(), last, &consumed);
+     return (consumed == parts.size() - 1) ? entry : nullptr;
+   }
+

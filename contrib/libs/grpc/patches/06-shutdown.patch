@@ -1,0 +1,20 @@
+diff --git a/src/cpp/server/server_builder.cc b/src/cpp/server/server_builder.cc
+index dffcad0..026a4bd 100644
+--- a/src/cpp/server/server_builder.cc
++++ b/src/cpp/server/server_builder.cc
+@@ -381,14 +381,12 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
+     }
+   }
+ 
+-  bool added_port = false;
+   for (auto& port : ports_) {
+     int r = server->AddListeningPort(port.addr, port.creds.get());
+     if (!r) {
+-      if (added_port) server->Shutdown();
++      server->Shutdown();
+       return nullptr;
+     }
+-    added_port = true;
+     if (port.selected_port != nullptr) {
+       *port.selected_port = r;
+     }

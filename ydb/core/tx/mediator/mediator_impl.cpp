@@ -55,7 +55,7 @@ void TTxMediator::InitSelfState(const TActorContext &ctx) {
     }
 
     ReplyEnqueuedSyncs(ctx);
-    ReplyEnqueuedWatch(ctx);
+    ProcessEnqueuedWatch(ctx);
 }
 
 void TTxMediator::ReplyEnqueuedSyncs(const TActorContext &ctx) {
@@ -65,15 +65,12 @@ void TTxMediator::ReplyEnqueuedSyncs(const TActorContext &ctx) {
     CoordinatorsSyncEnqueued.clear();
 }
 
-void TTxMediator::ReplyEnqueuedWatch(const TActorContext &ctx) {
-    for (auto &x: WatchEnqueued) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR,
-                    "tablet# " << TabletID() <<
-                    " ReplyEnqueuedWatch" <<
-                    " SEND EvWatch to# " << ExecQueue.ToString() << " ExecQueue");
-        ctx.Send(x->Forward(ExecQueue));
+void TTxMediator::ProcessEnqueuedWatch(const TActorContext &ctx) {
+    Y_UNUSED(ctx);
+    for (auto &ev: EnqueuedWatch) {
+        StateWork(ev);
     }
-    WatchEnqueued.clear();
+    EnqueuedWatch.clear();
 }
 
 void TTxMediator::ReplySync(const TActorId &sender, const NKikimrTx::TEvCoordinatorSync &record, const TActorContext &ctx) {
@@ -102,9 +99,9 @@ void TTxMediator::HandleEnqueue(TEvTxCoordinator::TEvCoordinatorSync::TPtr &ev, 
     CoordinatorsSyncEnqueued[ev->Sender] = ev->Get()->Record;
 }
 
-void TTxMediator::HandleEnqueue(TEvMediatorTimecast::TEvWatch::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " HANDLE Enqueue EvWatch");
-    WatchEnqueued.push_back(ev);
+void TTxMediator::HandleEnqueueWatch(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx) {
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " ENQUEUE Watch from# " << ev->Sender << " server# " << ev->Recipient);
+    EnqueuedWatch.push_back(std::move(ev));
 }
 
 void TTxMediator::DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo) {
@@ -299,11 +296,34 @@ void TTxMediator::Handle(TEvTxCoordinator::TEvCoordinatorStep::TPtr &ev, const T
     return ProcessForeignStep(ev->Sender, record, coordinator, VolatileState.Foreign[coordinator], ctx);
 }
 
-void TTxMediator::Handle(TEvMediatorTimecast::TEvWatch::TPtr &ev, const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " HANDLE EvWatch");
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " SEND EvWatch to# "
-        << ExecQueue.ToString() << " ExecQueue");
-    ctx.ExecutorThread.Send(ev->Forward(ExecQueue));
+void TTxMediator::HandleForwardWatch(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx) {
+    if (!ConnectedServers.contains(ev->Recipient)) {
+        // Server disconnected before this message could be processed
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID()
+            << " IGNORE Watch from# " << ev->Sender << " server# " << ev->Recipient);
+        return;
+    }
+
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID()
+        << " FORWARD Watch from# " << ev->Sender << " to# " << ExecQueue.ToString() << " ExecQueue");
+    // Preserve Recipient (server) and InterconnectSession
+    ev->Rewrite(ev->GetTypeRewrite(), ExecQueue);
+    ctx.ExecutorThread.Send(ev.Release());
+}
+
+void TTxMediator::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
+    auto* msg = ev->Get();
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " server# " << msg->ServerId << " connected");
+    ConnectedServers.insert(msg->ServerId);
+}
+
+void TTxMediator::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
+    auto* msg = ev->Get();
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR, "tablet# " << TabletID() << " server# " << msg->ServerId << " disconnnected");
+    ConnectedServers.erase(msg->ServerId);
+    if (!!ExecQueue) {
+        Send(ExecQueue, new TEvTxMediator::TEvServerDisconnected(msg->ServerId));
+    }
 }
 
 TTxMediator::TTxMediator(TTabletStorageInfo *info, const TActorId &tablet)

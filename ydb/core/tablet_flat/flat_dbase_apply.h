@@ -33,7 +33,7 @@ namespace NTable {
         bool AddTable(const TString& name, ui32 id);
         bool DropTable(ui32 id);
         bool AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null = { });
-        bool AddPgColumn(ui32 table, const TString& name, ui32 id, ui32 type, ui32 pgType, const TString& pgTypeMod, bool notNull, TCell null = { });
+        bool AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type, const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, TCell null = { });
         bool DropColumn(ui32 table, ui32 id);
         bool AddColumnToFamily(ui32 table, ui32 column, ui32 family);
         bool AddColumnToKey(ui32 table, ui32 column);
@@ -44,7 +44,7 @@ namespace NTable {
         bool SetExecutorLogFlushPeriod(TDuration flushPeriod);
         bool SetExecutorLimitInFlyTx(ui32 limitTxInFly);
         bool SetExecutorResourceProfile(const TString &name);
-        bool SetCompactionPolicy(ui32 tableId, const NKikimrSchemeOp::TCompactionPolicy& newPolicy);
+        bool SetCompactionPolicy(ui32 tableId, const NKikimrCompaction::TCompactionPolicy& newPolicy);
 
         TTable* Table(ui32 tid) const noexcept
         {

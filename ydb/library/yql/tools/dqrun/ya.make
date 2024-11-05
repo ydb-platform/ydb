@@ -5,7 +5,7 @@ IF (PROFILE_MEMORY_ALLOCATIONS)
     ALLOCATOR(LF_DBG)
     CFLAGS(-DPROFILE_MEMORY_ALLOCATIONS)
 ELSE()
-    IF (OS_LINUX)
+    IF (OS_LINUX AND NOT DISABLE_TCMALLOC)
         ALLOCATOR(TCMALLOC_256K)
     ELSE()
         ALLOCATOR(J)
@@ -25,6 +25,7 @@ ENDIF()
         library/cpp/logger
         library/cpp/resource
         library/cpp/yson
+        library/cpp/digest/md5
         yt/cpp/mapreduce/interface
         ydb/library/yql/sql/pg
         ydb/library/yql/core/facade
@@ -33,7 +34,9 @@ ENDIF()
         ydb/library/yql/core/file_storage/http_download
         ydb/library/yql/core/services
         ydb/library/yql/core/services/mounts
+        ydb/library/yql/dq/actors/input_transforms
         ydb/library/yql/dq/comp_nodes
+        ydb/library/yql/dq/actors/input_transforms
         ydb/library/yql/dq/integration/transform
         ydb/library/yql/dq/transform
         ydb/library/yql/minikql/comp_nodes/llvm14
@@ -50,10 +53,12 @@ ENDIF()
         ydb/library/yql/providers/dq/provider
         ydb/library/yql/providers/dq/provider/exec
         ydb/library/yql/providers/pq/async_io
+        ydb/library/yql/providers/pq/gateway/dummy
         ydb/library/yql/providers/pq/gateway/native
         ydb/library/yql/providers/pq/provider
         ydb/library/yql/providers/s3/actors
         ydb/library/yql/providers/s3/provider
+        ydb/library/yql/providers/solomon/async_io
         ydb/library/yql/providers/solomon/gateway
         ydb/library/yql/providers/solomon/provider
         ydb/library/yql/providers/ydb/actors
@@ -68,6 +73,8 @@ ENDIF()
         ydb/library/yql/utils/failure_injector
         ydb/library/yql/core/url_preprocessing
         ydb/library/yql/core/url_lister
+        ydb/library/yql/core/pg_ext
+        ydb/library/yql/providers/yt/actors
         ydb/library/yql/providers/yt/comp_nodes/dq
         ydb/library/yql/providers/yt/dq_task_preprocessor
         ydb/library/yql/providers/yt/gateway/file
@@ -82,10 +89,13 @@ ENDIF()
         ydb/library/yql/providers/yt/lib/config_clusters
         ydb/library/yql/parser/pg_wrapper
         ydb/library/yql/utils/log/proto
+        ydb/library/yql/core/qplayer/storage/file
+        ydb/library/yql/public/result_format
 
         ydb/library/yql/utils/actor_system
         ydb/core/fq/libs/actors
         ydb/core/fq/libs/db_id_async_resolver_impl
+        ydb/core/fq/libs/init
 
         ydb/library/yql/udfs/common/clickhouse/client
     )

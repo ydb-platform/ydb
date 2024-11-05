@@ -29,7 +29,7 @@ struct IBlockReader {
 
     virtual std::pair<const char*, const char*> NextFilledBlock() = 0;
     virtual void ReturnBlock() = 0;
-    virtual bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex) = 0;
+    virtual bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex, const std::exception_ptr& error) = 0;
 };
 
 struct IBlockWriter {

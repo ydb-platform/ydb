@@ -75,4 +75,18 @@ bool TSnapshot::GetSecretValue(const TSecretIdOrValue& sId, TString& result) con
     return true;
 }
 
+std::vector<TSecretId> TSnapshot::GetSecretIds(const std::optional<NACLib::TUserToken>& userToken, const TString& secretId) const {
+    std::vector<TSecretId> secretIds;
+    for (const auto& [key, value]: Secrets) {
+        if (key.GetSecretId() != secretId) {
+            continue;
+        }
+        if (!CheckSecretAccess(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(key), userToken)) {
+            continue;
+        }
+        secretIds.push_back(key);
+    }
+    return secretIds;
+}
+
 }

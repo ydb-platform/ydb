@@ -1,5 +1,6 @@
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 #include "probes.h"
@@ -80,11 +81,17 @@ void TCompleteWriteUnit::CompleteWrite(TOperation::TPtr op, const TActorContext&
 
     auto result = writeOp->ReleaseWriteResult();
     if (result) {
+        auto status = result->GetStatus();
+
         DataShard.FillExecutionStats(op->GetExecutionProfile(), *result->Record.MutableTxStats());
 
         if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
             result->SetOrbit(std::move(op->Orbit));
-            DataShard.SendWriteResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId());
+            DataShard.SendWriteResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId(), op->GetTraceId());
+        }
+
+        if (!op->IsImmediate() && !op->IsReadOnly()) {
+            NDataIntegrity::LogIntegrityTrailsFinish<NKikimrDataEvents::TEvWriteResult>(ctx, DataShard.TabletID(), op->GetGlobalTxId(), status);
         }
     }
 

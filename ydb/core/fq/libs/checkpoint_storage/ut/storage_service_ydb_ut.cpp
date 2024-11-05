@@ -8,6 +8,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
@@ -16,7 +17,6 @@
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-
 #include <util/system/env.h>
 
 namespace NFq {
@@ -166,7 +166,12 @@ void CheckpointOperation(
     TActorId sender = runtime->AllocateEdgeActor();
 
     TCoordinatorId coordinatorId(graphId, generation);
-    auto request = std::make_unique<TRequest>(coordinatorId, checkpointId, 100);
+    std::unique_ptr<TRequest> request;
+
+    if constexpr (std::is_same_v<TRequest, TEvCheckpointStorage::TEvCompleteCheckpointRequest>)
+        request = std::make_unique<TRequest>(coordinatorId, checkpointId, 100, NYql::NDqProto::CHECKPOINT_TYPE_SNAPSHOT);
+    else
+        request = std::make_unique<TRequest>(coordinatorId, checkpointId, 100);
     runtime->Send(new IEventHandle(
         NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
 
@@ -212,7 +217,7 @@ void SaveState(
     checkpoint.SetGeneration(checkpointId.CoordinatorGeneration);
     checkpoint.SetId(checkpointId.SeqNo);
     auto request = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskState>(GraphId, taskId, checkpoint);
-    request->State.MutableMiniKqlProgram()->MutableData()->MutableStateData()->SetBlob(blob);
+    request->State.MiniKqlProgram.ConstructInPlace().Data.Blob = blob;
     runtime->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
 
     TAutoPtr<IEventHandle> handle;
@@ -242,7 +247,7 @@ TString GetState(
     UNIT_ASSERT(event->Issues.Empty());
     UNIT_ASSERT(!event->States.empty());
 
-    return event->States[0].GetMiniKqlProgram().GetData().GetStateData().GetBlob();
+    return event->States[0].MiniKqlProgram->Data.Blob;
 }
 
 void CreateCompletedCheckpoint(
@@ -254,6 +259,13 @@ void CreateCompletedCheckpoint(
     CreateCheckpoint(runtime, graphId, generation, checkpointId, false);
     PendingCommitCheckpoint(runtime, graphId, generation, checkpointId, false);
     CompleteCheckpoint(runtime, graphId, generation, checkpointId, false);
+}
+
+TString MakeState(const TString& value) {
+    TString nodesState;
+    auto mkqlState = NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(value, 0);
+    NKikimr::NMiniKQL::TNodeStateHelper::AddNodeState(nodesState, mkqlState.AsStringRef());
+    return nodesState;
 }
 
 } // namespace
@@ -490,25 +502,27 @@ Y_UNIT_TEST_SUITE(TStorageServiceTest) {
 
     Y_UNIT_TEST(ShouldSaveState)
     {
+        NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
         auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldSaveState");
 
         RegisterDefaultCoordinator(runtime);
         CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
 
-        SaveState(runtime, 1317, CheckpointId1, "some random state");
+        SaveState(runtime, 1317, CheckpointId1, MakeState("some random state"));
     }
 
     Y_UNIT_TEST(ShouldGetState)
     {
+        NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
         auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldGetState");
 
         RegisterDefaultCoordinator(runtime);
         CreateCheckpoint(runtime, GraphId, Generation, CheckpointId1, false);
+        auto state = MakeState("some random state");
+        SaveState(runtime, 1317, CheckpointId1, state);
 
-        SaveState(runtime, 1317, CheckpointId1, "some random state");
-
-        auto state = GetState(runtime, 1317, GraphId, CheckpointId1);
-        UNIT_ASSERT_VALUES_EQUAL(state, "some random state");
+        auto actual = GetState(runtime, 1317, GraphId, CheckpointId1);
+        UNIT_ASSERT_VALUES_EQUAL(state, actual);
     }
 
     Y_UNIT_TEST(ShouldUseGc)

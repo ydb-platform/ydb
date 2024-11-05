@@ -39,9 +39,11 @@ SRCS(
     read_info_actor.h
     read_info_actor.cpp
     read_session_actor.h
+    read_session_actor.cpp
     direct_read_actor.h
     direct_read_actor.cpp
     write_session_actor.h
+    write_session_actor.cpp
     schema_actors.h
     schema_actors.cpp
     update_offsets_in_transaction_actor.cpp

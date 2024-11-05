@@ -4,16 +4,13 @@ import itertools
 import logging
 import subprocess
 import time
-import pprint
 from concurrent import futures
 
-import ydb.tests.library.common.yatest_common as yatest_common
 import ydb
 
 from . import param_constants
 from .kikimr_runner import KiKiMR, KikimrExternalNode
 from .kikimr_cluster_interface import KiKiMRClusterInterface
-from . import blockstore
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -25,7 +22,7 @@ DEFAULT_GRPC_PORT = 2135
 
 
 def kikimr_cluster_factory(configurator=None, config_path=None):
-    logger.info("All test params = {}".format(pprint.pformat(yatest_common.get_param_dict_copy())))
+    # TODO: remove current function, use explicit KiKiMR/ExternalKiKiMRCluster
     logger.info("Starting standalone YDB cluster")
     if config_path is not None:
         return ExternalKiKiMRCluster(config_path)
@@ -33,19 +30,13 @@ def kikimr_cluster_factory(configurator=None, config_path=None):
         return KiKiMR(configurator)
 
 
-def load_yaml(path):
-    with open(path, 'r') as r:
-        data = yaml.safe_load(r.read())
-    return data
-
-
 class ExternalKiKiMRCluster(KiKiMRClusterInterface):
     def __init__(self, config_path, binary_path=None, output_path=None):
         self.__config_path = config_path
-        self.__yaml_config = load_yaml(config_path)
+        with open(config_path, 'r') as r:
+            self.__yaml_config = yaml.safe_load(r.read())
         self.__hosts = [host['name'] for host in self.__yaml_config.get('hosts')]
         self._slots = None
-        self._nbs = None
         self.__binary_path = binary_path if binary_path is not None else param_constants.kikimr_driver_path()
         self.__output_path = output_path
         self.__slot_count = 0
@@ -77,21 +68,25 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         return self
 
     def _start(self):
-        for inst_set in [self.nodes, self.slots, self.nbs]:
+        for inst_set in [self.nodes, self.slots]:
             self._run_on(inst_set, lambda x: x.start())
 
     def _stop(self):
-        for inst_set in [self.nodes, self.slots, self.nbs]:
+        for inst_set in [self.nodes, self.slots]:
             self._run_on(inst_set, lambda x: x.stop())
 
     @staticmethod
     def _run_on(instances, *funcs):
         with futures.ThreadPoolExecutor(8) as executor:
             for func in funcs:
-                executor.map(
+                results = executor.map(
                     func,
                     instances.values()
                 )
+                # raising exceptions here if they occured
+                # also ensure that funcs[0] finished before func[1]
+                for _ in results:
+                    pass
 
     def _deploy_secrets(self):
         self._run_on(
@@ -123,7 +118,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
 
         self._deploy_secrets()
 
-        for inst_set in [self.nodes, self.nbs]:
+        for inst_set in [self.nodes]:
             self._run_on(
                 inst_set,
                 lambda x: x.prepare_artifacts(
@@ -163,7 +158,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         )
 
         if param_constants.deploy_cluster:
-            for inst_set in [self.nodes, self.slots, self.nbs]:
+            for inst_set in [self.nodes, self.slots]:
                 self._run_on(
                     inst_set,
                     lambda x: x.cleanup_logs()
@@ -194,15 +189,6 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
                 configurator=None,
             ) for node_id, host in zip(itertools.count(start=1), self.__hosts)
         }
-
-    @property
-    def nbs(self):
-        return {}
-        if self._nbs is None:
-            self._nbs = {}
-            for node_id, host in zip(itertools.count(start=1), self.__hosts):
-                self._nbs[node_id] = blockstore.ExternalNetworkBlockStoreNode(host)
-        return self._nbs
 
     @property
     def slots(self):

@@ -1,0 +1,12 @@
+bazel_remote_htpasswd_lockbox_secret_id: e6qe20m48alkec2btn5v
+bazel_remote_instances:
+  - name: ccache
+    config:
+      dir: /mnt/ccache/cache/
+      max_size: 175
+      http_address: 0.0.0.0:8080
+  - name: ya-cache
+    config:
+      dir: /mnt/ya-cache/cache/
+      max_size: 4000
+      http_address: 0.0.0.0:8081

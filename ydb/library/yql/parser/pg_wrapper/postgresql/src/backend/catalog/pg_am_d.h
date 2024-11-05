@@ -3,7 +3,7 @@
  * pg_am_d.h
  *    Macro definitions for pg_am
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,8 @@
 #define PG_AM_D_H
 
 #define AccessMethodRelationId 2601
+#define AmNameIndexId 2651
+#define AmOidIndexId 2652
 
 #define Anum_pg_am_oid 1
 #define Anum_pg_am_amname 2

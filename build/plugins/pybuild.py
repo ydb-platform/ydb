@@ -12,6 +12,7 @@ YA_IDE_VENV_VAR = 'YA_IDE_VENV'
 PY_NAMESPACE_PREFIX = 'py/namespace'
 BUILTIN_PROTO = 'builtin_proto'
 DEFAULT_FLAKE8_FILE_PROCESSING_TIME = "1.5"  # in seconds
+DEFAULT_BLACK_FILE_PROCESSING_TIME = "1.5"  # in seconds
 
 
 def _split_macro_call(macro_call, data, item_size, chunk_size=1024):
@@ -56,8 +57,8 @@ def uniq_suffix(path, unit):
 
 
 def pb2_arg(suf, path, mod, unit):
-    return '{path}__int__{suf}={mod}{modsuf}'.format(
-        path=stripext(to_build_root(path, unit)), suf=suf, mod=mod, modsuf=stripext(suf)
+    return '{path}__int{py_ver}__{suf}={mod}{modsuf}'.format(
+        path=stripext(to_build_root(path, unit)), suf=suf, mod=mod, modsuf=stripext(suf), py_ver=unit.get('_PYTHON_VER')
     )
 
 
@@ -74,7 +75,7 @@ def ev_cc_arg(path, unit):
 
 
 def ev_arg(path, mod, unit):
-    return '{}__int___ev_pb2.py={}_ev_pb2'.format(stripext(to_build_root(path, unit)), mod)
+    return '{}__int{}___ev_pb2.py={}_ev_pb2'.format(stripext(to_build_root(path, unit)), unit.get('_PYTHON_VER'), mod)
 
 
 def mangle(name):
@@ -168,9 +169,12 @@ def add_python_lint_checks(unit, py_ver, files):
             "travel/",
             "market/report/lite/",  # MARKETOUT-38662, deadline: 2021-08-12
             "passport/backend/oauth/",  # PASSP-35982
+            "sdg/sdc/contrib/",  # SDC contrib
+            "sdg/sdc/third_party/",  # SDC contrib
             "testenv/",  # CI-3229
             "yt/yt/",  # YT-20053
             "yt/python/",  # YT-20053
+            "yt/python_py2/",
         )
 
         if not upath.startswith(no_lint_allowed_paths):
@@ -179,59 +183,9 @@ def add_python_lint_checks(unit, py_ver, files):
     if files and no_lint_value not in ("none", "none_internal"):
         resolved_files = get_resolved_files()
         if resolved_files:
-            flake8_cfg = 'build/config/tests/flake8/flake8.conf'
-            migrations_cfg = 'build/rules/flake8/migrations.yaml'
-            resource = "build/external_resources/flake8_py{}".format(py_ver)
-            lint_name = "py2_flake8" if py_ver == 2 else "flake8"
-            params = [lint_name, "tools/flake8_linter/flake8_linter"]
-            params += ["FILES"] + resolved_files
-            params += ["GLOBAL_RESOURCES", resource]
-            params += [
-                "FILE_PROCESSING_TIME",
-                unit.get("FLAKE8_FILE_PROCESSING_TIME") or DEFAULT_FLAKE8_FILE_PROCESSING_TIME,
-            ]
-
-            extra_params = []
-            if unit.get("DISABLE_FLAKE8_MIGRATIONS") == "yes":
-                extra_params.append("DISABLE_FLAKE8_MIGRATIONS=yes")
-                config_files = [flake8_cfg, '']
-            else:
-                config_files = [flake8_cfg, migrations_cfg]
-            params += ["CONFIGS"] + config_files
-
-            if extra_params:
-                params += ["EXTRA_PARAMS"] + extra_params
-            unit.on_add_linter_check(params)
-
-    # ruff related stuff
-    if unit.get('STYLE_RUFF_VALUE') == 'yes':
-        if no_lint_value in ("none", "none_internal"):
-            ymake.report_configure_error(
-                'NO_LINT() and STYLE_RUFF() can\'t be enabled both at the same time',
-            )
-        # temporary allow using ruff for taxi only
-        ruff_allowed_paths = ("taxi/",)
-        if not upath.startswith(ruff_allowed_paths):
-            ymake.report_configure_error("STYLE_RUFF() is allowed only in " + ", ".join(ruff_allowed_paths))
-
-        resolved_files = get_resolved_files()
-        if resolved_files:
-            resource = "build/external_resources/ruff"
-            params = ["ruff", "tools/ruff_linter/bin/ruff_linter"]
-            params += ["FILES"] + resolved_files
-            params += ["GLOBAL_RESOURCES", resource]
-            configs = [unit.get('RUFF_CONFIG_PATHS_FILE'), 'build/config/tests/ruff/ruff.toml'] + get_ruff_configs(unit)
-            params += ['CONFIGS'] + configs
-            unit.on_add_linter_check(params)
-
-    if files and unit.get('STYLE_PYTHON_VALUE') == 'yes' and is_py3(unit):
-        resolved_files = get_resolved_files()
-        if resolved_files:
-            black_cfg = unit.get('STYLE_PYTHON_PYPROJECT_VALUE') or 'build/config/tests/py_style/config.toml'
-            params = ['black', 'tools/black_linter/black_linter']
-            params += ['FILES'] + resolved_files
-            params += ['CONFIGS', black_cfg]
-            unit.on_add_linter_check(params)
+            # repeated PY_SRCS, TEST_SCRS+PY_SRCS
+            collected = json.loads(unit.get('PY_LINTER_FILES')) if unit.get('PY_LINTER_FILES') else []
+            unit.set(['PY_LINTER_FILES', json.dumps(resolved_files + collected)])
 
 
 def is_py3(unit):
@@ -255,6 +209,7 @@ def py_program(unit, py3):
         if unit.get('PYTHON_SQLITE3') != 'no':
             peers.append('contrib/tools/python/src/Modules/_sqlite')
     unit.onpeerdir(peers)
+    unit.onwindows_long_path_manifest()
     if unit.get('MODULE_TYPE') == 'PROGRAM':  # can not check DLL
         unit.onadd_check_py_imports()
 
@@ -332,6 +287,7 @@ def onpy_srcs(unit, *args):
     swigs_cpp = []
     swigs = swigs_cpp
     pys = []
+    pyis = []
     protos = []
     evs = []
     fbss = []
@@ -450,9 +406,8 @@ def onpy_srcs(unit, *args):
                 evs.append(pathmod)
             elif path.endswith('.swg'):
                 swigs.append(pathmod)
-            # Allow pyi files in PY_SRCS for autocomplete in IDE, but skip it during building
             elif path.endswith('.pyi'):
-                pass
+                pyis.append(pathmod)
             elif path.endswith('.fbs'):
                 fbss.append(pathmod)
             else:
@@ -629,6 +584,20 @@ def onpy_srcs(unit, *args):
                 unit, 2, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split()
             )
 
+    if pyis:
+        pyis_seen = set()
+        pyis_dups = {m for _, m in pyis if (m in pyis_seen or pyis_seen.add(m))}
+        if pyis_dups:
+            pyis_dups = ', '.join(name for name in sorted(pyis_dups))
+            ymake.report_configure_error('Duplicate(s) is found in the PY_SRCS macro: {}'.format(pyis_dups))
+
+        res = []
+        for path, mod in pyis:
+            dest = 'py/' + mod.replace('.', '/') + '.pyi'
+            res += ['DEST', dest, path]
+
+        unit.onresource_files(res)
+
     use_vanilla_protoc = unit.get('USE_VANILLA_PROTOC') == 'yes'
     if use_vanilla_protoc:
         cpp_runtime_path = 'contrib/libs/protobuf_std'
@@ -641,7 +610,8 @@ def onpy_srcs(unit, *args):
 
     if protos:
         if not upath.startswith(py_runtime_path) and not upath.startswith(builtin_proto_path):
-            unit.onpeerdir(py_runtime_path)
+            if 'protobuf_old' not in upath:
+                unit.onpeerdir(py_runtime_path)
 
         unit.onpeerdir(unit.get("PY_PROTO_DEPS").split())
 

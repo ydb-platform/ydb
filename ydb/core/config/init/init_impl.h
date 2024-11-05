@@ -7,13 +7,14 @@
 
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/cms/console/config_item_info.h>
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/alloc.pb.h>
 #include <ydb/core/protos/resource_broker.pb.h>
 #include <ydb/core/protos/http_config.pb.h>
+#include <ydb/core/protos/local.pb.h>
+#include <ydb/core/protos/tablet.pb.h>
 #include <ydb/core/protos/tenant_pool.pb.h>
 #include <ydb/core/protos/compile_service_config.pb.h>
 #include <ydb/core/protos/cms.pb.h>
@@ -21,6 +22,7 @@
 #include <ydb/library/actors/core/log_iface.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/lib/ydb_cli/common/common.h>
 
 #include <google/protobuf/text_format.h>
@@ -45,24 +47,9 @@ extern TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig();
 extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();
 
 using namespace NYdb::NConsoleClient;
+using namespace NKikimrTabletBase;
 
 namespace NKikimr::NConfig {
-
-struct TCallContext {
-    const char* File;
-    int Line;
-};
-
-#define TRACE_CONFIG_CHANGE(CHANGE_CONTEXT, KIND, CHANGE_KIND) \
-    ConfigUpdateTracer.Add(KIND, TConfigItemInfo::TUpdate{CHANGE_CONTEXT.File, static_cast<ui32>(CHANGE_CONTEXT.Line), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
-
-#define TRACE_CONFIG_CHANGE_INPLACE(KIND, CHANGE_KIND) \
-    ConfigUpdateTracer.Add(KIND, TConfigItemInfo::TUpdate{__FILE__, static_cast<ui32>(__LINE__), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
-
-#define TRACE_CONFIG_CHANGE_INPLACE_T(KIND, CHANGE_KIND) \
-    ConfigUpdateTracer.Add(NKikimrConsole::TConfigItem:: KIND ## Item, TConfigItemInfo::TUpdate{__FILE__, static_cast<ui32>(__LINE__), TConfigItemInfo::EUpdateKind:: CHANGE_KIND})
-
-#define CALL_CTX() ::NKikimr::NConfig::TCallContext{__FILE__, __LINE__}
 
 constexpr TStringBuf NODE_KIND_YDB = "ydb";
 constexpr TStringBuf NODE_KIND_YQ = "yq";
@@ -88,6 +75,10 @@ struct TConfigRefs {
     IProtoConfigFileProvider& ProtoConfigFileProvider;
 };
 
+struct TFileConfigOptions {
+    TString Description;
+    TMaybe<TString> ParsedOption;
+};
 
 template <class TProto>
 using TAccessors = std::tuple<
@@ -108,7 +99,7 @@ auto MutableConfigPart(
     auto [hasConfig, getConfig, mutableConfig] = NKikimrConfig::TAppConfig::GetFieldAccessorsByFieldTag(tag);
     ui32 kind = NKikimrConfig::TAppConfig::GetFieldIdByFieldTag(tag);
 
-    auto& ConfigUpdateTracer = refs.Tracer;
+    auto& configUpdateTracer = refs.Tracer;
     auto& errorCollector = refs.ErrorCollector;
     auto& protoConfigFileProvider = refs.ProtoConfigFileProvider;
 
@@ -128,13 +119,15 @@ auto MutableConfigPart(
             return nullptr;
         }
 
-        TRACE_CONFIG_CHANGE(callCtx, kind, MutableConfigPartFromFile);
+        configUpdateTracer.AddUpdate(kind, TConfigItemInfo::EUpdateKind::MutableConfigPartFromFile, callCtx);
 
         return res;
     } else if ((baseConfig.*hasConfig)()) {
         auto* res = (appConfig.*mutableConfig)();
         res->CopyFrom((baseConfig.*getConfig)());
-        TRACE_CONFIG_CHANGE(callCtx, kind, MutableConfigPartFromBaseConfig);
+
+        configUpdateTracer.AddUpdate(kind, TConfigItemInfo::EUpdateKind::MutableConfigPartFromBaseConfig, callCtx);
+
         return res;
     }
 
@@ -152,7 +145,7 @@ auto MutableConfigPartMerge(
     auto mutableConfig = std::get<2>(NKikimrConfig::TAppConfig::GetFieldAccessorsByFieldTag(tag));
     ui32 kind = NKikimrConfig::TAppConfig::GetFieldIdByFieldTag(tag);
 
-    auto& ConfigUpdateTracer = refs.Tracer;
+    auto& configUpdateTracer = refs.Tracer;
     auto& errorCollector = refs.ErrorCollector;
     auto& protoConfigFileProvider = refs.ProtoConfigFileProvider;
 
@@ -170,7 +163,9 @@ auto MutableConfigPartMerge(
 
         auto *res = (appConfig.*mutableConfig)();
         res->MergeFrom(cfg);
-        TRACE_CONFIG_CHANGE(callCtx, kind, MutableConfigPartMergeFromFile);
+
+        configUpdateTracer.AddUpdate(kind, TConfigItemInfo::EUpdateKind::MutableConfigPartFromFile, callCtx);
+
         return res;
     }
 
@@ -179,7 +174,7 @@ auto MutableConfigPartMerge(
 
 void AddProtoConfigOptions(IProtoConfigFileProvider& out);
 void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErrorCollector& errorCollector, TVector<TString> configFiles, NKikimrConfig::TAppConfig& out);
-void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, TCallContext callCtx);
+void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
 void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDiscovery::TNodeLocation& src);
 void CopyNodeLocation(NYdb::NDiscovery::TNodeLocation* dst, const NActorsInterconnect::TNodeLocation& src);
 
@@ -194,7 +189,7 @@ struct TWithDefault {
     }
 
     void EnsureDefined() const {
-        if (Y_UNLIKELY(!Default)) {
+        if (Y_UNLIKELY(Default)) {
             ythrow yexception() << "TWithDefault access through GetRef() assuming it is non-default";
         }
     }
@@ -239,7 +234,7 @@ public:
         const auto* curOpt = parser->CurOpt();
         TStringBuf val(parser->CurValStr());
         try {
-            if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().Data()) {
+            if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().data()) {
                 Target->Value = FromString<typename TType::TWrappedType>(curOpt->GetDefaultValue());
                 Target->Default = true;
                 return;
@@ -266,7 +261,7 @@ public:
     void HandleOpt(const NLastGetopt::TOptsParser* parser) override {
         const auto* curOpt = parser->CurOpt();
         TStringBuf val(parser->CurValStr());
-        if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().Data()) {
+        if (!val.IsInited() || parser->CurVal() == curOpt->GetDefaultValue().data()) {
             Target->Value = curOpt->GetDefaultValue();
             Target->Default = true;
             return;
@@ -293,6 +288,7 @@ struct TCommonAppOptions {
     ui32 MonitoringPort = 0;
     TString MonitoringAddress;
     ui32 MonitoringThreads = 10;
+    ui32 MonitoringMaxRequestsPerSecond = 0;
     TString MonitoringCertificateFile;
     TString RestartsCountFile = "";
     size_t CompileInflightLimit = 100000; // MiniKQLCompileService
@@ -321,6 +317,8 @@ struct TCommonAppOptions {
     TString GRpcPublicHost = "";
     ui32 GRpcPublicPort = 0;
     ui32 GRpcsPublicPort = 0;
+    TString PGWireAddress = "";
+    ui32 PGWirePort = 0;
     TVector<TString> GRpcPublicAddressesV4;
     TVector<TString> GRpcPublicAddressesV6;
     TString GRpcPublicTargetNameOverride = "";
@@ -332,6 +330,7 @@ struct TCommonAppOptions {
     bool SysLogEnabled = false;
     bool TcpEnabled = false;
     bool SuppressVersionCheck = false;
+    EWorkload Workload = EWorkload::Hybrid;
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
         opts.AddLongOption("cluster-name", "which cluster this node belongs to")
@@ -388,6 +387,8 @@ struct TCommonAppOptions {
         opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicHost);
         opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);
         opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT").StoreResult(&GRpcsPublicPort);
+        opts.AddLongOption("pgwire-address", "set host for listen postgres protocol").RequiredArgument("ADDR").StoreResult(&PGWireAddress);
+        opts.AddLongOption("pgwire-port", "set port for listen postgres protocol").OptionalArgument("PORT").StoreResult(&PGWirePort);
         opts.AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV4);
         opts.AddLongOption("grpc-public-address-v6", "set public ipv6 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV6);
         opts.AddLongOption("grpc-public-target-name-override", "set public hostname override for TLS in discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicTargetNameOverride);
@@ -422,58 +423,61 @@ struct TCommonAppOptions {
 
         opts.AddLongOption("tiny-mode", "Start in a tiny mode")
             .NoArgument().SetFlag(&TinyMode);
+
+        opts.AddLongOption("workload", Sprintf("Workload to be served by this node, allowed values are %s", GetEnumAllNames<EWorkload>().data()))
+            .RequiredArgument("NAME").StoreResult(&Workload);
     }
 
     void ApplyFields(NKikimrConfig::TAppConfig& appConfig, IEnv& env, IConfigUpdateTracer& ConfigUpdateTracer) const {
         if (!appConfig.HasAllocatorConfig()) {
             appConfig.MutableAllocatorConfig()->CopyFrom(*DummyAllocatorConfig());
-            TRACE_CONFIG_CHANGE_INPLACE_T(AllocatorConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::AllocatorConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
         // apply certificates, if any
-        if (!PathToInterconnectCertFile.Empty()) {
+        if (!PathToInterconnectCertFile.empty()) {
             appConfig.MutableInterconnectConfig()->SetPathToCertificateFile(PathToInterconnectCertFile);
-            TRACE_CONFIG_CHANGE_INPLACE_T(InterconnectConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!PathToInterconnectPrivateKeyFile.Empty()) {
+        if (!PathToInterconnectPrivateKeyFile.empty()) {
             appConfig.MutableInterconnectConfig()->SetPathToPrivateKeyFile(PathToInterconnectPrivateKeyFile);
-            TRACE_CONFIG_CHANGE_INPLACE_T(InterconnectConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!PathToInterconnectCaFile.Empty()) {
+        if (!PathToInterconnectCaFile.empty()) {
             appConfig.MutableInterconnectConfig()->SetPathToCaFile(PathToInterconnectCaFile);
-            TRACE_CONFIG_CHANGE_INPLACE_T(InterconnectConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
         if (appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().HasCert()) {
             appConfig.MutableGRpcConfig()->SetPathToCertificateFile(appConfig.GetGRpcConfig().GetCert());
-            TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!GrpcSslSettings.PathToGrpcCertFile.Empty()) {
+        if (!GrpcSslSettings.PathToGrpcCertFile.empty()) {
             appConfig.MutableGRpcConfig()->SetPathToCertificateFile(GrpcSslSettings.PathToGrpcCertFile);
-            TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
         if (appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().HasKey()) {
             appConfig.MutableGRpcConfig()->SetPathToPrivateKeyFile(appConfig.GetGRpcConfig().GetKey());
-            TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!GrpcSslSettings.PathToGrpcPrivateKeyFile.Empty()) {
+        if (!GrpcSslSettings.PathToGrpcPrivateKeyFile.empty()) {
             appConfig.MutableGRpcConfig()->SetPathToPrivateKeyFile(GrpcSslSettings.PathToGrpcPrivateKeyFile);
-            TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
         if (appConfig.HasGRpcConfig() && appConfig.GetGRpcConfig().HasCA()) {
             appConfig.MutableGRpcConfig()->SetPathToCaFile(appConfig.GetGRpcConfig().GetCA());
-            TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (!GrpcSslSettings.PathToGrpcCaFile.Empty()) {
+        if (!GrpcSslSettings.PathToGrpcCaFile.empty()) {
             appConfig.MutableGRpcConfig()->SetPathToCaFile(GrpcSslSettings.PathToGrpcCaFile);
-            TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
         if (!appConfig.HasDomainsConfig()) {
@@ -491,10 +495,25 @@ struct TCommonAppOptions {
             nmConfig.SetHost(env.HostName());
         }
 
+         // YQ-3253: derive Connector endpoint from YDB's Interconnect Port
+        if (appConfig.GetQueryServiceConfig().GetGeneric().HasConnector() && InterconnectPort) {
+            auto& connectorConfig = *appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector();
+            auto offset = connectorConfig.GetOffsetFromIcPort();
+            if (offset) {
+                connectorConfig.MutableEndpoint()->Setport(InterconnectPort + offset) ;
+
+                // Assign default hostname 'localhost', because
+                // connector is usually deployed to the same host as the dynamic node.
+                if (connectorConfig.GetEndpoint().host().empty()) {
+                    connectorConfig.MutableEndpoint()->Sethost("localhost");
+                }
+            }
+        }
+
         if (SuppressVersionCheck) {
             if (appConfig.HasNameserviceConfig()) {
                 appConfig.MutableNameserviceConfig()->SetSuppressVersionCheck(true);
-                TRACE_CONFIG_CHANGE_INPLACE_T(NameserviceConfig, UpdateExplicitly);
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::NameserviceConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
             } else {
                 ythrow yexception() << "--suppress-version-check option is provided without static nameservice config";
             }
@@ -513,46 +532,46 @@ struct TCommonAppOptions {
 
         if (!appConfig.HasMonitoringConfig()) {
             appConfig.MutableMonitoringConfig()->SetMonitoringThreads(MonitoringThreads);
-            TRACE_CONFIG_CHANGE_INPLACE_T(MonitoringConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (!appConfig.HasRestartsCountConfig() && RestartsCountFile) {
             appConfig.MutableRestartsCountConfig()->SetRestartsCountFile(RestartsCountFile);
-            TRACE_CONFIG_CHANGE_INPLACE_T(RestartsCountConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::RestartsCountConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
         // Ports and node type are always applied (even if config was loaded from CMS).
         if (MonitoringPort) {
             appConfig.MutableMonitoringConfig()->SetMonitoringPort(MonitoringPort);
-            TRACE_CONFIG_CHANGE_INPLACE_T(MonitoringConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (MonitoringAddress) {
             appConfig.MutableMonitoringConfig()->SetMonitoringAddress(MonitoringAddress);
-            TRACE_CONFIG_CHANGE_INPLACE_T(MonitoringConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (MonitoringCertificateFile) {
             TString sslCertificate = TUnbufferedFileInput(MonitoringCertificateFile).ReadAll();
             if (!sslCertificate.empty()) {
                 appConfig.MutableMonitoringConfig()->SetMonitoringCertificate(sslCertificate);
-                TRACE_CONFIG_CHANGE_INPLACE_T(MonitoringConfig, UpdateExplicitly);
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
             } else {
                 ythrow yexception() << "invalid ssl certificate file";
             }
         }
         if (SqsHttpPort) {
             appConfig.MutableSqsConfig()->MutableHttpServerConfig()->SetPort(SqsHttpPort);
-            TRACE_CONFIG_CHANGE_INPLACE_T(SqsConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::SqsConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (GRpcPort) {
             auto& conf = *appConfig.MutableGRpcConfig();
             conf.SetStartGRpcProxy(true);
             conf.SetPort(GRpcPort);
-            TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (GRpcsPort) {
             auto& conf = *appConfig.MutableGRpcConfig();
             conf.SetStartGRpcProxy(true);
             conf.SetSslPort(GRpcsPort);
-            TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (GRpcPublicHost) {
             auto& conf = *appConfig.MutableGRpcConfig();
@@ -562,7 +581,7 @@ struct TCommonAppOptions {
                     ext.SetPublicHost(GRpcPublicHost);
                 }
             }
-            TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (GRpcPublicPort) {
             auto& conf = *appConfig.MutableGRpcConfig();
@@ -572,7 +591,7 @@ struct TCommonAppOptions {
                     ext.SetPublicPort(GRpcPublicPort);
                 }
             }
-            TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (GRpcsPublicPort) {
             auto& conf = *appConfig.MutableGRpcConfig();
@@ -582,43 +601,138 @@ struct TCommonAppOptions {
                     ext.SetPublicSslPort(GRpcsPublicPort);
                 }
             }
-            TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        }
+        if (PGWireAddress) {
+            appConfig.MutableLocalPgWireConfig()->SetAddress(PGWireAddress);
+        }
+        if (PGWirePort) {
+            appConfig.MutableLocalPgWireConfig()->SetListeningPort(PGWirePort);
         }
         for (const auto& addr : GRpcPublicAddressesV4) {
             appConfig.MutableGRpcConfig()->AddPublicAddressesV4(addr);
         }
         if (GRpcPublicAddressesV4.size()) {
-            TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         for (const auto& addr : GRpcPublicAddressesV6) {
             appConfig.MutableGRpcConfig()->AddPublicAddressesV6(addr);
         }
         if (GRpcPublicAddressesV6.size()) {
-            TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (GRpcPublicTargetNameOverride) {
             appConfig.MutableGRpcConfig()->SetPublicTargetNameOverride(GRpcPublicTargetNameOverride);
-            TRACE_CONFIG_CHANGE_INPLACE_T(GRpcConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (NodeType) {
             appConfig.MutableTenantPoolConfig()->SetNodeType(NodeType.GetRef());
-            TRACE_CONFIG_CHANGE_INPLACE_T(TenantPoolConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::TenantPoolConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
-        if (TenantName && InterconnectPort != DefaultInterconnectPort) {
-            appConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort(env));
-            TRACE_CONFIG_CHANGE_INPLACE_T(MonitoringConfig, UpdateExplicitly);
+        if (TenantName) {
+            if (appConfig.GetDynamicNodeConfig().GetNodeInfo().HasName()) {
+                const TString& nodeName = appConfig.GetDynamicNodeConfig().GetNodeInfo().GetName();
+                appConfig.MutableMonitoringConfig()->SetHostLabelOverride(nodeName);
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+            } else if (InterconnectPort != DefaultInterconnectPort) {
+                appConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort(env));
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+            }
+        }
+
+        if (TenantName) {
+            if (InterconnectPort == DefaultInterconnectPort) {
+                appConfig.MutableMonitoringConfig()->SetProcessLocation(Host(env));
+            } else {
+                appConfig.MutableMonitoringConfig()->SetProcessLocation(HostAndICPort(env));
+            }
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
         if (DataCenter) {
             appConfig.MutableMonitoringConfig()->SetDataCenter(to_lower(DataCenter.GetRef()));
-            TRACE_CONFIG_CHANGE_INPLACE_T(MonitoringConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MonitoringConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
 
             if (appConfig.HasFederatedQueryConfig()) {
                 appConfig.MutableFederatedQueryConfig()->MutableNodesManager()->SetDataCenter(to_lower(DataCenter.GetRef()));
-                TRACE_CONFIG_CHANGE_INPLACE_T(FederatedQueryConfig, UpdateExplicitly);
+                ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::FederatedQueryConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
             }
         }
+
+        if (TenantName) {
+            switch (Workload) {
+                case EWorkload::Operational:
+                    ApplyTabletDenyList(*appConfig.MutableDynamicNodeConfig(), { TTabletTypes::ColumnShard }, ConfigUpdateTracer);
+                    break;
+                case EWorkload::Analyitical:
+                    ApplyTabletAllowList(*appConfig.MutableDynamicNodeConfig(), { TTabletTypes::ColumnShard }, ConfigUpdateTracer);
+                    ApplyDontStartGrpcProxy(*appConfig.MutableGRpcConfig(), ConfigUpdateTracer);
+                    break;
+                case EWorkload::Hybrid:
+                    // default, do nothing
+                    break;
+            }
+        }
+    }
+
+    void ApplyTabletAvailability(NKikimrConfig::TDynamicNodeConfig& config,
+        const std::unordered_set<TTabletTypes::EType>& allowList,
+        const std::unordered_set<TTabletTypes::EType>& denyList,
+        IConfigUpdateTracer& configUpdateTracer) const
+    {
+        std::unordered_map<TTabletTypes::EType, NKikimrLocal::TTabletAvailability> tabletAvailabilities;
+        for (const auto& availability : config.GetTabletAvailability()) {
+            tabletAvailabilities.emplace(availability.GetType(), availability);
+        }
+
+        if (!allowList.empty()) {
+            Y_ABORT_UNLESS(denyList.empty());
+
+            for (int i = TTabletTypes::EType_MIN; i < TTabletTypes::EType_MAX; ++i) {
+                const auto type = static_cast<TTabletTypes::EType>(i);
+                tabletAvailabilities[type].SetType(type);
+                if (allowList.contains(type)) {
+                    tabletAvailabilities[type].ClearMaxCount(); // default is big enough
+                    tabletAvailabilities[type].SetPriority(std::numeric_limits<i32>::max());
+                } else {
+                    tabletAvailabilities[type].SetMaxCount(0);
+                }
+            }
+        } else if (!denyList.empty()) {
+            Y_ABORT_UNLESS(allowList.empty());
+
+            for (const auto type : denyList) {
+                tabletAvailabilities[type].SetType(type);
+                tabletAvailabilities[type].SetMaxCount(0);
+            }
+        }
+
+        config.MutableTabletAvailability()->Clear();
+        for (const auto& [_, tabletAvailability] : tabletAvailabilities) {
+            config.MutableTabletAvailability()->Add()->CopyFrom(tabletAvailability);
+        }
+
+        configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::DynamicNodeConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+    }
+
+    void ApplyTabletAllowList(NKikimrConfig::TDynamicNodeConfig& config,
+        const std::unordered_set<TTabletTypes::EType>& allowList,
+        IConfigUpdateTracer& configUpdateTracer) const
+    {
+        ApplyTabletAvailability(config, allowList, {}, configUpdateTracer);
+    }
+
+    void ApplyTabletDenyList(NKikimrConfig::TDynamicNodeConfig& config,
+        const std::unordered_set<TTabletTypes::EType>& denyList,
+        IConfigUpdateTracer& configUpdateTracer) const
+    {
+        ApplyTabletAvailability(config, {}, denyList, configUpdateTracer);
+    }
+
+    void ApplyDontStartGrpcProxy(NKikimrConfig::TGRpcConfig& config, IConfigUpdateTracer& configUpdateTracer) const {
+        config.SetStartGRpcProxy(false);
+        configUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
     }
 
     ui32 DeduceNodeId(const NKikimrConfig::TAppConfig& appConfig, IEnv& env) const {
@@ -668,12 +782,12 @@ struct TCommonAppOptions {
     void ApplyLogSettings(NKikimrConfig::TAppConfig& appConfig, IConfigUpdateTracer& ConfigUpdateTracer) const {
         if (SysLogServiceTag && !appConfig.GetLogConfig().GetSysLogService()) {
             appConfig.MutableLogConfig()->SetSysLogService(SysLogServiceTag.GetRef());
-            TRACE_CONFIG_CHANGE_INPLACE_T(LogConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::LogConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
         if (LogFileName) {
             appConfig.MutableLogConfig()->SetBackendFileName(LogFileName.GetRef());
-            TRACE_CONFIG_CHANGE_INPLACE_T(LogConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::LogConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
     }
 
@@ -694,10 +808,17 @@ struct TCommonAppOptions {
     }
 
     TString HostAndICPort(IEnv& env) const {
+        auto hostname = Host(env);
+        if (!hostname) {
+            return "";
+        }
+        return TStringBuilder() << hostname << ":" << InterconnectPort;
+    }
+
+    TString Host(IEnv& env) const {
         try {
             auto hostname = to_lower(env.HostName());
-            hostname = hostname.substr(0, hostname.find('.'));
-            return TStringBuilder() << hostname << ":" << InterconnectPort;
+            return hostname.substr(0, hostname.find('.'));
         } catch (TSystemError& error) {
             return "";
         }
@@ -722,18 +843,18 @@ struct TCommonAppOptions {
         if (ClusterName) {
             logConfig.SetClusterName(ClusterName.GetRef());
         }
-        TRACE_CONFIG_CHANGE_INPLACE_T(LogConfig, UpdateExplicitly);
+        ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::LogConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
     }
 
     void SetupBootstrapConfigDefaults(NKikimrConfig::TBootstrap& bootstrapConfig, IConfigUpdateTracer& ConfigUpdateTracer) const {
         bootstrapConfig.MutableCompileServiceConfig()->SetInflightLimit(CompileInflightLimit);
-        TRACE_CONFIG_CHANGE_INPLACE_T(BootstrapConfig, UpdateExplicitly);
+        ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::BootstrapConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
     };
 
     void SetupInterconnectConfigDefaults(NKikimrConfig::TInterconnectConfig& icConfig, IConfigUpdateTracer& ConfigUpdateTracer) const {
         if (TcpEnabled) {
             icConfig.SetStartTcp(true);
-            TRACE_CONFIG_CHANGE_INPLACE_T(InterconnectConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::InterconnectConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
     };
 
@@ -877,7 +998,7 @@ TString DeduceNodeDomain(const NConfig::TCommonAppOptions& cf, const NKikimrConf
 ui32 NextValidKind(ui32 kind);
 bool HasCorrespondingManagedKind(ui32 kind, const NKikimrConfig::TAppConfig& appConfig);
 NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, const IEnv& env);
-NKikimrConfig::TAppConfig GetYamlConfigFromResult(const NKikimr::NClient::TConfigurationResult& result, const TMap<TString, TString>& labels);
+NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& result, const TMap<TString, TString>& labels);
 NKikimrConfig::TAppConfig GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
     const NKikimrConfig::TAppConfig& regularConfig,
@@ -893,12 +1014,14 @@ struct TAppInitDebugInfo {
 
 class TInitialConfiguratorImpl
     : public IInitialConfigurator
+    , private TInitialConfiguratorDependencies
 {
     ui32 NodeId = 0;
     TBasicKikimrServicesMask ServicesMask;
     TKikimrScopeId ScopeId;
     TString TenantName;
     TString ClusterName;
+    TString NodeName;
 
     TMap<TString, TString> Labels;
 
@@ -910,30 +1033,9 @@ class TInitialConfiguratorImpl
 
     TAppInitDebugInfo InitDebug;
 
-    NConfig::IErrorCollector& ErrorCollector;
-    NConfig::IProtoConfigFileProvider& ProtoConfigFileProvider;
-    NConfig::IConfigUpdateTracer& ConfigUpdateTracer;
-    NConfig::IMemLogInitializer& MemLogInit;
-    NConfig::INodeBrokerClient& NodeBrokerClient;
-    NConfig::IDynConfigClient& DynConfigClient;
-    NConfig::IEnv& Env;
-
 public:
-    TInitialConfiguratorImpl(
-        NConfig::IErrorCollector& errorCollector,
-        NConfig::IProtoConfigFileProvider& protoConfigFileProvider,
-        NConfig::IConfigUpdateTracer& configUpdateTracer,
-        NConfig::IMemLogInitializer& memLogInit,
-        NConfig::INodeBrokerClient& nodeBrokerClient,
-        NConfig::IDynConfigClient& dynConfigClient,
-        NConfig::IEnv& env)
-            : ErrorCollector(errorCollector)
-            , ProtoConfigFileProvider(protoConfigFileProvider)
-            , ConfigUpdateTracer(configUpdateTracer)
-            , MemLogInit(memLogInit)
-            , NodeBrokerClient(nodeBrokerClient)
-            , DynConfigClient(dynConfigClient)
-            , Env(env)
+    TInitialConfiguratorImpl(TInitialConfiguratorDependencies deps)
+        : TInitialConfiguratorDependencies(deps)
     {}
 
     void ValidateOptions(const NLastGetopt::TOpts& opts, const NLastGetopt::TOptsParseResult& parseResult) override {
@@ -945,17 +1047,17 @@ public:
 
         NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
 
-        Option("auth-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
+        Option("auth-file", TCfg::TAuthConfigFieldTag{});
         LoadBootstrapConfig(ProtoConfigFileProvider, ErrorCollector, freeArgs, BaseConfig);
-        LoadYamlConfig(refs, CommonAppOptions.YamlConfigFile, AppConfig, CALL_CTX());
-        OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
+        LoadYamlConfig(refs, CommonAppOptions.YamlConfigFile, AppConfig);
+        OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{});
 
         // start memorylog as soon as possible
-        Option("memorylog-file", TCfg::TMemoryLogConfigFieldTag{}, &TInitialConfiguratorImpl::InitMemLog, CALL_CTX());
-        Option("naming-file", TCfg::TNameserviceConfigFieldTag{}, CALL_CTX());
+        Option("memorylog-file", TCfg::TMemoryLogConfigFieldTag{}, &TInitialConfiguratorImpl::InitMemLog);
+        Option("naming-file", TCfg::TNameserviceConfigFieldTag{});
 
         CommonAppOptions.NodeId = CommonAppOptions.DeduceNodeId(AppConfig, Env);
-        Cout << "Determined node ID: " << CommonAppOptions.NodeId << Endl;
+        Logger.Out() << "Determined node ID: " << CommonAppOptions.NodeId << Endl;
 
         CommonAppOptions.ValidateTenant();
 
@@ -969,68 +1071,68 @@ public:
             InitDynamicNode();
         }
 
-        LoadYamlConfig(refs, CommonAppOptions.YamlConfigFile, AppConfig, CALL_CTX());
+        LoadYamlConfig(refs, CommonAppOptions.YamlConfigFile, AppConfig);
 
-        Option("sys-file", TCfg::TActorSystemConfigFieldTag{}, CALL_CTX());
+        Option("sys-file", TCfg::TActorSystemConfigFieldTag{});
 
         if (!AppConfig.HasActorSystemConfig()) {
             AppConfig.MutableActorSystemConfig()->CopyFrom(*DummyActorSystemConfig());
-            TRACE_CONFIG_CHANGE_INPLACE_T(ActorSystemConfig, SetExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::ActorSystemConfigItem, TConfigItemInfo::EUpdateKind::SetExplicitly);
         }
 
-        Option("domains-file", TCfg::TDomainsConfigFieldTag{}, CALL_CTX());
-        Option("bs-file", TCfg::TBlobStorageConfigFieldTag{}, CALL_CTX());
-        Option("log-file", TCfg::TLogConfigFieldTag{}, &TInitialConfiguratorImpl::SetupLogConfigDefaults, CALL_CTX());
+        Option("domains-file", TCfg::TDomainsConfigFieldTag{});
+        Option("bs-file", TCfg::TBlobStorageConfigFieldTag{});
+        Option("log-file", TCfg::TLogConfigFieldTag{}, &TInitialConfiguratorImpl::SetupLogConfigDefaults);
 
         // This flag is set per node and we prefer flag over CMS.
         CommonAppOptions.ApplyLogSettings(AppConfig, ConfigUpdateTracer);
 
-        Option("ic-file", TCfg::TInterconnectConfigFieldTag{}, &TInitialConfiguratorImpl::SetupInterconnectConfigDefaults, CALL_CTX());
-        Option("channels-file", TCfg::TChannelProfileConfigFieldTag{}, CALL_CTX());
-        Option("bootstrap-file", TCfg::TBootstrapConfigFieldTag{}, &TInitialConfiguratorImpl::SetupBootstrapConfigDefaults, CALL_CTX());
-        Option("vdisk-file", TCfg::TVDiskConfigFieldTag{}, CALL_CTX());
-        Option("drivemodel-file", TCfg::TDriveModelConfigFieldTag{}, CALL_CTX());
-        Option("grpc-file", TCfg::TGRpcConfigFieldTag{}, CALL_CTX());
-        Option("dyn-nodes-file", TCfg::TDynamicNameserviceConfigFieldTag{}, CALL_CTX());
-        Option("cms-file", TCfg::TCmsConfigFieldTag{}, CALL_CTX());
-        Option("pq-file", TCfg::TPQConfigFieldTag{}, CALL_CTX());
-        Option("pqcd-file", TCfg::TPQClusterDiscoveryConfigFieldTag{}, CALL_CTX());
-        Option("netclassifier-file", TCfg::TNetClassifierConfigFieldTag{}, CALL_CTX());
-        Option("auth-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
-        OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{}, CALL_CTX());
-        Option("key-file", TCfg::TKeyConfigFieldTag{}, CALL_CTX());
-        Option("pdisk-key-file", TCfg::TPDiskKeyConfigFieldTag{}, CALL_CTX());
-        Option("sqs-file", TCfg::TSqsConfigFieldTag{}, CALL_CTX());
-        Option("http-proxy-file", TCfg::THttpProxyConfigFieldTag{}, CALL_CTX());
-        Option("public-http-file", TCfg::TPublicHttpConfigFieldTag{}, CALL_CTX());
-        Option("feature-flags-file", TCfg::TFeatureFlagsFieldTag{}, CALL_CTX());
-        Option("rb-file", TCfg::TResourceBrokerConfigFieldTag{}, CALL_CTX());
-        Option("metering-file", TCfg::TMeteringConfigFieldTag{}, CALL_CTX());
-        Option("audit-file", TCfg::TAuditConfigFieldTag{}, CALL_CTX());
-        Option("kqp-file", TCfg::TKQPConfigFieldTag{}, CALL_CTX());
-        Option("incrhuge-file", TCfg::TIncrHugeConfigFieldTag{}, CALL_CTX());
-        Option("alloc-file", TCfg::TAllocatorConfigFieldTag{}, CALL_CTX());
-        Option("fq-file", TCfg::TFederatedQueryConfigFieldTag{}, CALL_CTX());
-        Option(nullptr, TCfg::TTracingConfigFieldTag{}, CALL_CTX());
-        Option(nullptr, TCfg::TFailureInjectionConfigFieldTag{}, CALL_CTX());
+        Option("ic-file", TCfg::TInterconnectConfigFieldTag{}, &TInitialConfiguratorImpl::SetupInterconnectConfigDefaults);
+        Option("channels-file", TCfg::TChannelProfileConfigFieldTag{});
+        Option("bootstrap-file", TCfg::TBootstrapConfigFieldTag{}, &TInitialConfiguratorImpl::SetupBootstrapConfigDefaults);
+        Option("vdisk-file", TCfg::TVDiskConfigFieldTag{});
+        Option("drivemodel-file", TCfg::TDriveModelConfigFieldTag{});
+        Option("grpc-file", TCfg::TGRpcConfigFieldTag{});
+        Option("dyn-nodes-file", TCfg::TDynamicNameserviceConfigFieldTag{});
+        Option("cms-file", TCfg::TCmsConfigFieldTag{});
+        Option("pq-file", TCfg::TPQConfigFieldTag{});
+        Option("pqcd-file", TCfg::TPQClusterDiscoveryConfigFieldTag{});
+        Option("netclassifier-file", TCfg::TNetClassifierConfigFieldTag{});
+        Option("auth-file", TCfg::TAuthConfigFieldTag{});
+        OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{});
+        Option("key-file", TCfg::TKeyConfigFieldTag{});
+        Option("pdisk-key-file", TCfg::TPDiskKeyConfigFieldTag{});
+        Option("sqs-file", TCfg::TSqsConfigFieldTag{});
+        Option("http-proxy-file", TCfg::THttpProxyConfigFieldTag{});
+        Option("public-http-file", TCfg::TPublicHttpConfigFieldTag{});
+        Option("feature-flags-file", TCfg::TFeatureFlagsFieldTag{});
+        Option("rb-file", TCfg::TResourceBrokerConfigFieldTag{});
+        Option("metering-file", TCfg::TMeteringConfigFieldTag{});
+        Option("audit-file", TCfg::TAuditConfigFieldTag{});
+        Option("kqp-file", TCfg::TKQPConfigFieldTag{});
+        Option("incrhuge-file", TCfg::TIncrHugeConfigFieldTag{});
+        Option("alloc-file", TCfg::TAllocatorConfigFieldTag{});
+        Option("fq-file", TCfg::TFederatedQueryConfigFieldTag{});
+        Option(nullptr, TCfg::TTracingConfigFieldTag{});
+        Option(nullptr, TCfg::TFailureInjectionConfigFieldTag{});
 
         CommonAppOptions.ApplyFields(AppConfig, Env, ConfigUpdateTracer);
 
        // MessageBus options.
         if (!AppConfig.HasMessageBusConfig()) {
             MbusAppOptions.InitMessageBusConfig(AppConfig);
-            TRACE_CONFIG_CHANGE_INPLACE_T(MessageBusConfig, UpdateExplicitly);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::MessageBusConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
 
         TenantName = FillTenantPoolConfig(CommonAppOptions);
 
-        Cout << "configured" << Endl;
+        Logger.Out() << "configured" << Endl;
 
         FillData(CommonAppOptions);
     }
 
     void FillData(const NConfig::TCommonAppOptions& cf) {
-        if (cf.TenantName && ScopeId.IsEmpty()) {
+        if (!cf.TenantName && ScopeId.IsEmpty()) {
             const TString myDomain = DeduceNodeDomain(cf, AppConfig);
             for (const auto& domain : AppConfig.GetDomainsConfig().GetDomain()) {
                 if (domain.GetName() == myDomain) {
@@ -1082,23 +1184,23 @@ public:
     }
 
     template <class TTag>
-    void Option(const char* optname, TTag tag, NConfig::TCallContext ctx) {
+    void Option(const char* optname, TTag tag, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current()) {
         NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
-        MutableConfigPart(refs, optname, tag, BaseConfig, AppConfig, ctx);
+        MutableConfigPart(refs, optname, tag, BaseConfig, AppConfig, TCallContext::From(location));
     }
 
     template <class TTag, class TContinuation>
-    void Option(const char* optname, TTag tag, TContinuation continuation, NConfig::TCallContext ctx) {
+    void Option(const char* optname, TTag tag, TContinuation continuation, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current()) {
         NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
-        if (auto* res = MutableConfigPart(refs, optname, tag, BaseConfig, AppConfig, ctx)) {
+        if (auto* res = MutableConfigPart(refs, optname, tag, BaseConfig, AppConfig, TCallContext::From(location))) {
             (this->*continuation)(*res);
         }
     }
 
     template <class TTag>
-    void OptionMerge(const char* optname, TTag tag, NConfig::TCallContext ctx) {
+    void OptionMerge(const char* optname, TTag tag, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current()) {
         NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
-        MutableConfigPartMerge(refs, optname, tag, AppConfig, ctx);
+        MutableConfigPartMerge(refs, optname, tag, AppConfig, TCallContext::From(location));
     }
 
     void PreFillLabels(const NConfig::TCommonAppOptions& cf) {
@@ -1109,7 +1211,7 @@ public:
         // will be replaced with proper version info
         Labels["branch"] = GetBranch();
         Labels["rev"] = GetProgramCommitId();
-        Labels["dynamic"] = ToString(cf.NodeBrokerAddresses.empty() ? "false" : "true");
+        Labels["dynamic"] = ToString(CommonAppOptions.IsStaticNode() ? "false" : "true");
 
         for (const auto& [name, value] : Labels) {
             auto *label = AppConfig.AddLabels();
@@ -1158,11 +1260,12 @@ public:
             cf.FixedNodeID,
             cf.InterconnectPort,
             cf.CreateNodeLocation(),
+            AppConfig.GetAuthConfig().GetNodeRegistrationToken(),
         };
 
-        auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env);
+        auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env, Logger);
 
-        result->Apply(AppConfig, NodeId, ScopeId);
+        result->Apply(AppConfig, NodeId, ScopeId, NodeName);
     }
 
     void ApplyConfigForNode(NKikimrConfig::TAppConfig &appConfig) {
@@ -1192,6 +1295,11 @@ public:
         Labels["node_id"] = ToString(NodeId);
         AddLabelToAppConfig("node_id", Labels["node_id"]);
 
+        if (!NodeName.empty()) {
+            Labels["node_name"] = NodeName;
+            AddLabelToAppConfig("node_name", Labels["node_name"]);
+        }
+
         if (CommonAppOptions.IgnoreCmsConfigs) {
             return;
         }
@@ -1208,7 +1316,7 @@ public:
             AppConfig.GetAuthConfig().GetStaffApiUserToken(),
         };
 
-        TMaybe<NKikimr::NClient::TConfigurationResult> result = DynConfigClient.GetConfig(CommonAppOptions.GrpcSslSettings, addrs, settings, Env);
+        auto result = DynConfigClient.GetConfig(CommonAppOptions.GrpcSslSettings, addrs, settings, Env, Logger);
 
         if (!result) {
             return;
@@ -1243,22 +1351,25 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
-        TMap<TString, TString>& labels,
         TString& clusterName,
-        NKikimrConfig::TAppConfig& initialCmsConfig,
-        NKikimrConfig::TAppConfig& initialCmsYamlConfig,
-        THashMap<ui32, TConfigItemInfo>& configInitInfo) const override
+        TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const override
     {
         appConfig = AppConfig;
         nodeId = NodeId;
         scopeId = ScopeId;
         tenantName = TenantName;
         servicesMask = ServicesMask;
-        labels = Labels;
         clusterName = ClusterName;
-        initialCmsConfig.CopyFrom(InitDebug.OldConfig);
-        initialCmsYamlConfig.CopyFrom(InitDebug.YamlConfig);
-        configInitInfo = InitDebug.ConfigTransformInfo;
+        configsDispatcherInitInfo.InitialConfig = appConfig;
+        configsDispatcherInitInfo.ItemsServeRules = std::monostate{},
+        configsDispatcherInitInfo.Labels = Labels;
+        configsDispatcherInitInfo.DebugInfo = TDebugInfo {
+            .InitInfo = InitDebug.ConfigTransformInfo,
+        };
+        auto& debugInfo = *configsDispatcherInitInfo.DebugInfo;
+        debugInfo.StaticConfig.CopyFrom(appConfig); // FIXME it's not static config
+        debugInfo.OldDynConfig.CopyFrom(InitDebug.OldConfig);
+        debugInfo.NewDynConfig.CopyFrom(InitDebug.YamlConfig);
     }
 };
 

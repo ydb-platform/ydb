@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include <arrow/array/array_base.h>
+#include <arrow/array/util.h>
 #include <arrow/chunked_array.h>
 #include <arrow/record_batch.h>
 
@@ -10,63 +11,6 @@ namespace NYql {
 namespace NUdf {
 
 namespace {
-
-class TResizeableBuffer final : public arrow::ResizableBuffer {
-public:
-    explicit TResizeableBuffer(arrow::MemoryPool* pool)
-        : ResizableBuffer(nullptr, 0, arrow::CPUDevice::memory_manager(pool))
-        , Pool(pool)
-    {
-    }
-
-    ~TResizeableBuffer() override {
-        uint8_t* ptr = mutable_data();
-        if (ptr) {
-            Pool->Free(ptr, capacity_);
-        }
-    }
-
-    arrow::Status Reserve(const int64_t capacity) override {
-        if (capacity < 0) {
-            return arrow::Status::Invalid("Negative buffer capacity: ", capacity);
-        }
-        uint8_t* ptr = mutable_data();
-        if (!ptr || capacity > capacity_) {
-            int64_t newCapacity = arrow::BitUtil::RoundUpToMultipleOf64(capacity);
-            if (ptr) {
-                ARROW_RETURN_NOT_OK(Pool->Reallocate(capacity_, newCapacity, &ptr));
-            } else {
-                ARROW_RETURN_NOT_OK(Pool->Allocate(newCapacity, &ptr));
-            }
-            data_ = ptr;
-            capacity_ = newCapacity;
-        }
-        return arrow::Status::OK();
-    }
-
-    arrow::Status Resize(const int64_t newSize, bool shrink_to_fit = true) override {
-        if (ARROW_PREDICT_FALSE(newSize < 0)) {
-            return arrow::Status::Invalid("Negative buffer resize: ", newSize);
-        }
-        uint8_t* ptr = mutable_data();
-        if (ptr && shrink_to_fit && newSize <= size_) {
-            int64_t newCapacity = arrow::BitUtil::RoundUpToMultipleOf64(newSize);
-            if (capacity_ != newCapacity) {
-                ARROW_RETURN_NOT_OK(Pool->Reallocate(capacity_, newCapacity, &ptr));
-                data_ = ptr;
-                capacity_ = newCapacity;
-            }
-        } else {
-            RETURN_NOT_OK(Reserve(newSize));
-        }
-        size_ = newSize;
-
-        return arrow::Status::OK();
-    }
-
-private:
-    arrow::MemoryPool* Pool;
-};
 
 ui64 GetSizeOfArrayDataInBytes(const arrow::ArrayData& data) {
     ui64 size = sizeof(data);
@@ -85,6 +29,21 @@ ui64 GetSizeOfArrayDataInBytes(const arrow::ArrayData& data) {
     }
 
     return size;
+}
+
+ui64 GetSizeOfDatumInBytes(const arrow::Datum& datum) {
+    ui64 size = sizeof(datum);
+    if (datum.is_scalar()) {
+        const auto& scarray = ARROW_RESULT(arrow::MakeArrayFromScalar(*datum.scalar(), 1));
+        return size + GetSizeOfArrayDataInBytes(*scarray->data());
+    }
+    if (datum.is_arraylike()) {
+        ForEachArrayData(datum, [&size](const auto& arrayData) {
+            size += GetSizeOfArrayDataInBytes(*arrayData);
+        });
+        return size;
+    }
+    Y_ABORT("Not yet implemented");
 }
 
 } // namespace
@@ -179,15 +138,6 @@ arrow::Datum MakeArray(const TVector<std::shared_ptr<arrow::ArrayData>>& chunks)
     return arrow::Datum(resultChunks.front());
 }
 
-std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBuffer(size_t size, arrow::MemoryPool* pool, bool zeroPad) {
-    std::unique_ptr<TResizeableBuffer> result = std::make_unique<TResizeableBuffer>(pool);
-    ARROW_OK(result->Reserve(size));
-    if (zeroPad) {
-        result->ZeroPadding();
-    }
-    return result;
-}
-
 ui64 GetSizeOfArrowBatchInBytes(const arrow::RecordBatch& batch) {
     ui64 size = sizeof(batch);
     size += batch.num_columns() * sizeof(void*);
@@ -198,5 +148,14 @@ ui64 GetSizeOfArrowBatchInBytes(const arrow::RecordBatch& batch) {
     return size;
 }
 
+ui64 GetSizeOfArrowExecBatchInBytes(const arrow::compute::ExecBatch& batch) {
+    ui64 size = sizeof(batch);
+    size += batch.num_values() * sizeof(void*);
+    for (const auto& datum : batch.values) {
+        size += GetSizeOfDatumInBytes(datum);
+    }
+
+    return size;
+}
 }
 }

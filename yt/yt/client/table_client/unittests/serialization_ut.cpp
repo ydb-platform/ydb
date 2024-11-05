@@ -1,3 +1,4 @@
+#include <yt/yt/client/table_client/helpers.h>
 #include <yt/yt/client/table_client/schema.h>
 
 #include <yt/yt/library/formats/format.h>
@@ -64,6 +65,27 @@ TEST(TSchemaSerialization, Deleted)
     EXPECT_THROW_WITH_SUBSTRING(
         Deserialize(schema, NYTree::ConvertToNode(NYson::TYsonString(TString(schemaString)))),
         "Stable name should be set for a deleted column");
+}
+
+TEST(TInstantSerialization, YsonCompatibility)
+{
+    auto convert = [] (auto value) {
+        TUnversionedValue unversioned;
+        ToUnversionedValue(&unversioned, value, /*rowBuffer*/ nullptr);
+        auto node = NYTree::ConvertToNode(unversioned);
+        return NYTree::ConvertTo<TInstant>(node);
+    };
+
+    TInstant now = TInstant::Now();
+    TInstant lower = TInstant::TInstant::ParseIso8601("1970-03-01");
+    TInstant upper = TInstant::ParseIso8601("2100-01-01");
+
+    EXPECT_EQ(now, convert(now));
+    EXPECT_EQ(TInstant::MilliSeconds(now.MilliSeconds()), convert(now.MilliSeconds()));
+    EXPECT_EQ(lower, convert(lower));
+    EXPECT_EQ(TInstant::MilliSeconds(lower.MilliSeconds()), convert(lower.MilliSeconds()));
+    EXPECT_EQ(upper, convert(upper));
+    EXPECT_EQ(TInstant::MilliSeconds(upper.MilliSeconds()), convert(upper.MilliSeconds()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

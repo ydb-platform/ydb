@@ -1,3 +1,4 @@
+from __future__ import print_function
 import argparse
 import json
 import os
@@ -95,7 +96,7 @@ def filter_cmd(cmd):
         if not skip:
             yield x
 
-        if '/wrapcc.py' in x:
+        if '/retry_cc.py' in x:
             skip = False
 
 
@@ -115,7 +116,7 @@ def find_header(p, h):
 
 def main():
     args, clang_cmd = parse_args()
-    if '/wrapcc.py' in str(clang_cmd):
+    if '/retry_cc.py' in str(clang_cmd):
         clang_cmd = list(filter_cmd(clang_cmd))
     setup_script(args)
     clang_tidy_bin = args.clang_tidy_bin

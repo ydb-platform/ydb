@@ -1,6 +1,12 @@
 {%- set publish = target.publish -%}
 import com.google.protobuf.gradle.*
 
+val baseBuildDir = "{{ export_root }}/gradle.build/"
+buildDir = file(baseBuildDir + project.path.replaceFirst(":", "/").replace(":", "."))
+subprojects {
+    buildDir = file(baseBuildDir + project.path.replaceFirst(":", "/").replace(":", "."))
+}
+
 val buildProtoDir = File("${buildDir}", "__proto__")
 
 plugins {
@@ -9,7 +15,7 @@ plugins {
 {%- if publish %}
     `maven-publish`
     `signing`
-{%- endif -%}
+{%- endif %}
 }
 {%- if publish %}
 
@@ -20,15 +26,15 @@ version = {% if target.publish_version -%}"{{ target.publish_version }}"{%- else
 val bucketUsername: String by project
 val bucketPassword: String by project
 repositories {
-   repositories {
-    maven {
-        url = uri("https://bucket.yandex-team.ru/v1/maven/central")
-        credentials {
-            username = "$bucketUsername"
-            password = "$bucketPassword"
+    repositories {
+        maven {
+            url = uri("https://bucket.yandex-team.ru/v1/maven/central")
+            credentials {
+                username = "$bucketUsername"
+                password = "$bucketPassword"
+            }
         }
     }
-}
 }
 
 sourceSets {
@@ -37,7 +43,7 @@ sourceSets {
     }
 }
 
-val project_root="{%- if exportRoot.startswith(arcadiaRoot + '/') -%}{{ arcadiaRoot }}{%- else -%}{{ exportRoot }}{%- endif -%}"
+val project_root = "{{ arcadia_root }}"
 
 java {
     withSourcesJar()
@@ -58,21 +64,25 @@ configurations.testImplementation {
 
 {%- if target.jar_source_set is defined -%}
 {%-     for source_set in target.jar_source_set -%}
-{%-         set srcdir_glob = split(source_set, ':') -%}
+{%-         set srcdir_glob = split(source_set, ':') %}
 sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
 {%      endfor -%}
-{%- endif -%}
+{%- endif %}
 
 dependencies {
 {%- for library in target.consumer if library.classpath -%}
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or target.handler.build_contribs) %}
     implementation(files("$project_root/{{ library.jar }}"))
 {%-     else -%}
+{%-         set classpath = library.classpath -%}
+{%-         if classpath|replace('"','') == classpath -%}
+{%-             set classpath = '"' + classpath + '"' -%}
+{%-         endif %}
 {%-         if library.type != "contrib" %}
     implementation
 {%-         else %}
     api
-{%-         endif -%}({{ library.classpath }})
+{%-         endif -%}({{ classpath }})
 {%-         if library.excludes.consumer is defined %} {
 {%              for exclude in library.excludes.consumer -%}
 {%                  set classpath = exclude.classpath|replace('"','') -%}
@@ -103,7 +113,7 @@ protobuf {
         }
     }
     generateProtoTasks {
-        ofSourceSet("main").forEach {
+        all().forEach {
             it.plugins {
                 id("grpc")
             }
@@ -117,6 +127,16 @@ val prepareProto = tasks.register<Copy>("prepareProto") {
 {%- for proto in target.proto_files %}
         include("{{ proto }}")
 {%- endfor %}
+{# Mining proto-deps sources directories #}
+{%- for library in target.consumer if library.prebuilt -%}
+{%-     if library.type == "library" %}
+{%-         set proto_rep = library.classpath|replace('project(":','') %}
+{%-         set proto_rep = proto_rep|replace('")','') %}
+{%-         set proto_rep = proto_rep|replace(':','/') %}
+{%-         set proto = proto_rep + '/**' %}
+        include("{{ proto }}")
+{%-     endif -%}
+{%- endfor %}
     }
     into(buildProtoDir)
 }
@@ -124,5 +144,13 @@ val prepareProto = tasks.register<Copy>("prepareProto") {
 afterEvaluate {
     tasks.getByName("extractProto").dependsOn(prepareProto)
 }
+{# To avoid problems when build project with proto #}
+tasks.named("sourcesJar").configure {
+    dependsOn("generateProto")
+}
+{# To disable redundant javadoc (it may fail the build) #}
+tasks.withType<Javadoc>().configureEach {
+    isEnabled = false
+}
 
-{{ dump }}
+{%- include "[generator]/debug.jinja" ignore missing -%}

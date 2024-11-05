@@ -18,6 +18,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/impl/data_query.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/impl/request_migrator.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/impl/table_client.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/impl/transaction.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
 #include <google/protobuf/util/time_util.h>
@@ -27,6 +28,7 @@
 #include <util/generic/map.h>
 #include <util/random/random.h>
 #include <util/string/join.h>
+#include <util/stream/output.h>
 
 #include <unordered_map>
 
@@ -251,6 +253,23 @@ static void SerializeTo(const TRenameIndex& rename, Ydb::Table::RenameIndexItem&
     proto.set_replace_destination(rename.ReplaceDestination_);
 }
 
+TExplicitPartitions TExplicitPartitions::FromProto(const Ydb::Table::ExplicitPartitions& proto) {
+    TExplicitPartitions out;
+    for (const auto& splitPoint : proto.split_points()) {
+        TValue value(TType(splitPoint.type()), splitPoint.value());
+        out.AppendSplitPoints(value);
+    }
+    return out;
+}
+
+void TExplicitPartitions::SerializeTo(Ydb::Table::ExplicitPartitions& proto) const {
+    for (const auto& splitPoint : SplitPoints_) {
+        auto* boundary = proto.Addsplit_points();
+        boundary->mutable_type()->CopyFrom(TProtoAccessor::GetProto(splitPoint.GetType()));
+        boundary->mutable_value()->CopyFrom(TProtoAccessor::GetProto(splitPoint));
+    }
+}
+
 class TTableDescription::TImpl {
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
@@ -268,7 +287,28 @@ class TTableDescription::TImpl {
 
         // columns
         for (const auto& col : proto.columns()) {
-            Columns_.emplace_back(col.name(), col.type(), col.family(), col.not_null());
+            std::optional<bool> not_null;
+            if (col.has_not_null()) {
+                not_null = col.not_null();
+            }
+            std::optional<TSequenceDescription> sequenceDescription;
+            switch (col.default_value_case()) {
+                case Ydb::Table::ColumnMeta::kFromSequence: {
+                    if (col.from_sequence().name() == "_serial_column_" + col.name()) {
+                        TSequenceDescription currentSequenceDescription;
+                        if (col.from_sequence().has_set_val()) {
+                            TSequenceDescription::TSetVal setVal;
+                            setVal.NextUsed = col.from_sequence().set_val().next_used();
+                            setVal.NextValue = col.from_sequence().set_val().next_value();
+                            currentSequenceDescription.SetVal = std::move(setVal);
+                        }
+                        sequenceDescription = std::move(currentSequenceDescription);
+                    }
+                    break;
+                }
+                default: break;
+            }
+            Columns_.emplace_back(col.name(), col.type(), col.family(), not_null, std::move(sequenceDescription));
         }
 
         // indexes
@@ -382,7 +422,7 @@ public:
 
         for (const auto& shardStats : Proto_.table_stats().partition_stats()) {
             PartitionStats_.emplace_back(
-                TPartitionStats{shardStats.rows_estimate(), shardStats.store_size()}
+                TPartitionStats{shardStats.rows_estimate(), shardStats.store_size(), shardStats.leader_node_id()}
             );
         }
 
@@ -415,13 +455,7 @@ public:
                 break;
 
             case Ydb::Table::CreateTableRequest::kPartitionAtKeys: {
-                TExplicitPartitions partitionAtKeys;
-                for (const auto& splitPoint : request.partition_at_keys().split_points()) {
-                    TValue value(TType(splitPoint.type()), splitPoint.value());
-                    partitionAtKeys.AppendSplitPoints(value);
-                }
-
-                SetPartitionAtKeys(partitionAtKeys);
+                SetPartitionAtKeys(TExplicitPartitions::FromProto(request.partition_at_keys()));
                 break;
             }
 
@@ -436,8 +470,8 @@ public:
         return Proto_;
     }
 
-    void AddColumn(const TString& name, const Ydb::Type& type, const TString& family, std::optional<bool> notNull) {
-        Columns_.emplace_back(name, type, family, notNull);
+    void AddColumn(const TString& name, const Ydb::Type& type, const TString& family, std::optional<bool> notNull, std::optional<TSequenceDescription> sequenceDescription) {
+        Columns_.emplace_back(name, type, family, notNull, std::move(sequenceDescription));
     }
 
     void SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns) {
@@ -450,6 +484,18 @@ public:
 
     void AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns) {
         Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns));
+    }
+
+    void AddSecondaryIndex(const TIndexDescription& indexDescription) {
+        Indexes_.emplace_back(indexDescription);
+    }
+
+    void AddVectorKMeansTreeIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TKMeansTreeSettings& indexSettings) {
+        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, {}, {}, indexSettings));
+    }
+
+    void AddVectorKMeansTreeIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns, const TKMeansTreeSettings& indexSettings) {
+        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns, {}, indexSettings));
     }
 
     void AddChangefeed(const TString& name, EChangefeedMode mode, EChangefeedFormat format) {
@@ -708,8 +754,8 @@ const TVector<TKeyRange>& TTableDescription::GetKeyRanges() const {
     return Impl_->GetKeyRanges();
 }
 
-void TTableDescription::AddColumn(const TString& name, const Ydb::Type& type, const TString& family, std::optional<bool> notNull) {
-    Impl_->AddColumn(name, type, family, notNull);
+void TTableDescription::AddColumn(const TString& name, const Ydb::Type& type, const TString& family, std::optional<bool> notNull, std::optional<TSequenceDescription> sequenceDescription) {
+    Impl_->AddColumn(name, type, family, notNull, std::move(sequenceDescription));
 }
 
 void TTableDescription::SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns) {
@@ -722,6 +768,10 @@ void TTableDescription::AddSecondaryIndex(const TString& indexName, EIndexType t
 
 void TTableDescription::AddSecondaryIndex(const TString& indexName, EIndexType type, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns) {
     Impl_->AddSecondaryIndex(indexName, type, indexColumns, dataColumns);
+}
+
+void TTableDescription::AddSecondaryIndex(const TIndexDescription& indexDescription) {
+    Impl_->AddSecondaryIndex(indexDescription);
 }
 
 void TTableDescription::AddSyncSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns) {
@@ -746,6 +796,14 @@ void TTableDescription::AddUniqueSecondaryIndex(const TString& indexName, const 
 
 void TTableDescription::AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns) {
     AddSecondaryIndex(indexName, EIndexType::GlobalUnique, indexColumns, dataColumns);
+}
+
+void TTableDescription::AddVectorKMeansTreeIndex(const TString& indexName, const TVector<TString>& indexColumns, const TKMeansTreeSettings& indexSettings) {
+    Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, indexSettings);
+}
+
+void TTableDescription::AddVectorKMeansTreeIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns, const TKMeansTreeSettings& indexSettings) {
+    Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, dataColumns, indexSettings);
 }
 
 void TTableDescription::AddSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns) {
@@ -873,6 +931,15 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
         if (column.NotNull.has_value()) {
             protoColumn.set_not_null(column.NotNull.value());
         }
+        if (column.SequenceDescription.has_value()) {
+            auto* fromSequence = protoColumn.mutable_from_sequence();
+            if (column.SequenceDescription->SetVal.has_value()) {
+                auto* setVal = fromSequence->mutable_set_val();
+                setVal->set_next_value(column.SequenceDescription->SetVal->NextValue);
+                setVal->set_next_used(column.SequenceDescription->SetVal->NextUsed);
+            }
+            fromSequence->set_name("_serial_column_" + column.Name);
+        }
     }
 
     for (const auto& pk : Impl_->GetPrimaryKeyColumns()) {
@@ -917,12 +984,7 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
     }
 
     if (const auto& partitionAtKeys = Impl_->GetPartitionAtKeys()) {
-        auto* borders = request.mutable_partition_at_keys();
-        for (const auto& splitPoint : partitionAtKeys->SplitPoints_) {
-            auto* border = borders->Addsplit_points();
-            border->mutable_type()->CopyFrom(TProtoAccessor::GetProto(splitPoint.GetType()));
-            border->mutable_value()->CopyFrom(TProtoAccessor::GetProto(splitPoint));
-        }
+        partitionAtKeys->SerializeTo(*request.mutable_partition_at_keys());
     } else if (Impl_->GetProto().shard_key_bounds_size()) {
         request.mutable_partition_at_keys()->mutable_split_points()->CopyFrom(Impl_->GetProto().shard_key_bounds());
     }
@@ -1085,7 +1147,7 @@ TTableBuilder& TTableBuilder::AddNullableColumn(const TString& name, const EPrim
         .EndOptional()
         .Build();
 
-    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family, false);
+    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family, false, std::nullopt);
     return *this;
 }
 
@@ -1095,7 +1157,7 @@ TTableBuilder& TTableBuilder::AddNullableColumn(const TString& name, const TDeci
             .Decimal(type)
         .EndOptional()
         .Build();
-    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family, false);
+    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family, false, std::nullopt);
     return *this;
 }
 
@@ -1104,7 +1166,7 @@ TTableBuilder& TTableBuilder::AddNullableColumn(const TString& name, const TPgTy
         .Pg(type)
         .Build();
 
-    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family, false);
+    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family, false, std::nullopt);
     return *this;
 }
 
@@ -1113,7 +1175,7 @@ TTableBuilder& TTableBuilder::AddNonNullableColumn(const TString& name, const EP
         .Primitive(type)
         .Build();
 
-    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family, true);
+    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family, true, std::nullopt);
     return *this;
 }
 
@@ -1122,7 +1184,7 @@ TTableBuilder& TTableBuilder::AddNonNullableColumn(const TString& name, const TD
         .Decimal(type)
         .Build();
 
-    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family, true);
+    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family, true, std::nullopt);
     return *this;
 }
 
@@ -1131,7 +1193,16 @@ TTableBuilder& TTableBuilder::AddNonNullableColumn(const TString& name, const TP
         .Pg(type)
         .Build();
 
-    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family, true);
+    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family, true, std::nullopt);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddSerialColumn(const TString& name, const EPrimitiveType& type, TSequenceDescription sequenceDescription, const TString& family) {
+    auto columnType = TTypeBuilder()
+        .Primitive(type)
+        .Build();
+
+    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family, true, std::move(sequenceDescription));
     return *this;
 }
 
@@ -1142,6 +1213,11 @@ TTableBuilder& TTableBuilder::SetPrimaryKeyColumns(const TVector<TString>& prima
 
 TTableBuilder& TTableBuilder::SetPrimaryKeyColumn(const TString& primaryKeyColumn) {
     TableDescription_.SetPrimaryKeyColumns(TVector<TString>{primaryKeyColumn});
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddSecondaryIndex(const TIndexDescription& indexDescription) {
+    TableDescription_.AddSecondaryIndex(indexDescription);
     return *this;
 }
 
@@ -1198,6 +1274,16 @@ TTableBuilder& TTableBuilder::AddUniqueSecondaryIndex(const TString& indexName, 
 
 TTableBuilder& TTableBuilder::AddUniqueSecondaryIndex(const TString& indexName, const TVector<TString>& indexColumns) {
     return AddSecondaryIndex(indexName, EIndexType::GlobalUnique, indexColumns);
+}
+
+TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const TString& indexName, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns, const TKMeansTreeSettings& indexSettings) {
+    TableDescription_.AddVectorKMeansTreeIndex(indexName, indexColumns, dataColumns, indexSettings);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const TString& indexName, const TVector<TString>& indexColumns, const TKMeansTreeSettings& indexSettings) {
+    TableDescription_.AddVectorKMeansTreeIndex(indexName, indexColumns, indexSettings);
+    return *this;
 }
 
 TTableBuilder& TTableBuilder::AddSecondaryIndex(const TString& indexName, const TString& indexColumn) {
@@ -1901,7 +1987,7 @@ const TString& TSession::GetId() const {
 ////////////////////////////////////////////////////////////////////////////////
 
 TTxControl::TTxControl(const TTransaction& tx)
-    : TxId_(tx.GetId())
+    : Tx_(tx)
 {}
 
 TTxControl::TTxControl(const TTxSettings& begin)
@@ -1911,16 +1997,40 @@ TTxControl::TTxControl(const TTxSettings& begin)
 ////////////////////////////////////////////////////////////////////////////////
 
 TTransaction::TTransaction(const TSession& session, const TString& txId)
-    : Session_(session)
-    , TxId_(txId)
+    : TransactionImpl_(new TTransaction::TImpl(session, txId))
 {}
 
+const TString& TTransaction::GetId() const
+{
+    return TransactionImpl_->GetId();
+}
+
+bool TTransaction::IsActive() const
+{
+    return TransactionImpl_->IsActive();
+}
+
+TAsyncStatus TTransaction::Precommit() const
+{
+    return TransactionImpl_->Precommit();
+}
+
 TAsyncCommitTransactionResult TTransaction::Commit(const TCommitTxSettings& settings) {
-    return Session_.Client_->CommitTransaction(Session_, *this, settings);
+    return TransactionImpl_->Commit(settings);
 }
 
 TAsyncStatus TTransaction::Rollback(const TRollbackTxSettings& settings) {
-    return Session_.Client_->RollbackTransaction(Session_, *this, settings);
+    return TransactionImpl_->Rollback(settings);
+}
+
+TSession TTransaction::GetSession() const
+{
+    return TransactionImpl_->GetSession();
+}
+
+void TTransaction::AddPrecommitCallback(TPrecommitTransactionCallback cb)
+{
+    TransactionImpl_->AddPrecommitCallback(std::move(cb));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2172,6 +2282,12 @@ bool TCopyItem::OmitIndexes() const {
     return OmitIndexes_;
 }
 
+void TCopyItem::Out(IOutputStream& o) const {
+    o << "{ src: \"" << Source_ << "\""
+      << ", dst: \"" << Destination_ << "\""
+      << " }";
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TRenameItem::TRenameItem(const TString& source, const TString& destination)
@@ -2199,16 +2315,27 @@ bool TRenameItem::ReplaceDestination() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TIndexDescription::TIndexDescription(const TString& name, EIndexType type,
-        const TVector<TString>& indexColumns, const TVector<TString>& dataColumns)
-    : IndexName_(name)
+TIndexDescription::TIndexDescription(
+    const TString& name,
+    EIndexType type,
+    const TVector<TString>& indexColumns,
+    const TVector<TString>& dataColumns,
+    const TVector<TGlobalIndexSettings>& globalIndexSettings,
+    const std::variant<std::monostate, TKMeansTreeSettings>& specializedIndexSettings
+)   : IndexName_(name)
     , IndexType_(type)
     , IndexColumns_(indexColumns)
     , DataColumns_(dataColumns)
+    , GlobalIndexSettings_(globalIndexSettings)
+    , SpecializedIndexSettings_(specializedIndexSettings)
 {}
 
-TIndexDescription::TIndexDescription(const TString& name, const TVector<TString>& indexColumns, const TVector<TString>& dataColumns)
-    : TIndexDescription(name, EIndexType::GlobalSync, indexColumns, dataColumns)
+TIndexDescription::TIndexDescription(
+    const TString& name,
+    const TVector<TString>& indexColumns,
+    const TVector<TString>& dataColumns,
+    const TVector<TGlobalIndexSettings>& globalIndexSettings
+)   : TIndexDescription(name, EIndexType::GlobalSync, indexColumns, dataColumns, globalIndexSettings)
 {}
 
 TIndexDescription::TIndexDescription(const Ydb::Table::TableIndex& tableIndex)
@@ -2235,8 +2362,144 @@ const TVector<TString>& TIndexDescription::GetDataColumns() const {
     return DataColumns_;
 }
 
+const std::variant<std::monostate, TKMeansTreeSettings>& TIndexDescription::GetVectorIndexSettings() const {
+    return SpecializedIndexSettings_;
+}
+
 ui64 TIndexDescription::GetSizeBytes() const {
-    return SizeBytes;
+    return SizeBytes_;
+}
+
+TGlobalIndexSettings TGlobalIndexSettings::FromProto(const Ydb::Table::GlobalIndexSettings& proto) {
+    auto partitionsFromProto = [](const Ydb::Table::GlobalIndexSettings& proto) -> TUniformOrExplicitPartitions {
+        switch (proto.partitions_case()) {
+        case Ydb::Table::GlobalIndexSettings::kUniformPartitions:
+            return proto.uniform_partitions();
+        case Ydb::Table::GlobalIndexSettings::kPartitionAtKeys:
+            return TExplicitPartitions::FromProto(proto.partition_at_keys());
+        default:
+            return {};
+        }
+    };
+
+    return {
+        .PartitioningSettings = TPartitioningSettings(proto.partitioning_settings()),
+        .Partitions = partitionsFromProto(proto)
+    };
+}
+
+void TGlobalIndexSettings::SerializeTo(Ydb::Table::GlobalIndexSettings& settings) const {
+    *settings.mutable_partitioning_settings() = PartitioningSettings.GetProto();
+
+    auto variantVisitor = [&settings](auto&& partitions) {
+        using T = std::decay_t<decltype(partitions)>;
+        if constexpr (std::is_same_v<T, ui64>) {
+            settings.set_uniform_partitions(partitions);
+        } else if constexpr (std::is_same_v<T, TExplicitPartitions>) {
+            partitions.SerializeTo(*settings.mutable_partition_at_keys());
+        }
+    };
+    std::visit(std::move(variantVisitor), Partitions);
+}
+
+TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorIndexSettings& proto) {
+    auto covertMetric = [&] {
+        switch (proto.metric()) {
+        case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
+            return EMetric::InnerProduct;
+        case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
+            return EMetric::CosineSimilarity;
+        case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
+            return EMetric::CosineDistance;
+        case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
+            return EMetric::Manhattan;
+        case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
+            return EMetric::Euclidean;
+        default:
+            return EMetric::Unspecified;
+        }
+    };
+
+    auto convertVectorType = [&] {
+        switch (proto.vector_type()) {
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
+            return EVectorType::Float;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
+            return EVectorType::Uint8;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
+            return EVectorType::Int8;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
+            return EVectorType::Bit;
+        default:
+            return EVectorType::Unspecified;
+        }
+    };
+
+    return {
+        .Metric = covertMetric(),
+        .VectorType = convertVectorType(),
+        .VectorDimension = proto.vector_dimension(),
+    };
+}
+
+void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings) const {
+    auto convertMetric = [&] {
+        switch (Metric) {
+        case EMetric::InnerProduct:
+            return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
+        case EMetric::CosineSimilarity:
+            return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
+        case EMetric::CosineDistance:
+            return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
+        case EMetric::Manhattan:
+            return Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN;
+        case EMetric::Euclidean:
+            return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
+        case EMetric::Unspecified:
+            return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
+        }
+    };
+
+    auto convertVectorType = [&] {
+        switch (VectorType) {
+        case EVectorType::Float:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+        case EVectorType::Uint8:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
+        case EVectorType::Int8:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8;
+        case EVectorType::Bit:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
+        case EVectorType::Unspecified:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED;
+        }
+    };
+
+    settings.set_metric(convertMetric());
+    settings.set_vector_type(convertVectorType());
+    settings.set_vector_dimension(VectorDimension);
+}
+
+void TVectorIndexSettings::Out(IOutputStream& o) const {
+    o << *this;
+}
+
+TKMeansTreeSettings TKMeansTreeSettings::FromProto(const Ydb::Table::KMeansTreeSettings& proto) {
+    return {
+        .Settings = TVectorIndexSettings::FromProto(proto.settings()),
+        .Clusters = proto.clusters(),
+        .Levels = proto.levels(),
+    };
+}
+
+void TKMeansTreeSettings::SerializeTo(Ydb::Table::KMeansTreeSettings& settings) const {
+    Settings.SerializeTo(*settings.mutable_settings());
+    settings.set_clusters(Clusters);
+    settings.set_levels(Levels);
+}
+
+void TKMeansTreeSettings::Out(IOutputStream& o) const {
+    o << *this;
 }
 
 template <typename TProto>
@@ -2244,6 +2507,8 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     EIndexType type;
     TVector<TString> indexColumns;
     TVector<TString> dataColumns;
+    TVector<TGlobalIndexSettings> globalIndexSettings;
+    std::variant<std::monostate, TKMeansTreeSettings> specializedIndexSettings;
 
     indexColumns.assign(proto.index_columns().begin(), proto.index_columns().end());
     dataColumns.assign(proto.data_columns().begin(), proto.data_columns().end());
@@ -2251,21 +2516,33 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     switch (proto.type_case()) {
     case TProto::kGlobalIndex:
         type = EIndexType::GlobalSync;
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(proto.global_index().settings()));
         break;
     case TProto::kGlobalAsyncIndex:
         type = EIndexType::GlobalAsync;
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(proto.global_async_index().settings()));
         break;
     case TProto::kGlobalUniqueIndex:
         type = EIndexType::GlobalUnique;
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(proto.global_unique_index().settings()));
         break;
+    case TProto::kGlobalVectorKmeansTreeIndex: {
+        type = EIndexType::GlobalVectorKMeansTree;
+        const auto &vectorProto = proto.global_vector_kmeans_tree_index();
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.level_table_settings()));
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.posting_table_settings()));
+        specializedIndexSettings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
+        break;
+    }
     default: // fallback to global sync
         type = EIndexType::GlobalSync;
+        globalIndexSettings.resize(1);
         break;
     }
 
-    auto result = TIndexDescription(proto.name(), type, indexColumns, dataColumns);
+    auto result = TIndexDescription(proto.name(), type, indexColumns, dataColumns, globalIndexSettings, specializedIndexSettings);
     if constexpr (std::is_same_v<TProto, Ydb::Table::TableIndexDescription>) {
-        result.SizeBytes = proto.size_bytes();
+        result.SizeBytes_ = proto.size_bytes();
     }
 
     return result;
@@ -2280,15 +2557,38 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
     *proto.mutable_data_columns() = {DataColumns_.begin(), DataColumns_.end()};
 
     switch (IndexType_) {
-    case EIndexType::GlobalSync:
-        *proto.mutable_global_index() = Ydb::Table::GlobalIndex();
+    case EIndexType::GlobalSync: {
+        auto& settings = *proto.mutable_global_index()->mutable_settings();
+        if (GlobalIndexSettings_.size() == 1)
+            GlobalIndexSettings_[0].SerializeTo(settings);
         break;
-    case EIndexType::GlobalAsync:
-        *proto.mutable_global_async_index() = Ydb::Table::GlobalAsyncIndex();
+    }
+    case EIndexType::GlobalAsync: {
+        auto& settings = *proto.mutable_global_async_index()->mutable_settings();
+        if (GlobalIndexSettings_.size() == 1)
+            GlobalIndexSettings_[0].SerializeTo(settings);
         break;
-    case EIndexType::GlobalUnique:
-        *proto.mutable_global_unique_index() = Ydb::Table::GlobalUniqueIndex();
+    }
+    case EIndexType::GlobalUnique: {
+        auto& settings = *proto.mutable_global_unique_index()->mutable_settings();
+        if (GlobalIndexSettings_.size() == 1)
+            GlobalIndexSettings_[0].SerializeTo(settings);
         break;
+    }
+    case EIndexType::GlobalVectorKMeansTree: {
+        auto* global_vector_kmeans_tree_index = proto.mutable_global_vector_kmeans_tree_index();
+        auto& level_settings = *global_vector_kmeans_tree_index->mutable_level_table_settings();
+        auto& posting_settings = *global_vector_kmeans_tree_index->mutable_posting_table_settings();
+        auto& vector_settings = *global_vector_kmeans_tree_index->mutable_vector_settings();
+        if (GlobalIndexSettings_.size() == 2) {
+            GlobalIndexSettings_[0].SerializeTo(level_settings);
+            GlobalIndexSettings_[1].SerializeTo(posting_settings);
+        }
+        if (const auto* settings = std::get_if<TKMeansTreeSettings>(&SpecializedIndexSettings_)) {
+            settings->SerializeTo(vector_settings);
+        }
+        break;
+    }
     case EIndexType::Unknown:
         break;
     }
@@ -2309,6 +2609,12 @@ void TIndexDescription::Out(IOutputStream& o) const {
     if (DataColumns_) {
         o << ", data_columns: [" << JoinSeq(", ", DataColumns_) << "]";
     }
+
+    std::visit([&]<typename T>(const T& settings) {
+        if constexpr (!std::is_same_v<T, std::monostate>) {
+            o << ", vector_settings: " << settings;
+        }
+    }, SpecializedIndexSettings_);
 
     o << " }";
 }
@@ -2339,6 +2645,38 @@ TChangefeedDescription::TChangefeedDescription(const Ydb::Table::Changefeed& pro
 TChangefeedDescription::TChangefeedDescription(const Ydb::Table::ChangefeedDescription& proto)
     : TChangefeedDescription(FromProto(proto))
 {}
+
+TChangefeedDescription::TInitialScanProgress::TInitialScanProgress()
+    : PartsTotal(0)
+    , PartsCompleted(0)
+{}
+
+TChangefeedDescription::TInitialScanProgress::TInitialScanProgress(ui32 total, ui32 completed)
+    : PartsTotal(total)
+    , PartsCompleted(completed)
+{}
+
+TChangefeedDescription::TInitialScanProgress& TChangefeedDescription::TInitialScanProgress::operator+=(const TInitialScanProgress& other) {
+    PartsTotal += other.PartsTotal;
+    PartsCompleted += other.PartsCompleted;
+    return *this;
+}
+
+ui32 TChangefeedDescription::TInitialScanProgress::GetPartsTotal() const {
+    return PartsTotal;
+}
+
+ui32 TChangefeedDescription::TInitialScanProgress::GetPartsCompleted() const {
+    return PartsCompleted;
+}
+
+float TChangefeedDescription::TInitialScanProgress::GetProgress() const {
+    if (PartsTotal == 0) {
+        return 0;
+    }
+
+    return 100 * float(PartsCompleted) / float(PartsTotal);
+}
 
 TChangefeedDescription& TChangefeedDescription::WithVirtualTimestamps() {
     VirtualTimestamps_ = true;
@@ -2416,6 +2754,10 @@ const TString& TChangefeedDescription::GetAwsRegion() const {
     return AwsRegion_;
 }
 
+const std::optional<TChangefeedDescription::TInitialScanProgress>& TChangefeedDescription::GetInitialScanProgress() const {
+    return InitialScanProgress_;
+}
+
 template <typename TProto>
 TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
     EChangefeedMode mode;
@@ -2482,6 +2824,13 @@ TChangefeedDescription TChangefeedDescription::FromProto(const TProto& proto) {
         default:
             ret.State_ = EChangefeedState::Unknown;
             break;
+        }
+
+        if (proto.has_initial_scan_progress()) {
+            ret.InitialScanProgress_ = std::make_optional<TInitialScanProgress>(
+                proto.initial_scan_progress().parts_total(),
+                proto.initial_scan_progress().parts_completed()
+            );
         }
     }
 
@@ -2568,6 +2917,10 @@ void TChangefeedDescription::Out(IOutputStream& o) const {
 
     if (AwsRegion_) {
         o << ", aws_region: " << AwsRegion_;
+    }
+
+    if (InitialScanProgress_) {
+        o << ", initial_scan_progress: " << InitialScanProgress_->GetProgress() << "%";
     }
 
     o << " }";
@@ -2849,11 +3202,3 @@ TReadRowsResult::TReadRowsResult(TStatus&& status, TResultSet&& resultSet)
 
 } // namespace NTable
 } // namespace NYdb
-
-Y_DECLARE_OUT_SPEC(, NYdb::NTable::TCreateSessionResult, o, x) {
-    return x.Out(o);
-}
-
-Y_DECLARE_OUT_SPEC(, NYdb::NTable::TDescribeTableResult, o, x) {
-    return x.Out(o);
-}

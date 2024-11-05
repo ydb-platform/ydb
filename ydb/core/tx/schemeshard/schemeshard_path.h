@@ -4,6 +4,9 @@
 #include "schemeshard_info_types.h"
 
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/util/source_location.h>
+
+#include <util/generic/maybe.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -17,18 +20,18 @@ class TPath {
 public:
     class TChecker {
         using EStatus = NKikimrScheme::EStatus;
-
         const TPath& Path;
         mutable bool Failed;
         mutable EStatus Status;
         mutable TString Error;
+        NCompat::TSourceLocation Location;
 
     private:
         TString BasicPathInfo(TPathElement::TPtr element) const;
         const TChecker& Fail(EStatus status, const TString& error) const;
 
     public:
-        explicit TChecker(const TPath& path);
+        explicit TChecker(const TPath& path, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
 
         explicit operator bool() const;
         EStatus GetStatus() const;
@@ -86,6 +89,7 @@ public:
         const TChecker& ShardsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
         const TChecker& PathShardsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
         const TChecker& NotChildren(EStatus status = EStatus::StatusInvalidParameter) const;
+        const TChecker& CanBackupTable(EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& IsValidACL(const TString& acl, EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& PQPartitionsLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
         const TChecker& PQReservedStorageLimit(ui64 delta = 1, EStatus status = EStatus::StatusResourceExhausted) const;
@@ -96,6 +100,9 @@ public:
         // Check there are no uncles or cousins with same name
         const TChecker& IsNameUniqGrandParentLevel(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsView(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& FailOnRestrictedCreateInTempZone(bool allowCreateInTemporaryDir = false, EStatus status = EStatus::StatusPreconditionFailed) const;
+        const TChecker& IsResourcePool(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsBackupCollection(EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:
@@ -117,8 +124,7 @@ public:
     static TPath ResolveWithInactive(TOperationId opId, const TString path, TSchemeShard* ss);
 
     static TPath Init(const TPathId pathId, TSchemeShard* ss);
-
-    TChecker Check() const;
+    TChecker Check(const NCompat::TSourceLocation location = NCompat::TSourceLocation::current()) const;
     bool IsEmpty() const;
     bool IsResolved() const;
 
@@ -150,13 +156,16 @@ public:
     bool IsUnderRestoring() const;
     bool IsUnderDeleting() const;
     bool IsUnderMoving() const;
+    bool IsUnderOutgoingIncrementalRestore() const;
     TPath& RiseUntilOlapStore();
     TPath FindOlapStore() const;
     bool IsCommonSensePath() const;
     bool AtLocalSchemeShardPath() const;
-    bool IsInsideTableIndexPath() const;
+    bool IsInsideTableIndexPath(bool failOnUnresolved = true) const;
     bool IsInsideCdcStreamPath() const;
-    bool IsTableIndex() const;
+    bool IsTableIndex(
+        const TMaybe<NKikimrSchemeOp::EIndexType>& type = {},
+        bool failOnUnresolved = true) const;
     bool IsBackupTable() const;
     bool IsAsyncReplicaTable() const;
     bool IsCdcStream() const;

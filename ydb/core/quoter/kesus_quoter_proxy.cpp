@@ -41,7 +41,7 @@
 namespace NKikimr {
 namespace NQuoter {
 
-using NKesus::TEvKesus;
+namespace TEvKesus = NKesus::TEvKesus;
 
 class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     struct TResourceState {
@@ -1105,7 +1105,7 @@ public:
                     << ev->GetTypeRewrite()
                     << " event: "
                     << ev->ToString());
-                Y_DEBUG_ABORT_UNLESS(false, "Unknown event");
+                Y_DEBUG_ABORT("Unknown event");
                 break;
         }
 

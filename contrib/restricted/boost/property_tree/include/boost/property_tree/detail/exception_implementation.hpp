@@ -11,6 +11,10 @@
 #ifndef BOOST_PROPERTY_TREE_DETAIL_EXCEPTIONS_IMPLEMENTATION_HPP_INCLUDED
 #define BOOST_PROPERTY_TREE_DETAIL_EXCEPTIONS_IMPLEMENTATION_HPP_INCLUDED
 
+#include <boost/property_tree/exceptions.hpp>
+
+#include <string>
+
 namespace boost { namespace property_tree
 {
 
@@ -35,20 +39,12 @@ namespace boost { namespace property_tree
     {
     }
 
-    inline ptree_error::~ptree_error()
-    {
-    }
-
     ///////////////////////////////////////////////////////////////////////////
     // ptree_bad_data
 
     template<class D> inline
     ptree_bad_data::ptree_bad_data(const std::string &w, const D &d):
         ptree_error(w), m_data(d)
-    {
-    }
-
-    inline ptree_bad_data::~ptree_bad_data()
     {
     }
 
@@ -66,10 +62,6 @@ namespace boost { namespace property_tree
         ptree_error(detail::prepare_bad_path_what(w, p)), m_path(p)
     {
 
-    }
-
-    inline ptree_bad_path::~ptree_bad_path()
-    {
     }
 
     template<class P> inline

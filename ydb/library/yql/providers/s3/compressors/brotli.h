@@ -23,6 +23,7 @@ private:
     bool SubstreamFinished_ = false;
     bool InputExhausted_ = false;
     size_t InputAvailable_ = 0;
+    size_t InputSize_ = 0;
 
     void InitDecoder();
     void FreeDecoder();

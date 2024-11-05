@@ -31,6 +31,10 @@ struct TEvPrivate {
         EvRestartCancelled,
         EvProcessStorageBalancer,
         EvStorageBalancerOut,
+        EvDeleteNode,
+        EvCanMoveTablets,
+        EvUpdateDataCenterFollowers,
+        EvRefreshScaleRecommendation,
         EvEnd
     };
 
@@ -110,6 +114,22 @@ struct TEvPrivate {
     struct TEvProcessStorageBalancer : TEventLocal<TEvProcessStorageBalancer, EvProcessStorageBalancer> {};
 
     struct TEvStorageBalancerOut : TEventLocal<TEvStorageBalancerOut, EvStorageBalancerOut> {};
+
+    struct TEvDeleteNode : TEventLocal<TEvDeleteNode, EvDeleteNode> {
+        TNodeId NodeId;
+
+        TEvDeleteNode(TNodeId nodeId) : NodeId(nodeId) {}
+    };
+
+    struct TEvCanMoveTablets : TEventLocal<TEvCanMoveTablets, EvCanMoveTablets> {};
+
+    struct TEvUpdateDataCenterFollowers : TEventLocal<TEvUpdateDataCenterFollowers, EvUpdateDataCenterFollowers> {
+        TDataCenterId DataCenter;
+
+        TEvUpdateDataCenterFollowers(TDataCenterId dataCenter) : DataCenter(dataCenter) {};
+    };
+
+    struct TEvRefreshScaleRecommendation : TEventLocal<TEvRefreshScaleRecommendation, EvRefreshScaleRecommendation> {};
 };
 
 } // NHive

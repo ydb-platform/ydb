@@ -1,6 +1,7 @@
 #include "mkql_skip.h"
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <ydb/library/yql/minikql/computation/mkql_simple_codegen.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -117,105 +118,56 @@ private:
     IComputationNode* const Count;
 };
 
-class TWideSkipWrapper : public TStatefulWideFlowCodegeneratorNode<TWideSkipWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideSkipWrapper>;
+class TWideSkipWrapper : public TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWrapper, ui64> {
+using TBaseComputation = TSimpleStatefulWideFlowCodegeneratorNode<TWideSkipWrapper, ui64>;
 public:
      TWideSkipWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 size)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
+        : TBaseComputation(mutables, flow, size, size)
         , Flow(flow)
         , Count(count)
         , StubsIndex(mutables.IncrementWideFieldsIndex(size))
     {}
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        if (state.IsInvalid()) {
-            state = Count->GetValue(ctx);
+    void InitState(NUdf::TUnboxedValue& cntToSkip, TComputationContext& ctx) const {
+        cntToSkip = Count->GetValue(ctx);
+    }
+
+    NUdf::TUnboxedValue*const* PrepareInput(NUdf::TUnboxedValue& cntToSkip, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+         return cntToSkip.Get<ui64>() ? ctx.WideFields.data() + StubsIndex : output;
+     }
+
+    TMaybeFetchResult DoProcess(NUdf::TUnboxedValue& cntToSkip, TComputationContext&, TMaybeFetchResult fetchRes, NUdf::TUnboxedValue*const*) const {
+        if (fetchRes.Get() == EFetchResult::One && cntToSkip.Get<ui64>()) {
+            cntToSkip = NUdf::TUnboxedValuePod(cntToSkip.Get<ui64>() - 1);
+            return TMaybeFetchResult::None();
         }
-
-        if (auto count = state.Get<ui64>()) {
-            do if (const auto result = Flow->FetchValues(ctx, ctx.WideFields.data() + StubsIndex); EFetchResult::One != result) {
-                state = NUdf::TUnboxedValuePod(count);
-                return result;
-            } while (--count);
-
-            state = NUdf::TUnboxedValuePod::Zero();
-        }
-
-        return Flow->FetchValues(ctx, output);
+        return fetchRes;
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
+    TGenerateResult GenFetchProcess(Value* statePtrVal, const TCodegenContext& ctx, const TResultCodegenerator& fetchGenerator, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
+        const auto decr = BasicBlock::Create(context, "decr", ctx.Func);
+        const auto end = BasicBlock::Create(context, "end", ctx.Func);
 
-        const auto valueType = Type::getInt128Ty(context);
+        const auto fetched = fetchGenerator(ctx, block);
+        const auto cntToSkipVal = GetterFor<ui64>(new LoadInst(IntegerType::getInt128Ty(context), statePtrVal, "unboxed_state", block), context, block);
+        const auto needSkipCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, cntToSkipVal, ConstantInt::get(cntToSkipVal->getType(), 0), "need_skip", block);
+        const auto gotOneCond = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, fetched.first, ConstantInt::get(fetched.first->getType(), 1), "got_one", block);
+        const auto willSkipCond = BinaryOperator::Create(Instruction::And, needSkipCond, gotOneCond, "will_skip", block);
+        BranchInst::Create(decr, end, willSkipCond, block);
 
-        const auto init = BasicBlock::Create(context, "init", ctx.Func);
-        const auto main = BasicBlock::Create(context, "main", ctx.Func);
+        block = decr;
+        const auto cntToSkipNewVal = BinaryOperator::CreateSub(cntToSkipVal, ConstantInt::get(cntToSkipVal->getType(), 1), "decr", block);
+        new StoreInst(SetterFor<ui64>(cntToSkipNewVal, context, block), statePtrVal, block);
+        BranchInst::Create(end, block);
 
-        const auto load = new LoadInst(valueType, statePtr, "load", block);
-        const auto state = PHINode::Create(valueType, 2U, "state", main);
-        state->addIncoming(load, block);
-        BranchInst::Create(init, main, IsInvalid(load, block), block);
-
-        block = init;
-
-        GetNodeValue(statePtr, Count, ctx, block);
-        const auto save = new LoadInst(valueType, statePtr, "save", block);
-        state->addIncoming(save, block);
-        BranchInst::Create(main, block);
-
-        block = main;
-
-        const auto work = BasicBlock::Create(context, "work", ctx.Func);
-        const auto good = BasicBlock::Create(context, "good", ctx.Func);
-        const auto pass = BasicBlock::Create(context, "pass", ctx.Func);
-        const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
-        const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
-        const auto done = BasicBlock::Create(context, "done", ctx.Func);
-
-        const auto resultType = Type::getInt32Ty(context);
-        const auto result = PHINode::Create(resultType, 2U, "result", done);
-
-        const auto trunc = GetterFor<ui64>(state, context, block);
-
-        const auto count = PHINode::Create(trunc->getType(), 2U, "count", work);
-        count->addIncoming(trunc, block);
-
-        const auto plus = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, trunc, ConstantInt::get(trunc->getType(), 0ULL), "plus", block);
-
-        BranchInst::Create(work, skip, plus, block);
-
-        block = work;
-        const auto status = GetNodeValues(Flow, ctx, block).first;
-        const auto special = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, status, ConstantInt::get(status->getType(), 0), "special", block);
-        BranchInst::Create(pass, good, special, block);
-
-        block = pass;
-        new StoreInst(SetterFor<ui64>(count, context, block), statePtr, block);
-        result->addIncoming(status, block);
-        BranchInst::Create(done, block);
-
-        block = good;
-
-        const auto decr = BinaryOperator::CreateSub(count, ConstantInt::get(count->getType(), 1ULL), "decr", block);
-        const auto next = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, decr, ConstantInt::get(decr->getType(), 0ULL), "next", block);
-        count->addIncoming(decr, block);
-        BranchInst::Create(work, exit, next, block);
-
-        block = exit;
-        new StoreInst(SetterFor<ui64>(decr, context, block), statePtr, block);
-        BranchInst::Create(skip, block);
-
-        block = skip;
-        auto getres = GetNodeValues(Flow, ctx, block);
-        result->addIncoming(getres.first, block);
-        BranchInst::Create(done, block);
-
-        block = done;
-        return {result, std::move(getres.second)};
+        block = end;
+        const auto result = SelectInst::Create(willSkipCond, TMaybeFetchResult::None().LLVMConst(context), TMaybeFetchResult::LLVMFromFetchResult(fetched.first, "fetch_res_ext", block), "result", block);
+        return {result, fetched.second};
     }
 #endif
+
 private:
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(Flow))

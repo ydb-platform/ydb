@@ -111,7 +111,6 @@ def with_attribute(*args, **attr_dict):
             <div type="graph">1,3 2,3 1,1</div>
             <div>this has no type</div>
             </div>
-
         '''
         div,div_end = make_html_tags("div")
 
@@ -197,21 +196,11 @@ def with_class(classname, namespace=""):
     return with_attribute(**{classattr: classname})
 
 
-# pre-PEP8 compatibility symbols
+# Compatibility synonyms
 # fmt: off
-@replaced_by_pep8(replace_with)
-def replaceWith(): ...
-
-@replaced_by_pep8(remove_quotes)
-def removeQuotes(): ...
-
-@replaced_by_pep8(with_attribute)
-def withAttribute(): ...
-
-@replaced_by_pep8(with_class)
-def withClass(): ...
-
-@replaced_by_pep8(match_only_at_col)
-def matchOnlyAtCol(): ...
-
+replaceWith = replaced_by_pep8("replaceWith", replace_with)
+removeQuotes = replaced_by_pep8("removeQuotes", remove_quotes)
+withAttribute = replaced_by_pep8("withAttribute", with_attribute)
+withClass = replaced_by_pep8("withClass", with_class)
+matchOnlyAtCol = replaced_by_pep8("matchOnlyAtCol", match_only_at_col)
 # fmt: on

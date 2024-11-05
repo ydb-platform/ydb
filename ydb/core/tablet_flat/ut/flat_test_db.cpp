@@ -27,7 +27,7 @@ struct TFakeKeyComparator {
                 return false;
             Y_ASSERT(av.Type() == bv.Type());
             // pg types are not supported
-            int res = CompareTypedCells(TCell(&av), TCell(&bv), NScheme::TTypeInfo(av.Type(), {}));
+            int res = CompareTypedCells(TCell(&av), TCell(&bv), NScheme::TTypeInfo(av.Type()));
             if (res)
                 return res < 0;
         }

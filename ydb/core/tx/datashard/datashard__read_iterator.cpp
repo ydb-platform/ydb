@@ -5,6 +5,7 @@
 #include "datashard_locks_db.h"
 #include "probes.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
@@ -103,13 +104,6 @@ struct TShortColumnInfo {
         , Type(type)
         , Name(name)
     {}
-
-    TString Dump() const {
-        TStringStream ss;
-        // TODO: support pg types
-        ss << "{Tag: " << Tag << ", Type: " << Type.GetTypeId() << ", Name: " << Name << "}";
-        return ss.Str();
-    }
 };
 
 struct TShortTableInfo {
@@ -144,16 +138,6 @@ struct TShortTableInfo {
     }
 
     TShortTableInfo& operator =(TShortTableInfo&& other) = default;
-
-    TString Dump() const {
-        TStringStream ss;
-        ss << "{LocalTid: " << LocalTid << ", SchemaVerstion: " << SchemaVersion  << ", Columns: {";
-        for (const auto& it: Columns) {
-            ss << it.second.Dump();
-        }
-        ss << "}";
-        return ss.Str();
-    }
 
     ui32 LocalTid = 0;
     ui64 SchemaVersion = 0;
@@ -219,15 +203,15 @@ std::pair<std::unique_ptr<IBlockBuilder>, TString> CreateBlockBuilder(
 }
 
 std::vector<TRawTypeValue> ToRawTypeValue(
-    const TSerializedCellVec& keyCells,
+    TArrayRef<const TCell> keyCells,
     const TShortTableInfo& tableInfo,
     bool addNulls)
 {
     std::vector<TRawTypeValue> result;
-    result.reserve(keyCells.GetCells().size());
+    result.reserve(keyCells.size());
 
-    for (ui32 i = 0; i < keyCells.GetCells().size(); ++i) {
-        result.push_back(TRawTypeValue(keyCells.GetCells()[i].AsRef(), tableInfo.KeyColumnTypes[i]));
+    for (ui32 i = 0; i < keyCells.size(); ++i) {
+        result.push_back(TRawTypeValue(keyCells[i].AsRef(), tableInfo.KeyColumnTypes[i].GetTypeId()));
     }
 
     // note that currently without nulls it is [prefix, +inf, +inf],
@@ -297,9 +281,9 @@ class TReader {
     bool VolatileWaitForCommit = false;
 
     enum class EReadStatus {
-        Done = 0,
+        Done,
         NeedData,
-        StoppedByLimit,
+        NeedContinue,
     };
 
 public:
@@ -315,6 +299,8 @@ public:
         , Self(self)
         , TableId(state.PathId.OwnerId, state.PathId.LocalPathId, state.SchemaVersion)
         , FirstUnprocessedQuery(State.FirstUnprocessedQuery)
+        , LastProcessedKey(State.LastProcessedKey)
+        , LastProcessedKeyErased(State.LastProcessedKeyErased)
     {
         GetTimeFast(&StartTime);
         EndTime = StartTime;
@@ -322,17 +308,16 @@ public:
 
     EReadStatus ReadRange(
         TTransactionContext& txc,
-        const TActorContext& ctx,
         const TSerializedTableRange& range)
     {
         bool fromInclusive;
         bool toInclusive;
         TSerializedCellVec keyFromCells;
         TSerializedCellVec keyToCells;
-        if (Y_UNLIKELY(FirstUnprocessedQuery == State.FirstUnprocessedQuery && State.LastProcessedKey)) {
+        if (LastProcessedKey) {
             if (!State.Reverse) {
-                keyFromCells = TSerializedCellVec(State.LastProcessedKey);
-                fromInclusive = State.LastProcessedKeyErased;
+                keyFromCells = TSerializedCellVec(LastProcessedKey);
+                fromInclusive = LastProcessedKeyErased;
 
                 keyToCells = range.To;
                 toInclusive = range.ToInclusive;
@@ -341,8 +326,8 @@ public:
                 keyFromCells = range.From;
                 fromInclusive = range.FromInclusive;
 
-                keyToCells = TSerializedCellVec(State.LastProcessedKey);
-                toInclusive = State.LastProcessedKeyErased;
+                keyToCells = TSerializedCellVec(LastProcessedKey);
+                toInclusive = LastProcessedKeyErased;
             }
         } else {
             keyFromCells = range.From;
@@ -352,8 +337,8 @@ public:
             toInclusive = range.ToInclusive;
         }
 
-        const auto keyFrom = ToRawTypeValue(keyFromCells, TableInfo, fromInclusive);
-        const auto keyTo = ToRawTypeValue(keyToCells, TableInfo, !toInclusive);
+        const auto keyFrom = ToRawTypeValue(keyFromCells.GetCells(), TableInfo, fromInclusive);
+        const auto keyTo = ToRawTypeValue(keyToCells.GetCells(), TableInfo, !toInclusive);
 
         // TODO: split range into parts like in read_columns
 
@@ -364,7 +349,7 @@ public:
         iterRange.MaxInclusive = toInclusive;
         const bool reverse = State.Reverse;
 
-        if (TArrayRef<const TCell> cells = keyFromCells.GetCells()) {
+        if (TArrayRef<const TCell> cells = (reverse ? keyToCells.GetCells() : keyFromCells.GetCells())) {
             if (!fromInclusive || cells.size() >= TableInfo.KeyColumnTypes.size()) {
                 Self->GetKeyAccessSampler()->AddSample(TableId, cells);
             } else {
@@ -375,31 +360,24 @@ public:
         }
 
         EReadStatus result;
+
+        txc.Env.EnableReadMissingReferences();
+
         if (!reverse) {
             auto iter = txc.DB.IterateRange(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-            result = IterateRange(iter.Get(), ctx);
+            result = IterateRange(iter.Get(), iterRange, txc);
         } else {
             auto iter = txc.DB.IterateRangeReverse(TableInfo.LocalTid, iterRange, State.Columns, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-            result = IterateRange(iter.Get(), ctx);
+            result = IterateRange(iter.Get(), iterRange, txc);
         }
 
-        if (result == EReadStatus::NeedData && !(RowsProcessed && CanResume())) {
-            if (LastProcessedKey) {
-                keyFromCells = TSerializedCellVec(LastProcessedKey);
-                const auto keyFrom = ToRawTypeValue(keyFromCells, TableInfo, false);
-                Precharge(txc.DB, keyFrom, iterRange.MaxKey, reverse);
-            } else {
-                Precharge(txc.DB, iterRange.MinKey, iterRange.MaxKey, reverse);
-            }
-            return EReadStatus::NeedData;
-        }
+        txc.Env.DisableReadMissingReferences();
 
         return result;
     }
 
     EReadStatus ReadKey(
         TTransactionContext& txc,
-        const TActorContext& ctx,
         const TSerializedCellVec& keyCells,
         size_t keyIndex)
     {
@@ -410,7 +388,7 @@ public:
             range.To = keyCells;
             range.ToInclusive = true;
             range.FromInclusive = true;
-            return ReadRange(txc, ctx, range);
+            return ReadRange(txc, range);
         }
 
         if (ColumnTypes.empty()) {
@@ -421,13 +399,16 @@ public:
             }
         }
 
-        const auto key = ToRawTypeValue(keyCells, TableInfo, true);
+        const auto key = ToRawTypeValue(keyCells.GetCells(), TableInfo, true);
 
         NTable::TRowState rowState;
         rowState.Init(State.Columns.size());
         NTable::TSelectStats stats;
         auto ready = txc.DB.Select(TableInfo.LocalTid, key, State.Columns, rowState, stats, 0, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
         if (ready == NTable::EReady::Page) {
+            if (RowsProcessed && CanResume()) {
+                return EReadStatus::NeedContinue;
+            }
             return EReadStatus::NeedData;
         }
 
@@ -459,11 +440,11 @@ public:
     {
         if (keyCells.GetCells().size() != TableInfo.KeyColumnCount) {
             // key prefix, treat it as range [prefix, null, null] - [prefix, +inf, +inf]
-            auto minKey = ToRawTypeValue(keyCells, TableInfo, true);
-            auto maxKey = ToRawTypeValue(keyCells, TableInfo, false);
+            auto minKey = ToRawTypeValue(keyCells.GetCells(), TableInfo, true);
+            auto maxKey = ToRawTypeValue(keyCells.GetCells(), TableInfo, false);
             return Precharge(txc.DB, minKey, maxKey, State.Reverse);
         } else {
-            auto key = ToRawTypeValue(keyCells, TableInfo, true);
+            auto key = ToRawTypeValue(keyCells.GetCells(), TableInfo, true);
             return Precharge(txc.DB, key, key, State.Reverse);
         }
     }
@@ -494,12 +475,13 @@ public:
 
     // TODO: merge ReadRanges and ReadKeys to single template Read?
 
-    bool ReadRanges(TTransactionContext& txc, const TActorContext& ctx) {
+    bool ReadRanges(TTransactionContext& txc) {
         // note that FirstUnprocessedQuery is unsigned and if we do reverse iteration,
         // then it will also become less than size() when finished
         while (FirstUnprocessedQuery < State.Request->Ranges.size()) {
             if (ReachedTotalRowsLimit()) {
                 FirstUnprocessedQuery = -1;
+                LastProcessedKey.clear();
                 return true;
             }
 
@@ -507,36 +489,35 @@ public:
                 return true;
 
             const auto& range = State.Request->Ranges[FirstUnprocessedQuery];
-            auto status = ReadRange(txc, ctx, range);
+            auto status = ReadRange(txc, range);
             switch (status) {
             case EReadStatus::Done:
                 break;
-            case EReadStatus::StoppedByLimit:
-                return true;
             case EReadStatus::NeedData:
-                if (RowsProcessed && CanResume())
-                    return true;
-
                 // Note: ReadRange has already precharged current range and
                 //       we don't precharge multiple ranges as opposed to keys
                 return false;
+            case EReadStatus::NeedContinue:
+                return true;
             }
 
             if (!State.Reverse)
                FirstUnprocessedQuery++;
             else
                FirstUnprocessedQuery--;
+            LastProcessedKey.clear();
         }
 
         return true;
     }
 
-    bool ReadKeys(TTransactionContext& txc, const TActorContext& ctx) {
+    bool ReadKeys(TTransactionContext& txc) {
         // note that FirstUnprocessedQuery is unsigned and if we do reverse iteration,
         // then it will also become less than size() when finished
         while (FirstUnprocessedQuery < State.Request->Keys.size()) {
             if (ReachedTotalRowsLimit()) {
                 FirstUnprocessedQuery = -1;
+                LastProcessedKey.clear();
                 return true;
             }
 
@@ -544,40 +525,38 @@ public:
                 return true;
 
             const auto& key = State.Request->Keys[FirstUnprocessedQuery];
-            auto status = ReadKey(txc, ctx, key, FirstUnprocessedQuery);
+            auto status = ReadKey(txc, key, FirstUnprocessedQuery);
             switch (status) {
             case EReadStatus::Done:
                 break;
-            case EReadStatus::StoppedByLimit:
-                return true;
             case EReadStatus::NeedData:
-                if (RowsProcessed && CanResume())
-                    return true;
-
                 PrechargeKeysAfter(txc, FirstUnprocessedQuery);
                 return false;
+            case EReadStatus::NeedContinue:
+                return true;
             }
 
             if (!State.Reverse)
                FirstUnprocessedQuery++;
             else
                FirstUnprocessedQuery--;
+            LastProcessedKey.clear();
         }
 
         return true;
     }
 
     // return semantics the same as in the Execute()
-    bool Read(TTransactionContext& txc, const TActorContext& ctx) {
+    bool Read(TTransactionContext& txc) {
         // TODO: consider trying to precharge multiple records at once in case
         // when first precharge fails?
 
         if (!State.Request->Keys.empty()) {
-            return ReadKeys(txc, ctx);
+            return ReadKeys(txc);
         }
 
         // since no keys, then we must have ranges (has been checked initially)
-        return ReadRanges(txc, ctx);
+        return ReadRanges(txc);
     }
 
     bool HasUnreadQueries() const {
@@ -665,6 +644,10 @@ public:
             }
         }
 
+        if (record.TxLocksSize() > 0 || record.BrokenTxLocksSize() > 0) {
+            useful = true;
+        }
+
         Self->IncCounter(COUNTER_READ_ITERATOR_ROWS_READ, RowsRead);
         if (!isKeysRequest) {
             Self->IncCounter(COUNTER_ENGINE_HOST_SELECT_RANGE_ROW_SKIPS, DeletedRowSkips);
@@ -723,6 +706,28 @@ public:
     }
 
     void UpdateState(TReadIteratorState& state, bool sentResult) {
+        if (state.FirstUnprocessedQuery == FirstUnprocessedQuery &&
+            state.LastProcessedKey && !LastProcessedKey)
+        {
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
+                "DataShard " << Self->TabletID() << " detected unexpected reset of LastProcessedKey:"
+                << " ReadId# " << State.ReadId
+                << " LastSeqNo# " << State.SeqNo
+                << " LastQuery# " << State.FirstUnprocessedQuery
+                << " RowsRead# " << RowsRead
+                << " RowsProcessed# " << RowsProcessed
+                << " RowsSinceLastCheck# " << RowsSinceLastCheck
+                << " BytesInResult# " << BytesInResult
+                << " DeletedRowSkips# " << DeletedRowSkips
+                << " InvisibleRowSkips# " << InvisibleRowSkips
+                << " Quota.Rows# " << State.Quota.Rows
+                << " Quota.Bytes# " << State.Quota.Bytes
+                << " State.TotalRows# " << State.TotalRows
+                << " State.TotalRowsLimit# " << State.TotalRowsLimit
+                << " State.MaxRowsInResult# " << State.MaxRowsInResult);
+            Self->IncCounterReadIteratorLastKeyReset();
+        }
+
         state.TotalRows += RowsRead;
         state.FirstUnprocessedQuery = FirstUnprocessedQuery;
         state.LastProcessedKey = LastProcessedKey;
@@ -751,22 +756,22 @@ private:
         return true;
     }
 
-    bool OutOfQuota() const {
-        return RowsRead >= State.Quota.Rows ||
-            BlockBuilder.Bytes() >= State.Quota.Bytes||
-            BytesInResult >= State.Quota.Bytes;
+    bool OutOfQuota(ui64 prechargedCount = 0, ui64 bytesPrecharged = 0) const {
+        return RowsRead + prechargedCount >= State.Quota.Rows ||
+            BlockBuilder.Bytes() + bytesPrecharged >= State.Quota.Bytes ||
+            BytesInResult + bytesPrecharged >= State.Quota.Bytes;
     }
 
-    bool HasMaxRowsInResult() const {
-        return RowsRead >= State.MaxRowsInResult;
+    bool HasMaxRowsInResult(ui64 prechargedCount = 0) const {
+        return RowsRead + prechargedCount >= State.MaxRowsInResult;
     }
 
-    bool ReachedTotalRowsLimit() const {
+    bool ReachedTotalRowsLimit(ui64 prechargedCount = 0) const {
         if (State.TotalRowsLimit == Max<ui64>()) {
             return false;
         }
 
-        return State.TotalRows + RowsRead >= State.TotalRowsLimit;
+        return State.TotalRows + RowsRead + prechargedCount >= State.TotalRowsLimit;
     }
 
     ui64 GetTotalRowsLeft() const {
@@ -782,12 +787,12 @@ private:
         return State.TotalRowsLimit - State.TotalRows - RowsRead;
     }
 
-    bool ShouldStop() {
+    bool ShouldStop(ui64 prechargedCount = 0, ui64 bytesPrecharged = 0) {
         if (!CanResume()) {
             return false;
         }
 
-        return OutOfQuota() || HasMaxRowsInResult() || ShouldStopByElapsedTime();
+        return OutOfQuota(prechargedCount, bytesPrecharged) || HasMaxRowsInResult(prechargedCount) || ShouldStopByElapsedTime();
     }
 
     ui64 GetRowsLeft() {
@@ -814,8 +819,8 @@ private:
 
     bool Precharge(
         NTable::TDatabase& db,
-        NTable::TRawVals keyFrom,
-        NTable::TRawVals keyTo,
+        NTable::TRawVals minKey,
+        NTable::TRawVals maxKey,
         bool reverse)
     {
         ui64 rowsLeft = GetRowsLeft();
@@ -823,8 +828,8 @@ private:
 
         auto direction = reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward;
         return db.Precharge(TableInfo.LocalTid,
-                            keyFrom,
-                            keyTo,
+                            minKey,
+                            maxKey,
                             State.Columns,
                             0,
                             rowsLeft,
@@ -834,25 +839,49 @@ private:
     }
 
     template <typename TIterator>
-    EReadStatus IterateRange(TIterator* iter, const TActorContext& ctx) {
-        Y_UNUSED(ctx);
-
+    EReadStatus IterateRange(TIterator* iter, NTable::TKeyRange& iterRange, TTransactionContext& txc) {
         auto keyAccessSampler = Self->GetKeyAccessSampler();
 
         bool advanced = false;
+
+        bool precharging = false;
+        ui64 prechargedCount = 0;
+        ui64 prechargedRowsSize = 0; // Without referenced blobs (external, outer)
+
         while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
+            TDbTupleRef rowKey = iter->GetKey();
+            TDbTupleRef rowValues = iter->GetValues();
+
+            if (!precharging && txc.Env.MissingReferencesSize()) {
+                // Note: the current key must be returned to reader, but the
+                // previous key is lost, and we cannot safely resume. We can
+                // only restart query from the beginning, and don't want to
+                // keep track of any stats.
+                precharging = true;
+            }
+
+            if (precharging) {
+                // Note: RowsProcessed, RowsSinceLastCheck and LastProcessed key are not updated,
+                // so we will restart the transaction from the exact same key we started iterating from.
+                prechargedCount++;
+                prechargedRowsSize += EstimateSize(rowValues.Cells());
+
+                if (ReachedTotalRowsLimit(prechargedCount) || ShouldStop(prechargedCount, prechargedRowsSize + txc.Env.MissingReferencesSize())) {
+                    break;
+                }
+
+                continue;
+            }
+
             advanced = true;
+
             DeletedRowSkips += iter->Stats.DeletedRowSkips;
             InvisibleRowSkips += iter->Stats.InvisibleRowSkips;
-
-            TDbTupleRef rowKey = iter->GetKey();
 
             keyAccessSampler->AddSample(TableId, rowKey.Cells());
             const ui64 processedRecords = 1 + ResetRowSkips(iter->Stats);
             RowsSinceLastCheck += processedRecords;
             RowsProcessed += processedRecords;
-
-            TDbTupleRef rowValues = iter->GetValues();
 
             // note that if user requests key columns then they will be in
             // rowValues and we don't have to add rowKey columns
@@ -867,7 +896,7 @@ private:
             if (ShouldStop()) {
                 LastProcessedKey = TSerializedCellVec::Serialize(rowKey.Cells());
                 LastProcessedKeyErased = false;
-                return EReadStatus::StoppedByLimit;
+                return EReadStatus::NeedContinue;
             }
         }
 
@@ -880,6 +909,27 @@ private:
         // the same transaction, instead of starting a new one, in which case
         // we will not update stats and will not update RowsProcessed.
         auto lastKey = iter->GetKey().Cells();
+
+        auto prechargeFromLastKey = [&]() {
+            if (lastKey) {
+                const auto key = ToRawTypeValue(lastKey, TableInfo, false);
+                if (!State.Reverse) {
+                    Precharge(txc.DB, key, iterRange.MaxKey, State.Reverse);
+                } else {
+                    Precharge(txc.DB, iterRange.MinKey, key, State.Reverse);
+                }
+            } else {
+                Precharge(txc.DB, iterRange.MinKey, iterRange.MaxKey, State.Reverse);
+            }
+        };
+
+        if (precharging) {
+            if (iter->Last() == NTable::EReady::Page) {
+                prechargeFromLastKey();
+            }
+            return EReadStatus::NeedData;
+        }
+
         if (lastKey && (advanced || iter->Stats.DeletedRowSkips >= 4) && iter->Last() == NTable::EReady::Page) {
             LastProcessedKey = TSerializedCellVec::Serialize(lastKey);
             LastProcessedKeyErased = iter->GetKeyState() == NTable::ERowOp::Erase;
@@ -897,9 +947,14 @@ private:
             RowsProcessed += processedRecords;
         }
 
-        // TODO: consider restart when Page and too few data read
-        // (how much is too few, less than user's limit?)
         if (iter->Last() == NTable::EReady::Page) {
+            // TODO: consider restart when Page and too few data read
+            // (how much is too few, less than user's limit?)
+            if (RowsProcessed && CanResume()) {
+                return EReadStatus::NeedContinue;
+            }
+
+            prechargeFromLastKey();
             return EReadStatus::NeedData;
         }
 
@@ -1070,8 +1125,7 @@ const NHPTimer::STime TReader::MaxCyclesPerIteration =
 
 class TDataShard::TReadOperation : public TOperation, public IReadOperation {
     TDataShard* Self;
-    TActorId Sender;
-    std::shared_ptr<TEvDataShard::TEvRead> Request;
+    TReadIteratorId ReadId;
 
     NMiniKQL::IEngineFlat::TValidationInfo ValidationInfo;
 
@@ -1087,11 +1141,10 @@ class TDataShard::TReadOperation : public TOperation, public IReadOperation {
     static constexpr ui32 Flags = NTxDataShard::TTxFlags::ReadOnly | NTxDataShard::TTxFlags::Immediate;
 
 public:
-    TReadOperation(TDataShard* ds, TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvRead::TPtr ev)
+    TReadOperation(TDataShard* ds, TInstant receivedAt, ui64 tieBreakerIndex, const TReadIteratorId& readId)
         : TOperation(TBasicOpInfo(EOperationKind::ReadTx, Flags, 0, receivedAt, tieBreakerIndex))
         , Self(ds)
-        , Sender(ev->Sender)
-        , Request(ev->Release().Release())
+        , ReadId(readId)
     {}
 
     void BuildExecutionPlan(bool loaded) override
@@ -1113,14 +1166,13 @@ public:
     }
 
     EExecutionStatus Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        TReadIteratorId readId(Sender, Request->Record.GetReadId());
-        auto it = Self->ReadIterators.find(readId);
-        if (it == Self->ReadIterators.end()) {
+        auto readIt = Self->ReadIterators.find(ReadId);
+        if (readIt == Self->ReadIterators.end()) {
             // iterator has been aborted
             return EExecutionStatus::DelayComplete;
         }
-        Y_ABORT_UNLESS(it->second);
-        auto& state = *it->second;
+        Y_ABORT_UNLESS(readIt->second);
+        auto& state = *readIt->second;
 
         if (Result->Record.HasStatus()) {
             // error happened on check phase
@@ -1129,9 +1181,11 @@ public:
 
         Y_ABORT_UNLESS(state.State == TReadIteratorState::EState::Executing);
 
+        auto* request = state.Request;
+
         ++ExecuteCount;
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Execute read# " << ExecuteCount
-            << ", request: " << Request->Record);
+            << ", request: " << request->Record);
 
         switch (Self->State) {
         case TShardState::Ready:
@@ -1244,8 +1298,8 @@ public:
             }
         }
 
-        state.LockId = state.Request->Record.GetLockTxId();
-        state.LockNodeId = state.Request->Record.GetLockNodeId();
+        state.LockId = request->Record.GetLockTxId();
+        state.LockNodeId = request->Record.GetLockNodeId();
 
         TDataShardLocksDb locksDb(*Self, txc);
         TSetupSysLocks guardLocks(state.LockId, state.LockNodeId, *Self, &locksDb);
@@ -1305,22 +1359,37 @@ public:
                 state.IsHeadRead = false;
 
                 if (!Self->IsFollower()) {
+                    TRowVersion unreadableEdge = Self->Pipeline.GetUnreadableEdge();
+                    if (state.ReadVersion >= unreadableEdge) {
+                        // This version is unreadable in repeatable read mode at the moment, we have to wait
+                        // We actually have to completely destroy current state and start from scratch
+                        LWTRACK(ReadWaitSnapshot, request->Orbit, state.ReadVersion.Step, state.ReadVersion.TxId);
+                        Self->Pipeline.AddWaitingReadIterator(state.ReadVersion, std::move(state.Ev), ctx);
+                        Self->DeleteReadIterator(readIt);
+
+                        // Make sure we rollback everything (on a slim chance there are any changes)
+                        if (txc.DB.HasChanges()) {
+                            txc.DB.RollbackChanges();
+                        }
+
+                        // This unit will remove current operation from the pipeline when we return
+                        Abort(EExecutionUnitKind::CompletedOperations);
+
+                        return EExecutionStatus::Executed;
+                    }
+
                     // Switch to repeatable read at the same version
                     SetMvccSnapshot(state.ReadVersion, /* isRepeatable */ true);
 
-                    TStepOrder order(state.ReadVersion.Step, state.ReadVersion.TxId);
-                    const auto& plannedOps = Self->Pipeline.GetActivePlannedOps();
-                    auto it = plannedOps.lower_bound(order);
-                    if (it != plannedOps.end() && it->first == order) {
-                        if (!it->second->IsReadOnly()) {
-                            // we need to wait this op
-                            AddDependency(it->second);
+                    // We may have had repeatable read conflicts, promote them
+                    PromoteRepeatableReadConflicts();
 
-                            // Make sure current incomplete result will not be sent
-                            Result = MakeEvReadResult(ctx.SelfID.NodeId());
+                    // Having runtime conflicts now means we have to wait and restart
+                    if (HasRuntimeConflicts()) {
+                        // Make sure current incomplete result will not be sent
+                        Result = MakeEvReadResult(ctx.SelfID.NodeId());
 
-                            return EExecutionStatus::Continue;
-                        }
+                        return EExecutionStatus::Continue;
                     }
                 } else {
                     auto [followerEdge, followerRepeatable] = Self->GetSnapshotManager().GetFollowerReadEdge();
@@ -1374,8 +1443,7 @@ public:
     }
 
     void CheckRequestAndInit(TTransactionContext& txc, const TActorContext& ctx) override {
-        TReadIteratorId readId(Sender, Request->Record.GetReadId());
-        auto it = Self->ReadIterators.find(readId);
+        auto it = Self->ReadIterators.find(ReadId);
         if (it == Self->ReadIterators.end()) {
             // iterator has been aborted
             return;
@@ -1386,7 +1454,8 @@ public:
 
         Result = MakeEvReadResult(ctx.SelfID.NodeId());
 
-        const auto& record = Request->Record;
+        auto* request = state.Request;
+        const auto& record = request->Record;
 
         if (record.HasMaxRows())
             state.Quota.Rows = record.GetMaxRows();
@@ -1405,7 +1474,7 @@ public:
 
         state.Reverse = record.GetReverse();
         if (state.Reverse) {
-            state.FirstUnprocessedQuery = Request->Keys.size() + Request->Ranges.size() - 1;
+            state.FirstUnprocessedQuery = request->Keys.size() + request->Ranges.size() - 1;
         }
 
         // Note: some checks already performed in TTxReadViaPipeline::Execute
@@ -1421,7 +1490,6 @@ public:
             TableInfo = TShortTableInfo(userTableInfo);
 
             Y_ABORT_UNLESS(!userTableInfo->IsBackup);
-            Y_ABORT_UNLESS(Self->IsMvccEnabled());
 
             state.SchemaVersion = userTableInfo->GetTableSchemaVersion();
             if (record.GetTableId().HasSchemaVersion()) {
@@ -1455,10 +1523,10 @@ public:
         }
 
         // Make ranges in the new 'any' form compatible with the old '+inf' form
-        for (size_t i = 0; i < Request->Ranges.size(); ++i) {
-            auto& range = Request->Ranges[i];
+        for (size_t i = 0; i < request->Ranges.size(); ++i) {
+            auto& range = request->Ranges[i];
             auto& keyFrom = range.From;
-            auto& keyTo = Request->Ranges[i].To;
+            auto& keyTo = request->Ranges[i].To;
 
             if (range.FromInclusive && keyFrom.GetCells().size() != TableInfo.KeyColumnCount) {
                 keyFrom = ExtendWithNulls(keyFrom, TableInfo.KeyColumnCount);
@@ -1470,16 +1538,16 @@ public:
         }
 
         // Make prefixes in the new 'any' form compatible with the old '+inf' form
-        for (size_t i = 0; i < Request->Keys.size(); ++i) {
-            const auto& key = Request->Keys[i];
+        for (size_t i = 0; i < request->Keys.size(); ++i) {
+            const auto& key = request->Keys[i];
             if (key.GetCells().size() == TableInfo.KeyColumnCount)
                 continue;
 
-            if (state.Keys.size() != Request->Keys.size()) {
-                state.Keys.resize(Request->Keys.size());
+            if (state.Keys.size() != request->Keys.size()) {
+                state.Keys.resize(request->Keys.size());
             }
 
-            // we can safely use cells referencing original Request->Keys[x],
+            // we can safely use cells referencing original request->Keys[x],
             // because request will live until the end
             state.Keys[i] = ExtendWithNulls(key, TableInfo.KeyColumnCount);
         }
@@ -1499,7 +1567,6 @@ public:
             state.Columns.push_back(col);
         }
 
-        state.Request = Request;
         state.State = TReadIteratorState::EState::Executing;
 
         Y_ASSERT(Result);
@@ -1517,29 +1584,29 @@ public:
             return;
         ResultSent = true;
 
-        TReadIteratorId readId(Sender, Request->Record.GetReadId());
-        auto it = Self->ReadIterators.find(readId);
+        auto it = Self->ReadIterators.find(ReadId);
         if (it == Self->ReadIterators.end()) {
             // the one who removed the iterator should have replied to user
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << ReadId
                 << " has been invalidated before TReadOperation::SendResult()");
             return;
         }
 
         Y_ABORT_UNLESS(it->second);
         auto& state = *it->second;
+        auto* request = state.Request;
 
         if (!Result) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << ReadId
                 << " TReadOperation::Execute() finished without Result, aborting");
             Result = MakeEvReadResult(ctx.SelfID.NodeId());
             SetStatusError(Result->Record, Ydb::StatusIds::ABORTED, TStringBuilder()
                 << "Iterator aborted"
                 << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
-            Result->Record.SetReadId(readId.ReadId);
-            Self->SendImmediateReadResult(Sender, Result.release(), 0, state.SessionId);
+            Result->Record.SetReadId(ReadId.ReadId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
             
-            Request->ReadSpan.EndError("Iterator aborted");
+            request->ReadSpan.EndError("Iterator aborted");
             Self->DeleteReadIterator(it);
             return;
         }
@@ -1553,13 +1620,13 @@ public:
         // error happened and status set
         auto& record = Result->Record;
         if (record.HasStatus()) {
-            record.SetReadId(readId.ReadId);
+            record.SetReadId(ReadId.ReadId);
             record.SetSeqNo(state.SeqNo + 1);
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << ReadId
                 << " TReadOperation::Execute() finished with error, aborting: " << record.DebugString());
-            Self->SendImmediateReadResult(Sender, Result.release(), 0, state.SessionId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
 
-            Request->ReadSpan.EndError("Finished with error");
+            request->ReadSpan.EndError("Finished with error");
             Self->DeleteReadIterator(it);
             return;
         }
@@ -1567,7 +1634,7 @@ public:
         Y_ASSERT(Reader);
         Y_ASSERT(BlockBuilder);
 
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << ReadId
             << " sends rowCount# " << Reader->GetRowsRead() << ", bytes# " << Reader->GetBytesRead()
             << ", quota rows left# " << (state.Quota.Rows - Reader->GetRowsRead())
             << ", quota bytes left# " << (state.Quota.Bytes - Reader->GetBytesRead())
@@ -1583,29 +1650,29 @@ public:
 
         if (!gSkipReadIteratorResultFailPoint.Check(Self->TabletID())) {
             LWTRACK(ReadSendResult, state.Orbit);
-            Self->SendImmediateReadResult(Sender, Result.release(), 0, state.SessionId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, request->ReadSpan.GetTraceId());
         }
     }
 
     void Complete(const TActorContext& ctx) override {
-        TReadIteratorId readId(Sender, Request->Record.GetReadId());
-        auto it = Self->ReadIterators.find(readId);
+        auto it = Self->ReadIterators.find(ReadId);
         if (it == Self->ReadIterators.end()) {
             // the one who removed the iterator should have reply to user
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << ReadId
                 << " has been invalidated before TReadOperation::Complete()");
             return;
         }
         auto& state = *it->second;
+        auto* request = state.Request;
 
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Complete read# " << state.ReadId
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Complete read# " << ReadId
             << " after executionsCount# " << ExecuteCount);
 
         SendResult(ctx);
 
-        it = Self->ReadIterators.find(readId);
+        it = Self->ReadIterators.find(ReadId);
         if (it == Self->ReadIterators.end()) {
-            // We sent an error and delete iterator
+            // We sent an error and deleted iterator
             return;
         }
 
@@ -1615,19 +1682,20 @@ public:
         if (Reader->HasUnreadQueries()) {
             Reader->UpdateState(state, ResultSent);
             if (!state.IsExhausted()) {
+                state.ReadContinuePending = true;
                 ctx.Send(
                     Self->SelfId(),
-                    new TEvDataShard::TEvReadContinue(Sender, Request->Record.GetReadId()));
+                    new TEvDataShard::TEvReadContinue(ReadId.Sender, ReadId.ReadId));
             } else {
                 Self->IncCounter(COUNTER_READ_ITERATORS_EXHAUSTED_COUNT);
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
-                    << " read iterator# " << readId << " exhausted");
+                    << " read iterator# " << ReadId << " exhausted");
             }
         } else {
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << ReadId
                 << " finished in read");
 
-            Request->ReadSpan.EndOk();
+            request->ReadSpan.EndOk();
             Self->DeleteReadIterator(it);
         }
     }
@@ -1726,7 +1794,7 @@ private:
             AppData()->MonotonicTimeProvider->Now(),
             Self));
 
-        return Reader->Read(txc, ctx);
+        return Reader->Read(txc);
     }
 
     void PrepareValidationInfo(const TActorContext&, const TReadIteratorState& state) {
@@ -1870,7 +1938,6 @@ private:
 };
 
 class TDataShard::TTxReadViaPipeline : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-    TEvDataShard::TEvRead::TPtr Ev;
     TReadIteratorId ReadId;
 
     // When we need to reply with an error
@@ -1881,17 +1948,16 @@ class TDataShard::TTxReadViaPipeline : public NTabletFlatExecutor::TTransactionB
     bool WaitComplete = false;
 
 public:
-    TTxReadViaPipeline(TDataShard* ds, TEvDataShard::TEvRead::TPtr ev, NWilson::TTraceId &&traceId)
+    TTxReadViaPipeline(TDataShard* ds, const TReadIteratorId& readId, NWilson::TTraceId &&traceId)
         : TBase(ds, std::move(traceId))
-        , Ev(std::move(ev))
-        , ReadId(Ev->Sender, Ev->Get()->Record.GetReadId())
+        , ReadId(readId)
     {}
 
     TTxType GetTxType() const override { return TXTYPE_READ; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxReadViaPipeline execute"
-            << ": at tablet# " << Self->TabletID());
+            << ": at tablet# " << Self->TabletID() << ", FollowerId " << Self->FollowerId());
 
         auto readIt = Self->ReadIterators.find(ReadId);
         if (readIt == Self->ReadIterators.end() && !Op) {
@@ -1916,22 +1982,23 @@ public:
                         // iterator already aborted
                         return true;
                     }
+                    auto& state = *readIt->second;
                     ReplyError(
                         Ydb::StatusIds::INTERNAL_ERROR,
                         TStringBuilder() << "Failed to sync follower: " << errMessage
                             << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
                         ctx.SelfID.NodeId(),
-                        Ev->Get()->ReadSpan);
+                        state.Request->ReadSpan);
                     return true;
                 }
             }
 
-            if (Ev) {
+            if (!Op) {
                 // We must perform some initialization in transaction (e.g. after a follower sync), but before the operation is built
                 Y_ABORT_UNLESS(readIt != Self->ReadIterators.end());
                 Y_ABORT_UNLESS(readIt->second);
                 auto& state = *readIt->second;
-                auto* request = Ev->Get();
+                auto* request = state.Request;
                 const auto& record = request->Record;
                 NWilson::TSpan &readSpan = request->ReadSpan;
 
@@ -1970,16 +2037,6 @@ public:
                         ReplyError(
                             Ydb::StatusIds::BAD_REQUEST,
                             TStringBuilder() << "Can't read from a backup table"
-                                << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
-                            ctx.SelfID.NodeId(),
-                            readSpan);
-                        return true;
-                    }
-
-                    if (!Self->IsMvccEnabled()) {
-                        ReplyError(
-                            Ydb::StatusIds::UNSUPPORTED,
-                            TStringBuilder() << "Cannot use read iterators without mvcc"
                                 << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
                             ctx.SelfID.NodeId(),
                             readSpan);
@@ -2039,7 +2096,7 @@ public:
                                 TRowVersion unreadableEdge = Self->Pipeline.GetUnreadableEdge();
                                 if (state.ReadVersion >= unreadableEdge) {
                                     LWTRACK(ReadWaitSnapshot, request->Orbit, state.ReadVersion.Step, state.ReadVersion.TxId);
-                                    Self->Pipeline.AddWaitingReadIterator(state.ReadVersion, std::move(Ev), ctx);
+                                    Self->Pipeline.AddWaitingReadIterator(state.ReadVersion, std::move(state.Ev), ctx);
                                     Self->DeleteReadIterator(readIt);
                                     return true;
                                 }
@@ -2115,7 +2172,7 @@ public:
                 }
 
                 const ui64 tieBreaker = Self->NextTieBreakerIndex++;
-                Op = new TReadOperation(Self, ctx.Now(), tieBreaker, Ev);
+                Op = new TReadOperation(Self, ctx.Now(), tieBreaker, ReadId);
 
                 Op->BuildExecutionPlan(false);
                 Self->Pipeline.GetExecutionUnit(Op->GetCurrentUnit()).AddOperation(Op);
@@ -2129,7 +2186,6 @@ public:
                     Op->SetUsingSnapshotFlag();
                 }
 
-                Ev = nullptr;
                 Op->IncrementInProgress();
             }
 
@@ -2234,7 +2290,7 @@ public:
 };
 
 class TDataShard::TTxReadContinue : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-    TEvDataShard::TEvReadContinue::TPtr Ev;
+    TReadIteratorId ReadId;
 
     std::unique_ptr<TEvDataShard::TEvReadResult> Result;
     std::unique_ptr<IBlockBuilder> BlockBuilder;
@@ -2243,9 +2299,9 @@ class TDataShard::TTxReadContinue : public NTabletFlatExecutor::TTransactionBase
     bool DelayedResult = false;
 
 public:
-    TTxReadContinue(TDataShard* ds, TEvDataShard::TEvReadContinue::TPtr ev, NWilson::TTraceId &&traceId)
+    TTxReadContinue(TDataShard* ds, const TReadIteratorId& readId, NWilson::TTraceId &&traceId)
         : TBase(ds, std::move(traceId))
-        , Ev(ev)
+        , ReadId(readId)
     {}
 
     // note that intentionally the same as TEvRead
@@ -2256,20 +2312,27 @@ public:
         // 1. Since TTxReadContinue scheduled, shard was ready.
         // 2. If shards changes the state, it must cancel iterators and we will
         // not find our readId ReadIterators.
-        TReadIteratorId readId(Ev->Get()->Reader, Ev->Get()->ReadId);
-        auto it = Self->ReadIterators.find(readId);
+        auto it = Self->ReadIterators.find(ReadId);
         if (it == Self->ReadIterators.end()) {
             // read has been aborted
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ReadContinue for reader# "
-                << Ev->Get()->Reader << ", readId# " << Ev->Get()->ReadId << " didn't found state");
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ReadContinue for iterator# " << ReadId
+                << " didn't find state");
             return true;
         }
 
         Y_ASSERT(it->second);
         auto& state = *it->second;
 
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ReadContinue for reader# "
-            << Ev->Get()->Reader << ", readId# " << Ev->Get()->ReadId
+        if (state.IsExhausted()) {
+            // iterator quota reduced and exhausted while ReadContinue was inflight
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ReadContinue for iterator# " << ReadId
+                << ", quota exhausted while rescheduling");
+            state.ReadContinuePending = false;
+            Result.reset();
+            return true;
+        }
+
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ReadContinue for iterator# " << ReadId
             << ", firstUnprocessedQuery# " << state.FirstUnprocessedQuery);
 
         Result = MakeEvReadResult(ctx.SelfID.NodeId());
@@ -2364,7 +2427,7 @@ public:
         Y_ASSERT(Result);
 
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
-            << " ReadContinue: reader# " << Ev->Get()->Reader << ", readId# " << Ev->Get()->ReadId
+            << " ReadContinue: iterator# " << ReadId
             << ", FirstUnprocessedQuery# " << state.FirstUnprocessedQuery);
 
         TDataShardLocksDb locksDb(*Self, txc);
@@ -2378,13 +2441,15 @@ public:
             Self));
 
         LWTRACK(ReadExecute, state.Orbit);
-        if (Reader->Read(txc, ctx)) {
+
+        if (Reader->Read(txc)) {
             // Retry later when dependencies are resolved
             if (!Reader->GetVolatileReadDependencies().empty()) {
+                state.ReadContinuePending = true;
                 Self->WaitVolatileDependenciesThenSend(
                     Reader->GetVolatileReadDependencies(),
                     Self->SelfId(),
-                    std::make_unique<TEvDataShard::TEvReadContinue>(Ev->Get()->Reader, Ev->Get()->ReadId));
+                    std::make_unique<TEvDataShard::TEvReadContinue>(ReadId.Sender, ReadId.ReadId));
                 return true;
             }
 
@@ -2407,9 +2472,7 @@ public:
     }
 
     void ApplyLocks(const TActorContext& ctx) {
-        const auto* request = Ev->Get();
-        TReadIteratorId readId(request->Reader, request->ReadId);
-        auto it = Self->ReadIterators.find(readId);
+        auto it = Self->ReadIterators.find(ReadId);
         Y_ABORT_UNLESS(it != Self->ReadIterators.end());
         Y_ABORT_UNLESS(it->second);
         auto& state = *it->second;
@@ -2445,7 +2508,7 @@ public:
                 addLock->SetSchemeShard(state.PathId.OwnerId);
                 addLock->SetPathId(state.PathId.LocalPathId);
 
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << ReadId
                     << " TTxReadContinue::Execute() found broken lock# " << state.Lock->GetLockId());
 
                 // A broken write lock means we are reading inconsistent results and must abort
@@ -2464,21 +2527,21 @@ public:
     }
 
     void SendResult(const TActorContext& ctx) {
-        auto* request = Ev->Get();
-        TReadIteratorId readId(request->Reader, request->ReadId);
-        auto it = Self->ReadIterators.find(readId);
+        auto it = Self->ReadIterators.find(ReadId);
         Y_ABORT_UNLESS(it != Self->ReadIterators.end());
         Y_ABORT_UNLESS(it->second);
         auto& state = *it->second;
 
+        state.ReadContinuePending = false;
+
         if (!Result) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << ReadId
                 << " TTxReadContinue::Execute() finished without Result, aborting");
 
             Result = MakeEvReadResult(ctx.SelfID.NodeId());
             SetStatusError(Result->Record, Ydb::StatusIds::ABORTED, "Iterator aborted");
-            Result->Record.SetReadId(readId.ReadId);
-            Self->SendImmediateReadResult(request->Reader, Result.release(), 0, state.SessionId);
+            Result->Record.SetReadId(ReadId.ReadId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, state.Request->ReadSpan.GetTraceId());
 
             state.Request->ReadSpan.EndError("Iterator aborted");
             Self->DeleteReadIterator(it);
@@ -2489,10 +2552,10 @@ public:
         auto& record = Result->Record;
         if (record.HasStatus()) {
             record.SetSeqNo(state.SeqNo + 1);
-            record.SetReadId(readId.ReadId);
-            Self->SendImmediateReadResult(request->Reader, Result.release(), 0, state.SessionId);
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
+            record.SetReadId(ReadId.ReadId);
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << ReadId
                 << " TTxReadContinue::Execute() finished with error, aborting: " << record.DebugString());
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, state.Request->ReadSpan.GetTraceId());
 
             state.Request->ReadSpan.EndError("Finished with error");
             Self->DeleteReadIterator(it);
@@ -2502,7 +2565,7 @@ public:
         Y_ASSERT(Reader);
         Y_ASSERT(BlockBuilder);
 
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " readContinue iterator# " << readId
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " readContinue iterator# " << ReadId
             << " sends rowCount# " << Reader->GetRowsRead() << ", bytes# " << Reader->GetBytesRead()
             << ", quota rows left# " << (state.Quota.Rows - Reader->GetRowsRead())
             << ", quota bytes left# " << (state.Quota.Bytes - Reader->GetBytesRead())
@@ -2514,24 +2577,24 @@ public:
         bool useful = Reader->FillResult(*Result, state);
         if (useful) {
             LWTRACK(ReadSendResult, state.Orbit);
-            Self->SendImmediateReadResult(request->Reader, Result.release(), 0, state.SessionId);
+            Self->SendImmediateReadResult(ReadId.Sender, Result.release(), 0, state.SessionId, state.Request->ReadSpan.GetTraceId());
         }
 
         if (Reader->HasUnreadQueries()) {
-            Y_ASSERT(it->second);
-            auto& state = *it->second;
+            bool wasExhausted = state.IsExhausted();
             Reader->UpdateState(state, useful);
             if (!state.IsExhausted()) {
+                state.ReadContinuePending = true;
                 ctx.Send(
                     Self->SelfId(),
-                    new TEvDataShard::TEvReadContinue(request->Reader, request->ReadId));
-            } else {
+                    new TEvDataShard::TEvReadContinue(ReadId.Sender, ReadId.ReadId));
+            } else if (!wasExhausted) {
                 Self->IncCounter(COUNTER_READ_ITERATORS_EXHAUSTED_COUNT);
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
-                    << " read iterator# " << readId << " exhausted");
+                    << " read iterator# " << ReadId << " exhausted");
             }
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << ReadId
                 << " finished in ReadContinue");
             
             state.Request->ReadSpan.EndOk();
@@ -2544,9 +2607,13 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     // Note that we mutate this request below
     auto* request = ev->Get();
     
-    if (!request->ReadSpan) {
+    if (ev->TraceId && !request->ReadSpan) {
         request->ReadSpan = NWilson::TSpan(TWilsonTablet::TabletTopLevel, std::move(ev->TraceId), "Datashard.Read", NWilson::EFlags::AUTO_END);
-        request->ReadSpan.Attribute("Shard", std::to_string(TabletID()));
+        if (request->ReadSpan) {
+            request->ReadSpan.Attribute("Shard", std::to_string(TabletID()));
+        }
+        // Reparent other event-based spans to the read span
+        ev->TraceId = request->ReadSpan.GetTraceId();
     }
 
     const auto& record = request->Record;
@@ -2587,6 +2654,16 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         replyWithError(
             Ydb::StatusIds::ALREADY_EXISTS,
             TStringBuilder() << "Request " << readId.ReadId << " already executing at shard " << TabletID());
+        return;
+    }
+
+    if (State == TShardState::PreOffline ||
+        State == TShardState::Offline)
+    {
+        replyWithError(
+            Ydb::StatusIds::NOT_FOUND,
+            TStringBuilder() << "Shard " << TabletID() << " finished splitting/merging"
+                << " (node# " << SelfId().NodeId() << " state# " << DatashardStateName(State) << ")");
         return;
     }
 
@@ -2671,11 +2748,6 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         isHeadRead = false;
     }
 
-    if (MvccSwitchState == TSwitchState::SWITCHING) {
-        Pipeline.AddWaitingReadIterator(readVersion, std::move(ev), ctx);
-        return;
-    }
-
     TActorId sessionId;
     if (readId.Sender.NodeId() != SelfId().NodeId()) {
         Y_DEBUG_ABORT_UNLESS(ev->InterconnectSession);
@@ -2694,16 +2766,21 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         sessionId = ev->InterconnectSession;
     }
 
-    ReadIterators.emplace(
+    auto pr = ReadIterators.emplace(
         readId,
         new TReadIteratorState(
             readId, TPathId(record.GetTableId().GetOwnerId(), record.GetTableId().GetTableId()),
             sessionId, readVersion, isHeadRead,
             AppData()->MonotonicTimeProvider->Now(), std::move(request->Orbit)));
+    Y_ABORT_UNLESS(pr.second);
+
+    auto& state = *pr.first->second;
+    state.Ev = std::move(ev);
+    state.Request = request;
 
     SetCounter(COUNTER_READ_ITERATORS_COUNT, ReadIterators.size());
 
-    Executor()->Execute(new TTxReadViaPipeline(this, ev, request->ReadSpan.GetTraceId()), ctx);
+    Executor()->Execute(new TTxReadViaPipeline(this, readId, request->ReadSpan.GetTraceId()), ctx);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorContext& ctx) {
@@ -2712,8 +2789,8 @@ void TDataShard::Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorCon
     if (Y_UNLIKELY(it == ReadIterators.end())) {
         return;
     }
-    
-    Executor()->Execute(new TTxReadContinue(this, ev, it->second->Request->ReadSpan.GetTraceId()), ctx);
+
+    Executor()->Execute(new TTxReadContinue(this, readId, it->second->Request->ReadSpan.GetTraceId()), ctx);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext& ctx) {
@@ -2789,14 +2866,19 @@ void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext&
     bool wasExhausted = state.IsExhausted();
     state.UpQuota(
         record.GetSeqNo(),
-        record.GetMaxRows(),
-        record.GetMaxBytes());
+        record.HasMaxRows() ? record.GetMaxRows() : Max<ui64>(),
+        record.HasMaxBytes() ? record.GetMaxBytes() : Max<ui64>());
 
     if (wasExhausted && !state.IsExhausted()) {
         DecCounter(COUNTER_READ_ITERATORS_EXHAUSTED_COUNT);
-        ctx.Send(
-            SelfId(),
-            new TEvDataShard::TEvReadContinue(ev->Sender, record.GetReadId()));
+        if (!state.ReadContinuePending) {
+            state.ReadContinuePending = true;
+            ctx.Send(
+                SelfId(),
+                new TEvDataShard::TEvReadContinue(ev->Sender, record.GetReadId()));
+        }
+    } else if (!wasExhausted && state.IsExhausted()) {
+        IncCounter(COUNTER_READ_ITERATORS_EXHAUSTED_COUNT);
     }
 
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " ReadAck for read iterator# " << readId
@@ -2831,9 +2913,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorConte
 
     LWTRACK(ReadCancel, state->Orbit);
 
-    if (state->Request) {
-        state->Request->ReadSpan.EndError("Cancelled");
-    }
+    state->Request->ReadSpan.EndError("Cancelled");
     DeleteReadIterator(it);
 }
 
@@ -2856,6 +2936,7 @@ void TDataShard::CancelReadIterators(Ydb::StatusIds::StatusCode code, const TStr
         result->Record.SetSeqNo(state->SeqNo + 1);
 
         SendViaSession(state->SessionId, readIteratorId.Sender, SelfId(), result.release());
+        state->Request->ReadSpan.EndError("Cancelled");
     }
 
     ReadIterators.clear();
@@ -2909,6 +2990,7 @@ void TDataShard::ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, cons
             ++exhaustedCount;
         }
 
+        state->Request->ReadSpan.EndError("Disconnected");
         ReadIterators.erase(it);
     }
 
@@ -2923,6 +3005,16 @@ void TDataShard::UnsubscribeReadIteratorSessions(const TActorContext& ctx) {
         Send(pr.first, new TEvents::TEvUnsubscribe);
     }
     ReadIteratorSessions.clear();
+}
+
+void TDataShard::IncCounterReadIteratorLastKeyReset() {
+    if (!CounterReadIteratorLastKeyReset) {
+        CounterReadIteratorLastKeyReset = GetServiceCounters(AppData()->Counters, "tablets")
+            ->GetSubgroup("type", "DataShard")
+            ->GetSubgroup("category", "app")
+            ->GetCounter("DataShard/ReadIteratorLastKeyReset", true);
+    }
+    ++*CounterReadIteratorLastKeyReset;
 }
 
 } // NKikimr::NDataShard

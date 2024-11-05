@@ -1,7 +1,10 @@
 #include "helpers.h"
 
+#include <yt/yt/client/api/distributed_table_session.h>
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/table_client.h>
+
+#include <yt/yt/client/sequoia_client/public.h>
 
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/column_sort_schema.h>
@@ -56,6 +59,17 @@ void ToProto(
     proto->set_suppress_upstream_sync(options.SuppressUpstreamSync);
 }
 
+void FromProto(
+    NApi::TTransactionalOptions* options,
+    const NProto::TTransactionalOptions& proto)
+{
+    FromProto(&options->TransactionId, proto.transaction_id());
+    options->Ping = proto.ping();
+    options->PingAncestors = proto.ping_ancestors();
+    options->SuppressTransactionCoordinatorSync = proto.suppress_transaction_coordinator_sync();
+    options->SuppressUpstreamSync = proto.suppress_upstream_sync();
+}
+
 void ToProto(
     NProto::TPrerequisiteOptions* proto,
     const NApi::TPrerequisiteOptions& options)
@@ -67,7 +81,7 @@ void ToProto(
     for (const auto& item : options.PrerequisiteRevisions) {
         auto* protoItem = proto->add_revisions();
         protoItem->set_path(item->Path);
-        protoItem->set_revision(item->Revision);
+        protoItem->set_revision(ToProto(item->Revision));
     }
 }
 
@@ -77,9 +91,9 @@ void ToProto(
 {
     proto->set_read_from(static_cast<NProto::EMasterReadKind>(options.ReadFrom));
     proto->set_disable_per_user_cache(options.DisablePerUserCache);
-    proto->set_expire_after_successful_update_time(ToProto<i64>(options.ExpireAfterSuccessfulUpdateTime));
-    proto->set_expire_after_failed_update_time(ToProto<i64>(options.ExpireAfterFailedUpdateTime));
-    proto->set_success_staleness_bound(ToProto<i64>(options.SuccessStalenessBound));
+    proto->set_expire_after_successful_update_time(ToProto(options.ExpireAfterSuccessfulUpdateTime));
+    proto->set_expire_after_failed_update_time(ToProto(options.ExpireAfterFailedUpdateTime));
+    proto->set_success_staleness_bound(ToProto(options.SuccessStalenessBound));
     if (options.CacheStickyGroupSize) {
         proto->set_cache_sticky_group_size(*options.CacheStickyGroupSize);
     }
@@ -120,7 +134,7 @@ void ToProto(
 {
     protoOptions->set_read_from(static_cast<NProto::ETabletReadKind>(options.ReadFrom));
     if (options.CachedSyncReplicasTimeout) {
-        protoOptions->set_cached_sync_replicas_timeout(ToProto<i64>(*options.CachedSyncReplicasTimeout));
+        protoOptions->set_cached_sync_replicas_timeout(ToProto(*options.CachedSyncReplicasTimeout));
     }
 }
 
@@ -424,19 +438,43 @@ void FromProto(
     FromProto(&result->Errors, proto.errors());
 }
 
+void ToProto(
+    NProto::TJobTraceEvent* proto,
+    const NApi::TJobTraceEvent& result)
+{
+    ToProto(proto->mutable_operation_id(), result.OperationId);
+    ToProto(proto->mutable_job_id(), result.JobId);
+    ToProto(proto->mutable_trace_id(), result.TraceId);
+    proto->set_event_index(result.EventIndex);
+    proto->set_event(result.Event);
+    proto->set_event_time(ToProto(result.EventTime));
+}
+
+void FromProto(
+    NApi::TJobTraceEvent* result,
+    const NProto::TJobTraceEvent& proto)
+{
+    FromProto(&result->OperationId, proto.operation_id());
+    FromProto(&result->JobId, proto.job_id());
+    FromProto(&result->TraceId, proto.trace_id());
+    result->EventIndex = proto.event_index();
+    result->Event = proto.event();
+    result->EventTime = TInstant::FromValue(proto.event_time());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // MISC
 ////////////////////////////////////////////////////////////////////////////////
 
 void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSchema& schema)
 {
-    protoSchema->set_stable_name(schema.StableName().Underlying());
-    protoSchema->set_name(schema.Name());
-    protoSchema->set_type(ToProto<int>(GetPhysicalType(schema.CastToV1Type())));
+    protoSchema->set_stable_name(ToProto(schema.StableName()));
+    protoSchema->set_name(ToProto(schema.Name()));
+    protoSchema->set_type(ToProto(GetPhysicalType(schema.CastToV1Type())));
     auto typeV3Yson = ConvertToYsonString(TTypeV3LogicalTypeWrapper{schema.LogicalType()});
     protoSchema->set_type_v3(typeV3Yson.ToString());
     if (schema.Lock()) {
-        protoSchema->set_lock(*schema.Lock());
+        protoSchema->set_lock(ToProto(*schema.Lock()));
     } else {
         protoSchema->clear_lock();
     }
@@ -445,18 +483,23 @@ void ToProto(NProto::TColumnSchema* protoSchema, const NTableClient::TColumnSche
     } else {
         protoSchema->clear_expression();
     }
+    if (schema.Materialized()) {
+        protoSchema->set_materialized(*schema.Materialized());
+    } else {
+        protoSchema->clear_materialized();
+    }
     if (schema.Aggregate()) {
-        protoSchema->set_aggregate(*schema.Aggregate());
+        protoSchema->set_aggregate(ToProto(*schema.Aggregate()));
     } else {
         protoSchema->clear_aggregate();
     }
     if (schema.SortOrder()) {
-        protoSchema->set_sort_order(ToProto<int>(*schema.SortOrder()));
+        protoSchema->set_sort_order(ToProto(*schema.SortOrder()));
     } else {
         protoSchema->clear_sort_order();
     }
     if (schema.Group()) {
-        protoSchema->set_group(*schema.Group());
+        protoSchema->set_group(ToProto(*schema.Group()));
     } else {
         protoSchema->clear_group();
     }
@@ -518,12 +561,13 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
     }
 
     schema->SetLogicalType(std::move(columnType));
-    schema->SetLock(protoSchema.has_lock() ? std::make_optional(protoSchema.lock()) : std::nullopt);
-    schema->SetExpression(protoSchema.has_expression() ? std::make_optional(protoSchema.expression()) : std::nullopt);
-    schema->SetAggregate(protoSchema.has_aggregate() ? std::make_optional(protoSchema.aggregate()) : std::nullopt);
-    schema->SetSortOrder(protoSchema.has_sort_order() ? std::make_optional(ESortOrder(protoSchema.sort_order())) : std::nullopt);
-    schema->SetGroup(protoSchema.has_group() ? std::make_optional(protoSchema.group()) : std::nullopt);
-    schema->SetMaxInlineHunkSize(protoSchema.has_max_inline_hunk_size() ? std::make_optional(protoSchema.max_inline_hunk_size()) : std::nullopt);
+    schema->SetLock(YT_PROTO_OPTIONAL(protoSchema, lock));
+    schema->SetExpression(YT_PROTO_OPTIONAL(protoSchema, expression));
+    schema->SetMaterialized(YT_PROTO_OPTIONAL(protoSchema, materialized));
+    schema->SetAggregate(YT_PROTO_OPTIONAL(protoSchema, aggregate));
+    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, CheckedEnumCast<ESortOrder>));
+    schema->SetGroup(YT_PROTO_OPTIONAL(protoSchema, group));
+    schema->SetMaxInlineHunkSize(YT_PROTO_OPTIONAL(protoSchema, max_inline_hunk_size));
 }
 
 void ToProto(NProto::TTableSchema* protoSchema, const NTableClient::TTableSchema& schema)
@@ -555,8 +599,8 @@ void FromProto(NTableClient::TTableSchemaPtr* schema, const NProto::TTableSchema
 void ToProto(NProto::TTabletInfo* protoTabletInfo, const NTabletClient::TTabletInfo& tabletInfo)
 {
     ToProto(protoTabletInfo->mutable_tablet_id(), tabletInfo.TabletId);
-    protoTabletInfo->set_mount_revision(tabletInfo.MountRevision);
-    protoTabletInfo->set_state(static_cast<i32>(tabletInfo.State));
+    protoTabletInfo->set_mount_revision(ToProto(tabletInfo.MountRevision));
+    protoTabletInfo->set_state(ToProto(tabletInfo.State));
     ToProto(protoTabletInfo->mutable_pivot_key(), tabletInfo.PivotKey);
     if (tabletInfo.CellId) {
         ToProto(protoTabletInfo->mutable_cell_id(), tabletInfo.CellId);
@@ -567,7 +611,7 @@ void FromProto(NTabletClient::TTabletInfo* tabletInfo, const NProto::TTabletInfo
 {
     tabletInfo->TabletId =
         FromProto<TTabletId>(protoTabletInfo.tablet_id());
-    tabletInfo->MountRevision = protoTabletInfo.mount_revision();
+    tabletInfo->MountRevision = FromProto<NHydra::TRevision>(protoTabletInfo.mount_revision());
     tabletInfo->State = CheckedEnumCast<ETabletState>(protoTabletInfo.state());
     tabletInfo->PivotKey = FromProto<NTableClient::TLegacyOwningKey>(protoTabletInfo.pivot_key());
     if (protoTabletInfo.has_cell_id()) {
@@ -632,10 +676,10 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
     }
 
     if (operation.StartTime) {
-        protoOperation->set_start_time(ToProto<i64>(*operation.StartTime));
+        protoOperation->set_start_time(ToProto(*operation.StartTime));
     }
     if (operation.FinishTime) {
-        protoOperation->set_finish_time(ToProto<i64>(*operation.FinishTime));
+        protoOperation->set_finish_time(ToProto(*operation.FinishTime));
     }
 
     if (operation.AuthenticatedUser) {
@@ -688,6 +732,10 @@ void ToProto(NProto::TOperation* protoOperation, const NApi::TOperation& operati
 
     if (operation.SlotIndexPerPoolTree) {
         protoOperation->set_slot_index_per_pool_tree(operation.SlotIndexPerPoolTree.ToString());
+    }
+
+    if (operation.SchedulingAttributesPerPoolTree) {
+        protoOperation->set_scheduling_attributes_per_pool_tree(operation.SchedulingAttributesPerPoolTree.ToString());
     }
 
     if (operation.TaskNames) {
@@ -822,6 +870,12 @@ void FromProto(NApi::TOperation* operation, const NProto::TOperation& protoOpera
         operation->SlotIndexPerPoolTree = TYsonString();
     }
 
+    if (protoOperation.has_scheduling_attributes_per_pool_tree()) {
+        operation->SchedulingAttributesPerPoolTree = TYsonString(protoOperation.scheduling_attributes_per_pool_tree());
+    } else {
+        operation->SchedulingAttributesPerPoolTree = TYsonString();
+    }
+
     if (protoOperation.has_task_names()) {
         operation->TaskNames = TYsonString(protoOperation.task_names());
     } else {
@@ -877,10 +931,10 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     }
 
     if (job.StartTime) {
-        protoJob->set_start_time(ToProto<i64>(*job.StartTime));
+        protoJob->set_start_time(ToProto(*job.StartTime));
     }
     if (job.FinishTime) {
-        protoJob->set_finish_time(ToProto<i64>(*job.FinishTime));
+        protoJob->set_finish_time(ToProto(*job.FinishTime));
     }
 
     if (job.Address) {
@@ -944,6 +998,12 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     }
     if (job.JobCookie) {
         protoJob->set_job_cookie(*job.JobCookie);
+    }
+    if (job.ArchiveFeatures) {
+        protoJob->set_archive_features(job.ArchiveFeatures.ToString());
+    }
+    if (job.MonitoringDescriptor) {
+        protoJob->set_monitoring_descriptor(*job.MonitoringDescriptor);
     }
 }
 
@@ -1084,6 +1144,16 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     } else {
         job->JobCookie.reset();
     }
+    if (protoJob.has_archive_features()) {
+        job->ArchiveFeatures = TYsonString(protoJob.archive_features());
+    } else {
+        job->ArchiveFeatures = TYsonString();
+    }
+    if (protoJob.has_monitoring_descriptor()) {
+        job->MonitoringDescriptor = protoJob.monitoring_descriptor();
+    } else {
+        job->MonitoringDescriptor.reset();
+    }
 }
 
 void ToProto(
@@ -1157,7 +1227,7 @@ void ToProto(
     const NChunkClient::TFetcherConfigPtr& fetcherConfig)
 {
     protoFetcherConfig->set_node_rpc_timeout(
-        ToProto<i64>(fetcherConfig->NodeRpcTimeout));
+        ToProto(fetcherConfig->NodeRpcTimeout));
 }
 
 void FromProto(
@@ -1189,6 +1259,8 @@ void ToProto(
     if (statistics.LegacyChunkRowCount) {
         protoStatistics->set_legacy_chunk_row_count(*statistics.LegacyChunkRowCount);
     }
+
+    ToProto(protoStatistics->mutable_column_hyperloglog_digests(), statistics.LargeStatistics.ColumnHyperLogLogDigests);
 }
 
 void FromProto(
@@ -1217,6 +1289,8 @@ void FromProto(
     } else {
         statistics->LegacyChunkRowCount.reset();
     }
+
+    FromProto(&statistics->LargeStatistics.ColumnHyperLogLogDigests, protoStatistics.column_hyperloglog_digests());
 }
 
 void ToProto(
@@ -1288,7 +1362,7 @@ void ToProto(
 {
     protoManifest->set_source_path(manifest->SourcePath);
     protoManifest->set_destination_path(manifest->DestinationPath);
-    protoManifest->set_ordered_mode(ToProto<i32>(manifest->OrderedMode));
+    protoManifest->set_ordered_mode(ToProto(manifest->OrderedMode));
 }
 
 void FromProto(
@@ -1350,10 +1424,10 @@ void ToProto(
         protoQuery->set_files(query.Files->ToString());
     }
     if (query.StartTime) {
-        protoQuery->set_start_time(NYT::ToProto<i64>(*query.StartTime));
+        protoQuery->set_start_time(NYT::ToProto(*query.StartTime));
     }
     if (query.FinishTime) {
-        protoQuery->set_start_time(NYT::ToProto<i64>(*query.FinishTime));
+        protoQuery->set_finish_time(NYT::ToProto(*query.FinishTime));
     }
     if (query.Settings) {
         protoQuery->set_settings(query.Settings.ToString());
@@ -1364,6 +1438,8 @@ void ToProto(
     if (query.AccessControlObject) {
         protoQuery->set_access_control_object(*query.AccessControlObject);
     }
+    protoQuery->set_access_control_objects(query.AccessControlObjects->ToString());
+
     if (query.State) {
         protoQuery->set_state(ConvertQueryStateToProto(*query.State));
     }
@@ -1430,12 +1506,17 @@ void FromProto(
     } else {
         query->AccessControlObject.reset();
     }
+    if (protoQuery.has_access_control_objects()) {
+        query->AccessControlObjects = TYsonString(protoQuery.access_control_objects());
+    } else {
+        query->AccessControlObjects.reset();
+    }
     if (protoQuery.has_state()) {
         query->State = ConvertQueryStateFromProto(protoQuery.state());
     } else {
         query->State.reset();
     }
-    if (protoQuery.result_count()) {
+    if (protoQuery.has_result_count()) {
         query->ResultCount = protoQuery.result_count();
     } else {
         query->ResultCount.reset();
@@ -1872,6 +1953,78 @@ NQueryTrackerClient::EQueryState ConvertQueryStateFromProto(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void FillRequest(
+    TReqStartDistributedWriteSession* req,
+    const NYPath::TRichYPath& path,
+    const TDistributedWriteSessionStartOptions& options)
+{
+    ToProto(req->mutable_path(), path);
+
+    if (options.TransactionId) {
+        ToProto(req->mutable_transactional_options(), options);
+    }
+}
+
+void ParseRequest(
+    NYPath::TRichYPath* mutablePath,
+    TDistributedWriteSessionStartOptions* mutableOptions,
+    const TReqStartDistributedWriteSession& req)
+{
+    *mutablePath = FromProto<NYPath::TRichYPath>(req.path());
+    if (req.has_transactional_options()) {
+        FromProto(mutableOptions, req.transactional_options());
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqFinishDistributedWriteSession* req,
+    TDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionFinishOptions& options)
+{
+    req->set_session(ConvertToYsonString(session).ToString());
+    req->set_max_children_per_attach_request(options.MaxChildrenPerAttachRequest);
+}
+
+void ParseRequest(
+    TDistributedWriteSessionPtr* mutableSession,
+    TDistributedWriteSessionFinishOptions* mutableOptions,
+    const TReqFinishDistributedWriteSession& req)
+{
+    *mutableSession = ConvertTo<TDistributedWriteSessionPtr>(TYsonString(req.session()));
+    mutableOptions->MaxChildrenPerAttachRequest = req.max_children_per_attach_request();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void FillRequest(
+    TReqWriteTableFragment* req,
+    const TFragmentWriteCookiePtr& cookie,
+    const TFragmentTableWriterOptions& options)
+{
+    req->set_cookie(ConvertToYsonString(cookie).ToString());
+
+    if (options.Config) {
+        req->set_config(ConvertToYsonString(*options.Config).ToString());
+    }
+}
+
+void ParseRequest(
+    TFragmentWriteCookiePtr* mutableCookie,
+    TFragmentTableWriterOptions* mutableOptions,
+    const TReqWriteTableFragment& req)
+{
+    *mutableCookie = ConvertTo<TFragmentWriteCookiePtr>(TYsonString(req.cookie()));
+    if (req.has_config()) {
+        mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonString(req.config()));
+    } else {
+        mutableOptions->Config = ConvertTo<TTableWriterConfigPtr>(TYsonString(TStringBuf("{}")));
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NProto
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1888,8 +2041,20 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet);
 }
 
-bool IsRetriableError(const TError& error, bool retryProxyBanned)
+bool IsRetriableError(const TError& error, bool retryProxyBanned, bool retrySequoiaErrorsOnly)
 {
+    // For now transient Sequoia failures are always retriable even if client's
+    // retries are disabled.
+    // TODO(kvk1920): consider to make a separate flag "EnableSequoiaRetries"
+    // for this.
+    if (error.FindMatching(NSequoiaClient::EErrorCode::SequoiaRetriableError)) {
+        return true;
+    }
+
+    if (retrySequoiaErrorsOnly) {
+        return false;
+    }
+
     if (error.FindMatching(NRpcProxy::EErrorCode::ProxyBanned) ||
         error.FindMatching(NRpc::EErrorCode::PeerBanned))
     {
@@ -1993,12 +2158,12 @@ std::vector<TSharedRef> SerializeRowset(
     // COMPAT(babenko)
     for (const auto& column : schema.Columns()) {
         auto* entry = descriptor->add_name_table_entries();
-        entry->set_name(column.Name());
+        entry->set_name(ToProto(column.Name()));
         // we save physical type for backward compatibility
         // COMPAT(babenko)
-        entry->set_type(ToProto<int>(column.GetWireType()));
+        entry->set_type(ToProto(column.GetWireType()));
         // COMPAT(babenko)
-        entry->set_logical_type(ToProto<int>(column.CastToV1Type()));
+        entry->set_logical_type(ToProto(column.CastToV1Type()));
     }
 
     auto writer = CreateWireProtocolWriter();

@@ -13,15 +13,17 @@ from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
 K = 1024
-M = 1024*1024
-G = 1024*1024*1024
-DEFAULT_LIMIT = 8*G
-DEFAULT_DELTA = 30*M
+M = 1024 * 1024
+G = 1024 * 1024 * 1024
+DEFAULT_LIMIT = 8 * G
+DEFAULT_DELTA = 30 * M
 
 
 @pytest.fixture
 def kikimr(request):
-    kikimr_conf = StreamingOverKikimrConfig(cloud_mode=True, node_count=4, dc_mapping={1: "DC1", 2: "DC2", 3: "DC1", 4: "DC2"})
+    kikimr_conf = StreamingOverKikimrConfig(
+        cloud_mode=True, node_count=4, dc_mapping={1: "DC1", 2: "DC2", 3: "DC1", 4: "DC2"}
+    )
     kikimr = StreamingOverKikimr(kikimr_conf)
     kikimr.start_mvp_mock_server()
     kikimr.start()
@@ -33,13 +35,11 @@ def kikimr(request):
 class TestAlloc(TestYdsBase):
     @pytest.mark.parametrize("kikimr", [(None, None, None)], indirect=["kikimr"])
     def test_dc_locality(self, kikimr):
-
         self.init_topics("select_dc_locality", create_output=False)
 
         sql = R'''
             SELECT * FROM myyds.`{input_topic}`
-            '''\
-        .format(
+            '''.format(
             input_topic=self.input_topic,
         )
 

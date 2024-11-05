@@ -70,6 +70,13 @@ static inline void _Py_RefcntAdd(PyObject* op, Py_ssize_t n)
 
 static inline void _Py_SetImmortal(PyObject *op)
 {
+#ifdef Py_DEBUG
+    // For strings, use _PyUnicode_InternImmortal instead.
+    if (PyUnicode_CheckExact(op)) {
+        assert(PyUnicode_CHECK_INTERNED(op) == SSTATE_INTERNED_IMMORTAL
+            || PyUnicode_CHECK_INTERNED(op) == SSTATE_INTERNED_IMMORTAL_STATIC);
+    }
+#endif
     if (op) {
         op->ob_refcnt = _Py_IMMORTAL_REFCNT;
     }
@@ -80,7 +87,7 @@ static inline void _Py_SetImmortal(PyObject *op)
 static inline void _Py_ClearImmortal(PyObject *op)
 {
     if (op) {
-        assert(op->ob_refcnt == _Py_IMMORTAL_REFCNT);
+        assert(_Py_IsImmortal(op));
         op->ob_refcnt = 1;
         Py_DECREF(op);
     }

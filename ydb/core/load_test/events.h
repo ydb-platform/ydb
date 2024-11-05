@@ -2,6 +2,7 @@
 
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/load_test.pb.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
 #include <library/cpp/json/writer/json_value.h>

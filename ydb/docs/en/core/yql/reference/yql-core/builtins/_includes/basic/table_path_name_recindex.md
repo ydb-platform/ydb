@@ -12,7 +12,7 @@ To avoid such a situation, create a subquery for calculating these functions, as
 
 {% endnote %}
 
-**Examples**
+### Examples
 
 ```yql
 SELECT TablePath() FROM CONCAT(table_a, table_b);
@@ -32,7 +32,7 @@ Optional arguments:
 * Path to the table, `TablePath()` is used by default (see also its limitations).
 * Specifying the system ("yt") whose rules are used to determine the table name. You need to specify the system only if [USE](../../../syntax/select.md#use) doesn't specify the current cluster.
 
-**Examples**
+### Examples
 
 ```yql
 USE hahn;
@@ -49,7 +49,7 @@ Access to the current sequence number of a row in the physical source table, **s
 
 No arguments. When used in combination with [CONCAT](../../../syntax/select.md#concat), [RANGE](../../../syntax/select.md#range) and other similar mechanisms, numbering restarts for each input table. If used in an incorrect context, it returns 0.
 
-**Example**
+### Example
 
 ```yql
 SELECT TableRecordIndex() FROM my_table;

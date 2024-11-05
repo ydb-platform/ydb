@@ -1,13 +1,14 @@
 # DELETE FROM
 
-{% include [../_includes/alert_preview.md)](../_includes/alert_preview.md) %}
+<!-- markdownlint-disable blanks-around-fences -->
+
+{% include [alert_preview.md](../_includes/alert_preview.md) %}
 
 Syntax of the `DELETE FROM` statement:
 
-{% include [syntax.md](../../../_includes/postgresql/statements/delete_from/syntax.md) %}
+{% include [syntax](../_includes/statements/delete_from/syntax.md) %}
 
 To delete a row from a table based on a specific column value, the construction `DELETE FROM <table name> WHERE <column name><condition><value/range>` is used.
-
 
 {% note warning %}
 
@@ -15,5 +16,4 @@ Note that the use of the `WHERE ...` clause is optional, so when working with `D
 
 {% endnote %}
 
-
-{% include [../_includes/alert_locks.md](../_includes/alert_locks.md) %}
+{% include [alert_locks](../_includes/alert_locks.md) %}

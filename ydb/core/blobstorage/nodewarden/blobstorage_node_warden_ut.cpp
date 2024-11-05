@@ -1,29 +1,17 @@
-#include <ydb/core/testlib/basics/appdata.h>
-#include <ydb/core/testlib/basics/runtime.h>
-#include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
-#include <ydb/core/base/hive.h>
-
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/base/counters.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/statestorage_impl.h>
-#include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_http_request.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
-#include <ydb/core/mind/local.h>
-#include <ydb/core/util/testactorsys.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 
 #include <ydb/library/pdisk_io/sector_map.h>
-#include <util/random/entropy.h>
-#include <util/string/printf.h>
-#include <util/string/subst.h>
-#include <util/stream/file.h>
+#include <ydb/core/util/random.h>
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -74,12 +62,12 @@ void FormatPDiskRandomKeys(TString path, ui32 diskSize, ui32 chunkSize, ui64 gui
     NPDisk::TKey chunkKey;
     NPDisk::TKey logKey;
     NPDisk::TKey sysLogKey;
-    EntropyPool().Read(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
-    EntropyPool().Read(&logKey, sizeof(NKikimr::NPDisk::TKey));
-    EntropyPool().Read(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
+    SafeEntropyPoolRead(&chunkKey, sizeof(NKikimr::NPDisk::TKey));
+    SafeEntropyPoolRead(&logKey, sizeof(NKikimr::NPDisk::TKey));
+    SafeEntropyPoolRead(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
     if (!isGuidValid) {
-        EntropyPool().Read(&guid, sizeof(guid));
+        SafeEntropyPoolRead(&guid, sizeof(guid));
     }
 
     NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize,
@@ -763,7 +751,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         VERBOSE_COUT(" Creating PDisk");
         ui64 guid = 1;
         ui64 pDiskCategory = 0;
-        EntropyPool().Read(&guid, sizeof(guid));
+        SafeEntropyPoolRead(&guid, sizeof(guid));
 //        TODO: look why doesn't sernder 1 work
         ui32 pDiskId = CreatePDisk(runtime, 0, tempDir() + "/new_pdisk.dat", guid, 1001, pDiskCategory);
 
@@ -772,7 +760,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TVDiskID vDiskId;
         ui64 guid2 = guid;
         while (guid2 == guid) {
-            EntropyPool().Read(&guid2, sizeof(guid2));
+            SafeEntropyPoolRead(&guid2, sizeof(guid2));
         }
         ui32 nodeId = runtime.GetNodeId(0);
         TActorId pDiskActorId = MakeBlobStoragePDiskID(nodeId, pDiskId);
@@ -884,6 +872,48 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
     CUSTOM_UNIT_TEST(ObtainTenantKeyDifferentPin) {
         TestObtainTenantKey("pin1", "pin2");
+    }
+
+    Y_UNIT_TEST(TestReceivedPDiskRestartNotAllowed) {
+        TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
+        runtime.Start();
+
+        ui32 nodeId = 1;
+        ui32 pdiskId = 1337;
+        ui64 cookie = 555;
+
+        auto &appData = runtime.GetNode(1)->AppData;
+        appData->DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dom", 1).Release());
+
+        TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())));
+
+        IActor* ac = CreateBSNodeWarden(nodeWardenConfig.Release());
+
+        TActorId nodeWarden = runtime.Register(ac, nodeId);
+
+        auto fakeBSC = runtime.AllocateEdgeActor(nodeId);
+
+        TActorId pdiskActorId = runtime.AllocateEdgeActor(nodeId);
+        TActorId pdiskServiceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
+
+        runtime.RegisterService(pdiskServiceId, pdiskActorId);
+
+        runtime.Send(new IEventHandle(nodeWarden, pdiskActorId, new TEvBlobStorage::TEvAskWardenRestartPDisk(pdiskId), 0, cookie), nodeId);
+
+        auto responseEvent = new TEvBlobStorage::TEvControllerConfigResponse();
+
+        auto res = responseEvent->Record.MutableResponse();
+        res->SetSuccess(false);
+        res->SetErrorDescription("Fake error");
+        runtime.Send(new IEventHandle(nodeWarden, fakeBSC, responseEvent, 0, 1), nodeId);
+
+        auto evPtr = runtime.WaitForEdgeActorEvent<TEvBlobStorage::TEvAskWardenRestartPDiskResult>(pdiskActorId);
+        auto restartPDiskEv = evPtr->Get();
+
+        UNIT_ASSERT(!restartPDiskEv->RestartAllowed);
+        UNIT_ASSERT_STRINGS_EQUAL("Fake error", restartPDiskEv->Details);
+
+        UNIT_ASSERT_EQUAL(pdiskId, restartPDiskEv->PDiskId);
     }
 }
 

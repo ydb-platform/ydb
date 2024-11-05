@@ -17,7 +17,7 @@ public:
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
         for (const TGroupId groupId : GroupIds) {
-            db.Table<Schema::Group>().Key(groupId).Update<Schema::Group::SeenOperational>(true);
+            db.Table<Schema::Group>().Key(groupId.GetRawId()).Update<Schema::Group::SeenOperational>(true);
             Self->SysViewChangedGroups.insert(groupId);
         }
         return true;

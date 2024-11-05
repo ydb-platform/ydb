@@ -73,6 +73,8 @@ void TInstanceSize::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("default_config", &TThis::DefaultConfig)
         .DefaultNew();
+    registrar.Parameter("host_tag_filter", &TThis::HostTagFilter)
+        .Optional();
 }
 
 void TBundleTargetConfig::Register(TRegistrar registrar)
@@ -107,6 +109,10 @@ void TBundleResourceQuota::Register(TRegistrar registrar)
         .Default(0);
 
     registrar.Parameter("memory", &TThis::Memory)
+        .GreaterThanOrEqual(0)
+        .Default(0);
+
+    registrar.Parameter("network", &TThis::Network)
         .GreaterThanOrEqual(0)
         .Default(0);
 }
@@ -261,7 +267,7 @@ void ToProto(NBundleController::NProto::TBundleConfigConstraints* protoBundleCon
 
 void FromProto(TBundleConfigConstraintsPtr bundleConfigConstraints, const NBundleController::NProto::TBundleConfigConstraints* protoBundleConfigConstraints)
 {
-    auto rpcProxySizes = protoBundleConfigConstraints->get_arr_rpc_proxy_sizes();
+    auto rpcProxySizes = protoBundleConfigConstraints->rpc_proxy_sizes();
 
     for (auto instance : rpcProxySizes) {
         auto newInstance = New<TInstanceSize>();
@@ -269,7 +275,7 @@ void FromProto(TBundleConfigConstraintsPtr bundleConfigConstraints, const NBundl
         bundleConfigConstraints->RpcProxySizes.push_back(newInstance);
     }
 
-    auto tabletNodeSizes = protoBundleConfigConstraints->get_arr_tablet_node_sizes();
+    auto tabletNodeSizes = protoBundleConfigConstraints->tablet_node_sizes();
 
     for (auto instance : tabletNodeSizes) {
         auto newInstance = New<TInstanceSize>();

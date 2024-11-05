@@ -48,7 +48,7 @@ public:
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateView);
 
         context.SS->TabletCounters->Simple()[COUNTER_VIEW_COUNT].Add(1);
-        
+
         const auto pathId = txState->TargetPathId;
         auto path = TPath::Init(pathId, context.SS);
 
@@ -68,6 +68,7 @@ TViewInfo::TPtr CreateView(const NKikimrSchemeOp::TViewDescription& desc) {
     TViewInfo::TPtr viewInfo = new TViewInfo;
     viewInfo->AlterVersion = 1;
     viewInfo->QueryText = desc.GetQueryText();
+    viewInfo->CapturedContext = desc.GetCapturedContext();
     return viewInfo;
 }
 
@@ -109,7 +110,7 @@ public:
         const auto& viewDescription = Transaction.GetCreateView();
 
         const TString& name = viewDescription.GetName();
-        
+
         LOG_N("TCreateView Propose"
                             << ", path: " << parentPathStr << "/" << name
                             << ", opId: " << OperationId
@@ -133,7 +134,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsLikeDirectory();
+                .IsLikeDirectory()
+                .FailOnRestrictedCreateInTempZone();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

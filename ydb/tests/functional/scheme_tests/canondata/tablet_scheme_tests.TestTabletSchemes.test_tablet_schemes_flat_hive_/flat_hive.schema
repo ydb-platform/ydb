@@ -520,6 +520,11 @@
                 "ColumnId": 5,
                 "ColumnName": "Timestamp",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "DeletedAtGeneration",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -531,7 +536,8 @@
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -558,7 +564,7 @@
         "ColumnsAdded": [
             {
                 "ColumnId": 1,
-                "ColumnName": "Timestamp",
+                "ColumnName": "Index",
                 "ColumnType": "Uint64"
             },
             {
@@ -570,6 +576,11 @@
                 "ColumnId": 3,
                 "ColumnName": "Operation",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "OperationTimestamp",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -578,7 +589,8 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -647,6 +659,16 @@
                 "ColumnId": 9,
                 "ColumnName": "Location",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "Name",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "BecomeUpOnRestart",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -661,7 +683,9 @@
                     5,
                     6,
                     8,
-                    9
+                    9,
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -860,6 +884,11 @@
                 "ColumnId": 5,
                 "ColumnName": "Statistics",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "DataCenter",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -870,7 +899,8 @@
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

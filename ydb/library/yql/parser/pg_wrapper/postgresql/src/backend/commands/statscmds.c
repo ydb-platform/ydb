@@ -3,7 +3,7 @@
  * statscmds.c
  *	  Commands for creating and altering extended statistics objects
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -75,13 +75,10 @@ CreateStatistics(CreateStatsStmt *stmt)
 	HeapTuple	htup;
 	Datum		values[Natts_pg_statistic_ext];
 	bool		nulls[Natts_pg_statistic_ext];
-	Datum		datavalues[Natts_pg_statistic_ext_data];
-	bool		datanulls[Natts_pg_statistic_ext_data];
 	int2vector *stxkeys;
 	List	   *stxexprs = NIL;
 	Datum		exprsDatum;
 	Relation	statrel;
-	Relation	datarel;
 	Relation	rel = NULL;
 	Oid			relid;
 	ObjectAddress parentobject,
@@ -136,11 +133,12 @@ CreateStatistics(CreateStatsStmt *stmt)
 			rel->rd_rel->relkind != RELKIND_PARTITIONED_TABLE)
 			ereport(ERROR,
 					(errcode(ERRCODE_WRONG_OBJECT_TYPE),
-					 errmsg("relation \"%s\" is not a table, foreign table, or materialized view",
-							RelationGetRelationName(rel))));
+					 errmsg("cannot define statistics for relation \"%s\"",
+							RelationGetRelationName(rel)),
+					 errdetail_relkind_not_supported(rel->rd_rel->relkind)));
 
 		/* You must own the relation to create stats on it */
-		if (!pg_class_ownercheck(RelationGetRelid(rel), stxowner))
+		if (!object_ownercheck(RelationRelationId, RelationGetRelid(rel), stxowner))
 			aclcheck_error(ACLCHECK_NOT_OWNER, get_relkind_objtype(rel->rd_rel->relkind),
 						   RelationGetRelationName(rel));
 
@@ -157,10 +155,9 @@ CreateStatistics(CreateStatsStmt *stmt)
 
 	/*
 	 * If the node has a name, split it up and determine creation namespace.
-	 * If not (a possibility not considered by the grammar, but one which can
-	 * occur via the "CREATE TABLE ... (LIKE)" command), then we put the
-	 * object in the same namespace as the relation, and cons up a name for
-	 * it.
+	 * If not, put the object in the same namespace as the relation, and cons
+	 * up a name for it.  (This can happen either via "CREATE STATISTICS ..."
+	 * or via "CREATE TABLE ... (LIKE)".)
 	 */
 	if (stmt->defnames)
 		namespaceId = QualifiedNameGetCreationNamespace(stmt->defnames,
@@ -184,6 +181,10 @@ CreateStatistics(CreateStatsStmt *stmt)
 	{
 		if (stmt->if_not_exists)
 		{
+			/*
+			 * Since stats objects aren't members of extensions (see comments
+			 * below), no need for checkMembershipInCurrentExtension here.
+			 */
 			ereport(NOTICE,
 					(errcode(ERRCODE_DUPLICATE_OBJECT),
 					 errmsg("statistics object \"%s\" already exists, skipping",
@@ -212,14 +213,14 @@ CreateStatistics(CreateStatsStmt *stmt)
 	 * Convert the expression list to a simple array of attnums, but also keep
 	 * a list of more complex expressions.  While at it, enforce some
 	 * constraints - we don't allow extended statistics on system attributes,
-	 * and we require the data type to have less-than operator.
+	 * and we require the data type to have a less-than operator.
 	 *
-	 * There are many ways how to "mask" a simple attribute refenrece as an
+	 * There are many ways to "mask" a simple attribute reference as an
 	 * expression, for example "(a+0)" etc. We can't possibly detect all of
-	 * them, but we handle at least the simple case with attribute in parens.
-	 * There'll always be a way around this, if the user is determined (like
-	 * the "(a+0)" example), but this makes it somewhat consistent with how
-	 * indexes treat attributes/expressions.
+	 * them, but we handle at least the simple case with the attribute in
+	 * parens. There'll always be a way around this, if the user is determined
+	 * (like the "(a+0)" example), but this makes it somewhat consistent with
+	 * how indexes treat attributes/expressions.
 	 */
 	foreach(cell, stmt->exprs)
 	{
@@ -260,9 +261,9 @@ CreateStatistics(CreateStatsStmt *stmt)
 			nattnums++;
 			ReleaseSysCache(atttuple);
 		}
-		else if (IsA(selem->expr, Var))	/* column reference in parens */
+		else if (IsA(selem->expr, Var)) /* column reference in parens */
 		{
-			Var *var = (Var *) selem->expr;
+			Var		   *var = (Var *) selem->expr;
 			TypeCacheEntry *type;
 
 			/* Disallow use of system attributes in extended stats */
@@ -299,10 +300,11 @@ CreateStatistics(CreateStatsStmt *stmt)
 			while ((k = bms_next_member(attnums, k)) >= 0)
 			{
 				AttrNumber	attnum = k + FirstLowInvalidHeapAttributeNumber;
+
 				if (attnum <= 0)
 					ereport(ERROR,
-						(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-						 errmsg("statistics creation on system columns is not supported")));
+							(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+							 errmsg("statistics creation on system columns is not supported")));
 			}
 
 			/*
@@ -337,7 +339,7 @@ CreateStatistics(CreateStatsStmt *stmt)
 	if ((list_length(stmt->exprs) == 1) && (list_length(stxexprs) == 1))
 	{
 		/* statistics kinds not specified */
-		if (list_length(stmt->stat_types) > 0)
+		if (stmt->stat_types != NIL)
 			ereport(ERROR,
 					(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
 					 errmsg("when building statistics on a single expression, statistics kinds may not be specified")));
@@ -349,7 +351,7 @@ CreateStatistics(CreateStatsStmt *stmt)
 	build_mcv = false;
 	foreach(cell, stmt->stat_types)
 	{
-		char	   *type = strVal((Value *) lfirst(cell));
+		char	   *type = strVal(lfirst(cell));
 
 		if (strcmp(type, "ndistinct") == 0)
 		{
@@ -389,7 +391,7 @@ CreateStatistics(CreateStatsStmt *stmt)
 	 * automatically. This allows calculating good estimates for stats that
 	 * consider per-clause estimates (e.g. functional dependencies).
 	 */
-	build_expressions = (list_length(stxexprs) > 0);
+	build_expressions = (stxexprs != NIL);
 
 	/*
 	 * Check that at least two columns were specified in the statement, or
@@ -468,7 +470,7 @@ CreateStatistics(CreateStatsStmt *stmt)
 	if (build_expressions)
 		types[ntypes++] = CharGetDatum(STATS_EXT_EXPRESSIONS);
 	Assert(ntypes > 0 && ntypes <= lengthof(types));
-	stxkind = construct_array(types, ntypes, CHAROID, 1, true, TYPALIGN_CHAR);
+	stxkind = construct_array_builtin(types, ntypes, CHAROID);
 
 	/* convert the expressions (if any) to a text datum */
 	if (stxexprs != NIL)
@@ -513,28 +515,10 @@ CreateStatistics(CreateStatsStmt *stmt)
 	relation_close(statrel, RowExclusiveLock);
 
 	/*
-	 * Also build the pg_statistic_ext_data tuple, to hold the actual
-	 * statistics data.
+	 * We used to create the pg_statistic_ext_data tuple too, but it's not
+	 * clear what value should the stxdinherit flag have (it depends on
+	 * whether the rel is partitioned, contains data, etc.)
 	 */
-	datarel = table_open(StatisticExtDataRelationId, RowExclusiveLock);
-
-	memset(datavalues, 0, sizeof(datavalues));
-	memset(datanulls, false, sizeof(datanulls));
-
-	datavalues[Anum_pg_statistic_ext_data_stxoid - 1] = ObjectIdGetDatum(statoid);
-
-	/* no statistics built yet */
-	datanulls[Anum_pg_statistic_ext_data_stxdndistinct - 1] = true;
-	datanulls[Anum_pg_statistic_ext_data_stxddependencies - 1] = true;
-	datanulls[Anum_pg_statistic_ext_data_stxdmcv - 1] = true;
-	datanulls[Anum_pg_statistic_ext_data_stxdexpr - 1] = true;
-
-	/* insert it into pg_statistic_ext_data */
-	htup = heap_form_tuple(datarel->rd_att, datavalues, datanulls);
-	CatalogTupleInsert(datarel, htup);
-	heap_freetuple(htup);
-
-	relation_close(datarel, RowExclusiveLock);
 
 	InvokeObjectPostCreateHook(StatisticExtRelationId, statoid, 0);
 
@@ -681,7 +665,7 @@ AlterStatistics(AlterStatsStmt *stmt)
 		elog(ERROR, "cache lookup failed for extended statistics object %u", stxoid);
 
 	/* Must be owner of the existing statistics object */
-	if (!pg_statistics_object_ownercheck(stxoid, GetUserId()))
+	if (!object_ownercheck(StatisticExtRelationId, stxoid, GetUserId()))
 		aclcheck_error(ACLCHECK_NOT_OWNER, OBJECT_STATISTIC_EXT,
 					   NameListToString(stmt->defnames));
 
@@ -718,32 +702,42 @@ AlterStatistics(AlterStatsStmt *stmt)
 }
 
 /*
+ * Delete entry in pg_statistic_ext_data catalog. We don't know if the row
+ * exists, so don't error out.
+ */
+void
+RemoveStatisticsDataById(Oid statsOid, bool inh)
+{
+	Relation	relation;
+	HeapTuple	tup;
+
+	relation = table_open(StatisticExtDataRelationId, RowExclusiveLock);
+
+	tup = SearchSysCache2(STATEXTDATASTXOID, ObjectIdGetDatum(statsOid),
+						  BoolGetDatum(inh));
+
+	/* We don't know if the data row for inh value exists. */
+	if (HeapTupleIsValid(tup))
+	{
+		CatalogTupleDelete(relation, &tup->t_self);
+
+		ReleaseSysCache(tup);
+	}
+
+	table_close(relation, RowExclusiveLock);
+}
+
+/*
  * Guts of statistics object deletion.
  */
 void
 RemoveStatisticsById(Oid statsOid)
 {
 	Relation	relation;
+	Relation	rel;
 	HeapTuple	tup;
 	Form_pg_statistic_ext statext;
 	Oid			relid;
-
-	/*
-	 * First delete the pg_statistic_ext_data tuple holding the actual
-	 * statistical data.
-	 */
-	relation = table_open(StatisticExtDataRelationId, RowExclusiveLock);
-
-	tup = SearchSysCache1(STATEXTDATASTXOID, ObjectIdGetDatum(statsOid));
-
-	if (!HeapTupleIsValid(tup)) /* should not happen */
-		elog(ERROR, "cache lookup failed for statistics data %u", statsOid);
-
-	CatalogTupleDelete(relation, &tup->t_self);
-
-	ReleaseSysCache(tup);
-
-	table_close(relation, RowExclusiveLock);
 
 	/*
 	 * Delete the pg_statistic_ext tuple.  Also send out a cache inval on the
@@ -759,11 +753,25 @@ RemoveStatisticsById(Oid statsOid)
 	statext = (Form_pg_statistic_ext) GETSTRUCT(tup);
 	relid = statext->stxrelid;
 
+	/*
+	 * Delete the pg_statistic_ext_data tuples holding the actual statistical
+	 * data. There might be data with/without inheritance, so attempt deleting
+	 * both. We lock the user table first, to prevent other processes (e.g.
+	 * DROP STATISTICS) from removing the row concurrently.
+	 */
+	rel = table_open(relid, ShareUpdateExclusiveLock);
+
+	RemoveStatisticsDataById(statsOid, true);
+	RemoveStatisticsDataById(statsOid, false);
+
 	CacheInvalidateRelcacheByRelid(relid);
 
 	CatalogTupleDelete(relation, &tup->t_self);
 
 	ReleaseSysCache(tup);
+
+	/* Keep lock until the end of the transaction. */
+	table_close(rel, NoLock);
 
 	table_close(relation, RowExclusiveLock);
 }

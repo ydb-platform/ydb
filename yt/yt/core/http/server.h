@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/actions/future.h>
 
+#include <yt/yt/core/misc/public.h>
+
 #include <library/cpp/yt/memory/ref.h>
 
 namespace NYT::NHttp {
@@ -60,7 +62,7 @@ struct IServer
      */
     virtual void Stop() = 0;
 
-    //! Sets path matcher
+    //! Sets path matcher.
     /*!
      *  Must be called before adding callbacks.
      *  @see IRequestPathMatcher
@@ -80,31 +82,31 @@ DEFINE_REFCOUNTED_TYPE(IServer)
 ////////////////////////////////////////////////////////////////////////////////
 
 IServerPtr CreateServer(
-    const TServerConfigPtr& config,
-    const NNet::IListenerPtr& listener,
-    const NConcurrency::IPollerPtr& poller);
+    TServerConfigPtr config,
+    NNet::IListenerPtr listener,
+    NConcurrency::IPollerPtr poller);
 IServerPtr CreateServer(
-    const TServerConfigPtr& config,
-    const NNet::IListenerPtr& listener,
-    const NConcurrency::IPollerPtr& poller,
-    const NConcurrency::IPollerPtr& acceptor);
+    TServerConfigPtr config,
+    NNet::IListenerPtr listener,
+    NConcurrency::IPollerPtr poller,
+    NConcurrency::IPollerPtr acceptor);
 IServerPtr CreateServer(
-    const TServerConfigPtr& config,
-    const NConcurrency::IPollerPtr& poller);
+    TServerConfigPtr config,
+    NConcurrency::IPollerPtr poller);
 IServerPtr CreateServer(
-    const TServerConfigPtr& config,
-    const NConcurrency::IPollerPtr& poller,
-    const NConcurrency::IPollerPtr& acceptor);
+    TServerConfigPtr config,
+    NConcurrency::IPollerPtr poller,
+    NConcurrency::IPollerPtr acceptor);
 IServerPtr CreateServer(
     int port,
-    const NConcurrency::IPollerPtr& poller);
+    NConcurrency::IPollerPtr poller);
 IServerPtr CreateServer(
-    const TServerConfigPtr& config,
+    TServerConfigPtr config,
     int pollerThreadCount = 1);
 IServerPtr CreateServer(
-    const TServerConfigPtr& config,
-    const NConcurrency::IPollerPtr& poller,
-    const IInvokerPtr& invoker);
+    TServerConfigPtr config,
+    NConcurrency::IPollerPtr poller,
+    IInvokerPtr invoker);
 
 ////////////////////////////////////////////////////////////////////////////////
 

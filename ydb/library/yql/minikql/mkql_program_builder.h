@@ -86,6 +86,10 @@ inline void AddAnyJoinSide(EAnyJoinSettings& combined, EAnyJoinSettings value) {
     combined = (EAnyJoinSettings)combinedVal;
 }
 
+inline bool HasSpillingFlag(const TCallable& callable) {
+    return TStringBuf(callable.GetType()->GetName()).EndsWith("WithSpilling"_sb);
+}
+
 #define MKQL_SCRIPT_TYPES(xx) \
     xx(Unknown, 0, unknown, false) \
     xx(Python, 1, python, false) \
@@ -101,6 +105,12 @@ inline void AddAnyJoinSide(EAnyJoinSettings& combined, EAnyJoinSettings value) {
     xx(CustomPython3, 11, custompython3, true) \
     xx(SystemPython2, 12, systempython2, false) \
     xx(SystemPython3, 13, systempython3, false) \
+    xx(SystemPython3_8, 14, systempython3_8, false) \
+    xx(SystemPython3_9, 15, systempython3_9, false) \
+    xx(SystemPython3_10, 16, systempython3_10, false) \
+    xx(SystemPython3_11, 17, systempython3_11, false) \
+    xx(SystemPython3_12, 18, systempython3_12, false) \
+    xx(SystemPython3_13, 19, systempython3_13, false) \
 
 enum class EScriptType {
     MKQL_SCRIPT_TYPES(ENUM_VALUE_GEN)
@@ -200,7 +210,7 @@ public:
     TRuntimeNode FromString(TRuntimeNode data, TType* type);
     TRuntimeNode StrictFromString(TRuntimeNode data, TType* type);
     TRuntimeNode ToBytes(TRuntimeNode data);
-    TRuntimeNode FromBytes(TRuntimeNode data, NUdf::TDataTypeId schemeType);
+    TRuntimeNode FromBytes(TRuntimeNode data, TType* type);
     TRuntimeNode InversePresortString(TRuntimeNode data);
     TRuntimeNode InverseString(TRuntimeNode data);
     TRuntimeNode Random(const TArrayRef<const TRuntimeNode>& dependentNodes);
@@ -236,12 +246,18 @@ public:
     TRuntimeNode BlockCompress(TRuntimeNode flow, ui32 bitmapIndex);
     TRuntimeNode BlockExpandChunked(TRuntimeNode flow);
     TRuntimeNode BlockCoalesce(TRuntimeNode first, TRuntimeNode second);
+    TRuntimeNode BlockExists(TRuntimeNode data);
+    TRuntimeNode BlockMember(TRuntimeNode structure, const std::string_view& memberName);
     TRuntimeNode BlockNth(TRuntimeNode tuple, ui32 index);
+    TRuntimeNode BlockAsStruct(const TArrayRef<std::pair<std::string_view, TRuntimeNode>>& args);
     TRuntimeNode BlockAsTuple(const TArrayRef<const TRuntimeNode>& args);
     TRuntimeNode BlockToPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockFromPg(TRuntimeNode input, TType* returnType);
     TRuntimeNode BlockPgResolvedCall(const std::string_view& name, ui32 id,
         const TArrayRef<const TRuntimeNode>& args, TType* returnType);
+    TRuntimeNode BlockMapJoinCore(TRuntimeNode flow, TRuntimeNode dict,
+        EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
+        const TArrayRef<const ui32>& leftKeyDrops, TType* returnType);
 
     //-- logical functions
     TRuntimeNode BlockNot(TRuntimeNode data);
@@ -394,7 +410,9 @@ public:
     TRuntimeNode WideSkipWhileInclusive(TRuntimeNode flow, const TNarrowLambda& handler);
 
     TRuntimeNode WideCombiner(TRuntimeNode flow, i64 memLimit, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
+    TRuntimeNode WideLastCombinerCommon(const TStringBuf& funcName, TRuntimeNode flow, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
     TRuntimeNode WideLastCombiner(TRuntimeNode flow, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
+    TRuntimeNode WideLastCombinerWithSpilling(TRuntimeNode flow, const TWideLambda& keyExtractor, const TBinaryWideLambda& init, const TTernaryWideLambda& update, const TBinaryWideLambda& finish);
     TRuntimeNode WideCondense1(TRuntimeNode stream, const TWideLambda& init, const TWideSwitchLambda& switcher, const TBinaryWideLambda& handler, bool useCtx = false);
 
     TRuntimeNode WideTop(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
@@ -435,10 +453,18 @@ public:
         ui64 memLimit, std::optional<ui32> sortedTableOrder,
         EAnyJoinSettings anyJoinSettings, const ui32 tableIndexField,
         TType* returnType);
+    TRuntimeNode GraceJoinCommon(const TStringBuf& funcName, TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
+        const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
+        const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings = EAnyJoinSettings::None);
     TRuntimeNode GraceJoin(TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
         const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
         const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings = EAnyJoinSettings::None);
     TRuntimeNode GraceSelfJoin(TRuntimeNode flowLeft,  EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
+        const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings = EAnyJoinSettings::None);
+    TRuntimeNode GraceJoinWithSpilling(TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
+        const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
+        const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings = EAnyJoinSettings::None);
+    TRuntimeNode GraceSelfJoinWithSpilling(TRuntimeNode flowLeft,  EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,
         const TArrayRef<const ui32>& leftRenames, const TArrayRef<const ui32>& rightRenames, TType* returnType, EAnyJoinSettings anyJoinSettings = EAnyJoinSettings::None);
     TRuntimeNode CombineCore(TRuntimeNode stream,
         const TUnaryLambda& keyExtractor,
@@ -553,6 +579,10 @@ public:
     TRuntimeNode DecimalDiv(TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode DecimalMod(TRuntimeNode data1, TRuntimeNode data2);
     TRuntimeNode DecimalMul(TRuntimeNode data1, TRuntimeNode data2);
+
+    TRuntimeNode BlockDecimalDiv(TRuntimeNode first, TRuntimeNode second);
+    TRuntimeNode BlockDecimalMod(TRuntimeNode first, TRuntimeNode second);
+    TRuntimeNode BlockDecimalMul(TRuntimeNode first, TRuntimeNode second);
 
     //-- bit logical functions
     TRuntimeNode BitNot(TRuntimeNode data);
@@ -683,7 +713,8 @@ public:
         const TArrayRef<std::pair<TStringBuf, TBinaryLambda>>& getMeasures,
         const NYql::NMatchRecognize::TRowPattern& pattern,
         const TArrayRef<std::pair<TStringBuf, TTernaryLambda>>& getDefines,
-        bool streamingMode
+        bool streamingMode,
+        const NYql::NMatchRecognize::TAfterMatchSkipTo& skipTo
     );
 
     TRuntimeNode TimeOrderRecover(
@@ -723,8 +754,20 @@ protected:
     TRuntimeNode BuildWideSkipTakeBlocks(const std::string_view& callableName, TRuntimeNode flow, TRuntimeNode count);
     TRuntimeNode BuildBlockLogical(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second);
     TRuntimeNode BuildExtend(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists);
+    
+    TRuntimeNode BuildBlockDecimalBinary(const std::string_view& callableName, TRuntimeNode first, TRuntimeNode second);
+
 private:
     TRuntimeNode BuildWideFilter(const std::string_view& callableName, TRuntimeNode flow, const TNarrowLambda& handler);
+
+    TRuntimeNode BuildBlockCombineAll(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
+        const TArrayRef<const TAggInfo>& aggs, TType* returnType);
+    TRuntimeNode BuildBlockCombineHashed(const std::string_view& callableName, TRuntimeNode input, std::optional<ui32> filterColumn,
+        const TArrayRef<ui32>& keys, const TArrayRef<const TAggInfo>& aggs, TType* returnType);
+    TRuntimeNode BuildBlockMergeFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, const TArrayRef<ui32>& keys,
+        const TArrayRef<const TAggInfo>& aggs, TType* returnType);
+    TRuntimeNode BuildBlockMergeManyFinalizeHashed(const std::string_view& callableName, TRuntimeNode input, const TArrayRef<ui32>& keys,
+        const TArrayRef<const TAggInfo>& aggs, ui32 streamIndex, const TVector<TVector<ui32>>& streams, TType* returnType);
 
     TRuntimeNode DictItems(TRuntimeNode dict, EDictItems mode);
     TRuntimeNode If(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch, TType* resultType);

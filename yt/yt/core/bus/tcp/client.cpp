@@ -28,7 +28,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = BusLogger;
+static constexpr auto& Logger = BusLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -51,7 +51,7 @@ public:
         Connection_->Terminate(TError(NBus::EErrorCode::TransportError, "Bus terminated"));
     }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         VERIFY_THREAD_AFFINITY_ANY();
         return Connection_->GetEndpointDescription();
@@ -63,7 +63,7 @@ public:
         return Connection_->GetEndpointAttributes();
     }
 
-    const TString& GetEndpointAddress() const override
+    const std::string& GetEndpointAddress() const override
     {
         VERIFY_THREAD_AFFINITY_ANY();
         return Connection_->GetEndpointAddress();
@@ -141,9 +141,11 @@ class TTcpBusClient
 public:
     TTcpBusClient(
         TBusClientConfigPtr config,
-        IPacketTranscoderFactory* packetTranscoderFactory)
+        IPacketTranscoderFactory* packetTranscoderFactory,
+        IMemoryUsageTrackerPtr memoryUsageTracker)
         : Config_(std::move(config))
         , PacketTranscoderFactory_(packetTranscoderFactory)
+        , MemoryUsageTracker_(std::move(memoryUsageTracker))
     {
         if (Config_->Address) {
             EndpointDescription_ = *Config_->Address;
@@ -159,7 +161,7 @@ public:
             .EndMap());
     }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return EndpointDescription_;
     }
@@ -204,7 +206,8 @@ public:
             Config_->UnixDomainSocketPath,
             std::move(handler),
             std::move(poller),
-            PacketTranscoderFactory_);
+            PacketTranscoderFactory_,
+            MemoryUsageTracker_);
         connection->Start();
 
         return New<TTcpClientBusProxy>(std::move(connection));
@@ -215,7 +218,9 @@ private:
 
     IPacketTranscoderFactory* const PacketTranscoderFactory_;
 
-    TString EndpointDescription_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
+
+    std::string EndpointDescription_;
     IAttributeDictionaryPtr EndpointAttributes_;
 };
 
@@ -223,9 +228,13 @@ private:
 
 IBusClientPtr CreateBusClient(
     TBusClientConfigPtr config,
-    IPacketTranscoderFactory* packetTranscoderFactory)
+    IPacketTranscoderFactory* packetTranscoderFactory,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
 {
-    return New<TTcpBusClient>(std::move(config), packetTranscoderFactory);
+    return New<TTcpBusClient>(
+        std::move(config),
+        packetTranscoderFactory,
+        std::move(memoryUsageTracker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

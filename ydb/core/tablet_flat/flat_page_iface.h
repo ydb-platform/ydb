@@ -61,7 +61,7 @@ namespace NPage {
     enum class EPage : ui16 {
         Undef = 0,
         Scheme = 2,
-        Index = 3,
+        FlatIndex = 3,
         DataPage = 4,
         Frames = 5, /* Tagged entities to TRowId relation index     */
         Globs = 6,  /* Just enumeration of NPageCollection::TGlobId refs    */

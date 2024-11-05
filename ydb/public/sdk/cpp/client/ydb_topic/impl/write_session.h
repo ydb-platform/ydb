@@ -1,11 +1,8 @@
 #pragma once
 
-#include "topic_impl.h"
-#include "write_session_impl.h"
-
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/callback_context.h>
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/write_session_impl.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 
 #include <util/generic/buffer.h>
 
@@ -17,7 +14,7 @@ namespace NYdb::NTopic {
 // TWriteSession
 
 class TWriteSession : public IWriteSession,
-                      public NPersQueue::TContextOwner<TWriteSessionImpl> {
+                      public TContextOwner<TWriteSessionImpl> {
 private:
     friend class TSimpleBlockingWriteSession;
     friend class TTopicClient;
@@ -39,9 +36,11 @@ public:
     void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize,
                TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override;
 
-    void Write(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
+    void Write(TContinuationToken&& continuationToken, TWriteMessage&& message,
+               NTable::TTransaction* tx = nullptr) override;
 
-    void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& message) override;
+    void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& message,
+                      NTable::TTransaction* tx = nullptr) override;
 
     NThreading::TFuture<void> WaitEvent() override;
 
@@ -70,7 +69,9 @@ public:
     bool Write(TStringBuf data, TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing(),
                const TDuration& blockTimeout = TDuration::Max()) override;
 
-    bool Write(TWriteMessage&& message, const TDuration& blockTimeout = TDuration::Max()) override;
+    bool Write(TWriteMessage&& message,
+               NTable::TTransaction* tx = nullptr,
+               const TDuration& blockTimeout = TDuration::Max()) override;
 
     ui64 GetInitSeqNo() override;
 
@@ -84,12 +85,9 @@ protected:
 
 private:
     TMaybe<TContinuationToken> WaitForToken(const TDuration& timeout);
-    void HandleAck(TWriteSessionEvent::TAcksEvent&);
-    void HandleReady(TWriteSessionEvent::TReadyToAcceptEvent&);
-    void HandleClosed(const TSessionClosedEvent&);
 
     std::atomic_bool Closed = false;
 };
 
 
-}; // namespace NYdb::NTopic
+}  // namespace NYdb::NTopic

@@ -4,7 +4,7 @@
 //-----------------------------------------------------------------------------
 //
 // Copyright (c) 2003 Eric Friedman, Itay Maman
-// Copyright (c) 2013-2023 Antony Polukhin
+// Copyright (c) 2013-2024 Antony Polukhin
 //
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
@@ -24,15 +24,6 @@
 #include <boost/preprocessor/enum_params.hpp>
 #include <boost/preprocessor/enum_shifted_params.hpp>
 #include <boost/preprocessor/repeat.hpp>
-
-///////////////////////////////////////////////////////////////////////////////
-// macro BOOST_VARIANT_NO_TYPE_SEQUENCE_SUPPORT
-//
-// Defined if variant does not support make_variant_over (see below). 
-//
-#if defined(BOOST_NO_USING_DECLARATION_OVERLOADS_FROM_TYPENAME_BASE)
-#   define BOOST_VARIANT_NO_TYPE_SEQUENCE_SUPPORT
-#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 // macro BOOST_VARIANT_NO_FULL_RECURSIVE_VARIANT_SUPPORT
@@ -117,40 +108,6 @@ struct convert_void< void_ >
 {
     typedef mpl::na type;
 };
-
-///////////////////////////////////////////////////////////////////////////////
-// (workaround) BOOST_NO_USING_DECLARATION_OVERLOADS_FROM_TYPENAME_BASE
-//
-// Needed to work around compilers that don't support using-declaration
-// overloads. (See the variant::initializer workarounds below.)
-//
-
-#if defined(BOOST_NO_USING_DECLARATION_OVERLOADS_FROM_TYPENAME_BASE)
-// (detail) tags voidNN -- NN defined on [0, BOOST_VARIANT_LIMIT_TYPES)
-//
-// Defines void types that are each unique and specializations of
-// convert_void that yields mpl::na for each voidNN type.
-//
-
-#define BOOST_VARIANT_DETAIL_DEFINE_VOID_N(z,N,_)          \
-    struct BOOST_PP_CAT(void,N);                           \
-                                                           \
-    template <>                                            \
-    struct convert_void< BOOST_PP_CAT(void,N) >            \
-    {                                                      \
-        typedef mpl::na type;                              \
-    };                                                     \
-    /**/
-
-BOOST_PP_REPEAT(
-      BOOST_VARIANT_LIMIT_TYPES
-    , BOOST_VARIANT_DETAIL_DEFINE_VOID_N
-    , _
-    )
-
-#undef BOOST_VARIANT_DETAIL_DEFINE_VOID_N
-
-#endif // BOOST_NO_USING_DECLARATION_OVERLOADS_FROM_TYPENAME_BASE workaround
 
 }} // namespace detail::variant
 

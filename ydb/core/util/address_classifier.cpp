@@ -18,6 +18,35 @@ TString ExtractAddress(const TString& peer) {
     return TString(buf);
 }
 
+TString ParseAddress(const TString& address, TString& hostname, ui32& port) {
+    size_t first_colon_pos = address.find(':');
+    if (first_colon_pos != TString::npos) {
+        size_t last_colon_pos = address.rfind(':');
+        if (last_colon_pos == first_colon_pos) {
+            // only one colon, simple case
+            port = FromString<ui32>(address.substr(first_colon_pos + 1));
+            hostname = address.substr(0, first_colon_pos);
+        } else {
+            // ipv6?
+            size_t closing_bracket_pos = address.rfind(']');
+            if (closing_bracket_pos == TString::npos || closing_bracket_pos > last_colon_pos) {
+                // whole address is ipv6 host
+                hostname = address;
+            } else {
+                port = FromString<ui32>(address.substr(last_colon_pos + 1));
+                hostname = address.substr(0, last_colon_pos);
+            }
+            if (hostname.StartsWith('[') && hostname.EndsWith(']')) {
+                hostname = hostname.substr(1, hostname.size() - 2);
+            }
+        }
+    } else {
+        hostname = address;
+    }
+    return hostname;
+}
+
+
 bool TAddressClassifier::AddNetByCidrAndLabel(const TString& cidr, const size_t label) {
     try {
         // The following method still throws despite its name

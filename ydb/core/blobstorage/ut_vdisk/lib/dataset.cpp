@@ -5,6 +5,7 @@
 
 using namespace NKikimr;
 
+extern const ui64 DefaultTestTabletId = 5000;
 
 TString CreateData(const TString &orig, ui32 minHugeBlobSize, bool huge) {
     if (huge) {
@@ -23,15 +24,15 @@ TString CreateData(const TString &orig, ui32 minHugeBlobSize, bool huge) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 TSmallCommonDataSet::TSmallCommonDataSet() {
     auto put = [&] (ui32 step, TString data) {
-        Items.push_back(TDataItem{NKikimr::TLogoBlobID(0, 1, step, 0, data.size(), 0), std::move(data),
+        Items.push_back(TDataItem{NKikimr::TLogoBlobID(DefaultTestTabletId, 1, step, 0, data.size(), 0), std::move(data),
             NKikimrBlobStorage::EPutHandleClass::TabletLog});
     };
 
-    put(321, "xxxxxxxxxx");
-    put(331, "yyy");
-    put(408, "zzz");
-    put(471, "pppp");
-    put(909, "qqqqq");
+    put(322, "xxxxxxxxxx");
+    put(370, "yyy");
+    put(424, "zzz");
+    put(472, "pppp");
+    put(915, "qqqqq");
 }
 
 
@@ -54,15 +55,15 @@ TCustomDataSet::TCustomDataSet(ui64 tabletId, ui32 gen, ui32 channel, ui32 step,
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 T3PutDataSet::T3PutDataSet(NKikimrBlobStorage::EPutHandleClass cls, ui32 minHugeBlobSize, bool huge) {
     TString abcdefghkj(CreateData("abcdefghkj", minHugeBlobSize, huge));
-    TLogoBlobID id1(0, 1, 10, 0, abcdefghkj.size(), 0, 1);
+    TLogoBlobID id1(DefaultTestTabletId, 1, 16, 0, abcdefghkj.size(), 0, 1);
     Items.push_back(TDataItem(id1, abcdefghkj, cls));
 
     TString pqr(CreateData("pqr", minHugeBlobSize, huge));
-    TLogoBlobID id2(0, 1, 30, 0, pqr.size(), 0, 1);
+    TLogoBlobID id2(DefaultTestTabletId, 1, 30, 0, pqr.size(), 0, 1);
     Items.push_back(TDataItem(id2, pqr, cls));
 
     TString xyz(CreateData("xyz", minHugeBlobSize, huge));
-    TLogoBlobID id3(0, 1, 34, 0, xyz.size(), 0, 1);
+    TLogoBlobID id3(DefaultTestTabletId, 1, 36, 0, xyz.size(), 0, 1);
     Items.push_back(TDataItem(id3, xyz, cls));
 }
 
@@ -72,8 +73,8 @@ T3PutDataSet::T3PutDataSet(NKikimrBlobStorage::EPutHandleClass cls, ui32 minHuge
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 T1PutHandoff2DataSet::T1PutHandoff2DataSet(NKikimrBlobStorage::EPutHandleClass cls, ui32 minHugeBlobSize, bool huge) {
     TString abc(CreateData("abc", minHugeBlobSize, huge));
-    TLogoBlobID id1Part1(0, 1, 10, 0, abc.size(), 0, 1);
-    TLogoBlobID id1Part2(0, 1, 10, 0, abc.size(), 0, 2);
+    TLogoBlobID id1Part1(DefaultTestTabletId, 1, 16, 0, abc.size(), 0, 1);
+    TLogoBlobID id1Part2(DefaultTestTabletId, 1, 16, 0, abc.size(), 0, 2);
 
     Items.push_back(TDataItem(id1Part1, abc, cls));
     Items.push_back(TDataItem(id1Part2, abc, cls));
@@ -86,12 +87,12 @@ T3PutHandoff2DataSet::T3PutHandoff2DataSet(NKikimrBlobStorage::EPutHandleClass c
     TString abcdefghkj(CreateData("abcdefghkj", minHugeBlobSize, huge));
     TString pqr(CreateData("pqr", minHugeBlobSize, huge));
     TString xyz(CreateData("xyz", minHugeBlobSize, huge));
-    TLogoBlobID id1Part1(0, 1, 10, 0, abcdefghkj.size(), 0, 1);
-    TLogoBlobID id1Part2(0, 1, 10, 0, abcdefghkj.size(), 0, 2);
-    TLogoBlobID id2Part1(0, 1, 30, 0, pqr.size(), 0, 1);
-    TLogoBlobID id2Part2(0, 1, 30, 0, pqr.size(), 0, 2);
-    TLogoBlobID id3Part1(0, 1, 34, 0, xyz.size(), 0, 1);
-    TLogoBlobID id3Part2(0, 1, 34, 0, xyz.size(), 0, 2);
+    TLogoBlobID id1Part1(DefaultTestTabletId, 1, 16, 0, abcdefghkj.size(), 0, 1);
+    TLogoBlobID id1Part2(DefaultTestTabletId, 1, 16, 0, abcdefghkj.size(), 0, 2);
+    TLogoBlobID id2Part1(DefaultTestTabletId, 1, 30, 0, pqr.size(), 0, 1);
+    TLogoBlobID id2Part2(DefaultTestTabletId, 1, 30, 0, pqr.size(), 0, 2);
+    TLogoBlobID id3Part1(DefaultTestTabletId, 1, 36, 0, xyz.size(), 0, 1);
+    TLogoBlobID id3Part2(DefaultTestTabletId, 1, 36, 0, xyz.size(), 0, 2);
 
     Items.push_back(TDataItem(id1Part1, abcdefghkj, cls));
     Items.push_back(TDataItem(id1Part2, abcdefghkj, cls));
@@ -193,9 +194,9 @@ IDataGenerator* CreateBlobGenerator(ui64 maxCumSize, ui32 maxNumBlobs, ui32 minB
 
         ui64 GenerateTabletId() {
             if (DifferentTablets > 1) {
-                return Rng() % DifferentTablets;
+                return Rng() % DifferentTablets + DefaultTestTabletId;
             } else {
-                return 0;
+                return DefaultTestTabletId;
             }
         }
 
@@ -217,6 +218,16 @@ IDataGenerator* CreateBlobGenerator(ui64 maxCumSize, ui32 maxNumBlobs, ui32 minB
 
     return new Generator(maxCumSize, maxNumBlobs, minBlobSize, maxBlobSize, differentTablets, startingStep, info,
             std::move(matchingVDisks), reuseData);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TBadIdsDataSet
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+TBadIdsDataSet::TBadIdsDataSet(NKikimrBlobStorage::EPutHandleClass cls, ui32 minHugeBlobSize, bool huge) {
+    TString abcdefghkj(CreateData("abcdefghkj", minHugeBlobSize, huge));
+    ui64 tabletId = 0;
+    TLogoBlobID id(tabletId, 1, 10, 0, abcdefghkj.size(), 0, 1);
+    Items.push_back(TDataItem(id, abcdefghkj, cls));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -18,7 +18,7 @@ namespace NYT::NDetail::NRawClient {
 
 using ::ToString;
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 static void SetTransactionIdParam(TNode* node, const TTransactionId& transactionId)
 {
@@ -105,7 +105,7 @@ void SerializeMasterReadOptions(TNode* node, const TMasterReadOptions<T>& option
     }
 }
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 TNode SerializeParamsForCreate(
     const TTransactionId& transactionId,
@@ -525,6 +525,15 @@ TNode SerializeParamsForGetJob(
     return result;
 }
 
+TNode SerializeParamsForGetJobTrace(
+    const TOperationId& operationId,
+    const TGetJobTraceOptions& /* options */)
+{
+    TNode result;
+    SetOperationIdParam(&result, operationId);
+    return result;
+}
+
 TNode SerializeParamsForListJobs(
     const TOperationId& operationId,
     const TListJobsOptions& options)
@@ -549,6 +558,9 @@ TNode SerializeParamsForListJobs(
     }
     if (options.WithFailContext_) {
         result["with_fail_context"] = *options.WithFailContext_;
+    }
+    if (options.WithMonitoringDescriptor_) {
+        result["with_monitoring_descriptor"] = *options.WithMonitoringDescriptor_;
     }
 
     if (options.SortField_) {

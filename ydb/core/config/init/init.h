@@ -1,11 +1,10 @@
 #pragma once
 
+#include <ydb/core/driver_lib/run/service_mask.h>
 #include <ydb/core/base/event_filter.h>
-#include <ydb/core/cms/console/config_item_info.h>
-#include <ydb/core/driver_lib/run/config.h>
+#include <ydb/core/util/source_location.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 
@@ -14,9 +13,38 @@
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
 
-#include <memory>
-
 namespace NKikimr::NConfig {
+
+struct TConfigItemInfo {
+    enum class EUpdateKind {
+        MutableConfigPartFromFile,
+        MutableConfigPartFromBaseConfig,
+        MutableConfigPartMergeFromFile,
+        ReplaceConfigWithConsoleYaml,
+        ReplaceConfigWithConsoleProto,
+        ReplaceConfigWithBase,
+        LoadYamlConfigFromFile,
+        SetExplicitly,
+        UpdateExplicitly,
+    };
+
+    struct TUpdate {
+        TString File;
+        ui32 Line;
+        EUpdateKind Kind;
+    };
+
+    TVector<TUpdate> Updates;
+};
+
+struct TCallContext {
+    const char* File;
+    ui32 Line;
+
+    static TCallContext From(const NCompat::TSourceLocation& location) {
+        return TCallContext{location.file_name(), static_cast<ui32>(location.line())};
+    }
+};
 
 class IEnv {
 public:
@@ -47,8 +75,21 @@ public:
 class IConfigUpdateTracer {
 public:
     virtual ~IConfigUpdateTracer() {}
-    virtual void Add(ui32 kind, TConfigItemInfo::TUpdate) = 0;
+    void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current()) {
+        return this->Add(kind, TConfigItemInfo::TUpdate{NUtil::TrimSourceFileName(location.file_name()), location.line(), update});
+    }
+    void AddUpdate(ui32 kind, TConfigItemInfo::EUpdateKind update, TCallContext ctx) {
+        return this->Add(kind, TConfigItemInfo::TUpdate{NUtil::TrimSourceFileName(ctx.File), ctx.Line, update});
+    }
+    virtual void Add(ui32 kind, TConfigItemInfo::TUpdate update) = 0;
     virtual THashMap<ui32, TConfigItemInfo> Dump() const = 0;
+};
+
+class IInitLogger {
+public:
+    virtual ~IInitLogger() {}
+    virtual IOutputStream& Out() const noexcept = 0;
+    virtual IOutputStream& Err() const noexcept = 0;
 };
 
 // ===
@@ -76,22 +117,28 @@ struct TNodeRegistrationSettings {
     bool FixedNodeID;
     ui32 InterconnectPort;
     NActors::TNodeLocation Location;
+    TString NodeRegistrationToken;
 };
 
 class INodeRegistrationResult {
 public:
     virtual ~INodeRegistrationResult() {}
-    virtual void Apply(NKikimrConfig::TAppConfig& appConfig, ui32& nodeId, TKikimrScopeId& scopeId) const = 0;
+    virtual void Apply(
+        NKikimrConfig::TAppConfig& appConfig,
+        ui32& nodeId,
+        TKikimrScopeId& scopeId,
+        TString& nodeName) const = 0;
 };
 
 class INodeBrokerClient {
 public:
     virtual ~INodeBrokerClient() {}
-    virtual std::unique_ptr<INodeRegistrationResult> RegisterDynamicNode(
+    virtual std::shared_ptr<INodeRegistrationResult> RegisterDynamicNode(
         const TGrpcSslSettings& grpcSettings,
         const TVector<TString>& addrs,
         const TNodeRegistrationSettings& regSettings,
-        const IEnv& env) const = 0;
+        const IEnv& env,
+        IInitLogger& logger) const = 0;
 };
 
 // ===
@@ -105,17 +152,86 @@ struct TDynConfigSettings {
     TString StaffApiUserToken;
 };
 
+class IConfigurationResult {
+public:
+    virtual ~IConfigurationResult() {}
+    virtual const NKikimrConfig::TAppConfig& GetConfig() const = 0;
+    virtual bool HasYamlConfig() const = 0;
+    virtual const TString& GetYamlConfig() const = 0;
+    virtual TMap<ui64, TString> GetVolatileYamlConfigs() const = 0;
+};
+
 class IDynConfigClient {
 public:
     virtual ~IDynConfigClient() {}
-    virtual TMaybe<NKikimr::NClient::TConfigurationResult> GetConfig(
+    virtual std::shared_ptr<IConfigurationResult> GetConfig(
         const TGrpcSslSettings& gs,
         const TVector<TString>& addrs,
         const TDynConfigSettings& settings,
-        const IEnv& env) const = 0;
+        const IEnv& env,
+        IInitLogger& logger) const = 0;
 };
 
 // ===
+
+struct TInitialConfiguratorDependencies {
+    NConfig::IErrorCollector& ErrorCollector;
+    NConfig::IProtoConfigFileProvider& ProtoConfigFileProvider;
+    NConfig::IConfigUpdateTracer& ConfigUpdateTracer;
+    NConfig::IMemLogInitializer& MemLogInit;
+    NConfig::INodeBrokerClient& NodeBrokerClient;
+    NConfig::IDynConfigClient& DynConfigClient;
+    NConfig::IEnv& Env;
+    NConfig::IInitLogger& Logger;
+};
+
+struct TRecordedInitialConfiguratorDeps {
+    TInitialConfiguratorDependencies GetDeps() {
+        return {
+            *ErrorCollector,
+            *ProtoConfigFileProvider,
+            *ConfigUpdateTracer,
+            *MemLogInit,
+            *NodeBrokerClient,
+            *DynConfigClient,
+            *Env,
+            *Logger
+        };
+    }
+
+    std::unique_ptr<NConfig::IErrorCollector> ErrorCollector;
+    std::unique_ptr<NConfig::IProtoConfigFileProvider> ProtoConfigFileProvider;
+    std::unique_ptr<NConfig::IConfigUpdateTracer> ConfigUpdateTracer;
+    std::unique_ptr<NConfig::IMemLogInitializer> MemLogInit;
+    std::unique_ptr<NConfig::INodeBrokerClient> NodeBrokerClient;
+    std::unique_ptr<NConfig::IDynConfigClient> DynConfigClient;
+    std::unique_ptr<NConfig::IEnv> Env;
+    std::unique_ptr<NConfig::IInitLogger> Logger;
+};
+
+struct TDenyList {
+    std::set<ui32> Items;
+};
+
+struct TAllowList {
+    std::set<ui32> Items;
+};
+
+struct TDebugInfo {
+    NKikimrConfig::TAppConfig StaticConfig;
+    NKikimrConfig::TAppConfig OldDynConfig;
+    NKikimrConfig::TAppConfig NewDynConfig;
+    THashMap<ui32, TConfigItemInfo> InitInfo;
+};
+
+struct TConfigsDispatcherInitInfo {
+    NKikimrConfig::TAppConfig InitialConfig;
+    TMap<TString, TString> Labels;
+    std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
+    std::optional<TDebugInfo> DebugInfo;
+    std::shared_ptr<NConfig::TRecordedInitialConfiguratorDeps> RecordedInitialConfiguratorDeps = nullptr;
+    std::vector<TString> Args;
+};
 
 class IInitialConfigurator {
 public:
@@ -129,11 +245,8 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
-        TMap<TString, TString>& labels,
         TString& clusterName,
-        NKikimrConfig::TAppConfig& initialCmsConfig,
-        NKikimrConfig::TAppConfig& initialCmsYamlConfig,
-        THashMap<ui32, TConfigItemInfo>& configInitInfo) const = 0;
+        NConfig::TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const = 0;
 };
 
 std::unique_ptr<IConfigUpdateTracer> MakeDefaultConfigUpdateTracer();
@@ -143,34 +256,32 @@ std::unique_ptr<IErrorCollector> MakeDefaultErrorCollector();
 std::unique_ptr<IMemLogInitializer> MakeDefaultMemLogInitializer();
 std::unique_ptr<INodeBrokerClient> MakeDefaultNodeBrokerClient();
 std::unique_ptr<IDynConfigClient> MakeDefaultDynConfigClient();
+std::unique_ptr<IInitLogger> MakeDefaultInitLogger();
 
-std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(
-        NConfig::IErrorCollector& errorCollector,
-        NConfig::IProtoConfigFileProvider& protoConfigFileProvider,
-        NConfig::IConfigUpdateTracer& configUpdateTracer,
-        NConfig::IMemLogInitializer& memLogInit,
-        NConfig::INodeBrokerClient& nodeBrokerClient,
-        NConfig::IDynConfigClient& DynConfigClient,
-        NConfig::IEnv& env);
+std::unique_ptr<IMemLogInitializer> MakeNoopMemLogInitializer();
+std::unique_ptr<INodeBrokerClient> MakeNoopNodeBrokerClient();
+std::unique_ptr<IDynConfigClient> MakeNoopDynConfigClient();
+std::unique_ptr<IInitLogger> MakeNoopInitLogger();
+
+void AddProtoConfigOptions(IProtoConfigFileProvider& out);
+
+std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(TInitialConfiguratorDependencies deps);
+
+class IInitialConfiguratorDepsRecorder {
+public:
+    virtual ~IInitialConfiguratorDepsRecorder() {}
+
+    virtual TInitialConfiguratorDependencies GetDeps() = 0;
+
+    virtual TRecordedInitialConfiguratorDeps GetRecordedDeps() const = 0;
+};
+
+std::unique_ptr<IInitialConfiguratorDepsRecorder> MakeDefaultInitialConfiguratorDepsRecorder(TInitialConfiguratorDependencies deps);
 
 class TInitialConfigurator {
 public:
-    TInitialConfigurator(
-        NConfig::IErrorCollector& errorCollector,
-        NConfig::IProtoConfigFileProvider& protoConfigFileProvider,
-        NConfig::IConfigUpdateTracer& configUpdateTracer,
-        NConfig::IMemLogInitializer& memLogInit,
-        NConfig::INodeBrokerClient& nodeBrokerClient,
-        NConfig::IDynConfigClient& dynConfigClient,
-        NConfig::IEnv& env)
-            : Impl(MakeDefaultInitialConfigurator(
-                       errorCollector,
-                       protoConfigFileProvider,
-                       configUpdateTracer,
-                       memLogInit,
-                       nodeBrokerClient,
-                       dynConfigClient,
-                       env))
+    TInitialConfigurator(TInitialConfiguratorDependencies deps)
+        : Impl(MakeDefaultInitialConfigurator(deps))
     {}
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) {
@@ -191,11 +302,8 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
-        TMap<TString, TString>& labels,
         TString& clusterName,
-        NKikimrConfig::TAppConfig& initialCmsConfig,
-        NKikimrConfig::TAppConfig& initialCmsYamlConfig,
-        THashMap<ui32, TConfigItemInfo>& configInitInfo) const
+        TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const
     {
         Impl->Apply(
             appConfig,
@@ -203,15 +311,18 @@ public:
             scopeId,
             tenantName,
             servicesMask,
-            labels,
             clusterName,
-            initialCmsConfig,
-            initialCmsYamlConfig,
-            configInitInfo);
+            configsDispatcherInitInfo);
     }
 
 private:
     std::unique_ptr<IInitialConfigurator> Impl;
+};
+
+enum class EWorkload {
+    Hybrid /* "hybrid" */,
+    Analyitical /* "analytical" */,
+    Operational /* "operational" */,
 };
 
 } // namespace NKikimr::NConfig

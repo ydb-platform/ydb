@@ -120,6 +120,12 @@ TExprBase KqpRewriteSqlInCompactToJoin(const TExprBase& node, TExprContext& ctx)
         .Value(leftLabelStr)
         .Done().Ptr();
 
+    TVector<TCoAtom> leftJoinKeyNames;
+    TVector<TCoAtom> rightJoinKeyNames;
+
+    leftJoinKeyNames.emplace_back(leftColumn);
+    rightJoinKeyNames.emplace_back(rightColumn);
+
     auto joinKeys = Build<TDqJoinKeyTupleList>(ctx, node.Pos())
         .Add<TDqJoinKeyTuple>()
             .LeftLabel(leftLabel)
@@ -149,6 +155,12 @@ TExprBase KqpRewriteSqlInCompactToJoin(const TExprBase& node, TExprContext& ctx)
             .Value("LeftSemi")
             .Build()
         .JoinKeys(joinKeys)
+        .LeftJoinKeyNames()
+            .Add(leftJoinKeyNames)
+            .Build()
+        .RightJoinKeyNames()
+            .Add(rightJoinKeyNames)
+            .Build()
         .Done();
 
     // Convert column names back, i.e. leftLabel.ColumnName -> ColumnName

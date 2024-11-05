@@ -265,7 +265,7 @@ namespace NActors {
         void HandleMonInfo(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx);
         void HandleWakeup();
         [[nodiscard]] bool OutputRecord(NLog::TEvLog *evLog) noexcept;
-        [[nodiscard]] bool OutputRecord(TInstant time, NLog::EPrio priority, NLog::EComponent component, const TString& formatted) noexcept;
+        [[nodiscard]] bool OutputRecord(TInstant time, NLog::EPrio priority, NLog::EComponent component, const TString& formatted, bool json) noexcept;
         void RenderComponentPriorities(IOutputStream& str);
         void FlushLogBufferMessage();
         void WriteMessageStat(const NLog::TEvLog& ev);
@@ -342,11 +342,12 @@ namespace NActors {
     }
 
     template <typename TCtx>
-    inline void DeliverLogMessage(TCtx& ctx, NLog::EPriority mPriority, NLog::EComponent mComponent, TString &&str)
+    inline void DeliverLogMessage(TCtx& ctx, NLog::EPriority mPriority, NLog::EComponent mComponent, TString &&str,
+            bool json = false)
     {
         const NLog::TSettings *mSettings = ctx.LoggerSettings();
         TLoggerActor::Throttle(*mSettings);
-        ctx.Send(new IEventHandle(mSettings->LoggerActorId, TActorId(), new NLog::TEvLog(mPriority, mComponent, std::move(str))));
+        ctx.Send(new IEventHandle(mSettings->LoggerActorId, TActorId(), new NLog::TEvLog(mPriority, mComponent, std::move(str), json)));
     }
 
     template <typename TCtx, typename... TArgs>
@@ -365,7 +366,7 @@ namespace NActors {
         }
 
         MemLogWrite(Formatted.data(), Formatted.size(), true);
-        DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, std::move(Formatted));
+        DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, std::move(Formatted), false);
     }
 
     template <typename TCtx>
@@ -373,10 +374,11 @@ namespace NActors {
         TCtx& actorCtxOrSystem,
         NLog::EPriority mPriority,
         NLog::EComponent mComponent,
-        const TString& str) {
+        const TString& str,
+        bool json = false) {
 
         MemLogWrite(str.data(), str.size(), true);
-        DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, TString(str));
+        DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, TString(str), json);
     }
 
     template <typename TCtx>
@@ -384,10 +386,11 @@ namespace NActors {
         TCtx& actorCtxOrSystem,
         NLog::EPriority mPriority,
         NLog::EComponent mComponent,
-        TString&& str) {
+        TString&& str,
+        bool json = false) {
 
         MemLogWrite(str.data(), str.size(), true);
-        DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, std::move(str));
+        DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, std::move(str), json);
     }
 
     class TRecordWriter: public TStringBuilder {

@@ -56,6 +56,7 @@ struct TYtTableStatInfo: public TThrRefBase {
     ui64 ChunkCount = 0;
     ui64 ModifyTime = 0;
     ui64 Revision = 0;
+    TSet<TString> SecurityTags = {};
     ui64 TableRevision = 0; // Not serializable
 };
 
@@ -171,6 +172,7 @@ struct TYtOutTableInfo: public TYtTableBaseInfo {
     NNodes::TExprBase ToExprNode(TExprContext& ctx, const TPositionHandle& pos) const override;
 
     TYtOutTableInfo& SetUnique(const TDistinctConstraintNode* distinct, const TPositionHandle& pos, TExprContext& ctx);
+    NYT::TNode GetColumnGroups() const;
 };
 
 struct TYtRangesInfo: public TThrRefBase {
@@ -344,6 +346,7 @@ struct TYtPathInfo: public TThrRefBase {
     TYtColumnsInfo::TPtr Columns;
     TYtRangesInfo::TPtr Ranges;
     TYtTableStatInfo::TPtr Stat;
+    TMaybe<TString> AdditionalAttributes;
 private:
     const NCommon::TStructMemberMapper& GetColumnMapper();
 

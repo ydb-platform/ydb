@@ -3,3 +3,5 @@ PRAGMA DisableSimpleColumns;
 PRAGMA UseBlocks;
 PRAGMA EmitAggApply;
 pragma OrderedColumns="true";
+pragma FilterPushdownOverJoinOptionalSide;
+pragma RotateJoinTree="false";

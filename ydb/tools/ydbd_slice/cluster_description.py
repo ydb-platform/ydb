@@ -8,7 +8,6 @@ from ydb.tools.cfg.base import ClusterDetailsProvider
 from ydb.tools.cfg.dynamic import DynamicConfigGenerator
 from ydb.tools.cfg.static import StaticConfigGenerator
 from ydb.tools.cfg.utils import write_to_file
-from ydb.tools.cfg.walle import NopHostsInformationProvider
 
 
 DynamicSlot = namedtuple(
@@ -28,13 +27,13 @@ class ClusterDetails(ClusterDetailsProvider):
     SLOTS_PORTS_START = 31000
     PORTS_SHIFT = 10
 
-    def __init__(self, cluster_description_path):
+    def __init__(self, cluster_description_path, walle_provider):
         self.__template = None
         self.__details = None
         self.__databases = None
         self.__dynamic_slots = None
         self._cluster_description_file = cluster_description_path
-        self._walle_provider = NopHostsInformationProvider()
+        self._walle_provider = walle_provider
 
         super(ClusterDetails, self).__init__(self.template, self._walle_provider)
 
@@ -103,7 +102,8 @@ class Configurator(object):
             cluster_details,
             out_dir,
             kikimr_bin,
-            kikimr_compressed_bin
+            kikimr_compressed_bin,
+            walle_provider
     ):
         self.__cluster_details = cluster_details
         self.__kikimr_bin_file = kikimr_bin
@@ -114,6 +114,7 @@ class Configurator(object):
         self.__dynamic = None
         self.__dynamic_cfg = os.path.join(out_dir, 'kikimr-dynamic')
         self.__subdomains = None
+        self.__walle_provider = walle_provider
 
     @property
     def kikimr_bin(self):
@@ -169,8 +170,7 @@ class Configurator(object):
         assert self.__kikimr_bin_file
 
         if self.__static is None:
-            walle_provider = NopHostsInformationProvider()
-            self.__static = StaticConfigGenerator(self.template, self.__kikimr_bin_file, self.__static_cfg, walle_provider=walle_provider)
+            self.__static = StaticConfigGenerator(self.template, self.__kikimr_bin_file, self.__static_cfg, walle_provider=self.__walle_provider)
         return self.__static
 
     def create_static_cfg(self):
@@ -183,9 +183,8 @@ class Configurator(object):
         assert self.__kikimr_bin_file
 
         if self.__dynamic is None:
-            walle_provider = NopHostsInformationProvider()
             self.__dynamic = DynamicConfigGenerator(
-                self.__cluster_details.template, self.__kikimr_bin_file, self.__dynamic_cfg, walle_provider=walle_provider
+                self.__cluster_details.template, self.__kikimr_bin_file, self.__dynamic_cfg, walle_provider=self.__walle_provider
             )
         return self.__dynamic
 

@@ -14,14 +14,17 @@ OWNER(g:yql)
 SRCDIR(ydb/library/yql/minikql/computation)
 
 SRCS(
+    mkql_computation_node_holders_ut.cpp
     mkql_computation_node_pack_ut.cpp
     mkql_computation_node_list_ut.cpp
     mkql_computation_node_dict_ut.cpp
     mkql_computation_node_graph_saveload_ut.cpp
     mkql_computation_pattern_cache_ut.cpp
+    mkql_key_payload_value_lru_cache_ut.cpp
     mkql_validate_ut.cpp
     mkql_value_builder_ut.cpp
     presort_ut.cpp
+    mkql_vector_spiller_adapter_ut.cpp
 )
 
 PEERDIR(

@@ -21,7 +21,12 @@ public:
     virtual ui32 GetGroup(const TLogoBlobID& blobId) const = 0;
 };
 
-class TUnifiedBlobId;
+class TFakeGroupSelector: public IBlobGroupSelector {
+public:
+    virtual ui32 GetGroup(const TLogoBlobID& /*blobId*/) const override {
+        return 1;
+    }
+};
 
 class TUnifiedBlobId {
     // Id of a blob in YDB distributed storage
@@ -65,6 +70,10 @@ public:
     TUnifiedBlobId& operator = (const TUnifiedBlobId& logoBlobId) = default;
     TUnifiedBlobId(TUnifiedBlobId&& other) = default;
     TUnifiedBlobId& operator = (TUnifiedBlobId&& logoBlobId) = default;
+
+    static TUnifiedBlobId BuildRaw(const ui32 groupId, const ui64 tabletId, const ui64 r1, const ui64 r2) {
+        return TUnifiedBlobId(groupId, TLogoBlobID(tabletId, r1, r2));
+    }
 
     NKikimrColumnShardProto::TUnifiedBlobId SerializeToProto() const;
 
@@ -187,8 +196,55 @@ struct TBlobRange {
     ui32 Offset;
     ui32 Size;
 
+    ui32 GetSize() const {
+        return Size;
+    }
+
+    ui32 GetOffset() const {
+        return Offset;
+    }
+
+    TString GetData(const TString& blobData) const;
+
+    bool operator<(const TBlobRange& br) const {
+        if (BlobId != br.BlobId) {
+            return BlobId.GetLogoBlobId().Compare(br.BlobId.GetLogoBlobId()) < 0;
+        } else if (Offset != br.Offset) {
+            return Offset < br.Offset;
+        } else {
+            return Size < br.Size;
+        }
+    }
+
     const TUnifiedBlobId& GetBlobId() const {
         return BlobId;
+    }
+
+    bool IsNextRangeFor(const TBlobRange& br) const {
+        return BlobId == br.BlobId && br.Offset + br.Size == Offset;
+    }
+
+    bool TryGlueSameBlob(const TBlobRange& br, const ui64 limit) {
+        if (GetBlobId() != br.GetBlobId()) {
+            return false;
+        }
+        const ui32 right = std::max<ui32>(Offset + Size, br.Offset + br.Size);
+        const ui32 offset = std::min<ui32>(Offset, br.Offset);
+        const ui32 size = right - offset;
+        if (size > limit) {
+            return false;
+        }
+        Size = size;
+        Offset = offset;
+        return true;
+    }
+
+    bool TryGlueWithNext(const TBlobRange& br) {
+        if (!br.IsNextRangeFor(*this)) {
+            return false;
+        }
+        Size += br.Size;
+        return true;
     }
 
     TBlobRangeLink16 BuildLink(const TBlobRangeLink16::TLinkId idx) const {
@@ -339,11 +395,6 @@ IOutputStream& operator <<(IOutputStream& out, const NKikimr::NOlap::TUnifiedBlo
 
 inline
 IOutputStream& operator <<(IOutputStream& out, const NKikimr::NOlap::TBlobRange& blobRange) {
-    return out << blobRange.ToString();
-}
-
-inline
-IOutputStream& operator <<(IOutputStream& out, const NKikimr::NOlap::TBlobRangeLink16& blobRange) {
     return out << blobRange.ToString();
 }
 

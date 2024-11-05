@@ -15,17 +15,73 @@ namespace NMiniKQL {
 
 namespace {
 
-class TUdfRunCodegeneratorNode: public TUnboxedImmutableRunCodegeneratorNode {
+template<class TValidatePolicy, class TValidateMode>
+class TSimpleUdfWrapper: public TMutableComputationNode<TSimpleUdfWrapper<TValidatePolicy,TValidateMode>> {
+using TBaseComputation = TMutableComputationNode<TSimpleUdfWrapper<TValidatePolicy,TValidateMode>>;
 public:
-    TUdfRunCodegeneratorNode(TMemoryUsageInfo* memInfo,
-        NUdf::TUnboxedValue&& value, const TString& moduleIRUniqID, const TString& moduleIR, const TString& functionName)
-        : TUnboxedImmutableRunCodegeneratorNode(memInfo, std::move(value))
-        , ModuleIRUniqID(moduleIRUniqID)
-        , ModuleIR(moduleIR)
-        , FunctionName(functionName)
+    TSimpleUdfWrapper(
+            TComputationMutables& mutables,
+            TString&& functionName,
+            TString&& typeConfig,
+            NUdf::TSourcePosition pos,
+            const TCallableType* callableType,
+            TType* userType)
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , FunctionName(std::move(functionName))
+        , TypeConfig(std::move(typeConfig))
+        , Pos(pos)
+        , CallableType(callableType)
+        , UserType(userType)
     {
+        this->Stateless = false;
     }
 
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        ui32 flags = 0;
+        TFunctionTypeInfo funcInfo;
+        const auto status = ctx.HolderFactory.GetFunctionRegistry()->FindFunctionTypeInfo(
+            ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
+            TypeConfig, flags, Pos, ctx.SecureParamsProvider, &funcInfo);
+
+        MKQL_ENSURE(status.IsOk(), status.GetError());
+        MKQL_ENSURE(funcInfo.Implementation, "UDF implementation is not set for function " << FunctionName);
+        NUdf::TUnboxedValue udf(NUdf::TUnboxedValuePod(funcInfo.Implementation.Release()));
+        TValidate<TValidatePolicy,TValidateMode>::WrapCallable(CallableType, udf, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
+        return udf.Release();
+    }
+private:
+    void RegisterDependencies() const final {}
+
+    const TString FunctionName;
+    const TString TypeConfig;
+    const NUdf::TSourcePosition Pos;
+    const TCallableType *const CallableType;
+    TType *const UserType;
+};
+
+class TUdfRunCodegeneratorNode: public TSimpleUdfWrapper<TValidateErrorPolicyNone, TValidateModeLazy<TValidateErrorPolicyNone>>
+#ifndef MKQL_DISABLE_CODEGEN
+    , public ICodegeneratorRunNode
+#endif
+{
+public:
+    TUdfRunCodegeneratorNode(
+            TComputationMutables& mutables,
+            TString&& functionName,
+            TString&& typeConfig,
+            NUdf::TSourcePosition pos,
+            const TCallableType* callableType,
+            TType* userType,
+            TString&& moduleIRUniqID,
+            TString&& moduleIR,
+            TString&& fuctioNameIR,
+            NUdf::TUniquePtr<NUdf::IBoxedValue>&& impl)
+        : TSimpleUdfWrapper(mutables, std::move(functionName), std::move(typeConfig), pos, callableType, userType)
+        , ModuleIRUniqID(std::move(moduleIRUniqID))
+        , ModuleIR(std::move(moduleIR))
+        , IRFunctionName(std::move(fuctioNameIR))
+        , Impl(std::move(impl))
+    {}
 #ifndef MKQL_DISABLE_CODEGEN
     void CreateRun(const TCodegenContext& ctx, BasicBlock*& block, Value* result, Value* args) const final {
         ctx.Codegen.LoadBitCode(ModuleIR, ModuleIRUniqID);
@@ -35,110 +91,148 @@ public:
         const auto type = Type::getInt128Ty(context);
         YQL_ENSURE(result->getType() == PointerType::getUnqual(type));
 
-        const auto data = ConstantInt::get(Type::getInt64Ty(context), reinterpret_cast<ui64>(UnboxedValue.AsBoxed().Get()));
+        const auto data = ConstantInt::get(Type::getInt64Ty(context), reinterpret_cast<ui64>(Impl.Get()));
         const auto ptrStructType = PointerType::getUnqual(StructType::get(context));
         const auto boxed = CastInst::Create(Instruction::IntToPtr, data, ptrStructType, "boxed", block);
         const auto builder = ctx.GetBuilder();
 
         const auto funType = FunctionType::get(Type::getVoidTy(context), {boxed->getType(), result->getType(), builder->getType(), args->getType()}, false);
-        const auto runFunc = ctx.Codegen.GetModule().getOrInsertFunction(llvm::StringRef(FunctionName.data(), FunctionName.size()), funType);
+        const auto runFunc = ctx.Codegen.GetModule().getOrInsertFunction(llvm::StringRef(IRFunctionName.data(), IRFunctionName.size()), funType);
         CallInst::Create(runFunc, {boxed, result, builder, args}, "", block);
     }
 #endif
 private:
     const TString ModuleIRUniqID;
     const TString ModuleIR;
-    const TString FunctionName;
+    const TString IRFunctionName;
+    const NUdf::TUniquePtr<NUdf::IBoxedValue> Impl;
 };
-
 
 template<class TValidatePolicy, class TValidateMode>
 class TUdfWrapper: public TMutableCodegeneratorPtrNode<TUdfWrapper<TValidatePolicy,TValidateMode>> {
-    typedef TMutableCodegeneratorPtrNode<TUdfWrapper<TValidatePolicy,TValidateMode>> TBaseComputation;
+using TBaseComputation = TMutableCodegeneratorPtrNode<TUdfWrapper<TValidatePolicy,TValidateMode>>;
 public:
     TUdfWrapper(
             TComputationMutables& mutables,
-            IComputationNode* functionImpl,
             TString&& functionName,
+            TString&& typeConfig,
+            NUdf::TSourcePosition pos,
             IComputationNode* runConfigNode,
-            const TCallableType* callableType)
+            const TCallableType* callableType,
+            TType* userType)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
-        , FunctionImpl(functionImpl)
         , FunctionName(std::move(functionName))
+        , TypeConfig(std::move(typeConfig))
+        , Pos(pos)
         , RunConfigNode(runConfigNode)
         , CallableType(callableType)
+        , UserType(userType)
+        , UdfIndex(mutables.CurValueIndex++)
     {
         this->Stateless = false;
     }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
+        auto& udf = ctx.MutableValues[UdfIndex];
+        if (!udf.HasValue()) {
+            MakeUdf(ctx, udf);
+        }
         const auto runConfig = RunConfigNode->GetValue(ctx);
-        auto callable = FunctionImpl->GetValue(ctx).Run(ctx.Builder, &runConfig);
+        auto callable = udf.Run(ctx.Builder, &runConfig);
         Wrap(callable);
         return callable;
     }
-
 #ifndef MKQL_DISABLE_CODEGEN
     void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
+        const auto valueType = Type::getInt128Ty(context);
+
+        const auto udfPtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(Type::getInt32Ty(context), UdfIndex)}, "udf_ptr", block);
+
+        const auto make = BasicBlock::Create(context, "make", ctx.Func);
+        const auto main = BasicBlock::Create(context, "main", ctx.Func);
+
+        const auto ptrType = PointerType::getUnqual(StructType::get(context));
+        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
+
+        BranchInst::Create(main, make, HasValue(udfPtr, block), block);
+
+        block = make;
+
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TUdfWrapper::MakeUdf));
+        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), udfPtr->getType()}, false);
+        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
+        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, udfPtr}, "", block);
+        BranchInst::Create(main, block);
+
+        block = main;
+
         GetNodeValue(pointer, RunConfigNode, ctx, block);
-        const auto conf = new LoadInst(Type::getInt128Ty(context), pointer, "conf", block);
+        const auto conf = new LoadInst(valueType, pointer, "conf", block);
+        const auto udf = new LoadInst(valueType, udfPtr, "udf", block);
 
-        const auto func = GetNodeValue(FunctionImpl, ctx, block);
-
-        CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Run>(pointer, func, ctx.Codegen, block, ctx.GetBuilder(), pointer);
+        CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Run>(pointer, udf, ctx.Codegen, block, ctx.GetBuilder(), pointer);
 
         ValueUnRef(RunConfigNode->GetRepresentation(), conf, ctx, block);
 
-        const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto wrap = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TUdfWrapper::Wrap));
-        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
         const auto funType = FunctionType::get(Type::getVoidTy(context), {self->getType(), pointer->getType()}, false);
         const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, wrap, PointerType::getUnqual(funType), "function", block);
         CallInst::Create(funType, doFuncPtr, {self, pointer}, "", block);
     }
 #endif
 private:
+    void MakeUdf(TComputationContext& ctx, NUdf::TUnboxedValue& udf) const {
+        ui32 flags = 0;
+        TFunctionTypeInfo funcInfo;
+        const auto status = ctx.HolderFactory.GetFunctionRegistry()->FindFunctionTypeInfo(
+            ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
+            TypeConfig, flags, Pos, ctx.SecureParamsProvider, &funcInfo);
+
+        MKQL_ENSURE(status.IsOk(), status.GetError());
+        MKQL_ENSURE(funcInfo.Implementation, "UDF implementation is not set for function " << FunctionName);
+        udf =  NUdf::TUnboxedValuePod(funcInfo.Implementation.Release());
+    }
+
     void Wrap(NUdf::TUnboxedValue& callable) const {
         MKQL_ENSURE(bool(callable), "Returned empty value in function: " << FunctionName);
         TValidate<TValidatePolicy,TValidateMode>::WrapCallable(CallableType, callable, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
     }
 
     void RegisterDependencies() const final {
-        this->DependsOn(FunctionImpl);
         this->DependsOn(RunConfigNode);
     }
 
-    IComputationNode* const FunctionImpl;
     const TString FunctionName;
+    const TString TypeConfig;
+    const NUdf::TSourcePosition Pos;
     IComputationNode* const RunConfigNode;
-    const TCallableType* const CallableType;
+    const TCallableType* CallableType;
+    TType* const UserType;
+    const ui32 UdfIndex;
 };
 
-inline IComputationNode* CreateUdfWrapper(
-    const TComputationNodeFactoryContext& ctx,
-    NUdf::TUnboxedValue&& functionImpl,
-    TString&& functionName,
-    IComputationNode* runConfigNode,
-    const TCallableType* callableType)
+template<bool Simple, class TValidatePolicy, class TValidateMode>
+using TWrapper = std::conditional_t<Simple, TSimpleUdfWrapper<TValidatePolicy, TValidateMode>, TUdfWrapper<TValidatePolicy, TValidateMode>>;
+
+template<bool Simple, typename...TArgs>
+inline IComputationNode* CreateUdfWrapper(const TComputationNodeFactoryContext& ctx, TArgs&&...args)
 {
-    const auto node = ctx.NodeFactory.CreateImmutableNode(std::move(functionImpl));
-    ctx.NodePushBack(node);
     switch (ctx.ValidateMode) {
         case NUdf::EValidateMode::None:
-            return new TUdfWrapper<TValidateErrorPolicyNone,TValidateModeLazy<TValidateErrorPolicyNone>>(ctx.Mutables, std::move(node), std::move(functionName), runConfigNode, callableType);
+            return new TWrapper<Simple, TValidateErrorPolicyNone,TValidateModeLazy<TValidateErrorPolicyNone>>(ctx.Mutables, std::forward<TArgs>(args)...);
         case NUdf::EValidateMode::Lazy:
             if (ctx.ValidatePolicy == NUdf::EValidatePolicy::Fail) {
-                return new TUdfWrapper<TValidateErrorPolicyFail,TValidateModeLazy<TValidateErrorPolicyFail>>(ctx.Mutables, std::move(node), std::move(functionName), runConfigNode, callableType);
+                return new TWrapper<Simple, TValidateErrorPolicyFail,TValidateModeLazy<TValidateErrorPolicyFail>>(ctx.Mutables, std::forward<TArgs>(args)...);
             } else {
-                return new TUdfWrapper<TValidateErrorPolicyThrow,TValidateModeLazy<TValidateErrorPolicyThrow>>(ctx.Mutables, std::move(node), std::move(functionName), runConfigNode, callableType);
+                return new TWrapper<Simple, TValidateErrorPolicyThrow,TValidateModeLazy<TValidateErrorPolicyThrow>>(ctx.Mutables, std::forward<TArgs>(args)...);
             }
         case NUdf::EValidateMode::Greedy:
             if (ctx.ValidatePolicy == NUdf::EValidatePolicy::Fail) {
-                return new TUdfWrapper<TValidateErrorPolicyFail,TValidateModeGreedy<TValidateErrorPolicyFail>>(ctx.Mutables, std::move(node), std::move(functionName), runConfigNode, callableType);
+                return new TWrapper<Simple, TValidateErrorPolicyFail,TValidateModeGreedy<TValidateErrorPolicyFail>>(ctx.Mutables, std::forward<TArgs>(args)...);
             } else {
-                return new TUdfWrapper<TValidateErrorPolicyThrow,TValidateModeGreedy<TValidateErrorPolicyThrow>>(ctx.Mutables, std::move(node), std::move(functionName), runConfigNode, callableType);
+                return new TWrapper<Simple, TValidateErrorPolicyThrow,TValidateModeGreedy<TValidateErrorPolicyThrow>>(ctx.Mutables, std::forward<TArgs>(args)...);
             }
         default:
             Y_ABORT("Unexpected validate mode: %u", static_cast<unsigned>(ctx.ValidateMode));
@@ -159,7 +253,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
     MKQL_ENSURE(userTypeNode.GetStaticType()->IsType(), "Expected type");
 
     TString funcName(AS_VALUE(TDataLiteral, funcNameNode)->AsValue().AsStringRef());
-    TStringBuf typeConfig(AS_VALUE(TDataLiteral, typeCfgNode)->AsValue().AsStringRef());
+    TString typeConfig(AS_VALUE(TDataLiteral, typeCfgNode)->AsValue().AsStringRef());
 
     NUdf::TSourcePosition pos;
     if (callable.GetInputsCount() == 7) {
@@ -171,6 +265,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
     ui32 flags = 0;
     TFunctionTypeInfo funcInfo;
     const auto userType = static_cast<TType*>(userTypeNode.GetNode());
+
     const auto status = ctx.FunctionRegistry.FindFunctionTypeInfo(
         ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, userType->IsVoid() ? nullptr : userType,
         typeConfig, flags, pos, ctx.SecureParamsProvider, &funcInfo);
@@ -179,42 +274,25 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
     MKQL_ENSURE(funcInfo.FunctionType->IsConvertableTo(*callable.GetType()->GetReturnType(), true),
                 "Function '" << funcName << "' type mismatch, expected return type: " << PrintNode(callable.GetType()->GetReturnType(), true) <<
                 ", actual:" << PrintNode(funcInfo.FunctionType, true));
-    MKQL_ENSURE(funcInfo.Implementation, "UDF implementation is not set");
+    MKQL_ENSURE(funcInfo.Implementation, "UDF implementation is not set for function " << funcName);
 
     const auto runConfigType = funcInfo.RunConfigType;
     const bool typesMatch = runConfigType->IsSameType(*runCfgNode.GetStaticType());
     MKQL_ENSURE(typesMatch, "RunConfig '" << funcName << "' type mismatch, expected: " << PrintNode(runCfgNode.GetStaticType(), true) <<
                 ", actual: " << PrintNode(runConfigType, true));
 
-    NUdf::TUnboxedValue impl(NUdf::TUnboxedValuePod(funcInfo.Implementation.Release()));
     if (runConfigType->IsVoid()) {
-        // use function implementation as is
-
         if (ctx.ValidateMode == NUdf::EValidateMode::None && funcInfo.ModuleIR && funcInfo.IRFunctionName) {
-            return new TUdfRunCodegeneratorNode(&ctx.HolderFactory.GetMemInfo(), std::move(impl), funcInfo.ModuleIRUniqID, funcInfo.ModuleIR, funcInfo.IRFunctionName);
+            return new TUdfRunCodegeneratorNode(
+                ctx.Mutables, std::move(funcName), std::move(typeConfig), pos, funcInfo.FunctionType, userType,
+                std::move(funcInfo.ModuleIRUniqID), std::move(funcInfo.ModuleIR), std::move(funcInfo.IRFunctionName), std::move(funcInfo.Implementation)
+            );
         }
-
-        if (ctx.ValidateMode != NUdf::EValidateMode::None) {
-            if (ctx.ValidateMode == NUdf::EValidateMode::Lazy) {
-                if (ctx.ValidatePolicy == NUdf::EValidatePolicy::Fail) {
-                    TValidate<TValidateErrorPolicyFail, TValidateModeLazy<TValidateErrorPolicyFail>>::WrapCallable(funcInfo.FunctionType, impl, TStringBuilder() << "FunctionWrapper<" << funcName << ">");
-                } else {
-                    TValidate<TValidateErrorPolicyThrow, TValidateModeLazy<TValidateErrorPolicyThrow>>::WrapCallable(funcInfo.FunctionType, impl, TStringBuilder() << "FunctionWrapper<" << funcName << ">");
-                }
-            } else {
-                if (ctx.ValidatePolicy == NUdf::EValidatePolicy::Fail) {
-                    TValidate<TValidateErrorPolicyFail, TValidateModeGreedy<TValidateErrorPolicyFail>>::WrapCallable(funcInfo.FunctionType, impl, TStringBuilder() << "FunctionWrapper<" << funcName << ">");
-                } else {
-                    TValidate<TValidateErrorPolicyThrow, TValidateModeGreedy<TValidateErrorPolicyThrow>>::WrapCallable(funcInfo.FunctionType, impl, TStringBuilder() << "FunctionWrapper<" << funcName << ">");
-                }
-            }
-        }
-        return ctx.NodeFactory.CreateImmutableNode(std::move(impl));
+        return CreateUdfWrapper<true>(ctx, std::move(funcName), std::move(typeConfig), pos, funcInfo.FunctionType, userType);
     }
 
-    // use function factory to get implementation by runconfig in runtime
     const auto runCfgCompNode = LocateNode(ctx.NodeLocator, *runCfgNode.GetNode());
-    return CreateUdfWrapper(ctx, std::move(impl), std::move(funcName), runCfgCompNode, funcInfo.FunctionType);
+    return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runCfgCompNode, funcInfo.FunctionType, userType);
 }
 
 IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -227,7 +305,7 @@ IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFacto
     MKQL_ENSURE(userTypeNode.IsImmediate() && userTypeNode.GetStaticType()->IsType(), "Expected immediate type");
 
     TString funcName(AS_VALUE(TDataLiteral, funcNameNode)->AsValue().AsStringRef());
-    TStringBuf typeConfig(AS_VALUE(TDataLiteral, typeConfigNode)->AsValue().AsStringRef());
+    TString typeConfig(AS_VALUE(TDataLiteral, typeConfigNode)->AsValue().AsStringRef());
 
     NUdf::TSourcePosition pos;
     if (callable.GetInputsCount() == 7) {
@@ -236,10 +314,11 @@ IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFacto
         pos.Column_ = AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().Get<ui32>();
     }
 
+    const auto userType = static_cast<TType*>(userTypeNode.GetNode());
     ui32 flags = 0;
     TFunctionTypeInfo funcInfo;
     const auto status = ctx.FunctionRegistry.FindFunctionTypeInfo(
-        ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, static_cast<TType*>(userTypeNode.GetNode()),
+        ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, userType,
         typeConfig, flags, pos, ctx.SecureParamsProvider, &funcInfo);
     MKQL_ENSURE(status.IsOk(), status.GetError());
     MKQL_ENSURE(funcInfo.Implementation, "UDF implementation is not set");
@@ -252,7 +331,7 @@ IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFacto
     const auto funcTypeInfo = static_cast<TCallableType*>(callableResultType);
 
     const auto programCompNode = LocateNode(ctx.NodeLocator, *programNode.GetNode());
-    return CreateUdfWrapper(ctx, NUdf::TUnboxedValuePod(funcInfo.Implementation.Release()), std::move(funcName), programCompNode, funcTypeInfo);
+    return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, programCompNode, funcTypeInfo, userType);
 }
 
 }

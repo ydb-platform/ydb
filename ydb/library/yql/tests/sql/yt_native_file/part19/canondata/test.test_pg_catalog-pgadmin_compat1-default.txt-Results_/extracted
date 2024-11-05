@@ -1,5 +1,0 @@
-<tmp_path>/program.sql:<main>: Warning: Parse Sql
-
-    <tmp_path>/program.sql:<main>:3:10: Warning: AEXPR_OP_ANY forced to false
-    	select 1 = any(array[2]);
-	         ^

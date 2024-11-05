@@ -11,6 +11,7 @@ namespace NTxProxy {
     enum class EReadTableFormat {
         OldResultSet,
         YdbResultSet,
+        YdbResultSetWithNotNullSupport
     };
 
     struct TReadTableSettings {

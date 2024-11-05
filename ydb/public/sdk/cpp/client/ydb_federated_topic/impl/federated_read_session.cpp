@@ -1,6 +1,6 @@
 #include "federated_read_session.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
 
 #define INCLUDE_YDB_INTERNAL_H
@@ -49,6 +49,7 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TCommitOffsetAcknowledgementEvent, CommitOffsetAcknowledgementHandler);
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TStartPartitionSessionEvent, StartPartitionSessionHandler);
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TStopPartitionSessionEvent, StopPartitionSessionHandler);
+    MAYBE_CONVERT_HANDLER(TReadSessionEvent::TEndPartitionSessionEvent, EndPartitionSessionHandler);
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TPartitionSessionStatusEvent, PartitionSessionStatusHandler);
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TPartitionSessionClosedEvent, PartitionSessionClosedHandler);
     MAYBE_CONVERT_HANDLER(TReadSessionEvent::TEvent, CommonHandler);
@@ -63,10 +64,12 @@ NTopic::TReadSessionSettings FromFederated(const TFederatedReadSessionSettings& 
 TFederatedReadSessionImpl::TFederatedReadSessionImpl(const TFederatedReadSessionSettings& settings,
                                                      std::shared_ptr<TGRpcConnectionsImpl> connections,
                                                      const TFederatedTopicClientSettings& clientSettings,
-                                                     std::shared_ptr<TFederatedDbObserver> observer)
+                                                     std::shared_ptr<TFederatedDbObserver> observer,
+                                                     std::shared_ptr<std::unordered_map<NTopic::ECodec, THolder<NTopic::ICodec>>> codecs)
     : Settings(settings)
     , Connections(std::move(connections))
     , SubClientSetttings(FromFederated(clientSettings))
+    , ProvidedCodecs(std::move(codecs))
     , Observer(std::move(observer))
     , AsyncInit(Observer->WaitForFirstState())
     , FederationState(nullptr)
@@ -96,6 +99,18 @@ void TFederatedReadSessionImpl::Start() {
 }
 
 void TFederatedReadSessionImpl::OpenSubSessionsImpl(const std::vector<std::shared_ptr<TDbInfo>>& dbInfos) {
+    {
+        TStringBuilder log(GetLogPrefix());
+        log << "Open read subsessions to databases: ";
+        bool first = true;
+        for (const auto& db : dbInfos) {
+            if (first) first = false; else log << ", ";
+            log << "{ name: " << db->name()
+                << ", endpoint: " << db->endpoint()
+                << ", path: " << db->path() << " }";
+        }
+        LOG_LAZY(Log, TLOG_INFO, log);
+    }
     for (const auto& db : dbInfos) {
         NTopic::TTopicClientSettings settings = SubClientSetttings;
         settings
@@ -110,7 +125,7 @@ void TFederatedReadSessionImpl::OpenSubSessionsImpl(const std::vector<std::share
 
 void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl() {
     if (!FederationState->Status.IsSuccess()) {
-        LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "Federated state update failed.");
+        LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "Federated state update failed. FederationState: " << *FederationState);
         CloseImpl();
         return;
     }
@@ -148,6 +163,27 @@ void TFederatedReadSessionImpl::OnFederatedStateUpdateImpl() {
         // TODO: investigate here, why empty list?
         // Reason (and returned status) could be BAD_REQUEST or UNAVAILABLE.
         LOG_LAZY(Log, TLOG_ERR, GetLogPrefix() << "No available databases to read.");
+        auto issues = FederationState->Status.GetIssues();
+        TStringBuilder issue;
+        issue << "Requested databases {";
+        bool first = true;
+        for (auto const& dbFromSettings : Settings.GetDatabasesToReadFrom()) {
+            if (first) first = false; else issue << ",";
+            issue << " " << dbFromSettings;
+        }
+        issue << " } not found. Available databases {";
+        first = true;
+        for (auto const& db : FederationState->DbInfos) {
+            if (db->status() == Ydb::FederationDiscovery::DatabaseInfo_Status_AVAILABLE) {
+                if (first) first = false; else issue << ",";
+                issue << " { name: " << db->name()
+                      << ", endpoint: " << db->endpoint()
+                      << ", path: " << db->path() << " }";
+            }
+        }
+        issue << " }";
+        issues.AddIssue(issue);
+        FederationState->Status = TStatus(EStatus::BAD_REQUEST, std::move(issues));
         CloseImpl();
         return;
     }

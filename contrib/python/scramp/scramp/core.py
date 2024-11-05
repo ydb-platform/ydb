@@ -281,7 +281,6 @@ def set_error(f):
 
 class ScramServer:
     def __init__(self, mechanism, auth_fn, channel_binding=None, s_nonce=None):
-
         _validate_channel_binding(channel_binding)
 
         self.channel_binding = channel_binding
@@ -596,7 +595,6 @@ def _set_client_final(
     channel_binding,
     use_binding,
 ):
-
     msg = _parse_message(client_final, "client final", "crp")
     chan_binding = msg["c"]
 

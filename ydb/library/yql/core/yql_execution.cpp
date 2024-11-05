@@ -525,12 +525,12 @@ public:
 
         if (DeterministicMode) {
             future.Subscribe([state](const NThreading::TFuture<void>& future) {
-                YQL_ENSURE(!future.HasException());
+                HandleFutureException(future);
                 ProcessFutureResultQueue(state);
             });
         } else {
             future.Subscribe([state, node=node.Get(), dataProvider](const NThreading::TFuture<void>& future) {
-                YQL_ENSURE(!future.HasException());
+                HandleFutureException(future);
 
                 TAutoPtr<TState::TItem> item = new TState::TItem;
                 item->Node = node; item->DataProvider = dataProvider;
@@ -912,7 +912,7 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
 
             return true;
         };
-        static const THashSet<TStringBuf> noExecutionList = {"InstanceOf", "Lag", "Lead", "Rank", "DenseRank", "RowNumber"};
+        static const THashSet<TStringBuf> noExecutionList = {"InstanceOf", "Lag", "Lead", "RowNumber", "Rank", "DenseRank", "PercentRank", "CumeDist", "NTile"};
         static const THashSet<TStringBuf> noExecutionListForCalcOverWindow = {"InstanceOf"};
         VisitExpr(input, [funcCheckExecution](const TExprNode::TPtr& node) {
             bool collectCalcOverWindow = true;

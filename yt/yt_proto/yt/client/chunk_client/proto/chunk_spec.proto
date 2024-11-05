@@ -83,6 +83,8 @@ message TChunkSpec
 
     optional bool striped_erasure = 24;
 
+    optional bool use_proxying_data_node_service = 26 [default = false];
+
     reserved 5, 6, 8;
 }
 

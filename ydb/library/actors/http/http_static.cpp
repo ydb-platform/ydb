@@ -29,7 +29,7 @@ public:
     static constexpr char ActorName[] = "HTTP_STATIC_ACTOR";
 
     static TInstant GetCompileTime() {
-        tm compileTime;
+        tm compileTime = {};
         strptime(__DATE__ " " __TIME__, "%B %d %Y %H:%M:%S", &compileTime);
         return TInstant::Seconds(mktime(&compileTime));
     }

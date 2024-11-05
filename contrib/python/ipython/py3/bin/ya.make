@@ -1,5 +1,7 @@
 PY3_PROGRAM(ipython)
 
+VERSION(Service-proxy-version)
+
 LICENSE(BSD-3-Clause)
 
 PEERDIR(

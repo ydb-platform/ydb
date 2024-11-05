@@ -189,11 +189,28 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
         }
     }
 
+    Y_UNIT_TEST(TestJust) {
+        TestOne([](auto& b,auto& ctx) {
+            const auto boolType = ctx.template MakeType<TDataExprType>(EDataSlot::Bool);
+            const auto inputType = ctx.template MakeType<TBlockExprType>(boolType);
+            const auto outputType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(boolType));
+            return b.AddUnaryOp(TKernelRequestBuilder::EUnaryOp::Just, inputType, outputType);
+        });
+    }
+
     Y_UNIT_TEST(TestCoalesece) {
         TestOne([](auto& b,auto& ctx) {
             auto blockStringType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::String));
             auto blockOptStringType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TOptionalExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::String)));
             return b.AddBinaryOp(TKernelRequestBuilder::EBinaryOp::Coalesce, blockOptStringType, blockStringType, blockStringType);
+        });
+    }
+
+    Y_UNIT_TEST(TestIf) {
+        TestOne([](auto& b,auto& ctx) {
+            auto blockStringType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::String));
+            auto blockBoolType = ctx.template MakeType<TBlockExprType>(ctx.template MakeType<TDataExprType>(EDataSlot::Bool));
+            return b.AddIf(blockBoolType, blockStringType, blockStringType);
         });
     }
 
@@ -227,6 +244,26 @@ Y_UNIT_TEST_SUITE(TKernelRegistryTest) {
                 ctx.template MakeType<TOptionalExprType>(
                 ctx.template MakeType<TDataExprType>(EDataSlot::String)));
             return b.Udf("Url.GetHost", false, { blockOptStringType }, blockOptStringType) ;
+        });
+    }
+
+    Y_UNIT_TEST(TestScalarApply) {
+        TestOne([](auto& b,auto& ctx) {
+            const auto stringType = ctx.template MakeType<TDataExprType>(EDataSlot::String);
+            const auto uint32Type = ctx.template MakeType<TDataExprType>(EDataSlot::Uint32);
+            const auto blockStringType = ctx.template MakeType<TBlockExprType>(stringType);
+            const auto blockUint32Type = ctx.template MakeType<TBlockExprType>(uint32Type);
+            const TPositionHandle stub;
+            auto arg1 = ctx.NewArgument(stub, "str");
+            auto arg2 = ctx.NewArgument(stub, "pos");
+            auto size = ctx.NewCallable(stub, "Uint32", {ctx.NewAtom(stub, 42U)});
+            auto body = ctx.NewCallable(stub, "Substring", {arg1, arg2, size});
+            arg1->SetTypeAnn(stringType);
+            arg2->SetTypeAnn(uint32Type);
+            size->SetTypeAnn(uint32Type);
+            body->SetTypeAnn(stringType);
+            const auto lambda = ctx.NewLambda(stub, ctx.NewArguments(stub, {std::move(arg1), std::move(arg2)}), std::move(body));
+            return b.AddScalarApply(*lambda, { blockStringType, blockUint32Type }, ctx);
         });
     }
 

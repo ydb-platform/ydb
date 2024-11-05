@@ -42,6 +42,9 @@ struct TBridgeYqlPluginOptions
     // convenient; get rid of this ASAP.
     using TLogBackendHolder = void;
     TLogBackendHolder* LogBackend = nullptr;
+
+    const char* Libraries = nullptr;
+    size_t LibrariesLength = 0;
 };
 
 // Opaque type representing a YQL plugin.
@@ -73,6 +76,26 @@ struct TBridgeQueryResult
     ssize_t YsonErrorLength = 0;
 };
 
+#define FOR_EACH_QUERY_RESULT_STRING_FIELD(XX) \
+    XX(YsonResult) \
+    XX(Plan) \
+    XX(Statistics) \
+    XX(Progress) \
+    XX(TaskInfo) \
+    XX(YsonError)
+
+struct TBridgeClustersResult
+{
+    const char** Clusters = nullptr;
+    ssize_t ClusterCount = 0;
+
+    const char* YsonError = nullptr;
+    ssize_t YsonErrorLength = 0;
+};
+
+#define FOR_EACH_BRIDGE_RESULT_STRING_FIELD(XX) \
+    XX(YsonError)
+
 enum EQueryFileContentType
 {
     RawInlineData,
@@ -96,17 +119,29 @@ struct TBridgeAbortResult
     ssize_t YsonErrorLength = 0;
 };
 
+#define FOR_EACH_ABORT_RESULT_STRING_FIELD(XX) \
+    XX(YsonError)
+
 using TFuncBridgeFreeQueryResult = void(TBridgeQueryResult* result);
+using TFuncBridgeFreeClustersResult = void(TBridgeClustersResult* result);
 using TFuncBridgeRun = TBridgeQueryResult*(
     TBridgeYqlPlugin* plugin,
     const char* queryId,
-    const char* impersonationUser,
+    const char* user,
+    const char* token,
     const char* queryText,
     const char* settings,
     int settingsLength,
     const TBridgeQueryFile* files,
     int fileCount,
     int executeMode);
+using TFuncBridgeGetUsedClusters = TBridgeClustersResult*(
+    TBridgeYqlPlugin* plugin,
+    const char* queryText,
+    const char* settings,
+    int settingsLength,
+    const TBridgeQueryFile* files,
+    int fileCount);
 using TFuncBridgeGetProgress = TBridgeQueryResult*(TBridgeYqlPlugin* plugin, const char* queryId);
 using TFuncBridgeAbort = TBridgeAbortResult*(TBridgeYqlPlugin* plugin, const char* queryId);
 using TFuncBridgeFreeAbortResult = void(TBridgeAbortResult* result);
@@ -118,7 +153,9 @@ using TFuncBridgeFreeAbortResult = void(TBridgeAbortResult* result);
     XX(BridgeStartYqlPlugin) \
     XX(BridgeFreeYqlPlugin) \
     XX(BridgeFreeQueryResult) \
+    XX(BridgeFreeClustersResult) \
     XX(BridgeRun) \
+    XX(BridgeGetUsedClusters) \
     XX(BridgeGetProgress) \
     XX(BridgeGetAbiVersion) \
     XX(BridgeAbort) \

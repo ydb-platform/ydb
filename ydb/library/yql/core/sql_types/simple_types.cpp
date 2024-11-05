@@ -63,6 +63,9 @@ std::optional<std::string_view> LookupSimpleTypeBySqlAlias(const std::string_vie
         {"datetime64",  "Datetime64"},
         {"timestamp64", "Timestamp64"},
         {"interval64",  "Interval64"},
+        {"tzdate32",    "TzDate32"},
+        {"tzdatetime64",  "TzDatetime64"},
+        {"tztimestamp64", "TzTimestamp64"},
     };
 
     // new types (or aliases) should be added here

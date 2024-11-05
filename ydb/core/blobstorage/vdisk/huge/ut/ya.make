@@ -19,7 +19,6 @@ SRCS(
     blobstorage_hullhugedefs_ut.cpp
     blobstorage_hullhugeheap_ctx_ut.cpp
     blobstorage_hullhugeheap_ut.cpp
-    blobstorage_hullhugerecovery_ut.cpp
     blobstorage_hullhuge_ut.cpp
     top_ut.cpp
 )

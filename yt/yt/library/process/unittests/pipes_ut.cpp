@@ -21,7 +21,7 @@ using namespace NNet;
 
 #ifndef _win_
 
-//! NB: You can't set size smaller than that of a page size
+//! NB: You can't set size smaller than that of a page.
 constexpr int SmallPipeCapacity = 4096;
 
 TEST(TPipeIOHolder, CanInstantiate)
@@ -174,6 +174,13 @@ protected:
         auto pipe = TNamedPipe::Create("./namedpipewcap", 0660, capacity);
         Reader = pipe->CreateAsyncReader();
         Writer = pipe->CreateAsyncWriter();
+    }
+
+    void SetUpWithDeliveryFence()
+    {
+        auto pipe = TNamedPipe::Create("./namedpipewcap", 0660);
+        Reader = pipe->CreateAsyncReader();
+        Writer = pipe->CreateAsyncWriter(/*useDeliveryFence*/ true);
     }
 
     IConnectionReaderPtr Reader;
@@ -343,6 +350,48 @@ TEST_F(TNamedPipeReadWriteTest, CapacityDontDiscardSurplus)
     EXPECT_TRUE(writeFuture.Get().IsOK());
 }
 
+#ifdef _linux_
+
+TEST_F(TNamedPipeReadWriteTest, SyncWriteJustWorks)
+{
+    SetUpWithDeliveryFence();
+
+    TString text("aabbb");
+    auto writeBuffer = TSharedRef::FromString(text);
+    auto writeFuture = Writer->Write(writeBuffer);
+
+    auto readBuffer = TSharedMutableRef::Allocate(2, {.InitializeStorage = false});
+    auto readResult = Reader->Read(readBuffer).Get();
+    EXPECT_EQ(TString("aa"), TString(readBuffer.Begin(), readResult.Value()));
+
+    EXPECT_FALSE(writeFuture.IsSet());
+
+    readBuffer = TSharedMutableRef::Allocate(10, {.InitializeStorage = false});
+    readResult = Reader->Read(readBuffer).Get();
+    EXPECT_EQ(TString("bbb"), TString(readBuffer.Begin(), readResult.Value()));
+
+    // Future is set only after the entire buffer is read.
+    EXPECT_TRUE(writeFuture.Get().IsOK());
+}
+
+#else
+
+TEST_F(TNamedPipeReadWriteTest, SyncWriteUnsupportedPlatform)
+{
+    SetUpWithDeliveryFence();
+
+    TString text("aabbb");
+    auto writeBuffer = TSharedRef::FromString(text);
+    auto writeFuture = Writer->Write(writeBuffer);
+
+    // Future is set with error because platform is not supported
+    auto error = writeFuture.Get();
+    EXPECT_FALSE(error.IsOK());
+    EXPECT_TRUE(error.GetMessage().Contains("Delivery fenced write failed: FIONDREAD is not supported on your platform"));
+}
+
+#endif
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPipeBigReadWriteTest
@@ -359,7 +408,7 @@ TEST_P(TPipeBigReadWriteTest, RealReadWrite)
 
     std::vector<char> data(dataSize, 'a');
 
-    YT_UNUSED_FUTURE(BIND([&] () {
+    YT_UNUSED_FUTURE(BIND([&] {
         auto dice = std::bind(
             std::uniform_int_distribution<int>(0, 127),
             std::default_random_engine());

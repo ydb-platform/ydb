@@ -3,10 +3,6 @@
 namespace NKikimr::NSchemeShard {
 
     bool TOlapSchemaUpdate::Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema, IErrorCollector& errors, bool allowNullKeys) {
-        if (tableSchema.HasEngine()) {
-            Engine = tableSchema.GetEngine();
-        }
-
         if (!Columns.Parse(tableSchema, errors, allowNullKeys)) {
             return false;
         }
@@ -23,7 +19,7 @@ namespace NKikimr::NSchemeShard {
             return false;
         }
 
-        if (!Statistics.Parse(alterRequest, errors)) {
+        if (!Options.Parse(alterRequest, errors)) {
             return false;
         }
 

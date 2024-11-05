@@ -5,7 +5,7 @@
 #include <util/system/thread.h>
 #include <util/generic/map.h>
 
-#include <grpc++/resource_quota.h>
+#include <grpcpp/resource_quota.h>
 #include <contrib/libs/grpc/src/core/lib/iomgr/socket_mutator.h>
 
 #if !defined(_WIN32) && !defined(_WIN64)
@@ -35,6 +35,71 @@ static void PullEvents(grpc::ServerCompletionQueue* cq) {
         } else {
             break;
         }
+    }
+}
+
+void TGrpcServiceProtectiable::StopService() noexcept {
+    AtomicSet(ShuttingDown_, 1);
+
+    for (auto& shard : Shards_) {
+        with_lock(shard.Lock_) {
+            // Send TryCansel to event (can be send after finishing).
+            // Actual dtors will be called from grpc thread, so deadlock impossible
+            for (auto* request : shard.Requests_) {
+                request->Shutdown();
+            }
+        }
+    }
+}
+
+size_t TGrpcServiceProtectiable::RequestsInProgress() const {
+    size_t c = 0;
+    for (auto& shard : Shards_) {
+        with_lock(shard.Lock_) {
+            c += shard.Requests_.size();
+        }
+    }
+    return c;
+}
+
+bool TGrpcServiceProtectiable::RegisterRequestCtx(ICancelableContext* req) {
+    if (Y_LIKELY(req->ShardIndex == size_t(-1))) {
+        req->ShardIndex = NextShard_.fetch_add(1, std::memory_order_relaxed) % Shards_.size();
+    }
+
+    auto& shard = Shards_[req->ShardIndex];
+    with_lock(shard.Lock_) {
+        if (IsShuttingDown()) {
+            return false;
+        }
+
+        auto r = shard.Requests_.emplace(req);
+        Y_ABORT_UNLESS(r.second, "Ctx already registered");
+    }
+
+    return true;
+}
+
+void TGrpcServiceProtectiable::DeregisterRequestCtx(ICancelableContext* req) {
+    Y_ABORT_UNLESS(req->ShardIndex != size_t(-1), "Ctx does not have an assigned shard index");
+
+    auto& shard = Shards_[req->ShardIndex];
+    with_lock(shard.Lock_) {
+        Y_ABORT_UNLESS(shard.Requests_.erase(req), "Ctx is not registered");
+    }
+}
+
+bool TGrpcServiceProtectiable::IncRequest() {
+    if (Limiter_) {
+        return Limiter_->Inc();
+    }
+    return true;
+}
+
+void TGrpcServiceProtectiable::DecRequest() {
+    if (Limiter_) {
+        Limiter_->Dec();
+        Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
     }
 }
 
@@ -210,13 +275,16 @@ void TGRpcServer::Stop() {
             break;
 
         auto spent = (TInstant::Now() - now).SecondsFloat();
-        if (attempt % 300 == 0) {
+        if ((attempt + 1) % 300 == 0) {
             // don't log too much
             Cerr << "GRpc shutdown warning: left infly: " << infly << ", spent: " << spent << " sec" <<  Endl;
         }
 
-        if (!unsafe && spent > Options_.GRpcShutdownDeadline.SecondsFloat())
+        if (!unsafe && spent > Options_.GRpcShutdownDeadline.SecondsFloat()) {
+            Cerr << "GRpc shutdown warning: failed to shutdown all connections, left infly: " << infly << ", spent: " << spent << " sec"
+                 << Endl;
             break;
+        }
         Sleep(TDuration::MilliSeconds(10));
     }
 

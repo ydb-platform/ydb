@@ -22,8 +22,7 @@
 namespace orc {
 
   // find column id from column name
-  uint64_t SargsApplier::findColumn(const Type& type,
-                                    const std::string& colName) {
+  uint64_t SargsApplier::findColumn(const Type& type, const std::string& colName) {
     for (uint64_t i = 0; i != type.getSubtypeCount(); ++i) {
       // Only STRUCT type has field names
       if (type.getKind() == STRUCT && type.getFieldName(i) == colName) {
@@ -38,19 +37,18 @@ namespace orc {
     return INVALID_COLUMN_ID;
   }
 
-  SargsApplier::SargsApplier(const Type& type,
-                             const SearchArgument * searchArgument,
-                             uint64_t rowIndexStride,
-                             WriterVersion writerVersion)
-                             : mType(type)
-                             , mSearchArgument(searchArgument)
-                             , mRowIndexStride(rowIndexStride)
-                             , mWriterVersion(writerVersion)
-                             , mStats(0, 0)
-                             , mHasEvaluatedFileStats(false)
-                             , mFileStatsEvalResult(true) {
-    const SearchArgumentImpl * sargs =
-      dynamic_cast<const SearchArgumentImpl *>(mSearchArgument);
+  SargsApplier::SargsApplier(const Type& type, const SearchArgument* searchArgument,
+                             uint64_t rowIndexStride, WriterVersion writerVersion,
+                             ReaderMetrics* metrics, const SchemaEvolution* schemaEvolution)
+      : mType(type),
+        mSearchArgument(searchArgument),
+        mSchemaEvolution(schemaEvolution),
+        mRowIndexStride(rowIndexStride),
+        mWriterVersion(writerVersion),
+        mHasEvaluatedFileStats(false),
+        mFileStatsEvalResult(true),
+        mMetrics(metrics) {
+    const SearchArgumentImpl* sargs = dynamic_cast<const SearchArgumentImpl*>(mSearchArgument);
 
     // find the mapping from predicate leaves to columns
     const std::vector<PredicateLeaf>& leaves = sargs->getLeaves();
@@ -64,13 +62,11 @@ namespace orc {
     }
   }
 
-  bool SargsApplier::pickRowGroups(
-               uint64_t rowsInStripe,
-               const std::unordered_map<uint64_t, proto::RowIndex>& rowIndexes,
-               const std::map<uint32_t, BloomFilterIndex>& bloomFilters) {
+  bool SargsApplier::pickRowGroups(uint64_t rowsInStripe,
+                                   const std::unordered_map<uint64_t, proto::RowIndex>& rowIndexes,
+                                   const std::map<uint32_t, BloomFilterIndex>& bloomFilters) {
     // init state of each row group
-    uint64_t groupsInStripe =
-      (rowsInStripe + mRowIndexStride - 1) / mRowIndexStride;
+    uint64_t groupsInStripe = (rowsInStripe + mRowIndexStride - 1) / mRowIndexStride;
     mNextSkippedRows.resize(groupsInStripe);
     mTotalRowsInStripe = rowsInStripe;
 
@@ -79,10 +75,8 @@ namespace orc {
       return true;
     }
 
-    const auto& leaves =
-      dynamic_cast<const SearchArgumentImpl *>(mSearchArgument)->getLeaves();
-    std::vector<TruthValue> leafValues(
-      leaves.size(), TruthValue::YES_NO_NULL);
+    const auto& leaves = dynamic_cast<const SearchArgumentImpl*>(mSearchArgument)->getLeaves();
+    std::vector<TruthValue> leafValues(leaves.size(), TruthValue::YES_NO_NULL);
     mHasSelected = false;
     mHasSkipped = false;
     uint64_t nextSkippedRowGroup = groupsInStripe;
@@ -95,10 +89,13 @@ namespace orc {
         if (columnIdx == INVALID_COLUMN_ID || rowIndexIter == rowIndexes.cend()) {
           // this column does not exist in current file
           leafValues[pred] = TruthValue::YES_NO_NULL;
+        } else if (mSchemaEvolution && !mSchemaEvolution->isSafePPDConversion(columnIdx)) {
+          // cannot evaluate predicate when ppd is not safe
+          leafValues[pred] = TruthValue::YES_NO_NULL;
         } else {
           // get column statistics
           const proto::ColumnStatistics& statistics =
-            rowIndexIter->second.entry(static_cast<int>(rowGroup)).statistics();
+              rowIndexIter->second.entry(static_cast<int>(rowGroup)).statistics();
 
           // get bloom filter
           std::shared_ptr<BloomFilter> bloomFilter;
@@ -107,9 +104,7 @@ namespace orc {
             bloomFilter = iter->second.entries.at(rowGroup);
           }
 
-          leafValues[pred] = leaves[pred].evaluate(mWriterVersion,
-                                                   statistics,
-                                                   bloomFilter.get());
+          leafValues[pred] = leaves[pred].evaluate(mWriterVersion, statistics, bloomFilter.get());
         }
       }
 
@@ -118,53 +113,56 @@ namespace orc {
         mNextSkippedRows[rowGroup] = 0;
         nextSkippedRowGroup = rowGroup;
       } else {
-        mNextSkippedRows[rowGroup] = (nextSkippedRowGroup == groupsInStripe) ?
-                                     rowsInStripe : (nextSkippedRowGroup * mRowIndexStride);
+        mNextSkippedRows[rowGroup] = (nextSkippedRowGroup == groupsInStripe)
+                                         ? rowsInStripe
+                                         : (nextSkippedRowGroup * mRowIndexStride);
       }
       mHasSelected |= needed;
       mHasSkipped |= !needed;
     } while (rowGroup != 0);
 
     // update stats
-    mStats.first = std::accumulate(
-      mNextSkippedRows.cbegin(), mNextSkippedRows.cend(), mStats.first,
-      [](bool rg, uint64_t s) { return rg ? 1 : 0 + s; });
-    mStats.second += groupsInStripe;
+    uint64_t selectedRGs = std::accumulate(
+        mNextSkippedRows.cbegin(), mNextSkippedRows.cend(), 0UL,
+        [](uint64_t initVal, uint64_t rg) { return rg > 0 ? initVal + 1 : initVal; });
+    if (mMetrics != nullptr) {
+      mMetrics->SelectedRowGroupCount.fetch_add(selectedRGs);
+      mMetrics->EvaluatedRowGroupCount.fetch_add(groupsInStripe);
+    }
 
     return mHasSelected;
   }
 
-  bool SargsApplier::evaluateColumnStatistics(
-                                    const PbColumnStatistics& colStats) const {
-    const SearchArgumentImpl * sargs =
-      dynamic_cast<const SearchArgumentImpl *>(mSearchArgument);
+  bool SargsApplier::evaluateColumnStatistics(const PbColumnStatistics& colStats) const {
+    const SearchArgumentImpl* sargs = dynamic_cast<const SearchArgumentImpl*>(mSearchArgument);
     if (sargs == nullptr) {
       throw InvalidArgument("Failed to cast to SearchArgumentImpl");
     }
 
     const std::vector<PredicateLeaf>& leaves = sargs->getLeaves();
-    std::vector<TruthValue> leafValues(
-      leaves.size(), TruthValue::YES_NO_NULL);
+    std::vector<TruthValue> leafValues(leaves.size(), TruthValue::YES_NO_NULL);
 
     for (size_t pred = 0; pred != leaves.size(); ++pred) {
       uint64_t columnId = mFilterColumns[pred];
-      if (columnId != INVALID_COLUMN_ID &&
-          colStats.size() > static_cast<int>(columnId)) {
-        leafValues[pred] = leaves[pred].evaluate(
-          mWriterVersion, colStats.Get(static_cast<int>(columnId)), nullptr);
+      if (columnId != INVALID_COLUMN_ID && colStats.size() > static_cast<int>(columnId)) {
+        leafValues[pred] = leaves[pred].evaluate(mWriterVersion,
+                                                 colStats.Get(static_cast<int>(columnId)), nullptr);
       }
     }
 
     return isNeeded(mSearchArgument->evaluate(leafValues));
   }
 
-  bool SargsApplier::evaluateStripeStatistics(
-                            const proto::StripeStatistics& stripeStats) {
-    if (stripeStats.colstats_size() == 0) {
+  bool SargsApplier::evaluateStripeStatistics(const proto::StripeStatistics& stripeStats,
+                                              uint64_t stripeRowGroupCount) {
+    if (stripeStats.col_stats_size() == 0) {
       return true;
     }
 
-    bool ret = evaluateColumnStatistics(stripeStats.colstats());
+    bool ret = evaluateColumnStatistics(stripeStats.col_stats());
+    if (mMetrics != nullptr) {
+      mMetrics->EvaluatedRowGroupCount.fetch_add(stripeRowGroupCount);
+    }
     if (!ret) {
       // reset mNextSkippedRows when the current stripe does not satisfy the PPD
       mNextSkippedRows.clear();
@@ -172,15 +170,19 @@ namespace orc {
     return ret;
   }
 
-  bool SargsApplier::evaluateFileStatistics(const proto::Footer& footer) {
+  bool SargsApplier::evaluateFileStatistics(const proto::Footer& footer,
+                                            uint64_t numRowGroupsInStripeRange) {
     if (!mHasEvaluatedFileStats) {
       if (footer.statistics_size() == 0) {
         mFileStatsEvalResult = true;
       } else {
         mFileStatsEvalResult = evaluateColumnStatistics(footer.statistics());
+        if (mMetrics != nullptr) {
+          mMetrics->EvaluatedRowGroupCount.fetch_add(numRowGroupsInStripeRange);
+        }
       }
       mHasEvaluatedFileStats = true;
     }
     return mFileStatsEvalResult;
   }
-}
+}  // namespace orc

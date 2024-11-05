@@ -83,7 +83,7 @@ public:
                 auto guard = TGuard(*KqpAlloc);
                 KqpTypeEnv.Reset();
             }
-            KqpAlloc.Reset();
+            KqpAlloc.reset();
         }
         KqpExecCtx = {};
 
@@ -101,7 +101,7 @@ public:
     void SetReadVersion(TRowVersion readVersion);
     void SetVolatileTxId(ui64 txId);
     void SetIsImmediateTx();
-    void SetIsRepeatableSnapshot();
+    void SetUsesMvccSnapshot();
 
     TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const;
     void ResetCollectedChanges();
@@ -110,6 +110,7 @@ public:
     const absl::flat_hash_set<ui64>& GetVolatileDependencies() const;
     std::optional<ui64> GetVolatileChangeGroup() const;
     bool GetVolatileCommitOrdered() const;
+    bool GetPerformedUserReads() const;
 
     void ResetCounters() { EngineHostCounters = TEngineHostCounters(); }
     const TEngineHostCounters& GetCounters() const { return EngineHostCounters; }
@@ -127,7 +128,7 @@ private:
     NYql::NDq::TLogFunc KqpLogFunc;
     THolder<NUdf::IApplyContext> KqpApplyCtx;
     THolder<NMiniKQL::TKqpDatashardComputeContext> ComputeCtx;
-    THolder<NMiniKQL::TScopedAlloc> KqpAlloc;
+    std::shared_ptr<NMiniKQL::TScopedAlloc> KqpAlloc;
     THolder<NMiniKQL::TTypeEnvironment> KqpTypeEnv;
     NYql::NDq::TDqTaskRunnerContext KqpExecCtx;
     TIntrusivePtr<NKqp::TKqpTasksRunner> KqpTasksRunner;

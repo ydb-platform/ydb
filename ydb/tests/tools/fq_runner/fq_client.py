@@ -12,17 +12,16 @@ import library.python.retry as retry
 from ydb.public.api.grpc.draft.fq_v1_pb2_grpc import FederatedQueryServiceStub
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
-import ydb.tests.library.common.yatest_common as yatest_common
-
 from google.protobuf.duration_pb2 import Duration
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 
 final_statuses = [fq.QueryMeta.COMPLETED, fq.QueryMeta.FAILED, fq.QueryMeta.ABORTED_BY_SYSTEM,
                   fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.PAUSED]
 
-CONTROL_PLANE_REQUEST_TIMEOUT = yatest_common.plain_or_under_sanitizer(30.0, 60.0)
+CONTROL_PLANE_REQUEST_TIMEOUT = plain_or_under_sanitizer(30.0, 60.0)
 
 
 class FederatedQueryException(Exception):
@@ -141,7 +140,7 @@ class FederatedQueryClient(object):
     @retry.retry_intrusive
     def create_query_impl(self, name, text, type=fq.QueryContent.QueryType.ANALYTICS, mode=fq.ExecuteMode.RUN,
                           visibility=fq.Acl.Visibility.PRIVATE, streaming_disposition=None, check_issues=True,
-                          automatic=False, idempotency_key=None, pg_syntax=False, execution_ttl=0, vcpu_time_limit=0):
+                          automatic=False, idempotency_key=None, pg_syntax=False, execution_ttl=0, vcpu_time_limit=0, parameters=None):
         request = fq.CreateQueryRequest()
         request.execute_mode = mode
         request.content.type = type
@@ -161,7 +160,11 @@ class FederatedQueryClient(object):
         if vcpu_time_limit:
             request.content.limits.vcpu_time_limit = vcpu_time_limit
 
-        logging.debug("Request: {}".format(self._pretty_retry(request)))
+        if parameters is not None:
+            for k, v in parameters.items():
+                request.content.parameters[k].CopyFrom(v)
+
+        logging.debug("Request: {}".format(request))
 
         response = self.service.CreateQuery(
             request,
@@ -176,8 +179,9 @@ class FederatedQueryClient(object):
 
     def create_query(self, name, text, type=fq.QueryContent.QueryType.ANALYTICS, mode=fq.ExecuteMode.RUN,
                      visibility=fq.Acl.Visibility.PRIVATE, streaming_disposition=None, check_issues=True,
-                     automatic=False, idempotency_key=None, pg_syntax=False, execution_ttl=0, vcpu_time_limit=0):
+                     automatic=False, idempotency_key=None, pg_syntax=False, execution_ttl=0, vcpu_time_limit=0, parameters=None):
         idempotency_key_for_retries = idempotency_key if idempotency_key is not None else str(uuid.uuid4())
+
         return self.create_query_impl(name=name,
                                       text=text,
                                       type=type,
@@ -188,13 +192,14 @@ class FederatedQueryClient(object):
                                       automatic=automatic,
                                       idempotency_key=idempotency_key_for_retries,
                                       pg_syntax=pg_syntax, execution_ttl=execution_ttl,
-                                      vcpu_time_limit=vcpu_time_limit)
+                                      vcpu_time_limit=vcpu_time_limit,
+                                      parameters=parameters)
 
     @retry.retry_intrusive
     def modify_query(self, query_id, name, text, type=fq.QueryContent.QueryType.ANALYTICS,
                      execute_mode=fq.ExecuteMode.RUN,
                      visibility=fq.Acl.Visibility.PRIVATE, state_load_mode=fq.StateLoadMode.EMPTY,
-                     streaming_disposition=None, check_issues=True):
+                     streaming_disposition=None, check_issues=True, parameters=None):
 
         request = fq.ModifyQueryRequest()
         request.query_id = query_id
@@ -206,6 +211,10 @@ class FederatedQueryClient(object):
         request.content.acl.visibility = visibility
         if streaming_disposition is not None:
             request.disposition.CopyFrom(streaming_disposition)
+
+        if parameters is not None:
+            for k, v in parameters.items():
+                request.content.parameters[k].CopyFrom(v)
 
         logging.debug("Request: {}".format(self._pretty_retry(request)))
 
@@ -272,7 +281,7 @@ class FederatedQueryClient(object):
         return result.status
 
     # TODO: merge wait_query() and wait_query_status
-    def wait_query(self, query_id, timeout=yatest_common.plain_or_under_sanitizer(40, 200), statuses=final_statuses):
+    def wait_query(self, query_id, timeout=plain_or_under_sanitizer(40, 200), statuses=final_statuses):
         start = time.time()
         deadline = start + timeout
         while True:
@@ -290,10 +299,10 @@ class FederatedQueryClient(object):
                     response.result.query.issue,
                     response.result.query.transient_issue
                 )
-            time.sleep(yatest_common.plain_or_under_sanitizer(0.5, 2))
+            time.sleep(plain_or_under_sanitizer(0.5, 2))
 
     # Wait query status or one of statuses in list
-    def wait_query_status(self, query_id, expected_status, timeout=yatest_common.plain_or_under_sanitizer(60, 150)):
+    def wait_query_status(self, query_id, expected_status, timeout=plain_or_under_sanitizer(60, 150)):
         statuses = expected_status if isinstance(expected_status, list) else [expected_status]
         return self.wait_query(query_id, timeout, statuses=statuses).query.meta.status
 
@@ -380,13 +389,13 @@ class FederatedQueryClient(object):
         return FederatedQueryClient.Response(response.operation.issues, result, check_issues)
 
     @retry.retry_intrusive
-    def create_ydb_connection(self, name, database, endpoint, visibility=fq.Acl.Visibility.PRIVATE,
-                              auth_method=AuthMethod.no_auth(), check_issues=True):
+    def create_ydb_connection(self, name, database_id,
+                              secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
         request = fq.CreateConnectionRequest()
         request.content.name = name
         ydb = request.content.setting.ydb_database
-        ydb.database = database
-        ydb.endpoint = endpoint
+        ydb.database_id = database_id
+        ydb.secure = secure
 
         ydb.auth.CopyFrom(auth_method)
         request.content.acl.visibility = visibility
@@ -395,7 +404,7 @@ class FederatedQueryClient(object):
     @retry.retry_intrusive
     def create_yds_connection(self, name, database=None, endpoint=None, database_id=None,
                               visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.no_auth(),
-                              check_issues=True):
+                              check_issues=True, shared_reading=False):
         assert (database_id is not None and database is None and endpoint is None) or (
             database_id is None and database is not None and endpoint is not None)
         request = fq.CreateConnectionRequest()
@@ -407,23 +416,9 @@ class FederatedQueryClient(object):
             yds.database = database
             yds.endpoint = endpoint
 
+        yds.shared_reading = shared_reading
+
         yds.auth.CopyFrom(auth_method)
-        request.content.acl.visibility = visibility
-        return self.create_connection(request, check_issues)
-
-    @retry.retry_intrusive
-    def create_postgresql_connection(self, name, database_name, database_id, login, password,
-                                     secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
-        request = fq.CreateConnectionRequest()
-        request.content.name = name
-        pg = request.content.setting.postgresql_cluster
-        pg.database_name = database_name
-        pg.database_id = database_id
-        pg.secure = secure
-        pg.login = login
-        pg.password = password
-
-        pg.auth.CopyFrom(auth_method)
         request.content.acl.visibility = visibility
         return self.create_connection(request, check_issues)
 
@@ -440,6 +435,37 @@ class FederatedQueryClient(object):
         ch.password = password
 
         ch.auth.CopyFrom(auth_method)
+        request.content.acl.visibility = visibility
+        return self.create_connection(request, check_issues)
+
+    @retry.retry_intrusive
+    def create_greenplum_connection(self, name, database_name, database_id, login, password,
+                                    secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
+        request = fq.CreateConnectionRequest()
+        request.content.name = name
+        gp = request.content.setting.greenplum_cluster
+        gp.database_name = database_name
+        gp.database_id = database_id
+        gp.login = login
+        gp.password = password
+
+        gp.auth.CopyFrom(auth_method)
+        request.content.acl.visibility = visibility
+        return self.create_connection(request, check_issues)
+
+    @retry.retry_intrusive
+    def create_postgresql_connection(self, name, database_name, database_id, login, password,
+                                     secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
+        request = fq.CreateConnectionRequest()
+        request.content.name = name
+        pg = request.content.setting.postgresql_cluster
+        pg.database_name = database_name
+        pg.database_id = database_id
+        pg.secure = secure
+        pg.login = login
+        pg.password = password
+
+        pg.auth.CopyFrom(auth_method)
         request.content.acl.visibility = visibility
         return self.create_connection(request, check_issues)
 

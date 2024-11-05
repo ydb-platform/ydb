@@ -3,7 +3,7 @@
  * amapi.h
  *	  API for Postgres index access methods.
  *
- * Copyright (c) 2015-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2015-2023, PostgreSQL Global Development Group
  *
  * src/include/access/amapi.h
  *
@@ -244,6 +244,8 @@ typedef struct IndexAmRoutine
 	bool		amcaninclude;
 	/* does AM use maintenance_work_mem? */
 	bool		amusemaintenanceworkmem;
+	/* does AM store tuple information only at block granularity? */
+	bool		amsummarizing;
 	/* OR of parallel vacuum flags.  See vacuum.h for flags. */
 	uint8		amparallelvacuumoptions;
 	/* type of data stored in index, or InvalidOid if variable */

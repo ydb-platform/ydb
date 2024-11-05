@@ -1,6 +1,5 @@
 import os
 import sys
-import getopt
 import json
 import re
 
@@ -17,7 +16,7 @@ defsOutFile = sys.argv[5]
 env = Environment(loader=FileSystemLoader(templateDir))
 template = env.get_template(templateFilename)
 
-json_data=open(jsonFile)
+json_data = open(jsonFile)
 model = json.load(json_data)
 json_data.close()
 
@@ -51,7 +50,7 @@ for node in model["Nodes"]:
                 child["Optional"] = False
 
     if node["Base"] == model["FreeArgCallableBase"]:
-        aux["isFinal"] = True;
+        aux["isFinal"] = True
 
 # Traverse tree
 nodesMap = {}
@@ -135,7 +134,7 @@ for node in model["Nodes"]:
             raise Exception("Child #" + str(index) + " should be optional in " + node["Name"])
         optionalArgs = child["Optional"]
         if not child["Optional"]:
-            aux["fixedChildrenCount"] += 1;
+            aux["fixedChildrenCount"] += 1
 
     if "Match" in node and node["Match"]["Type"] == "CallableBase":
         namesToMatch = aux["namesToMatch"] = []
@@ -202,4 +201,3 @@ with open(declOutFile, "w") as fh:
 defsOutput = template.render(generator=__file__, genType="Definitions", model=model, nodes=model["Nodes"])
 with open(defsOutFile, "w") as fh:
     fh.write(defsOutput)
-

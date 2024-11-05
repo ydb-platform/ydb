@@ -57,7 +57,6 @@ void PreparePgTable(TSession& session) {
 }
 
 void Test(
-    bool enableInplaceUpdate,
     const TString& query,
     TParams&& params,
     const TString& expectedResult,
@@ -70,7 +69,6 @@ void Test(
 
     // source read and stream lookup use iterator interface, that doesn't use datashard transactions
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
     auto settings = TKikimrSettings()
@@ -89,7 +87,7 @@ void Test(
     auto q = TStringBuilder()
         << R"(
             --!syntax_v1
-            PRAGMA kikimr.OptEnableInplaceUpdate = ')" << (enableInplaceUpdate ? "true" : "false") << "';" << Endl
+            PRAGMA kikimr.OptEnableInplaceUpdate = ')" <<  "true" << "';" << Endl
          << query;
 
     auto result = session.ExecuteDataQuery(q, TTxControl::BeginTx().CommitTx(), params, execSettings).ExtractValueSync();
@@ -116,9 +114,8 @@ void Test(
     UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(phaseNo).table_access(0).partitions_count(), std::max(readsCnt, updatesCnt), stats.DebugString());
 
 
-Y_UNIT_TEST_TWIN(SingleRowSimple, EnableInplaceUpdate) {
+Y_UNIT_TEST(SingleRowSimple) {
     Test(
-        EnableInplaceUpdate,
         R"( DECLARE $key AS Uint64;
             DECLARE $value AS String;
 
@@ -135,20 +132,14 @@ Y_UNIT_TEST_TWIN(SingleRowSimple, EnableInplaceUpdate) {
             [[20u];["Two"];[200u];[202.]]
            ])",
         [](const Ydb::TableStats::QueryStats& stats) {
-            if constexpr (EnableInplaceUpdate) {
-                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
-                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 1);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-            }
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
+            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
         });
 }
 
-Y_UNIT_TEST_TWIN(SingleRowStr, EnableInplaceUpdate) {
+Y_UNIT_TEST(SingleRowStr) {
     Test(
-        EnableInplaceUpdate,
         R"( DECLARE $key AS Uint64;
             DECLARE $value AS String;
 
@@ -165,20 +156,14 @@ Y_UNIT_TEST_TWIN(SingleRowStr, EnableInplaceUpdate) {
             [[20u];["Two"];[200u];[202.]]
            ])",
         [](const Ydb::TableStats::QueryStats& stats) {
-            if constexpr (EnableInplaceUpdate) {
-                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
-                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 1);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-            }
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
+            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
         });
 }
 
-Y_UNIT_TEST_TWIN(SingleRowArithm, EnableInplaceUpdate) {
+Y_UNIT_TEST(SingleRowArithm) {
     Test(
-        EnableInplaceUpdate,
         R"( DECLARE $key AS Uint64;
             DECLARE $x AS Uint64;
             DECLARE $y AS Double;
@@ -198,20 +183,14 @@ Y_UNIT_TEST_TWIN(SingleRowArithm, EnableInplaceUpdate) {
             [[20u];["Two"];[200u];[202.]]
            ])",
         [](const Ydb::TableStats::QueryStats& stats) {
-            if constexpr (EnableInplaceUpdate) {
-                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
-                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 1);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-            }
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
+            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
         });
 }
 
-Y_UNIT_TEST_TWIN(SingleRowIf, EnableInplaceUpdate) {
+Y_UNIT_TEST(SingleRowIf) {
     Test(
-        EnableInplaceUpdate,
         R"( DECLARE $key AS Uint64;
 
             $trim = ($v, $min, $max) -> {
@@ -235,21 +214,15 @@ Y_UNIT_TEST_TWIN(SingleRowIf, EnableInplaceUpdate) {
             [[20u];["Two"];[200u];[202.]]
            ])",
         [](const Ydb::TableStats::QueryStats& stats) {
-            if constexpr (EnableInplaceUpdate) {
-                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
-                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 1);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-                ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-            }
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
+            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
         });
 }
 
 // allow multiple keys in KqpLookupTable to enable this test
-Y_UNIT_TEST_TWIN(Negative_SingleRowWithKeyCast, EnableInplaceUpdate) {
+Y_UNIT_TEST(Negative_SingleRowWithKeyCast) {
     Test(
-        EnableInplaceUpdate,
         R"( DECLARE $key AS Uint32; -- not Uint64
             DECLARE $value AS String;
 
@@ -279,7 +252,7 @@ Y_UNIT_TEST_TWIN(Negative_SingleRowWithKeyCast, EnableInplaceUpdate) {
         });
 }
 
-Y_UNIT_TEST_TWIN(Negative_SingleRowWithValueCast, EnableInplaceUpdate) {
+Y_UNIT_TEST(Negative_SingleRowWithValueCast) {
 /*
     (
     (declare $key (DataType 'Uint64))
@@ -293,7 +266,6 @@ Y_UNIT_TEST_TWIN(Negative_SingleRowWithValueCast, EnableInplaceUpdate) {
     `Convert` is not safe callable, so there is no InplaceUpdate optimization here
 */
     Test(
-        EnableInplaceUpdate,
         R"( DECLARE $key AS Uint64;
             DECLARE $value AS Int32; -- not Uint64
 
@@ -316,9 +288,8 @@ Y_UNIT_TEST_TWIN(Negative_SingleRowWithValueCast, EnableInplaceUpdate) {
         });
 }
 
-Y_UNIT_TEST_TWIN(Negative_SingleRowListFromRange, EnableInplaceUpdate) {
+Y_UNIT_TEST(Negative_SingleRowListFromRange) {
     Test(
-        EnableInplaceUpdate,
         R"( DECLARE $key AS Uint64;
 
             $foo = ($x) -> {
@@ -345,9 +316,8 @@ Y_UNIT_TEST_TWIN(Negative_SingleRowListFromRange, EnableInplaceUpdate) {
 }
 
 // allow multiple keys in KqpLookupTable to enable this test
-Y_UNIT_TEST_TWIN(Negative_BatchUpdate, EnableInplaceUpdate) {
+Y_UNIT_TEST(Negative_BatchUpdate) {
     Test(
-        EnableInplaceUpdate,
         R"( DECLARE $key1 AS Uint64;
             DECLARE $value1 AS String;
             DECLARE $key2 AS Uint64;
@@ -389,7 +359,7 @@ Y_UNIT_TEST_TWIN(Negative_BatchUpdate, EnableInplaceUpdate) {
         });
 }
 
-Y_UNIT_TEST_TWIN(BigRow, EnableInplaceUpdate) {
+Y_UNIT_TEST(BigRow) {
     auto keysLimitSetting = NKikimrKqp::TKqpSetting();
     keysLimitSetting.SetName("_CommitPerShardKeysSizeLimitBytes");
     keysLimitSetting.SetValue("100");
@@ -400,7 +370,6 @@ Y_UNIT_TEST_TWIN(BigRow, EnableInplaceUpdate) {
 
     // source read use iterator interface, that doesn't use datashard transactions
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(false);
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
 
     auto settings = TKikimrSettings()
@@ -435,40 +404,27 @@ Y_UNIT_TEST_TWIN(BigRow, EnableInplaceUpdate) {
         UPDATE `/Root/Temp` SET
             Value2 = Value1
         WHERE Key = $Key
-    )", EnableInplaceUpdate ? "true" : "false");
+    )", "true");
 
     auto params = db.GetParamsBuilder()
         .AddParam("$Key").Uint32(1).Build()
         .Build();
 
     result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
-
-    if constexpr (EnableInplaceUpdate) {
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR, [](const NYql::TIssue& issue) {
-            return issue.GetMessage().Contains("READ_SIZE_EXECEEDED");
-        }));
-    } else {
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    }
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
     result = session.ExecuteDataQuery(R"(
         SELECT Value2 FROM `/Root/Temp` ORDER BY Value2;
     )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-    if constexpr (EnableInplaceUpdate) {
-        CompareYson(R"([[#];[#]])", FormatResultSetYson(result.GetResultSet(0)));
-    } else {
-        CompareYson(R"([
-            [#];[["123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890"]]
-        ])", FormatResultSetYson(result.GetResultSet(0)));
-    }
+    CompareYson(R"([
+        [#];[["123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890"]]
+    ])", FormatResultSetYson(result.GetResultSet(0)));
 }
 
 Y_UNIT_TEST(SingleRowPgNotNull) {
     Test(
-        true,
         R"( DECLARE $key AS Uint64;
             DECLARE $value AS PgInt2;
 

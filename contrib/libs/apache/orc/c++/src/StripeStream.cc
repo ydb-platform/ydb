@@ -16,10 +16,10 @@
  * limitations under the License.
  */
 
-#include "orc/Exceptions.hh"
+#include "StripeStream.hh"
 #include "RLE.hh"
 #include "Reader.hh"
-#include "StripeStream.hh"
+#include "orc/Exceptions.hh"
 
 #include "wrap/coded-stream-wrapper.h"
 
@@ -27,19 +27,17 @@ namespace orc {
 
   StripeStreamsImpl::StripeStreamsImpl(const RowReaderImpl& _reader, uint64_t _index,
                                        const proto::StripeInformation& _stripeInfo,
-                                       const proto::StripeFooter& _footer,
-                                       uint64_t _stripeStart,
-                                       InputStream& _input,
-                                       const Timezone& _writerTimezone,
-                                       const Timezone& _readerTimezone
-                                       ): reader(_reader),
-                                          stripeInfo(_stripeInfo),
-                                          footer(_footer),
-                                          stripeIndex(_index),
-                                          stripeStart(_stripeStart),
-                                          input(_input),
-                                          writerTimezone(_writerTimezone),
-                                          readerTimezone(_readerTimezone) {
+                                       const proto::StripeFooter& _footer, uint64_t _stripeStart,
+                                       InputStream& _input, const Timezone& _writerTimezone,
+                                       const Timezone& _readerTimezone)
+      : reader(_reader),
+        stripeInfo(_stripeInfo),
+        footer(_footer),
+        stripeIndex(_index),
+        stripeStart(_stripeStart),
+        input(_input),
+        writerTimezone(_writerTimezone),
+        readerTimezone(_readerTimezone) {
     // PASS
   }
 
@@ -55,7 +53,6 @@ namespace orc {
     // PASS
   }
 
-
   StreamInformationImpl::~StreamInformationImpl() {
     // PASS
   }
@@ -64,8 +61,7 @@ namespace orc {
     return reader.getSelectedColumns();
   }
 
-  proto::ColumnEncoding StripeStreamsImpl::getEncoding(uint64_t columnId
-                                                       ) const {
+  proto::ColumnEncoding StripeStreamsImpl::getEncoding(uint64_t columnId) const {
     return footer.columns(static_cast<int>(columnId));
   }
 
@@ -81,46 +77,44 @@ namespace orc {
     return reader.getFileContents().errorStream;
   }
 
-    std::unique_ptr<SeekableInputStream>
-  StripeStreamsImpl::getStream(uint64_t columnId,
-                               proto::Stream_Kind kind,
-                               bool shouldStream) const {
+  std::unique_ptr<SeekableInputStream> StripeStreamsImpl::getStream(uint64_t columnId,
+                                                                    proto::Stream_Kind kind,
+                                                                    bool shouldStream) const {
     uint64_t offset = stripeStart;
-    uint64_t dataEnd = stripeInfo.offset() + stripeInfo.indexlength() + stripeInfo.datalength();
-    MemoryPool *pool = reader.getFileContents().pool;
-    for(int i = 0; i < footer.streams_size(); ++i) {
+    uint64_t dataEnd = stripeInfo.offset() + stripeInfo.index_length() + stripeInfo.data_length();
+    MemoryPool* pool = reader.getFileContents().pool;
+    for (int i = 0; i < footer.streams_size(); ++i) {
       const proto::Stream& stream = footer.streams(i);
-      if (stream.has_kind() &&
-          stream.kind() == kind &&
+      if (stream.has_kind() && stream.kind() == kind &&
           stream.column() == static_cast<uint64_t>(columnId)) {
         uint64_t streamLength = stream.length();
-        uint64_t myBlock = shouldStream ? input.getNaturalReadSize(): streamLength;
+        uint64_t myBlock = shouldStream ? input.getNaturalReadSize() : streamLength;
         if (offset + streamLength > dataEnd) {
           std::stringstream msg;
           msg << "Malformed stream meta at stream index " << i << " in stripe " << stripeIndex
               << ": streamOffset=" << offset << ", streamLength=" << streamLength
-              << ", stripeOffset=" << stripeInfo.offset() << ", stripeIndexLength="
-              << stripeInfo.indexlength() << ", stripeDataLength=" << stripeInfo.datalength();
+              << ", stripeOffset=" << stripeInfo.offset()
+              << ", stripeIndexLength=" << stripeInfo.index_length()
+              << ", stripeDataLength=" << stripeInfo.data_length();
           throw ParseError(msg.str());
         }
         return createDecompressor(reader.getCompression(),
-                                  std::unique_ptr<SeekableInputStream>
-                                  (new SeekableFileInputStream
-                                   (&input,
-                                    offset,
-                                    stream.length(),
-                                    *pool,
-                                    myBlock)),
-                                  reader.getCompressionSize(),
-                                  *pool);
+                                  std::make_unique<SeekableFileInputStream>(
+                                      &input, offset, stream.length(), *pool, myBlock),
+                                  reader.getCompressionSize(), *pool,
+                                  reader.getFileContents().readerMetrics);
       }
       offset += stream.length();
     }
-    return std::unique_ptr<SeekableInputStream>();
+    return nullptr;
   }
 
   MemoryPool& StripeStreamsImpl::getMemoryPool() const {
     return *reader.getFileContents().pool;
+  }
+
+  ReaderMetrics* StripeStreamsImpl::getReaderMetrics() const {
+    return reader.getFileContents().readerMetrics;
   }
 
   bool StripeStreamsImpl::getThrowOnHive11DecimalOverflow() const {
@@ -135,37 +129,33 @@ namespace orc {
     return reader.getForcedScaleOnHive11Decimal();
   }
 
+  const SchemaEvolution* StripeStreamsImpl::getSchemaEvolution() const {
+    return reader.getSchemaEvolution();
+  }
+
   void StripeInformationImpl::ensureStripeFooterLoaded() const {
     if (stripeFooter.get() == nullptr) {
       std::unique_ptr<SeekableInputStream> pbStream =
-        createDecompressor(compression,
-                           std::unique_ptr<SeekableInputStream>
-                             (new SeekableFileInputStream(stream,
-                                                          offset +
-                                                            indexLength +
-                                                            dataLength,
-                                                          footerLength,
-                                                          memory)),
-                           blockSize,
-                           memory);
-      stripeFooter.reset(new proto::StripeFooter());
+          createDecompressor(compression,
+                             std::make_unique<SeekableFileInputStream>(
+                                 stream, offset + indexLength + dataLength, footerLength, memory),
+                             blockSize, memory, metrics);
+      stripeFooter = std::make_unique<proto::StripeFooter>();
       if (!stripeFooter->ParseFromZeroCopyStream(pbStream.get())) {
         throw ParseError("Failed to parse the stripe footer");
       }
     }
   }
 
-  std::unique_ptr<StreamInformation>
-     StripeInformationImpl::getStreamInformation(uint64_t streamId) const {
+  std::unique_ptr<StreamInformation> StripeInformationImpl::getStreamInformation(
+      uint64_t streamId) const {
     ensureStripeFooterLoaded();
     uint64_t streamOffset = offset;
-    for(uint64_t s=0; s < streamId; ++s) {
+    for (uint64_t s = 0; s < streamId; ++s) {
       streamOffset += stripeFooter->streams(static_cast<int>(s)).length();
     }
-    return ORC_UNIQUE_PTR<StreamInformation>
-      (new StreamInformationImpl(streamOffset,
-                                 stripeFooter->
-                                   streams(static_cast<int>(streamId))));
+    return std::make_unique<StreamInformationImpl>(
+        streamOffset, stripeFooter->streams(static_cast<int>(streamId)));
   }
 
-}
+}  // namespace orc

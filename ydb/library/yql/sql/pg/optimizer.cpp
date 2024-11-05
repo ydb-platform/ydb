@@ -354,11 +354,11 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
     for (auto* ri : LeftRestriction) {
         root.left_join_clauses = lappend(root.left_join_clauses, ri);
         root.hasJoinRTEs = 1;
-        root.nullable_baserels = bms_add_members(root.nullable_baserels, ri->right_relids);
+        root.outer_join_rels = bms_add_members(root.outer_join_rels, ri->right_relids);
 
         SpecialJoinInfo* ji = makeNode(SpecialJoinInfo);
-        ji->min_lefthand = bms_add_member(ji->min_lefthand, bms_first_member(ri->left_relids));
-        ji->min_righthand = bms_add_member(ji->min_righthand, bms_first_member(ri->right_relids));
+        ji->min_lefthand = bms_add_member(ji->min_lefthand, bms_next_member(ri->left_relids, -1));
+        ji->min_righthand = bms_add_member(ji->min_righthand, bms_next_member(ri->right_relids, -1));
 
         ji->syn_lefthand = bms_add_members(ji->min_lefthand, ri->left_relids);
         ji->syn_righthand = bms_add_members(ji->min_righthand, ri->right_relids);
@@ -371,11 +371,11 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
     for (auto* ri : RightRestriction) {
         root.right_join_clauses = lappend(root.right_join_clauses, ri);
         root.hasJoinRTEs = 1;
-        root.nullable_baserels = bms_add_members(root.nullable_baserels, ri->left_relids);
+        root.outer_join_rels = bms_add_members(root.outer_join_rels, ri->left_relids);
 
         SpecialJoinInfo* ji = makeNode(SpecialJoinInfo);
-        ji->min_lefthand = bms_add_member(ji->min_lefthand, bms_first_member(ri->right_relids));
-        ji->min_righthand = bms_add_member(ji->min_righthand, bms_first_member(ri->left_relids));
+        ji->min_lefthand = bms_add_member(ji->min_lefthand, bms_next_member(ri->right_relids, -1));
+        ji->min_righthand = bms_add_member(ji->min_righthand, bms_next_member(ri->left_relids, -1));
 
         ji->syn_lefthand = bms_add_members(ji->min_lefthand, ri->right_relids);
         ji->syn_righthand = bms_add_members(ji->min_righthand, ri->left_relids);
@@ -462,8 +462,8 @@ struct TPgOptimizerImpl
         }
         auto& rel = Rels[relId - 1];
 
-        rel.Rows = leaf->Stats->Nrows;
-        rel.TotalCost = leaf->Stats->Cost;
+        rel.Rows = leaf->Stats.Nrows;
+        rel.TotalCost = leaf->Stats.Cost;
 
         int leafIndex = relId - 1;
         if (leafIndex >= static_cast<int>(Leafs.size())) {
@@ -491,11 +491,11 @@ struct TPgOptimizerImpl
         std::vector<std::tuple<int,int,TStringBuf,TStringBuf>>& rightVars,
         const std::shared_ptr<TJoinOptimizerNode>& op)
     {
-        for (auto& [l, r]: op->JoinConditions) {
-            auto& ltable = l.RelName;
-            auto& lcol = l.AttributeName;
-            auto& rtable = r.RelName;
-            auto& rcol = r.AttributeName;
+        for (size_t i=0; i<op->LeftJoinKeys.size(); i++ ) {
+            auto& ltable = op->LeftJoinKeys[i].RelName;
+            auto& lcol = op->LeftJoinKeys[i].AttributeName;
+            auto& rtable = op->RightJoinKeys[i].RelName;
+            auto& rcol = op->RightJoinKeys[i].AttributeName;
 
             const auto& lrelIds = Table2RelIds[ltable];
             YQL_ENSURE(!lrelIds.empty());
@@ -562,7 +562,7 @@ struct TPgOptimizerImpl
 
             MakeEqClasses(EqClasses, leftVars, rightVars);
         } else if (op->JoinType == LeftJoin || op->JoinType == RightJoin) {
-            CHECK(op->JoinConditions.size() == 1, "Only 1 var per join supported");
+            CHECK(op->LeftJoinKeys.size() == 1 && op->RightJoinKeys.size() == 1, "Only 1 var per join supported");
 
             std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> leftVars, rightVars;
             ExtractVars(leftVars, rightVars, op);
@@ -637,24 +637,27 @@ struct TPgOptimizerImpl
 
             YQL_ENSURE(node->LeftVars.size() == node->RightVars.size());
 
-            std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
+            TVector<NDq::TJoinColumn> leftJoinKeys;
+            TVector<NDq::TJoinColumn> rightJoinKeys;
+
             for (size_t i = 0; i < node->LeftVars.size(); i++) {
                 auto [lrelId, lvarId] = node->LeftVars[i];
                 auto [rrelId, rvarId] = node->RightVars[i];
                 auto [ltable, lcolumn] = Var2TableCol[lrelId - 1][lvarId - 1];
                 auto [rtable, rcolumn] = Var2TableCol[rrelId - 1][rvarId - 1];
 
-                joinConditions.insert({
-                    NDq::TJoinColumn{TString(ltable), TString(lcolumn)},
-                    NDq::TJoinColumn{TString(rtable), TString(rcolumn)}
-                });
+                leftJoinKeys.push_back(NDq::TJoinColumn(TString(ltable), TString(lcolumn)));
+                rightJoinKeys.push_back(NDq::TJoinColumn(TString(rtable), TString(rcolumn)));
             }
 
             return std::make_shared<TJoinOptimizerNode>(
                 left, right,
-                joinConditions,
+                leftJoinKeys,
+                rightJoinKeys,
                 joinKind,
-                GraceJoin
+                EJoinAlgoType::MapJoin,
+                false,
+                false
                 );
         } else {
             YQL_ENSURE(false, "Wrong CBO node");
@@ -690,8 +693,11 @@ public:
         , Log(log)
     { }
 
-    std::shared_ptr<TJoinOptimizerNode> JoinSearch(const std::shared_ptr<TJoinOptimizerNode>& joinTree) override
+    std::shared_ptr<TJoinOptimizerNode> JoinSearch(
+        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
+        const TOptimizerHints& hints = {}) override
     {
+        Y_UNUSED(hints);
         return TPgOptimizerImpl(joinTree, Ctx, Log).Do();
     }
 

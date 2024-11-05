@@ -21,7 +21,7 @@
  * are different.
  *
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *	src/backend/libpq/pqformat.c
@@ -77,6 +77,7 @@
 #include "libpq/pqformat.h"
 #include "mb/pg_wchar.h"
 #include "port/pg_bswap.h"
+#include "varatt.h"
 
 extern void yql_canonize_float4(float4*);
 extern void yql_canonize_float8(float8*);
@@ -124,7 +125,7 @@ pq_beginmessage_reuse(StringInfo buf, char msgtype)
  * --------------------------------
  */
 void
-pq_sendbytes(StringInfo buf, const char *data, int datalen)
+pq_sendbytes(StringInfo buf, const void *data, int datalen)
 {
 	/* use variant that maintains a trailing null-byte, out of caution */
 	appendBinaryStringInfo(buf, data, datalen);

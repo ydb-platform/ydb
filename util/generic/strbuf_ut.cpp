@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         UNIT_ASSERT(str.AfterPrefix("cat_", r));
         UNIT_ASSERT_EQUAL(r, "dog");
 
-        //example:
+        // example:
         str = "http://ya.ru";
         if (str.AfterPrefix("http://", r)) {
             UNIT_ASSERT_EQUAL(r, "ya.ru");
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         UNIT_ASSERT(str.BeforeSuffix("_dog", r));
         UNIT_ASSERT_EQUAL(r, "cat");
 
-        //example:
+        // example:
         str = "maps.yandex.com.ua";
         if (str.BeforeSuffix(".ru", r)) {
             UNIT_ASSERT_EQUAL(r, "maps.yandex");
@@ -362,7 +362,7 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         static_assert(std::is_same_v<decltype(s), TStringBuf>);
         UNIT_ASSERT_VALUES_EQUAL(s, TStringBuf("123"));
     }
-}
+} // Y_UNIT_TEST_SUITE(TStrBufTest)
 
 Y_UNIT_TEST_SUITE(TWtrBufTest) {
     Y_UNIT_TEST(TestConstExpr) {
@@ -388,4 +388,4 @@ Y_UNIT_TEST_SUITE(TWtrBufTest) {
 
         static_assert(str1 == str2);
     }
-}
+} // Y_UNIT_TEST_SUITE(TWtrBufTest)

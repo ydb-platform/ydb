@@ -16,6 +16,7 @@ public:
     virtual void SendReplyMove(NBus::TBusMessageAutoPtr response) = 0;
     virtual TVector<TStringBuf> FindClientCert() const = 0;
     virtual THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() = 0;
+    virtual TString GetPeerName() const = 0;
 };
 
 class TBusMessageContext::TImplMessageBus
@@ -61,6 +62,13 @@ public:
         return {};
     }
 
+    TString GetPeerName() const override {
+        TStringBuilder ret;
+        if (IsConnectionAlive()) {
+            ret << GetPeerAddrNetAddr();
+        }
+        return std::move(ret);
+    }
 
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
 };
@@ -90,18 +98,11 @@ public:
             MTYPE(TBusResponse)
             MTYPE(TBusFakeConfigDummy)
             MTYPE(TBusSchemeInitRoot)
-            MTYPE(TBusBSAdm)
             MTYPE(TBusTypesRequest)
             MTYPE(TBusTypesResponse)
             MTYPE(TBusHiveCreateTablet)
             MTYPE(TBusOldHiveCreateTablet)
             MTYPE(TBusHiveCreateTabletResult)
-            MTYPE(TBusLocalEnumerateTablets)
-            MTYPE(TBusOldLocalEnumerateTablets)
-            MTYPE(TBusLocalEnumerateTabletsResult)
-            MTYPE(TBusKeyValue)
-            MTYPE(TBusOldKeyValue)
-            MTYPE(TBusKeyValueResponse)
             MTYPE(TBusPersQueue)
             MTYPE(TBusTabletKillRequest)
             MTYPE(TBusTabletStateRequest)
@@ -113,20 +114,11 @@ public:
             MTYPE(TBusSchemeDescribe)
             MTYPE(TBusOldFlatDescribeRequest)
             MTYPE(TBusOldFlatDescribeResponse)
-            MTYPE(TBusBsTestLoadRequest)
-            MTYPE(TBusBsTestLoadResponse)
-            MTYPE(TBusBsGetRequest)
-            MTYPE(TBusBsGetResponse)
-            MTYPE(TBusDbSchema)
-            MTYPE(TBusDbOperation)
-            MTYPE(TBusDbResponse)
-            MTYPE(TBusDbBatch)
             MTYPE(TBusBlobStorageConfigRequest)
             MTYPE(TBusNodeRegistrationRequest)
             MTYPE(TBusCmsRequest)
             MTYPE(TBusChooseProxy)
             MTYPE(TBusSqsRequest)
-            MTYPE(TBusWhoAmI)
             MTYPE(TBusStreamRequest)
             MTYPE(TBusInterconnectDebug)
             MTYPE(TBusConsoleRequest)
@@ -134,7 +126,6 @@ public:
             MTYPE(TBusFillNode)
             MTYPE(TBusDrainNode)
             MTYPE(TBusTestShardControlRequest)
-            MTYPE(TBusLoginRequest)
 #undef MTYPE
         }
 
@@ -172,8 +163,6 @@ public:
             }
 
             REPLY_OPTION(TBusResponse)
-            REPLY_OPTION(TBusDbResponse)
-            REPLY_OPTION(TBusBsTestLoadResponse)
             REPLY_OPTION(TBusNodeRegistrationResponse)
             REPLY_OPTION(TBusCmsResponse)
             REPLY_OPTION(TBusSqsResponse)
@@ -194,6 +183,10 @@ public:
     };
 
     THolder<TMessageBusSessionIdentHolder::TImpl> CreateSessionIdentHolder() override;
+
+    TString GetPeerName() const override {
+        return RequestContext->GetPeer();
+    }
 };
 
 TBusMessageContext::TBusMessageContext()
@@ -239,6 +232,8 @@ void TBusMessageContext::Swap(TBusMessageContext &msg) {
 }
 
 TVector<TStringBuf> TBusMessageContext::FindClientCert() const { return Impl->FindClientCert(); }
+
+TString TBusMessageContext::GetPeerName() const { return Impl->GetPeerName(); }
 
 THolder<TMessageBusSessionIdentHolder::TImpl> TBusMessageContext::CreateSessionIdentHolder() {
     Y_ABORT_UNLESS(Impl);
@@ -503,8 +498,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientProxyRequest<TEvBusProxy::TEvRequest>(msg);
     case MTYPE_CLIENT_SCHEME_INITROOT:
         return ClientProxyRequest<TEvBusProxy::TEvInitRoot>(msg);
-    case MTYPE_CLIENT_BSADM:
-        return ClientActorRequest(CreateMessageBusBSAdm, msg);
     case MTYPE_CLIENT_SCHEME_NAVIGATE:
         return ClientProxyRequest<TEvBusProxy::TEvNavigate>(msg);
     case MTYPE_CLIENT_TYPES_REQUEST:
@@ -512,12 +505,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     case MTYPE_CLIENT_HIVE_CREATE_TABLET:
     case MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET:
         return ClientActorRequest(CreateMessageBusHiveCreateTablet, msg);
-    case MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS:
-    case MTYPE_CLIENT_OLD_LOCAL_ENUMERATE_TABLETS:
-        return ClientActorRequest(CreateMessageBusLocalEnumerateTablets, msg);
-    case MTYPE_CLIENT_KEYVALUE:
-    case MTYPE_CLIENT_OLD_KEYVALUE:
-        return ClientActorRequest(CreateMessageBusKeyValue, msg);
     case MTYPE_CLIENT_PERSQUEUE:
         return ClientProxyRequest<TEvBusProxy::TEvPersQueue>(msg);
     case MTYPE_CLIENT_CHOOSE_PROXY:
@@ -539,16 +526,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     case MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST:
     case MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST:
         return ClientProxyRequest<TEvBusProxy::TEvFlatDescribeRequest>(msg);
-    case MTYPE_CLIENT_LOAD_REQUEST:
-        return ClientActorRequest(CreateMessageBusBlobStorageLoadRequest, msg);
-    case MTYPE_CLIENT_GET_REQUEST:
-        return ClientActorRequest(CreateMessageBusBlobStorageGetRequest, msg);
-    case MTYPE_CLIENT_DB_SCHEMA:
-        return ClientProxyRequest<TEvBusProxy::TEvDbSchema>(msg);
-    case MTYPE_CLIENT_DB_OPERATION:
-        return ClientProxyRequest<TEvBusProxy::TEvDbOperation>(msg);
-    case MTYPE_CLIENT_DB_BATCH:
-        return ClientProxyRequest<TEvBusProxy::TEvDbBatch>(msg);
     case MTYPE_CLIENT_BLOB_STORAGE_CONFIG_REQUEST:
         return ClientActorRequest(CreateMessageBusBlobStorageConfig, msg);
     case MTYPE_CLIENT_DRAIN_NODE:
@@ -561,16 +538,12 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusCmsRequest, msg);
     case MTYPE_CLIENT_SQS_REQUEST:
         return ClientActorRequest(CreateMessageBusSqsRequest, msg);
-    case MTYPE_CLIENT_WHOAMI:
-        return ClientActorRequest(CreateMessageBusWhoAmI, msg);
     case MTYPE_CLIENT_INTERCONNECT_DEBUG:
         return ClientActorRequest(CreateMessageBusInterconnectDebug, msg);
     case MTYPE_CLIENT_CONSOLE_REQUEST:
         return ClientActorRequest(CreateMessageBusConsoleRequest, msg);
     case MTYPE_CLIENT_TEST_SHARD_CONTROL:
         return ClientActorRequest(CreateMessageBusTestShardControl, msg);
-    case MTYPE_CLIENT_LOGIN_REQUEST:
-        return ClientActorRequest(CreateMessageBusLoginRequest, msg);
     default:
         return UnknownMessage(msg);
     }

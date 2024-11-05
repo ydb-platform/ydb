@@ -91,7 +91,7 @@ namespace NYql {
             const TGenericState::TPtr State_;
         };
 
-    }
+    } // namespace
 
     THolder<IGraphTransformer> CreateGenericLogicalOptProposalTransformer(TGenericState::TPtr state) {
         return MakeHolder<TGenericLogicalOptProposalTransformer>(state);

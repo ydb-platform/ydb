@@ -20,6 +20,7 @@ struct TWriteMsg {
     TMaybe<ui64> Offset;
     TEvPQ::TEvWrite::TMsg Msg;
     std::optional<ui64> InitialSeqNo;
+    bool Internal = false;
 };
 
 struct TOwnershipMsg {
@@ -60,6 +61,7 @@ struct TSplitMessageGroupMsg {
     }
 };
 
+
 struct TMessage {
     std::variant<
         TWriteMsg,
@@ -68,7 +70,6 @@ struct TMessage {
         TDeregisterMessageGroupMsg,
         TSplitMessageGroupMsg
     > Body;
-
     TDuration QueueTime;    // baseline for request and duration for response
     TInstant WriteTimeBaseline;
 
@@ -117,6 +118,15 @@ struct TMessage {
     DEFINE_CHECKER_GETTER(SplitMessageGroup, 4)
 
     #undef DEFINE_CHECKER_GETTER
+
+    size_t GetWriteSize() const {
+        if (IsWrite()) {
+            auto& w = GetWrite();
+            return w.Msg.SourceId.size() + w.Msg.Data.size();
+        } else {
+            return 0;
+        }
+    }
 };
 
 

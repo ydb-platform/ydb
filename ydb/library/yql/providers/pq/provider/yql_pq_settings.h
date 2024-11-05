@@ -29,6 +29,8 @@ struct TPqClusterConfigurationSettings {
     ui32 TvmId = 0;
     TString AuthToken;
     bool AddBearerToToken = false;
+    bool SharedReading = false;
+    TString ReconnectPeriod;
 };
 
 struct TPqConfiguration : public TPqSettings, public NCommon::TSettingDispatcher {

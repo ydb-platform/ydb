@@ -3,17 +3,35 @@
 #include "stream_remover.h"
 #include "util.h"
 
+#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-
-#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 
 namespace NKikimr::NReplication::NController {
 
 class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
+    void RequestPermission() {
+        Send(Parent, new TEvPrivate::TEvRequestDropStream());
+        Become(&TThis::StateRequestPermission);
+    }
+
+    STATEFN(StateRequestPermission) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPrivate::TEvAllowDropStream, Handle);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvPrivate::TEvAllowDropStream::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+        DropStream();
+    }
+
     void DropStream() {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
+        case TReplication::ETargetKind::IndexTable:
             Send(YdbProxy, new TEvYdbProxy::TEvAlterTableRequest(SrcPath, NYdb::NTable::TAlterTableSettings()
                 .AppendDropChangefeeds(StreamName)));
             break;
@@ -26,7 +44,8 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
             sFunc(TEvents::TEvWakeup, DropStream);
-            sFunc(TEvents::TEvPoison, PassAway);
+        default:
+            return StateBase(ev);
         }
     }
 
@@ -77,7 +96,13 @@ public:
     }
 
     void Bootstrap() {
-        DropStream();
+        RequestPermission();
+    }
+
+    STATEFN(StateBase) {
+        switch (ev->GetTypeRewrite()) {
+            sFunc(TEvents::TEvPoison, PassAway);
+        }
     }
 
 private:
@@ -91,6 +116,13 @@ private:
     const TActorLogPrefix LogPrefix;
 
 }; // TStreamRemover
+
+IActor* CreateStreamRemover(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
+    const auto* target = replication->FindTarget(targetId);
+    Y_ABORT_UNLESS(target);
+    return CreateStreamRemover(ctx.SelfID, replication->GetYdbProxy(),
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetStreamName());
+}
 
 IActor* CreateStreamRemover(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
         TReplication::ETargetKind kind, const TString& srcPath, const TString& streamName)

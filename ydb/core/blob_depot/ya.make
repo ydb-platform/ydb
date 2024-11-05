@@ -51,6 +51,8 @@ LIBRARY()
         ydb/core/protos
     )
 
+    GENERATE_ENUM_SERIALIZATION(schema.h)
+
 END()
 
 RECURSE(

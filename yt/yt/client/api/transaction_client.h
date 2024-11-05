@@ -16,6 +16,8 @@ struct TTransactionStartOptions
     //! If not null then the transaction must use this externally provided id.
     //! Only applicable to tablet transactions.
     NTransactionClient::TTransactionId Id;
+    //! Cell tag used for id generation. Used for Sequoia transactions.
+    std::optional<NObjectClient::TCellTag> CellTag;
 
     NTransactionClient::TTransactionId ParentId;
     std::vector<NTransactionClient::TTransactionId> PrerequisiteTransactionIds;
@@ -55,6 +57,9 @@ struct TTransactionStartOptions
     //! By default, all master transactions are Cypress expect for some
     //! system ones (e.g. store flusher transactions).
     bool StartCypressTransaction = true;
+
+    //! Clock cluster tag used for timestamp generation on coordinators
+    TClusterTag ClockClusterTag = NObjectClient::InvalidCellTag;
 };
 
 struct TTransactionAttachOptions

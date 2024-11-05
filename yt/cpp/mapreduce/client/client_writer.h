@@ -24,14 +24,19 @@ public:
         const TMaybe<TFormat>& format,
         const TTableWriterOptions& options);
 
+    ~TClientWriter();
+
     size_t GetStreamCount() const override;
     IOutputStream* GetStream(size_t tableIndex) const override;
     void OnRowFinished(size_t tableIndex) override;
     void Abort() override;
     size_t GetBufferMemoryUsage() const override;
 
+    void Finish();
+
 private:
     const size_t BufferSize_ = 64 << 20;
+    const bool AutoFinish_;
 
     ::TIntrusivePtr<TRawTableWriter> RawWriter_;
 };

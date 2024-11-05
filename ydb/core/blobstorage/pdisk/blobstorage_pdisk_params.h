@@ -27,13 +27,15 @@ namespace NKikimr {
         const ui64 PrefetchSizeBytes; // Pdisk is expected to stream data of this size at 83% of max speed.
         const ui64 GlueRequestDistanceBytes;  // It is faster to read unneeded data of this size than to seek over it.
 
+        const NPDisk::EDeviceType TrueMediaType;
+
         static ui32 CalculateRecommendedReadSize(ui64 seekTimeUs, ui64 readSpeedBps, ui64 appendBlockSize);
         static ui64 CalculatePrefetchSizeBytes(ui64 seekTimeUs, ui64 readSpeedBps);
         static ui64 CalculateGlueRequestDistanceBytes(ui64 seekTimeUs, ui64 readSpeedBps);
 
         TPDiskParams(NPDisk::TOwner owner, ui64 ownerRound, ui32 chunkSize, ui32 appendBlockSize,
                      ui64 seekTimeUs, ui64 readSpeedBps, ui64 writeSpeedBps, ui64 readBlockSize,
-                     ui64 writeBlockSize, ui64 bulkWriteBlockSize);
+                     ui64 writeBlockSize, ui64 bulkWriteBlockSize, NPDisk::EDeviceType trueMediaType);
         void OutputHtml(IOutputStream &str) const;
         TString ToString() const;
     };

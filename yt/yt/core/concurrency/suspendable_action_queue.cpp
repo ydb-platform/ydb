@@ -14,7 +14,9 @@ class TSuspendableActionQueue
     : public ISuspendableActionQueue
 {
 public:
-    explicit TSuspendableActionQueue(const TString& threadName)
+    TSuspendableActionQueue(
+        TString threadName,
+        TSuspendableActionQueueOptions options)
         : Queue_(New<TMpscInvokerQueue>(
             CallbackEventCount_,
             GetThreadTags(threadName)))
@@ -23,7 +25,10 @@ public:
             Queue_,
             CallbackEventCount_,
             threadName,
-            threadName))
+            threadName,
+            NThreading::TThreadOptions{
+                .ThreadInitializer = options.ThreadInitializer,
+            }))
         , ShutdownCookie_(RegisterShutdownCallback(
             Format("SuspendableActionQueue(%v)", threadName),
             BIND_NO_PROPAGATE(&TSuspendableActionQueue::Shutdown, MakeWeak(this), /*graceful*/ false),
@@ -37,16 +42,14 @@ public:
 
     void Shutdown(bool graceful) final
     {
-        if (Stopped_.exchange(true)) {
+        // Synchronization done via Queue_->Shutdown().
+        if (Stopped_.exchange(true, std::memory_order::relaxed)) {
             return;
         }
 
-        Queue_->Shutdown();
-
-        ShutdownInvoker_->Invoke(BIND([graceful, thread = Thread_, queue = Queue_] {
-            thread->Shutdown(graceful);
-            queue->DrainConsumer();
-        }));
+        Queue_->Shutdown(graceful);
+        Thread_->Shutdown(graceful);
+        Queue_->OnConsumerFinished();
     }
 
     const IInvokerPtr& GetInvoker() override
@@ -71,6 +74,7 @@ public:
     }
 
 private:
+    const TSuspendableActionQueueOptions Options_;
     const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_ = New<NThreading::TEventCount>();
     const TMpscInvokerQueuePtr Queue_;
     const IInvokerPtr Invoker_;
@@ -79,26 +83,25 @@ private:
     const TShutdownCookie ShutdownCookie_;
     const IInvokerPtr ShutdownInvoker_ = GetShutdownInvoker();
 
-    std::atomic<bool> Started_ = false;
     std::atomic<bool> Stopped_ = false;
 
     void EnsureStarted()
     {
-        if (Started_.load(std::memory_order::relaxed)) {
-            return;
-        }
-        if (Started_.exchange(true)) {
-            return;
-        }
+        // Thread::Start already has
+        // its own short-circ.
         Thread_->Start();
     }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-ISuspendableActionQueuePtr CreateSuspendableActionQueue(const TString& threadName)
+ISuspendableActionQueuePtr CreateSuspendableActionQueue(
+    TString threadName,
+    TSuspendableActionQueueOptions options)
 {
-    return New<TSuspendableActionQueue>(threadName);
+    return New<TSuspendableActionQueue>(
+        std::move(threadName),
+        std::move(options));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

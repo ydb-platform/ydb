@@ -12,8 +12,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-REQUIREMENTS(ram:12)
-
 SRCS(
     kqp_effects_ut.cpp
     kqp_immediate_effects_ut.cpp

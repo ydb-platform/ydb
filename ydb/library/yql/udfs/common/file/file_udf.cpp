@@ -1,4 +1,5 @@
 #include <ydb/library/yql/public/udf/udf_helpers.h>
+#include <ydb/library/yql/utils/line_split.h>
 
 #include <util/generic/yexception.h>
 #include <util/stream/buffered.h>
@@ -236,52 +237,6 @@ namespace {
         const TTerminateFunc TerminateFunc;
     };
 
-    class TLineSplitter {
-    public:
-        TLineSplitter(IInputStream& stream)
-            : Stream_(stream)
-        {
-        }
-
-        size_t Next(TString& st) {
-            st.clear();
-            char c;
-            size_t ret = 0;
-            if (HasPendingLineChar_) {
-                st.push_back(PendingLineChar_);
-                HasPendingLineChar_ = false;
-                ++ret;
-            }
-
-            while (Stream_.ReadChar(c)) {
-                ++ret;
-                if (c == '\n') {
-                    break;
-                } else if (c == '\r') {
-                    if (Stream_.ReadChar(c)) {
-                        ++ret;
-                        if (c != '\n') {
-                            --ret;
-                            PendingLineChar_ = c;
-                            HasPendingLineChar_ = true;
-                        }
-                    }
-
-                    break;
-                } else {
-                    st.push_back(c);
-                }
-            }
-
-            return ret;
-        }
-
-    private:
-        IInputStream& Stream_;
-        bool HasPendingLineChar_ = false;
-        char PendingLineChar_ = 0;
-    };
-
     template <class TUserType>
     class TLineByLineBoxedValueIterator: public TBoxedValue {
     public:
@@ -434,10 +389,12 @@ namespace {
 
     public:
         static void DeclareSignature(
+            TStringRef name,
             TType* userType,
             IFunctionTypeInfoBuilder& builder,
             bool typesOnly)
         {
+            Y_UNUSED(name);
             builder.UserType(userType);
             builder.SimpleSignature<TListType<TUserType>(char*)>();
             if (!typesOnly) {
@@ -612,7 +569,7 @@ namespace {
     };
 
     SIMPLE_MODULE(TFileModule,
-        TUserDataTypeFuncFactory<false, ByLineFuncName, TByLinesFunc, const char*, TUtf8, TYson, TJson, i8, ui8, i16, ui16, ui32, ui64, i32, i64, float, double, bool>,
+        TUserDataTypeFuncFactory<false, false, ByLineFuncName, TByLinesFunc, const char*, TUtf8, TYson, TJson, i8, ui8, i16, ui16, ui32, ui64, i32, i64, float, double, bool>,
         TFolderListFromFile
     )
 

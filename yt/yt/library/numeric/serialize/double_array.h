@@ -9,19 +9,17 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TDerived>
-struct TValueFormatter<TDerived, std::enable_if_t<IsDoubleArray<TDerived>>>
+    requires (IsDoubleArray<TDerived>)
+void FormatValue(TStringBuilderBase* builder, const TDerived& vec, TStringBuf spec)
 {
-    static void Do(TStringBuilderBase* builder, const TDerived& vec, TStringBuf format)
-    {
-        builder->AppendChar('[');
-        FormatValue(builder, vec[0], format);
-        for (size_t i = 1; i < TDerived::Size; i++) {
-            builder->AppendChar(' ');
-            FormatValue(builder, vec[i], format);
-        }
-        builder->AppendChar(']');
+    builder->AppendChar('[');
+    FormatValue(builder, vec[0], spec);
+    for (size_t i = 1; i < TDerived::Size; i++) {
+        builder->AppendChar(' ');
+        FormatValue(builder, vec[i], spec);
     }
-};
+    builder->AppendChar(']');
+}
 
 // TODO(ignat)
 // template <class TDerived, class = std::enable_if_t<IsDoubleArray<TDerived>>>

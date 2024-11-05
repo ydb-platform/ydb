@@ -1,4 +1,4 @@
-| Data type | Can be used in<br>column-oriented tables | Can be used<br>as primary key |
+| Data type | Can be used in<br/>column-oriented tables | Can be used<br/>as primary key |
 ---|---|---
 | `Bool` | ☓ | ☓ |
 | `Int8` | ✓ | ☓ |

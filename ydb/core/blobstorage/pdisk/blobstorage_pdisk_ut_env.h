@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/core/blobstorage/pdisk/mock/pdisk_mock.h>
+#include <ydb/core/util/random.h>
+
 #include "blobstorage_pdisk_ut.h"
 #include "blobstorage_pdisk_ut_defs.h"
 #include "blobstorage_pdisk_data.h"
@@ -19,19 +21,20 @@ struct TActorTestContext {
     using EDiskMode = NPDisk::NSectorMap::EDiskMode;
 public:
     struct TSettings {
-        bool IsBad;
+        bool IsBad = false;
         bool UsePDiskMock = false;
         ui64 DiskSize = 0;
         EDiskMode DiskMode = EDiskMode::DM_NONE;
         ui32 ChunkSize = 128 * (1 << 20);
         bool SmallDisk = false;
         bool SuppressCompatibilityCheck = false;
+        bool UseSectorMap = true;
     };
 
 private:
     std::optional<TActorId> PDiskActor;
-    THolder<TTestActorRuntime> Runtime;
     std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
+    THolder<TTestActorRuntime> Runtime;
     NPDisk::TPDisk *PDisk = nullptr;
 
 public:
@@ -41,17 +44,16 @@ public:
     TSettings Settings;
 
     TIntrusivePtr<TPDiskConfig> DefaultPDiskConfig(bool isBad) {
-        TString path;
-        EntropyPool().Read(&TestCtx.PDiskGuid, sizeof(TestCtx.PDiskGuid));
+        SafeEntropyPoolRead(&TestCtx.PDiskGuid, sizeof(TestCtx.PDiskGuid));
         ui64 formatGuid = TestCtx.PDiskGuid + static_cast<ui64>(isBad);
         if (Settings.DiskSize) {
-            FormatPDiskForTest(path, formatGuid, Settings.ChunkSize, Settings.DiskSize, false, TestCtx.SectorMap, Settings.SmallDisk);
+            FormatPDiskForTest(TestCtx.Path, formatGuid, Settings.ChunkSize, Settings.DiskSize, false, TestCtx.SectorMap, Settings.SmallDisk);
         } else {
-            FormatPDiskForTest(path, formatGuid, Settings.ChunkSize, false, TestCtx.SectorMap, Settings.SmallDisk);
+            FormatPDiskForTest(TestCtx.Path, formatGuid, Settings.ChunkSize, false, TestCtx.SectorMap, Settings.SmallDisk);
         }
 
         ui64 pDiskCategory = 0;
-        TIntrusivePtr<TPDiskConfig> pDiskConfig = new TPDiskConfig(path, TestCtx.PDiskGuid, 1, pDiskCategory);
+        TIntrusivePtr<TPDiskConfig> pDiskConfig = new TPDiskConfig(TestCtx.Path, TestCtx.PDiskGuid, 1, pDiskCategory);
         pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->ChunkSize = Settings.ChunkSize;
@@ -64,7 +66,7 @@ public:
 
     TActorTestContext(TSettings settings)
         : Runtime(new TTestActorRuntime(1, true))
-        , TestCtx(false, true, settings.DiskMode, settings.DiskSize)
+        , TestCtx(settings.UseSectorMap, settings.DiskMode, settings.DiskSize)
         , Settings(settings)
     {
         auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
@@ -72,13 +74,13 @@ public:
         appData->IoContextFactory = IoContext.get();
 
         Runtime->SetLogBackend(IsLowVerbose ? CreateStderrBackend() : CreateNullBackend());
-        Runtime->Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}});
+        Runtime->Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}});
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_SYSLOG, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_TEST, NLog::PRI_DEBUG);
         Sender = Runtime->AllocateEdgeActor();
 
-        TIntrusivePtr<TPDiskConfig> cfg = DefaultPDiskConfig(Settings.IsBad);
+        auto cfg = DefaultPDiskConfig(Settings.IsBad);
         UpdateConfigRecreatePDisk(cfg);
     }
 
@@ -125,8 +127,30 @@ public:
                     new NPDisk::TEvYardControl(NPDisk::TEvYardControl::GetPDiskPointer, nullptr),
                     NKikimrProto::OK);
             PDisk = reinterpret_cast<NPDisk::TPDisk*>(evControlRes->Cookie);
+
+            PDiskActor = PDisk->PCtx->PDiskActor;
         }
         return PDisk;
+    }
+
+    void GracefulPDiskRestart(bool waitForRestart = true) {
+        ui32 pdiskId = GetPDisk()->PCtx->PDiskId;
+
+        Send(new TEvBlobStorage::TEvAskWardenRestartPDiskResult(pdiskId, MainKey, true, nullptr));
+
+        if (waitForRestart) {
+            const auto evInitRes = Recv<TEvBlobStorage::TEvNotifyWardenPDiskRestarted>();
+            UNIT_ASSERT_VALUES_EQUAL(NKikimrProto::EReplyStatus::OK, evInitRes->Status);
+        }
+
+        if (!Settings.UsePDiskMock) {
+            TActorId wellKnownPDiskActorId = MakeBlobStoragePDiskID(PDiskActor->NodeId(), pdiskId);
+
+            PDisk = nullptr;
+
+            // We will temporarily use well know pdisk actor id, because restarted pdisk actor id is not yet known.
+            PDiskActor = wellKnownPDiskActorId;
+        }
     }
 
     template<typename T>

@@ -39,6 +39,7 @@ public:
         AddHandler({TYtKeyRange::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleDefault));
         AddHandler({TYtReadTableScheme::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleDefault));
         AddHandler({TYtLength::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleDefault));
+        AddHandler({TCoConfigure::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleDefault));
         AddHandler({TYtConfigure::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleDefault));
         AddHandler({TYtTablePath::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleDefault));
         AddHandler({TYtTableRecord::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleDefault));

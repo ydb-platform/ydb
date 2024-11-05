@@ -13,6 +13,7 @@
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 
 #include <library/cpp/threading/future/async.h>
+#include <library/cpp/yson/node/node_io.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
@@ -101,7 +102,7 @@ public:
                     if (State_->Types->IsReadOnly || State_->Types->UseTableMetaFromGraph || tableDesc.HasWriteLock || !HasModifyIntents(tableDesc.Intents)) {
                         // Intents/views can be updated since evaluation phase
                         if (!tableDesc.FillViews(
-                            clusterAndTable.first, clusterAndTable.second, ctx,
+                            clusterAndTable.first, clusterAndTable.second, State_->Types->QContext, ctx,
                             State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider,
                             State_->Configuration->ViewIsolation.Get().GetOrElse(false),
                             State_->Types->UdfResolver
@@ -191,7 +192,7 @@ public:
                     if (!rowSpec->Parse(tableDesc.Meta->Attrs, ctx)) {
                         return TStatus::Error;
                     }
-                    if (!State_->Configuration->UseNativeDescSort.Get().GetOrElse(false) && rowSpec->ClearNativeDescendingSort()) {
+                    if (!State_->Configuration->UseNativeDescSort.Get().GetOrElse(false) && rowSpec->ClearNativeDescendingSort(ctx)) {
                         if (!ctx.AddWarning(YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_NATIVE_DESC_SORT_IGNORED, "Native descending sort is ignored"))) {
                             return TStatus::Error;
                         }
@@ -230,7 +231,7 @@ public:
 
                 if (0 == LoadCtx->Epoch) {
                     if (!tableDesc.Fill(
-                        cluster, tableName, ctx,
+                        cluster, tableName, State_->Types->QContext, ctx,
                         State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider,
                         State_->Configuration->ViewIsolation.Get().GetOrElse(false),
                         State_->Types->UdfResolver
@@ -242,6 +243,25 @@ public:
 
             if (auto stat = LoadCtx->Result.Data[i].Stat) {
                 tableDesc.Stat = stat;
+                if (HasReadIntents(tableDesc.Intents)) {
+                    const auto& securityTagsSet = tableDesc.Stat->SecurityTags;
+                    const TString tmpFolder = GetTablesTmpFolder(*State_->Configuration);
+                    if (!securityTagsSet.empty() && tmpFolder.empty()) {
+                        TStringBuilder msg;
+                        msg << "Table " << cluster << "." << tableName
+                            << " contains sensitive data, but is used with the default tmp folder."
+                            << " This may lead to sensitive data being leaked, consider using a protected tmp folder with the TmpFolder pragma.";
+                        auto issue = YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_SECURE_DATA_IN_COMMON_TMP, msg);
+                        if (State_->Configuration->ForceTmpSecurity.Get().GetOrElse(false)) {
+                            ctx.AddError(issue);
+                            return TStatus::Error;
+                        } else {
+                            if (!ctx.AddWarning(issue)) {
+                                return TStatus::Error;
+                            }
+                        }
+                    }
+                }
             }
         }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/public/purecalc/common/names.h>
+#include <ydb/library/yql/public/purecalc/common/processor_mode.h>
 
 #include <ydb/library/yql/core/yql_graph_transformer.h>
 
@@ -15,14 +16,15 @@ namespace NYql::NPureCalc {
      *
      * @param inputStructs types of each input.
      * @param useSystemColumns whether to allow special system columns in input structs.
-     * @param tablePrefix required prefix for all table names (e.g. `Input`).
      * @param callableName name of the special callable used to get input data (e.g. `Self`).
+     * @param tablePrefix required prefix for all table names (e.g. `Input`).
      * @param return a graph transformer for replacing table reads.
      */
     TAutoPtr<IGraphTransformer> MakeTableReadsReplacer(
-        ui32 inputsNumber,
+        const TVector<const TStructExprType*>& inputStructs,
         bool useSystemColumns,
-        TString tablePrefix = TString{PurecalcInputTablePrefix},
-        TString callableName = TString{PurecalcInputCallableName}
+        EProcessorMode processorMode,
+        TString callableName = TString{PurecalcInputCallableName},
+        TString tablePrefix = TString{PurecalcInputTablePrefix}
     );
 }

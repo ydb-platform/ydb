@@ -162,7 +162,12 @@ class IntrospectiveArgumentParser(ArgumentParser):
         def consume_optional(start_index):
             # get the optional identified at this index
             option_tuple = option_string_indices[start_index]
-            action, option_string, explicit_arg = option_tuple
+            if isinstance(option_tuple, list):  # Python 3.12.7+
+                option_tuple = option_tuple[0]
+            if len(option_tuple) == 3:
+                action, option_string, explicit_arg = option_tuple
+            else:  # Python 3.11.9+, 3.12.3+, 3.13+
+                action, option_string, _, explicit_arg = option_tuple
 
             # identify additional optionals in the same arg string
             # (e.g. -xyz is the same as -x -y -z if no args are required)

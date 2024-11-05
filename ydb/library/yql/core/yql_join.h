@@ -2,6 +2,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <ydb/library/yql/core/yql_cost_function.h>
 
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
@@ -59,6 +60,7 @@ struct TJoinOptions {
 
     bool Flatten = false;
     bool StrictKeys = false;
+    bool Compact = false;
 };
 
 IGraphTransformer::TStatus ValidateEquiJoinOptions(
@@ -142,8 +144,10 @@ struct TEquiJoinLinkSettings {
     TPositionHandle Pos;
     TSet<TString> LeftHints;
     TSet<TString> RightHints;
+    EJoinAlgoType JoinAlgo = EJoinAlgoType::Undefined;
     // JOIN implementation may ignore this flags if SortedMerge strategy is not supported
     bool ForceSortedMerge = false;
+    bool Compact = false;
 };
 
 TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings);
@@ -152,7 +156,8 @@ TExprNode::TPtr BuildEquiJoinLinkSettings(const TEquiJoinLinkSettings& linkSetti
 TExprNode::TPtr RemapNonConvertibleMemberForJoin(TPositionHandle pos, const TExprNode::TPtr& memberValue,
     const TTypeAnnotationNode& memberType, const TTypeAnnotationNode& unifiedType, TExprContext& ctx);
 
-TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNode::TListType& keyTypes, TExprNode::TListType& keys, TExprNode::TListType& payloads, bool payload, bool optional, bool filter, TExprContext& ctx);
+TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNode::TListType& keyTypes, TExprNode::TListType& keys, bool payload, bool optional, bool filter, TExprContext& ctx);
+TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNode::TListType& keyTypes, TExprNode::TListType& keys, TExprNode::TListType&& payloads, bool payload, bool optional, bool filter, TExprContext& ctx);
 
 template<bool Squeeze = false>
 TExprNode::TPtr MakeDictForJoin(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx);

@@ -72,7 +72,7 @@ struct TObjectDistribution {
     }
 
     void UpdateCount(const TNodeInfo& node, i64 diff) {
-        if (!node.MatchesFilter(NodeFilter) || !node.IsAllowedToRunTablet()) {
+        if (!node.IsAllowedToRunTablet()) {
             // We should not use this node for computing imbalance, hence we ignore it in SortedDistribution
             // But we still account for it in Distribution, because it might become relevant later
             Distribution[node.Id] += diff;
@@ -216,7 +216,9 @@ struct TObjectDistributions {
             return;
         }
         for (const auto& [obj, it] : Distributions) {
-            UpdateCount(obj, node, 0);
+            if (node.MatchesFilter(it->NodeFilter)) {
+                UpdateCount(obj, node, 0);
+            }
         }
     }
 

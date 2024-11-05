@@ -13,7 +13,7 @@ TEST(TEmaCounterTest, Simple)
 {
     const auto min = TDuration::Minutes(1);
 
-    TEmaCounter counter({min});
+    TEmaCounter<i64> counter({min});
 
     EXPECT_EQ(std::nullopt, counter.LastTimestamp);
     EXPECT_EQ(std::nullopt, counter.StartTimestamp);
@@ -44,7 +44,7 @@ TEST(TEmaCounterTest, MockTime)
 {
     const auto sec = TDuration::Seconds(1), min = TDuration::Minutes(1);
 
-    TEmaCounter counter({min});
+    TEmaCounter<i64> counter({min});
 
     int obsoleteRate = 1;
     int actualRate = 10;
@@ -94,7 +94,7 @@ TEST(TEmaCounterTest, RealTime)
 {
     const auto quant = TDuration::MilliSeconds(10), sec = TDuration::Seconds(1);
 
-    TEmaCounter counter({sec});
+    TEmaCounter<i64> counter({sec});
 
     const int valueCount = 200;
     std::mt19937 generator(/*seed*/ 42);

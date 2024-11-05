@@ -29,10 +29,10 @@ namespace NKikimr {
                 const bool prettyPrint = Ev->Get()->Record.GetPrettyPrint();
                 CalculateStat(str, prettyPrint);
                 Result->SetResult(str.Str());
-                SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie);
+                SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, HullCtx->VCtx);
             } else {
                 CalculateStat(Result);
-                SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie);
+                SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, HullCtx->VCtx);
             }
             ctx.Send(ParentId, new TEvents::TEvActorDied);
             TThis::Die(ctx);

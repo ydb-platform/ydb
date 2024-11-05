@@ -215,6 +215,8 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTest) {
         UNIT_ASSERT(FromStringEx("-1e-99", 10, 2) == 0);
         UNIT_ASSERT(FromStringEx("-510e-3", 1, 0) == -1);
         UNIT_ASSERT(FromStringEx("+99E3", 5, 0) == 99000);
+        UNIT_ASSERT(FromStringEx("2.1E-130", 35, 2) == 0);
+        UNIT_ASSERT(FromStringEx("2.1E0", 35, 2) == 210);
     }
 
     Y_UNIT_TEST(TestFormStringExInvalidValues) {
@@ -225,24 +227,25 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTest) {
 
         UNIT_ASSERT(IsError(FromStringEx("E2", 35, 15))); // empty
         UNIT_ASSERT(IsError(FromStringEx("E2E4", 35, 15))); // empty
-        UNIT_ASSERT(IsError(FromStringEx("12E0", 35, 15))); // zero isn't avail
         UNIT_ASSERT(IsError(FromStringEx("NANE5", 35, 15))); // nan with exp
+        UNIT_ASSERT(IsError(FromStringEx("infE5", 35, 15))); // inf with exp
+        UNIT_ASSERT(IsError(FromStringEx("-infe-5", 35, 15))); // inf with exp
+        UNIT_ASSERT(IsError(FromStringEx("2.1E0X", 35, 2))); // not fully parsed exp
+        UNIT_ASSERT(IsError(FromStringEx("2.1E+-1", 35, 2))); // two signs
+        UNIT_ASSERT(IsError(FromStringEx("ae30", 10, 0))); // bad mantissa
     }
 
     Y_UNIT_TEST(TestSpecialAsString) {
-        UNIT_ASSERT(IsValid("+Nan"));
-        UNIT_ASSERT(IsValid("-nAn"));
+        UNIT_ASSERT(IsValid("Nan"));
         UNIT_ASSERT(IsValid("INF"));
         UNIT_ASSERT(IsValid("-inf"));
 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(+Nan(), 10, 2), "nan");
-        UNIT_ASSERT_VALUES_EQUAL(ToString(-Nan(), 10, 2), "-nan");
+        UNIT_ASSERT_VALUES_EQUAL(ToString(Nan(), 10, 2), "nan");
 
         UNIT_ASSERT_VALUES_EQUAL(ToString(+Inf(), 10, 2), "inf");
         UNIT_ASSERT_VALUES_EQUAL(ToString(-Inf(), 10, 2), "-inf");
 
         UNIT_ASSERT(IsNan(FromString("nan", 10, 2)));
-        UNIT_ASSERT(IsNan(FromString("-nAN", 12, 7)));
         UNIT_ASSERT(IsInf(FromString("+INf", MaxPrecision, 6)));
         UNIT_ASSERT(IsInf(FromString("-inF", 4, 2)));
     }

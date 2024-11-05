@@ -18,7 +18,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = RpcClientLogger;
+static constexpr auto& Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -208,7 +208,7 @@ private:
             // NB: The underlying handler is not notified.
         }
 
-        void HandleError(const TError& error) override
+        void HandleError(TError error) override
         {
             YT_LOG_DEBUG(error, "Request attempt failed (RequestId: %v, Attempt: %v of %v)",
                 Request_->GetRequestId(),
@@ -216,28 +216,28 @@ private:
                 Config_->RetryAttempts);
 
             if (!RetryChecker_.Run(error)) {
-                ResponseHandler_->HandleError(error);
+                ResponseHandler_->HandleError(std::move(error));
                 return;
             }
 
             if (!FirstError_) {
-                FirstError_ = error;
+                FirstError_ = std::move(error);
             } else {
                 if (LastError_) {
                     ++OmittedInnerErrorCount_;
                 }
-                LastError_ = error;
+                LastError_ = std::move(error);
             }
 
             Retry();
         }
 
-        void HandleResponse(TSharedRefArray message, TString address) override
+        void HandleResponse(TSharedRefArray message, const std::string& address) override
         {
             YT_LOG_DEBUG("Request attempt succeeded (RequestId: %v)",
                 Request_->GetRequestId());
 
-            ResponseHandler_->HandleResponse(std::move(message), std::move(address));
+            ResponseHandler_->HandleResponse(std::move(message), address);
         }
 
         void HandleStreamingPayload(const TStreamingPayload& /*payload*/) override
@@ -271,7 +271,7 @@ private:
             if (LastError_) {
                 detailedError = detailedError << *LastError_;
             }
-            ResponseHandler_->HandleError(detailedError);
+            ResponseHandler_->HandleError(std::move(detailedError));
         }
 
         void Retry()
@@ -310,12 +310,12 @@ private:
                 Request_->GetService(),
                 Request_->GetMethod(),
                 MakeFormatterWrapper([&] (auto* builder) {
-                    if (Request_->GetUser()) {
+                    if (!Request_->GetUser().empty()) {
                         builder->AppendFormat("User: %v, ", Request_->GetUser());
                     }
                 }),
                 MakeFormatterWrapper([&] (auto* builder) {
-                    if (Request_->GetUserTag() && Request_->GetUserTag() != Request_->GetUser()) {
+                    if (!Request_->GetUserTag().empty() && Request_->GetUserTag() != Request_->GetUser()) {
                         builder->AppendFormat("UserTag: %v, ", Request_->GetUserTag());
                     }
                 }),

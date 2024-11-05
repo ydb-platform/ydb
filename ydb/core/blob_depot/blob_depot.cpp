@@ -22,6 +22,7 @@ namespace NKikimr::NBlobDepot {
         , BarrierServer(new TBarrierServer(this))
         , Data(new TData(this))
         , SpaceMonitor(new TSpaceMonitor(this))
+        , JsonHandler(std::bind(&TBlobDepot::RenderJson, this, std::placeholders::_1), TEvPrivate::EvJsonTimer, TEvPrivate::EvJsonUpdate)
     {}
 
     TBlobDepot::~TBlobDepot()
@@ -127,6 +128,9 @@ namespace NKikimr::NBlobDepot {
                 cFunc(TEvPrivate::EvDoGroupMetricsExchange, DoGroupMetricsExchange);
                 hFunc(TEvBlobStorage::TEvControllerGroupMetricsExchange, Handle);
                 cFunc(TEvPrivate::EvUpdateThroughputs, UpdateThroughputs);
+
+                cFunc(TEvPrivate::EvJsonTimer, JsonHandler.HandleTimer);
+                cFunc(TEvPrivate::EvJsonUpdate, JsonHandler.HandleUpdate);
 
                 default:
                     if (!HandleDefaultEvents(ev, SelfId())) {

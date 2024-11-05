@@ -88,6 +88,32 @@
 
 (let bool_xor_traits_factory_opt (lambda '(list_type) (Apply easy_traits_factory list_type (lambda '(one two) (Xor one two)) (lambda '(val state) (Xor state val)))))
 
+# list_type:type n
+# supports optional values
+(let nth_value_traits_factory_opt (lambda '(list_type n) (block '(
+  (let msg (String '"Expected positive integral number for second argument of nth_value"))
+  (let n (Unwrap (SafeCast n 'Uint64) msg))
+  (let n (Ensure n (> n (Uint64 '0)) msg))
+  (let init (lambda '(value) '((If (== n (Uint64 '1)) value (Null)) (Uint64 '1))))
+  (let update (lambda '(value state) '((If (== n (+ (Nth state '1) (Uint64 '1))) value (Nth state '0)) (+ (Nth state '1) (Uint64 '1)))))
+  (let shift (lambda '(value state) (Void)))
+  (let current (lambda '(state) (Nth state '0)))
+  (return (WindowTraits (ListItemType list_type) init update shift current (Null)))
+))))
+
+# list_type:type n
+# supports optional values
+(let nth_value_ignore_nulls_traits_factory_opt (lambda '(list_type n) (block '(
+  (let msg (String '"Expected positive integral number for second argument of nth_value"))
+  (let n (Unwrap (SafeCast n 'Uint64) msg))
+  (let n (Ensure n (> n (Uint64 '0)) msg))
+  (let init (lambda '(value) '((If (== n (Convert (Exists value) 'Uint64)) value (Null)) (Convert (Exists value) 'Uint64))))
+  (let update (lambda '(value state) '((If (And (Exists value) (== n (+ (Nth state '1) (Convert (Exists value) 'Uint64)))) value (Nth state '0)) (+ (Nth state '1) (Convert (Exists value) 'Uint64)))))
+  (let shift (lambda '(value state) (Void)))
+  (let current (lambda '(state) (Nth state '0)))
+  (return (WindowTraits (ListItemType list_type) init update shift current (Null)))
+))))
+
 # list_type:type init:lambda
 # doesn't support optional values
 (let count_traits_factory (lambda '(list_type init) (block '(
@@ -636,8 +662,10 @@
 
 (let first_value_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor first_value_traits_factory_opt)))
 (let last_value_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor last_value_traits_factory_opt)))
+(let nth_value_traits_factory (lambda '(list_type extractor n) (Apply extractor_traits_factory list_type extractor (lambda '(list_type) (Apply nth_value_traits_factory_opt list_type n)))))
 (let first_value_ignore_nulls_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor first_value_ignore_nulls_traits_factory_opt)))
 (let last_value_ignore_nulls_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor last_value_ignore_nulls_traits_factory_opt)))
+(let nth_value_ignore_nulls_traits_factory (lambda '(list_type extractor n) (Apply extractor_traits_factory list_type extractor (lambda '(list_type) (Apply nth_value_ignore_nulls_traits_factory_opt list_type n)))))
 
 # list_type:type extractor:lambda n:double
 # support optional values
@@ -913,8 +941,10 @@
 (export dense_rank_traits_factory)
 (export first_value_traits_factory)
 (export last_value_traits_factory)
+(export nth_value_traits_factory)
 (export first_value_ignore_nulls_traits_factory)
 (export last_value_ignore_nulls_traits_factory)
+(export nth_value_ignore_nulls_traits_factory)
 (export udaf_traits_factory)
 (export top_traits_factory)
 (export bottom_traits_factory)

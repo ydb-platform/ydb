@@ -4,7 +4,7 @@
  *		Support routines for manipulating partition information cached in
  *		relcache
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * IDENTIFICATION
@@ -115,6 +115,12 @@ RelationBuildPartitionKey(Relation relation)
 	key->strategy = form->partstrat;
 	key->partnatts = form->partnatts;
 
+	/* Validate partition strategy code */
+	if (key->strategy != PARTITION_STRATEGY_LIST &&
+		key->strategy != PARTITION_STRATEGY_RANGE &&
+		key->strategy != PARTITION_STRATEGY_HASH)
+		elog(ERROR, "invalid partition strategy \"%c\"", key->strategy);
+
 	/*
 	 * We can rely on the first variable-length attribute being mapped to the
 	 * relevant field of the catalog's C struct, because all previous
@@ -124,15 +130,13 @@ RelationBuildPartitionKey(Relation relation)
 
 	/* But use the hard way to retrieve further variable-length attributes */
 	/* Operator class */
-	datum = SysCacheGetAttr(PARTRELID, tuple,
-							Anum_pg_partitioned_table_partclass, &isnull);
-	Assert(!isnull);
+	datum = SysCacheGetAttrNotNull(PARTRELID, tuple,
+								   Anum_pg_partitioned_table_partclass);
 	opclass = (oidvector *) DatumGetPointer(datum);
 
 	/* Collation */
-	datum = SysCacheGetAttr(PARTRELID, tuple,
-							Anum_pg_partitioned_table_partcollation, &isnull);
-	Assert(!isnull);
+	datum = SysCacheGetAttrNotNull(PARTRELID, tuple,
+								   Anum_pg_partitioned_table_partcollation);
 	collation = (oidvector *) DatumGetPointer(datum);
 
 	/* Expressions */
@@ -376,7 +380,7 @@ generate_partition_qual(Relation rel)
 		bound = castNode(PartitionBoundSpec,
 						 stringToNode(TextDatumGetCString(boundDatum)));
 
-		my_qual = get_qual_from_partbound(rel, parent, bound);
+		my_qual = get_qual_from_partbound(parent, bound);
 	}
 
 	ReleaseSysCache(tuple);

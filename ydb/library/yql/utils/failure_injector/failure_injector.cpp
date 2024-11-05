@@ -24,6 +24,18 @@ void TFailureInjector::ActivateImpl() {
     YQL_LOG(DEBUG) << "TFailureInjector::Activate";
 }
 
+THashMap<TString, TFailureInjector::TFailureSpec> TFailureInjector::GetCurrentState() {
+    return Singleton<TFailureInjector>()->GetCurrentStateImpl();
+}
+
+THashMap<TString, TFailureInjector::TFailureSpec> TFailureInjector::GetCurrentStateImpl() {
+    THashMap<TString, TFailureInjector::TFailureSpec> copy;
+    with_lock(Lock) {
+        copy = FailureSpecs;
+    }
+    return copy;
+}
+
 void TFailureInjector::ReachImpl(std::string_view name, std::function<void()> action) {
     if (!Enabled_.load()) {
         return;

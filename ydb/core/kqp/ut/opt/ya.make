@@ -22,6 +22,7 @@ SRCS(
     kqp_ranges_ut.cpp
     kqp_sort_ut.cpp
     kqp_sqlin_ut.cpp
+    kqp_returning_ut.cpp
 )
 
 PEERDIR(

@@ -82,15 +82,31 @@ TClientReader::TClientReader(
 
 bool TClientReader::Retry(
     const TMaybe<ui32>& rangeIndex,
-    const TMaybe<ui64>& rowIndex)
+    const TMaybe<ui64>& rowIndex,
+    const std::exception_ptr& error)
 {
     if (CurrentRequestRetryPolicy_) {
-        // TODO we should pass actual exception in Retry function
-        yexception genericError;
-        auto backoff = CurrentRequestRetryPolicy_->OnGenericError(genericError);
-        if (!backoff) {
+        TMaybe<TDuration> backoffDuration;
+        try {
+            std::rethrow_exception(error);
+        } catch (const TErrorResponse& ex) {
+            if (!IsRetriable(ex)) {
+                throw;
+            }
+            backoffDuration = CurrentRequestRetryPolicy_->OnRetriableError(ex);
+        } catch (const std::exception& ex) {
+            if (!IsRetriable(ex)) {
+                throw;
+            }
+            backoffDuration = CurrentRequestRetryPolicy_->OnGenericError(ex);
+        } catch (...) {
+        }
+
+        if (!backoffDuration) {
             return false;
         }
+
+        NDetail::TWaitProxy::Get()->Sleep(*backoffDuration);
     }
 
     try {
@@ -200,7 +216,11 @@ void TClientReader::CreateRequest(const TMaybe<ui32>& rangeIndex, const TMaybe<u
 
             Input_ = Response_->GetResponseStream();
 
-            YT_LOG_DEBUG("RSP %v - table stream (RequestId: %v, RangeIndex: %v, RowIndex: %v)", requestId, rangeIndex, rowIndex);
+            YT_LOG_DEBUG(
+                "RSP %v - table stream (RangeIndex: %v, RowIndex: %v)",
+                requestId,
+                rangeIndex,
+                rowIndex);
 
             return;
         } catch (const TErrorResponse& e) {

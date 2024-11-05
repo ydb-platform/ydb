@@ -307,6 +307,7 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
             case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
             case NKikimrSchemeOp::EPathType::EPathTypeView:
+            case NKikimrSchemeOp::EPathType::EPathTypeResourcePool:
                 Y_ABORT_UNLESS(!path.Base()->IsRoot());
                 //no shards
                 break;
@@ -361,6 +362,7 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeSequence:
             case NKikimrSchemeOp::EPathType::EPathTypeReplication:
             case NKikimrSchemeOp::EPathType::EPathTypeBlobDepot:
+            case NKikimrSchemeOp::EPathType::EPathTypeBackupCollection:
                 Y_ABORT("UNIMPLEMENTED");
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid:
                 Y_UNREACHABLE();
@@ -1529,13 +1531,13 @@ ISubOperation::TPtr CreateCompatibleSubdomainDrop(TSchemeShard* ss, TOperationId
     return CreateForceDropSubDomain(id, tx);
 }
 
-ISubOperation::TPtr CreateCompatibleSubdomainAlter(TSchemeShard* ss, TOperationId id, const TTxTransaction& tx) {
+TVector<ISubOperation::TPtr> CreateCompatibleSubdomainAlter(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     const auto& info = tx.GetSubDomain();
 
     const TString& parentPathStr = tx.GetWorkingDir();
     const TString& name = info.GetName();
 
-    TPath path = TPath::Resolve(parentPathStr, ss).Dive(name);
+    TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
 
     {
         TPath::TChecker checks = path.Check();
@@ -1545,15 +1547,16 @@ ISubOperation::TPtr CreateCompatibleSubdomainAlter(TSchemeShard* ss, TOperationI
             .NotDeleted();
 
         if (!checks) {
-            return CreateAlterSubDomain(id, tx);
+            return {CreateAlterSubDomain(id, tx)};
         }
     }
 
     if (path.Base()->IsExternalSubDomainRoot()) {
-        return CreateAlterExtSubDomain(id, tx);
+        // plain subdomains don't have subdomain/tenant hives so only single operation should be returned here
+        return CreateCompatibleAlterExtSubDomain(id, tx, context);
     }
 
-    return CreateAlterSubDomain(id, tx);
+    return {CreateAlterSubDomain(id, tx)};
 }
 
 }

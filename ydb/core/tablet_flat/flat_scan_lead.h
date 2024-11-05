@@ -1,7 +1,6 @@
 #pragma once
 
 #include "flat_row_eggs.h"
-#include "flat_row_nulls.h"
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <util/generic/xrange.h>
 
@@ -11,8 +10,13 @@ namespace NTable {
     struct TLead {
         void To(TTagsRef tags, TArrayRef<const TCell> key, ESeek seek)
         {
+            To(key, seek);
+            SetTags(tags);
+        }
+
+        void To(TArrayRef<const TCell> key, ESeek seek)
+        {
             Valid = true;
-            Tags.assign(tags.begin(), tags.end());
             Relation = seek;
             Key = TSerializedCellVec(key);
             StopKey = { };
@@ -25,6 +29,10 @@ namespace NTable {
             StopKeyInclusive = inclusive;
         }
 
+        void SetTags(TTagsRef tags) {
+            Tags.assign(tags.begin(), tags.end());
+        }
+
         explicit operator bool() const noexcept
         {
             return Valid;
@@ -35,12 +43,12 @@ namespace NTable {
             Valid = false;
         }
 
-        bool Valid = false;
         ESeek Relation = ESeek::Exact;
+        bool Valid = false;
+        bool StopKeyInclusive = true;
         TVector<ui32> Tags;
         TSerializedCellVec Key;
         TSerializedCellVec StopKey;
-        bool StopKeyInclusive = true;
     };
 
 }

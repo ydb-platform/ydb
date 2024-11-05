@@ -16,7 +16,7 @@ namespace NTable {
 
 using namespace NTabletFlatScheme;
 
-using NKikimrSchemeOp::ECompactionStrategy;
+using NKikimrCompaction::ECompactionStrategy;
 
 using TCompactionPolicy = NLocalDb::TCompactionPolicy;
 
@@ -128,7 +128,7 @@ public:
         TDuration LogFlushPeriod = TDuration::MicroSeconds(500);
         ui32 LimitInFlyTx = 0;
         TString ResourceProfile = "default";
-        ECompactionStrategy DefaultCompactionStrategy = NKikimrSchemeOp::CompactionStrategyGenerational;
+        ECompactionStrategy DefaultCompactionStrategy = NKikimrCompaction::CompactionStrategyGenerational;
     };
 
     const TTableInfo* GetTableInfo(ui32 id) const { return const_cast<TScheme*>(this)->GetTableInfo(id); }
@@ -172,11 +172,11 @@ public:
     {
         if (auto *table = GetTableInfo(id)) {
             auto strategy = table->CompactionPolicy->CompactionStrategy;
-            if (strategy != NKikimrSchemeOp::CompactionStrategyUnset) {
-                if (strategy == NKikimrSchemeOp::CompactionStrategySharded) {
+            if (strategy != NKikimrCompaction::CompactionStrategyUnset) {
+                if (strategy == NKikimrCompaction::CompactionStrategySharded) {
                     // Sharded strategy doesn't exist anymore
                     // Use the safe generational strategy instead
-                    strategy = NKikimrSchemeOp::CompactionStrategyGenerational;
+                    strategy = NKikimrCompaction::CompactionStrategyGenerational;
                 }
                 return strategy;
             }
@@ -240,7 +240,7 @@ public:
     TAlter& AddTable(const TString& name, ui32 id);
     TAlter& DropTable(ui32 id);
     TAlter& AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null = { });
-    TAlter& AddPgColumn(ui32 table, const TString& name, ui32 id, ui32 type, ui32 pgType, const TString& pgTypeMod, bool notNull, TCell null = { });
+    TAlter& AddColumnWithTypeInfo(ui32 table, const TString& name, ui32 id, ui32 type, const std::optional<NKikimrProto::TTypeInfo>& typeInfoProto, bool notNull, TCell null = { });
     TAlter& DropColumn(ui32 table, ui32 id);
     TAlter& AddColumnToFamily(ui32 table, ui32 column, ui32 family);
     TAlter& AddFamily(ui32 table, ui32 family, ui32 room);
@@ -259,6 +259,7 @@ public:
     TAlter& SetByKeyFilter(ui32 tableId, bool enabled);
     TAlter& SetColdBorrow(ui32 tableId, bool enabled);
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
+    TAlter& SetRewrite();
 
     TAutoPtr<TSchemeChanges> Flush();
 

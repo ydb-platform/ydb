@@ -4,6 +4,7 @@
 #include "events.h"
 #include "types.h"
 #include "schema.h"
+#include "mon_main.h"
 
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
@@ -31,6 +32,8 @@ namespace NKikimr::NBlobDepot {
                 EvKickSpaceMonitor,
                 EvUpdateThroughputs,
                 EvDeliver,
+                EvJsonTimer,
+                EvJsonUpdate,
             };
         };
 
@@ -169,6 +172,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void StartOperation() {
+            JsonHandler.Setup(SelfId(), Executor()->Generation());
             InitChannelKinds();
             DoGroupMetricsExchange();
             ProcessRegisterAgentQ();
@@ -280,9 +284,12 @@ namespace NKikimr::NBlobDepot {
 
         class TTxMonData;
 
+        TJsonHandler JsonHandler;
+
         bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
 
         void RenderMainPage(IOutputStream& s);
+        NJson::TJsonValue RenderJson(bool pretty);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Group assimilation
@@ -290,6 +297,28 @@ namespace NKikimr::NBlobDepot {
         TActorId GroupAssimilatorId;
         EDecommitState DecommitState = EDecommitState::Default;
         std::optional<TString> AssimilatorState;
+        struct TAsStats {
+            std::optional<ui64> SkipBlocksUpTo;
+            std::optional<std::tuple<ui64, ui8>> SkipBarriersUpTo;
+            std::optional<TLogoBlobID> SkipBlobsUpTo;
+            TInstant LatestErrorGet;
+            TInstant LatestOkGet;
+            TInstant LatestErrorPut;
+            TInstant LatestOkPut;
+            TLogoBlobID LastReadBlobId;
+            ui64 BytesToCopy = 0;
+            ui64 BytesCopied = 0;
+            ui64 CopySpeed = 0;
+            TDuration CopyTimeRemaining = TDuration::Max();
+            ui64 BlobsReadOk = 0;
+            ui64 BlobsReadNoData = 0;
+            ui64 BlobsReadError = 0;
+            ui64 BlobsPutOk = 0;
+            ui64 BlobsPutError = 0;
+            ui32 CopyIteration = 0;
+
+            void ToJson(NJson::TJsonValue& json, bool pretty) const;
+        } AsStats;
 
         class TGroupAssimilator;
 
@@ -301,6 +330,8 @@ namespace NKikimr::NBlobDepot {
         ui64 BytesRead = 0;
         ui64 BytesWritten = 0;
         std::deque<std::tuple<TMonotonic, ui64, ui64>> MetricsQ;
+        ui64 ReadThroughput = 0;
+        ui64 WriteThroughput = 0;
 
         void DoGroupMetricsExchange();
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);

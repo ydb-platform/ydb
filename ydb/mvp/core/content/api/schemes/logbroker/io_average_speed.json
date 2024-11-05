@@ -1,0 +1,22 @@
+{
+    "title" : "TIoAverageSpeed",
+    "type": "object",
+    "required" : ["lastMinuteAverage", "lastHourAverage", "lastDayAverage"],
+    "properties": {
+        "lastMinuteAverage": {
+            "description": "Last minute average rate in bytes per second",
+            "type": "integer",
+            "format": "int64"
+        },
+        "lastHourAverage": {
+            "description": "Last hour average rate in bytes per second",
+            "type": "integer",
+            "format": "int64"
+        },
+        "lastDayAverage": {
+            "description": "Last day average rate in bytes per second",
+            "type": "integer",
+            "format": "int64"
+        }
+    }
+}

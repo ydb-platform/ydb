@@ -67,6 +67,12 @@ TYsonString ConvertToYsonString<TString>(const TString& value)
     return ConvertToYsonString(static_cast<TStringBuf>(value));
 }
 
+template <>
+TYsonString ConvertToYsonString<std::string>(const std::string& value)
+{
+    return ConvertToYsonString(static_cast<TStringBuf>(value));
+}
+
 struct TConvertStringToYsonStringTag
 { };
 
@@ -234,7 +240,8 @@ TString ParseStringFromYsonString(const TYsonStringBuf& str)
         throw TYsonLiteralParseException(ex, "Failed to decode string length");
     }
     if (length < 0) {
-        throw TYsonLiteralParseException(Format("Negative string length ",
+        throw TYsonLiteralParseException(Format(
+            "Negative string length %v",
             length));
     }
     if (static_cast<i64>(input.Avail()) != length) {

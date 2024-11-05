@@ -141,7 +141,7 @@ namespace NKikimr {
                     auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::RACE, SelfVDiskId,
                         TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
                         SlCtx->CountersMonGroup.VDiskCheckFailedPtr(), nullptr, ev->GetChannel());
-                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie);
+                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, SlCtx->VCtx);
                     return;
                 }
 
@@ -160,7 +160,7 @@ namespace NKikimr {
                     auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(NKikimrProto::BLOCKED, SelfVDiskId,
                         TSyncState(), true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
                         SlCtx->CountersMonGroup.DiskLockedPtr(), nullptr, ev->GetChannel());
-                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie);
+                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, SlCtx->VCtx);
                     return;
                 }
 
@@ -180,7 +180,7 @@ namespace NKikimr {
                     auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(status, SelfVDiskId, syncState,
                         true, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(), now,
                         SlCtx->CountersMonGroup.UnequalGuidPtr(), nullptr, ev->GetChannel());
-                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie);
+                    SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, SlCtx->VCtx);
                     return;
                 }
 

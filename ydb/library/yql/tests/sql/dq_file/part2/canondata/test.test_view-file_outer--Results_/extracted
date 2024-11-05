@@ -9,6 +9,6 @@
             <tmp_path>/program.sql:<main>:1:8: Error: At function: FileContent
             	/* postgres can not */
 	       ^
-                <tmp_path>/program.sql:<main>:1:29: Error: File not found: view_bb686f68-4245bd5f-2318fa8e-22eb9250/foo.txt
+                <tmp_path>/program.sql:<main>:1:8: Error: File not found: view_bb686f68-4245bd5f-2318fa8e-22eb9250/foo.txt
                 	/* postgres can not */
-	                            ^
+	       ^

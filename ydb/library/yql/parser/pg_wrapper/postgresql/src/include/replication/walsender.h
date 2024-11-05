@@ -3,7 +3,7 @@
  * walsender.h
  *	  Exports from replication/walsender.c.
  *
- * Portions Copyright (c) 2010-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 2010-2023, PostgreSQL Global Development Group
  *
  * src/include/replication/walsender.h
  *
@@ -25,24 +25,24 @@ typedef enum
 } CRSSnapshotAction;
 
 /* global state */
-extern __thread bool am_walsender;
-extern __thread bool am_cascading_walsender;
-extern __thread bool am_db_walsender;
-extern __thread bool wake_wal_senders;
+extern __thread PGDLLIMPORT bool am_walsender;
+extern __thread PGDLLIMPORT bool am_cascading_walsender;
+extern __thread PGDLLIMPORT bool am_db_walsender;
+extern __thread PGDLLIMPORT bool wake_wal_senders;
 
 /* user-settable parameters */
-extern __thread int	max_wal_senders;
-extern __thread int	wal_sender_timeout;
-extern __thread bool log_replication_commands;
+extern __thread PGDLLIMPORT int max_wal_senders;
+extern __thread PGDLLIMPORT int wal_sender_timeout;
+extern __thread PGDLLIMPORT bool log_replication_commands;
 
 extern void InitWalSender(void);
-extern bool exec_replication_command(const char *query_string);
+extern bool exec_replication_command(const char *cmd_string);
 extern void WalSndErrorCleanup(void);
 extern void WalSndResourceCleanup(bool isCommit);
 extern void WalSndSignals(void);
 extern Size WalSndShmemSize(void);
 extern void WalSndShmemInit(void);
-extern void WalSndWakeup(void);
+extern void WalSndWakeup(bool physical, bool logical);
 extern void WalSndInitStopping(void);
 extern void WalSndWaitStopping(void);
 extern void HandleWalSndInitStopping(void);
@@ -60,15 +60,15 @@ extern void WalSndRqstFileReload(void);
 /*
  * wakeup walsenders if there is work to be done
  */
-#define WalSndWakeupProcessRequests()		\
-	do										\
-	{										\
-		if (wake_wal_senders)				\
-		{									\
-			wake_wal_senders = false;		\
-			if (max_wal_senders > 0)		\
-				WalSndWakeup();				\
-		}									\
-	} while (0)
+static inline void
+WalSndWakeupProcessRequests(bool physical, bool logical)
+{
+	if (wake_wal_senders)
+	{
+		wake_wal_senders = false;
+		if (max_wal_senders > 0)
+			WalSndWakeup(physical, logical);
+	}
+}
 
 #endif							/* _WALSENDER_H */

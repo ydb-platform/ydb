@@ -3,7 +3,7 @@
  * pgtime.h
  *	  PostgreSQL internal timezone library
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
  * IDENTIFICATION
  *	  src/include/pgtime.h
@@ -22,14 +22,23 @@
 
 typedef int64 pg_time_t;
 
+/*
+ * Data structure representing a broken-down timestamp.
+ *
+ * CAUTION: the IANA timezone library (src/timezone/) follows the POSIX
+ * convention that tm_mon counts from 0 and tm_year is relative to 1900.
+ * However, Postgres' datetime functions generally treat tm_mon as counting
+ * from 1 and tm_year as relative to 1 BC.  Be sure to make the appropriate
+ * adjustments when moving from one code domain to the other.
+ */
 struct pg_tm
 {
 	int			tm_sec;
 	int			tm_min;
 	int			tm_hour;
 	int			tm_mday;
-	int			tm_mon;			/* origin 1, not 0! */
-	int			tm_year;		/* relative to 1900 */
+	int			tm_mon;			/* see above */
+	int			tm_year;		/* see above */
 	int			tm_wday;
 	int			tm_yday;
 	int			tm_isdst;
@@ -37,6 +46,7 @@ struct pg_tm
 	const char *tm_zone;
 };
 
+/* These structs are opaque outside the timezone library */
 typedef struct pg_tz pg_tz;
 typedef struct pg_tzenum pg_tzenum;
 
@@ -65,13 +75,13 @@ extern bool pg_tz_acceptable(pg_tz *tz);
 
 /* these functions are in strftime.c */
 
-extern size_t pg_strftime(char *s, size_t max, const char *format,
-						  const struct pg_tm *tm);
+extern size_t pg_strftime(char *s, size_t maxsize, const char *format,
+						  const struct pg_tm *t);
 
 /* these functions and variables are in pgtz.c */
 
 extern __thread PGDLLIMPORT pg_tz *session_timezone;
-extern __thread pg_tz *log_timezone;
+extern __thread PGDLLIMPORT pg_tz *log_timezone;
 
 extern void pg_timezone_initialize(void);
 extern pg_tz *pg_tzset(const char *tzname);

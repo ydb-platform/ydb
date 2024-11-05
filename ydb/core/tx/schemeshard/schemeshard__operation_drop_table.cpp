@@ -530,9 +530,14 @@ public:
                 if (parent.Base()->IsTableIndex()) {
                     checks
                         .IsTableIndex()
-                        .IsInsideTableIndexPath()
-                        .IsUnderDeleting()
-                        .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of drop base table
+                        .IsInsideTableIndexPath();
+                    // Not build index impl tables can be dropped only as part of drop index
+                    // build index impl tables dropped multiple times during index construction
+                    if (!NTableIndex::IsBuildImplTable(name)) {
+                        checks
+                            .IsUnderDeleting()
+                            .IsUnderTheSameOperation(OperationId.GetTxId());
+                    }
                 } else {
                     checks
                         .IsLikeDirectory()
@@ -595,15 +600,6 @@ public:
 
         for (auto splitTx: table->GetSplitOpsInFlight()) {
             context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
-        }
-
-        if (table->IsTemporary) {
-            const auto& ownerActorId = table->OwnerActorId;
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Processing drop temp table with Name: " << name
-                    << ", WorkingDir: " << parentPathStr
-                    << ", OwnerActorId: " << ownerActorId);
-            context.OnComplete.UpdateTempTablesToDropState(ownerActorId, path.Base()->PathId);
         }
 
         context.OnComplete.ActivateTx(OperationId);

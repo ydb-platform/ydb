@@ -145,6 +145,8 @@ void TJournalWriterConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("open_session_backoff_time", &TThis::OpenSessionBackoffTime)
         .Default(TDuration::Seconds(10));
+    registrar.Parameter("open_session_retry_count", &TThis::OpenSessionRetryCount)
+        .Default(5);
 
     registrar.Parameter("prerequisite_transaction_probe_period", &TThis::PrerequisiteTransactionProbePeriod)
         .Default(TDuration::Seconds(60));

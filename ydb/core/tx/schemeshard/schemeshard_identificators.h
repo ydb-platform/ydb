@@ -2,9 +2,14 @@
 
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/util/ui64id.h>
+#include <ydb/library/conclusion/result.h>
 
 #include <util/generic/utility.h>
 #include <util/stream/output.h>
+
+namespace NKikimrSchemeOp {
+class TShardIdx;
+}
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -37,6 +42,10 @@ public:
     explicit operator bool() const {
         return GetOwnerId() != InvalidOwnerId && GetLocalId() != InvalidLocalShardIdx;
     }
+
+    NKikimrSchemeOp::TShardIdx SerializeToProto() const;
+
+    static TConclusion<TShardIdx> BuildFromProto(const NKikimrSchemeOp::TShardIdx& proto);
 };
 constexpr TShardIdx InvalidShardIdx = TShardIdx(InvalidOwnerId, InvalidLocalShardIdx);
 

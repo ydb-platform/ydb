@@ -144,6 +144,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         case EDM_CMS:
         case EDM_DISCOVERY:
         case EDM_WHOAMI:
+        case EDM_CONFIG:
             return NDriverClient::NewClient(argc + freeArgsPos, argv - freeArgsPos, factories);
         case EDM_FORMAT_INFO:
             return MainFormatInfo(cmdConf, argc, argv);
@@ -155,16 +156,12 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
             return NDriverClient::SchemeInitRoot(cmdConf, argc, argv);
         case EDM_COMPILE_AND_EXEC_MINIKQL:
             return NDriverClient::CompileAndExecMiniKQL(cmdConf, argc, argv);
-        case EDM_KEYVALUE_REQUEST:
-            return NDriverClient::KeyValueRequest(cmdConf, argc, argv);
         case EDM_PERSQUEUE_REQUEST:
             return NDriverClient::PersQueueRequest(cmdConf, argc, argv);
         case EDM_PERSQUEUE_STRESS:
             return NDriverClient::PersQueueStress(cmdConf, argc, argv);
         case EDM_PERSQUEUE_DISCOVER_CLUSTERS:
             return NDriverClient::PersQueueDiscoverClustersRequest(cmdConf, argc, argv);
-        case EDM_LOAD_REQUEST:
-            return NDriverClient::LoadRequest(cmdConf, argc, argv);
         case EDM_ACTORSYS_PERFTEST:
             return NDriverClient::ActorsysPerfTest(cmdConf, argc, argv);
         default:

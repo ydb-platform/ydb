@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.3
 Name: httpcore
-Version: 1.0.3
+Version: 1.0.6
 Summary: A minimal low-level HTTP client.
 Project-URL: Documentation, https://www.encode.io/httpcore
 Project-URL: Homepage, https://www.encode.io/httpcore/
@@ -33,7 +33,7 @@ Requires-Dist: h2<5,>=3; extra == 'http2'
 Provides-Extra: socks
 Requires-Dist: socksio==1.*; extra == 'socks'
 Provides-Extra: trio
-Requires-Dist: trio<0.24.0,>=0.22.0; extra == 'trio'
+Requires-Dist: trio<1.0,>=0.22.0; extra == 'trio'
 Description-Content-Type: text/markdown
 
 # HTTP Core
@@ -79,7 +79,7 @@ There are also a number of optional extras available...
 $ pip install httpcore['asyncio,trio,http2,socks']
 ```
 
-# Sending requests
+## Sending requests
 
 Send an HTTP request:
 
@@ -152,6 +152,22 @@ pip install 'httpcore==1.*'
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## Version 1.0.6 (October 1st, 2024)
+
+- Relax `trio` dependency pinning. (#956)
+- Handle `trio` raising `NotImplementedError` on unsupported platforms. (#955)
+- Handle mapping `ssl.SSLError` to `httpcore.ConnectError`. (#918)
+
+## 1.0.5 (March 27th, 2024)
+
+- Handle `EndOfStream` exception for anyio backend. (#899)
+- Allow trio `0.25.*` series in package dependancies. (#903)
+
+## 1.0.4 (February 21st, 2024)
+
+- Add `target` request extension. (#888)
+- Fix support for connection `Upgrade` and `CONNECT` when some data in the stream has been read. (#882)
 
 ## 1.0.3 (February 13th, 2024)
 

@@ -8,8 +8,10 @@
 #include <ydb/core/tx/columnshard/data_locks/locks/abstract.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/composite.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
-#include <ydb/core/tx/columnshard/engines/portions/with_blobs.h>
+#include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
 
@@ -28,22 +30,75 @@ class TTransactionContext;
 namespace NKikimr::NColumnShard {
 class TBlobManagerDb;
 class TColumnShard;
-class TBackgroundActivity;
 }
 
 namespace NKikimr::NOlap {
 class TColumnEngineForLogs;
 class TVersionedIndex;
-class TPortionInfoWithBlobs;
 
-struct TPortionEvictionFeatures {
-    const TString TargetTierName;
-    const ui64 PathId;      // portion path id for cold-storage-key construct
+class TPortionEvictionFeatures {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, CurrentScheme);
+    YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, TargetScheme);
+    std::optional<TString> TargetTierName;
+    const TString CurrentTierName;
+    std::optional<NActualizer::TRWAddress> RWAddress;
+public:
+    TPortionEvictionFeatures(const std::shared_ptr<ISnapshotSchema>& currentScheme, const std::shared_ptr<ISnapshotSchema>& targetScheme, const TString& currentTierName)
+        : CurrentScheme(currentScheme)
+        , TargetScheme(targetScheme)
+        , CurrentTierName(currentTierName)
+    {
+        AFL_VERIFY(CurrentTierName);
+    }
 
-    TPortionEvictionFeatures(const TString& targetTierName, const ui64 pathId)
-        : TargetTierName(targetTierName)
-        , PathId(pathId)
-    {}
+    const TString& GetTargetTierName() const {
+        AFL_VERIFY(TargetTierName);
+        return *TargetTierName;
+    }
+
+    void SetTargetTierName(const TString& value) {
+        AFL_VERIFY(!TargetTierName);
+        TargetTierName = value;
+    }
+
+    void OnSkipPortionWithProcessMemory(const NColumnShard::TEngineLogsCounters& counters, const TDuration dWait) const {
+        if (TargetTierName == NTiering::NCommon::DeleteTierName) {
+            counters.OnSkipDeleteWithProcessMemory(dWait);
+        } else {
+            counters.OnSkipEvictionWithProcessMemory(dWait);
+        }
+    }
+
+    void OnSkipPortionWithTxLimit(const NColumnShard::TEngineLogsCounters& counters, const TDuration dWait) const {
+        if (TargetTierName == NTiering::NCommon::DeleteTierName) {
+            counters.OnSkipDeleteWithTxLimit(dWait);
+        } else {
+            counters.OnSkipEvictionWithTxLimit(dWait);
+        }
+    }
+
+    NActualizer::TRWAddress GetRWAddress() {
+        if (!RWAddress) {
+            AFL_VERIFY(TargetTierName);
+            RWAddress = NActualizer::TRWAddress(CurrentScheme->GetIndexInfo().GetUsedStorageIds(CurrentTierName), TargetScheme->GetIndexInfo().GetUsedStorageIds(*TargetTierName));
+        }
+        return *RWAddress;
+    }
+
+    bool NeedRewrite() const {
+        if (TargetTierName == NTiering::NCommon::DeleteTierName) {
+            return false;
+        }
+        if (CurrentTierName != TargetTierName) {
+            return true;
+        }
+        if (CurrentScheme->GetVersion() != TargetScheme->GetVersion()) {
+            return true;
+        }
+        AFL_VERIFY(false);
+        return false;
+    }
 };
 
 class TFinalizationContext: TNonCopyable {
@@ -75,7 +130,8 @@ public:
     NTable::TDatabase* DB;
     IDbWrapper& DBWrapper;
     TColumnEngineForLogs& EngineLogs;
-    TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs);
+    const TSnapshot Snapshot;
+    TWriteIndexContext(NTable::TDatabase* db, IDbWrapper& dbWrapper, TColumnEngineForLogs& engineLogs, const TSnapshot& snapshot);
 };
 
 class TChangesFinishContext {
@@ -99,16 +155,16 @@ public:
     const ui32 BlobsWritten;
     const ui64 BytesWritten;
     const TDuration Duration;
-    NColumnShard::TBackgroundActivity& TriggerActivity;
     TColumnEngineForLogs& EngineLogs;
-    TWriteIndexCompleteContext(const TActorContext& actorContext, const ui32 blobsWritten, const ui64 bytesWritten
-        , const TDuration d, NColumnShard::TBackgroundActivity& triggerActivity, TColumnEngineForLogs& engineLogs)
+    const TSnapshot Snapshot;
+    TWriteIndexCompleteContext(const TActorContext& actorContext, const ui32 blobsWritten, const ui64 bytesWritten, const TDuration d,
+        TColumnEngineForLogs& engineLogs, const TSnapshot& snapshot)
         : ActorContext(actorContext)
         , BlobsWritten(blobsWritten)
         , BytesWritten(bytesWritten)
         , Duration(d)
-        , TriggerActivity(triggerActivity)
         , EngineLogs(engineLogs)
+        , Snapshot(snapshot)
     {
 
     }
@@ -118,10 +174,13 @@ class TConstructionContext: TNonCopyable {
 public:
     const TVersionedIndex& SchemaVersions;
     const NColumnShard::TIndexationCounters Counters;
+    const NOlap::TSnapshot LastCommittedTx;
 
-    TConstructionContext(const TVersionedIndex& schemaVersions, const NColumnShard::TIndexationCounters& counters)
+    TConstructionContext(const TVersionedIndex& schemaVersions, const NColumnShard::TIndexationCounters& counters, const NOlap::TSnapshot& lastCommittedTx)
         : SchemaVersions(schemaVersions)
-        , Counters(counters) {
+        , Counters(counters)
+        , LastCommittedTx(lastCommittedTx)
+    {
 
     }
 };
@@ -141,9 +200,14 @@ public:
     };
 private:
     EStage Stage = EStage::Created;
+    std::shared_ptr<NDataLocks::TManager::TGuard> LockGuard;
+    TString AbortedReason;
+    const TString TaskIdentifier = TGUID::CreateTimebased().AsGuidString();
+
 protected:
     virtual void DoDebugString(TStringOutput& out) const = 0;
     virtual void DoCompile(TFinalizationContext& context) = 0;
+    virtual void DoOnAfterCompile() {}
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) = 0;
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) = 0;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) = 0;
@@ -153,14 +217,12 @@ protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) = 0;
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& context) noexcept = 0;
     virtual void OnAbortEmergency() {
-
     }
 
     TBlobsAction BlobsAction;
 
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const = 0;
 
-    const TString TaskIdentifier = TGUID::Create().AsGuidString();
     virtual ui64 DoCalcMemoryForUsage() const = 0;
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const = 0;
     std::shared_ptr<NDataLocks::ILock> BuildDataLock() const {
@@ -170,9 +232,13 @@ protected:
 public:
     class IMemoryPredictor {
     public:
-        virtual ui64 AddPortion(const TPortionInfo& portionInfo) = 0;
+        virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) = 0;
         virtual ~IMemoryPredictor() = default;
     };
+
+    virtual bool NeedDiskWriteLimiter() const {
+        return false;
+    }
 
     void OnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context);
 
@@ -192,7 +258,7 @@ public:
         return BlobsAction;
     }
 
-    TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const TString& consumerId)
+    TColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager, const NBlobOperations::EConsumer consumerId)
         : BlobsAction(storagesManager, consumerId)
     {
 
@@ -206,13 +272,13 @@ public:
     }
 
     void StartEmergency();
-    void AbortEmergency();
+    void AbortEmergency(const TString& reason);
 
     void Abort(NColumnShard::TColumnShard& self, TChangesFinishContext& context);
     void Start(NColumnShard::TColumnShard& self);
 
     virtual ui32 GetWritePortionsCount() const = 0;
-    virtual TPortionInfoWithBlobs* GetWritePortionInfo(const ui32 index) = 0;
+    virtual TWritePortionInfoWithBlobsResult* GetWritePortionInfo(const ui32 index) = 0;
     virtual bool NeedWritePortion(const ui32 index) const = 0;
 
     void WriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context);
@@ -225,7 +291,7 @@ public:
 
     std::vector<std::shared_ptr<IBlobsReadingAction>> GetReadingActions() const {
         auto result = BlobsAction.GetReadingActions();
-        Y_ABORT_UNLESS(result.size());
+//        Y_ABORT_UNLESS(result.size());
         return result;
     }
     virtual TString TypeString() const = 0;

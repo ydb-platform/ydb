@@ -16,6 +16,7 @@ SRCS(
 PEERDIR(
     library/cpp/digest/md5
     library/cpp/testing/unittest
+    ydb/apps/version
     ydb/core/base
     ydb/core/blob_depot
     ydb/core/blobstorage/backpressure
@@ -37,6 +38,7 @@ PEERDIR(
     ydb/library/yql/minikql/comp_nodes/llvm14
     ydb/library/yql/public/udf/service/exception_policy
     ydb/library/yql/sql/pg_dummy
+    ydb/core/util/actorsys_test
 )
 
 END()

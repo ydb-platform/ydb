@@ -1,6 +1,6 @@
 #include "write_session.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/log_lazy.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/common/log_lazy.h>
 
 namespace NYdb::NTopic {
 
@@ -45,8 +45,12 @@ void TWriteSession::WriteEncoded(TContinuationToken&& token, TStringBuf data, EC
     TryGetImpl()->WriteInternal(std::move(token), std::move(message));
 }
 
-void TWriteSession::WriteEncoded(TContinuationToken&& token, TWriteMessage&& message)
+void TWriteSession::WriteEncoded(TContinuationToken&& token, TWriteMessage&& message,
+                                 NTable::TTransaction* tx)
 {
+    if (tx) {
+        message.Tx(*tx);
+    }
     TryGetImpl()->WriteInternal(std::move(token), std::move(message));
 }
 
@@ -60,7 +64,11 @@ void TWriteSession::Write(TContinuationToken&& token, TStringBuf data, TMaybe<ui
     TryGetImpl()->WriteInternal(std::move(token), std::move(message));
 }
 
-void TWriteSession::Write(TContinuationToken&& token, TWriteMessage&& message) {
+void TWriteSession::Write(TContinuationToken&& token, TWriteMessage&& message,
+                          NTable::TTransaction* tx) {
+    if (tx) {
+        message.Tx(*tx);
+    }
     TryGetImpl()->WriteInternal(std::move(token), std::move(message));
 }
 
@@ -112,15 +120,15 @@ bool TSimpleBlockingWriteSession::Write(
     auto message = TWriteMessage(std::move(data))
         .SeqNo(seqNo)
         .CreateTimestamp(createTimestamp);
-    return Write(std::move(message), blockTimeout);
+    return Write(std::move(message), nullptr, blockTimeout);
 }
 
 bool TSimpleBlockingWriteSession::Write(
-        TWriteMessage&& message, const TDuration& blockTimeout
+        TWriteMessage&& message, NTable::TTransaction* tx, const TDuration& blockTimeout
 ) {
     auto continuationToken = WaitForToken(blockTimeout);
     if (continuationToken.Defined()) {
-        Writer->Write(std::move(*continuationToken), std::move(message));
+        Writer->Write(std::move(*continuationToken), std::move(message), tx);
         return true;
     }
     return false;
@@ -170,4 +178,4 @@ bool TSimpleBlockingWriteSession::Close(TDuration closeTimeout) {
     return Writer->Close(std::move(closeTimeout));
 }
 
-}; // namespace NYdb::NTopic
+}  // namespace NYdb::NTopic

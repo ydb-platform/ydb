@@ -34,7 +34,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class ILoggerCtx {
     public:
-        virtual void DeliverLogMessage(NLog::EPriority mPriority, NLog::EComponent mComponent, TString &&str) = 0;
+        virtual void DeliverLogMessage(NLog::EPriority mPriority, NLog::EComponent mComponent, TString &&str, bool json) = 0;
         virtual NActors::NLog::TSettings* LoggerSettings() = 0;
         virtual ~ILoggerCtx() = default;
     };
@@ -48,8 +48,8 @@ namespace NKikimr {
             : ActorSystem(as)
         {}
 
-        void DeliverLogMessage(NLog::EPriority mPriority, NLog::EComponent mComponent, TString &&str) override {
-            ::NActors::DeliverLogMessage(*ActorSystem, mPriority, mComponent, std::move(str));
+        void DeliverLogMessage(NLog::EPriority mPriority, NLog::EComponent mComponent, TString &&str, bool json) override {
+            ::NActors::DeliverLogMessage(*ActorSystem, mPriority, mComponent, std::move(str), json);
         }
 
         virtual NActors::NLog::TSettings* LoggerSettings() override {
@@ -66,7 +66,7 @@ namespace NKikimr {
     public:
         TFakeLoggerCtx();
 
-        void DeliverLogMessage(NLog::EPriority mPriority, NLog::EComponent mComponent, TString &&str) override {
+        void DeliverLogMessage(NLog::EPriority mPriority, NLog::EComponent mComponent, TString &&str, bool /*json*/) override {
             Y_UNUSED(mPriority);
             Y_UNUSED(mComponent);
             Y_UNUSED(str);
@@ -89,9 +89,10 @@ namespace NActors {
             NKikimr::ILoggerCtx& ctx,
             NLog::EPriority mPriority,
             NLog::EComponent mComponent,
-            TString &&str)
+            TString &&str,
+            bool json)
     {
-        ctx.DeliverLogMessage(mPriority, mComponent, std::move(str));
+        ctx.DeliverLogMessage(mPriority, mComponent, std::move(str), json);
     }
 
 } // NActors

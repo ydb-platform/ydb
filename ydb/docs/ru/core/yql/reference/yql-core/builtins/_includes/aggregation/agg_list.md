@@ -1,14 +1,15 @@
 ## AGGREGATE_LIST {#agg-list}
 
-**Сигнатура**
-```
+### Сигнатура
+
+```yql
 AGGREGATE_LIST(T? [, limit:Uint64])->List<T>
 AGGREGATE_LIST(T [, limit:Uint64])->List<T>
 AGGREGATE_LIST_DISTINCT(T? [, limit:Uint64])->List<T>
 AGGREGATE_LIST_DISTINCT(T [, limit:Uint64])->List<T>
 ```
 
-Получить все значения столбца в виде списка. В сочетании с `DISTINCT` возвращает только уникальные значения. Опциональный второй параметр задает максимальное количество получаемых значений.  
+Получить все значения столбца в виде списка. В сочетании с `DISTINCT` возвращает только уникальные значения. Опциональный второй параметр задает максимальное количество получаемых значений. Значение 0 равносильно отсутствию лимита.
 
 Если заранее известно, что уникальных значений не много, то лучше воспользоваться агрегатной функцией `AGGREGATE_LIST_DISTINCT`, которая строит тот же результат в памяти (которой при большом числе уникальных значений может не хватить).
 
@@ -18,10 +19,10 @@ AGGREGATE_LIST_DISTINCT(T [, limit:Uint64])->List<T>
 
 Например, можно использовать в сочетании с `DISTINCT` и функцией [String::JoinFromList](../../../udf/list/string.md) (аналог `','.join(list)` из Python) для распечатки в строку всех значений, которые встретились в столбце после применения [GROUP BY](../../../syntax/group_by.md).
 
-**Примеры**
+### Примеры
 
-``` yql
-SELECT  
+```yql
+SELECT
    AGGREGATE_LIST( region ),
    AGGREGATE_LIST( region, 5 ),
    AGGREGATE_LIST( DISTINCT region ),
@@ -30,12 +31,13 @@ SELECT
 FROM users
 ```
 
-``` yql
+```yql
 -- Аналог GROUP_CONCAT из MySQL
 SELECT
     String::JoinFromList(CAST(AGGREGATE_LIST(region, 2) AS List<String>), ",")
 FROM users
 ```
+
 Существует также короткая форма записи этих функций - `AGG_LIST` и `AGG_LIST_DISTINCT`.
 
 {% note alert %}

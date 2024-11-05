@@ -43,6 +43,9 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 t
     const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets, 
     TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets);
 
+bool KqpLocksHasArbiter(const NKikimrDataEvents::TKqpLocks* kqpLocks);
+bool KqpLocksIsArbiter(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks);
+
 void KqpEraseLocks(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks);
 void KqpCommitLocks(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, const TRowVersion& writeVersion, IDataShardUserDb& userDb);
 

@@ -79,7 +79,7 @@ void xml_unescape<Base>::drain_residue(const char * literal){
 
 // note key constraint on this function is that can't "look ahead" any
 // more than necessary into base iterator.  Doing so would alter the base
-// iterator refenence which would make subsequent iterator comparisons
+// iterator reference which would make subsequent iterator comparisons
 // incorrect and thereby break the composiblity of iterators.
 template<class Base>
 typename xml_unescape<Base>::value_type

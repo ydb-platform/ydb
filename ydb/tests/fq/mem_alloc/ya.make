@@ -7,7 +7,9 @@ PEERDIR(
     ydb/tests/tools/fq_runner
 )
 
-DEPENDS(ydb/tests/tools/pq_read)
+DEPENDS(
+    ydb/tests/tools/pq_read
+)
 
 TEST_SRCS(
     test_alloc_default.py
@@ -17,14 +19,10 @@ TEST_SRCS(
 )
 
 IF (SANITIZER_TYPE == "thread")
-    TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)
 ELSE()
-    TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
-
-REQUIREMENTS(ram:9)
 
 END()

@@ -290,6 +290,8 @@ void RegisterEquals(IBuiltinFunctionRegistry& registry) {
     RegisterAggrComparePrimitive<TEquals, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareDatetime<TDiffDateEquals, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareTzDatetime<TAggrTzDateEquals, TCompareArgsOpt>(registry, aggrName);
+    RegisterAggrCompareBigDatetime<TDiffDateEquals, TCompareArgsOpt>(registry, aggrName);
+    RegisterAggrCompareBigTzDatetime<TAggrTzDateEquals, TCompareArgsOpt>(registry, aggrName);
 
     RegisterAggrCompareStrings<TCustomEquals, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrEquals, TCompareArgsOpt>(registry, aggrName);
@@ -300,6 +302,7 @@ void RegisterEquals(TKernelFamilyMap& kernelFamilyMap) {
 
     AddNumericComparisonKernels<TEqualsOp>(*family);
     AddDateComparisonKernels<TDiffDateEqualsOp>(*family);
+    AddDecimalComparisonKernels<TDecimalEquals>(*family);
     RegisterStringKernelEquals(*family);
 
     kernelFamilyMap["Equals"] = std::move(family);

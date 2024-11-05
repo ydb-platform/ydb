@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import os
@@ -31,6 +31,8 @@ def is_result_fixed(oid_per_name, catalog_by_oid, name):
 def get_fixed_args(oid_per_name, catalog_by_oid, name):
     found = None
     for oid in oid_per_name[name]:
+        if "var_type" in catalog_by_oid[oid]:
+            return None
         fixed = [x["arg_type_fixed"] for x in catalog_by_oid[oid]["args"]]
         if found is None:
             found = fixed
@@ -128,6 +130,27 @@ def main():
                 elif srcline.startswith("PSEUDOTYPE_DUMMY_RECEIVE_FUNC(") and "\\" not in srcline:
                     pos=srcline.find(")")
                     names=[srcline[30:pos]+"_recv"]
+                elif srcline.startswith("PG_STAT_GET_DBENTRY_FLOAT8_MS("):
+                    pos=srcline.find(")")
+                    names=["pg_stat_get_db_" + srcline[30:pos]]
+                elif srcline.startswith("PG_STAT_GET_DBENTRY_INT64("):
+                    pos=srcline.find(")")
+                    names=["pg_stat_get_db_" + srcline[26:pos]]
+                elif srcline.startswith("PG_STAT_GET_RELENTRY_INT64("):
+                    pos=srcline.find(")")
+                    names=["pg_stat_get_" + srcline[27:pos]]
+                elif srcline.startswith("PG_STAT_GET_RELENTRY_TIMESTAMPTZ("):
+                    pos=srcline.find(")")
+                    names=["pg_stat_get_" + srcline[33:pos]]
+                elif srcline.startswith("PG_STAT_GET_XACT_RELENTRY_INT64("):
+                    pos=srcline.find(")")
+                    names=["pg_stat_get_xact_" + srcline[32:pos]]
+                elif srcline.startswith("PG_STAT_GET_FUNCENTRY_FLOAT8_MS("):
+                    pos=srcline.find(")")
+                    names=["pg_stat_get_function_" + srcline[32:pos]]
+                elif srcline.startswith("PG_STAT_GET_XACT_FUNCENTRY_FLOAT8_MS("):
+                    pos=srcline.find(")")
+                    names=["pg_stat_get_xact_function_" + srcline[37:pos]]
                 else:
                     continue
                 for name in names:
@@ -311,8 +334,9 @@ def main():
                 "    TTupleType* tupleType,\n" \
                 "    const std::vector<ui32>& argsColumns,\n" \
                 "    const TTypeEnvironment& env,\n" \
-                "    TType* returnType) const final {\n" \
-                "    const auto& aggDesc = ResolveAggregation(\"NAME\", tupleType, argsColumns, returnType);\n"
+                "    TType* returnType,\n" \
+                "    ui32 hint) const final {\n" \
+                "    const auto& aggDesc = ResolveAggregation(\"NAME\", tupleType, argsColumns, returnType, hint);\n"
                 "    switch (aggDesc.AggId) {\n" +
                 "".join(["    case " + str(agg_id) + ": return MakePgAgg_NAME_" + str(agg_id) + "().PrepareFinalizeKeys(argsColumns.front(), aggDesc);\n" for agg_id in agg_names[name]]) +
                 "    default: throw yexception() << \"Unsupported agg id: \" << aggDesc.AggId;\n" \
@@ -347,6 +371,7 @@ def main():
                 '#undef fopen\n'
                 '#undef bind\n'
                 '#undef locale_t\n'
+                '#undef strtou64\n'
                 '}\n'
                 '\n'
                 '#include "arrow.h"\n'

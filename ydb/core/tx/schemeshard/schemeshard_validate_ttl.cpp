@@ -13,9 +13,8 @@ static inline bool IsDropped(const TTableInfo::TColumn& col) {
     return col.IsDropped();
 }
 
-static inline ui32 GetType(const TTableInfo::TColumn& col) {
-    Y_ABORT_UNLESS(col.PType.GetTypeId() != NScheme::NTypeIds::Pg, "pg types are not supported");
-    return col.PType.GetTypeId();
+static inline NScheme::TTypeInfo GetType(const TTableInfo::TColumn& col) {
+    return col.PType;
 }
 
 }
@@ -57,6 +56,12 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
         const auto unit = enabled.GetColumnUnit();
         if (!NValidation::TTTLValidator::ValidateUnit(GetType(*column), unit, errStr)) {
             return false;
+        }
+
+        const TInstant now = TInstant::Now();
+        if (enabled.GetExpireAfterSeconds() > now.Seconds()) {
+            errStr = Sprintf("TTL should be less than %" PRIu64 " seconds (%" PRIu64 " days, %" PRIu64 " years). The ttl behaviour is undefined before 1970.", now.Seconds(), now.Days(), now.Days() / 365);
+            return false;            
         }
 
         if (enabled.HasSysSettings()) {

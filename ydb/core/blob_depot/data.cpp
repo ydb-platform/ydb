@@ -732,8 +732,3 @@ template<>
 void Out<NKikimr::NBlobDepot::TGivenIdRange>(IOutputStream& s, const NKikimr::NBlobDepot::TGivenIdRange& x) {
     x.Output(s);
 }
-
-template<>
-void Out<NKikimr::NBlobDepot::TGenStep>(IOutputStream& s, const NKikimr::NBlobDepot::TGenStep& x) {
-    x.Output(s);
-}

@@ -1,0 +1,18 @@
+--- contrib/tools/bison/src/main.c	(index)
++++ contrib/tools/bison/src/main.c	(working tree)
+@@ -63,15 +63,6 @@ main (int argc, char *argv[])
+ #define DEPENDS_ON_LIBINTL 1
+   set_program_name (argv[0]);
+   setlocale (LC_ALL, "");
+-  {
+-    char *cp = NULL;
+-    char const *localedir = relocate2 (LOCALEDIR, &cp);
+-    bindtextdomain ("bison", localedir);
+-    bindtextdomain ("bison-gnulib", localedir);
+-    bindtextdomain ("bison-runtime", localedir);
+-    free (cp);
+-  }
+-  textdomain ("bison");
+ 
+   {
+     char const *cp = getenv ("LC_CTYPE");

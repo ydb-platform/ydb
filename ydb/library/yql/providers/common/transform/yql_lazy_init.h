@@ -26,6 +26,10 @@ public:
         return Value.Get();
     }
 
+    inline explicit operator bool() const noexcept {
+        return !!Value.Get();
+    }
+
 private:
     TFactory Factory;
     mutable THolder<T> Value;

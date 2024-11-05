@@ -19,7 +19,7 @@ from
   ,{{web_site}}
   ,{{date_dim}}
 where
-    d_month_seq between 1215 and 1215 + 11
+    d_month_seq between 1200 and 1200 + 11
 and ws_ship_date_sk   = d_date_sk
 and ws_warehouse_sk   = w_warehouse_sk
 and ws_ship_mode_sk   = sm_ship_mode_sk
@@ -28,9 +28,9 @@ group by
    substr(w_warehouse_name,1,20)
   ,sm_type
   ,web_name
-order by substr(w_warehouse_name,1,20)
-        ,sm_type
-       ,web_name
+order by substr(w_warehouse_name,1,20) nulls first
+        ,sm_type nulls first
+       ,web_name nulls first
 limit 100;
 
 -- end query 1 in stream 0 using template ../query_templates/query62.tpl

@@ -9,8 +9,8 @@
 #include <util/system/yassert.h>
 #include <util/generic/set.h>
 
-#include <grpc++/server.h>
-#include <grpc++/server_context.h>
+#include <grpcpp/server.h>
+#include <grpcpp/server_context.h>
 
 #include <chrono>
 
@@ -25,7 +25,7 @@ public:
     {
     }
 
-    TString GetPeerName() const {
+    TString GetPeer() const {
         // Decode URL-encoded square brackets
         auto ip = Context.peer();
         CGIUnescape(ip);

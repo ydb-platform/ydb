@@ -511,7 +511,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
         TVector<TCell> cells;
         TVector<TString> memoryOwner;
         TString errStr;
-        bool res = CellsFromTuple(&params.GetType(), params.GetValue(), types, true, cells, errStr, memoryOwner);
+        bool res = CellsFromTuple(&params.GetType(), params.GetValue(), types, {}, true, cells, errStr, memoryOwner);
         UNIT_ASSERT_VALUES_EQUAL_C(res, errStr.empty(), paramsProto);
 
         return errStr;

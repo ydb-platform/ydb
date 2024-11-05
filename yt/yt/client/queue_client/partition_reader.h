@@ -29,12 +29,6 @@ struct IPartitionReader
 
 DEFINE_REFCOUNTED_TYPE(IPartitionReader)
 
-IPartitionReaderPtr CreatePartitionReader(
-    TPartitionReaderConfigPtr config,
-    NApi::IClientPtr client,
-    NYPath::TYPath path,
-    int partitionIndex);
-
 IPartitionReaderPtr CreateMultiQueueConsumerPartitionReader(
     TPartitionReaderConfigPtr config,
     NApi::IClientPtr client,

@@ -5,6 +5,7 @@
 #endif
 #undef BIND_INL_H_
 
+#include <yt/yt/core/actions/invoker.h>
 #include <yt/yt/core/concurrency/propagating_storage.h>
 
 namespace NYT {
@@ -21,7 +22,7 @@ public:
         : T_(x)
     { }
 
-    T* Get() const
+    T* Unwrap() const
     {
         return T_;
     }
@@ -49,7 +50,7 @@ public:
         delete T_;
     }
 
-    T* Get() const
+    T* Unwrap() const
     {
         return T_;
     }
@@ -81,7 +82,7 @@ public:
         other.IsValid_ = false;
     }
 
-    T&& Get() const
+    T&& Unwrap() const
     {
         YT_ASSERT(IsValid_);
         IsValid_ = false;
@@ -101,7 +102,7 @@ public:
         : T_(&x)
     { }
 
-    const T& Get() const
+    const T& Unwrap() const
     {
         return *T_;
     }
@@ -113,33 +114,33 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-inline const T& Unwrap(T& value)
+const T& Unwrap(T& value)
 {
     return value;
 }
 
 template <class T>
-inline T* Unwrap(const TUnretainedWrapper<T>& wrapper)
+T* Unwrap(const TUnretainedWrapper<T>& wrapper)
 {
-    return wrapper.Get();
+    return wrapper.Unwrap();
 }
 
 template <class T>
-inline T* Unwrap(const TOwnedWrapper<T>& wrapper)
+T* Unwrap(const TOwnedWrapper<T>& wrapper)
 {
-    return wrapper.Get();
+    return wrapper.Unwrap();
 }
 
 template <class T>
-inline T&& Unwrap(const TPassedWrapper<T>& wrapper)
+T&& Unwrap(const TPassedWrapper<T>& wrapper)
 {
-    return wrapper.Get();
+    return wrapper.Unwrap();
 }
 
 template <class T>
-inline const T& Unwrap(const TConstRefWrapper<T>& wrapper)
+const T& Unwrap(const TConstRefWrapper<T>& wrapper)
 {
-    return wrapper.Get();
+    return wrapper.Unwrap();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -152,7 +153,26 @@ public:
         : Functor_(functor)
     { }
 
-    T& Get()
+    T& Unwrap()
+    {
+        return Functor_;
+    }
+
+private:
+    T Functor_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+class TThrowOnDestroyedWrapper
+{
+public:
+    explicit TThrowOnDestroyedWrapper(const T& functor)
+        : Functor_(functor)
+    { }
+
+    T& Unwrap()
     {
         return Functor_;
     }
@@ -166,43 +186,49 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-static auto IgnoreResult(const T& x)
+auto IgnoreResult(const T& x)
 {
     return NYT::NDetail::TIgnoreResultWrapper<T>(x);
 }
 
 template <class T>
-static auto Unretained(T* x)
+auto ThrowOnDestroyed(const T& x)
+{
+    return NYT::NDetail::TThrowOnDestroyedWrapper<T>(x);
+}
+
+template <class T>
+auto Unretained(T* x)
 {
     return NYT::NDetail::TUnretainedWrapper<T>(x);
 }
 
 template <class T>
-static auto Owned(T* x)
+auto Owned(T* x)
 {
     return NYT::NDetail::TOwnedWrapper<T>(x);
 }
 
 template <class T>
-static auto Passed(T&& x)
+auto Passed(T&& x)
 {
     return NYT::NDetail::TPassedWrapper<T>(std::forward<T>(x));
 }
 
 template <class T>
-static auto ConstRef(const T& x)
+auto ConstRef(const T& x)
 {
     return NYT::NDetail::TConstRefWrapper<T>(x);
 }
 
 template <class U>
-static U& WrapToPassed(U& arg)
+U& WrapToPassed(U& arg)
 {
     return arg;
 }
 
 template <class U>
-static auto WrapToPassed(U&& arg)
+auto WrapToPassed(U&& arg)
 {
     return Passed(std::move(arg));
 }
@@ -223,38 +249,35 @@ public:
     { }
 
     template <class D, class... XAs>
-    auto operator()(D* object, XAs&&... args) const
+    auto operator()(D* this_, XAs&&... args) const
     {
         static_assert(
             !std::is_array_v<D>,
             "First bound argument to a method cannot be an array");
 
-        return (object->*Method_)(std::forward<XAs>(args)...);
+        return (this_->*Method_)(std::forward<XAs>(args)...);
     }
 
     template <class D, class... XAs>
-    void operator()(const TWeakPtr<D>& ref, XAs&&... args) const
+    void operator()(const TWeakPtr<D>& weakThis, XAs&&... args) const
     {
         using TResult = typename TFunctorTraits<TMethod>::TResult;
         static_assert(
             std::is_void_v<TResult>,
             "Weak calls are only supported for methods with a void return type");
 
-        auto strongRef = ref.Lock();
-        auto* object = strongRef.Get();
-
-        if (!object) {
+        auto this_ = weakThis.Lock();
+        if (!this_) {
             return;
         }
 
-        (object->*Method_)(std::forward<XAs>(args)...);
+        (this_.Get()->*Method_)(std::forward<XAs>(args)...);
     }
 
     template <class D, class... XAs>
-    auto operator()(const TIntrusivePtr<D>& ref, XAs&&... args) const
+    auto operator()(const TIntrusivePtr<D>& this_, XAs&&... args) const
     {
-        auto* object = ref.Get();
-        return (object->*Method_)(std::forward<XAs>(args)...);
+        return (this_.Get()->*Method_)(std::forward<XAs>(args)...);
     }
 
 private:
@@ -350,13 +373,13 @@ struct TFunctorTraits<TR (C::*)(TAs...) const noexcept>
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-class TOmitResultInvoker
+class TIgnoreResultInvoker
 {
 public:
     using TInvoker = typename TFunctorTraits<T>::TInvoker;
 
-    explicit TOmitResultInvoker(NDetail::TIgnoreResultWrapper<T>&& invoker)
-        : Invoker_(std::move(invoker.Get()))
+    explicit TIgnoreResultInvoker(NDetail::TIgnoreResultWrapper<T>&& wrapper)
+        : Invoker_(std::move(wrapper.Unwrap()))
     { }
 
     template <class... XAs>
@@ -372,8 +395,65 @@ private:
 template <class T>
 struct TFunctorTraits<NDetail::TIgnoreResultWrapper<T>>
 {
-    using TInvoker = TOmitResultInvoker<T>;
+    using TInvoker = TIgnoreResultInvoker<T>;
     using TSignature = typename TToVoidSignature<typename TFunctorTraits<T>::TSignature>::TType;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TMethod>
+class TThrowOnDestroyedInvoker
+{
+public:
+    explicit TThrowOnDestroyedInvoker(NDetail::TThrowOnDestroyedWrapper<TMethod>&& wrapper)
+        : Method_(wrapper.Unwrap())
+    { }
+
+    template <class D, class... XAs>
+    auto operator()(const TWeakPtr<D>& weakThis, XAs&&... args) const
+    {
+        auto this_ = weakThis.Lock();
+        if (!this_) {
+            THROW_ERROR_EXCEPTION(NYT::EErrorCode::Canceled, "Object destroyed");
+        }
+
+        return (this_.Get()->*Method_)(std::forward<XAs>(args)...);
+    }
+
+private:
+    const TMethod Method_;
+};
+
+template <class TR, class C, class... TAs>
+struct TFunctorTraits<NDetail::TThrowOnDestroyedWrapper<TR (C::*)(TAs...)>>
+{
+    using TInvoker = TThrowOnDestroyedInvoker<TR (C::*)(TAs...)>;
+    using TSignature = TR (C*, TAs...);
+    using TResult = TR;
+};
+
+template <class TR, class C, class... TAs>
+struct TFunctorTraits<NDetail::TThrowOnDestroyedWrapper<TR (C::*)(TAs...) const>>
+{
+    using TInvoker = TThrowOnDestroyedInvoker<TR (C::*)(TAs...) const>;
+    using TSignature = TR (C*, TAs...);
+    using TResult = TR;
+};
+
+template <class TR, class C, class... TAs>
+struct TFunctorTraits<NDetail::TThrowOnDestroyedWrapper<TR (C::*)(TAs...) noexcept>>
+{
+    using TInvoker = TThrowOnDestroyedInvoker<TR (C::*)(TAs...) noexcept>;
+    using TSignature = TR (C*, TAs...);
+    using TResult = TR;
+};
+
+template <class TR, class C, class... TAs>
+struct TFunctorTraits<NDetail::TThrowOnDestroyedWrapper<TR (C::*)(TAs...) const noexcept>>
+{
+    using TInvoker = TThrowOnDestroyedInvoker<TR (C::*)(TAs...) const noexcept>;
+    using TSignature = TR (C*, TAs...);
+    using TResult = TR;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -399,8 +479,7 @@ struct TCheckNoRawPtrToRefCountedType
     static_assert(
         !(std::is_pointer_v<T> && (
             std::is_convertible_v<T, const TRefCounted*> ||
-            std::is_convertible_v<T, TRefCounted*>
-        )),
+            std::is_convertible_v<T, TRefCounted*>)),
         "T has reference-counted type and should not be bound by the raw pointer");
 };
 
@@ -443,23 +522,45 @@ template <>
 class TPropagateMixin<true>
 {
 public:
-    TPropagateMixin()
+    TPropagateMixin(
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+        TSourceLocation location
+#endif
+    )
         : Storage_(NConcurrency::GetCurrentPropagatingStorage())
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+        , Location_(location)
+#endif
     { }
 
     NConcurrency::TPropagatingStorageGuard MakePropagatingStorageGuard()
     {
-        return NConcurrency::TPropagatingStorageGuard(Storage_);
+        return NConcurrency::TPropagatingStorageGuard(Storage_
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+        , Location_
+#endif
+    );
     }
 
 private:
     const NConcurrency::TPropagatingStorage Storage_;
+
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+    const TSourceLocation Location_;
+#endif
 };
 
 template <>
 class TPropagateMixin<false>
 {
 public:
+    TPropagateMixin(
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+        TSourceLocation /*location*/
+#endif
+    )
+    { }
+
     std::monostate MakePropagatingStorageGuard()
     {
         return {};
@@ -489,8 +590,13 @@ public:
             location
 #endif
         )
-        , Functor(std::forward<XFunctor>(functor))
-        , BoundArgs(std::forward<XBs>(boundArgs)...)
+        , TPropagateMixin<Propagate>(
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+            location
+#endif
+        )
+        , Functor_(std::forward<XFunctor>(functor))
+        , BoundArgs_(std::forward<XBs>(boundArgs)...)
     { }
 
     // Keep minimum frame count.
@@ -507,14 +613,14 @@ public:
         auto propagatingStorageGuard = state->MakePropagatingStorageGuard();
         Y_UNUSED(propagatingStorageGuard);
 
-        return state->Functor(
-            NDetail::Unwrap(std::get<BoundIndexes>(state->BoundArgs))...,
+        return state->Functor_(
+            NDetail::Unwrap(std::get<BoundIndexes>(state->BoundArgs_))...,
             std::forward<TAs>(args)...);
     }
 
 private:
-    TFunctor Functor;
-    const std::tuple<TBs...> BoundArgs;
+    TFunctor Functor_;
+    const std::tuple<TBs...> BoundArgs_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -578,6 +684,8 @@ auto Bind(
         THelper::template GetInvokeFunction<TState>()};
 }
 
+// NB: This specialization doesn't act proper to `Propagate` flag,
+// it just copies propagating policy from given callback.
 template <
     bool Propagate,
 #ifdef YT_ENABLE_BIND_LOCATION_TRACKING
@@ -596,6 +704,34 @@ auto Bind(
     Y_UNUSED(location);
 #endif
     return TExtendedCallback<T>(callback);
+}
+
+template <class R, class... TArgs>
+TExtendedCallback<R(TArgs...)>
+TExtendedCallback<R(TArgs...)>::Via(IInvokerPtr invoker) const &
+{
+    return ViaImpl(*this, std::move(invoker));
+}
+
+template <class R, class... TArgs>
+TExtendedCallback<R(TArgs...)>
+TExtendedCallback<R(TArgs...)>::Via(IInvokerPtr invoker) &&
+{
+    return ViaImpl(std::move(*this), std::move(invoker));
+}
+
+template <class R, class... TArgs>
+TExtendedCallback<R(TArgs...)>
+TExtendedCallback<R(TArgs...)>::ViaImpl(TExtendedCallback<R(TArgs...)> callback, TIntrusivePtr<IInvoker> invoker)
+{
+    static_assert(
+        std::is_void_v<R>,
+        "Via() can only be used with void return type.");
+    YT_ASSERT(invoker);
+
+    return BIND_NO_PROPAGATE([callback = std::move(callback), invoker = std::move(invoker)] (TArgs... args) {
+        invoker->Invoke(BIND_NO_PROPAGATE(callback, WrapToPassed(std::forward<TArgs>(args))...));
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

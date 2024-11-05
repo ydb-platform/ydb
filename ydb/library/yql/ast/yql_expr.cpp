@@ -19,6 +19,8 @@
 #include <util/digest/numeric.h>
 #include <util/string/cast.h>
 
+#include <openssl/sha.h>
+
 #include <map>
 #include <unordered_set>
 
@@ -1178,8 +1180,9 @@ namespace {
         if (typeExpr.size() != 1U)
             return false;
 
+        auto typePos = node.GetChild(2)->GetPosition();
         auto parameterExpr = ctx.ProcessNode(node,
-            ctx.Expr.NewCallable(node.GetPosition(), "Parameter", {
+            ctx.Expr.NewCallable(typePos, "Parameter", {
                 ctx.Expr.NewAtom(node.GetPosition(), nameStr),
                 std::move(typeExpr.front())
             }));
@@ -1321,21 +1324,21 @@ namespace {
             packageModuleName << Sep << part;
         }
 
-        auto queue = TVector<std::pair<TString, THttpURL>> {
-            {packageModuleName, ParseURL(url)}
+        auto queue = TVector<std::pair<TString, TString>> {
+            {packageModuleName, url}
         };
 
         while (queue) {
-            auto [prefix, httpUrl] = queue.back();
+            auto [prefix, url] = queue.back();
             queue.pop_back();
 
             TVector<TUrlListEntry> urlListEntries;
             try {
-                urlListEntries = ctx.UrlListerManager->ListUrl(httpUrl, token);
+                urlListEntries = ctx.UrlListerManager->ListUrl(url, token);
             } catch (const std::exception& e) {
                 ctx.AddError(*nameNode,
                     TStringBuilder()
-                        << "UrlListerManager: failed to list URL \"" << httpUrl.PrintS()
+                        << "UrlListerManager: failed to list URL \"" << url
                         << "\", details: " << e.what()
                 );
 
@@ -1353,7 +1356,7 @@ namespace {
                     }
 
                     if (!ctx.ModuleResolver->AddFromUrl(
-                        moduleName, urlListEntry.Url.PrintS(), token, ctx.Expr,
+                        moduleName, urlListEntry.Url, token, ctx.Expr,
                         ctx.SyntaxVersion, 0, nameNode->GetPosition()
                     )) {
                         return false;
@@ -1708,6 +1711,7 @@ namespace {
         size_t Order = 0ULL;
         bool RefAtoms = false;
         bool AllowFreeArgs = false;
+        bool NormalizeAtomFlags = false;
         TNodeMap<size_t> FreeArgs;
         std::unique_ptr<TMemoryPool> Pool;
         std::vector<TFrameContext> Frames;
@@ -1832,10 +1836,11 @@ namespace {
             case TExprNode::Atom:
                 {
                     auto quote = AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms);
+                    auto flags = ctx.NormalizeAtomFlags ? TNodeFlags::ArbitraryContent : node.Flags();
                     auto content = AnnotateAstNode(
                         ctx.RefAtoms ?
-                            TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, node.Flags()) :
-                            TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, node.Flags()),
+                            TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, flags) :
+                            TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, flags),
                         &node, annotationFlags, pool, ctx.RefAtoms);
 
                     res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool, quote, content);
@@ -1905,7 +1910,9 @@ namespace {
             case TExprNode::Lambda:
                 {
                     const auto prevFrame = ctx.CurrentFrame;
-                    ctx.CurrentFrame = &ctx.Frames[ctx.LambdaFrames.find(&node)->second];
+                    const auto it = ctx.LambdaFrames.find(&node);
+                    YQL_ENSURE(it != ctx.LambdaFrames.end());
+                    ctx.CurrentFrame = &ctx.Frames[it->second];
                     YQL_ENSURE(node.ChildrenSize() > 0U);
                     const auto& args = node.Head();
                     TSmallVec<TAstNode*> argsChildren;
@@ -1963,7 +1970,7 @@ namespace {
                 res = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("world"), pool);
                 break;
             case TExprNode::Argument: {
-                YQL_ENSURE(ctx.AllowFreeArgs, "Free arguments are not allowed"); 
+                YQL_ENSURE(ctx.AllowFreeArgs, "Free arguments are not allowed");
                 auto iter = ctx.FreeArgs.emplace(&node, ctx.FreeArgs.size());
                 res = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), ctx.Expr.AppendString("_FreeArg" + ToString(iter.first->second)), pool);
                 break;
@@ -2225,16 +2232,9 @@ namespace {
         }
     }
 
-    template <class TPMap>
-    bool GatherParentsImpl(const TExprNode& node, TPMap& parentsMap, TNodeSet& visited, bool withLeaves) {
-        if (node.Type() == TExprNode::Arguments) {
+    bool GatherParentsImpl(const TExprNode& node, TParentsMap& parentsMap, TNodeSet& visited) {
+        if (node.Type() == TExprNode::Arguments || node.Type() == TExprNode::Atom || node.Type() == TExprNode::World) {
             return false;
-        }
-
-        if (!withLeaves) {
-            if (node.Type() == TExprNode::Atom || node.Type() == TExprNode::World) {
-                return false;
-            }
         }
 
         if (!visited.emplace(&node).second) {
@@ -2242,7 +2242,7 @@ namespace {
         }
 
         node.ForEachChild([&](const TExprNode& child) {
-            if (GatherParentsImpl<TPMap>(child, parentsMap, visited, withLeaves)) {
+            if (GatherParentsImpl(child, parentsMap, visited)) {
                 parentsMap[&child].emplace(&node);
             }
         });
@@ -2712,7 +2712,8 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
     TVisitNodeContext ctx(exprContext);
     ctx.RefAtoms = settings.RefAtoms;
     ctx.AllowFreeArgs = settings.AllowFreeArgs;
-    ctx.Pool = std::make_unique<TMemoryPool>(4096);
+    ctx.NormalizeAtomFlags = settings.NormalizeAtomFlags;
+    ctx.Pool = std::make_unique<TMemoryPool>(4096, TMemoryPool::TExpGrow::Instance(), settings.Allocator);
     ctx.Frames.push_back(TFrameContext());
     ctx.CurrentFrame = &ctx.Frames.front();
     VisitNode(root, 0ULL, ctx);
@@ -2776,6 +2777,13 @@ TExprNode::TPtr TExprContext::RenameNode(const TExprNode& node, const TStringBuf
 TExprNode::TPtr TExprContext::ShallowCopy(const TExprNode& node) {
     YQL_ENSURE(node.Type() != TExprNode::Lambda);
     const auto newNode = node.Clone(AllocateNextUniqueId());
+    ExprNodes.emplace_back(newNode.Get());
+    return newNode;
+}
+
+TExprNode::TPtr TExprContext::ShallowCopyWithPosition(const TExprNode& node, TPositionHandle pos) {
+    YQL_ENSURE(node.Type() != TExprNode::Lambda);
+    const auto newNode = node.CloneWithPosition(AllocateNextUniqueId(), pos);
     ExprNodes.emplace_back(newNode.Get());
     return newNode;
 }
@@ -2948,6 +2956,30 @@ TExprNode::TPtr TExprContext::SwapWithHead(const TExprNode& node) {
     return ChangeChild(node.Head(), 0U, ChangeChild(node, 0U, node.Head().HeadPtr()));
 }
 
+TConstraintSet TExprContext::MakeConstraintSet(const NYT::TNode& serializedConstraints) {
+    const static std::unordered_map<std::string_view, std::function<const TConstraintNode*(TExprContext&, const NYT::TNode&)>> FACTORIES = {
+        {TSortedConstraintNode::Name(),     std::mem_fn(&TExprContext::MakeConstraint<TSortedConstraintNode, const NYT::TNode&>)},
+        {TChoppedConstraintNode::Name(),    std::mem_fn(&TExprContext::MakeConstraint<TChoppedConstraintNode, const NYT::TNode&>)},
+        {TUniqueConstraintNode::Name(),     std::mem_fn(&TExprContext::MakeConstraint<TUniqueConstraintNode, const NYT::TNode&>)},
+        {TDistinctConstraintNode::Name(),   std::mem_fn(&TExprContext::MakeConstraint<TDistinctConstraintNode, const NYT::TNode&>)},
+        {TEmptyConstraintNode::Name(),      std::mem_fn(&TExprContext::MakeConstraint<TEmptyConstraintNode, const NYT::TNode&>)},
+        {TVarIndexConstraintNode::Name(),   std::mem_fn(&TExprContext::MakeConstraint<TVarIndexConstraintNode, const NYT::TNode&>)},
+        {TMultiConstraintNode::Name(),      std::mem_fn(&TExprContext::MakeConstraint<TMultiConstraintNode, const NYT::TNode&>)},
+    };
+    TConstraintSet res;
+    YQL_ENSURE(serializedConstraints.IsMap(), "Unexpected node type with serialize constraints: " << serializedConstraints.GetType());
+    for (const auto& [key, node]: serializedConstraints.AsMap()) {
+        auto it = FACTORIES.find(key);
+        YQL_ENSURE(it != FACTORIES.cend(), "Unsupported constraint construction: " << key);
+        try {
+            res.AddConstraint((it->second)(*this, node));
+        } catch (...) {
+            YQL_ENSURE(false, "Error while constructing constraint: " << CurrentExceptionMessage());
+        }
+    }
+    return res;
+}
+
 TNodeException::TNodeException()
     : Pos_()
 {
@@ -3000,14 +3032,22 @@ bool TDataExprParamsType::Validate(TPosition position, TExprContext& ctx) const 
         return false;
     }
 
-    const auto precision = FromString<ui8>(GetParamOne());
+    ui8 precision;
+    if (!TryFromString<ui8>(GetParamOne(), precision)){
+        ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal precision: " << GetParamOne()));
+        return false;
+    }
 
     if (!precision || precision > 35) {
         ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal precision: " << GetParamOne()));
         return false;
     }
 
-    const auto scale = FromString<ui8>(GetParamTwo());
+    ui8 scale;
+    if (!TryFromString<ui8>(GetParamTwo(), scale)){
+        ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal scale: " << GetParamTwo()));
+        return false;
+    }
 
     if (scale > precision) {
         ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal parameters: (" << GetParamOne() << "," << GetParamTwo() << ")."));
@@ -3027,6 +3067,24 @@ bool TItemExprType::Validate(TPosition position, TExprContext& ctx) const {
 
 bool TItemExprType::Validate(TPositionHandle position, TExprContext& ctx) const {
     return Validate(ctx.GetPosition(position), ctx);
+}
+
+TStringBuf TItemExprType::GetCleanName(bool isVirtual) const {
+    if (!isVirtual) {
+        return Name;
+    }
+
+    YQL_ENSURE(Name.StartsWith(YqlVirtualPrefix));
+    return Name.SubStr(YqlVirtualPrefix.size());
+}
+
+const TItemExprType* TItemExprType::GetCleanItem(bool isVirtual, TExprContext& ctx) const {
+    if (!isVirtual) {
+        return this;
+    }
+
+    YQL_ENSURE(Name.StartsWith(YqlVirtualPrefix));
+    return ctx.MakeType<TItemExprType>(Name.SubStr(YqlVirtualPrefix.size()), ItemType);
 }
 
 bool TMultiExprType::Validate(TPosition position, TExprContext& ctx) const {
@@ -3251,6 +3309,20 @@ ui32 TPgExprType::GetFlags(ui32 typeId) {
     }
 
     return ret;
+}
+
+ui64 TPgExprType::GetPgExtensionsMask(ui32 typeId) {
+    auto descPtr = &NPg::LookupType(typeId);
+    return MakePgExtensionMask(descPtr->ExtensionIndex);
+}
+
+ui64 MakePgExtensionMask(ui32 extensionIndex) {
+    if (!extensionIndex) {
+        return 0;
+    }
+    
+    YQL_ENSURE(extensionIndex <= 64);
+    return 1ull << (extensionIndex - 1);
 }
 
 TExprContext::TExprContext(ui64 nextUniqueId)
@@ -3607,16 +3679,57 @@ bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNod
     return CompareExpressions(l, r, map, level, visited);
 }
 
-void GatherParents(const TExprNode& node, TParentsMap& parentsMap, bool withLeaves) {
-    parentsMap.clear();
-    TNodeSet visisted;
-    GatherParentsImpl<TParentsMap>(node, parentsMap, visisted, withLeaves);
+class TCacheKeyBuilder {
+public:
+    TString Process(const TExprNode& root) {
+        SHA256_Init(&Sha);
+        unsigned char hash[SHA256_DIGEST_LENGTH];
+        Visit(root);
+        SHA256_Final(hash, &Sha);
+        return TString((const char*)hash, sizeof(hash));
+    }
+
+private:
+    void Visit(const TExprNode& node) {
+        auto [it, inserted] = Visited.emplace(&node, Visited.size());
+        SHA256_Update(&Sha, &it->second, sizeof(it->second));
+        if (!inserted) {
+            return;
+        }
+
+        ui32 type = node.Type();
+        SHA256_Update(&Sha, &type, sizeof(type));
+        if (node.Type() == TExprNode::EType::Atom || node.Type() == TExprNode::EType::Callable) {
+            ui32 textLen = node.Content().size();
+            SHA256_Update(&Sha, &textLen, sizeof(textLen));
+            SHA256_Update(&Sha, node.Content().data(), textLen);
+        }
+
+        if (node.Type() == TExprNode::EType::Atom || node.Type() == TExprNode::EType::Argument || node.Type() == TExprNode::EType::World) {
+            return;
+        }
+
+        ui32 len = node.ChildrenSize();
+        SHA256_Update(&Sha, &len, sizeof(len));
+        for (const auto& child : node.Children()) {
+            Visit(*child);
+        }
+    }
+
+private:
+    SHA256_CTX Sha;
+    TNodeMap<ui64> Visited;
+};
+
+TString MakeCacheKey(const TExprNode& root) {
+    TCacheKeyBuilder builder;
+    return builder.Process(root);
 }
 
-void GatherParentsMulti(const TExprNode& node, TParentsMultiMap& parentsMap, bool withLeaves) {
+void GatherParents(const TExprNode& node, TParentsMap& parentsMap) {
     parentsMap.clear();
     TNodeSet visisted;
-    GatherParentsImpl<TParentsMultiMap>(node, parentsMap, visisted, withLeaves);
+    GatherParentsImpl(node, parentsMap, visisted);
 }
 
 void CheckCounts(const TExprNode& root) {

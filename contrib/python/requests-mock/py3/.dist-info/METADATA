@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: requests-mock
-Version: 1.11.0
+Version: 1.12.1
 Summary: Mock out responses from the requests package
 Home-page: https://requests-mock.readthedocs.io/
 Author: Jamie Lennox
@@ -13,32 +13,20 @@ Classifier: Intended Audience :: Information Technology
 Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
-Classifier: Programming Language :: Python :: 2
-Classifier: Programming Language :: Python :: 2.7
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.4
-Classifier: Programming Language :: Python :: 3.5
-Classifier: Programming Language :: Python :: 3.6
-Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Software Development :: Testing
+Requires-Python: >=3.5
 License-File: LICENSE
-Requires-Dist: requests (<3,>=2.3)
-Requires-Dist: six
+Requires-Dist: requests <3,>=2.22
 Provides-Extra: fixture
 Requires-Dist: fixtures ; extra == 'fixture'
-Provides-Extra: test
-Requires-Dist: fixtures ; extra == 'test'
-Requires-Dist: purl ; extra == 'test'
-Requires-Dist: pytest ; extra == 'test'
-Requires-Dist: sphinx ; extra == 'test'
-Requires-Dist: testtools ; extra == 'test'
-Requires-Dist: requests-futures ; extra == 'test'
-Requires-Dist: mock ; (( python_version < '3.3')) and extra == 'test'
 
 ===============================
 requests-mock
@@ -141,4 +129,3 @@ under the License.
 .. _docs: https://requests-mock.readthedocs.io/
 .. _GitHub: https://github.com/jamielennox/requests-mock
 .. _StackOverflow: https://stackoverflow.com/questions/tagged/requests-mock
-

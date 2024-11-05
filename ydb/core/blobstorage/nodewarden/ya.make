@@ -1,17 +1,19 @@
 LIBRARY()
 
 SRCS(
-    defs.h
     group_stat_aggregator.cpp
     group_stat_aggregator.h
     distconf.cpp
     distconf.h
     distconf_binding.cpp
+    distconf_dynamic.cpp
+    distconf_generate.cpp
     distconf_fsm.cpp
     distconf_invoke.cpp
     distconf_mon.cpp
     distconf_persistent_storage.cpp
     distconf_scatter_gather.cpp
+    distconf_validate.cpp
     node_warden.h
     node_warden_cache.cpp
     node_warden_events.h
@@ -39,6 +41,8 @@ PEERDIR(
     ydb/core/blobstorage/pdisk
     ydb/core/control
     ydb/library/pdisk_io
+    ydb/library/yaml_config
+    ydb/core/util/actorsys_test
 )
 
 END()

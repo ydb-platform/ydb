@@ -6,7 +6,7 @@ Construct an empty list. The only argument specifies a string describing the dat
 
 [Documentation for the type definition format](../../types/type_string.md).
 
-**Examples**
+### Examples
 
 ```yql
 SELECT ListCreate(Tuple<String,Double?>);
@@ -20,7 +20,7 @@ SELECT ListCreate(OptionalType(DataType("String")));
 
 Construct a list based on one or more arguments. The argument types must be compatible in the case of `AsList` and strictly match in the case of `AsListStrict`.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT AsList(1, 2, 3, 4, 5);
@@ -30,7 +30,8 @@ SELECT AsList(1, 2, 3, 4, 5);
 
 The count of items in the list.
 
-**Examples**
+### Examples
+
 {% if feature_column_container_type %}
 
 ```yql
@@ -43,7 +44,8 @@ SELECT ListLength(list_column) FROM my_table;
 
 Check that the list contains at least one item.
 
-**Examples**
+### Examples
+
 {% if feature_column_container_type %}
 
 ```yql
@@ -54,9 +56,10 @@ SELECT ListHasItems(list_column) FROM my_table;
 
 ## ListCollect {#listcollect}
 
-Convert a lazy list (it can be built by such functions as [ListFilter](#listfilter), [ListMap](#listmap), [ListFlatMap](#listflatmap)) to an eager list. In contrast to a lazy list, where each new pass re-calculates the list contents, in an eager list the content is built at once by consuming more memory.
+Convert a lazy list (it can be built by such functions as [ListFilter](#listmap), [ListMap](#listmap), [ListFlatMap](#listmap)) to an eager list. In contrast to a lazy list, where each new pass re-calculates the list contents, in an eager list the content is built at once by consuming more memory.
 
-**Examples**
+### Examples
+
 {% if feature_column_container_type %}
 
 ```yql
@@ -74,7 +77,7 @@ Arguments:
 1. List.
 2. An optional expression to get the sort key from a list element (it's the element itself by default).
 
-**Examples**
+### Examples
 
 {% if feature_column_container_type %}
 
@@ -109,8 +112,9 @@ The types of list items must be compatible in the case of `ListExtend` and stric
 If at least one of the lists is optional, then the result is also optional.
 If at least one argument is `NULL`, then the result type is `NULL`.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT ListExtend(
@@ -128,8 +132,9 @@ Sequentially join lists of structures (concatenation of lists). A field is added
 
 If at least one of the lists is optional, then the result is also optional.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT ListUnionAll(
@@ -148,8 +153,9 @@ Based on the input lists, build a list of pairs containing the list items with m
 The length of the returned list is determined by the shortest list for ListZip and the longest list for ListZipAll.
 When the shorter list is exhausted, a `NULL` value of a relevant [optional type](../../types/optional.md) is paired with the elements of the longer list.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT
@@ -164,8 +170,9 @@ FROM my_table;
 
 Build a list of pairs (Tuple) containing the element number and the element itself (`List<TupleUint64,list_element_type>`).
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT ListEnumerate(list_column) FROM my_table;
@@ -177,8 +184,9 @@ SELECT ListEnumerate(list_column) FROM my_table;
 
 Reverse the list.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT ListReverse(list_column) FROM my_table;
@@ -192,8 +200,9 @@ Returns a copy of the list, skipping the specified number of its first elements.
 
 The first argument specifies the source list and the second argument specifies how many elements to skip.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT
@@ -209,8 +218,9 @@ Returns a copy of the list containing a limited number of elements from the seco
 
 The first argument specifies the source list and the second argument specifies the maximum number of elements to be taken from the beginning of the list.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT ListTake(list_column, 3) FROM my_table;
@@ -222,8 +232,9 @@ SELECT ListTake(list_column, 3) FROM my_table;
 
 Searches the list for an element with the specified value and returns its index at the first occurrence. Indexes count from 0. If such element is missing, it returns `NULL`.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT
@@ -251,15 +262,19 @@ Arguments:
 
 1. Source list.
 2. Functions for processing list elements, such as:
+
     * [Lambda function](../../syntax/expressions.md#lambda).
     * `Module::Function` - C++ UDF.
+
 {% if feature_udf_noncpp %}
+
     * [Python UDF](../../udf/python.md), [JavaScript UDF](../../udf/javascript.md) or any other called value.
 
 If the source list is optional, then the output list is also optional.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 $callable = Python::test(Callable<(Int64)->Bool>, "defMyFavouriteCrutchtest(i): return i % 2");
@@ -271,6 +286,7 @@ FROM my_table;
 ```
 
 {% endif %}
+
 {% endif %}
 
 ## ListNotNull {#listnotnull}
@@ -279,7 +295,7 @@ Applies transformation to the source list, skipping empty optional items and str
 
 If the source list is optional, then the output list is also optional.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT ListNotNull([1,2]),   -- [1,2]
@@ -292,7 +308,7 @@ Expands the list of lists into a flat list, preserving the order of items. As th
 
 If the source list is optional, then the output list is also optional.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT ListFlatten([[1,2],[3,4]]),   -- [1,2,3,4]
@@ -303,8 +319,9 @@ SELECT ListFlatten([[1,2],[3,4]]),   -- [1,2,3,4]
 
 Returns a copy of the list containing only distinct elements.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT
@@ -323,8 +340,9 @@ Returns `true` for a list of Boolean values, if:
 
 Otherwise, it returns false.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT
@@ -339,8 +357,9 @@ FROM my_table;
 
 Show whether the list contains the specified element.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT
@@ -354,8 +373,9 @@ FROM my_table;
 
 Returns the first and last item of the list.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT
@@ -370,8 +390,9 @@ FROM my_table;
 
 Apply the appropriate aggregate function to all elements of the numeric list.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT
@@ -391,13 +412,11 @@ Folding a list.
 Arguments:
 
 1. List
-2. Initial state U for ListFold, initLambda(item:T)->U for ListFold1
-3. updateLambda(item:T, state:U)->U
+2. Initial state `U` for `ListFold`, `initLambda(item:T)->U` for `ListFold1`
+3. `updateLambda(item:T, state:U)->U`
 
 Type returned:
-U for ListFold, optional U for ListFold1.
-
-**Examples**
+`U` for `ListFold`, `U?` for `ListFold1`.
 
 ```yql
 $l = [1, 4, 7, 2];
@@ -418,12 +437,12 @@ Converts each list item i by calling the handler(i, state).
 Arguments:
 
 1. List
-2. Initial state S for ListFoldMap, initLambda(item:T)->tuple (U S) for ListFold1Map
-3. handler(item:T, state:S)->tuple (U S)
+2. Initial state `S` for `ListFoldMap`, `initLambda(item:T)->tuple (U S)` for `ListFold1Map`
+3. `handler(item:T, state:S)->tuple (U S)`
 
-Type returned: List of U items.
+Type returned: `List` of `U` items.
 
-**Examples**
+### Examples
 
 ```yql
 $l = [1, 4, 7, 2];
@@ -456,7 +475,7 @@ Specifics:
 * If the step is negative and the end is greater than or equal to the start, the result list is empty.
 * If the step is neither positive nor negative (0 or NaN), the result list is empty.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT
@@ -473,7 +492,7 @@ Required arguments:
 1. Value.
 2. Number of copies.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT ListReplicate(true, 3); -- [true, true, true]
@@ -484,8 +503,9 @@ SELECT ListReplicate(true, 3); -- [true, true, true]
 Concatenates a list of strings into a single string.
 You can set a separator as the second parameter.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT
@@ -500,8 +520,9 @@ FROM my_table;
 
 For a list of structures, it returns a list of contained fields having the specified name.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT
@@ -526,7 +547,7 @@ Required arguments:
 
 If the input list is optional, then the result is also optional.
 
-**Examples**
+### Examples
 
 ```yql
 $data = AsList(1, 2, 5, 1, 2, 7);
@@ -549,7 +570,7 @@ Arguments:
 1. List.
 2. [Aggregation factory](../basic.md#aggregationfactory).
 
-**Examples**
+### Examples
 
 ```yql
 SELECT ListAggregate(AsList(1, 2, 3), AggregationFactory("Sum")); -- 6
@@ -566,8 +587,9 @@ It means that:
 
 Optional lists are also supported, resulting in an optional dictionary.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT
@@ -584,8 +606,9 @@ An optional list is also supported, resulting in an optional dictionary.
 
 Inverse function: get a list of keys for the [DictKeys](../dict.md#dictkeys) dictionary.
 
-**Examples**
 {% if feature_column_container_type %}
+
+### Examples
 
 ```yql
 SELECT
@@ -595,3 +618,23 @@ FROM my_table;
 
 {% endif %}
 
+## ListTop, ListTopAsc, ListTopDesc, ListTopSort, ListTopSortAsc и ListTopSortDesc {#listtop}
+
+Select top values from the list. `ListTopSort*` additionally sorts the returned values. The smallest values are selected by default. Thus, the functions without a suffix are the aliases to `*Asc` functions, while `*Desc` functions return the largest values.
+
+`ListTopSort` is more effective than consecutive `ListTop` and `ListSort` because `ListTop` can partially sort the list to find needed values. However, `ListTop` is more effective than `ListTopSort` when the result order is unimportant.
+
+Arguments:
+
+1. List.
+2. Size of selection.
+3. An optional expression to get the sort key from a list element (it's the element itself by default).
+
+### Examples
+
+```yql
+ListTop(List<T>{Flags:AutoMap}, N)->List<T>
+ListTop(List<T>{Flags:AutoMap}, N, (T)->U)->List<T>
+```
+
+The signatures of other functions are the same.

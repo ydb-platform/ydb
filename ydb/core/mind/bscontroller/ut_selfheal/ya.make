@@ -16,6 +16,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/apps/version
     ydb/core/blobstorage/dsproxy/mock
     ydb/core/blobstorage/pdisk/mock
     ydb/core/mind/bscontroller

@@ -24,9 +24,37 @@ class TDqConfig;
 
 class IDqGateway : public TThrRefBase {
 public:
+    struct TStageStats {
+        i64 InputRows = 0;
+        i64 OutputRows = 0;
+        i64 InputBytes = 0;
+        i64 OutputBytes = 0;
+
+        THashMap<TString, i64> ToMap() const {
+            return {
+                {"input_rows", InputRows},
+                {"output_rows", OutputRows},
+                {"input_bytes", InputBytes},
+                {"output_bytes", OutputBytes},
+            };
+        }
+
+        bool operator == (const TStageStats& other) const = default;
+    };
+
     using TPtr = TIntrusivePtr<IDqGateway>;
     using TFileResource = Yql::DqsProto::TFile;
-    using TDqProgressWriter = std::function<void(const TString&)>;
+
+    struct TProgressWriterState {
+        TString Stage;
+        std::unordered_map<ui64, IDqGateway::TStageStats> Stats;
+        bool empty() const {
+            return Stage.empty();
+        }
+        bool operator == (const TProgressWriterState& rhs) const = default;
+    };
+
+    using TDqProgressWriter = std::function<void(TProgressWriterState state)>;
 
     struct TFileResourceHash {
         std::size_t operator()(const TFileResource& f) const {
@@ -75,7 +103,7 @@ public:
                 const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
                 const TDqSettings::TPtr& settings,
                 const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
-                bool discard) = 0;
+                bool discard, ui64 executionTimeout) = 0;
 
     virtual TString GetVanillaJobPath() {
         return "";

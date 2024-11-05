@@ -16,6 +16,8 @@ namespace NYql {
 
 using namespace NNodes;
 
+const TString YtProvider_AnonTableName = "YtProvider_AnonTableName";
+
 class TYtIntentDeterminationTransformer : public TVisitorTransformerBase {
 public:
     TYtIntentDeterminationTransformer(TYtState::TPtr state)
@@ -148,7 +150,7 @@ public:
             }
         }
 
-        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph);
+        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
         if (!output) {
             return TStatus::Error;
         }
@@ -165,7 +167,7 @@ public:
             return TStatus::Error;
         }
 
-        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph);
+        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
         if (!output) {
             return TStatus::Error;
         }
@@ -188,7 +190,7 @@ public:
             }
         }
 
-        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph);
+        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
         if (!output) {
             return TStatus::Error;
         }
@@ -196,7 +198,7 @@ public:
     }
 
     TStatus HandleOutOperation(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph);
+        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
         if (!output) {
             return TStatus::Error;
         }
@@ -222,7 +224,7 @@ public:
 
         UpdateDescriptorMeta(tableDesc, tableInfo);
 
-        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph);
+        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
         if (!output) {
             return TStatus::Error;
         }
@@ -278,7 +280,7 @@ public:
 
         UpdateDescriptorMeta(tableDesc, tableInfo);
 
-        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph);
+        output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
         if (!output) {
             return TStatus::Error;
         }
@@ -453,7 +455,22 @@ private:
     void RegisterAnonymouseTable(const TString& cluster, const TString& label) {
         auto& path = State_->AnonymousLabels[std::make_pair(cluster, label)];
         if (path.empty()) {
-            path = "tmp/" + GetGuidAsString(State_->Types->RandomProvider->GenGuid());
+            auto& qContext = State_->Types->QContext;
+            const TString key = cluster + "." + label;
+            if (qContext.CanRead()) {
+                auto res = qContext.GetReader()->Get({YtProvider_AnonTableName, key}).GetValueSync();
+                if (!res) {
+                    ythrow yexception() << "Missing replay data";
+                }
+
+                path = res->Value;
+            } else {
+                path = "tmp/" + GetGuidAsString(State_->Types->RandomProvider->GenGuid());
+                if (qContext.CanWrite()) {
+                    qContext.GetWriter()->Put({YtProvider_AnonTableName, key}, path).GetValueSync();
+                }
+            }
+
             YQL_CLOG(INFO, ProviderYt) << "Anonymous label " << cluster << '.' << label << ": " << path;
         }
     }

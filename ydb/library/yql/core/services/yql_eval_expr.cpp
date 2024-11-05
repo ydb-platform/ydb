@@ -25,6 +25,8 @@ using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NNodes;
 
+const TString EvaluationComponent = "Evaluation";
+
 static THashSet<TStringBuf> EvaluationFuncs = {
     TStringBuf("EvaluateAtom"),
     TStringBuf("EvaluateExpr"),
@@ -384,6 +386,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     TString nextProvider;
     TMaybe<IDataProvider*> calcProvider;
     TExprNode::TPtr calcWorldRoot;
+    TPositionHandle pipelinePos;
     bool isAtomPipeline = false;
     bool isOptionalAtom = false;
     bool isTypePipeline = false;
@@ -959,6 +962,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             return nullptr;
         }
 
+        pipelinePos = node->Pos();
         isAtomPipeline = node->IsCallable("EvaluateAtom");
         isTypePipeline = node->IsCallable("EvaluateType");
         isCodePipeline = node->IsCallable("EvaluateCode");
@@ -969,13 +973,30 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             clonedArg = ctx.NewCallable(clonedArg->Pos(), "SerializeCode", { clonedArg });
         }
 
+        TString key;
         NYT::TNode ysonNode;
+        if (types.QContext) {
+            key = MakeCacheKey(*clonedArg);
+            if (types.QContext.CanRead()) {
+                auto item = types.QContext.GetReader()->Get({EvaluationComponent, key}).GetValueSync();
+                if (!item) {
+                    throw yexception() << "Missing replay data";
+                }
+
+                ysonNode = NYT::NodeFromYsonString(item->Value);
+            }
+        }
+
         do {
             calcProvider.Clear();
             calcWorldRoot.Drop();
             fullTransformer->Rewind();
             auto prevSteps = ctx.Step;
             TEvalScope scope(types);
+            ctx.Step.Reset();
+            if (prevSteps.IsDone(TExprStep::Recapture)) {
+                ctx.Step.Done(TExprStep::Recapture);
+            }
             status = SyncTransform(*fullTransformer, clonedArg, ctx);
             ctx.Step = prevSteps;
             if (status.Level == IGraphTransformer::TStatus::Error) {
@@ -987,6 +1008,10 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             status = SyncTransform(*execTransformer, calcWorldRoot, ctx);
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 return nullptr;
+            }
+
+            if (types.QContext.CanRead()) {
+                break;
             }
 
             IDataProvider::TFillSettings fillSettings;
@@ -1023,16 +1048,18 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
 
             delegatedNode->SetTypeAnn(atomType);
             delegatedNode->SetState(TExprNode::EState::ConstrComplete);
-
-            status = SyncTransform(calcTransfomer ? *calcTransfomer : (*calcProvider.Get())->GetCallableExecutionTransformer(), delegatedNode, ctx);
+            auto& transformer = calcTransfomer ? *calcTransfomer : (*calcProvider.Get())->GetCallableExecutionTransformer();
+            status = SyncTransform(transformer, delegatedNode, ctx);
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 return nullptr;
             }
 
-            auto yson = delegatedNode->GetResult().Content();
+            TString yson{delegatedNode->GetResult().Content()};
             ysonNode = NYT::NodeFromYsonString(yson);
             if (ysonNode.HasKey("FallbackProvider")) {
                 nextProvider = ysonNode["FallbackProvider"].AsString();
+            } else if (types.QContext.CanWrite()) {
+                types.QContext.GetWriter()->Put({EvaluationComponent, key}, yson).GetValueSync();
             }
         } while (ysonNode.HasKey("FallbackProvider"));
 

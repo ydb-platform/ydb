@@ -1,5 +1,6 @@
 #include "base_compute_actor.h"
 
+#include <ydb/core/fq/libs/common/rows_proto_splitter.h>
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/compute/common/metrics.h>
 #include <ydb/core/fq/libs/compute/common/retry_actor.h>
@@ -22,11 +23,13 @@
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/protobuf/interop/cast.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
-#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
-#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] QueryId: " << Params.QueryId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
+#include <queue>
+
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
+#define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
+#define LOG_I(stream) LOG_INFO_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [ResultWriter] CloudId: " << Params.CloudId << " Scope: " << Params.Scope.ToString() << " QueryId: " << Params.QueryId << " JobId: " << Params.JobId << " OperationId: " << ProtoToString(OperationId) << " " << stream)
 
 namespace NFq {
 
@@ -34,6 +37,11 @@ using namespace NActors;
 using namespace NFq;
 
 class TResultSetWriterActor : public TBaseComputeActor<TResultSetWriterActor> {
+    struct TWriterMeta {
+        int64_t Offset = 0;
+        TInstant StartTime;
+    };
+
 public:
     enum ERequestType {
         RT_FETCH_SCRIPT_RESULT,
@@ -76,7 +84,7 @@ public:
     static constexpr char ActorName[] = "FQ_RESULT_SET_WRITER_ACTOR";
 
     void Start() {
-        LOG_I("Start result set writer actor, id: " << ResultSetId);
+        LOG_I("ResultSetId: " << ResultSetId << " Start result set writer actor");
         Become(&TResultSetWriterActor::StateFunc);
         SendFetchScriptResultRequest();
     }
@@ -88,60 +96,108 @@ public:
 
     void Handle(const TEvYdbCompute::TEvFetchScriptResultResponse::TPtr& ev) {
         const auto& response = *ev.Get()->Get();
+        if (response.Status == NYdb::EStatus::BAD_REQUEST && FetchRowsLimit == 0) {
+            LOG_W("ResultSetId: " << ResultSetId << " Got bad request: " << ev->Get()->Issues.ToOneLineString() << ", try to fallback to old behaviour");
+            FetchRowsLimit = 1000;
+            SendFetchScriptResultRequest();
+            return;
+        }
+
         if (response.Status != NYdb::EStatus::SUCCESS) {
-            LOG_E("Can't fetch script result: " << ev->Get()->Issues.ToOneLineString());
+            LOG_E("ResultSetId: " << ResultSetId << " Can't fetch script result: " << ev->Get()->Issues.ToOneLineString());
             Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, ev->Get()->Issues, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
             return;
         }
 
-        StartTime = TInstant::Now();
+        LOG_I("ResultSetId: " << ResultSetId << " FetchToken: " << FetchToken << " Successfully fetched " << response.ResultSet->RowsCount() << " rows");
         Truncated |= response.ResultSet->Truncated();
         FetchToken = response.NextFetchToken;
         auto emptyResultSet = response.ResultSet->RowsCount() == 0;
-        const auto resultSetProto = NYdb::TProtoAccessor::GetProto(*response.ResultSet);
+        auto resultSetProto = NYdb::TProtoAccessor::GetProto(*response.ResultSet);
 
         if (!emptyResultSet) {
-            auto chunk = CreateProtoRequestWithoutResultSet(Offset);
-            Offset += response.ResultSet->RowsCount();
-            *chunk.mutable_result_set() = resultSetProto;
-            auto writeResultCounters = Counters.GetCounters(ERequestType::RT_WRITE_RESULT_SET);
-            writeResultCounters->InFly->Inc();
-            Send(NFq::MakeInternalServiceActorId(), new NFq::TEvInternalService::TEvWriteResultRequest(std::move(chunk)));
+            NFq::TRowsProtoSplitter rowsSplitter(std::move(resultSetProto), ProtoMessageLimit, BaseProtoByteSize, MaxRowsCountPerChunk);
+            auto splittedResultSets = rowsSplitter.Split();
+
+            if (!splittedResultSets.Success) {
+                LOG_E("ResultSetId: " << ResultSetId << " Can't split script result: " << splittedResultSets.Issues.ToOneLineString());
+                Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, splittedResultSets.Issues, NYdb::EStatus::INTERNAL_ERROR));
+                FailedAndPassAway();
+                return;
+            }
+
+            for (auto& resultSet : splittedResultSets.ResultSets) {
+                auto protoReq = CreateProtoRequestWithoutResultSet(Offset);
+                Offset += resultSet.rows().size();
+                protoReq.mutable_result_set()->Swap(&resultSet);
+                ResultChunks.emplace(std::move(protoReq));
+            }
+
+            TryStartResultWriters();
         }
 
-        if (!FetchToken) {
-            if (emptyResultSet) {
-                SendReplyAndPassAway();
-            }
+        if (WriterInflight.empty()) {
+            SendReplyAndPassAway();
+        } else if (FetchToken && (WriterInflight.size() + ResultChunks.size()) < 2 * MAX_WRITER_INFLIGHT) {
+            SendFetchScriptResultRequest();
         }
     }
 
     void Handle(const NFq::TEvInternalService::TEvWriteResultResponse::TPtr& ev) {
         auto writeResultCounters = Counters.GetCounters(ERequestType::RT_WRITE_RESULT_SET);
         writeResultCounters->InFly->Dec();
-        writeResultCounters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
-        if (ev.Get()->Get()->Status.IsSuccess()) {
-            writeResultCounters->Ok->Inc();
-            LOG_I("Result successfully written for offset " << Offset);
-            if (FetchToken) {
-                SendFetchScriptResultRequest();
-            } else {
-                SendReplyAndPassAway();
-            }
-        } else {
-            writeResultCounters->Error->Inc();
-            LOG_E("Error writing result for offset " << Offset);
-            Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error writing result for offset " << Offset}}, NYdb::EStatus::INTERNAL_ERROR));
+        
+        auto cookie = ev->Cookie;
+        auto it = WriterInflight.find(cookie);
+        if (it == WriterInflight.end()) {
+            auto errorMsg = TStringBuilder{} << "ResultSetId: " << ResultSetId << " Cookie: " << cookie << " Internal error. Cookie wasn't found in case of write result reponse";
+            LOG_E(errorMsg);
+            Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, NYql::TIssues{NYql::TIssue{errorMsg}}, NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
+            return;
+        }
+        auto meta = it->second;
+        WriterInflight.erase(it);
+        writeResultCounters->LatencyMs->Collect((TInstant::Now() - meta.StartTime).MilliSeconds());
+
+        if (!ev.Get()->Get()->Status.IsSuccess()) {
+            writeResultCounters->Error->Inc();
+            TString errorMsg = TStringBuilder{} << "ResultSetId: " << ResultSetId << " Cookie: " << cookie << " Error writing result for offset " << meta.Offset;
+            LOG_E(errorMsg);
+            Send(Parent, new TEvYdbCompute::TEvResultSetWriterResponse(ResultSetId, NYql::TIssues{NYql::TIssue{errorMsg}}, NYdb::EStatus::INTERNAL_ERROR));
+            FailedAndPassAway();
+            return;
+        }
+
+        TryStartResultWriters();
+
+        writeResultCounters->Ok->Inc();
+        LOG_I("ResultSetId: " << ResultSetId << " Cookie: " << cookie << " Result successfully written for offset " << meta.Offset);
+        if (FetchToken) {
+            if (FetchToken != LastProcessedToken && (WriterInflight.size() + ResultChunks.size()) < 2 * MAX_WRITER_INFLIGHT) {
+                SendFetchScriptResultRequest();
+            }
+        } else if (WriterInflight.empty()) {
+            SendReplyAndPassAway();
+        }
+    }
+
+    void TryStartResultWriters() {
+        auto writeResultCounters = Counters.GetCounters(ERequestType::RT_WRITE_RESULT_SET);
+        while (!ResultChunks.empty() && WriterInflight.size() < MAX_WRITER_INFLIGHT) {
+            auto chunk = std::move(ResultChunks.front());
+            ResultChunks.pop();
+
+            WriterInflight[Cookie] = {static_cast<int64_t>(chunk.offset()), TInstant::Now()};
+            writeResultCounters->InFly->Inc();
+            Send(NFq::MakeInternalServiceActorId(), new NFq::TEvInternalService::TEvWriteResultRequest(std::move(chunk)), 0, Cookie++);
         }
     }
 
     void SendFetchScriptResultRequest() {
-        auto fetchScriptResultCounters = Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT);
-        fetchScriptResultCounters->InFly->Inc();
-        StartTime = TInstant::Now();
-        Register(new TRetryActor<TEvYdbCompute::TEvFetchScriptResultRequest, TEvYdbCompute::TEvFetchScriptResultResponse, NKikimr::NOperationId::TOperationId, int64_t, TString>(Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT), SelfId(), Connector, OperationId, ResultSetId, FetchToken));
+        LastProcessedToken = FetchToken;
+        Register(new TRetryActor<TEvYdbCompute::TEvFetchScriptResultRequest, TEvYdbCompute::TEvFetchScriptResultResponse, NKikimr::NOperationId::TOperationId, int64_t, TString, uint64_t>(Counters.GetCounters(ERequestType::RT_FETCH_SCRIPT_RESULT), SelfId(), Connector, OperationId, ResultSetId, FetchToken, FetchRowsLimit));
     }
 
     void SendReplyAndPassAway() {
@@ -160,16 +216,24 @@ public:
     }
 
 private:
+    ui64 Cookie = 0;
+    static constexpr int MAX_WRITER_INFLIGHT = 3;
+    TMap<ui64, TWriterMeta> WriterInflight;
     TRunActorParams Params;
     uint32_t ResultSetId = 0;
     TActorId Parent;
     TActorId Connector;
     NKikimr::NOperationId::TOperationId OperationId;
     TCounters Counters;
-    TInstant StartTime;
     int64_t Offset = 0;
     bool Truncated = false;
     TString FetchToken;
+    TString LastProcessedToken;
+    ui64 FetchRowsLimit = 0;
+    const size_t ProtoMessageLimit = 10_MB;
+    const size_t MaxRowsCountPerChunk = 100'000;
+    const size_t BaseProtoByteSize = CreateProtoRequestWithoutResultSet(0).ByteSizeLong();
+    std::queue<Fq::Private::WriteTaskResultRequest> ResultChunks;
 };
 
 class TResultWriterActor : public TBaseComputeActor<TResultWriterActor> {
@@ -263,8 +327,10 @@ public:
 
         for (const auto& resultSetMeta: ev.Get()->Get()->ResultSetsMeta) {
             auto& meta = *PingTaskRequest.add_result_set_meta();
-            for (const auto& column: resultSetMeta.columns()) {
-                *meta.add_column() = column;
+            for (const auto& column: resultSetMeta.Columns) {
+                auto& new_column = *meta.add_column();
+                new_column.set_name(column.Name);
+                *new_column.mutable_type() = column.Type.GetProto();
             }
         }
 
@@ -312,6 +378,7 @@ public:
         auto pingCounters = Counters.GetCounters(ERequestType::RT_PING);
         pingCounters->InFly->Inc();
         PingTaskRequest.set_result_set_count(PingTaskRequest.result_set_meta_size());
+        PingTaskRequest.mutable_result_id()->set_value(Params.ResultId);
         Send(Pinger, new TEvents::TEvForwardPingRequest(PingTaskRequest));
     }
 

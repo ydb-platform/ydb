@@ -11,6 +11,7 @@ message TReqGenerateTimestamps
 message TRspGenerateTimestamps
 {
     required int64 timestamp = 1;
+    optional int32 clock_cluster_tag = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

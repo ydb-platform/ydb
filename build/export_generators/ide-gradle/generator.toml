@@ -1,4 +1,5 @@
 use_managed_peers_closure = true
+ignore_platforms = true
 
 [root]
 template="settings.gradle.kts.jinja"
@@ -6,8 +7,12 @@ copy=[
     "gradlew",
     "gradlew.bat",
     "gradle/wrapper/gradle-wrapper.jar",
-    "gradle/wrapper/gradle-wrapper.properties"
+    "gradle/wrapper/gradle-wrapper.properties",
+    ".idea/vcs.xml",
 ]
+
+[targets.EXTRA_ONLY]
+template="build.gradle.kts.jinja"
 
 [targets.jar]
 template="build.gradle.kts.jinja"
@@ -24,6 +29,7 @@ app_main_class="str"
 jar_source_set="list"
 enable_preview="flag"
 annotation_processors="list"
+use_annotation_processor="str"
 
 publish="flag"
 publish_group="str"
@@ -40,10 +46,10 @@ proto_grpc_version="str"
 
 kotlin_version="str"
 with_kotlin="flag"
-with_kotlinc_plugin_allopen="flag"
-with_kotlinc_plugin_lombok="flag"
-with_kotlinc_plugin_noarg="flag"
-with_kotlinc_plugin_serialization="flag"
+with_kotlinc_plugin_allopen="set"
+with_kotlinc_plugin_lombok="set"
+with_kotlinc_plugin_noarg="set"
+with_kotlinc_plugin_serialization="set"
 
 runs="list"
 runs-args="list"
@@ -56,6 +62,8 @@ runs-in_noparse="list"
 runs-out="list"
 runs-out_dir="list"
 runs-tool="list"
+
+javac-flags="list"
 
 [attrs.root]
 

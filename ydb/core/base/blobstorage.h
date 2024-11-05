@@ -10,6 +10,7 @@
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/protos/base.pb.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -24,6 +25,10 @@
 
 #include <optional>
 
+namespace NWilson {
+    class TSpan;
+} // NWilson
+
 namespace NKikimr {
 
 static constexpr ui32 MaxProtobufSize = 67108000;
@@ -32,6 +37,7 @@ static constexpr ui64 MaxCollectGarbageFlagsPerMessage = 10000;
 
 static constexpr TDuration VDiskCooldownTimeout = TDuration::Seconds(15);
 static constexpr TDuration VDiskCooldownTimeoutOnProxy = TDuration::Seconds(12);
+
 
 struct TStorageStatusFlags {
     ui32 Raw = 0;
@@ -102,6 +108,8 @@ enum class EGroupConfigurationType : ui32 {
 struct TGroupID {
     TGroupID() = default;
     TGroupID(const TGroupID&) = default;
+    TGroupID(const TGroupId wrappedId)
+        : Raw(wrappedId.GetRawId()) {}
 
     TGroupID(EGroupConfigurationType configurationType, ui32 dataCenterId, ui32 groupLocalId) {
         Set(configurationType, dataCenterId, groupLocalId);
@@ -437,6 +445,10 @@ inline IEventHandle *CreateEventForBSProxy(TActorId sender, ui32 groupId, IEvent
     return CreateEventForBSProxy(sender, MakeBlobStorageProxyID(groupId), ev, cookie, std::move(traceId));
 }
 
+inline IEventHandle *CreateEventForBSProxy(TActorId sender, TGroupId groupId, IEventBase *ev, ui64 cookie, NWilson::TTraceId traceId = {}) {
+    return CreateEventForBSProxy(sender, MakeBlobStorageProxyID(groupId), ev, cookie, std::move(traceId));
+}
+
 inline bool SendToBSProxy(TActorId sender, TActorId recipient, IEventBase *ev, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
     return TActivationContext::Send(CreateEventForBSProxy(sender, recipient, ev, cookie, std::move(traceId)));
 }
@@ -451,6 +463,15 @@ inline bool SendToBSProxy(TActorId sender, ui32 groupId, IEventBase *ev, ui64 co
 }
 
 inline bool SendToBSProxy(const TActorContext &ctx, ui32 groupId, IEventBase *ev, ui64 cookie = 0,
+        NWilson::TTraceId traceId = {}) {
+    return ctx.Send(CreateEventForBSProxy(ctx.SelfID, groupId, ev, cookie, std::move(traceId)));
+}
+
+inline bool SendToBSProxy(TActorId sender, TGroupId groupId, IEventBase *ev, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
+    return TActivationContext::Send(CreateEventForBSProxy(sender, groupId, ev, cookie, std::move(traceId)));
+}
+
+inline bool SendToBSProxy(const TActorContext &ctx, TGroupId groupId, IEventBase *ev, ui64 cookie = 0,
         NWilson::TTraceId traceId = {}) {
     return ctx.Send(CreateEventForBSProxy(ctx.SelfID, groupId, ev, cookie, std::move(traceId)));
 }
@@ -471,6 +492,8 @@ struct TEvBlobStorage {
         EvInplacePatch,
         EvAssimilate,
 
+        EvGetQueuesInfo,     // for debugging purposes
+
         //
         EvPutResult = EvPut + 512,                              /// 268 632 576
         EvGetResult,
@@ -484,6 +507,8 @@ struct TEvBlobStorage {
         EvPatchResult,
         EvInplacePatchResult,
         EvAssimilateResult,
+
+        EvQueuesInfo,  // for debugging purposes
 
         // proxy <-> vdisk interface
         EvVPut = EvPut + 2 * 512,                               /// 268 633 088
@@ -707,6 +732,12 @@ struct TEvBlobStorage {
         EvPermitGarbageCollection,
         EvReplInvoke,
         EvStartBalancing,
+        EvReplCheckProgress,
+        EvMinHugeBlobSizeUpdate,
+        EvHugePreCompact,
+        EvHugePreCompactResult,
+        EvPDiskMetadataLoaded,
+        EvBalancingSendPartsOnMain,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -784,66 +815,36 @@ struct TEvBlobStorage {
         EvRequestProxySessionsState,
         EvProxySessionsState,
         EvBunchOfEvents,
+        EvDeadline,
 
         // blobstorage controller interface
-        // EvControllerReadSchemeString = EvPut + 11 * 512,
-        // EvControllerReadDataString,
-        EvControllerRegisterNode = EvPut + 11 * 512 + 2,
-        EvControllerCreatePDisk,
-        EvControllerCreateVDiskSlots,
-        EvControllerCreateGroup,
-        EvControllerSelectGroups,
-        EvControllerGetGroup,
-        EvControllerUpdateDiskStatus,
-        EvControllerUpdateGroupsUsage, // Not used.
-        EvControllerConfigRequest,
-        EvControllerConfigResponse,
-        EvControllerProposeRequest,
-        EvControllerProposeResponse,
-        EvControllerVDiskStatusSubscribeRequest,
-        EvControllerVDiskStatusReport,
-        EvControllerGroupStatusRequest,
-        EvControllerGroupStatusResponse,
-        EvControllerUpdateGroup,
-        EvControllerUpdateFaultyDisks,
-        EvControllerProposeGroupKey,
-        EvControllerUpdateGroupLatencies, // Not used.
-        EvControllerUpdateGroupStat,
-        EvControllerNotifyGroupChange,
-        EvControllerCommitGroupLatencies,
-        EvControllerUpdateSelfHealInfo,
-        EvControllerScrubQueryStartQuantum,
-        EvControllerScrubQuantumFinished,
-        EvControllerScrubReportQuantumInProgress,
-        EvControllerUpdateNodeDrives,
-        EvControllerGroupDecommittedNotify,
-        EvControllerGroupDecommittedResponse,
-        EvControllerGroupMetricsExchange,
+        EvControllerRegisterNode                    = 0x10031602,
+        EvControllerSelectGroups                    = 0x10031606,
+        EvControllerGetGroup                        = 0x10031607,
+        EvControllerUpdateDiskStatus                = 0x10031608,
+        EvControllerConfigRequest                   = 0x1003160a,
+        EvControllerConfigResponse                  = 0x1003160b,
+        EvControllerProposeGroupKey                 = 0x10031614,
+        EvControllerUpdateGroupStat                 = 0x10031616,
+        EvControllerNotifyGroupChange               = 0x10031617,
+        EvControllerCommitGroupLatencies            = 0x10031618,
+        EvControllerUpdateSelfHealInfo              = 0x10031619,
+        EvControllerScrubQueryStartQuantum          = 0x1003161a,
+        EvControllerScrubQuantumFinished            = 0x1003161b,
+        EvControllerScrubReportQuantumInProgress    = 0x1003161c,
+        EvControllerUpdateNodeDrives                = 0x1003161d,
+        EvControllerGroupDecommittedNotify          = 0x1003161e,
+        EvControllerGroupDecommittedResponse        = 0x1003161f,
+        EvControllerGroupMetricsExchange            = 0x10031620,
 
-        // EvControllerReadSchemeStringResult = EvPut + 12 * 512,
-        // EvControllerReadDataStringResult,
-        EvControllerNodeServiceSetUpdate = EvPut + 12 * 512 + 2,
-        EvControllerCreatePDiskResult,
-        EvControllerCreateVDiskSlotsResult,
-        EvControllerCreateGroupResult,
-        EvControllerSelectGroupsResult,
-        EvRequestControllerInfo,
-        EvResponseControllerInfo,
-        EvControllerGroupReconfigureReplace, // Not used.
-        EvControllerGroupReconfigureReplaceResult, // Not used.
-        EvControllerGroupReconfigureWipe,
-        EvControllerGroupReconfigureWipeResult,
-        EvControllerNodeReport,
-        EvControllerScrubStartQuantum,
-
-        EvControllerMigrationPause,
-        EvControllerMigrationContinue,
-        EvControllerMigrationFinished,
-        EvControllerMigrationBatch,
-        EvControllerMigrationBatchRequest,
-        EvControllerMigrationDone,
-
-        EvControllerUpdateSystemViews,
+        // BSC interface result section
+        EvControllerNodeServiceSetUpdate            = 0x10031802,
+        EvControllerSelectGroupsResult              = 0x10031806,
+        EvRequestControllerInfo                     = 0x10031807,
+        EvResponseControllerInfo                    = 0x10031808,
+        EvControllerNodeReport                      = 0x1003180d,
+        EvControllerScrubStartQuantum               = 0x1003180e,
+        EvControllerUpdateSystemViews               = 0x10031815,
 
         // proxy - node controller interface
         EvConfigureProxy = EvPut + 13 * 512,
@@ -853,9 +854,9 @@ struct TEvBlobStorage {
 
         // node controller internal messages
         EvRegisterNodeRetry = EvPut + 14 * 512,
-        EvAskRestartPDisk,
-        EvRestartPDisk,
-        EvRestartPDiskResult,
+        EvAskWardenRestartPDisk,
+        EvAskWardenRestartPDiskResult,
+        EvNotifyWardenPDiskRestarted,
         EvNodeWardenQueryGroupInfo,
         EvNodeWardenGroupInfo,
         EvNodeConfigPush,
@@ -869,11 +870,20 @@ struct TEvBlobStorage {
         EvNodeConfigInvokeOnRoot,
         EvNodeConfigInvokeOnRootResult,
         EvNodeWardenStorageConfigConfirm,
+        EvNodeWardenQueryBaseConfig,
+        EvNodeWardenBaseConfig,
+        EvNodeWardenDynamicConfigSubscribe,
+        EvNodeWardenDynamicConfigPush,
+        EvNodeWardenReadMetadata,
+        EvNodeWardenReadMetadataResult,
+        EvNodeWardenWriteMetadata,
+        EvNodeWardenWriteMetadataResult,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
         EvVMockCtlRequest,
         EvVMockCtlResponse,
+        EvDelayedMessageWrapper,
 
         // incremental huge blob keeper
         EvIncrHugeInit = EvPut + 17 * 512,
@@ -930,7 +940,6 @@ struct TEvBlobStorage {
                     return "unknown";
             }
         };
-
         const TLogoBlobID Id;
         const TRcBuf Buffer; //FIXME(innokentii) const members prevent usage of move-semantics elsewhere
         const TInstant Deadline;
@@ -999,8 +1008,10 @@ struct TEvBlobStorage {
             return sizeof(*this) + Buffer.GetSize();
         }
 
+        void ToSpan(NWilson::TSpan& span) const;
+
         std::unique_ptr<TEvPutResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
-            ui32 groupId);
+            TGroupId groupId);
     };
 
     struct TEvPutResult : public TEventLocal<TEvPutResult, EvPutResult> {
@@ -1014,6 +1025,16 @@ struct TEvBlobStorage {
         mutable NLWTrace::TOrbit Orbit;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
         const TString StorageId;
+
+        TEvPutResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, const TStorageStatusFlags statusFlags,
+                TGroupId groupId, float approximateFreeSpaceShare, const TString& storageId = Default<TString>())
+            : Status(status)
+            , Id(id)
+            , StatusFlags(statusFlags)
+            , GroupId(groupId.GetRawId())
+            , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
+            , StorageId(storageId)
+        {}
 
         TEvPutResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, const TStorageStatusFlags statusFlags,
                 ui32 groupId, float approximateFreeSpaceShare, const TString& storageId = Default<TString>())
@@ -1192,8 +1213,10 @@ struct TEvBlobStorage {
             return sizeof(*this) + QuerySize * sizeof(TQuery);
         }
 
+        void ToSpan(NWilson::TSpan& span) const;
+
         std::unique_ptr<TEvGetResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
-            ui32 groupId);
+            TGroupId groupId);
 
     private:
         void VerifySameTabletId() const {
@@ -1246,6 +1269,13 @@ struct TEvBlobStorage {
 
         // to measure blobstorage->client hop
         TInstant Sent;
+
+        TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, TGroupId groupId)
+            : Status(status)
+            , ResponseSz(sz)
+            , Responses(sz == 0 ? nullptr : new TResponse[sz])
+            , GroupId(groupId.GetRawId())
+        {}
 
         TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, ui32 groupId)
             : Status(status)
@@ -1338,8 +1368,10 @@ struct TEvBlobStorage {
             return sizeof(*this);
         }
 
+        void ToSpan(NWilson::TSpan& span) const;
+
         std::unique_ptr<TEvBlockResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
-            ui32 groupId);
+            TGroupId groupId);
     };
 
     struct TEvBlockResult : public TEventLocal<TEvBlockResult, EvBlockResult> {
@@ -1385,7 +1417,7 @@ struct TEvBlobStorage {
             void Set(const TString &buffer, ui32 offset) {
                 Buffer = TRcBuf(buffer);
                 Offset = offset;
-                Y_VERIFY_S(buffer.Size(), "EvPatchDiff invalid: Diff size must be non-zero");
+                Y_VERIFY_S(buffer.size(), "EvPatchDiff invalid: Diff size must be non-zero");
             }
 
             void Set(const TRcBuf &buffer, ui32 offset) {
@@ -1535,22 +1567,24 @@ struct TEvBlobStorage {
             return sizeof(*this) + sizeof(TDiff) * DiffCount;
         }
 
+        void ToSpan(NWilson::TSpan& span) const;
+
         std::unique_ptr<TEvPatchResult> MakeErrorResponse(NKikimrProto::EReplyStatus status,
-                const TString& errorReason, ui32 groupId);
+                const TString& errorReason, TGroupId groupId);
     };
 
     struct TEvPatchResult : public TEventLocal<TEvPatchResult, EvPatchResult> {
         NKikimrProto::EReplyStatus Status;
         const TLogoBlobID Id;
         const TStorageStatusFlags StatusFlags;
-        const ui32 GroupId;
+        const TGroupId GroupId;
         const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained'
         TString ErrorReason;
         mutable NLWTrace::TOrbit Orbit;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
         TEvPatchResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, TStorageStatusFlags statusFlags,
-                ui32 groupId, float approximateFreeSpaceShare)
+                TGroupId groupId, float approximateFreeSpaceShare)
             : Status(status)
             , Id(id)
             , StatusFlags(statusFlags)
@@ -1624,6 +1658,8 @@ struct TEvBlobStorage {
         ui32 CalculateSize() const {
             return sizeof(*this) + sizeof(TDiff) * DiffCount;
         }
+
+        void ToSpan(NWilson::TSpan& span) const;
 
         std::unique_ptr<TEvInplacePatchResult> MakeErrorResponse(NKikimrProto::EReplyStatus status,
                 const TString& errorReason);
@@ -1712,8 +1748,10 @@ struct TEvBlobStorage {
             return sizeof(*this);
         }
 
+        void ToSpan(NWilson::TSpan& span) const;
+
         std::unique_ptr<TEvDiscoverResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
-            ui32 groupId);
+            TGroupId groupId);
     };
 
     struct TEvDiscoverResult : public TEventLocal<TEvDiscoverResult, EvDiscoverResult> {
@@ -1817,8 +1855,10 @@ struct TEvBlobStorage {
             return sizeof(*this);
         }
 
+        void ToSpan(NWilson::TSpan& span) const;
+
         std::unique_ptr<TEvRangeResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
-            ui32 groupId);
+            TGroupId groupId);
     };
 
     struct TEvRangeResult : public TEventLocal<TEvRangeResult, EvRangeResult> {
@@ -1847,6 +1887,13 @@ struct TEvBlobStorage {
         const ui32 GroupId;
         TString ErrorReason;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
+
+        TEvRangeResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &from, const TLogoBlobID &to, TGroupId groupId)
+            : Status(status)
+            , From(from)
+            , To(to)
+            , GroupId(groupId.GetRawId())
+        {}
 
         TEvRangeResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &from, const TLogoBlobID &to, ui32 groupId)
             : Status(status)
@@ -2005,8 +2052,10 @@ struct TEvBlobStorage {
             return sizeof(*this) + ((Keep ? Keep->size() : 0) + (DoNotKeep ? DoNotKeep->size() : 0)) * sizeof(TLogoBlobID);
         }
 
+        void ToSpan(NWilson::TSpan& span) const;
+
         std::unique_ptr<TEvCollectGarbageResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
-            ui32 groupId);
+            TGroupId groupId);
     };
 
     struct TEvCollectGarbageResult : public TEventLocal<TEvCollectGarbageResult, EvCollectGarbageResult> {
@@ -2073,8 +2122,10 @@ struct TEvBlobStorage {
             return sizeof(*this);
         }
 
+        void ToSpan(NWilson::TSpan& span) const;
+
         std::unique_ptr<TEvStatusResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
-            ui32 groupId);
+            TGroupId groupId);
     };
 
     struct TEvStatusResult : public TEventLocal<TEvStatusResult, EvStatusResult> {
@@ -2148,8 +2199,10 @@ struct TEvBlobStorage {
             return sizeof(*this);
         }
 
+        void ToSpan(NWilson::TSpan& span) const;
+
         std::unique_ptr<TEvAssimilateResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
-            ui32 groupId);
+            TGroupId groupId);
     };
 
     struct TEvAssimilateResult : TEventLocal<TEvAssimilateResult, EvAssimilateResult> {
@@ -2344,8 +2397,6 @@ struct TEvBlobStorage {
     struct TEvControllerNodeServiceSetUpdate;
     struct TEvControllerProposeGroupKey;
     struct TEvControllerSelectGroupsResult;
-    struct TEvControllerGroupReconfigureWipe;
-    struct TEvControllerGroupReconfigureWipeResult;
     struct TEvControllerNodeReport;
     struct TEvControllerConfigRequest;
     struct TEvControllerConfigResponse;
@@ -2366,10 +2417,10 @@ struct TEvBlobStorage {
     struct TEvDropDonor;
     struct TEvBunchOfEvents;
 
-    struct TEvAskRestartPDisk;
     struct TEvAskRestartVDisk;
-    struct TEvRestartPDisk;
-    struct TEvRestartPDiskResult;
+    struct TEvAskWardenRestartPDisk;
+    struct TEvAskWardenRestartPDiskResult;
+    struct TEvNotifyWardenPDiskRestarted;
 };
 
 // EPutHandleClass defines BlobStorage queue to a request to

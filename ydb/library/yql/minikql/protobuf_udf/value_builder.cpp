@@ -108,9 +108,12 @@ case FieldDescriptor::EProtoCppType: { \
         FIELD_TO_VALUE(CPPTYPE_UINT32, GetUInt32);
         FIELD_TO_VALUE(CPPTYPE_UINT64, GetUInt64);
         FIELD_TO_VALUE(CPPTYPE_DOUBLE, GetDouble);
-        FIELD_TO_VALUE(CPPTYPE_FLOAT,  GetFloat);
         FIELD_TO_VALUE(CPPTYPE_BOOL,   GetBool);
 
+        case FieldDescriptor::CPPTYPE_FLOAT: {
+            const auto f = r->GetFloat(proto, fd);
+            return info.YtMode ? TUnboxedValuePod(double(f)) : TUnboxedValuePod(f);
+        }
         case FieldDescriptor::CPPTYPE_ENUM: {
             return CreateEnumValue(valueBuilder, r->GetEnum(proto, fd), info.EnumFormat, fieldFlags);
         }
@@ -150,9 +153,12 @@ case FieldDescriptor::EProtoCppType: { \
         DEFAULT_TO_VALUE(CPPTYPE_UINT32, default_value_uint32);
         DEFAULT_TO_VALUE(CPPTYPE_UINT64, default_value_uint64);
         DEFAULT_TO_VALUE(CPPTYPE_DOUBLE, default_value_double);
-        DEFAULT_TO_VALUE(CPPTYPE_FLOAT,  default_value_float);
         DEFAULT_TO_VALUE(CPPTYPE_BOOL,   default_value_bool);
 
+        case FieldDescriptor::CPPTYPE_FLOAT: {
+            const auto f = fd->default_value_float();
+            return info.YtMode ? TUnboxedValuePod(double(f)) : TUnboxedValuePod(f);
+        }
         case FieldDescriptor::CPPTYPE_ENUM:
             return CreateEnumValue(valueBuilder, fd->default_value_enum(), info.EnumFormat, fieldFlags);
 
@@ -190,9 +196,14 @@ case FieldDescriptor::EProtoCppType: { \
         REPEATED_FIELD_TO_VALUE(CPPTYPE_UINT32, GetRepeatedUInt32);
         REPEATED_FIELD_TO_VALUE(CPPTYPE_UINT64, GetRepeatedUInt64);
         REPEATED_FIELD_TO_VALUE(CPPTYPE_DOUBLE, GetRepeatedDouble);
-        REPEATED_FIELD_TO_VALUE(CPPTYPE_FLOAT,  GetRepeatedFloat);
         REPEATED_FIELD_TO_VALUE(CPPTYPE_BOOL,   GetRepeatedBool);
 
+        case FieldDescriptor::CPPTYPE_FLOAT:
+            for (int i = 0; i < endI; ++i) {
+                const auto f = r->GetRepeatedFloat(proto, fd, i);
+                *items++ = info.YtMode ? TUnboxedValuePod(double(f)) : TUnboxedValuePod(f);
+            }
+            break;
         case FieldDescriptor::CPPTYPE_ENUM:
             for (int i = 0; i < endI; ++i) {
                 *items++ = CreateEnumValue(valueBuilder, r->GetRepeatedEnum(proto, fd, i), info.EnumFormat, fieldFlags);

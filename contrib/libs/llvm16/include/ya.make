@@ -4,6 +4,8 @@ LIBRARY()
 
 PROVIDES(llvm)
 
+VERSION(16.0.0)
+
 LICENSE(
     Apache-2.0 WITH LLVM-exception AND
     BSD-2-Clause AND

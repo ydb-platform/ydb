@@ -765,6 +765,18 @@ SELECT 'indio' NOT LIKE 'in_o' AS "true";
  t
 (1 row)
 
+SELECT 'abc'::name LIKE '_b_' AS "true";
+ true 
+------
+ t
+(1 row)
+
+SELECT 'abc'::name NOT LIKE '_b_' AS "false";
+ false 
+-------
+ f
+(1 row)
+
 -- unused escape character
 SELECT 'hawkeye' LIKE 'h%' ESCAPE '#' AS "true";
  true 
@@ -885,6 +897,18 @@ SELECT 'Hawkeye' ILIKE 'h%' AS "true";
 (1 row)
 
 SELECT 'Hawkeye' NOT ILIKE 'h%' AS "false";
+ false 
+-------
+ f
+(1 row)
+
+SELECT 'ABC'::name ILIKE '_b_' AS "true";
+ true 
+------
+ t
+(1 row)
+
+SELECT 'ABC'::name NOT ILIKE '_b_' AS "false";
  false 
 -------
  f

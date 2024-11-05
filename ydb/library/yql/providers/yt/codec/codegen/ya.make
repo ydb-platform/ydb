@@ -59,9 +59,15 @@ IF (NOT MKQL_DISABLE_CODEGEN)
         ReadTzDate
         ReadTzDatetime
         ReadTzTimestamp
+        ReadTzDate32
+        ReadTzDatetime64
+        ReadTzTimestamp64
         WriteTzDate
         WriteTzDatetime
         WriteTzTimestamp
+        WriteTzDate32
+        WriteTzDatetime64
+        WriteTzTimestamp64
         GetWrittenBytes
         FillZero
     )

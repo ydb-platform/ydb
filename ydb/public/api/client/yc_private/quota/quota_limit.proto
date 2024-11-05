@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.quota;
+
+message QuotaLimit {
+  string quota_id = 1; // formatted as <domain>.<metric>.<unit>, e.g. mdb.hdd.size
+  double limit = 2;
+  double usage = 3;
+}
+
+message DesiredQuotaLimit {
+  string quota_id = 1;
+  double limit = 2;
+}
+
+message Resource {
+  string resource_id = 1; // [(required) = true, (length) = "<=50"];
+  string resource_type = 2; // [(required) = true, (length) = "<=50"];
+}
+
+message GetQuotaLimitRequest {
+  Resource resource = 1; // [(required) = true];
+}
+
+message GetQuotaLimitResponse {
+  Resource resource = 1;
+  repeated QuotaLimit limits = 2;
+}
+
+message GetDefaultQuotaLimitRequest {
+  string resource_type = 1; // [(required) = true, (length) = "<=50"];
+}
+
+message GetDefaultQuotaLimitResponse {
+  string resource_type = 1; // [(required) = true, (length) = "<=50"];
+  repeated QuotaLimit limits = 2;
+}
+
+message UpdateQuotaLimitRequest {
+  Resource resource = 1; // [(required) = true];
+  DesiredQuotaLimit limit = 2;
+}
+
+message UpdateQuotaLimitMetadata {
+  Resource resource = 1; // [(required) = true];
+}
+
+message UpdateQuotaLimitResponse {
+  Resource resource = 1; // [(required) = true];
+  QuotaLimit limit = 2;
+}
+
+message BatchUpdateQuotaLimitsRequest {
+  Resource resource = 1; // [(required) = true];
+  repeated DesiredQuotaLimit limits = 2;
+}
+
+message BatchUpdateQuotaLimitsMetadata {
+  Resource resource = 1; // [(required) = true];
+}
+
+message BatchUpdateQuotaLimitsResponse {
+  Resource resource = 1; // [(required) = true];
+  repeated QuotaLimit limits = 2;
+}

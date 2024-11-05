@@ -45,11 +45,13 @@ namespace NKikimr {
 
             const ui64 IncarnationGuid;
 
+            TIntrusivePtr<TVDiskContext> VCtx;
+
         public:
             TBufferVMultiPutActor(TActorId leaderId, const TBatchedVec<NKikimrProto::EReplyStatus> &statuses,
                     TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
                     TActorIDPtr skeletonFrontIDPtr, ::NMonitoring::TDynamicCounters::TCounterPtr multiPutResMsgsPtr,
-                    ui64 incarnationGuid)
+                    ui64 incarnationGuid, TIntrusivePtr<TVDiskContext>& vCtx)
                 : TActorBootstrapped()
                 , Items(ev->Get()->Record.ItemsSize())
                 , ReceivedResults(0)
@@ -59,6 +61,7 @@ namespace NKikimr {
                 , LeaderId(leaderId)
                 , OOSStatus(oosStatus)
                 , IncarnationGuid(incarnationGuid)
+                , VCtx(vCtx)
             {
                 Y_ABORT_UNLESS(statuses.size() == Items.size());
                 for (ui64 idx = 0; idx < Items.size(); ++idx) {
@@ -92,7 +95,7 @@ namespace NKikimr {
 
                 vMultiPutResult->Record.SetStatusFlags(OOSStatus.Flags);
 
-                SendVDiskResponse(ctx, Event->Sender, vMultiPutResult.release(), Event->Cookie);
+                SendVDiskResponse(ctx, Event->Sender, vMultiPutResult.release(), Event->Cookie, VCtx);
                 PassAway();
             }
 
@@ -156,9 +159,9 @@ namespace NKikimr {
     IActor* CreateSkeletonVMultiPutActor(TActorId leaderId, const TBatchedVec<NKikimrProto::EReplyStatus> &statuses,
             TOutOfSpaceStatus oosStatus, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
             TActorIDPtr skeletonFrontIDPtr, ::NMonitoring::TDynamicCounters::TCounterPtr counterPtr,
-            ui64 incarnationGuid) {
+            ui64 incarnationGuid, TIntrusivePtr<TVDiskContext>& vCtx) {
         return new NPrivate::TBufferVMultiPutActor(leaderId, statuses, oosStatus, ev,
-                skeletonFrontIDPtr, counterPtr, incarnationGuid);
+                skeletonFrontIDPtr, counterPtr, incarnationGuid, vCtx);
     }
 
 } // NKikimr

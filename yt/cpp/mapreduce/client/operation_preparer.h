@@ -56,7 +56,7 @@ struct IItemToUpload
     virtual TString CalculateMD5() const = 0;
     virtual THolder<IInputStream> CreateInputStream() const = 0;
     virtual TString GetDescription() const = 0;
-    virtual ui64 GetDataSize() const = 0;
+    virtual i64 GetDataSize() const = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -80,6 +80,7 @@ public:
     const TUserJobSpec& GetSpec() const;
     bool ShouldMountSandbox() const;
     ui64 GetTotalFileSize() const;
+    bool ShouldRedirectStdoutToStderr() const;
 
 private:
     TOperationPreparer& OperationPreparer_;
@@ -94,6 +95,8 @@ private:
     TString ClassName_;
     TString Command_;
     ui64 TotalFileSize_ = 0;
+
+    bool IsCommandJob_ = false;
 
 private:
     TString GetFileStorage() const;

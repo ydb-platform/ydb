@@ -11,7 +11,7 @@ jobs:
       cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Check dirs
       run: ${{github.workspace}}/.github/check_dirs.sh  ${{github.workspace}}

@@ -68,7 +68,7 @@ class TServer
 {
 public:
     explicit TServer(TServerConfigPtr config)
-        : TServerBase(GrpcLogger.WithTag("GrpcServerId: %v", TGuid::Create()))
+        : TServerBase(GrpcLogger().WithTag("GrpcServerId: %v", TGuid::Create()))
         , Config_(std::move(config))
         , ShutdownCookie_(RegisterShutdownCallback(
             "GrpcServer",
@@ -238,7 +238,7 @@ private:
         { }
 
         // IBus overrides.
-        const TString& GetEndpointDescription() const override
+        const std::string& GetEndpointDescription() const override
         {
             return PeerAddressString_;
         }
@@ -253,7 +253,7 @@ private:
             return {};
         }
 
-        const TString& GetEndpointAddress() const override
+        const std::string& GetEndpointAddress() const override
         {
             return PeerAddressString_;
         }
@@ -354,7 +354,7 @@ private:
             switch (cookie) {
                 case EServerCallCookie::Normal:
                 {
-                    const auto stage = [&] () {
+                    const auto stage = [&] {
                         auto guard = Guard(SpinLock_);
                         return Stage_;
                     }();
@@ -779,7 +779,7 @@ private:
             std::optional<NGrpc::NProto::TSslCredentialsExt> sslCredentialsExtension;
 
             ParsePeerIdentity(authContext, &sslCredentialsExtension);
-            ParseIssuer(authContext, &sslCredentialsExtension);
+            ParseIssuerAndSerialNumber(authContext, &sslCredentialsExtension);
 
             return sslCredentialsExtension;
         }
@@ -803,7 +803,7 @@ private:
             (*sslCredentialsExtension)->set_peer_identity(TString(peerIdentityProperty->value, peerIdentityProperty->value_length));
         }
 
-        static void ParseIssuer(const TGrpcAuthContextPtr& authContext, std::optional<NGrpc::NProto::TSslCredentialsExt>* sslCredentialsExtension)
+        static void ParseIssuerAndSerialNumber(const TGrpcAuthContextPtr& authContext, std::optional<NGrpc::NProto::TSslCredentialsExt>* sslCredentialsExtension)
         {
             const char* peerIdentityPropertyName = grpc_auth_context_peer_identity_property_name(authContext.Unwrap());
             if (!peerIdentityPropertyName) {
@@ -816,15 +816,23 @@ private:
                 return;
             }
 
-            auto issuer = ParseIssuerFromX509(TStringBuf(pemCertProperty->value, pemCertProperty->value_length));
-            if (!issuer) {
+            auto pemCertX509 = ParsePemCertToX509(TStringBuf(pemCertProperty->value, pemCertProperty->value_length));
+            if (!pemCertX509) {
                 return;
             }
 
-            if (!sslCredentialsExtension->has_value()) {
-                sslCredentialsExtension->emplace();
+            if (auto issuer = ParseIssuerFromX509(pemCertX509)) {
+                if (!sslCredentialsExtension->has_value()) {
+                    sslCredentialsExtension->emplace();
+                }
+                (*sslCredentialsExtension)->set_issuer(std::move(*issuer));
             }
-            (*sslCredentialsExtension)->set_issuer(std::move(*issuer));
+            if (auto serialNumber = ParseSerialNumberFromX509(pemCertX509)) {
+                if (!sslCredentialsExtension->has_value()) {
+                    sslCredentialsExtension->emplace();
+                }
+                (*sslCredentialsExtension)->set_serial_number(std::move(*serialNumber));
+            }
         }
 
         void ParseTimeout()
@@ -938,11 +946,11 @@ private:
             header->set_method(MethodName_);
             header->set_protocol_version_major(ProtocolVersion_.Major);
             header->set_protocol_version_minor(ProtocolVersion_.Minor);
-            header->set_request_codec(ToProto<int>(RequestCodec_));
-            header->set_response_codec(ToProto<int>(ResponseCodec_));
+            header->set_request_codec(ToProto(RequestCodec_));
+            header->set_response_codec(ToProto(ResponseCodec_));
 
             if (Timeout_) {
-                header->set_timeout(ToProto<i64>(*Timeout_));
+                header->set_timeout(ToProto(*Timeout_));
             }
             if (SslCredentialsExt_) {
                 *header->MutableExtension(NGrpc::NProto::TSslCredentialsExt::ssl_credentials_ext) = std::move(*SslCredentialsExt_);

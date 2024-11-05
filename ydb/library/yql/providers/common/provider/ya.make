@@ -6,8 +6,6 @@ SRCS(
     yql_provider.cpp
     yql_provider.h
     yql_provider_names.h
-    yql_table_lookup.cpp
-    yql_table_lookup.h
 )
 
 PEERDIR(
@@ -15,6 +13,7 @@ PEERDIR(
     ydb/library/yql/public/udf
     ydb/library/yql/sql # fixme
     ydb/library/yql/core
+    ydb/library/yql/parser/pg_catalog
 )
 
 YQL_LAST_ABI_VERSION()

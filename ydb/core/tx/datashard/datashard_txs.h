@@ -311,14 +311,4 @@ private:
     TRowVersion MvccVersion = TRowVersion::Min();
 };
 
-class TDataShard::TTxExecuteMvccStateChange: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
-    TTxExecuteMvccStateChange(TDataShard* ds);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
-    void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_EXECUTE_MVCC_STATE_CHANGE; }
-private:
-    bool ActivateWaitingOps = false;
-};
-
 }

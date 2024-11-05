@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#include <yt/yt/client/table_client/row_base.h>
+#include "row_base.h"
 
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/core/ytree/public.h>
@@ -104,6 +104,7 @@ private:
 DEFINE_REFCOUNTED_TYPE(TLogicalType)
 
 TString ToString(const TLogicalType& logicalType);
+void FormatValue(TStringBuilderBase* builder, const TLogicalType& logicalType, TStringBuf /*spec*/);
 
 //! Debug printers for Gtest unittests.
 void PrintTo(ELogicalMetatype type, std::ostream* os);
@@ -169,7 +170,7 @@ class TDecimalLogicalType
 {
 public:
     static constexpr int MinPrecision = 1;
-    static constexpr int MaxPrecision = 35;
+    static constexpr int MaxPrecision = 76;
 
 public:
     TDecimalLogicalType(int precision, int scale);
@@ -259,7 +260,7 @@ class TComplexTypeFieldDescriptor
 public:
     explicit TComplexTypeFieldDescriptor(TLogicalTypePtr type);
     explicit TComplexTypeFieldDescriptor(const TColumnSchema& column);
-    TComplexTypeFieldDescriptor(TString columnName, TLogicalTypePtr type);
+    TComplexTypeFieldDescriptor(const std::string& columnName, TLogicalTypePtr type);
 
     TComplexTypeFieldDescriptor OptionalElement() const;
     TComplexTypeFieldDescriptor ListElement() const;
@@ -275,11 +276,11 @@ public:
 
     TComplexTypeFieldDescriptor Detag() const;
 
-    const TString& GetDescription() const;
+    const std::string& GetDescription() const;
     const TLogicalTypePtr& GetType() const;
 
 private:
-    TString Descriptor_;
+    std::string Description_;
     TLogicalTypePtr Type_;
 };
 
@@ -287,7 +288,7 @@ private:
 
 struct TStructField
 {
-    TString Name;
+    std::string Name;
     TLogicalTypePtr Type;
 };
 
@@ -297,8 +298,6 @@ struct TStructField
 class TStructLogicalTypeBase
     : public TLogicalType
 {
-public:
-
 public:
     TStructLogicalTypeBase(ELogicalMetatype metatype, std::vector<TStructField> fields);
     Y_FORCE_INLINE const std::vector<TStructField>& GetFields() const;

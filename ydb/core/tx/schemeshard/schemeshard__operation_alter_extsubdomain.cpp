@@ -38,6 +38,7 @@ struct TParamsDelta {
     uint8_t AddExternalSysViewProcessor = 0;
     uint8_t AddExternalStatisticsAggregator = 0;
     uint8_t AddGraphShard = 0;
+    uint8_t AddBackupController = 0;
     bool SharedTxSupportAdded = false;
     TVector<TStoragePool> StoragePoolsAdded;
     bool ServerlessComputeResourcesModeChanged = false;
@@ -205,6 +206,21 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
         }
     }
 
+    // BackupController checks
+    uint8_t addBackupController = 0;
+    if (input.GetExternalBackupController()) {
+        const bool prev = bool(current->GetTenantBackupControllerID());
+        const bool next = input.GetExternalBackupController();
+        const bool changed = (prev != next);
+
+        if (changed) {
+            if (next == false) {
+                return paramError("BackupController could only be added, not removed");
+            }
+            addBackupController = 1;
+        }
+    }
+
     // Second params check: combinations
 
     bool sharedTxSupportAdded = (coordinatorsAdded + mediatorsAdded) > 0;
@@ -258,6 +274,16 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
             }
         }
 
+        // storage pools quotas check
+        TString error;
+        if (const auto& effectivePools = requestedPools.empty()
+                ? actualPools
+                : requestedPools;
+            !CheckStoragePoolsInQuotas(input.GetDatabaseQuotas(), effectivePools, input.GetName(), error)
+        ) {
+            return paramError(error);
+        }
+
         std::set_difference(requestedPools.begin(), requestedPools.end(),
                             actualPools.begin(), actualPools.end(),
                             std::back_inserter(storagePoolsAdded));
@@ -298,6 +324,7 @@ VerifyParams(TParamsDelta* delta, const TPathId pathId, const TSubDomainInfo::TP
     delta->AddExternalSysViewProcessor = addExternalSysViewProcessor;
     delta->AddExternalStatisticsAggregator = addExternalStatisticsAggregator;
     delta->AddGraphShard = addGraphShard;
+    delta->AddBackupController = addBackupController;
     delta->SharedTxSupportAdded = sharedTxSupportAdded;
     delta->StoragePoolsAdded = std::move(storagePoolsAdded);
     delta->ServerlessComputeResourcesModeChanged = serverlessComputeResourcesModeChanged;
@@ -787,7 +814,7 @@ public:
     }
 
     bool HandleReply(TEvHive::TEvUpdateDomainReply::TPtr& ev, TOperationContext& context) override {
-        const TTabletId hive = TTabletId(ev->Get()->Record.GetOrigin()); 
+        const TTabletId hive = TTabletId(ev->Get()->Record.GetOrigin());
 
         LOG_I(DebugHint() << "HandleReply TEvUpdateDomainReply"
             << ", from hive: " << hive);
@@ -880,7 +907,10 @@ public:
 
         //NOTE: ExternalHive, ExternalSysViewProcessor and ExternalStatisticsAggregator are _not_ counted against limits
         ui64 tabletsToCreateUnderLimit = delta.AddExternalSchemeShard + delta.CoordinatorsAdded + delta.MediatorsAdded;
-        ui64 tabletsToCreateOverLimit = delta.AddExternalSysViewProcessor + delta.AddExternalStatisticsAggregator + delta.AddGraphShard;
+        ui64 tabletsToCreateOverLimit = delta.AddExternalSysViewProcessor
+            + delta.AddExternalStatisticsAggregator
+            + delta.AddGraphShard
+            + delta.AddBackupController;
         ui64 tabletsToCreateTotal = tabletsToCreateUnderLimit + tabletsToCreateOverLimit;
 
         // Check path limits
@@ -906,21 +936,23 @@ public:
         // Create or derive alter.
         // (We could have always created new alter from a current subdomainInfo but
         // we need to take into account possible version increase from CreateHive suboperation.)
-        auto createAlterFrom = [&inputSettings, &delta](auto prototype) {
+        auto createAlterFrom = [&inputSettings](auto prototype, const TStoragePools& additionalPools) {
             return MakeIntrusive<TSubDomainInfo>(
                 *prototype,
                 inputSettings.GetPlanResolution(),
                 inputSettings.GetTimeCastBucketsPerMediator(),
-                delta.StoragePoolsAdded
+                additionalPools
             );
         };
         TSubDomainInfo::TPtr alter = [&delta, &subdomainInfo, &createAlterFrom, &context]() {
             if (delta.AddExternalHive && context.SS->EnableAlterDatabaseCreateHiveFirst) {
                 Y_ABORT_UNLESS(subdomainInfo->GetAlter());
-                return createAlterFrom(subdomainInfo->GetAlter());
+                //NOTE: existing alter already has all storage pools that combined operation wanted to add,
+                // should not add them second time when deriving alter from alter
+                return createAlterFrom(subdomainInfo->GetAlter(), {});
             } else {
                 Y_ABORT_UNLESS(!subdomainInfo->GetAlter());
-                return createAlterFrom(subdomainInfo);
+                return createAlterFrom(subdomainInfo, delta.StoragePoolsAdded);
             }
         }();
 
@@ -958,7 +990,8 @@ public:
                 delta.AddExternalSysViewProcessor ||
                 delta.AddExternalHive ||
                 delta.AddExternalStatisticsAggregator ||
-                delta.AddGraphShard)
+                delta.AddGraphShard ||
+                delta.AddBackupController)
             {
                 if (!context.SS->ResolveSubdomainsChannels(alter->GetStoragePools(), channelsBinding)) {
                     result->SetError(NKikimrScheme::StatusInvalidParameter, "failed to construct channels binding");
@@ -990,6 +1023,9 @@ public:
             }
             if (delta.AddGraphShard) {
                 AddShardsTo(txState, OperationId.GetTxId(), basenameId, 1, TTabletTypes::GraphShard, channelsBinding, context.SS);
+            }
+            if (delta.AddBackupController) {
+                AddShardsTo(txState, OperationId.GetTxId(), basenameId, 1, TTabletTypes::BackupController, channelsBinding, context.SS);
             }
             Y_ABORT_UNLESS(txState.Shards.size() == tabletsToCreateTotal);
         }
@@ -1050,7 +1086,13 @@ ISubOperation::TPtr CreateAlterExtSubDomain(TOperationId id, TTxState::ETxState 
 }
 
 TVector<ISubOperation::TPtr> CreateCompatibleAlterExtSubDomain(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
-    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain);
+    //NOTE: Accepting ESchemeOpAlterSubDomain operation for an ExtSubDomain is a special compatibility case
+    // for those old subdomains that at the time went through migration to a separate tenants.
+    // Console tablet holds records about types of the subdomains but they hadn't been updated
+    // at the migration time. So Console still thinks that old subdomains are plain subdomains
+    // whereas they had been migrated to the extsubdomains.
+    // This compatibility case should be upholded until Console records would be updated.
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterExtSubDomain || tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterSubDomain);
 
     LOG_I("CreateCompatibleAlterExtSubDomain, opId " << id
         << ", feature flag EnableAlterDatabaseCreateHiveFirst " << context.SS->EnableAlterDatabaseCreateHiveFirst

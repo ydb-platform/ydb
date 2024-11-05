@@ -75,9 +75,13 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
         case arrow::Type::DURATION:
             toType.set_type_id(Ydb::Type::INTERVAL);
             return true;
-        case arrow::Type::DECIMAL:
-            // TODO
-            return false;
+        case arrow::Type::DECIMAL: {
+            auto arrowDecimal = static_cast<const arrow::DecimalType *>(&type);
+            Ydb::DecimalType* decimalType = toType.mutable_decimal_type();
+            decimalType->set_precision(arrowDecimal->precision());
+            decimalType->set_scale(arrowDecimal->scale());
+            return true;
+        }
         case arrow::Type::NA:
         case arrow::Type::HALF_FLOAT:
         case arrow::Type::FIXED_SIZE_BINARY:
@@ -132,7 +136,7 @@ private:
 
     void OnBeforePoison(const TActorContext&) override {
         // Client is gone, but we need to "reply" anyway?
-        Request->SendResult(Ydb::StatusIds::CANCELLED, {});
+        Request->ReplyWithYdbStatus(Ydb::StatusIds::CANCELLED);
     }
 
     bool ReportCostInfoEnabled() const {
@@ -299,7 +303,7 @@ private:
 
     void OnBeforePoison(const TActorContext&) override {
         // Client is gone, but we need to "reply" anyway?
-        Request->SendResult(Ydb::StatusIds::CANCELLED, {});
+        Request->ReplyWithYdbStatus(Ydb::StatusIds::CANCELLED);
     }
 
     bool ReportCostInfoEnabled() const {
@@ -462,8 +466,19 @@ private:
                 auto& nullValue = cvsSettings.null_value();
                 bool withHeader = cvsSettings.header();
 
-                NFormats::TArrowCSV reader(SrcColumns, withHeader, NotNullColumns);
-                reader.SetSkipRows(skipRows);
+                auto reader = NFormats::TArrowCSV::Create(SrcColumns, withHeader, NotNullColumns);
+                if (!reader.ok()) {
+                    errorMessage = reader.status().ToString();
+                    return false;
+                }
+                const auto& quoting = cvsSettings.quoting();
+                if (quoting.quote_char().length() > 1) {
+                    errorMessage = TStringBuilder() << "Wrong quote char '" << quoting.quote_char() << "'";
+                    return false;
+                }
+                const char qchar = quoting.quote_char().empty() ? '"' : quoting.quote_char().front();
+                reader->SetQuoting(!quoting.disabled(), qchar, !quoting.double_quote_disabled());
+                reader->SetSkipRows(skipRows);
 
                 if (!delimiter.empty()) {
                     if (delimiter.size() != 1) {
@@ -471,20 +486,20 @@ private:
                         return false;
                     }
 
-                    reader.SetDelimiter(delimiter[0]);
+                    reader->SetDelimiter(delimiter[0]);
                 }
 
                 if (!nullValue.empty()) {
-                    reader.SetNullValue(nullValue);
+                    reader->SetNullValue(nullValue);
                 }
 
                 if (data.size() > NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE) {
                     ui32 blockSize = NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE;
                     blockSize *= data.size() / blockSize + 1;
-                    reader.SetBlockSize(blockSize);
+                    reader->SetBlockSize(blockSize);
                 }
 
-                Batch = reader.ReadSingleBatch(data, errorMessage);
+                Batch = reader->ReadSingleBatch(data, errorMessage);
                 if (!Batch) {
                     return false;
                 }

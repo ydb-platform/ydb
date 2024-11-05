@@ -29,7 +29,43 @@ public:
 
     void SetLimit(i64 /*size*/) override
     { }
+
+    i64 GetLimit()  const override
+    {
+        return std::numeric_limits<i64>::max();
+    }
+
+    i64 GetUsed() const override
+    {
+        return 0;
+    }
+
+    i64 GetFree() const override
+    {
+        return std::numeric_limits<i64>::max();
+    }
+
+    bool IsExceeded() const override
+    {
+        return false;
+    }
+
+    TSharedRef Track(
+        TSharedRef reference,
+        bool /*keepExistingTracking*/) override
+    {
+        return reference;
+    }
+
+    TErrorOr<TSharedRef> TryTrack(
+        TSharedRef reference,
+        bool /*keepExistingTracking*/) override
+    {
+        return reference;
+    }
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 IMemoryUsageTrackerPtr GetNullMemoryUsageTracker()
 {
@@ -68,6 +104,21 @@ void TMemoryUsageTrackerGuard::MoveFrom(TMemoryUsageTrackerGuard&& other)
     other.Size_ = 0;
     other.AcquiredSize_ = 0;
     other.Granularity_ = 0;
+}
+
+TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::Build(
+    IMemoryUsageTrackerPtr tracker,
+    i64 granularity)
+{
+    if (!tracker) {
+        return {};
+    }
+
+    TMemoryUsageTrackerGuard guard;
+    guard.Tracker_ = tracker;
+    guard.Size_ = 0;
+    guard.Granularity_ = granularity;
+    return guard;
 }
 
 TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::Acquire(
@@ -145,7 +196,7 @@ i64 TMemoryUsageTrackerGuard::GetSize() const
 
 void TMemoryUsageTrackerGuard::SetSize(i64 size)
 {
-    auto ignoredError = SetSizeGeneric(size, [&] (i64 delta) {
+    auto ignoredError = SetSizeImpl(size, [&] (i64 delta) {
         Tracker_->Acquire(delta);
         return TError{};
     });
@@ -155,12 +206,12 @@ void TMemoryUsageTrackerGuard::SetSize(i64 size)
 
 TError TMemoryUsageTrackerGuard::TrySetSize(i64 size)
 {
-    return SetSizeGeneric(size, [&] (i64 delta) {
+    return SetSizeImpl(size, [&] (i64 delta) {
         return Tracker_->TryAcquire(delta);
     });
 }
 
-TError TMemoryUsageTrackerGuard::SetSizeGeneric(i64 size, auto acquirer)
+TError TMemoryUsageTrackerGuard::SetSizeImpl(i64 size, auto acquirer)
 {
     if (!Tracker_) {
         return {};
@@ -182,9 +233,14 @@ TError TMemoryUsageTrackerGuard::SetSizeGeneric(i64 size, auto acquirer)
     return {};
 }
 
-void TMemoryUsageTrackerGuard::IncrementSize(i64 sizeDelta)
+void TMemoryUsageTrackerGuard::IncreaseSize(i64 sizeDelta)
 {
     SetSize(Size_ + sizeDelta);
+}
+
+void TMemoryUsageTrackerGuard::DecreaseSize(i64 sizeDelta)
+{
+    SetSize(Size_ - sizeDelta);
 }
 
 TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::TransferMemory(i64 size)
@@ -202,6 +258,144 @@ TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::TransferMemory(i64 size)
     guard.AcquiredSize_ = acquiredDelta;
     guard.Granularity_ = Granularity_;
     return std::move(guard);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TMemoryTrackedBlob::TMemoryTrackedBlob(
+    TBlob&& blob,
+    TMemoryUsageTrackerGuard&& guard)
+    : Blob_(std::move(blob))
+    , Guard_(std::move(guard))
+{ }
+
+TMemoryTrackedBlob TMemoryTrackedBlob::Build(
+    IMemoryUsageTrackerPtr tracker,
+    TRefCountedTypeCookie tagCookie)
+{
+    YT_VERIFY(tracker);
+
+    return TMemoryTrackedBlob(
+        TBlob(tagCookie),
+        TMemoryUsageTrackerGuard::Build(tracker));
+}
+
+void TMemoryTrackedBlob::Resize(
+    i64 size,
+    bool initializeStorage)
+{
+    YT_VERIFY(size >= 0);
+
+    Blob_.Resize(size, initializeStorage);
+    Guard_.SetSize(Blob_.Capacity());
+}
+
+TError TMemoryTrackedBlob::TryResize(
+    i64 size,
+    bool initializeStorage)
+{
+    YT_VERIFY(size >= 0);
+    auto result = Guard_.TrySetSize(size);
+
+    if (result.IsOK()) {
+        Blob_.Resize(size, initializeStorage);
+        return {};
+    } else {
+        return result;
+    }
+}
+
+void TMemoryTrackedBlob::Reserve(i64 size)
+{
+    YT_VERIFY(size >= 0);
+
+    Blob_.Reserve(size);
+    Guard_.SetSize(Blob_.Capacity());
+}
+
+TError TMemoryTrackedBlob::TryReserve(i64 size)
+{
+    YT_VERIFY(size >= 0);
+
+    auto result = Guard_.TrySetSize(size);
+
+    if (result.IsOK()) {
+        Blob_.Reserve(size);
+        return {};
+    } else {
+        return result;
+    }
+}
+
+char* TMemoryTrackedBlob::Begin()
+{
+    return Blob_.Begin();
+}
+
+char* TMemoryTrackedBlob::End()
+{
+    return Blob_.End();
+}
+
+size_t TMemoryTrackedBlob::Capacity() const
+{
+    return Blob_.Capacity();
+}
+
+size_t TMemoryTrackedBlob::Size() const
+{
+    return Blob_.Size();
+}
+
+void TMemoryTrackedBlob::Append(TRef ref)
+{
+    Blob_.Append(ref);
+    Guard_.SetSize(Blob_.Capacity());
+}
+
+void TMemoryTrackedBlob::Clear()
+{
+    Blob_.Clear();
+    Guard_.SetSize(Blob_.Capacity());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TErrorOr<TSharedRef> TryTrackMemory(
+    const IMemoryUsageTrackerPtr& tracker,
+    TSharedRef reference,
+    bool keepExistingTracking)
+{
+    if (!tracker || !reference) {
+        return reference;
+    }
+    return tracker->TryTrack(std::move(reference), keepExistingTracking);
+}
+
+TSharedRef TrackMemory(
+    const IMemoryUsageTrackerPtr& tracker,
+    TSharedRef reference,
+    bool keepExistingTracking)
+{
+    if (!tracker || !reference) {
+        return reference;
+    }
+    return tracker->Track(std::move(reference), keepExistingTracking);
+}
+
+TSharedRefArray TrackMemory(
+    const IMemoryUsageTrackerPtr& tracker,
+    TSharedRefArray array,
+    bool keepExistingTracking)
+{
+    if (!tracker || !array) {
+        return array;
+    }
+    TSharedRefArrayBuilder builder(array.Size());
+    for (const auto& part : array) {
+        builder.Add(tracker->Track(part, keepExistingTracking));
+    }
+    return builder.Finish();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

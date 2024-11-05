@@ -1,0 +1,90 @@
+name: Ya-Build-and-Test
+inputs:
+  build_target:
+    type: string
+    default: "ydb/"
+    description: "limit build and test to specific target"
+  build_preset:
+    type: string
+  run_build:
+    type: boolean
+    default: true
+    description: "run build"
+  run_tests:
+    type: boolean
+    default: true
+    description: "run tests"
+  test_threads:
+    type: string
+    default: 28
+    description: "Test threads count"
+  link_threads:
+    type: string
+    default: 12
+    description: "link threads count"
+  test_size:
+    type: string
+    default: "small,medium,large"
+  test_type:
+    type: string
+    default: ""
+    description: "run only specific test types (or all by default)"
+  increment:
+    type: boolean
+    required: true
+    description: If true, compares build graphs between the current and previous commits to find a list of test suites to run. Otherwise, runs all tests.
+  folder_prefix:
+    type: string
+    default: "ya-"
+  put_build_results_to_cache:
+    type: boolean
+    default: true
+  additional_ya_make_args:
+    type: string
+    default: ""
+  test_retry_count:
+    default: ""
+    description: "how many times to retry failed tests"
+  secs:
+    type: string
+    default: ""
+  vars:
+    type: string
+    default: ""
+defaults:
+  run:
+    shell: bash
+runs:
+  using: "composite"
+  steps:
+    - name: Prepare s3cmd
+      uses: ./.github/actions/s3cmd
+      with:
+        s3_bucket: ${{ fromJSON( inputs.vars ).AWS_BUCKET }}
+        s3_endpoint: ${{ fromJSON( inputs.vars ).AWS_ENDPOINT }}
+        s3_key_id: ${{ fromJSON( inputs.secs ).AWS_KEY_ID }}
+        s3_key_secret: ${{ fromJSON( inputs.secs ).AWS_KEY_VALUE }}
+        folder_prefix: ya-
+        build_preset: ${{ inputs.build_preset }}
+
+    - name: Run build and tests
+      id: build
+      uses: ./.github/actions/test_ya
+      with:
+        build_target: ${{ inputs.build_target }}
+        build_preset: ${{ inputs.build_preset }}
+        test_size: ${{ inputs.test_size }}
+        test_type: ${{ inputs.test_type }}
+        run_tests: ${{ inputs.run_tests }}
+        increment: ${{ inputs.increment }}
+        testman_token: ${{ fromJSON( inputs.secs ).TESTMO_TOKEN2 }}
+        testman_url: ${{  fromJSON( inputs.vars ).TESTMO_URL }}
+        testman_project_id: ${{  fromJSON( inputs.vars ).TESTMO_PROJECT_ID }}
+        link_threads: ${{ inputs.link_threads }}
+        additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
+        test_threads: ${{ inputs.test_threads }}
+        bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
+        bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
+        bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
+        put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
+        test_retry_count: ${{ inputs.test_retry_count }}

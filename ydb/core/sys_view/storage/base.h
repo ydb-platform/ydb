@@ -47,7 +47,7 @@ namespace NKikimr::NSysView {
                 return;
             }
 
-            auto pipeCache = MakePipePeNodeCacheID(false);
+            auto pipeCache = MakePipePerNodeCacheID(false);
             TBase::Send(pipeCache, new TEvPipeCache::TEvForward(static_cast<TDerived&>(*this).CreateQuery(),
                 bsControllerId, true), IEventHandle::FlagTrackDelivery);
         }
@@ -184,7 +184,7 @@ namespace NKikimr::NSysView {
         }
 
         void PassAway() override {
-            TBase::Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+            TBase::Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
             TBase::PassAway();
         }
 

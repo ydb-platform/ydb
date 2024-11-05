@@ -12,6 +12,13 @@ struct TCompareArithmeticBinary : public TArithmeticConstraintsBinary<TLeft, TRi
         return NUdf::TUnboxedValuePod(TImpl::Do(left.template Get<TLeft>(), right.template Get<TRight>()));
     }
 
+    static void DoPtr(
+        const typename TPrimitiveDataType<TLeft>::TLayout* left,
+        const typename TPrimitiveDataType<TRight>::TLayout* right,
+        typename TPrimitiveDataType<bool>::TLayout* res) {
+        *res = TImpl::Do(*left, *right);
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
@@ -459,27 +466,113 @@ void RegisterCompareBigDatetime(IBuiltinFunctionRegistry& registry, const std::s
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTimestamp64>, TFunc, TArgs>(registry, name);
 
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TTzDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TTzDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TTzTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TTzDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TTzDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TTzTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTzDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTzDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTzTimestamp64>, TFunc, TArgs>(registry, name);
+
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>, TFunc, TArgs>(registry, name);
 
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDate32>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TTimestamp64>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDate32>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TTimestamp64>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDate32>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp64>, TFunc, TArgs>(registry, name);
+
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TTzDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TTzDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TTzTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TTzDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TTzDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TTzTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTzDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTzDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTzTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TTzDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TTzDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TTzTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TTzDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TTzDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TTzTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTzDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTzDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTzTimestamp64>, TFunc, TArgs>(registry, name);
 
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);    
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
+
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);    
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
+
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TTzDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TTzDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TTzTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TTzDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TTzDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TTzTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTzDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTzDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTzTimestamp64>, TFunc, TArgs>(registry, name);
+
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TDate32>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTimestamp64>, TFunc, TArgs>(registry, name);
 
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval64>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval>, TFunc, TArgs>(registry, name);
@@ -504,6 +597,27 @@ void RegisterAggrCompareTzDatetime(IBuiltinFunctionRegistry& registry, const std
     RegisterAggrCompareOpt<NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
     RegisterAggrCompareOpt<NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
     RegisterAggrCompareOpt<NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename, typename, bool> class TFunc,
+    template<typename, typename, bool, bool, bool> class TArgs
+>
+void RegisterAggrCompareBigDatetime(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterAggrComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, TFunc, TArgs>(registry, name);
+    RegisterAggrComparePolyOpt<NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterAggrComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, TFunc, TArgs>(registry, name);
+    RegisterAggrComparePolyOpt<NUdf::TDataType<NUdf::TInterval64>, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<typename, typename, bool> class TFunc,
+    template<typename, typename, bool, bool, bool> class TArgs
+>
+void RegisterAggrCompareBigTzDatetime(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterAggrCompareOpt<NUdf::TDataType<NUdf::TTzDate32>, TFunc, TArgs>(registry, name);
+    RegisterAggrCompareOpt<NUdf::TDataType<NUdf::TTzDatetime64>, TFunc, TArgs>(registry, name);
+    RegisterAggrCompareOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, TFunc, TArgs>(registry, name);
 }
 
 template <

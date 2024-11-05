@@ -22,7 +22,7 @@ from yarl import URL
 from .helpers import get_running_loop
 from .typedefs import LooseCookies
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     from .web_app import Application
     from .web_exceptions import HTTPException
     from .web_request import BaseRequest, Request
@@ -65,7 +65,9 @@ class AbstractMatchInfo(ABC):
 
     @property
     @abstractmethod
-    def expect_handler(self) -> Callable[[Request], Awaitable[None]]:
+    def expect_handler(
+        self,
+    ) -> Callable[[Request], Awaitable[Optional[StreamResponse]]]:
         """Expect handler for 100-continue processing"""
 
     @property  # pragma: no branch
@@ -129,7 +131,7 @@ class AbstractResolver(ABC):
         """Release resolver"""
 
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     IterableBase = Iterable[Morsel[str]]
 else:
     IterableBase = Iterable
@@ -166,7 +168,7 @@ class AbstractStreamWriter(ABC):
 
     buffer_size = 0
     output_size = 0
-    length = 0  # type: Optional[int]
+    length: Optional[int] = 0
 
     @abstractmethod
     async def write(self, chunk: bytes) -> None:

@@ -48,7 +48,10 @@ struct IsReadSet {
     {
         if (ev.GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
             auto &rec = ev.Get<TEvTxProcessing::TEvReadSet>()->Record;
-            if (rec.GetTabletSource() == Source && rec.GetTabletDest() == Dest) {
+            bool isExpectation = (
+                (rec.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET) &&
+                (rec.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA));
+            if (rec.GetTabletSource() == Source && rec.GetTabletDest() == Dest && !isExpectation) {
                 return true;
             }
         }
@@ -64,7 +67,9 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            // Volatile transactions avoid storing readsets in InReadSets table
+            .SetEnableDataShardVolatileTransactions(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -250,7 +255,13 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            // This test expects rs acks to be delayed during one of restarts,
+            // which doesn't happen with volatile transactions. With volatile
+            // transactions both upserts have already executed, one of them is
+            // just waiting for confirmation before making changes visible.
+            // Since acks are not delayed they are just gone when dropped.
+            .SetEnableDataShardVolatileTransactions(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -278,7 +289,10 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         auto captureRS = [shard1,shard3](TAutoPtr<IEventHandle> &event) -> auto {
             if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSet) {
                 auto &rec = event->Get<TEvTxProcessing::TEvReadSet>()->Record;
-                if (rec.GetTabletSource() == shard1) {
+                bool isExpectation = (
+                    (rec.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET) &&
+                    (rec.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA));
+                if (rec.GetTabletSource() == shard1 && !isExpectation) {
                     return TTestActorRuntime::EEventAction::DROP;
                 }
             } else if (event->GetTypeRewrite() == TEvTxProcessing::EvReadSetAck) {
@@ -359,6 +373,9 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
+                    if (msg->Record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA) {
+                        break;
+                    }
                     NKikimrTx::TReadSetData genericData;
                     Y_ABORT_UNLESS(genericData.ParseFromString(msg->Record.GetReadSet()));
                     Cerr << "... generic readset: " << genericData.DebugString() << Endl;
@@ -419,6 +436,13 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
             switch (ev->GetTypeRewrite()) {
                 case TEvTxProcessing::TEvReadSet::EventType: {
                     auto* msg = ev->Get<TEvTxProcessing::TEvReadSet>();
+                    if (msg->Record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_NO_DATA) {
+                        if (!(msg->Record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET)) {
+                            Cerr << "... nodata readset" << Endl;
+                            ++readSets;
+                        }
+                        break;
+                    }
                     NKikimrTx::TReadSetData genericData;
                     Y_ABORT_UNLESS(genericData.ParseFromString(msg->Record.GetReadSet()));
                     Cerr << "... generic readset: " << genericData.DebugString() << Endl;

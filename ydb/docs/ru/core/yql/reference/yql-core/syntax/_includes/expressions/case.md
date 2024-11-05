@@ -9,8 +9,9 @@
 
 Так как синтаксис достаточно громоздкий, зачастую удобнее пользоваться встроенной функцией [IF](../../../builtins/basic.md#if).
 
-**Примеры**
-``` yql
+### Примеры
+
+```yql
 SELECT
   CASE
     WHEN value > 0
@@ -20,7 +21,7 @@ SELECT
 FROM my_table;
 ```
 
-``` yql
+```yql
 SELECT
   CASE value
     WHEN 0 THEN "zero"

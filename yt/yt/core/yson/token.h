@@ -84,7 +84,7 @@ private:
     bool BooleanValue_ = false;
 };
 
-TString ToString(const TToken& token);
+void FormatValue(TStringBuilderBase* builder, const TToken& token, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

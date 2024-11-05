@@ -395,7 +395,7 @@ void TLockCommand::DoExecute(ICommandContextPtr context)
             ProduceSingleOutputValue(context, "lock_id", lockResult.LockId);
             break;
         default:
-            ProduceOutput(context, [&](NYson::IYsonConsumer* consumer) {
+            ProduceOutput(context, [&] (NYson::IYsonConsumer* consumer) {
                 BuildYsonFluently(consumer)
                     .BeginMap()
                         .Item("lock_id").Value(lockResult.LockId)

@@ -7,7 +7,7 @@
  *	  stuff - checking the qualification and projecting the tuple
  *	  appropriately.
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  *
@@ -69,13 +69,12 @@ ExecScanFetch(ScanState *node,
 		else if (epqstate->relsubs_done[scanrelid - 1])
 		{
 			/*
-			 * Return empty slot, as we already performed an EPQ substitution
-			 * for this relation.
+			 * Return empty slot, as either there is no EPQ tuple for this rel
+			 * or we already returned it.
 			 */
 
 			TupleTableSlot *slot = node->ss_ScanTupleSlot;
 
-			/* Return empty slot, as we already returned a tuple */
 			return ExecClearTuple(slot);
 		}
 		else if (epqstate->relsubs_slot[scanrelid - 1] != NULL)
@@ -88,7 +87,7 @@ ExecScanFetch(ScanState *node,
 
 			Assert(epqstate->relsubs_rowmark[scanrelid - 1] == NULL);
 
-			/* Mark to remember that we shouldn't return more */
+			/* Mark to remember that we shouldn't return it again */
 			epqstate->relsubs_done[scanrelid - 1] = true;
 
 			/* Return empty slot if we haven't got a test tuple */
@@ -282,7 +281,7 @@ ExecAssignScanProjectionInfo(ScanState *node)
  *		As above, but caller can specify varno expected in Vars in the tlist.
  */
 void
-ExecAssignScanProjectionInfoWithVarno(ScanState *node, Index varno)
+ExecAssignScanProjectionInfoWithVarno(ScanState *node, int varno)
 {
 	TupleDesc	tupdesc = node->ss_ScanTupleSlot->tts_tupleDescriptor;
 
@@ -306,14 +305,18 @@ ExecScanReScan(ScanState *node)
 	 */
 	ExecClearTuple(node->ss_ScanTupleSlot);
 
-	/* Rescan EvalPlanQual tuple if we're inside an EvalPlanQual recheck */
+	/*
+	 * Rescan EvalPlanQual tuple(s) if we're inside an EvalPlanQual recheck.
+	 * But don't lose the "blocked" status of blocked target relations.
+	 */
 	if (estate->es_epq_active != NULL)
 	{
 		EPQState   *epqstate = estate->es_epq_active;
 		Index		scanrelid = ((Scan *) node->ps.plan)->scanrelid;
 
 		if (scanrelid > 0)
-			epqstate->relsubs_done[scanrelid - 1] = false;
+			epqstate->relsubs_done[scanrelid - 1] =
+				epqstate->relsubs_blocked[scanrelid - 1];
 		else
 		{
 			Bitmapset  *relids;
@@ -325,7 +328,7 @@ ExecScanReScan(ScanState *node)
 			 * all of them.
 			 */
 			if (IsA(node->ps.plan, ForeignScan))
-				relids = ((ForeignScan *) node->ps.plan)->fs_relids;
+				relids = ((ForeignScan *) node->ps.plan)->fs_base_relids;
 			else if (IsA(node->ps.plan, CustomScan))
 				relids = ((CustomScan *) node->ps.plan)->custom_relids;
 			else
@@ -335,7 +338,8 @@ ExecScanReScan(ScanState *node)
 			while ((rtindex = bms_next_member(relids, rtindex)) >= 0)
 			{
 				Assert(rtindex > 0);
-				epqstate->relsubs_done[rtindex - 1] = false;
+				epqstate->relsubs_done[rtindex - 1] =
+					epqstate->relsubs_blocked[rtindex - 1];
 			}
 		}
 	}

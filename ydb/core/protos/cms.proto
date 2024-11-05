@@ -110,13 +110,29 @@ message TAction {
     REBOOT_HOST = 10; // Same as SHUTDOWN_HOST, but forcibly allowed if host is down
   }
 
-  optional EType     Type = 1;
-  optional string    Host = 2;
-  repeated string    Services = 3;
-  repeated string    Devices = 4;
-  optional uint64    Duration = 5;
+  message TIssue {
+    enum EType {
+      UNKNOWN = 0;
+      GENERIC = 1;
+      TOO_MANY_UNAVAILABLE_VDISKS = 2;
+      TOO_MANY_UNAVAILABLE_STATE_STORAGE_RINGS = 3;
+      DISABLED_NODES_LIMIT_REACHED = 4;
+      TENANT_DISABLED_NODES_LIMIT_REACHED = 5;
+      SYS_TABLETS_NODE_LIMIT_REACHED = 6;
+    }
+
+    optional EType Type = 1;
+    optional string Message = 2;
+  }
+
+  optional EType Type = 1;
+  optional string Host = 2;
+  repeated string Services = 3;
+  repeated string Devices = 4;
+  optional uint64 Duration = 5;
   // If specified will be expanded to list of hosts.
-  optional string    Tenant = 6;
+  optional string Tenant = 6;
+  optional TIssue Issue = 7;
 }
 
 enum ETenantPolicy {
@@ -384,7 +400,7 @@ message TLimits {
     optional uint32 DisabledNodesLimit = 1;
     // Works similarly to DisabledNodesLimit but specify
     // limit in percents of cluster/tenant nodes count.
-    optional uint32 DisabledNodesRatioLimit = 2 [default = 10];
+    optional uint32 DisabledNodesRatioLimit = 2 [default = 13]; // 1/8 rounded up
 }
 
 message TCmsConfig {
@@ -414,6 +430,12 @@ message TCmsConfig {
             optional uint32 Limit = 2;
         }
 
+        enum EEvictVDisksStatus {
+            UNKNOWN = 0;
+            DISABLED = 1;
+            FAULTY = 2;
+        }
+
         optional bool Enable = 1 [default = true];
         // Updater's config
         optional uint64 UpdateConfigInterval = 2 [default = 3600000000];
@@ -433,6 +455,9 @@ message TCmsConfig {
 
         optional bool DryRun = 13;
         repeated TStateLimit StateLimits = 14;
+        optional EEvictVDisksStatus EvictVDisksStatus = 15;
+        
+        optional uint32 GoodStateLimit = 16 [default = 5];
     }
 
     message TLogConfig {

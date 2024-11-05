@@ -26,7 +26,6 @@
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
-
 #include <ydb/library/actors/core/event_pb.h>
 
 #include <stack>
@@ -40,6 +39,15 @@ using namespace NYql::NNodes;
 using namespace NKikimr::NMiniKQL;
 
 using namespace Yql::DqsProto;
+
+namespace {
+    TString RemoveAliases(TString attributeName) {
+        if (auto idx = attributeName.find_last_of('.'); idx != TString::npos) {
+            return attributeName.substr(idx+1);
+        }
+        return attributeName;
+    }
+}
 
 namespace NYql::NDqs {
     namespace {
@@ -187,10 +195,10 @@ namespace NYql::NDqs {
                         auto transform = output.Cast<NNodes::TDqTransform>();
                         outputTransform.Type = transform.Type();
                         const auto inputTypeAnnotation = transform.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                        outputTransform.InputType = GetSerializedTypeAnnotation(inputTypeAnnotation, FunctionRegistry);
+                        outputTransform.InputType = GetSerializedTypeAnnotation(inputTypeAnnotation);
 
                         const auto outputTypeAnnotation = transform.OutputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                        outputTransform.OutputType = GetSerializedTypeAnnotation(outputTypeAnnotation, FunctionRegistry);
+                        outputTransform.OutputType = GetSerializedTypeAnnotation(outputTypeAnnotation);
                         dqIntegration->FillTransformSettings(transform.Ref(), outputTransform.Settings);
                     } else {
                         YQL_ENSURE(false, "Unknown stage output type");
@@ -434,7 +442,7 @@ namespace NYql::NDqs {
 
             bool enableSpilling = false;
             if (task.Outputs.size() > 1) {
-                enableSpilling = Settings->IsSpillingEnabled();
+                enableSpilling = Settings->IsSpillingInChannelsEnabled();
             }
             for (auto& output : task.Outputs) {
                 FillOutputDesc(*taskDesc.AddOutputs(), output, enableSpilling);
@@ -449,6 +457,7 @@ namespace NYql::NDqs {
             taskMeta.SetStageId(publicId);
             taskDesc.MutableMeta()->PackFrom(taskMeta);
             taskDesc.SetStageId(stageId);
+            taskDesc.SetEnableSpilling(Settings->GetEnabledSpillingNodes());
 
             if (Settings->DisableLLVMForBlockStages.Get().GetOrElse(true)) {
                 auto& stage = TasksGraph.GetStageInfo(task.StageId).Meta.Stage;
@@ -480,8 +489,7 @@ namespace NYql::NDqs {
             auto& item = result->Cast<TTupleExprType>()->GetItems()[0];
             YQL_ENSURE(item->GetKind() == ETypeAnnotationKind::List);
             auto exprType = item->Cast<TListExprType>()->GetItemType();
-
-            return GetSerializedTypeAnnotation(exprType, FunctionRegistry);
+            return GetSerializedTypeAnnotation(exprType);
         }
         return {};
     }
@@ -541,7 +549,7 @@ namespace NYql::NDqs {
             TString sourceType;
             if (dqSource) {
                 sourceSettings.ConstructInPlace();
-                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions);
+                dqIntegration->FillSourceSettings(*read, *sourceSettings, sourceType, maxPartitions, ExprContext);
                 YQL_ENSURE(!sourceSettings->type_url().empty(), "Data source provider \"" << dataSourceName << "\" did't fill dq source settings for its dq source node");
                 YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceName << "\" did't fill dq source settings type for its dq source node");
             }
@@ -560,14 +568,71 @@ namespace NYql::NDqs {
 
     const static std::unordered_map<
         std::string_view,
-        void(*)(TDqsTasksGraph&, const NNodes::TDqPhyStage&, ui32,  const TChannelLogFunc&)
+        void(*)(TDqsTasksGraph&, const NNodes::TDqPhyStage&, ui32, const TChannelLogFunc&)
     > ConnectionBuilders = {
-        {TDqCnUnionAll::CallableName(), &BuildUnionAllChannels},
+        {TDqCnUnionAll::CallableName(), &BuildUnionAllChannels<TDqsTasksGraph>},
         {TDqCnHashShuffle::CallableName(), &BuildHashShuffleChannels},
         {TDqCnBroadcast::CallableName(), &BuildBroadcastChannels},
-        {TDqCnMap::CallableName(), BuildMapChannels},
-        {TDqCnMerge::CallableName(), BuildMergeChannels},
+        {TDqCnMap::CallableName(), &BuildMapChannels},
+        {TDqCnStreamLookup::CallableName(), &BuildStreamLookupChannels},
+        {TDqCnMerge::CallableName(), &BuildMergeChannels},
     };
+
+    void TDqsExecutionPlanner::ConfigureInputTransformStreamLookup(const NNodes::TDqCnStreamLookup& streamLookup, const NNodes::TDqPhyStage& stage, ui32 inputIndex) {
+        auto rightInput = streamLookup.RightInput().Cast<TDqLookupSourceWrap>();
+        auto dataSourceName = rightInput.DataSource().Category().StringValue();
+        auto dataSource = TypeContext->DataSourceMap.FindPtr(dataSourceName);
+        YQL_ENSURE(dataSource);
+        auto dqIntegration = (*dataSource)->GetDqIntegration();
+        YQL_ENSURE(dqIntegration);
+        
+        google::protobuf::Any providerSpecificLookupSourceSettings;
+        TString sourceType;
+        dqIntegration->FillLookupSourceSettings(*rightInput.Raw(), providerSpecificLookupSourceSettings, sourceType);
+        YQL_ENSURE(!providerSpecificLookupSourceSettings.type_url().empty(), "Data source provider \"" << dataSourceName << "\" did't fill dq source settings for its dq source node");
+        YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceName << "\" did't fill dq source settings type for its dq source node");
+
+        NDqProto::TDqStreamLookupSource streamLookupSource;
+        streamLookupSource.SetProviderName(sourceType);
+        *streamLookupSource.MutableLookupSource() = providerSpecificLookupSourceSettings;
+        streamLookupSource.SetSerializedRowType(NYql::NCommon::GetSerializedTypeAnnotation(rightInput.RowType().Raw()->GetTypeAnn()));
+        NDqProto::TDqInputTransformLookupSettings settings;
+        settings.SetLeftLabel(streamLookup.LeftLabel().Cast<NNodes::TCoAtom>().StringValue());
+        *settings.MutableRightSource() = streamLookupSource;
+        settings.SetRightLabel(streamLookup.RightLabel().StringValue());
+        settings.SetJoinType(streamLookup.JoinType().StringValue());
+        for (const auto& k: streamLookup.LeftJoinKeyNames()) {
+            *settings.AddLeftJoinKeyNames() = RemoveAliases(k.StringValue());
+        }
+        for (const auto& k: streamLookup.RightJoinKeyNames()) {
+            *settings.AddRightJoinKeyNames() = RemoveAliases(k.StringValue());
+        }
+        const auto narrowInputRowType = GetSeqItemType(streamLookup.Output().Ptr()->GetTypeAnn());
+        Y_ABORT_UNLESS(narrowInputRowType->GetKind() == ETypeAnnotationKind::Struct);
+        settings.SetNarrowInputRowType(NYql::NCommon::GetSerializedTypeAnnotation(narrowInputRowType));
+        const auto narrowOutputRowType = GetSeqItemType(streamLookup.Ptr()->GetTypeAnn());
+        Y_ABORT_UNLESS(narrowOutputRowType->GetKind() == ETypeAnnotationKind::Struct);
+        settings.SetNarrowOutputRowType(NYql::NCommon::GetSerializedTypeAnnotation(narrowOutputRowType));
+        settings.SetMaxDelayedRows(1'000'000); //TODO configure me
+        settings.SetCacheLimit(1'000'000); //TODO configure me
+        settings.SetCacheTtlSeconds(60); //TODO configure me
+
+        const auto inputRowType = GetSeqItemType(streamLookup.Output().Stage().Program().Ref().GetTypeAnn());
+        const auto outputRowType = GetSeqItemType(stage.Program().Args().Arg(inputIndex).Ref().GetTypeAnn());
+        TTransform streamLookupTransform {
+            .Type = "StreamLookupInputTransform",
+            .InputType = NYql::NCommon::GetSerializedTypeAnnotation(inputRowType),
+            .OutputType = NYql::NCommon::GetSerializedTypeAnnotation(outputRowType),
+            .Settings = {} //set up in the next line
+        };
+        Y_ABORT_UNLESS(streamLookupTransform.Settings.PackFrom(settings));
+        auto& stageInfo = TasksGraph.GetStageInfo(stage);
+        for (auto taskId : stageInfo.Tasks) {
+            auto& task = TasksGraph.GetTask(taskId);
+            task.Inputs[inputIndex].Transform = streamLookupTransform;
+        }
+    }
+
 
     void TDqsExecutionPlanner::BuildConnections(const NNodes::TDqPhyStage& stage) {
         NDq::TChannelLogFunc logFunc = [](ui64, ui64, ui64, TStringBuf, bool) {};
@@ -576,6 +641,9 @@ namespace NYql::NDqs {
             if (input.Maybe<TDqConnection>()) {
                 if (const auto it = ConnectionBuilders.find(input.Cast<NNodes::TCallable>().CallableName()); it != ConnectionBuilders.cend()) {
                     it->second(TasksGraph, stage, inputIndex, logFunc);
+                    if (auto streamLookup = input.Maybe<TDqCnStreamLookup>())  {
+                        ConfigureInputTransformStreamLookup(streamLookup.Cast(), stage, inputIndex);
+                    }
                 } else {
                     YQL_ENSURE(false, "Unknown stage connection type: " << input.Cast<NNodes::TCallable>().CallableName());
                 }
@@ -585,8 +653,7 @@ namespace NYql::NDqs {
         }
     }
 
-
-void TDqsExecutionPlanner::BuildAllPrograms() {
+    void TDqsExecutionPlanner::BuildAllPrograms() {
         using namespace NKikimr::NMiniKQL;
 
         StagePrograms.clear();
@@ -621,10 +688,11 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
                 Y_ABORT_UNLESS(false);
             }
 */
+            TSpillingSettings spillingSettings{Settings->GetEnabledSpillingNodes()};
             StagePrograms[stageInfo.first] = std::make_tuple(
                 NDq::BuildProgram(
                     stage.Program(), *paramsType, compiler, typeEnv, *FunctionRegistry,
-                    ExprContext, fakeReads),
+                    ExprContext, fakeReads, spillingSettings),
                 stageId, publicId);
         }
     }
@@ -674,6 +742,13 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
             }
             default:
                 YQL_ENSURE(false, "Unexpected task input type.");
+        }
+        if (input.Transform) {
+            auto transform = inputDesc.MutableTransform();
+            transform->SetType(input.Transform->Type);
+            transform->SetInputType(input.Transform->InputType);
+            transform->SetOutputType(input.Transform->OutputType);
+            *transform->mutable_settings() = input.Transform->Settings;
         }
 
         for (ui64 channel : input.Channels) {
@@ -742,12 +817,10 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
         const TString& program,
         NActors::TActorId executerID,
         NActors::TActorId resultID,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TTypeAnnotationNode* typeAnn)
         : Program(program)
         , ExecuterID(executerID)
         , ResultID(resultID)
-        , FunctionRegistry(functionRegistry)
         , TypeAnn(typeAnn)
     { }
 
@@ -809,7 +882,7 @@ void TDqsExecutionPlanner::BuildAllPrograms() {
             auto item = TypeAnn;
             YQL_ENSURE(item->GetKind() == ETypeAnnotationKind::List);
             auto exprType = item->Cast<TListExprType>()->GetItemType();
-            return GetSerializedTypeAnnotation(exprType, FunctionRegistry);
+            return GetSerializedTypeAnnotation(exprType);
         } else {
             return GetSerializedResultType(Program);
         }

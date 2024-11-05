@@ -15,11 +15,12 @@
 
 #include <yt/yt/core/net/address.h>
 
-#include <yt/yt/core/misc/atomic_object.h>
+#include <library/cpp/yt/threading/atomic_object.h>
 #include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/atomic_ptr.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/net/public.h>
 
@@ -79,14 +80,15 @@ public:
         TConnectionId id,
         SOCKET socket,
         EMultiplexingBand multiplexingBand,
-        const TString& endpointDescription,
+        const std::string& endpointDescription,
         const NYTree::IAttributeDictionary& endpointAttributes,
         const NNet::TNetworkAddress& endpointNetworkAddress,
-        const std::optional<TString>& endpointAddress,
-        const std::optional<TString>& unixDomainSocketPath,
+        const std::optional<std::string>& endpointAddress,
+        const std::optional<std::string>& unixDomainSocketPath,
         IMessageHandlerPtr handler,
         NConcurrency::IPollerPtr poller,
-        IPacketTranscoderFactory* packetTranscoderFactory);
+        IPacketTranscoderFactory* packetTranscoderFactory,
+        IMemoryUsageTrackerPtr memoryUsageTracker);
 
     ~TTcpConnection();
 
@@ -97,15 +99,14 @@ public:
     TBusNetworkStatistics GetBusStatistics() const;
 
     // IPollable implementation.
-    NConcurrency::EPollablePriority GetPriority() const override;
     const TString& GetLoggingTag() const override;
     void OnEvent(NConcurrency::EPollControl control) override;
     void OnShutdown() override;
 
     // IBus implementation.
-    const TString& GetEndpointDescription() const override;
+    const std::string& GetEndpointDescription() const override;
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override;
-    const TString& GetEndpointAddress() const override;
+    const std::string& GetEndpointAddress() const override;
     const NNet::TNetworkAddress& GetEndpointNetworkAddress() const override;
     bool IsEndpointLocal() const override;
     bool IsEncrypted() const override;
@@ -186,7 +187,7 @@ private:
     const TBusConfigPtr Config_;
     const EConnectionType ConnectionType_;
     const TConnectionId Id_;
-    const TString EndpointDescription_;
+    const std::string EndpointDescription_;
     const NYTree::IAttributeDictionaryPtr EndpointAttributes_;
     const NNet::TNetworkAddress EndpointNetworkAddress_;
     const std::optional<TString> EndpointAddress_;
@@ -239,7 +240,7 @@ private:
     std::unique_ptr<IPacketDecoder> Decoder_;
     const NProfiling::TCpuDuration ReadStallTimeout_;
     std::atomic<NProfiling::TCpuInstant> LastIncompleteReadTime_ = std::numeric_limits<NProfiling::TCpuInstant>::max();
-    TBlob ReadBuffer_;
+    TMemoryTrackedBlob ReadBuffer_;
 
     TRingQueue<TPacketPtr> QueuedPackets_;
     TRingQueue<TPacketPtr> EncodedPackets_;
@@ -248,7 +249,7 @@ private:
     std::unique_ptr<IPacketEncoder> Encoder_;
     const NProfiling::TCpuDuration WriteStallTimeout_;
     std::atomic<NProfiling::TCpuInstant> LastIncompleteWriteTime_ = std::numeric_limits<NProfiling::TCpuInstant>::max();
-    std::vector<std::unique_ptr<TBlob>> WriteBuffers_;
+    std::vector<TMemoryTrackedBlob> WriteBuffers_;
     TRingQueue<TRef> EncodedFragments_;
     TRingQueue<size_t> EncodedPacketSizes_;
 
@@ -277,15 +278,17 @@ private:
     const EEncryptionMode EncryptionMode_;
     const EVerificationMode VerificationMode_;
 
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
+
     NYTree::IAttributeDictionaryPtr PeerAttributes_;
 
     size_t MaxFragmentsPerWrite_ = 256;
 
-    void Open();
+    void Open(TGuard<NThreading::TSpinLock>& guard);
     void Close();
     void CloseSslSession(ESslState newSslState);
 
-    void Abort(const TError& error);
+    void Abort(const TError& error, NLogging::ELogLevel logLevel = NLogging::ELogLevel::Debug);
     bool AbortIfNetworkingDisabled();
     void AbortSslSession();
 
@@ -294,7 +297,7 @@ private:
     int GetSocketPort();
 
     void ConnectSocket(const NNet::TNetworkAddress& address);
-    void OnDialerFinished(const TErrorOr<SOCKET>& socketOrError);
+    void OnDialerFinished(const TErrorOr<TFileDescriptor>& fdOrError);
 
     void ResolveAddress();
     void OnAddressResolveFinished(const TErrorOr<NNet::TNetworkAddress>& result);

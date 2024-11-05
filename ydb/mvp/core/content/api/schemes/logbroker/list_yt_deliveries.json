@@ -1,0 +1,53 @@
+{
+    "get": {
+        "tags": ["LB UI v2"],
+        "security": { "Bearer": [] },
+        "produces": ["application/json"],
+        "summary": "Lists YT deliveries",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "Logbroker installation, such as logbroker and logbroker-prestable",
+            "required": true,
+            "type" : "string"
+        }],
+        "responses": {
+            "200": {
+                "description": "OK",
+                "schema": {
+                    "type": "object",
+                    "title" : "ListYtDeliveriesResult",
+                    "required":["items"],
+                    "properties": {
+                        "items": {
+                            "title" : "YtDeliveries",
+                            "type": "array",
+                            "items": {
+                                "title" : "YtDelivery",
+                                "type": "object",
+                                "required": ["path", "destination", "additionAllowed"],
+                                "properties": {
+                                    "path": {
+                                        "type": "string"
+                                    },
+                                    "destination": {
+                                        "type": "string"
+                                    },
+                                    "destinationAlias": {
+                                        "type": "string",
+                                        "description": "'Logfeller' for YT deliveries that use Logfeller, undefined otherwise",
+                                        "enum": ["Logfeller"]
+                                    },
+                                    "additionAllowed": {
+                                        "type": "boolean",
+                                        "description": "True if current user can add topics to this YT delivery"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

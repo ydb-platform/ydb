@@ -32,7 +32,6 @@
 #endif
 
 #include <cstddef>
-#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -40,12 +39,10 @@
 #include <util/generic/string.h>
 #include <type_traits>
 
-#include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
 #include "y_absl/base/internal/endian.h"
 #include "y_absl/base/macros.h"
 #include "y_absl/base/nullability.h"
-#include "y_absl/base/optimization.h"
 #include "y_absl/base/port.h"
 #include "y_absl/numeric/bits.h"
 #include "y_absl/numeric/int128.h"
@@ -161,96 +158,6 @@ bool safe_strtou128_base(y_absl::string_view text,
 static const int kFastToBufferSize = 32;
 static const int kSixDigitsToBufferSize = 16;
 
-template <class T>
-std::enable_if_t<!std::is_unsigned<T>::value, bool> IsNegative(const T& v) {
-  return v < T();
-}
-
-template <class T>
-std::enable_if_t<std::is_unsigned<T>::value, std::false_type> IsNegative(
-    const T&) {
-  // The integer is unsigned, so return a compile-time constant.
-  // This can help the optimizer avoid having to prove bool to be false later.
-  return std::false_type();
-}
-
-template <class T>
-std::enable_if_t<std::is_unsigned<std::decay_t<T>>::value, T&&>
-UnsignedAbsoluteValue(T&& v Y_ABSL_ATTRIBUTE_LIFETIME_BOUND) {
-  // The value is unsigned; just return the original.
-  return std::forward<T>(v);
-}
-
-template <class T>
-Y_ABSL_ATTRIBUTE_CONST_FUNCTION
-    std::enable_if_t<!std::is_unsigned<T>::value, std::make_unsigned_t<T>>
-    UnsignedAbsoluteValue(T v) {
-  using U = std::make_unsigned_t<T>;
-  return IsNegative(v) ? U() - static_cast<U>(v) : static_cast<U>(v);
-}
-
-// Returns the number of base-10 digits in the given number.
-// Note that this strictly counts digits. It does not count the sign.
-// The `initial_digits` parameter is the starting point, which is normally equal
-// to 1 because the number of digits in 0 is 1 (a special case).
-// However, callers may e.g. wish to change it to 2 to account for the sign.
-template <typename T>
-std::enable_if_t<std::is_unsigned<T>::value, uint32_t> Base10Digits(
-    T v, const uint32_t initial_digits = 1) {
-  uint32_t r = initial_digits;
-  // If code size becomes an issue, the 'if' stage can be removed for a minor
-  // performance loss.
-  for (;;) {
-    if (Y_ABSL_PREDICT_TRUE(v < 10 * 10)) {
-      r += (v >= 10);
-      break;
-    }
-    if (Y_ABSL_PREDICT_TRUE(v < 1000 * 10)) {
-      r += (v >= 1000) + 2;
-      break;
-    }
-    if (Y_ABSL_PREDICT_TRUE(v < 100000 * 10)) {
-      r += (v >= 100000) + 4;
-      break;
-    }
-    r += 6;
-    v = static_cast<T>(v / 1000000);
-  }
-  return r;
-}
-
-template <typename T>
-std::enable_if_t<std::is_signed<T>::value, uint32_t> Base10Digits(
-    T v, uint32_t r = 1) {
-  // Branchlessly add 1 to account for a minus sign.
-  r += static_cast<uint32_t>(IsNegative(v));
-  return Base10Digits(UnsignedAbsoluteValue(v), r);
-}
-
-// These functions return the number of base-10 digits, but multiplied by -1 if
-// the input itself is negative. This is handy and efficient for later usage,
-// since the bitwise complement of the result becomes equal to the number of
-// characters required.
-Y_ABSL_ATTRIBUTE_CONST_FUNCTION int GetNumDigitsOrNegativeIfNegative(
-    signed char v);
-Y_ABSL_ATTRIBUTE_CONST_FUNCTION int GetNumDigitsOrNegativeIfNegative(
-    unsigned char v);
-Y_ABSL_ATTRIBUTE_CONST_FUNCTION int GetNumDigitsOrNegativeIfNegative(
-    short v);  // NOLINT
-Y_ABSL_ATTRIBUTE_CONST_FUNCTION int GetNumDigitsOrNegativeIfNegative(
-    unsigned short v);  // NOLINT
-Y_ABSL_ATTRIBUTE_CONST_FUNCTION int GetNumDigitsOrNegativeIfNegative(int v);
-Y_ABSL_ATTRIBUTE_CONST_FUNCTION int GetNumDigitsOrNegativeIfNegative(
-    unsigned int v);
-Y_ABSL_ATTRIBUTE_CONST_FUNCTION int GetNumDigitsOrNegativeIfNegative(
-    long v);  // NOLINT
-Y_ABSL_ATTRIBUTE_CONST_FUNCTION int GetNumDigitsOrNegativeIfNegative(
-    unsigned long v);  // NOLINT
-Y_ABSL_ATTRIBUTE_CONST_FUNCTION int GetNumDigitsOrNegativeIfNegative(
-    long long v);  // NOLINT
-Y_ABSL_ATTRIBUTE_CONST_FUNCTION int GetNumDigitsOrNegativeIfNegative(
-    unsigned long long v);  // NOLINT
-
 // Helper function for fast formatting of floating-point values.
 // The result is the same as printf's "%g", a.k.a. "%.6g"; that is, six
 // significant digits are returned, trailing zeros are removed, and numbers
@@ -259,18 +166,24 @@ Y_ABSL_ATTRIBUTE_CONST_FUNCTION int GetNumDigitsOrNegativeIfNegative(
 // Required buffer size is `kSixDigitsToBufferSize`.
 size_t SixDigitsToBuffer(double d, y_absl::Nonnull<char*> buffer);
 
-// All of these functions take an output buffer
+// WARNING: These functions may write more characters than necessary, because
+// they are intended for speed. All functions take an output buffer
 // as an argument and return a pointer to the last byte they wrote, which is the
 // terminating '\0'. At most `kFastToBufferSize` bytes are written.
-y_absl::Nonnull<char*> FastIntToBuffer(int32_t i, y_absl::Nonnull<char*> buffer);
-y_absl::Nonnull<char*> FastIntToBuffer(uint32_t i, y_absl::Nonnull<char*> buffer);
-y_absl::Nonnull<char*> FastIntToBuffer(int64_t i, y_absl::Nonnull<char*> buffer);
-y_absl::Nonnull<char*> FastIntToBuffer(uint64_t i, y_absl::Nonnull<char*> buffer);
+y_absl::Nonnull<char*> FastIntToBuffer(int32_t i, y_absl::Nonnull<char*> buffer)
+    Y_ABSL_INTERNAL_NEED_MIN_SIZE(buffer, kFastToBufferSize);
+y_absl::Nonnull<char*> FastIntToBuffer(uint32_t n, y_absl::Nonnull<char*> out_str)
+    Y_ABSL_INTERNAL_NEED_MIN_SIZE(out_str, kFastToBufferSize);
+y_absl::Nonnull<char*> FastIntToBuffer(int64_t i, y_absl::Nonnull<char*> buffer)
+    Y_ABSL_INTERNAL_NEED_MIN_SIZE(buffer, kFastToBufferSize);
+y_absl::Nonnull<char*> FastIntToBuffer(uint64_t i, y_absl::Nonnull<char*> buffer)
+    Y_ABSL_INTERNAL_NEED_MIN_SIZE(buffer, kFastToBufferSize);
 
 // For enums and integer types that are not an exact match for the types above,
 // use templates to call the appropriate one of the four overloads above.
 template <typename int_type>
-y_absl::Nonnull<char*> FastIntToBuffer(int_type i, y_absl::Nonnull<char*> buffer) {
+y_absl::Nonnull<char*> FastIntToBuffer(int_type i, y_absl::Nonnull<char*> buffer)
+    Y_ABSL_INTERNAL_NEED_MIN_SIZE(buffer, kFastToBufferSize) {
   static_assert(sizeof(i) <= 64 / 8,
                 "FastIntToBuffer works only with 64-bit-or-less integers.");
   // TODO(jorg): This signed-ness check is used because it works correctly
@@ -290,58 +203,6 @@ y_absl::Nonnull<char*> FastIntToBuffer(int_type i, y_absl::Nonnull<char*> buffer
       return FastIntToBuffer(static_cast<uint64_t>(i), buffer);
     } else {
       return FastIntToBuffer(static_cast<uint32_t>(i), buffer);
-    }
-  }
-}
-
-// These functions do NOT add any null-terminator.
-// They return a pointer to the beginning of the written string.
-// The digit counts provided must *exactly* match the number of base-10 digits
-// in the number, or the behavior is undefined.
-// (i.e. do NOT count the minus sign, or over- or under-count the digits.)
-y_absl::Nonnull<char*> FastIntToBufferBackward(int32_t i,
-                                             y_absl::Nonnull<char*> buffer_end,
-                                             uint32_t exact_digit_count);
-y_absl::Nonnull<char*> FastIntToBufferBackward(uint32_t i,
-                                             y_absl::Nonnull<char*> buffer_end,
-                                             uint32_t exact_digit_count);
-y_absl::Nonnull<char*> FastIntToBufferBackward(int64_t i,
-                                             y_absl::Nonnull<char*> buffer_end,
-                                             uint32_t exact_digit_count);
-y_absl::Nonnull<char*> FastIntToBufferBackward(uint64_t i,
-                                             y_absl::Nonnull<char*> buffer_end,
-                                             uint32_t exact_digit_count);
-
-// For enums and integer types that are not an exact match for the types above,
-// use templates to call the appropriate one of the four overloads above.
-template <typename int_type>
-y_absl::Nonnull<char*> FastIntToBufferBackward(int_type i,
-                                             y_absl::Nonnull<char*> buffer_end,
-                                             uint32_t exact_digit_count) {
-  static_assert(
-      sizeof(i) <= 64 / 8,
-      "FastIntToBufferBackward works only with 64-bit-or-less integers.");
-  // This signed-ness check is used because it works correctly
-  // with enums, and it also serves to check that int_type is not a pointer.
-  // If one day something like std::is_signed<enum E> works, switch to it.
-  // These conditions are constexpr bools to suppress MSVC warning C4127.
-  constexpr bool kIsSigned = static_cast<int_type>(1) - 2 < 0;
-  constexpr bool kUse64Bit = sizeof(i) > 32 / 8;
-  if (kIsSigned) {
-    if (kUse64Bit) {
-      return FastIntToBufferBackward(static_cast<int64_t>(i), buffer_end,
-                                     exact_digit_count);
-    } else {
-      return FastIntToBufferBackward(static_cast<int32_t>(i), buffer_end,
-                                     exact_digit_count);
-    }
-  } else {
-    if (kUse64Bit) {
-      return FastIntToBufferBackward(static_cast<uint64_t>(i), buffer_end,
-                                     exact_digit_count);
-    } else {
-      return FastIntToBufferBackward(static_cast<uint32_t>(i), buffer_end,
-                                     exact_digit_count);
     }
   }
 }

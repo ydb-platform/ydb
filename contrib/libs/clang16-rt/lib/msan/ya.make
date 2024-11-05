@@ -13,7 +13,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-OWNER(g:cpp-contrib)
+SUBSCRIBER(g:cpp-contrib)
+
+VERSION(16.0.6)
 
 ADDINCL(
     contrib/libs/clang16-rt/lib
@@ -24,6 +26,10 @@ NO_COMPILER_WARNINGS()
 NO_UTIL()
 
 NO_SANITIZE()
+
+IF(MAPSMOBI_BUILD_TARGET == "yes")
+    NO_OPTIMIZE()
+ENDIF()
 
 CFLAGS(
     -DHAVE_RPC_XDR_H=0

@@ -16,26 +16,22 @@
  * limitations under the License.
  */
 
-#include "orc/Exceptions.hh"
 #include "InputStream.hh"
+#include "orc/Exceptions.hh"
 
 #include <algorithm>
 #include <iomanip>
 
 namespace orc {
 
-  void printBuffer(std::ostream& out,
-                   const char *buffer,
-                   uint64_t length) {
+  void printBuffer(std::ostream& out, const char* buffer, uint64_t length) {
     const uint64_t width = 24;
     out << std::hex;
-    for(uint64_t line = 0; line < (length + width - 1) / width; ++line) {
+    for (uint64_t line = 0; line < (length + width - 1) / width; ++line) {
       out << std::setfill('0') << std::setw(7) << (line * width);
-      for(uint64_t byte = 0;
-          byte < width && line * width + byte < length; ++byte) {
+      for (uint64_t byte = 0; byte < width && line * width + byte < length; ++byte) {
         out << " " << std::setfill('0') << std::setw(2)
-            << static_cast<uint64_t>(0xff & buffer[line * width +
-                                                   byte]);
+            << static_cast<uint64_t>(0xff & buffer[line * width + byte]);
       }
       out << "\n";
     }
@@ -64,26 +60,23 @@ namespace orc {
     // PASS
   }
 
-  SeekableArrayInputStream::SeekableArrayInputStream
-               (const unsigned char* values,
-                uint64_t size,
-                uint64_t blkSize
-               ): data(reinterpret_cast<const char*>(values)) {
+  SeekableArrayInputStream::SeekableArrayInputStream(const unsigned char* values, uint64_t size,
+                                                     uint64_t blkSize)
+      : data(reinterpret_cast<const char*>(values)) {
     length = size;
     position = 0;
     blockSize = blkSize == 0 ? length : static_cast<uint64_t>(blkSize);
   }
 
-  SeekableArrayInputStream::SeekableArrayInputStream(const char* values,
-                                                     uint64_t size,
-                                                     uint64_t blkSize
-  ): data(values) {
+  SeekableArrayInputStream::SeekableArrayInputStream(const char* values, uint64_t size,
+                                                     uint64_t blkSize)
+      : data(values) {
     length = size;
     position = 0;
     blockSize = blkSize == 0 ? length : static_cast<uint64_t>(blkSize);
   }
 
-  bool SeekableArrayInputStream::Next(const void** buffer, int*size) {
+  bool SeekableArrayInputStream::Next(const void** buffer, int* size) {
     uint64_t currentSize = std::min(length - position, blockSize);
     if (currentSize > 0) {
       *buffer = data + position;
@@ -137,19 +130,14 @@ namespace orc {
     return std::min(length, request == 0 ? 256 * 1024 : request);
   }
 
-  SeekableFileInputStream::SeekableFileInputStream(InputStream* stream,
-                                                   uint64_t offset,
-                                                   uint64_t byteCount,
-                                                   MemoryPool& _pool,
-                                                   uint64_t _blockSize
-                                                   ):pool(_pool),
-                                                     input(stream),
-                                                     start(offset),
-                                                     length(byteCount),
-                                                     blockSize(computeBlock
-                                                               (_blockSize,
-                                                                length)) {
-
+  SeekableFileInputStream::SeekableFileInputStream(InputStream* stream, uint64_t offset,
+                                                   uint64_t byteCount, MemoryPool& _pool,
+                                                   uint64_t _blockSize)
+      : pool(_pool),
+        input(stream),
+        start(offset),
+        length(byteCount),
+        blockSize(computeBlock(_blockSize, length)) {
     position = 0;
     buffer.reset(new DataBuffer<char>(pool));
     pushBack = 0;
@@ -159,7 +147,7 @@ namespace orc {
     // PASS
   }
 
-  bool SeekableFileInputStream::Next(const void** data, int*size) {
+  bool SeekableFileInputStream::Next(const void** data, int* size) {
     uint64_t bytesRead;
     if (pushBack != 0) {
       *data = buffer->data() + (buffer->size() - pushBack);
@@ -168,7 +156,7 @@ namespace orc {
       bytesRead = std::min(length - position, blockSize);
       buffer->resize(bytesRead);
       if (bytesRead > 0) {
-        input->read(buffer->data(), bytesRead, start+position);
+        input->read(buffer->data(), bytesRead, start + position);
         *data = static_cast<void*>(buffer->data());
       }
     }
@@ -218,9 +206,8 @@ namespace orc {
 
   std::string SeekableFileInputStream::getName() const {
     std::ostringstream result;
-    result << input->getName() << " from " << start << " for "
-           << length;
+    result << input->getName() << " from " << start << " for " << length;
     return result.str();
   }
 
-}
+}  // namespace orc

@@ -50,6 +50,7 @@ NTabletFlatExecutor::ITransaction* TDataShard::CreateTxInitiateBorrowedPartsRetu
 }
 
 void TDataShard::CompletedLoansChanged(const TActorContext &ctx) {
+    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " CompletedLoansChanged");
     Y_ABORT_UNLESS(Executor()->GetStats().CompactedPartLoans);
 
     CheckInitiateBorrowedPartsReturn(ctx);
@@ -143,7 +144,7 @@ void TDataShard::Handle(TEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev, const 
 bool TDataShard::HasSharedBlobs() const {
     const bool* hasSharedBlobsPtr = Executor()->GetStats().HasSharedBlobs;
     if (!hasSharedBlobsPtr) {
-        Y_ABORT_UNLESS(Executor()->GetStats().IsFollower);
+        Y_ABORT_UNLESS(IsFollower());
         return false;
     }
     return *hasSharedBlobsPtr;

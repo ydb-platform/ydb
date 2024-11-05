@@ -1,0 +1,78 @@
+{
+    "get": {
+        "tags": ["LB UI v2"],
+        "security": { "Bearer": [] },
+        "produces": ["application/json"],
+        "summary": "Gets object configuration properties collected from Configuration manager",
+        "parameters": [{
+            "name": "installation",
+            "in": "path",
+            "description": "Logbroker installation, such as logbroker and logbroker-prestable",
+            "required": true,
+            "type" : "string"
+        },{
+            "name": "path",
+            "in": "query",
+            "description": "Path for a account, directory, topic or consumer to describe",
+            "required": true,
+            "type": "string"
+        }],
+        "responses": {
+            "200": {
+                "description": "OK",
+                "schema": {
+                    "title" : "DescribePathResult",
+                    "type": "object",
+                    "required": ["path", "resultType"],
+                    "properties": {
+                        "error": {
+                            "$ref": "#/definitions/TError"
+                        },
+                        "path": {
+                            "type": "string"
+                        },
+                        "resultType": {
+                            "type": "string",
+                            "enum": ["account", "directory", "topic", "consumer"]
+                        },
+                        "account": {
+                            "title": "DescribeAccountResult",
+                            "type": "object"
+                        },
+                        "directory": {
+                            "title" : "DescribeDirectoryResult",
+                            "type": "object"
+                        },
+                        "topic": {
+                            "title" : "DescribeTopicResult",
+                            "type": "object",
+                            "required": ["ytDeliveries", "additionToYtDeliveryAllowed", "removalFromYtDeliveryAllowed"],
+                            "properties": {
+                                "ytDeliveries": {
+                                    "description": "List of YT deliveries that this topic is added to",
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string",
+                                        "description": "YT delivery path"
+                                    }
+                                },
+                                "additionToYtDeliveryAllowed": {
+                                    "type": "boolean",
+                                    "description": "True if current user can add this topic to YT deliveries"
+                                },
+                                "removalFromYtDeliveryAllowed": {
+                                    "type": "boolean",
+                                    "description": "True if current user can remove this topic from YT deliveries"
+                                }
+                            }
+                        },
+                        "consumer": {
+                            "title" : "DescribeConsumerResult",
+                            "type": "object"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -10,9 +10,16 @@
 namespace NYql {
 namespace NCommon {
 
+struct TResultFormatSettings {
+    TString ResultType;
+    TVector<TString> Columns;
+    TMaybe<ui64> SizeLimit;
+    TMaybe<ui64> RowsLimit;
+};
+
 TMaybe<TString> SqlToSExpr(const TString& query);
 
-TString GetSerializedTypeAnnotation(const NYql::TTypeAnnotationNode* typeAnn, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry);
+TString GetSerializedTypeAnnotation(const NYql::TTypeAnnotationNode* typeAnn);
 TString GetSerializedResultType(const TString& program);
 
 bool ParseCounterName(TString* prefix, std::map<TString, TString>* labels, TString* name, const TString& counterName);

@@ -389,6 +389,11 @@ TUnversionedValueToSkiffConverter CreateSimpleValueConverter(
         case ESimpleLogicalValueType::Int64:
 
         case ESimpleLogicalValueType::Interval:
+
+        case ESimpleLogicalValueType::Date32:
+        case ESimpleLogicalValueType::Datetime64:
+        case ESimpleLogicalValueType::Timestamp64:
+        case ESimpleLogicalValueType::Interval64:
             CheckWireType(wireType, {EWireType::Int8, EWireType::Int16, EWireType::Int32, EWireType::Int64, EWireType::Yson32});
             return CreatePrimitiveValueConverter(wireType, required);
 
@@ -468,7 +473,7 @@ TUnversionedValueToSkiffConverter CreateComplexValueConverter(
             input.Reset(value.Data.String, value.Length);
         } else if (value.Type == EValueType::Null) {
             static const TStringBuf empty = "#";
-            input.Reset(empty.Data(), empty.Size());
+            input.Reset(empty.data(), empty.size());
         } else {
             THROW_ERROR_EXCEPTION("Internal error; unexpected value type: expected %Qlv or %Qlv, actual %Qlv",
                 EValueType::Composite,
@@ -501,6 +506,10 @@ TUnversionedValueToSkiffConverter CreateDecimalValueConverter(
             return CreatePrimitiveValueConverter<EValueType::String>(
                 isRequired,
                 TDecimalSkiffWriter<EWireType::Int128>(precision));
+        case EWireType::Int256:
+            return CreatePrimitiveValueConverter<EValueType::String>(
+                isRequired,
+                TDecimalSkiffWriter<EWireType::Int256>(precision));
         case EWireType::Yson32:
             return CreatePrimitiveValueConverter(wireType, isRequired);
         default:

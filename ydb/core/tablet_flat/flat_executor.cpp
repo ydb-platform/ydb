@@ -23,11 +23,9 @@
 #include "flat_abi_evol.h"
 #include "probes.h"
 #include "shared_sausagecache.h"
-#include "shared_cache_memtable.h"
 #include "util_fmt_desc.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
@@ -62,34 +60,34 @@ struct TCompactionChangesCtx {
     { }
 };
 
-class TSharedPageCacheMemTableObserver : public NSharedCache::ISharedPageCacheMemTableObserver {
+class TMemTableMemoryConsumersCollection : public NTable::IMemTableMemoryConsumersCollection {
 public:
-    TSharedPageCacheMemTableObserver(TActorSystem* actorSystem, TActorId owner)
+    TMemTableMemoryConsumersCollection(TActorSystem* actorSystem, TActorId owner)
         : ActorSystem(actorSystem)
         , Owner(owner)
-        , SharedCacheId(MakeSharedPageCacheId())
+        , MemoryControllerId(NMemory::MakeMemoryControllerId())
     {}
 
     void Register(ui32 table) override {
-        Send(new NSharedCache::TEvMemTableRegister(table));
+        Send(new NMemory::TEvMemTableRegister(table));
     }
 
     void Unregister(ui32 table) override {
-        Send(new NSharedCache::TEvMemTableUnregister(table));
+        Send(new NMemory::TEvMemTableUnregister(table));
     }
 
-    void CompactionComplete(TIntrusivePtr<NSharedCache::ISharedPageCacheMemTableRegistration> registration) override {
-        Send(new NSharedCache::TEvMemTableCompacted(std::move(registration)));
+    void CompactionComplete(TIntrusivePtr<NMemory::IMemoryConsumer> consumer) override {
+        Send(new NMemory::TEvMemTableCompacted(std::move(consumer)));
     }
 
 private:
     void Send(IEventBase* ev) {
-        ActorSystem->Send(new IEventHandle(SharedCacheId, Owner, ev));
+        ActorSystem->Send(new IEventHandle(MemoryControllerId, Owner, ev));
     }
 
     TActorSystem* ActorSystem;
     const TActorId Owner;
-    const TActorId SharedCacheId;
+    const TActorId MemoryControllerId;
 };
 
 TTableSnapshotContext::TTableSnapshotContext() = default;
@@ -136,6 +134,7 @@ TExecutor::TExecutor(
     , CounterEventsInFlight(new TEvTabletCounters::TInFlightCookie)
     , Stats(new TExecutorStatsImpl())
     , LogFlushDelayOverrideUsec(-1, -1, 60*1000*1000)
+    , MaxCommitRedoMB(256, 1, 4096)
 {}
 
 TExecutor::~TExecutor() {
@@ -157,8 +156,10 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     Broker = new TBroker(this, Emitter);
     Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId);
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
+    MemTableMemoryConsumersCollection = new TMemTableMemoryConsumersCollection(NActors::TActivationContext::ActorSystem(), SelfId());
     TString myTabletType = TTabletTypes::TypeToStr(Owner->TabletType());
     AppData()->Icb->RegisterSharedControl(LogFlushDelayOverrideUsec, myTabletType + "_LogFlushDelayOverrideUsec");
+    AppData()->Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
 
     // instantiate alert counters so even never reported alerts are created
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true);
@@ -197,7 +198,7 @@ void TExecutor::Broken() {
 
     if (Owner) {
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-            Owner->Info()->TenantPathId, Stats->IsFollower, SelfId());
+            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
         Owner->Detach(OwnerCtx());
     }
 
@@ -322,7 +323,7 @@ void TExecutor::SendReassignYellowChannels(const TVector<ui32> &yellowChannels) 
     if (Owner->ReassignChannelsEnabled()) {
         auto* info = Owner->Info();
         if (Y_LIKELY(info) && info->HiveId) {
-            Send(MakePipePeNodeCacheID(false),
+            Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(
                     new TEvHive::TEvReassignTabletSpace(info->TabletID, yellowChannels),
                     info->HiveId,
@@ -414,7 +415,7 @@ void TExecutor::ActivateFollower(const TActorContext &ctx) {
 
     Become(&TThis::StateFollower);
     Stats->IsActive = true;
-    Stats->IsFollower = true;
+    Stats->FollowerId = FollowerId;
 
     PlanTransactionActivation();
 
@@ -445,8 +446,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     CommitManager->Start(this, Owner->Tablet(), &Step0, Counters.Get());
 
-    auto sharedPageCacheMemTableObserver = MakeHolder<TSharedPageCacheMemTableObserver>(NActors::TActivationContext::ActorSystem(), SelfId());
-    CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(std::move(sharedPageCacheMemTableObserver), Logger.Get(), Broker.Get(), this, loadedState->Comp,
+    CompactionLogic = THolder<TCompactionLogic>(new TCompactionLogic(MemTableMemoryConsumersCollection.Get(), Logger.Get(), Broker.Get(), this, loadedState->Comp,
                                                                      Sprintf("tablet-%" PRIu64, Owner->TabletID())));
     LogicRedo->InstallCounters(Counters.Get(), nullptr);
 
@@ -465,7 +465,7 @@ void TExecutor::Active(const TActorContext &ctx) {
 
     Become(&TThis::StateWork);
     Stats->IsActive = true;
-    Stats->IsFollower = false;
+    Stats->FollowerId = 0;
 
     CompactionLogic->Start();
 
@@ -485,6 +485,18 @@ void TExecutor::Active(const TActorContext &ctx) {
     }
 
     MakeLogSnapshot();
+
+    if (loadedState->ShouldSnapshotScheme) {
+        TTxStamp stamp = Stamp();
+        auto alter = Database->GetScheme().GetSnapshot();
+        alter->SetRewrite(true);
+        auto change = alter->SerializeAsString();
+        Database->RollUp(stamp, change, {}, {});
+        auto commit = CommitManager->Begin(true, ECommit::Misc, {});
+        LogicAlter->Clear();
+        LogicAlter->WriteLog(*commit, std::move(change));
+        CommitManager->Commit(commit);
+    }
 
     if (auto error = CheckBorrowConsistency()) {
         if (auto logl = Logger->Log(ELnLev::Crit))
@@ -695,9 +707,9 @@ TExecutorCaches TExecutor::CleanupState() {
 }
 
 void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
-    if (Stats->IsFollower) {
+    if (Stats->IsFollower()) {
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-            Owner->Info()->TenantPathId, Stats->IsFollower, SelfId());
+            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
     }
 
     if (!Counters) {
@@ -710,7 +722,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
 
     Become(&TThis::StateBoot);
     Stats->IsActive = false;
-    Stats->IsFollower = false;
+    Stats->FollowerId = 0;
 
     TEvTablet::TEvBoot *msg = ev->Get();
     Generation0 = msg->Generation;
@@ -748,8 +760,6 @@ void TExecutor::FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext 
     RegisterTabletFlatProbes();
 
     Become(&TThis::StateFollowerBoot);
-    Stats->IsActive = false;
-    Stats->IsFollower = true;
 
     TEvTablet::TEvFBoot *msg = ev->Get();
     Generation0 = msg->Generation;
@@ -757,6 +767,9 @@ void TExecutor::FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext 
     Launcher = msg->Launcher;
     Memory->SetProfiles(msg->ResourceProfiles);
     FollowerId = msg->FollowerID;
+
+    Stats->IsActive = false;
+    Stats->FollowerId = FollowerId;
 
     const ui64 maxBootBytesInFly = 12 * 1024 * 1024;
 
@@ -786,7 +799,7 @@ void TExecutor::Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &
 
 void TExecutor::DetachTablet(const TActorContext &) {
     TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-        Owner->Info()->TenantPathId, Stats->IsFollower, SelfId());
+        Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
     return PassAway();
 }
 
@@ -1179,7 +1192,7 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
     }
 
     if (auto* stage = bundle.GetStage<TPendingPartSwitch::TLoaderStage>()) {
-        if (auto fetch = stage->Loader.Run()) {
+        if (auto fetch = stage->Loader.Run(PreloadTablesData.contains(partSwitch.TableId))) {
             Y_ABORT_UNLESS(fetch.size() == 1, "Cannot handle loads from more than one page collection");
 
             for (auto req : fetch) {
@@ -1288,7 +1301,7 @@ void TExecutor::Handle(TEvBlobStorage::TEvGetResult::TPtr& ev, const TActorConte
 
 void TExecutor::AdvancePendingPartSwitches() {
     while (PendingPartSwitches && ApplyReadyPartSwitches()) {
-        if (Stats->IsFollower) {
+        if (Stats->IsFollower()) {
             ApplyFollowerPostponedUpdates();
         }
     }
@@ -1355,6 +1368,10 @@ THashSet<NTable::TTag> TExecutor::GetStickyColumns(ui32 tableId) {
     auto *tableInfo = Scheme().GetTableInfo(tableId);
 
     THashSet<NTable::TTag> stickyColumns;
+    if (!tableInfo) {
+        return stickyColumns;
+    }
+
     for (const auto &column : tableInfo->Columns) {
         const auto* family = tableInfo->Families.FindPtr(column.second.Family);
         if (family && family->Cache == NTable::NPage::ECache::Ever) {
@@ -1544,7 +1561,7 @@ TExecutor::TLeaseCommit* TExecutor::AttachLeaseCommit(TLogCommit* commit, bool f
 }
 
 TExecutor::TLeaseCommit* TExecutor::EnsureReadOnlyLease(TMonotonic at) {
-    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower);
+    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower());
     Y_ABORT_UNLESS(at >= LeaseEnd);
 
     if (!LeaseEnabled) {
@@ -1580,7 +1597,7 @@ TExecutor::TLeaseCommit* TExecutor::EnsureReadOnlyLease(TMonotonic at) {
 }
 
 void TExecutor::ConfirmReadOnlyLease(TMonotonic at) {
-    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower);
+    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower());
     LeaseUsed = true;
 
     if (LeaseEnabled && at < LeaseEnd) {
@@ -1591,7 +1608,7 @@ void TExecutor::ConfirmReadOnlyLease(TMonotonic at) {
 }
 
 void TExecutor::ConfirmReadOnlyLease(TMonotonic at, std::function<void()> callback) {
-    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower);
+    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower());
     LeaseUsed = true;
 
     if (LeaseEnabled && at < LeaseEnd) {
@@ -1609,7 +1626,7 @@ void TExecutor::ConfirmReadOnlyLease(std::function<void()> callback) {
 }
 
 bool TExecutor::CanExecuteTransaction() const {
-    return Stats->IsActive && (Stats->IsFollower || PendingPartSwitches.empty()) && !BrokenTransaction;
+    return Stats->IsActive && (Stats->IsFollower() || PendingPartSwitches.empty()) && !BrokenTransaction;
 }
 
 void TExecutor::DoExecute(TAutoPtr<ITransaction> self, bool allowImmediate, const TActorContext &ctx) {
@@ -1694,7 +1711,7 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     Database->Begin(Stamp(), env);
 
     LWTRACK(TransactionExecuteBegin, seat->Self->Orbit, seat->UniqID);
-    
+
     txc.StartExecutionSpan();
     const bool done = seat->Self->Execute(txc, ctx.MakeFor(OwnerActorId));
     txc.FinishExecutionSpan();
@@ -1708,12 +1725,17 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     }
 
     bool failed = false;
-    TString failureReason;
-    if (done && (failed = !Database->ValidateCommit(failureReason))) {
-        if (auto logl = Logger->Log(ELnLev::Crit)) {
-            logl
-                << NFmt::Do(*this) << " " << NFmt::Do(*seat)
-                << " fatal commit failure: " << failureReason;
+    if (done) {
+        ui64 commitRedoBytes = Database->GetCommitRedoBytes();
+        ui64 maxCommitRedoBytes = ui64(MaxCommitRedoMB) << 20; // MB to bytes
+        if (commitRedoBytes > maxCommitRedoBytes) {
+            if (auto logl = Logger->Log(ELnLev::Crit)) {
+                logl
+                    << NFmt::Do(*this) << " " << NFmt::Do(*seat)
+                    << " fatal commit failure: Redo commit of " << commitRedoBytes
+                    << " bytes is more than the allowed limit";
+            }
+            failed = true;
         }
     }
 
@@ -1764,7 +1786,7 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
         Y_ABORT_UNLESS(!seat->CapturedMemory);
         if (!PrivatePageCache->GetStats().CurrentCacheMisses && !seat->RequestedMemory && !txc.IsRescheduled()) {
             Y_Fail(NFmt::Do(*this) << " " << NFmt::Do(*seat) << " type "
-                    << NFmt::Do(*seat->Self) << " postoned w/o demands");
+                    << NFmt::Do(*seat->Self) << " postponed w/o demands");
         }
         PostponeTransaction(seat, env, prod.Change, cpuTimer, ctx);
     }
@@ -1808,16 +1830,14 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     TTxType txType = seat->Self->GetTxType();
 
     ui32 touchedPages = 0;
-    ui64 touchedBytes = 0;
     ui32 newPinnedPages = 0;
-    ui32 waitPages = 0;
     ui32 loadPages = 0;
-    ui64 loadBytes = 0;
     ui64 prevTouched = seat->MemoryTouched;
 
     PrivatePageCache->PinTouches(seat->Pinned, touchedPages, newPinnedPages, seat->MemoryTouched);
 
-    touchedBytes = seat->MemoryTouched - prevTouched;
+    ui32 newTouchedPages = newPinnedPages;
+    ui64 newTouchedBytes = seat->MemoryTouched - prevTouched;
     prevTouched = seat->MemoryTouched;
 
     PrivatePageCache->PinToLoad(seat->Pinned, newPinnedPages, seat->MemoryTouched);
@@ -1831,7 +1851,7 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl
             << NFmt::Do(*this) << " " << NFmt::Do(*seat)
-            << " touch new " << touchedBytes << "b"
+            << " touch new " << newTouchedBytes << "b"
             << ", " << (seat->MemoryTouched - prevTouched) << "b lo load"
             << " (" << seat->MemoryTouched << "b in total)"
             << ", " << requestedMemory << "b requested for data"
@@ -1904,6 +1924,8 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     auto *const pad = padHolder.Get();
     TransactionWaitPads[pad] = std::move(padHolder);
 
+    ui32 waitPages = 0;
+    ui64 loadBytes = 0;
     auto toLoad = PrivatePageCache->GetToLoad();
     for (auto &xpair : toLoad) {
         TPrivatePageCache::TInfo *pageCollectionInfo = xpair.first;
@@ -1912,6 +1934,17 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
 
         const std::pair<ui32, ui64> toLoad = PrivatePageCache->Request(pages, pad, pageCollectionInfo);
         if (toLoad.first) {
+            if (auto logl = Logger->Log(ELnLev::Dbg03)) {
+                logl
+                    << NFmt::Do(*this) << " requests PageCollection " << pageCollectionInfo->PageCollection->Label()
+                    << " " << toLoad.second << " bytes, " << toLoad.first << " pages: [";
+                for (auto i : xrange(pages.size())) {
+                    if (i != 0) logl << ", ";
+                    logl << pages[i] << " " << ui32(pageCollectionInfo->GetPageType(pages[i]));
+                }
+                logl << "]";
+            }
+
             auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages), pad->GetWaitingTraceId());
 
             loadPages += toLoad.first;
@@ -1934,13 +1967,15 @@ void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &
     if (AppTxCounters && txType != UnknownTxType)
         AppTxCounters->TxCumulative(txType, COUNTER_TT_POSTPONED).Increment(1);
 
+    // Note: count all new touched pages (were obtained from cache), even not on the first attempt
+    Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(newTouchedPages);
+    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(newTouchedBytes);
     if (pad->Seat->Retries == 1) {
         Counters->Cumulative()[TExecutorCounters::TX_RETRIED].Increment(1);
-        Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(touchedPages);
     }
 
-    Counters->Cumulative()[TExecutorCounters::TX_BYTES_READ].Increment(loadBytes);
     Counters->Cumulative()[TExecutorCounters::TX_CACHE_MISSES].Increment(loadPages);
+    Counters->Cumulative()[TExecutorCounters::TX_BYTES_READ].Increment(loadBytes);
     if (AppTxCounters && txType != UnknownTxType) {
         AppTxCounters->TxCumulative(txType, COUNTER_TT_LOADED_BLOCKS).Increment(loadPages);
         AppTxCounters->TxCumulative(txType, COUNTER_TT_BYTES_READ).Increment(loadBytes);
@@ -1961,8 +1996,17 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
     if (AppTxCounters && txType != UnknownTxType)
         AppTxCounters->TxCumulative(txType, COUNTER_TT_TOUCHED_BLOCKS).Increment(touchedBlocks);
 
-    if (seat->Retries == 1) {
-        Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(touchedBlocks);
+    // Note: count all new touched pages (were obtained from cache), even not on the first attempt
+    ui32 newTouchedPages = 0;
+    ui64 newTouchedBytes = 0, pinnedTouchedBytes = 0;
+    PrivatePageCache->CountTouches(seat->Pinned, newTouchedPages, newTouchedBytes, pinnedTouchedBytes);
+    Counters->Cumulative()[TExecutorCounters::TX_CACHE_HITS].Increment(newTouchedPages);
+    Counters->Cumulative()[TExecutorCounters::TX_BYTES_CACHED].Increment(newTouchedBytes);
+    if (seat->MemoryTouched >= pinnedTouchedBytes) {
+        // memory that was pinned (for instance by Precharge) but wasn't used during the last successful execution
+        Counters->Cumulative()[TExecutorCounters::TX_BYTES_WASTED].Increment(seat->MemoryTouched - pinnedTouchedBytes);
+    } else {
+        Y_DEBUG_ABORT("Cache counters are out of sync");
     }
 
     UnpinTransactionPages(*seat);
@@ -1973,7 +2017,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
     const double currentExecTime = seat->CPUExecTime;
 
     if (isTerminated) {
-        if (Stats->IsFollower) {
+        if (Stats->IsFollower()) {
             --Stats->TxInFly;
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
             seat->Terminate(seat->TerminationReason, OwnerCtx());
@@ -1982,7 +2026,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
         }
     } else if (isReadOnly) {
-        if (Stats->IsFollower) {
+        if (Stats->IsFollower()) {
             // todo: extract completion counters from txloglogic
             --Stats->TxInFly;
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
@@ -1992,7 +2036,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
         }
     } else {
-        Y_ABORT_UNLESS(!Stats->IsFollower);
+        Y_ABORT_UNLESS(!Stats->IsFollower());
 
         const bool allowBatching = Scheme().Executor.AllowLogBatching;
         const bool force = !allowBatching
@@ -2177,7 +2221,8 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
                     Y_ABORT_UNLESS(srcSubset->Frozen.empty(), "Unexpected frozen parts in src subset");
 
                     // Check scheme compatibility (it may have changed due to alter)
-                    srcSubset->Scheme->CheckCompatability(*dstSubset->Scheme);
+                    auto tableInfo = Database->GetScheme().Tables.FindPtr(src);
+                    srcSubset->Scheme->CheckCompatibility(tableInfo ? tableInfo->Name : "", *dstSubset->Scheme);
 
                     // Don't do anything if there's nothing to move
                     if (srcSubset->Flatten.empty()) {
@@ -3377,21 +3422,11 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
         UtilizeSubset(*ops->Subset, *ops->Trace, std::move(reusedBundles), commit.Get());
 
-        const bool writeBundleDeltas = KIKIMR_TABLET_WRITE_BUNDLE_DELTAS;
-
         for (auto &gone: ops->Subset->Flatten) {
             if (auto *found = updatedSlices.FindPtr(gone->Label)) {
-                if (writeBundleDeltas) {
-                    auto *deltaProto = proto.AddBundleDeltas();
-                    LogoBlobIDFromLogoBlobID(gone->Label, deltaProto->MutableLabel());
-                    deltaProto->SetDelta(NTable::TOverlay::EncodeRemoveSlices(gone.Slices));
-                } else {
-                    auto *changed = proto.AddChangedBundles();
-                    LogoBlobIDFromLogoBlobID(gone->Label, changed->MutableLabel());
-                    changed->SetLegacy(NTable::TOverlay{ (*found)->ToScreen(), nullptr }.Encode());
-                    changed->SetOpaque(NTable::TOverlay{ nullptr, *found }.Encode());
-                    bundleChanges[gone->Label] = changed;
-                }
+                auto *deltaProto = proto.AddBundleDeltas();
+                LogoBlobIDFromLogoBlobID(gone->Label, deltaProto->MutableLabel());
+                deltaProto->SetDelta(NTable::TOverlay::EncodeRemoveSlices(gone.Slices));
             } else {
                 LogoBlobIDFromLogoBlobID(gone->Label, proto.AddLeavingBundles());
             }
@@ -3435,7 +3470,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
             const auto &newPart = result.Part;
 
             TPageCollectionProtoHelper::Snap(snap, newPart, tableId, logicResult.Changes.NewPartsLevel);
-            TPageCollectionProtoHelper(true, true).Do(bySwitchAux->AddHotBundles(), newPart);
+            TPageCollectionProtoHelper(true, false).Do(bySwitchAux->AddHotBundles(), newPart);
         }
     }
 
@@ -3511,23 +3546,23 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 }
 
 void TExecutor::UpdateUsedTabletMemory() {
-    UsedTabletMemory = 0;
-    // Estimate memory usage for internal executor structures.
-    UsedTabletMemory += 50 << 10; // 50kb
-    // Count the number of bytes exclusive to private cache.
+    // Estimate memory usage for internal executor structures:
+    UsedTabletMemory = 50 << 10; // 50kb
+
+    // Count the number of bytes kept in private cache (can't be offloaded right now):
     if (PrivatePageCache) {
-        UsedTabletMemory += PrivatePageCache->GetStats().TotalExclusive;
+        UsedTabletMemory += PrivatePageCache->GetStats().TotalPinnedBody;
+        UsedTabletMemory += PrivatePageCache->GetStats().PinnedLoadSize;
     }
-    // Estimate memory used by database structures.
+
+    // Estimate memory used by internal database structures:
     auto &counters = Database->Counters();
     UsedTabletMemory += counters.MemTableWaste;
     UsedTabletMemory += counters.MemTableBytes;
-    UsedTabletMemory += counters.Parts.IndexBytes;
     UsedTabletMemory += counters.Parts.OtherBytes;
-    UsedTabletMemory += counters.Parts.ByKeyBytes;
     UsedTabletMemory += Stats->PacksMetaBytes;
 
-    // Add tablet memory usage.
+    // Add tablet memory usage:
     UsedTabletMemory += Owner->GetMemoryUsage();
 }
 
@@ -3545,7 +3580,9 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
             { /* Memory consumption of common for leader and follower components */
                 Counters->Simple()[TExecutorCounters::DB_WARM_BYTES].Set(dbCounters.MemTableBytes);
                 Counters->Simple()[TExecutorCounters::DB_META_BYTES].Set(Stats->PacksMetaBytes);
-                Counters->Simple()[TExecutorCounters::DB_INDEX_BYTES].Set(dbCounters.Parts.IndexBytes);
+                Counters->Simple()[TExecutorCounters::DB_FLAT_INDEX_BYTES].Set(dbCounters.Parts.FlatIndexBytes);
+                Counters->Simple()[TExecutorCounters::DB_B_TREE_INDEX_BYTES].Set(dbCounters.Parts.BTreeIndexBytes);
+                Counters->Simple()[TExecutorCounters::DB_INDEX_BYTES].Set(dbCounters.Parts.FlatIndexBytes + dbCounters.Parts.BTreeIndexBytes);
                 Counters->Simple()[TExecutorCounters::DB_OTHER_BYTES].Set(dbCounters.Parts.OtherBytes);
                 Counters->Simple()[TExecutorCounters::DB_BYKEY_BYTES].Set(dbCounters.Parts.ByKeyBytes);
                 Counters->Simple()[TExecutorCounters::USED_TABLET_MEMORY].Set(UsedTabletMemory);
@@ -3621,7 +3658,7 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
             executorCounters = Counters->MakeDiffForAggr(*CountersBaseline);
             Counters->RememberCurrentStateAsBaseline(*CountersBaseline);
 
-            if (ResourceMetrics && !Stats->IsFollower) {
+            if (ResourceMetrics && !Stats->IsFollower()) {
                 // N.B. DB_UNIQUE_OUTER_BYTES is already part of DB_UNIQUE_DATA_BYTES, due to how BackingSize works
                 // We also include DB_UNIQUE_KEEP_BYTES as unreferenced data that cannot be deleted
                 ui64 storageSize = Counters->Simple()[TExecutorCounters::DB_UNIQUE_DATA_BYTES].Get()
@@ -3648,7 +3685,7 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
         auto tabletType = Owner->TabletType();
         auto tenantPathId = Owner->Info()->TenantPathId;
 
-        TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower);
+        TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower());
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
             CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
 
@@ -3668,7 +3705,7 @@ float TExecutor::GetRejectProbability() const {
     }
 
     // Followers do not control compaction so let's always allow to read the data from follower
-    if (Stats->IsFollower)
+    if (Stats->IsFollower())
         return 0.0;
 
     auto sigmoid = [](float x) -> float {
@@ -3728,12 +3765,10 @@ TString TExecutor::BorrowSnapshot(ui32 table, const TTableSnapshotContext &snap,
     proto.SetLenderTablet(TabletId());
     proto.MutableParts()->Reserve(subset->Flatten.size());
 
-    const bool includeMeta = !bool(KIKIMR_TABLET_BORROW_WITHOUT_META);
-
     for (const auto &partView : subset->Flatten) {
         auto *x = proto.AddParts();
 
-        TPageCollectionProtoHelper(includeMeta, false).Do(x->MutableBundle(), partView);
+        TPageCollectionProtoHelper(false, false).Do(x->MutableBundle(), partView);
         snap.Impl->Borrowed(Step(), table, partView->Label, loaner);
     }
 
@@ -3859,15 +3894,15 @@ bool TExecutor::CompactTables() {
     }
 }
 
-void TExecutor::Handle(NSharedCache::TEvMemTableRegistered::TPtr &ev) {
+void TExecutor::Handle(NMemory::TEvMemTableRegistered::TPtr &ev) {
     const auto *msg = ev->Get();
 
     if (CompactionLogic) {
-        CompactionLogic->ProvideSharedPageCacheMemTableRegistration(msg->Table, std::move(msg->Registration));
+        CompactionLogic->ProvideMemTableMemoryConsumer(msg->Table, std::move(msg->Consumer));
     }
 }
 
-void TExecutor::Handle(NSharedCache::TEvMemTableCompact::TPtr &ev) {
+void TExecutor::Handle(NMemory::TEvMemTableCompact::TPtr &ev) {
     const auto *msg = ev->Get();
 
     if (CompactionLogic) {
@@ -3923,8 +3958,8 @@ STFUNC(TExecutor::StateWork) {
         HFunc(NOps::TEvScanStat, Handle);
         hFunc(NOps::TEvResult, Handle);
         HFunc(NBlockIO::TEvStat, Handle);
-        hFunc(NSharedCache::TEvMemTableRegistered, Handle);
-        hFunc(NSharedCache::TEvMemTableCompact, Handle);
+        hFunc(NMemory::TEvMemTableRegistered, Handle);
+        hFunc(NMemory::TEvMemTableCompact, Handle);
     default:
         break;
     }
@@ -4191,7 +4226,7 @@ void TExecutor::UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr &ev) {
 }
 
 void TExecutor::SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) {
-    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower);
+    Y_ABORT_UNLESS(Stats->IsActive && !Stats->IsFollower());
 
     NKikimrExecutorFlat::TFollowerAux proto;
     proto.SetUserAuxUpdate(std::move(upd));
@@ -4299,6 +4334,9 @@ const NTable::TRowVersionRanges& TExecutor::TableRemovedRowVersions(ui32 table)
 
 ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 {
+    if (auto logl = Logger->Log(ELnLev::Info))
+        logl << NFmt::Do(*this) << " starting compaction";
+
     using NTable::NPage::ECache;
 
     auto table = params->Table;
@@ -4315,6 +4353,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Epoch = snapshot->Subset->Epoch(); /* narrows requested to actual */
     comp->Layout.Final = comp->Params->IsFinal;
     comp->Layout.WriteBTreeIndex = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    comp->Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
     comp->Writer.StickyFlatIndex = !comp->Layout.WriteBTreeIndex;
     comp->Layout.MaxRows = snapshot->Subset->MaxRows();
     comp->Layout.ByKeyFilter = tableInfo->ByKeyFilter;
@@ -4418,11 +4457,17 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     conf.Trace = true; /* Need for tracking gone blobs in GC */
     conf.Tablet = Owner->TabletID();
 
-    return Scans->StartSystem(table, scan, conf, std::move(snapshot));
+    auto result = Scans->StartSystem(table, scan, conf, std::move(snapshot));
+    if (auto logl = Logger->Log(ELnLev::Info))
+        logl << NFmt::Do(*this) << " started compaction " << result;
+    return result;
 }
 
 bool TExecutor::CancelCompaction(ui64 compactionId)
 {
+    if (auto logl = Logger->Log(ELnLev::Info))
+        logl << NFmt::Do(*this) << " cancelling compaction " << compactionId;
+
     return Scans->CancelSystem(compactionId);
 }
 
@@ -4617,7 +4662,7 @@ void TExecutor::Handle(TEvPrivate::TEvActivateCompactionChanges::TPtr& ev, const
 void TExecutor::CommitCompactionChanges(
         ui32 tableId,
         const NTable::TCompactionChanges& changes,
-        NKikimrSchemeOp::ECompactionStrategy strategy)
+        NKikimrCompaction::ECompactionStrategy strategy)
 {
     if (!changes.SliceChanges && !changes.StateChanges) {
         // Don't bother unless there's something to do
@@ -4648,7 +4693,7 @@ void TExecutor::CommitCompactionChanges(
 void TExecutor::ApplyCompactionChanges(
         TCompactionChangesCtx& ctx,
         const NTable::TCompactionChanges& changes,
-        NKikimrSchemeOp::ECompactionStrategy strategy)
+        NKikimrCompaction::ECompactionStrategy strategy)
 {
     const ui32 tableId = ctx.Proto.GetTableId();
 
@@ -4682,8 +4727,6 @@ void TExecutor::ApplyCompactionChanges(
 
         auto pendingChanges = Database->LookupSlices(tableId, labels);
 
-        const bool writeBundleDeltas = KIKIMR_TABLET_WRITE_BUNDLE_DELTAS;
-
         for (const auto &sliceChange : changes.SliceChanges) {
             auto* current = pendingChanges.FindPtr(sliceChange.Label);
             Y_ABORT_UNLESS(current, "[%" PRIu64 "] cannot apply changes to table %" PRIu32 " part %s: not found",
@@ -4693,7 +4736,7 @@ void TExecutor::ApplyCompactionChanges(
 
             if (auto *result = results.Value(sliceChange.Label, nullptr)) {
                 result->Part.Slices = *current;
-            } else if (writeBundleDeltas) {
+            } else {
                 auto *deltaProto = ctx.Proto.AddBundleDeltas();
                 LogoBlobIDFromLogoBlobID(sliceChange.Label, deltaProto->MutableLabel());
                 deltaProto->SetDelta(NTable::TOverlay::EncodeChangeSlices(sliceChange.NewSlices));
@@ -4701,32 +4744,11 @@ void TExecutor::ApplyCompactionChanges(
         }
 
         Database->ReplaceSlices(tableId, pendingChanges);
-
-        if (!writeBundleDeltas) {
-            // Changes may be to parts that had previous changes (partial compaction)
-            THashMap<TLogoBlobID, NKikimrExecutorFlat::TBundleChange*> bundleChanges;
-            for (size_t index = 0; index < ctx.Proto.ChangedBundlesSize(); ++index) {
-                auto* changedProto = ctx.Proto.MutableChangedBundles(index);
-                bundleChanges[LogoBlobIDFromLogoBlobID(changedProto->GetLabel())] = changedProto;
-            }
-
-            for (auto &kv : pendingChanges) {
-                const auto &label = kv.first;
-                if (results.contains(label)) {
-                    // Changes to compaction results don't go into bundle changes
-                    continue;
-                }
-                auto *changedProto = bundleChanges.Value(label, nullptr);
-                if (!changedProto) {
-                    // This was not part of compaction, create a new bundle change
-                    changedProto = ctx.Proto.AddChangedBundles();
-                    LogoBlobIDFromLogoBlobID(label, changedProto->MutableLabel());
-                }
-                changedProto->SetLegacy(NTable::TOverlay{ kv.second->ToScreen(), nullptr }.Encode());
-                changedProto->SetOpaque(NTable::TOverlay{ nullptr, kv.second }.Encode());
-            }
-        }
     }
+}
+
+void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
+    PreloadTablesData = std::move(tables);
 }
 
 }

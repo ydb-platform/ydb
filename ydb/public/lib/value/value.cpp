@@ -250,6 +250,34 @@ TWriteValue& TWriteValue::Interval(i64 value) {
     return *this;
 }
 
+TWriteValue& TWriteValue::Date32(i32 value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Date32);
+    Value.SetInt32(value);
+    return *this;
+}
+
+TWriteValue& TWriteValue::Datetime64(i64 value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Datetime64);
+    Value.SetInt64(value);
+    return *this;
+}
+
+TWriteValue& TWriteValue::Timestamp64(i64 value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Timestamp64);
+    Value.SetInt64(value);
+    return *this;
+}
+
+TWriteValue& TWriteValue::Interval64(i64 value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Interval);
+    Value.SetInt64(value);
+    return *this;
+}
+
 TWriteValue& TWriteValue::operator =(bool value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
     Type.MutableData()->SetScheme(NScheme::NTypeIds::Bool);
@@ -420,6 +448,12 @@ TString TValue::GetDataText() const {
         return ToString(Value.GetUint64());
     case NScheme::NTypeIds::Interval:
         return ToString(Value.GetInt64());
+    case NScheme::NTypeIds::Date32:
+        return ToString(Value.GetInt32());
+    case NScheme::NTypeIds::Datetime64:
+    case NScheme::NTypeIds::Timestamp64:
+    case NScheme::NTypeIds::Interval64:
+        return ToString(Value.GetInt64());        
     case NScheme::NTypeIds::JsonDocument:
         return "\"<JsonDocument>\"";
     case NScheme::NTypeIds::Uuid:

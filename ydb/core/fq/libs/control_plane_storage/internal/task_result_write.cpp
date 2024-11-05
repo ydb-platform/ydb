@@ -39,7 +39,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
     for (const auto& row : resultSet.rows()) {
         TString serializedRow;
         if (!row.SerializeToString(&serializedRow)) {
-            ythrow TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error serialize proto message for row. Please contact internal support";
+            ythrow NYql::TCodeLineException(TIssuesIds::INTERNAL_ERROR) << "Error serialize proto message for row. Please contact internal support";
         }
 
         itemsAsList.AddListItem()

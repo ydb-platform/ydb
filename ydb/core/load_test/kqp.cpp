@@ -5,9 +5,9 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 
-#include <ydb/library/workload/workload_factory.h>
-#include <ydb/library/workload/stock_workload.h>
-#include <ydb/library/workload/kv_workload.h>
+#include <ydb/library/workload/abstract/workload_factory.h>
+#include <ydb/library/workload/stock/stock.h>
+#include <ydb/library/workload/kv/kv.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
@@ -187,7 +187,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& response = ev->Get()->Record.GetRef();
+        auto& response = ev->Get()->Record;
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " data request status: Success");
@@ -407,7 +407,7 @@ private:
     }
 
     void HandleDropTablesResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& response = ev->Get()->Record.GetRef();
+        auto& response = ev->Get()->Record;
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " drop tables status: SUCCESS");
@@ -515,7 +515,7 @@ private:
     }
 
     void HandleCreateTableResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& response = ev->Get()->Record.GetRef();
+        auto& response = ev->Get()->Record;
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             Become(&TKqpLoadActor::StateMain);
@@ -542,7 +542,7 @@ private:
     }
 
     void HandleDataQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        auto& response = ev->Get()->Record.GetRef();
+        auto& response = ev->Get()->Record;
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " init query status: SUCCESS");

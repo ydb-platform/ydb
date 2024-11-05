@@ -2,6 +2,7 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 
 namespace NKikimr {
@@ -38,6 +39,8 @@ private:
     bool CheckCreateCdcStream(TActiveTransaction *activeTx);
     bool CheckAlterCdcStream(TActiveTransaction *activeTx);
     bool CheckDropCdcStream(TActiveTransaction *activeTx);
+    bool CheckCreateIncrementalRestoreSrc(TActiveTransaction *activeTx);
+    bool CheckCreateIncrementalBackupSrc(TActiveTransaction *activeTx);
 
     bool CheckSchemaVersion(TActiveTransaction *activeTx, ui64 proposedSchemaVersion, ui64 currentSchemaVersion, ui64 expectedSchemaVersion);
 
@@ -191,9 +194,22 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
     }
 
     if (!op->IsReadOnly() && DataShard.TxPlanWaiting() > 0) {
-        // We must wait until there are no transactions waiting for plan
-        Pipeline.AddWaitingSchemeOp(op);
-        return EExecutionStatus::Continue;
+        // Eagerly stop any waiting volatile transactions
+        // Note: this may immediate reactivate this operation
+        std::vector<std::unique_ptr<IEventHandle>> replies;
+        Pipeline.CleanupWaitingVolatile(ctx, replies);
+        // Technically we would like to wait until everything is committed, but
+        // since volatile transactions are only stored in memory, sending
+        // replies with confirmed read-only lease should be enough.
+        if (!replies.empty()) {
+            DataShard.SendConfirmedReplies(DataShard.ConfirmReadOnlyLease(), std::move(replies));
+        }
+        // Cleanup call above may have changed the number of waiting transactions
+        if (DataShard.TxPlanWaiting() > 0) {
+            // We must wait until there are no transactions waiting for plan
+            Pipeline.AddWaitingSchemeOp(op);
+            return EExecutionStatus::Continue;
+        }
     }
 
     op->SetMinStep(Pipeline.AllowedSchemaStep());
@@ -367,6 +383,12 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
     case TSchemaOperation::ETypeDropCdcStream:
         res = CheckDropCdcStream(activeTx);
         break;
+    case TSchemaOperation::ETypeCreateIncrementalRestoreSrc:
+        res = CheckCreateIncrementalRestoreSrc(activeTx);
+        break;
+    case TSchemaOperation::ETypeCreateIncrementalBackupSrc:
+        res = CheckCreateIncrementalBackupSrc(activeTx);
+        break;
     default:
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
                     "Unknown scheme tx type detected at tablet "
@@ -502,8 +524,9 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
         if (table.Columns.contains(colId)) {
             const TUserTable::TUserColumn &column = table.Columns.at(colId);
             Y_ABORT_UNLESS(column.Name == col.GetName());
-            // TODO: support pg types
-            Y_ABORT_UNLESS(column.Type.GetTypeId() == col.GetTypeId());
+            const auto& typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(), &col.GetTypeInfo());
+            Y_ABORT_UNLESS(column.Type == typeInfoMod.TypeInfo);
+            Y_ABORT_UNLESS(column.TypeMod == typeInfoMod.TypeMod);
             Y_ABORT_UNLESS(col.HasFamily());
         }
     }
@@ -728,6 +751,37 @@ bool TCheckSchemeTxUnit::CheckDropCdcStream(TActiveTransaction *activeTx) {
     }
 
     return CheckSchemaVersion(activeTx, notice);
+}
+
+bool TCheckSchemeTxUnit::CheckCreateIncrementalRestoreSrc(TActiveTransaction *activeTx) {
+    if (HasDuplicate(activeTx, "CreateIncrementalRestoreSrc", &TPipeline::HasCreateIncrementalRestoreSrc)) {
+        return false;
+    }
+
+    // TODO: add additional checks
+
+    return true;
+}
+
+bool TCheckSchemeTxUnit::CheckCreateIncrementalBackupSrc(TActiveTransaction *activeTx) {
+    if (HasDuplicate(activeTx, "CreateIncrementalBackupSrc", &TPipeline::HasCreateIncrementalBackupSrc)) {
+        return false;
+    }
+
+    const auto &snap = activeTx->GetSchemeTx().GetCreateIncrementalBackupSrc().GetSendSnapshot();
+    ui64 tableId = snap.GetTableId_Deprecated();
+    if (snap.HasTableId()) {
+        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == snap.GetTableId().GetOwnerId());
+        tableId = snap.GetTableId().GetTableId();
+    }
+    Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+
+    const auto &notice = activeTx->GetSchemeTx().GetCreateIncrementalBackupSrc().GetCreateCdcStreamNotice();
+    if (!HasPathId(activeTx, notice, "CreateIncrementalBackupSrc")) {
+        return false;
+    }
+
+    return true;
 }
 
 void TCheckSchemeTxUnit::Complete(TOperation::TPtr,

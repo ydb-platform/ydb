@@ -131,8 +131,9 @@ BOOST_ARCHIVE_DECL
 xml_oarchive_impl<Archive>::~xml_oarchive_impl(){
     if(boost::core::uncaught_exceptions() > 0)
         return;
-    if(0 == (this->get_flags() & no_header))
-        this->windup();
+    if(0 == (this->get_flags() & no_header)){
+        this->put("</boost_serialization>\n");
+    }
 }
 
 } // namespace archive

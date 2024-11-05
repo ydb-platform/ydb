@@ -10,7 +10,6 @@ private:
     using TBase = TOlapIndexUpsert;
     YDB_READONLY(ui32, Id, Max<ui32>());
     YDB_READONLY_DEF(TString, Name);
-    YDB_READONLY_DEF(TString, StorageId);
     YDB_READONLY_DEF(NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMeta>, IndexMeta);
 public:
     TOlapIndexSchema() = default;

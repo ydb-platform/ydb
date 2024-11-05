@@ -13,6 +13,7 @@ namespace NTable {
             ICompactionBackend* backend,
             IResourceBroker* broker,
             ITimeProvider* time,
+            NUtil::ILogger* logger,
             TString taskNameSuffix);
 
 }

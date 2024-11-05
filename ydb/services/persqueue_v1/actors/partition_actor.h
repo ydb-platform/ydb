@@ -125,6 +125,7 @@ private:
 
     void HandlePoison(NActors::TEvents::TEvPoisonPill::TPtr& ev, const NActors::TActorContext& ctx);
     void HandleWakeup(const NActors::TActorContext& ctx);
+    void DoWakeup(const NActors::TActorContext& ctx);
 
     void InitLockPartition(const NActors::TActorContext& ctx);
     void InitStartReading(const NActors::TActorContext& ctx);
@@ -135,6 +136,7 @@ private:
     void MakeCommit(const TActorContext& ctx);
     void SendPublishDirectRead(const ui64 directReadId, const TActorContext& ctx);
     void SendForgetDirectRead(const ui64 directReadId, const TActorContext& ctx);
+    void SendPartitionReady(const TActorContext& ctx);
 
 
 private:
@@ -209,6 +211,9 @@ private:
     std::map<ui64, NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult> DirectReads;
 
     bool UseMigrationProtocol;
+
+    bool FirstRead;
+    bool ReadingFinishedSent;
 };
 
 

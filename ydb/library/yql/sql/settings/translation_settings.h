@@ -44,7 +44,8 @@ namespace NSQLTranslation {
 
     using TIncrementMonCounterFunction = std::function<void(const TString&, const TString&)>;
 
-    enum class EV0Behavior {
+    // persisted
+    enum class EV0Behavior : ui32 {
         Silent = 0,
         Report,
         Disable
@@ -60,6 +61,8 @@ namespace NSQLTranslation {
         static TPtr MakeAlwaysDisallow();
 
         static TPtr MakeAlwaysAllow();
+
+        static TPtr Make(bool allow);
     };
 
     struct TTableBindingSettings {
@@ -82,6 +85,7 @@ namespace NSQLTranslation {
 
         EBindingsMode BindingsMode;
         THashMap<TString, TTableBindingSettings> Bindings;
+        bool SaveWorldDependencies = false;
 
         // each (name, type) entry in this map is equivalent to
         // DECLARE $name AS type;
@@ -97,11 +101,14 @@ namespace NSQLTranslation {
         bool EnableGenericUdfs;
         ui16 SyntaxVersion;
         bool AnsiLexer;
+        bool Antlr4Parser;
         bool PgParser;
         bool InferSyntaxVersion;
         EV0Behavior V0Behavior;
         bool V0ForceDisable;
+        bool PGDisable;
         bool WarnOnV0;
+        bool TestAntlr4;
         ISqlFeaturePolicy::TPtr V0WarnAsError;
         ISqlFeaturePolicy::TPtr DqDefaultAuto;
         ISqlFeaturePolicy::TPtr BlockDefaultAuto;

@@ -13,8 +13,8 @@ TDriverConfig TYdbCommand::CreateDriverConfig(const TConfig& config) {
         .SetEndpoint(config.Address)
         .SetDatabase(config.Database)
         .SetCredentialsProviderFactory(config.CredentialsGetter(config))        ;
-    
-    if (config.EnableSsl) 
+
+    if (config.EnableSsl)
         driverConfig.UseSecureConnection(config.CaCerts);
     if (config.IsNetworkIntensive)
         driverConfig.SetNetworkThreadsNum(16);
@@ -56,21 +56,6 @@ void TYdbOperationCommand::Config(TConfig& config) {
     opts.AddLongOption("timeout", "Operation timeout. Operation should be executed on server within this timeout. "
             "There could also be a delay up to 200ms to receive timeout error from server.")
         .RequiredArgument("ms").StoreResult(&OperationTimeout);
-}
-
-NScripting::TExplainYqlResult TYdbOperationCommand::ExplainQuery(TClientCommand::TConfig& config, const TString& queryText,
-        NScripting::ExplainYqlRequestMode mode) {
-    NScripting::TScriptingClient client(CreateDriver(config));
-
-    NScripting::TExplainYqlRequestSettings explainSettings;
-    explainSettings.Mode(mode);
-
-    auto result = client.ExplainYqlScript(
-        queryText,
-        explainSettings
-    ).GetValueSync();
-    ThrowOnError(result);
-    return result;
 }
 
 }

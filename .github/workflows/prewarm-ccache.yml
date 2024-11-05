@@ -1,7 +1,7 @@
 name: Prewarm-Ccache
 on:
   schedule:
-    - cron: "0 4 * * *"
+    - cron: "0 4 * * *"  # At 04:00 every day
   workflow_dispatch:
 
 jobs:
@@ -13,7 +13,7 @@ jobs:
         version: ["ubuntu-2204", "ubuntu-2004", "ubuntu-1804"]
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: build
         shell: bash
         run: |

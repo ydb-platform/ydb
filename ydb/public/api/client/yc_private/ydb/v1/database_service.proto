@@ -1,0 +1,289 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.ydb.v1;
+
+import "google/protobuf/field_mask.proto";
+import "ydb/public/api/client/yc_private/access/access.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+import "ydb/public/api/client/yc_private/ydb/v1/database.proto";
+import "ydb/public/api/client/yc_private/ydb/v1/backup.proto";
+
+// A set of methods for managing databases.
+service DatabaseService {
+  // Returns the specified database.
+  rpc Get (GetDatabaseRequest) returns (Database);
+
+  // Retrieves a list of databases.
+  rpc List (ListDatabasesRequest) returns (ListDatabasesResponse);
+
+  // Creates a new database.
+  rpc Create (CreateDatabaseRequest) returns (.ydb.yc.priv.operation.Operation);
+
+  // Modifies the specified database.
+  rpc Update (UpdateDatabaseRequest) returns (.ydb.yc.priv.operation.Operation);
+
+  // Starts the specified database.
+  rpc Start (StartDatabaseRequest) returns (.ydb.yc.priv.operation.Operation);
+
+  // Stops the specified database.
+  rpc Stop (StopDatabaseRequest) returns (.ydb.yc.priv.operation.Operation);
+
+  // Deletes the specified database.
+  rpc Delete (DeleteDatabaseRequest) returns (.ydb.yc.priv.operation.Operation);
+
+  // Restores the specified backup
+  rpc Restore (RestoreBackupRequest) returns (.ydb.yc.priv.operation.Operation);
+
+  rpc Backup(BackupDatabaseRequest) returns (.ydb.yc.priv.operation.Operation);
+
+  rpc Move(MoveDatabaseRequest) returns (.ydb.yc.priv.operation.Operation);
+
+  rpc ListAccessBindings (access.ListAccessBindingsRequest) returns (access.ListAccessBindingsResponse);
+
+  rpc SetAccessBindings (access.SetAccessBindingsRequest) returns (.ydb.yc.priv.operation.Operation);
+
+  rpc UpdateAccessBindings (access.UpdateAccessBindingsRequest) returns (.ydb.yc.priv.operation.Operation);
+
+  // private methods
+  rpc GetByPath(GetDatabaseByPathRequest) returns (Database);
+
+  rpc ListServerless(ListServerlessDatabasesRequest) returns (ListServerlessDatabasesResponse);
+
+  rpc ListAll(ListAllDatabasesRequest) returns (ListAllDatabasesResponse);
+
+  rpc UpdateInstances(UpdateInstancesRequest) returns (.ydb.yc.priv.operation.Operation);
+}
+
+enum DatabaseView {
+  // default view
+  // option (cloud.api.tools.enumeration).lint_skip.unspecified_value = true;
+  BASIC = 0;
+  SERVERLESS_INTERNALS = 100;
+}
+
+
+message StartDatabaseRequest {
+  string database_id = 1; // [(required) = true, (length) = "<=50"];
+}
+
+
+message StartDatabaseMetadata {
+  string database_id = 1;
+  string database_name = 2;
+}
+
+
+message StopDatabaseRequest {
+  string database_id = 1; // [(required) = true, (length) = "<=50"];
+}
+
+
+message StopDatabaseMetadata {
+  string database_id = 1;
+  string database_name = 2;
+}
+
+
+message BackupDatabaseMetadata {
+  string backup_id = 1;
+  string database_id = 2;
+}
+
+
+message MoveDatabaseRequest {
+  // ID of the YDB instance to move.
+  string database_id = 1; // [(required) = true, (length) = "<=50"];
+  // ID of the destination folder.
+  string destination_folder_id = 2; // [(required) = true, (length) = "<=50"];
+}
+
+message MoveDatabaseMetadata {
+  string database_id = 1;
+  string database_name = 2;
+}
+
+message RestoreBackupRequest {
+  // Required. ID of the YDB backup.
+  string backup_id = 1; // [(required) = true, (length) = "<=50"];
+  // Required. ID of the YDB database.
+  string database_id = 2; // [(required) = true, (length) = "<=50"];
+  // Specify paths to restore.
+  // If empty, all paths will restored by default.
+  repeated string paths_to_restore = 3;
+  // Specify target path.
+  string target_path = 4;
+}
+
+message RestoreBackupMetadata {
+  string backup_id = 1;
+  string database_id = 2;
+}
+
+
+message GetDatabaseByPathRequest {
+  string path = 1;
+  DatabaseView database_view = 2;
+}
+
+message ListAllDatabasesRequest {
+  DatabaseView database_view = 1;
+  int64 page_size = 2; // [(value) = "0-1000"];
+  string page_token = 3; // [(length) = "<=100"];
+}
+
+message ListAllDatabasesResponse {
+  repeated Database databases = 1;
+  string next_page_token = 2;
+}
+
+message ListServerlessDatabasesRequest {
+  DatabaseView database_view = 1;
+  int64 page_size = 2; // [(value) = "0-1000"];
+  string page_token = 3; // [(length) = "<=100"];
+}
+
+message BackupDatabaseRequest {
+  string database_id = 1;
+  // custom backup options, if required.
+  BackupSettings backup_settings = 2;
+}
+
+
+message ListServerlessDatabasesResponse {
+  repeated Database databases = 1;
+
+  string next_page_token = 2;
+}
+
+
+message GetDatabaseRequest {
+  // Required. ID of the YDB cluster.
+  string database_id = 1; // [(required) = true, (length) = "<=50"];
+}
+
+message ListDatabasesRequest {
+  string folder_id = 1;
+
+  // The maximum number of results per page that should be returned. If the number of available
+  // results is larger than `page_size`, the service returns a `next_page_token` that can be used
+  // to get the next page of results in subsequent ListDatabases requests.
+  // Acceptable values are 0 to 1000, inclusive. Default value: 100.
+  int64 page_size = 2; // [(value) = "0-1000"];
+
+  // Page token. Set `page_token` to the `next_page_token` returned by a previous ListDatabases
+  // request to get the next page of results.
+  string page_token = 3; // [(length) = "<=100"];
+}
+
+message ListDatabasesResponse {
+  repeated Database databases = 1;
+
+  // This token allows you to get the next page of results for ListDatabases requests,
+  // if the number of results is larger than `page_size` specified in the request.
+  // To get the next page, specify the value of `next_page_token` as a value for
+  // the `page_token` parameter in the next ListDatabases request. Subsequent ListDatabases
+  // requests will have their own `next_page_token` to continue paging through the results.
+  string next_page_token = 2;
+}
+
+message CreateDatabaseRequest {
+  string folder_id = 1;
+
+  string name = 2;
+
+  string description = 3;
+
+  string resource_preset_id = 4;
+
+  StorageConfig storage_config = 5;
+  ScalePolicy scale_policy = 6;
+  string network_id = 7;
+  repeated string subnet_ids = 8;
+
+  oneof database_type {
+    // deprecated field
+    ZonalDatabase zonal_database = 9;
+    // deprecated field
+    RegionalDatabase regional_database = 10;
+    DedicatedDatabase dedicated_database = 13;
+    ServerlessDatabase serverless_database = 14;
+    SharedDatabase shared_database = 100;
+  }
+
+  bool assign_public_ips = 11;
+  string location_id = 12;
+  map<string, string> labels = 15;
+
+  BackupConfig backup_config = 16;
+
+  MonitoringConfig monitoring_config = 17;
+
+  bool deletion_protection = 18;
+}
+
+message CreateDatabaseMetadata {
+  // Required. ID of the YDB cluster.
+  string database_id = 1;
+
+  // Required. Name of the creating database.
+  string database_name = 2;
+}
+
+message UpdateDatabaseRequest {
+  string folder_id = 1;
+  google.protobuf.FieldMask update_mask = 2;
+
+  string database_id = 3;
+
+  string name = 4;
+
+  string description = 5;
+
+  string resource_preset_id = 6;
+  StorageConfig storage_config = 7;
+  ScalePolicy scale_policy = 8;
+  string network_id = 9;
+  repeated string subnet_ids = 10;
+
+  oneof database_type {
+    // deprecated field
+    ZonalDatabase zonal_database = 11;
+    // deprecated field
+    RegionalDatabase regional_database = 12;
+    DedicatedDatabase dedicated_database = 15;
+    ServerlessDatabase serverless_database = 16;
+    SharedDatabase shared_database = 100;
+  }
+
+  bool assign_public_ips = 13;
+  string location_id = 14;
+  map<string, string> labels = 17;
+  BackupConfig backup_config = 18;
+
+  MonitoringConfig monitoring_config = 19;
+
+  bool deletion_protection = 20;
+}
+
+message UpdateDatabaseMetadata {
+  string database_id = 1;
+  string database_name = 2;
+}
+
+message DeleteDatabaseRequest {
+  string database_id = 1;
+}
+
+message DeleteDatabaseMetadata {
+  string database_id = 1;
+  string database_name = 2;
+}
+
+message UpdateInstancesRequest {
+  string database_id = 1;
+}
+
+message UpdateInstancesMetadata {
+  string database_id = 1;
+  string database_name = 2;
+}

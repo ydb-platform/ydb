@@ -78,7 +78,7 @@ namespace NYql {
             const THolder<IGraphTransformer> PhysicalOptProposalTransformer_;
         };
 
-    }
+    } // namespace
 
     TIntrusivePtr<IDataProvider> CreateGenericDataSink(TGenericState::TPtr state) {
         return new TGenericDataSink(state);

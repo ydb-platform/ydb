@@ -19,6 +19,7 @@ The `tools dump` command dumps the database data and objects schema to the clien
 `--scheme-only`: Dump only the details about the database schema objects, without dumping their data
 
 `--consistency-level VAL`: The consistency level. Possible options:
+
 - `database`: A fully consistent dump, with one snapshot taken before starting dumping. Applied by default.
 - `table`: Consistency within each dumped table, taking individual independent snapshots for each table dumped. Might run faster and have a smaller effect on the current workload processing in the database.
 
@@ -36,19 +37,19 @@ The `tools dump` command dumps the database data and objects schema to the clien
 
 With automatic creation of the `backup_...` directory In the current directory:
 
-```
+```bash
 {{ ydb-cli }} --profile quickstart tools dump
 ```
 
 To a specific directory:
 
-```
+```bash
 {{ ydb-cli }} --profile quickstart tools dump -o ~/backup_quickstart
 ```
 
 ### Dumping the table structure within a specified database directory (including subdirectories)
 
-```
+```bash
 {{ ydb-cli }} --profile quickstart tools dump -p dir1 --scheme-only
 ```
 

@@ -44,9 +44,8 @@ Y_UNIT_TEST_SUITE(TYqlExtractPredicate) {
         auto ytGateway = CreateYtFileGateway(yqlNativeServices);
         typesCtx = MakeIntrusive<TTypeAnnotationContext>();
         typesCtx->RandomProvider = CreateDeterministicRandomProvider(1);
-        auto ytState = MakeIntrusive<TYtState>();
+        auto ytState = MakeIntrusive<TYtState>(typesCtx.Get());
         ytState->Gateway = ytGateway;
-        ytState->Types = typesCtx.Get();
 
         InitializeYtGateway(ytGateway, ytState);
         typesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));

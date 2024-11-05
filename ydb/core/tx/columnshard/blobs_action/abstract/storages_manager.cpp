@@ -4,13 +4,22 @@
 
 namespace NKikimr::NOlap {
 
-std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOperatorVerified(const TString& storageId) {
+std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOperatorOptional(const TString& storageId) const {
     AFL_VERIFY(Initialized);
     AFL_VERIFY(storageId);
     TReadGuard rg(RWMutex);
     auto it = Constructed.find(storageId);
-    AFL_VERIFY(it != Constructed.end())("storage_id", storageId);
-    return it->second;
+    if (it != Constructed.end()) {
+        return it->second;
+    } else {
+        return nullptr;
+    }
+}
+
+std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOperatorVerified(const TString& storageId) const {
+    auto result = GetOperatorOptional(storageId);
+    AFL_VERIFY(result)("storage_id", storageId);
+    return result;
 }
 
 std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOperatorGuarantee(const TString& storageId) {
@@ -33,6 +42,7 @@ std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> IStoragesManager::GetOper
 }
 
 void IStoragesManager::OnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) {
+    AFL_VERIFY(tiers);
     for (auto&& i : tiers->GetManagers()) {
         GetOperatorGuarantee(i.first)->OnTieringModified(tiers);
     }
@@ -41,6 +51,7 @@ void IStoragesManager::OnTieringModified(const std::shared_ptr<NColumnShard::ITi
 void IStoragesManager::DoInitialize() {
     GetOperator(DefaultStorageId);
     GetOperator(MemoryStorageId);
+    GetOperator(LocalMetadataStorageId);
 }
 
 bool IStoragesManager::LoadIdempotency(NTable::TDatabase& database) {

@@ -31,6 +31,7 @@ public:
 
 IS3ListingStrategy::TPtr MakeS3ListingStrategy(
     const IHTTPGateway::TPtr& httpGateway,
+    const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
     const NS3Lister::IS3ListerFactory::TPtr& listerFactory,
     ui64 minDesiredDirectoriesOfFilesPerQuery,
     size_t maxParallelOps,

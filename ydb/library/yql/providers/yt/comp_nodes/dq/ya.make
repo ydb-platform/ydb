@@ -12,6 +12,7 @@ PEERDIR(
     library/cpp/yson/node
     yt/yt/core
     ydb/library/yql/public/udf/arrow
+    ydb/library/yql/public/udf
     contrib/libs/apache/arrow
     contrib/libs/flatbuffers
 )
@@ -28,7 +29,6 @@ IF(LINUX)
     )
 
     SRCS(
-        arrow_converter.cpp
         stream_decoder.cpp
         dq_yt_rpc_reader.cpp
         dq_yt_rpc_helpers.cpp

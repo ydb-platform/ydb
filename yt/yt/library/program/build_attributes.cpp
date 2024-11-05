@@ -12,7 +12,7 @@ namespace NYT {
 using namespace NYTree;
 using namespace NYson;
 
-static const NLogging::TLogger Logger("Build");
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Build");
 
 ////////////////////////////////////////////////////////////////////////////////
 

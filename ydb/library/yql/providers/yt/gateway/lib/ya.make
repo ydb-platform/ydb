@@ -29,6 +29,7 @@ PEERDIR(
     ydb/library/yql/core/type_ann
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/gateway
+    ydb/library/yql/providers/yt/provider
     ydb/library/yql/providers/yt/common
     ydb/library/yql/providers/yt/lib/hash
     ydb/library/yql/providers/yt/lib/res_pull

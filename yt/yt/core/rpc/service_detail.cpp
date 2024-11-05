@@ -32,17 +32,6 @@
 
 #include <library/cpp/yt/misc/tls.h>
 
-namespace NYT
-{
-    static TError operator<<(TError error, const std::optional<TError>& maybeError)
-    {
-        if (maybeError) {
-            return error << *maybeError;
-        }
-        return error;
-    }
-}
-
 namespace NYT::NRpc {
 
 using namespace NBus;
@@ -57,16 +46,48 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto InfiniteRequestThrottlerConfig = New<TThroughputThrottlerConfig>();
 static const auto DefaultLoggingSuppressionFailedRequestThrottlerConfig = TThroughputThrottlerConfig::Create(1'000);
 
-constexpr TDuration ServiceLivenessCheckPeriod = TDuration::MilliSeconds(100);
+constexpr int MaxUserAgentLength = 200;
+constexpr auto ServiceLivenessCheckPeriod = TDuration::MilliSeconds(100);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRequestQueuePtr CreateRequestQueue(TString name, const NProfiling::TProfiler& profiler)
+const auto InfiniteRequestThrottlerConfig = New<TThroughputThrottlerConfig>();
+
+TRequestQueuePtr CreateRequestQueue(
+    std::string name,
+    std::any tag,
+    IReconfigurableThroughputThrottlerPtr bytesThrottler,
+    IReconfigurableThroughputThrottlerPtr weightThrottler)
 {
-    return New<TRequestQueue>(name, profiler.WithTag("user", name));
+    return New<TRequestQueue>(
+        std::move(name),
+        std::move(tag),
+        std::move(bytesThrottler),
+        std::move(weightThrottler));
+}
+
+TRequestQueuePtr CreateRequestQueue(
+    std::string name,
+    const NProfiling::TProfiler& profiler)
+{
+    auto bytesThrottler = CreateNamedReconfigurableThroughputThrottler(
+        InfiniteRequestThrottlerConfig,
+        "BytesThrottler",
+        NLogging::TLogger(),
+        profiler);
+    auto weightThrottler = CreateNamedReconfigurableThroughputThrottler(
+        InfiniteRequestThrottlerConfig,
+        "WeightThrottler",
+        NLogging::TLogger(),
+        profiler);
+    auto tag = name;
+    return CreateRequestQueue(
+        std::move(name),
+        std::move(tag),
+        std::move(bytesThrottler),
+        std::move(weightThrottler));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -273,9 +294,22 @@ auto TServiceBase::TMethodDescriptor::SetHandleMethodError(bool value) const -> 
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TServiceBase::TErrorCodeCounter::TErrorCodeCounter(NProfiling::TProfiler profiler)
+    : Profiler_(std::move(profiler))
+{ }
+
+void TServiceBase::TErrorCodeCounter::Increment(TErrorCode code)
+{
+    CodeToCounter_.FindOrInsert(code, [&] {
+        return Profiler_.WithTag("code", ToString(code)).Counter("/code_count");
+    }).first->Increment();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TServiceBase::TMethodPerformanceCounters::TMethodPerformanceCounters(
     const NProfiling::TProfiler& profiler,
-    const THistogramConfigPtr& histogramConfig)
+    const TTimeHistogramConfigPtr& timeHistogramConfig)
     : RequestCounter(profiler.Counter("/request_count"))
     , CanceledRequestCounter(profiler.Counter("/canceled_request_count"))
     , FailedRequestCounter(profiler.Counter("/failed_request_count"))
@@ -285,16 +319,16 @@ TServiceBase::TMethodPerformanceCounters::TMethodPerformanceCounters(
     , RequestMessageAttachmentSizeCounter(profiler.Counter("/request_message_attachment_bytes"))
     , ResponseMessageBodySizeCounter(profiler.Counter("/response_message_body_bytes"))
     , ResponseMessageAttachmentSizeCounter(profiler.Counter("/response_message_attachment_bytes"))
-    , ErrorCodes(profiler)
+    , ErrorCodeCounter(profiler)
 {
-    if (histogramConfig && histogramConfig->CustomBounds) {
-        const auto &customBounds = *histogramConfig->CustomBounds;
+    if (timeHistogramConfig && timeHistogramConfig->CustomBounds) {
+        const auto& customBounds = *timeHistogramConfig->CustomBounds;
         ExecutionTimeCounter = profiler.TimeHistogram("/request_time_histogram/execution", customBounds);
         RemoteWaitTimeCounter = profiler.TimeHistogram("/request_time_histogram/remote_wait", customBounds);
         LocalWaitTimeCounter = profiler.TimeHistogram("/request_time_histogram/local_wait", customBounds);
         TotalTimeCounter = profiler.TimeHistogram("/request_time_histogram/total", customBounds);
-    } else if (histogramConfig && histogramConfig->ExponentialBounds) {
-        const auto &exponentialBounds = *histogramConfig->ExponentialBounds;
+    } else if (timeHistogramConfig && timeHistogramConfig->ExponentialBounds) {
+        const auto& exponentialBounds = *timeHistogramConfig->ExponentialBounds;
         ExecutionTimeCounter = profiler.TimeHistogram("/request_time_histogram/execution", exponentialBounds->Min, exponentialBounds->Max);
         RemoteWaitTimeCounter = profiler.TimeHistogram("/request_time_histogram/remote_wait", exponentialBounds->Min, exponentialBounds->Max);
         LocalWaitTimeCounter = profiler.TimeHistogram("/request_time_histogram/local_wait", exponentialBounds->Min, exponentialBounds->Max);
@@ -345,6 +379,8 @@ public:
         : TServiceContextBase(
             std::move(acceptedRequest.Header),
             std::move(acceptedRequest.Message),
+            std::move(acceptedRequest.MemoryGuard),
+            std::move(acceptedRequest.MemoryUsageTracker),
             std::move(logger),
             acceptedRequest.RuntimeInfo->LogLevel.load(std::memory_order::relaxed))
         , Service_(std::move(service))
@@ -407,7 +443,7 @@ public:
         return ReplyBus_->GetEndpointAttributes();
     }
 
-    const TString& GetEndpointDescription() const override
+    const std::string& GetEndpointDescription() const override
     {
         return ReplyBus_->GetEndpointDescription();
     }
@@ -581,6 +617,14 @@ public:
         return ExecutionTime_;
     }
 
+    void RecordThrottling(TDuration throttleDuration) override
+    {
+        ThrottlingTime_ = ThrottlingTime_ ? *ThrottlingTime_ + throttleDuration : throttleDuration;
+        if (ExecutionTime_) {
+            *ExecutionTime_ -= throttleDuration;
+        }
+    }
+
     TTraceContextPtr GetTraceContext() const override
     {
         return TraceContext_;
@@ -705,6 +749,7 @@ private:
     std::optional<TInstant> RunInstant_;
     std::optional<TInstant> ReplyInstant_;
     std::optional<TInstant> CancelInstant_;
+    std::optional<TDuration> ThrottlingTime_;
 
     std::optional<TDuration> ExecutionTime_;
     std::optional<TDuration> TotalTime_;
@@ -721,7 +766,6 @@ private:
     TError StreamsError_;
     TAttachmentsInputStreamPtr RequestAttachmentsStream_;
     TAttachmentsOutputStreamPtr ResponseAttachmentsStream_;
-
 
     bool IsRegistrable()
     {
@@ -742,7 +786,7 @@ private:
         auto userAgent = RequestHeader_->has_user_agent()
             ? TStringBuf(RequestHeader_->user_agent())
             : UnknownUserAgent;
-        PerformanceCounters_->IncrementRequestsPerUserAgent(userAgent);
+        PerformanceCounters_->IncrementRequestsPerUserAgent(userAgent.SubString(0, MaxUserAgentLength));
 
         MethodPerformanceCounters_->RequestCounter.Increment();
         MethodPerformanceCounters_->RequestMessageBodySizeCounter.Increment(
@@ -1000,7 +1044,7 @@ private:
             }
 
             Service_->RegisterQueuedReply(RequestId_, replySent);
-            replySent.Subscribe(BIND([weakService=MakeWeak(Service_), requestId=RequestId_] (const TError& /*error*/) {
+            replySent.Subscribe(BIND([weakService = MakeWeak(Service_), requestId = RequestId_] (const TError& /*error*/) {
                 if (auto service = weakService.Lock()) {
                     service->UnregisterQueuedReply(requestId);
                 }
@@ -1013,13 +1057,16 @@ private:
 
         ReplyInstant_ = NProfiling::GetInstant();
         ExecutionTime_ = RunInstant_ ? *ReplyInstant_ - *RunInstant_ : TDuration();
+        if (RunInstant_ && ThrottlingTime_) {
+            *ExecutionTime_ -= *ThrottlingTime_;
+        }
         TotalTime_ = *ReplyInstant_ - ArriveInstant_;
 
         MethodPerformanceCounters_->ExecutionTimeCounter.Record(*ExecutionTime_);
         MethodPerformanceCounters_->TotalTimeCounter.Record(*TotalTime_);
         if (!Error_.IsOK()) {
-            if (Service_->EnableErrorCodeCounting.load()) {
-                MethodPerformanceCounters_->ErrorCodes.RegisterCode(Error_.GetNonTrivialCode());
+            if (Service_->EnableErrorCodeCounter_.load()) {
+                MethodPerformanceCounters_->ErrorCodeCounter.Increment(Error_.GetNonTrivialCode());
             } else {
                 MethodPerformanceCounters_->FailedRequestCounter.Increment();
             }
@@ -1077,9 +1124,7 @@ private:
         }
 
         if (RequestRun_) {
-            auto requestTotalSize = GetMessageBodySize(RequestMessage_) +
-                GetTotalMessageAttachmentSize(RequestMessage_);
-            RequestQueue_->OnRequestFinished(requestTotalSize);
+            RequestQueue_->OnRequestFinished(TotalSize_);
         }
 
         if (ActiveRequestCountIncremented_) {
@@ -1108,17 +1153,17 @@ private:
         if (TraceContext_ && TraceContext_->IsRecorded()) {
             TraceContext_->AddTag(RequestInfoAnnotation, logMessage);
             const auto& authenticationIdentity = GetAuthenticationIdentity();
-            if (authenticationIdentity.User) {
+            if (!authenticationIdentity.User.empty()) {
                 TStringBuilder builder;
                 builder.AppendString(authenticationIdentity.User);
-                if (authenticationIdentity.UserTag && authenticationIdentity.UserTag != authenticationIdentity.User) {
+                if (!authenticationIdentity.UserTag.empty() && authenticationIdentity.UserTag != authenticationIdentity.User) {
                     builder.AppendChar(':');
                     builder.AppendString(authenticationIdentity.UserTag);
                 }
                 TraceContext_->AddTag(RequestUser, builder.Flush());
             }
         }
-        YT_LOG_EVENT_WITH_ANCHOR(Logger, LogLevel_, RuntimeInfo_->RequestLoggingAnchor, logMessage);
+        YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, LogLevel_, RuntimeInfo_->RequestLoggingAnchor, logMessage);
     }
 
     void LogResponse() override
@@ -1165,7 +1210,7 @@ private:
         if (TraceContext_ && TraceContext_->IsRecorded()) {
             TraceContext_->AddTag(ResponseInfoAnnotation, logMessage);
         }
-        YT_LOG_EVENT_WITH_ANCHOR(Logger, LogLevel_, RuntimeInfo_->ResponseLoggingAnchor, logMessage);
+        YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, LogLevel_, RuntimeInfo_->ResponseLoggingAnchor, logMessage);
     }
 
 
@@ -1237,7 +1282,7 @@ private:
             ToProto(header.mutable_realm_id(), GetRealmId());
         }
         header.set_sequence_number(payload->SequenceNumber);
-        header.set_codec(static_cast<int>(payload->Codec));
+        header.set_codec(ToProto(payload->Codec));
 
         auto message = CreateStreamingPayloadMessage(header, payload->Attachments);
 
@@ -1304,14 +1349,15 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRequestQueue::TRequestQueue(TString name, NProfiling::TProfiler profiler)
+TRequestQueue::TRequestQueue(
+    std::string name,
+    std::any tag,
+    NConcurrency::IReconfigurableThroughputThrottlerPtr bytesThrottler,
+    NConcurrency::IReconfigurableThroughputThrottlerPtr weightThrottler)
     : Name_(std::move(name))
-    , BytesThrottler_{CreateReconfigurableThroughputThrottler(InfiniteRequestThrottlerConfig,
-        NLogging::TLogger(),
-        profiler.WithPrefix("/bytes_throttler"))}
-    , WeightThrottler_{CreateReconfigurableThroughputThrottler(InfiniteRequestThrottlerConfig,
-        NLogging::TLogger(),
-        profiler.WithPrefix("/weight_throttler"))}
+    , Tag_(std::move(tag))
+    , BytesThrottler_{std::move(bytesThrottler)}
+    , WeightThrottler_{std::move(weightThrottler)}
 { }
 
 bool TRequestQueue::Register(TServiceBase* service, TServiceBase::TRuntimeMethodInfo* runtimeInfo)
@@ -1373,9 +1419,14 @@ void TRequestQueue::Configure(const TMethodConfigPtr& config)
     SubscribeToThrottlers();
 }
 
-const TString& TRequestQueue::GetName() const
+const std::string& TRequestQueue::GetName() const
 {
     return Name_;
+}
+
+const std::any& TRequestQueue::GetTag() const
+{
+    return Tag_;
 }
 
 void TRequestQueue::ConfigureBytesThrottler(const TThroughputThrottlerConfigPtr& config)
@@ -1390,13 +1441,13 @@ void TRequestQueue::ConfigureWeightThrottler(const TThroughputThrottlerConfigPtr
 
 bool TRequestQueue::IsQueueSizeLimitExceeded() const
 {
-    return QueueSize_.load(std::memory_order::relaxed) >=
+    return QueueSize_.load(std::memory_order::relaxed) >
         RuntimeInfo_->QueueSizeLimit.load(std::memory_order::relaxed);
 }
 
 bool TRequestQueue::IsQueueByteSizeLimitExceeded() const
 {
-    return QueueByteSize_.load(std::memory_order::relaxed) >=
+    return QueueByteSize_.load(std::memory_order::relaxed) >
         RuntimeInfo_->QueueByteSizeLimit.load(std::memory_order::relaxed);
 }
 
@@ -1432,7 +1483,7 @@ void TRequestQueue::OnRequestArrived(const TServiceBase::TServiceContextPtr& con
     }
 
     // Slow path.
-    DecrementConcurrency(GetTotalRequestSize(context));
+    DecrementConcurrency(context->GetTotalSize());
     IncrementQueueSize(context);
 
     context->BeforeEnqueued();
@@ -1454,17 +1505,17 @@ void TRequestQueue::OnRequestFinished(i64 requestTotalSize)
 // Prevents reentrant invocations.
 // One case is: RunRequest calling the handler synchronously, which replies the
 // context, which calls context->Finish, and we're back here again.
-YT_THREAD_LOCAL(bool) ScheduleRequestsLatch = false;
+YT_DEFINE_THREAD_LOCAL(bool, ScheduleRequestsLatch, false);
 
 void TRequestQueue::ScheduleRequestsFromQueue()
 {
-    if (ScheduleRequestsLatch) {
+    if (ScheduleRequestsLatch()) {
         return;
     }
 
-    ScheduleRequestsLatch = true;
+    ScheduleRequestsLatch() = true;
     auto latchGuard = Finally([&] {
-        ScheduleRequestsLatch = false;
+        ScheduleRequestsLatch() = false;
     });
 
 #ifndef NDEBUG
@@ -1514,10 +1565,12 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
     options.SetHeavy(RuntimeInfo_->Heavy.load(std::memory_order::relaxed));
 
     if (options.Heavy) {
-        BIND(RuntimeInfo_->Descriptor.HeavyHandler)
+        BIND([context, options, heavyHandler = RuntimeInfo_->Descriptor.HeavyHandler] {
+            return heavyHandler.Run(context, options);
+        })
             .AsyncVia(TDispatcher::Get()->GetHeavyInvoker())
-            .Run(context, options)
-            .Subscribe(BIND(&TServiceBase::TServiceContext::CheckAndRun, std::move(context)));
+            .Run()
+            .Subscribe(BIND(&TServiceBase::TServiceContext::CheckAndRun, context));
     } else {
         context->Run(RuntimeInfo_->Descriptor.LiteHandler);
     }
@@ -1526,28 +1579,22 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
 void TRequestQueue::IncrementQueueSize(const TServiceBase::TServiceContextPtr& context)
 {
     ++QueueSize_;
-    QueueByteSize_.fetch_add(GetTotalRequestSize(context));
+    QueueByteSize_.fetch_add(context->GetTotalSize());
 }
 
 void  TRequestQueue::DecrementQueueSize(const TServiceBase::TServiceContextPtr& context)
 {
     auto newQueueSize = --QueueSize_;
-    auto oldQueueByteSize = QueueByteSize_.fetch_sub(GetTotalRequestSize(context));
+    auto oldQueueByteSize = QueueByteSize_.fetch_sub(context->GetTotalSize());
 
     YT_ASSERT(newQueueSize >= 0);
     YT_ASSERT(oldQueueByteSize >= 0);
 }
 
-i64 TRequestQueue::GetTotalRequestSize(const TServiceBase::TServiceContextPtr& context)
-{
-    return GetMessageBodySize(context->GetRequestMessage()) +
-        GetTotalMessageAttachmentSize(context->GetRequestMessage());
-}
-
 bool TRequestQueue::IncrementConcurrency(const TServiceBase::TServiceContextPtr& context)
 {
     auto resultSize = ++Concurrency_ <= RuntimeInfo_->ConcurrencyLimit.GetDynamicLimit();
-    auto resultByteSize = ConcurrencyByte_.fetch_add(GetTotalRequestSize(context)) <= RuntimeInfo_->ConcurrencyByteLimit.GetDynamicByteLimit();
+    auto resultByteSize = ConcurrencyByte_.fetch_add(context->GetTotalSize()) <= RuntimeInfo_->ConcurrencyByteLimit.GetDynamicByteLimit();
     return resultSize && resultByteSize;
 }
 
@@ -1572,7 +1619,7 @@ void TRequestQueue::AcquireThrottlers(const TServiceBase::TServiceContextPtr& co
 {
     if (BytesThrottler_.Specified.load(std::memory_order::acquire)) {
         // Slow path.
-        auto requestSize = GetTotalRequestSize(context);
+        auto requestSize = context->GetTotalSize();
         BytesThrottler_.Throttler->Acquire(requestSize);
     }
     if (WeightThrottler_.Specified.load(std::memory_order::acquire)) {
@@ -1634,15 +1681,17 @@ struct TServiceBase::TRuntimeMethodInfo::TPerformanceCountersKeyEquals
 TServiceBase::TServiceBase(
     IInvokerPtr defaultInvoker,
     const TServiceDescriptor& descriptor,
-    const NLogging::TLogger& logger,
-    TRealmId realmId,
-    IAuthenticatorPtr authenticator)
-    : Logger(logger)
+    NLogging::TLogger logger,
+    TServiceOptions options)
+    : Logger(std::move(logger))
     , DefaultInvoker_(std::move(defaultInvoker))
-    , Authenticator_(std::move(authenticator))
+    , Authenticator_(std::move(options.Authenticator))
     , ServiceDescriptor_(descriptor)
-    , ServiceId_(descriptor.FullServiceName, realmId)
-    , Profiler_(RpcServerProfiler.WithHot().WithTag("yt_service", TString(ServiceId_.ServiceName)))
+    , ServiceId_(descriptor.FullServiceName, options.RealmId)
+    , MemoryUsageTracker_(std::move(options.MemoryUsageTracker))
+    , Profiler_(RpcServerProfiler
+        .WithHot(options.UseHotProfiler)
+        .WithTag("yt_service", ServiceId_.ServiceName))
     , AuthenticationTimer_(Profiler_.Timer("/authentication_time"))
     , ServiceLivenessChecker_(New<TPeriodicExecutor>(
         TDispatcher::Get()->GetLightInvoker(),
@@ -1674,7 +1723,7 @@ void TServiceBase::HandleRequest(
 {
     SetActive();
 
-    const auto& method = header->method();
+    auto method = FromProto<TString>(header->method());
     auto requestId = FromProto<TRequestId>(header->request_id());
 
     auto replyError = [&] (TError error) {
@@ -1699,6 +1748,14 @@ void TServiceBase::HandleRequest(
             NRpc::EErrorCode::NoSuchMethod,
             "Unknown method"));
         return;
+    }
+
+    auto memoryGuard = TMemoryUsageTrackerGuard::Acquire(MemoryUsageTracker_, TypicalRequestSize);
+    message = TrackMemory(MemoryUsageTracker_, std::move(message));
+    if (MemoryUsageTracker_ && MemoryUsageTracker_->IsExceeded()) {
+        return replyError(TError(
+            NRpc::EErrorCode::MemoryPressure,
+            "Request is dropped due to high memory pressure"));
     }
 
     auto tracingMode = runtimeInfo->TracingMode.load(std::memory_order::relaxed);
@@ -1740,14 +1797,16 @@ void TServiceBase::HandleRequest(
 
     // NOTE: Do not use replyError() after this line.
     TAcceptedRequest acceptedRequest{
-        requestId,
-        std::move(replyBus),
-        std::move(runtimeInfo),
-        std::move(traceContext),
-        std::move(header),
-        std::move(message),
-        requestQueue,
-        maybeThrottled
+        .RequestId = requestId,
+        .ReplyBus = std::move(replyBus),
+        .RuntimeInfo = std::move(runtimeInfo),
+        .TraceContext = std::move(traceContext),
+        .Header = std::move(header),
+        .Message = std::move(message),
+        .RequestQueue = requestQueue,
+        .ThrottledError = maybeThrottled,
+        .MemoryGuard = std::move(memoryGuard),
+        .MemoryUsageTracker = MemoryUsageTracker_,
     };
 
     if (!IsAuthenticationNeeded(acceptedRequest)) {
@@ -1788,7 +1847,6 @@ void TServiceBase::HandleRequest(
             NYT::NRpc::EErrorCode::AuthenticationError,
             "Request is missing credentials"));
     }
-
 }
 
 void TServiceBase::ReplyError(
@@ -1850,7 +1908,7 @@ void TServiceBase::OnRequestAuthenticated(
                 return;
             }
         }
-        requestHeader.set_user(std::move(authResult.User));
+        requestHeader.set_user(ToProto(authResult.User));
 
         auto* credentialsExt = requestHeader.MutableExtension(
             NRpc::NProto::TCredentialsExt::credentials_ext);
@@ -2118,19 +2176,19 @@ void TServiceBase::OnReplyBusTerminated(const NYT::TWeakPtr<NYT::NBus::IBus>& bu
     if (auto bus = busWeak.Lock()) {
         auto* bucket = GetReplyBusBucket(bus);
         auto guard = Guard(bucket->Lock);
-        auto it = bucket->ReplyBusToContexts.find(bus);
-        if (it == bucket->ReplyBusToContexts.end()) {
+        auto it = bucket->ReplyBusToData.find(bus);
+        if (it == bucket->ReplyBusToData.end()) {
             return;
         }
 
-        for (auto* rawContext : it->second) {
+        for (auto* rawContext : it->second.Contexts) {
             auto context = DangerousGetPtr(rawContext);
             if (context) {
                 contexts.push_back(context);
             }
         }
 
-        bucket->ReplyBusToContexts.erase(it);
+        bucket->ReplyBusToData.erase(it);
     }
 
     for (auto context : contexts) {
@@ -2166,18 +2224,21 @@ void TServiceBase::RegisterRequest(TServiceContext* context)
     }
 
     const auto& replyBus = context->GetReplyBus();
-    bool subscribe = false;
     {
         auto* bucket = GetReplyBusBucket(replyBus);
         auto guard = Guard(bucket->Lock);
-        auto [it, inserted] = bucket->ReplyBusToContexts.try_emplace(replyBus);
-        subscribe = inserted;
-        auto& contexts = it->second;
-        contexts.insert(context);
-    }
-
-    if (subscribe) {
-        replyBus->SubscribeTerminated(BIND(&TServiceBase::OnReplyBusTerminated, MakeWeak(this), MakeWeak(replyBus.Get())));
+        auto [it, inserted] = bucket->ReplyBusToData.try_emplace(replyBus);
+        auto& replyBusData = it->second;
+        replyBusData.Contexts.insert(context);
+        if (inserted) {
+            replyBusData.BusTerminationHandler =
+                BIND_NO_PROPAGATE(
+                    &TServiceBase::OnReplyBusTerminated,
+                    MakeWeak(this),
+                    MakeWeak(replyBus))
+                .Via(TDispatcher::Get()->GetHeavyInvoker());
+            replyBus->SubscribeTerminated(replyBusData.BusTerminationHandler);
+        }
     }
 
     auto pendingPayloads = GetAndErasePendingPayloads(requestId);
@@ -2205,13 +2266,14 @@ void TServiceBase::UnregisterRequest(TServiceContext* context)
     {
         auto* bucket = GetReplyBusBucket(replyBus);
         auto guard = Guard(bucket->Lock);
-        auto it = bucket->ReplyBusToContexts.find(replyBus);
-        // Missing replyBus in ReplyBusToContexts is OK; see OnReplyBusTerminated.
-        if (it != bucket->ReplyBusToContexts.end()) {
-            auto& contexts = it->second;
-            contexts.erase(context);
-            if (contexts.empty()) {
-                bucket->ReplyBusToContexts.erase(it);
+        auto it = bucket->ReplyBusToData.find(replyBus);
+        // Missing replyBus in ReplyBusToData is OK; see OnReplyBusTerminated.
+        if (it != bucket->ReplyBusToData.end()) {
+            auto& replyBusData = it->second;
+            replyBusData.Contexts.erase(context);
+            if (replyBusData.Contexts.empty()) {
+                replyBus->UnsubscribeTerminated(replyBusData.BusTerminationHandler);
+                bucket->ReplyBusToData.erase(it);
             }
         }
     }
@@ -2314,16 +2376,13 @@ TServiceBase::TMethodPerformanceCountersPtr TServiceBase::CreateMethodPerformanc
 
     auto profiler = runtimeInfo->Profiler.WithSparse();
     if (userTag) {
-        profiler = profiler.WithTag("user", TString(userTag));
+        // TODO(babenko): migrate to std::string
+        profiler = profiler.WithTag("user", std::string(userTag));
     }
     if (runtimeInfo->Descriptor.RequestQueueProvider) {
         profiler = profiler.WithTag("queue", requestQueue->GetName());
     }
-    const auto config = [&]{
-        const auto guard = Guard(HistogramConfigLock_);
-        return HistogramTimerProfiling;
-    }();
-    return New<TMethodPerformanceCounters>(profiler, config);
+    return New<TMethodPerformanceCounters>(profiler, TimeHistogramConfig_.Acquire());
 }
 
 TServiceBase::TMethodPerformanceCounters* TServiceBase::GetMethodPerformanceCounters(
@@ -2390,7 +2449,7 @@ void TServiceBase::DecrementActiveRequestCount()
     }
 }
 
-void TServiceBase::InitContext(IServiceContextPtr /*context*/)
+void TServiceBase::InitContext(IServiceContext* /*context*/)
 { }
 
 void TServiceBase::RegisterDiscoverRequest(const TCtxDiscoverPtr& context)
@@ -2556,15 +2615,14 @@ void TServiceBase::DoConfigureHistogramTimer(
     const TServiceCommonConfigPtr& configDefaults,
     const TServiceConfigPtr& config)
 {
-    THistogramConfigPtr finalConfig;
-    if (config->HistogramTimerProfiling) {
-        finalConfig = config->HistogramTimerProfiling;
-    } else if (configDefaults->HistogramTimerProfiling) {
-        finalConfig = configDefaults->HistogramTimerProfiling;
+    TTimeHistogramConfigPtr newTimeHistogramConfig;
+    if (config->TimeHistogram) {
+        newTimeHistogramConfig = config->TimeHistogram;
+    } else if (configDefaults->TimeHistogram) {
+        newTimeHistogramConfig = configDefaults->TimeHistogram;
     }
-    if (finalConfig) {
-        auto guard = Guard(HistogramConfigLock_);
-        HistogramTimerProfiling = finalConfig;
+    if (newTimeHistogramConfig) {
+        TimeHistogramConfig_.Store(std::move(newTimeHistogramConfig));
     }
 }
 
@@ -2578,13 +2636,21 @@ void TServiceBase::DoConfigure(
 
         // Validate configuration.
         for (const auto& [methodName, _] : config->Methods) {
-            GetMethodInfoOrThrow(methodName);
+            auto* method = FindMethodInfo(methodName);
+            if (!method) {
+                // TODO(don-dron): Split service configs by realmid.
+                YT_LOG_WARNING(
+                    "Method is not registered (Service: %v, RealmId: %v, Method: %v)",
+                    ServiceId_.ServiceName,
+                    ServiceId_.RealmId,
+                    methodName);
+            }
         }
 
         EnablePerUserProfiling_.store(config->EnablePerUserProfiling.value_or(configDefaults->EnablePerUserProfiling));
         AuthenticationQueueSizeLimit_.store(config->AuthenticationQueueSizeLimit.value_or(DefaultAuthenticationQueueSizeLimit));
         PendingPayloadsTimeout_.store(config->PendingPayloadsTimeout.value_or(DefaultPendingPayloadsTimeout));
-        EnableErrorCodeCounting.store(config->EnableErrorCodeCounting.value_or(configDefaults->EnableErrorCodeCounting));
+        EnableErrorCodeCounter_.store(config->EnableErrorCodeCounter.value_or(configDefaults->EnableErrorCodeCounter));
 
         DoConfigureHistogramTimer(configDefaults, config);
 
@@ -2697,6 +2763,9 @@ bool TServiceBase::IsUp(const TCtxDiscoverPtr& /*context*/)
     return true;
 }
 
+void TServiceBase::EnrichDiscoverResponse(TRspDiscover* /*response*/)
+{ }
+
 std::vector<TString> TServiceBase::SuggestAddresses()
 {
     VERIFY_THREAD_AFFINITY_ANY();
@@ -2714,6 +2783,7 @@ DEFINE_RPC_SERVICE_METHOD(TServiceBase, Discover)
         replyDelay);
 
     auto isUp = IsUp(context);
+    EnrichDiscoverResponse(response);
 
     // Fast path.
     if (replyDelay == TDuration::Zero() || isUp) {

@@ -287,6 +287,14 @@ public:
         }
 
         if (settings.HasDatabaseQuotas()) {
+            if (const auto& effectivePools = requestedPools.empty()
+                    ? actualPools
+                    : requestedPools;
+                !CheckStoragePoolsInQuotas(settings.GetDatabaseQuotas(), effectivePools, path.PathString(), errStr)
+            ) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                return result;
+            }
             alterData->SetDatabaseQuotas(settings.GetDatabaseQuotas());
         }
 

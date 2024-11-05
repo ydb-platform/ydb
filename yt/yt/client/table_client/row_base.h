@@ -71,6 +71,11 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(ESimpleLogicalValueType, ui32,
     ((Json)        (0x100e))
 
     ((Uuid)        (0x100f))
+
+    ((Date32)      (0x1010))
+    ((Datetime64)  (0x1011))
+    ((Timestamp64) (0x1012))
+    ((Interval64)  (0x1013))
 );
 
 //! Debug printers for Gtest unittests.
@@ -106,6 +111,17 @@ inline bool IsIntegralType(ESimpleLogicalValueType type)
         case ESimpleLogicalValueType::Uint16:
         case ESimpleLogicalValueType::Uint32:
         case ESimpleLogicalValueType::Uint64:
+            return true;
+        default:
+            return false;
+    }
+}
+
+inline bool IsFloatingPointType(ESimpleLogicalValueType type)
+{
+    switch (type) {
+        case ESimpleLogicalValueType::Double:
+        case ESimpleLogicalValueType::Float:
             return true;
         default:
             return false;
@@ -206,6 +222,12 @@ inline constexpr EValueType GetPhysicalType(ESimpleLogicalValueType type)
 
         case ESimpleLogicalValueType::Float:
             return EValueType::Double;
+
+        case ESimpleLogicalValueType::Date32:
+        case ESimpleLogicalValueType::Datetime64:
+        case ESimpleLogicalValueType::Timestamp64:
+        case ESimpleLogicalValueType::Interval64:
+            return EValueType::Int64;
 
         default:
             YT_ABORT();
@@ -325,7 +347,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString ToString(const TColumnFilter& columnFilter);
+void FormatValue(TStringBuilderBase* builder, const TColumnFilter& columnFilter, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -339,7 +361,7 @@ struct TTypeErasedRow
     }
 };
 
-static_assert(std::is_pod<TTypeErasedRow>::value, "TTypeErasedRow must be POD.");
+static_assert((std::is_standard_layout_v<TTypeErasedRow> && std::is_trivial_v<TTypeErasedRow>), "TTypeErasedRow must be POD.");
 
 ////////////////////////////////////////////////////////////////////////////////
 

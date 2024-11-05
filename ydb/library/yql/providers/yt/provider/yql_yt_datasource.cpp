@@ -6,11 +6,13 @@
 #include "yql_yt_dq_integration.h"
 #include "yql_yt_dq_optimize.h"
 
+#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
 #include <ydb/library/yql/providers/yt/lib/schema/schema.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
@@ -91,6 +93,22 @@ public:
         })
         , DqOptimizer_([this]() { return CreateYtDqOptimizers(State_); })
     {
+    }
+
+    void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override {
+        const TString& token = properties.Value("token", "");
+
+        State_->Configuration->AddValidCluster(name);
+        if (token) {
+            // Empty token is forbidden for yt reader
+            State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        }
+
+        TYtClusterConfig cluster;
+        cluster.SetName(name);
+        cluster.SetCluster(properties.Value("location", ""));
+        cluster.SetYTToken(token);
+        State_->Gateway->AddCluster(cluster);
     }
 
     TStringBuf GetName() const override {
@@ -190,15 +208,19 @@ public:
 
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
         YQL_CLOG(INFO, ProviderYt) << "RewriteIO";
-        if (auto left = TMaybeNode<TCoLeft>(node)) {
-            return left.Input().Maybe<TYtRead>().World().Cast().Ptr();
+
+        auto read = TCoInputBase(node).Input().Cast<TYtRead>();
+        bool buildLeft = TCoLeft::Match(node.Get());
+        bool buildReadTableScheme = NYql::HasSetting(read.Arg(4).Ref(), EYtSettingType::Scheme);
+
+        if (buildLeft && (buildReadTableScheme || !State_->PassiveExecution)) {
+            return read.World().Ptr();
         }
 
-        auto read = TCoRight(node).Input().Cast<TYtRead>();
-        if (NYql::HasSetting(read.Arg(4).Ref(), EYtSettingType::Scheme)) {
+        if (buildReadTableScheme) {
             YQL_ENSURE(read.Arg(2).Maybe<TExprList>().Item(0).Maybe<TYtPath>());
 
-            auto newRead = InjectUdfRemapperOrView(read, ctx, true);
+            auto newRead = InjectUdfRemapperOrView(read, ctx, true, false);
 
             return Build<TCoRight>(ctx, node->Pos())
                 .Input<TYtReadTableScheme>()
@@ -213,7 +235,7 @@ public:
         }
 
         YQL_ENSURE(read.Arg(2).Maybe<TExprList>().Item(0).Maybe<TYtPath>()); // At least one table
-        return InjectUdfRemapperOrView(read, ctx, false);
+        return InjectUdfRemapperOrView(read, ctx, false, buildLeft);
     }
 
     void PostRewriteIO() final {
@@ -248,7 +270,7 @@ public:
 
     bool CanBuildResult(const TExprNode& node, TSyncMap& syncList) override {
         TString usedCluster;
-        return IsYtCompleteIsolatedLambda(node, syncList, usedCluster, true, false);
+        return IsYtCompleteIsolatedLambda(node, syncList, usedCluster, false);
     }
 
     bool GetExecWorld(const TExprNode::TPtr& node, TExprNode::TPtr& root) override {
@@ -373,7 +395,7 @@ public:
         ScanPlanDependencies(node, children);
     }
 
-    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
+    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer, bool withLimits) override {
         if (auto maybeRead = TMaybeNode<TYtReadTable>(&node)) {
             writer.OnKeyedItem("InputColumns");
             auto read = maybeRead.Cast();
@@ -387,6 +409,22 @@ public:
             }
             else {
                 NCommon::WriteColumns(writer, read.Input().Item(0).Paths().Item(0).Columns());
+            }
+
+            if (read.Input().Size() > 1) {
+                writer.OnKeyedItem("InputSections");
+                writer.OnBeginList();
+                ui64 ndx = 0;
+                for (auto section: read.Input()) {
+                    writer.OnListItem();
+                    writer.OnBeginList();
+                    for (ui32 i = 0; i < Min((ui32)section.Paths().Size(), withLimits && State_->PlanLimits ? State_->PlanLimits : Max<ui32>()); ++i) {
+                        writer.OnListItem();
+                        writer.OnUint64Scalar(ndx++);
+                    }
+                    writer.OnEndList();
+                }
+                writer.OnEndList();
             }
         }
     }
@@ -405,10 +443,12 @@ public:
         writer.OnStringScalar(node.Child(1)->Content());
     }
 
-    void GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override {
+    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs, bool withLimit) override {
+        ui32 count = 0;
         if (auto maybeRead = TMaybeNode<TYtReadTable>(&node)) {
             auto read = maybeRead.Cast();
             for (auto section: read.Input()) {
+                ui32 i = 0;
                 for (auto path: section.Paths()) {
                     if (auto maybeTable = path.Table().Maybe<TYtTable>()) {
                         inputs.push_back(TPinInfo(read.DataSource().Raw(), nullptr, maybeTable.Cast().Raw(), MakeTableDisplayName(maybeTable.Cast(), false), false));
@@ -417,13 +457,19 @@ public:
                         auto tmpTable = GetOutTable(path.Table());
                         inputs.push_back(TPinInfo(read.DataSource().Raw(), nullptr, tmpTable.Raw(), MakeTableDisplayName(tmpTable, false), true));
                     }
+                    if (withLimit && State_->PlanLimits && ++i >= State_->PlanLimits) {
+                        break;
+                    }
                 }
+                count += section.Paths().Size();
             }
         }
         else if (auto maybeReadScheme = TMaybeNode<TYtReadTableScheme>(&node)) {
             auto readScheme = maybeReadScheme.Cast();
             inputs.push_back(TPinInfo(readScheme.DataSource().Raw(), nullptr, readScheme.Table().Raw(), MakeTableDisplayName(readScheme.Table(), false), false));
+            count = 1;
         }
+        return count;
     }
 
     void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
@@ -502,7 +548,7 @@ public:
     }
 
 private:
-    TExprNode::TPtr InjectUdfRemapperOrView(TYtRead readNode, TExprContext& ctx, bool fromReadSchema) {
+    TExprNode::TPtr InjectUdfRemapperOrView(TYtRead readNode, TExprContext& ctx, bool fromReadSchema, bool buildLeft) {
         const bool weakConcat = NYql::HasSetting(readNode.Arg(4).Ref(), EYtSettingType::WeakConcat);
         const bool ignoreNonExisting = NYql::HasSetting(readNode.Arg(4).Ref(), EYtSettingType::IgnoreNonExisting);
         const bool warnNonExisting = NYql::HasSetting(readNode.Arg(4).Ref(), EYtSettingType::WarnNonExisting);
@@ -582,7 +628,7 @@ private:
                 auto userSchema = GetSetting(table.Settings().Ref(), EYtSettingType::UserSchema);
                 if (userSchema) {
                     tableReads.push_back(ctx.Builder(table.Pos())
-                        .Callable("Right!")
+                        .Callable(buildLeft ? "Left!" : "Right!")
                             .Add(0, BuildEmptyTablesRead(table.Pos(), *userSchema, ctx))
                         .Seal()
                         .Build());
@@ -626,10 +672,9 @@ private:
                 || withQB;
 
             path = Build<TYtPath>(ctx, path.Pos())
+                .InitFrom(path)
                 .Table(table)
                 .Columns(needRewrite ? Build<TCoVoid>(ctx, path.Columns().Pos()).Done() : origColumnList)
-                .Ranges(path.Ranges())
-                .Stat(path.Stat())
                 .Done();
 
             bool tableSysColumns = useSysColumns && !tableDesc.View && (view.empty() || view == "raw");
@@ -659,6 +704,15 @@ private:
                     .Build()
                 .Build()
                 .Done();
+
+            if (buildLeft) {
+                TExprNode::TPtr leftOverRead = Build<TCoLeft>(ctx, readNode.Pos())
+                        .Input(origReadNode)
+                        .Done().Ptr();
+
+                tableReads.push_back(leftOverRead);
+                continue;
+            }
 
             TExprNode::TPtr rightOverRead = inlineContent
                 ? Build<TYtTableContent>(ctx, readNode.Pos())
@@ -690,6 +744,7 @@ private:
 
                 newReadNode = root;
                 ctx.Step
+                    .Repeat(TExprStep::ExpandApplyForLambdas)
                     .Repeat(TExprStep::ExprEval)
                     .Repeat(TExprStep::DiscoveryIO)
                     .Repeat(TExprStep::Epochs)
@@ -820,6 +875,10 @@ private:
             }
 
             tableReads.push_back(newReadNode);
+        }
+
+        if (buildLeft) {
+            return ctx.NewCallable(readNode.Pos(), TCoSync::CallableName(), std::move(tableReads));
         }
 
         if (tableReads.empty()) {

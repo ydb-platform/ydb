@@ -1,0 +1,47 @@
+#include "constructor.h"
+#include "read_metadata.h"
+#include "resolver.h"
+
+#include <ydb/core/tx/columnshard/columnshard_impl.h>
+
+namespace NKikimr::NOlap::NReader::NPlain {
+
+NKikimr::TConclusionStatus TIndexScannerConstructor::ParseProgram(
+    const TVersionedIndex* vIndex, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
+    AFL_VERIFY(vIndex);
+    auto& indexInfo = vIndex->GetSchema(Snapshot)->GetIndexInfo();
+    TIndexColumnResolver columnResolver(indexInfo);
+    return TBase::ParseProgram(vIndex, proto.GetOlapProgramType(), proto.GetOlapProgram(), read, columnResolver);
+}
+
+std::vector<TNameTypeInfo> TIndexScannerConstructor::GetPrimaryKeyScheme(const NColumnShard::TColumnShard* self) const {
+    auto& indexInfo = self->TablesManager.GetIndexInfo(Snapshot);
+    return indexInfo.GetPrimaryKeyColumns();
+}
+
+NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructor::DoBuildReadMetadata(
+    const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
+    auto& insertTable = self->InsertTable;
+    auto& index = self->TablesManager.GetPrimaryIndex();
+    if (!insertTable || !index) {
+        return std::shared_ptr<TReadMetadataBase>();
+    }
+
+    if (read.GetSnapshot().GetPlanInstant() < self->GetMinReadSnapshot().GetPlanInstant()) {
+        return TConclusionStatus::Fail(TStringBuilder() << "Snapshot too old: " << read.GetSnapshot() << ". CS min read snapshot: "
+                                                        << self->GetMinReadSnapshot() << ". now: " << TInstant::Now());
+    }
+
+    TDataStorageAccessor dataAccessor(insertTable, index);
+    AFL_VERIFY(read.PathId);
+    auto readMetadata = std::make_shared<TReadMetadata>(read.PathId, index->CopyVersionedIndexPtr(), read.GetSnapshot(),
+        IsReverse ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC, read.GetProgram());
+
+    auto initResult = readMetadata->Init(self, read, dataAccessor);
+    if (!initResult) {
+        return initResult;
+    }
+    return static_pointer_cast<TReadMetadataBase>(readMetadata);
+}
+
+}   // namespace NKikimr::NOlap::NReader::NPlain

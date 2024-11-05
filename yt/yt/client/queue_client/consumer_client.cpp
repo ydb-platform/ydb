@@ -39,7 +39,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = QueueClientLogger;
+static constexpr auto& Logger = QueueClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -58,11 +58,6 @@ static const TTableSchemaPtr YTConsumerTableSchema = New<TTableSchema>(std::vect
     TColumnSchema("partition_index", EValueType::Uint64, ESortOrder::Ascending).SetRequired(true),
     TColumnSchema("offset", EValueType::Uint64).SetRequired(true),
     TColumnSchema("meta", EValueType::Any).SetRequired(false),
-}, /*strict*/ true, /*uniqueKeys*/ true);
-
-static const TTableSchemaPtr BigRTConsumerTableSchema = New<TTableSchema>(std::vector<TColumnSchema>{
-    TColumnSchema("ShardId", EValueType::Uint64, ESortOrder::Ascending),
-    TColumnSchema("Offset", EValueType::Uint64),
 }, /*strict*/ true, /*uniqueKeys*/ true);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -340,14 +335,6 @@ public:
             }));
     }
 
-    TFuture<TCrossClusterReference> FetchTargetQueue() const override
-    {
-        return ConsumerClusterClient_->GetNode(ConsumerPath_ + "/@target_queue")
-            .Apply(BIND([] (const TYsonString& ysonString) {
-                return TCrossClusterReference::FromString(ConvertTo<TString>(ysonString));
-            }));
-    }
-
     TFuture<TPartitionStatistics> FetchPartitionStatistics(
         const TYPath& queuePath,
         int partitionIndex) const override
@@ -537,12 +524,20 @@ private:
             tabletAndRowIndices.push_back({partitionIndex, offset - 1});
         }
 
-        auto partitionRowInfos = CollectPartitionRowInfos(
+        auto partitionRowInfosOrError = WaitFor(CollectPartitionRowInfos(
             QueueRef_->Path,
             QueueClusterClient_,
             std::move(tabletAndRowIndices),
             params,
-            Logger);
+            Logger()));
+
+        if (!partitionRowInfosOrError.IsOK()) {
+            YT_LOG_DEBUG(partitionRowInfosOrError, "Failed to get partition row infos (Path: %v)",
+                QueueRef_->Path);
+            return {};
+        }
+
+        auto partitionRowInfos = std::move(partitionRowInfosOrError).Value();
 
         auto partitionIt = partitionRowInfos.find(partitionIndex);
         if (partitionIt == partitionRowInfos.end()) {
@@ -579,48 +574,6 @@ private:
         return meta;
     }
 };
-
-////////////////////////////////////////////////////////////////////////////////
-
-ISubConsumerClientPtr CreateBigRTConsumerClient(
-    const IClientPtr& client,
-    const TYPath& path,
-    const TTableSchema& schema)
-{
-    if (!schema.IsUniqueKeys()) {
-        THROW_ERROR_EXCEPTION("Consumer schema must have unique keys, schema does not")
-            << TErrorAttribute("actual_schema", schema);
-    }
-
-    if (schema == *BigRTConsumerTableSchema) {
-        return New<TGenericConsumerClient>(
-            client,
-            client,
-            path,
-            /*queuePath*/ std::nullopt,
-            TUnversionedOwningRow(),
-            "ShardId",
-            "Offset",
-            /*decrementOffset*/ true,
-            BigRTConsumerTableSchema,
-            /*queueTableSchema*/ nullptr);
-    } else {
-        THROW_ERROR_EXCEPTION("Table schema is not recognized as a valid BigRT consumer schema")
-            << TErrorAttribute("expected_schema", *BigRTConsumerTableSchema)
-            << TErrorAttribute("actual_schema", schema);
-    }
-}
-
-ISubConsumerClientPtr CreateBigRTConsumerClient(
-    const IClientPtr& client,
-    const TYPath& path)
-{
-    auto tableInfo = WaitFor(client->GetTableMountCache()->GetTableInfo(path))
-        .ValueOrThrow();
-    auto schema = tableInfo->Schemas[ETableSchemaKind::Primary];
-
-    return CreateBigRTConsumerClient(client, path, *schema);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 

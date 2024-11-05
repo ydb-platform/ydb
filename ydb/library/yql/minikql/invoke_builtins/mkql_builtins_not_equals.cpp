@@ -290,6 +290,8 @@ void RegisterNotEquals(IBuiltinFunctionRegistry& registry) {
     RegisterAggrComparePrimitive<TNotEquals, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareDatetime<TDiffDateNotEquals, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareTzDatetime<TAggrTzDateNotEquals, TCompareArgsOpt>(registry, aggrName);
+    RegisterAggrCompareBigDatetime<TDiffDateNotEquals, TCompareArgsOpt>(registry, aggrName);
+    RegisterAggrCompareBigTzDatetime<TAggrTzDateNotEquals, TCompareArgsOpt>(registry, aggrName);
 
     RegisterAggrCompareStrings<TCustomNotEquals, TCompareArgsOpt>(registry, aggrName);
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, TDecimalAggrNotEquals, TCompareArgsOpt>(registry, aggrName);
@@ -300,6 +302,7 @@ void RegisterNotEquals(TKernelFamilyMap& kernelFamilyMap) {
 
     AddNumericComparisonKernels<TNotEqualsOp>(*family);
     AddDateComparisonKernels<TDiffDateNotEqualsOp>(*family);
+    AddDecimalComparisonKernels<TDecimalNotEquals>(*family);
     RegisterStringKernelNotEquals(*family);
 
     kernelFamilyMap["NotEquals"] = std::move(family);

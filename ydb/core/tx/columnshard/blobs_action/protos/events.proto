@@ -11,4 +11,11 @@ message TEvDeleteSharedBlobs {
 
 message TEvDeleteSharedBlobsFinished {
     optional uint64 TabletId = 1;
+    enum EStatus {
+        Success = 0;
+        NeedRetry = 1;
+        DestinationCurrenlyLocked = 2;
+    }
+
+    optional EStatus Status = 2;
 }

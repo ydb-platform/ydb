@@ -23,6 +23,8 @@
 
 #include <yt/yt/core/yson/config.h>
 
+#include <yt/yt/library/process/io_dispatcher.h>
+
 #include <yt/yt/library/profiling/solomon/exporter.h>
 
 #include <yt/yt/library/tracing/jaeger/tracer.h>
@@ -33,7 +35,7 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class THeapSizeLimit
+class THeapSizeLimitConfig
     : public virtual NYTree::TYsonStruct
 {
 public:
@@ -41,15 +43,25 @@ public:
     // If program heap size exceeds the limit tcmalloc is instructed to release memory to the kernel.
     std::optional<double> ContainerMemoryRatio;
 
-    //! If true tcmalloc crashes when system allocates more memory than #ContainerMemoryRatio.
-    bool IsHard;
+    //! Similar to #ContainerMemoryRatio, but is set in terms of absolute difference from
+    //! the container memory limit.
+    //! For example, if ContainerMemoryLimit=200Gb and ContainerMemoryMargin=1Gb
+    // then tcmalloc limit will be 199Gb.
+    std::optional<double> ContainerMemoryMargin;
 
-    REGISTER_YSON_STRUCT(THeapSizeLimit);
+    //! If true tcmalloc crashes when system allocates more memory than #ContainerMemoryRatio/#ContainerMemoryMargin.
+    bool Hard;
+
+    bool DumpMemoryProfileOnViolation;
+    TDuration DumpMemoryProfileTimeout;
+    TString DumpMemoryProfilePath;
+
+    REGISTER_YSON_STRUCT(THeapSizeLimitConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(THeapSizeLimit)
+DEFINE_REFCOUNTED_TYPE(THeapSizeLimitConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -73,7 +85,7 @@ public:
     //! size <= 256 KiB will be under GWP-ASAN.
     std::optional<i64> GuardedSamplingRate;
 
-    THeapSizeLimitPtr HeapSizeLimit;
+    THeapSizeLimitConfigPtr HeapSizeLimit;
 
     REGISTER_YSON_STRUCT(TTCMallocConfig);
 
@@ -89,12 +101,32 @@ class TStockpileConfig
     , public NYTree::TYsonStruct
 {
 public:
+    TStockpileConfigPtr ApplyDynamic(const TStockpileDynamicConfigPtr& dynamicConfig) const;
+
     REGISTER_YSON_STRUCT(TStockpileConfig);
 
     static void Register(TRegistrar registrar);
 };
 
 DEFINE_REFCOUNTED_TYPE(TStockpileConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TStockpileDynamicConfig
+    : public NYTree::TYsonStruct
+{
+public:
+    std::optional<i64> BufferSize;
+    std::optional<int> ThreadCount;
+    std::optional<EStockpileStrategy> Strategy;
+    std::optional<TDuration> Period;
+
+    REGISTER_YSON_STRUCT(TStockpileDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TStockpileDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -127,6 +159,7 @@ public:
     THashMap<TString, int> FiberStackPoolSizes;
     NNet::TAddressResolverConfigPtr AddressResolver;
     NBus::TTcpDispatcherConfigPtr TcpDispatcher;
+    NPipes::TIODispatcherConfigPtr IODispatcher;
     NRpc::TDispatcherConfigPtr RpcDispatcher;
     NRpc::NGrpc::TDispatcherConfigPtr GrpcDispatcher;
     NServiceDiscovery::NYP::TServiceDiscoveryConfigPtr YPServiceDiscovery;
@@ -156,13 +189,16 @@ class TSingletonsDynamicConfig
 {
 public:
     std::optional<TDuration> SpinWaitSlowPathLoggingThreshold;
+    ui64 MaxIdleFibers;
     NYTAlloc::TYTAllocConfigPtr YTAlloc;
     NBus::TTcpDispatcherDynamicConfigPtr TcpDispatcher;
+    NPipes::TIODispatcherConfigPtr IODispatcher;
     NRpc::TDispatcherDynamicConfigPtr RpcDispatcher;
     NLogging::TLogManagerDynamicConfigPtr Logging;
     NTracing::TJaegerTracerDynamicConfigPtr Jaeger;
     NTracing::TTracingTransportConfigPtr TracingTransport;
     TTCMallocConfigPtr TCMalloc;
+    TStockpileDynamicConfigPtr Stockpile;
     NYson::TProtobufInteropDynamicConfigPtr ProtobufInterop;
 
     REGISTER_YSON_STRUCT(TSingletonsDynamicConfig);

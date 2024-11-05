@@ -2,7 +2,7 @@
 
 #include <ydb/services/ydb/ydb_common_ut.h>
 
-using namespace NFq;
+namespace NFq {
 
 using TCache = TTtlCache<int,int>;
 
@@ -66,3 +66,5 @@ Y_UNIT_TEST_SUITE(Cache) {
         UNIT_ASSERT_VALUES_EQUAL(cache.Size(), 0);
     }
 }
+
+}  // namespace NFq

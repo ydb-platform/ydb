@@ -10,9 +10,17 @@ using namespace NYql::NPureCalc;
 
 TProgramFactory::TProgramFactory(const TProgramFactoryOptions& options)
     : Options_(options)
+    , ExprOutputStream_(Options_.ExprOutputStream)
     , CountersProvider_(nullptr)
 {
     EnsureLoggingInitialized();
+
+    if (!TryFromString(Options_.BlockEngineSettings, BlockEngineMode_)) {
+        ythrow TCompileError("", "") << "Unknown BlockEngineSettings value: expected "
+                                     << GetEnumAllNames<EBlockEngineMode>()
+                                     << ", but got: "
+                                     << Options_.BlockEngineSettings;
+    }
 
     NUserData::TUserData::UserDataToLibraries(Options_.UserData_, Modules_);
 
@@ -75,6 +83,8 @@ IPullStreamWorkerFactoryPtr TProgramFactory::MakePullStreamWorkerFactory(
         UserData_,
         Modules_,
         Options_.LLVMSettings,
+        BlockEngineMode_,
+        ExprOutputStream_,
         CountersProvider_,
         mode,
         syntaxVersion,
@@ -102,6 +112,8 @@ IPullListWorkerFactoryPtr TProgramFactory::MakePullListWorkerFactory(
         UserData_,
         Modules_,
         Options_.LLVMSettings,
+        BlockEngineMode_,
+        ExprOutputStream_,
         CountersProvider_,
         mode,
         syntaxVersion,
@@ -133,6 +145,8 @@ IPushStreamWorkerFactoryPtr TProgramFactory::MakePushStreamWorkerFactory(
         UserData_,
         Modules_,
         Options_.LLVMSettings,
+        BlockEngineMode_,
+        ExprOutputStream_,
         CountersProvider_,
         mode,
         syntaxVersion,

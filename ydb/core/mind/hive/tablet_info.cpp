@@ -22,6 +22,7 @@ TTabletInfo::TTabletInfo(ETabletRole role, THive& hive)
     , ResourceMetricsAggregates(Hive.GetDefaultResourceMetricsAggregates())
     , Weight(0)
     , BalancerPolicy(EBalancerPolicy::POLICY_BALANCE)
+    , NodeFilter(hive)
 {}
 
 const TLeaderTabletInfo& TTabletInfo::GetLeader() const {
@@ -187,10 +188,10 @@ bool TTabletInfo::IsGoodForBalancer(TInstant now) const {
             && (now - LastBalancerDecisionTime > Hive.GetTabletKickCooldownPeriod());
 }
 
-bool TTabletInfo::InitiateBoot() {
+bool TTabletInfo::InitiateBoot(TNodeId node) {
     if (IsStopped()) {
         ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_BOOTING);
-        Hive.AddToBootQueue(this);
+        Hive.AddToBootQueue(this, node);
         Hive.ProcessBootQueue();
         return true;
     } else {
@@ -215,15 +216,15 @@ TNodeInfo* TTabletInfo::GetNode() const {
     return node;
 }
 
-bool TTabletInfo::InitiateStop(TSideEffects& sideEffects) {
+bool TTabletInfo::InitiateStop(TSideEffects& sideEffects, bool forMove) {
     TNodeInfo* node = GetNode();
     TActorId local;
     if (node != nullptr) {
         local = node->Local;
     }
     if (BecomeStopped()) {
-        if (Hive.GetEnableFastTabletMove() && node != nullptr && !node->Freeze && PreferredNodeId != 0) {
-            // we only do it when we have PreferredNodeId, which means that we are moving from one node to another
+        if (Hive.GetEnableFastTabletMove() && node != nullptr && !node->Freeze && forMove) {
+            // we only do it when we are moving from one node to another
             LastNodeId = node->Id;
         } else {
             SendStopTablet(local, sideEffects);
@@ -232,7 +233,7 @@ bool TTabletInfo::InitiateStop(TSideEffects& sideEffects) {
         if (IsLeader()) {
             for (TFollowerTabletInfo& follower : AsLeader().Followers) {
                 if (follower.FollowerGroup.LocalNodeOnly) {
-                    follower.InitiateStop(sideEffects);
+                    follower.InitiateStop(sideEffects, forMove);
                 }
             }
         }
@@ -294,9 +295,6 @@ void TTabletInfo::BecomeUnknown(TNodeInfo* node) {
     Y_ABORT_UNLESS(VolatileState == EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN);
     Y_ABORT_UNLESS(Node == nullptr || node == Node);
     Node = node;
-    if (Node->Freeze) {
-        PreferredNodeId = Node->Id;
-    }
     ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN);
 }
 
@@ -313,40 +311,78 @@ const TVector<i64>& TTabletInfo::GetTabletAllowedMetricIds() const {
     return Hive.GetTabletTypeAllowedMetricIds(GetLeader().Type);
 }
 
+bool TTabletInfo::HasAllowedMetric(const TVector<i64>& allowedMetricIds, EResourceToBalance resource) {
+    switch (resource) {
+        case EResourceToBalance::ComputeResources: { 
+            auto isComputeMetric = [](i64 metricId) {
+                return metricId == NKikimrTabletBase::TMetrics::kCPUFieldNumber ||
+                       metricId == NKikimrTabletBase::TMetrics::kMemoryFieldNumber ||
+                       metricId == NKikimrTabletBase::TMetrics::kNetworkFieldNumber;
+            };
+            return AnyOf(allowedMetricIds.begin(), allowedMetricIds.end(), isComputeMetric);
+        }
+        case EResourceToBalance::Counter:
+            return true;
+        case EResourceToBalance::CPU:
+            return Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kCPUFieldNumber) != allowedMetricIds.end();
+        case EResourceToBalance::Memory:
+            return Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kMemoryFieldNumber) != allowedMetricIds.end();
+        case EResourceToBalance::Network:
+            return Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kNetworkFieldNumber) != allowedMetricIds.end();
+    }
+}
+
+bool TTabletInfo::HasAllowedMetric(EResourceToBalance resource) const {
+    return HasAllowedMetric(GetTabletAllowedMetricIds(), resource);
+}
+
+bool TTabletInfo::HasMetric(EResourceToBalance resource) const {
+    if (!HasAllowedMetric(resource)) {
+        return false;
+    }
+    return ExtractResourceUsage(GetResourceCurrentValues(), resource) > 0;
+}
+
 void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics) {
     TInstant now = TActivationContext::Now();
     const TVector<i64>& allowedMetricIds(GetTabletAllowedMetricIds());
     auto before = ResourceValues;
     auto maximum = GetResourceMaximumValues();
-    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kCPUFieldNumber) != allowedMetricIds.end()) {
+    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU)) {
         if (metrics.HasCPU()) {
             if (metrics.GetCPU() > static_cast<ui64>(std::get<NMetrics::EResource::CPU>(maximum))) {
                 BLOG_W("Ignoring too high CPU metric (" << metrics.GetCPU() << ") for tablet " << ToString());
             } else {
                 ResourceMetricsAggregates.MaximumCPU.SetValue(metrics.GetCPU(), now);
-                ResourceValues.SetCPU(ResourceMetricsAggregates.MaximumCPU.GetValue());
             }
+        } else {
+            ResourceMetricsAggregates.MaximumCPU.AdvanceTime(now);
         }
+        ResourceValues.SetCPU(ResourceMetricsAggregates.MaximumCPU.GetValue());
     }
-    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kMemoryFieldNumber) != allowedMetricIds.end()) {
+    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory)) {
         if (metrics.HasMemory()) {
             if (metrics.GetMemory() > static_cast<ui64>(std::get<NMetrics::EResource::Memory>(maximum))) {
                 BLOG_W("Ignoring too high Memory metric (" << metrics.GetMemory() << ") for tablet " << ToString());
             } else {
                 ResourceMetricsAggregates.MaximumMemory.SetValue(metrics.GetMemory(), now);
-                ResourceValues.SetMemory(ResourceMetricsAggregates.MaximumMemory.GetValue());
             }
+        } else {
+            ResourceMetricsAggregates.MaximumMemory.AdvanceTime(now);
         }
+        ResourceValues.SetMemory(ResourceMetricsAggregates.MaximumMemory.GetValue());
     }
-    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kNetworkFieldNumber) != allowedMetricIds.end()) {
+    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network)) {
         if (metrics.HasNetwork()) {
             if (metrics.GetNetwork() > static_cast<ui64>(std::get<NMetrics::EResource::Network>(maximum))) {
                 BLOG_W("Ignoring too high Network metric (" << metrics.GetNetwork() << ") for tablet " << ToString());
             } else {
                 ResourceMetricsAggregates.MaximumNetwork.SetValue(metrics.GetNetwork(), now);
-                ResourceValues.SetNetwork(ResourceMetricsAggregates.MaximumNetwork.GetValue());
             }
+        } else {
+            ResourceMetricsAggregates.MaximumNetwork.AdvanceTime(now);
         }
+        ResourceValues.SetNetwork(ResourceMetricsAggregates.MaximumNetwork.GetValue());
     }
     if (metrics.HasStorage()) {
         ResourceValues.SetStorage(metrics.GetStorage());
@@ -398,14 +434,21 @@ TResourceRawValues TTabletInfo::GetResourceMaximumValues() const {
     }
 }
 
-i64 TTabletInfo::GetCounterValue(const NKikimrTabletBase::TMetrics& metrics, const TVector<i64>& allowedMetricIds) {
-    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kCPUFieldNumber) != allowedMetricIds.end() && THive::IsValidMetricsCPU(metrics)) {
+i64 TTabletInfo::GetCounterValue() const {
+    const auto& allowedMetricIds = GetTabletAllowedMetricIds();
+    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU)
+        && (ResourceMetricsAggregates.MaximumCPU.GetAllTimeMaximum() > 0
+        || ResourceValues.GetCPU() > 0)) {
         return 0;
     }
-    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kMemoryFieldNumber) != allowedMetricIds.end() && THive::IsValidMetricsMemory(metrics)) {
+    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory)
+        && (ResourceMetricsAggregates.MaximumMemory.GetAllTimeMaximum() > 0
+        || ResourceValues.GetMemory() > 0)) {
         return 0;
     }
-    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kNetworkFieldNumber) != allowedMetricIds.end() && THive::IsValidMetricsNetwork(metrics)) {
+    if (HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network)
+        && (ResourceMetricsAggregates.MaximumNetwork.GetAllTimeMaximum() > 0
+        || ResourceValues.GetNetwork() > 0)) {
         return 0;
     }
     return 1;
@@ -417,13 +460,13 @@ void TTabletInfo::FilterRawValues(TResourceRawValues& values) const {
     if (metrics.GetCounter() == 0) {
         std::get<NMetrics::EResource::Counter>(values) = 0;
     }
-    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kCPUFieldNumber) == allowedMetricIds.end() || !THive::IsValidMetricsCPU(metrics)) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU) || !THive::IsValidMetricsCPU(metrics)) {
         std::get<NMetrics::EResource::CPU>(values) = 0;
     }
-    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kMemoryFieldNumber) == allowedMetricIds.end() || !THive::IsValidMetricsMemory(metrics)) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory) || !THive::IsValidMetricsMemory(metrics)) {
         std::get<NMetrics::EResource::Memory>(values) = 0;
     }
-    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kNetworkFieldNumber) == allowedMetricIds.end() || !THive::IsValidMetricsNetwork(metrics)) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network) || !THive::IsValidMetricsNetwork(metrics)) {
         std::get<NMetrics::EResource::Network>(values) = 0;
     }
 }
@@ -434,28 +477,23 @@ void TTabletInfo::FilterRawValues(TResourceNormalizedValues& values) const {
     if (metrics.GetCounter() == 0) {
         std::get<NMetrics::EResource::Counter>(values) = 0;
     }
-    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kCPUFieldNumber) == allowedMetricIds.end() || !THive::IsValidMetricsCPU(metrics)) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::CPU) || !THive::IsValidMetricsCPU(metrics)) {
         std::get<NMetrics::EResource::CPU>(values) = 0;
     }
-    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kMemoryFieldNumber) == allowedMetricIds.end() || !THive::IsValidMetricsMemory(metrics)) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Memory) || !THive::IsValidMetricsMemory(metrics)) {
         std::get<NMetrics::EResource::Memory>(values) = 0;
     }
-    if (Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kNetworkFieldNumber) == allowedMetricIds.end() || !THive::IsValidMetricsNetwork(metrics)) {
+    if (!HasAllowedMetric(allowedMetricIds, EResourceToBalance::Network) || !THive::IsValidMetricsNetwork(metrics)) {
         std::get<NMetrics::EResource::Network>(values) = 0;
     }
 }
 
 void TTabletInfo::ActualizeCounter() {
-    auto value = GetCounterValue(ResourceValues, GetTabletAllowedMetricIds());
-    ResourceValues.SetCounter(value);
+    ResourceValues.SetCounter(GetCounterValue());
 }
 
 const TNodeFilter& TTabletInfo::GetNodeFilter() const {
-    if (IsLeader()) {
-        return AsLeader().NodeFilter;
-    } else {
-        return AsFollower().FollowerGroup.NodeFilter;
-    }
+    return NodeFilter;
 }
 
 bool TTabletInfo::InitiateStart(TNodeInfo* node) {

@@ -5235,7 +5235,7 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
     TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
     NSQLTranslation::TErrorCollectorOverIssues collector(err, maxErrors, "");
-    NProtoAST::TProtoASTBuilder<NALP::SQLParser, NALP::SQLLexer> builder(query, queryName, arena);
+    NProtoAST::TProtoASTBuilder3<NALP::SQLParser, NALP::SQLLexer> builder(query, queryName, arena);
     return builder.BuildAST(collector);
 }
 
@@ -5244,7 +5244,7 @@ google::protobuf::Message* SqlAST(const TString& query, const TString& queryName
 #if defined(_tsan_enabled_)
     TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
-    NProtoAST::TProtoASTBuilder<NALP::SQLParser, NALP::SQLLexer> builder(query, queryName, arena);
+    NProtoAST::TProtoASTBuilder3<NALP::SQLParser, NALP::SQLLexer> builder(query, queryName, arena);
     return builder.BuildAST(err);
 }
 
@@ -5290,6 +5290,7 @@ NYql::TAstParseResult SqlASTToYql(const google::protobuf::Message& protoAst,
     TAstParseResult res;
     TContext ctx(settings, res.Issues);
     SqlASTToYqlImpl(res, protoAst, ctx);
+    res.ActualSyntaxType = ESyntaxType::YQLv0;
     return res;
 }
 
@@ -5310,6 +5311,7 @@ NYql::TAstParseResult SqlToYql(const TString& query, const NSQLTranslation::TTra
         *warningRules = ctx.WarningPolicy.GetRules();
         ctx.WarningPolicy.Clear();
     }
+    res.ActualSyntaxType = NYql::ESyntaxType::YQLv0;
     return res;
 }
 

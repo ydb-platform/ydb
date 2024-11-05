@@ -157,7 +157,6 @@ IGraphTransformer::TStatus EvaluateParameters(const TExprNode::TPtr& input, TExp
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
     auto status = OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx)->TExprNode::TPtr {
-        Y_UNUSED(ctx);
         if (!node->IsCallable("Parameter")) {
             return node;
         }
@@ -165,7 +164,7 @@ IGraphTransformer::TStatus EvaluateParameters(const TExprNode::TPtr& input, TExp
         auto name = node->Child(0)->Content();
         auto evaluated = paramValues.FindPtr(name);
         YQL_ENSURE(evaluated, "Missing parameter value: " << name);
-        return *evaluated;
+        return ctx.ShallowCopyWithPosition(**evaluated, node->Pos());
     }, ctx, settings);
 
     if (status.Level == IGraphTransformer::TStatus::Error) {

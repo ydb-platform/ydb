@@ -7,6 +7,8 @@
 
 namespace NFq {
 
+constexpr ui64 MaxYdbStringValueLength = 16 * 1000 * 1000;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TCoordinatorId {

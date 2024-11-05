@@ -13,7 +13,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-OWNER(g:cpp-contrib)
+SUBSCRIBER(g:cpp-contrib)
+
+VERSION(16.0.6)
 
 ADDINCL(
     contrib/libs/clang16-rt/lib

@@ -26,35 +26,47 @@
 
 namespace orc {
 
-  class NotImplementedYet: public std::logic_error {
-  public:
+  class NotImplementedYet : public std::logic_error {
+   public:
     explicit NotImplementedYet(const std::string& what_arg);
     explicit NotImplementedYet(const char* what_arg);
-    virtual ~NotImplementedYet() ORC_NOEXCEPT;
+    ~NotImplementedYet() noexcept override;
     NotImplementedYet(const NotImplementedYet&);
-  private:
+
+   private:
     NotImplementedYet& operator=(const NotImplementedYet&);
   };
 
-  class ParseError: public std::runtime_error {
-  public:
+  class ParseError : public std::runtime_error {
+   public:
     explicit ParseError(const std::string& what_arg);
     explicit ParseError(const char* what_arg);
-    virtual ~ParseError() ORC_NOEXCEPT;
+    ~ParseError() noexcept override;
     ParseError(const ParseError&);
-  private:
+
+   private:
     ParseError& operator=(const ParseError&);
   };
 
-  class InvalidArgument: public std::runtime_error {
-  public:
+  class InvalidArgument : public std::runtime_error {
+   public:
     explicit InvalidArgument(const std::string& what_arg);
     explicit InvalidArgument(const char* what_arg);
-    virtual ~InvalidArgument() ORC_NOEXCEPT;
+    ~InvalidArgument() noexcept override;
     InvalidArgument(const InvalidArgument&);
-  private:
+
+   private:
     InvalidArgument& operator=(const InvalidArgument&);
   };
-}
+
+  class SchemaEvolutionError : public std::logic_error {
+   public:
+    explicit SchemaEvolutionError(const std::string& what_arg);
+    explicit SchemaEvolutionError(const char* what_arg);
+    virtual ~SchemaEvolutionError() noexcept override;
+    SchemaEvolutionError(const SchemaEvolutionError&);
+    SchemaEvolutionError& operator=(const SchemaEvolutionError&) = delete;
+  };
+}  // namespace orc
 
 #endif

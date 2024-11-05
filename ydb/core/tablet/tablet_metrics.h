@@ -69,11 +69,11 @@ protected:
     const ui64 TabletId;
     const ui32 FollowerId;
     const TActorId Launcher;
-    ui32 LevelCPU = 0;
-    ui32 LevelMemory = 0;
-    ui32 LevelNetwork = 0;
-    ui32 LevelStorage = 0;
-    ui32 LevelIops = 0;
+    std::optional<ui32> LevelCPU;
+    std::optional<ui32> LevelMemory;
+    std::optional<ui32> LevelNetwork;
+    std::optional<ui32> LevelStorage;
+    std::optional<ui32> LevelIops;
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelReadThroughput;
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelWriteThroughput;
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelReadIops;

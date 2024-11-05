@@ -10,6 +10,9 @@
 
 namespace NKikimr::NReplication::NTestHelpers {
 
+class TFeatureFlags: public TTestFeatureFlagsHolder<TFeatureFlags> {
+};
+
 template <bool UseDatabase = true>
 class TEnv {
     static constexpr char DomainName[] = "Root";
@@ -32,7 +35,7 @@ class TEnv {
         Database = "/" + ToString(DomainName);
 
         YdbProxy = Server.GetRuntime()->Register(CreateYdbProxy(
-            Endpoint, UseDatabase ? Database : "", std::forward<Args>(args)...));
+            Endpoint, UseDatabase ? Database : "", false /* ssl */, std::forward<Args>(args)...));
         Sender = Server.GetRuntime()->AllocateEdgeActor();
     }
 
@@ -51,6 +54,19 @@ public:
     TEnv(bool init = true)
         : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig())
             .SetDomainName(DomainName)
+        )
+        , Server(Settings)
+        , Client(Settings)
+    {
+        if (init) {
+            Init();
+        }
+    }
+
+    TEnv(const TFeatureFlags& featureFlags, bool init = true)
+        : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig())
+            .SetDomainName(DomainName)
+            .SetFeatureFlags(featureFlags.FeatureFlags)
         )
         , Server(Settings)
         , Client(Settings)
@@ -111,6 +127,11 @@ public:
     }
 
     template <typename... Args>
+    auto ModifyOwner(Args&&... args) {
+        return Client.ModifyOwner(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
     auto Describe(Args&&... args) {
         return Client.Ls(std::forward<Args>(args)...);
     }
@@ -129,9 +150,23 @@ public:
         return TPathId(self.GetSchemeshardId(), self.GetPathId());
     }
 
+    ui64 GetSchemeshardId(const TString& path) {
+        return GetPathId(path).OwnerId;
+    }
+
     template <typename... Args>
     auto CreateTable(Args&&... args) {
         return Client.CreateTable(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    auto CreateTableWithIndex(Args&&... args) {
+        return Client.CreateTableWithUniformShardedIndex(std::forward<Args>(args)...);
+    }
+
+    template <typename... Args>
+    auto MkDir(Args&&... args) {
+        return Client.MkDir(std::forward<Args>(args)...);
     }
 
     void SendAsync(const TActorId& recipient, IEventBase* ev) {

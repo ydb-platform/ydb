@@ -9,6 +9,8 @@ const char* YDB_DATABASE_HEADER = "x-ydb-database";
 const char* YDB_TRACE_ID_HEADER = "x-ydb-trace-id";
 const char* OTEL_TRACE_HEADER = "traceparent"; // https://w3c.github.io/trace-context/#header-name
 const char* YDB_SDK_BUILD_INFO_HEADER = "x-ydb-sdk-build-info";
+const char* YDB_APPLICATION_NAME = "x-ydb-application-name";
+const char* YDB_CLIENT_PID = "x-ydb-client-pid";
 const char* YDB_REQUEST_TYPE_HEADER = "x-ydb-request-type";
 const char* YDB_CONSUMED_UNITS_HEADER = "x-ydb-consumed-units";
 

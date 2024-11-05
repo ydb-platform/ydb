@@ -60,7 +60,7 @@ public:
     operator base_type () const {
         return t;
     }
-    // used for text intput
+    // used for text input
     operator base_type  & (){
         return t;
     }

@@ -69,6 +69,7 @@ private:
         bool hasError = false;
         TNodeOnNodeOwnedMap sectionRewrites;
         VisitExpr(input, [this, &pathStatArgs, &hasError, &sectionRewrites, &ctx](const TExprNode::TPtr& node) {
+            const TMaybe<ui64> maxChunkCountExtendedStats = State_->Configuration->ExtendedStatsMaxChunkCount.Get();
             if (auto maybeSection = TMaybeNode<TYtSection>(node)) {
                 TYtSection section = maybeSection.Cast();
                 if (NYql::HasSetting(section.Settings().Ref(), EYtSettingType::StatColumns)) {
@@ -77,6 +78,7 @@ private:
                     TMaybe<TString> cluster;
                     TVector<IYtGateway::TPathStatReq> pathStatReqs;
                     size_t idx = 0;
+                    ui64 totalChunkCount = 0;
                     for (auto path: section.Paths()) {
                         bool hasStat = false;
                         if (path.Table().Maybe<TYtTable>().Stat().Maybe<TYtStat>()) {
@@ -107,6 +109,7 @@ private:
 
                         TYtPathInfo pathInfo(path);
                         YQL_ENSURE(pathInfo.Table->Stat);
+                        totalChunkCount += pathInfo.Table->Stat->ChunkCount;
 
                         TString currCluster;
                         if (auto ytTable = path.Table().Maybe<TYtTable>()) {
@@ -139,11 +142,15 @@ private:
                         ++idx;
                     }
 
+                    bool requestExtendedStats = maxChunkCountExtendedStats &&
+                        (*maxChunkCountExtendedStats == 0 || totalChunkCount <= *maxChunkCountExtendedStats);
+
                     if (pathStatReqs) {
                         auto pathStatOptions = IYtGateway::TPathStatOptions(State_->SessionId)
                             .Cluster(*cluster)
                             .Paths(pathStatReqs)
-                            .Config(State_->Configuration->Snapshot());
+                            .Config(State_->Configuration->Snapshot())
+                            .Extended(requestExtendedStats);
 
                         auto tryResult = State_->Gateway->TryPathStat(IYtGateway::TPathStatOptions(pathStatOptions));
                         if (!tryResult.Success()) {

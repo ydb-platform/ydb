@@ -9,7 +9,6 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/hulldb/bulksst_add
     ydb/core/blobstorage/vdisk/hulldb/compstrat
     ydb/core/blobstorage/vdisk/hullop/hullcompdelete
-    ydb/core/blobstorage/vdisk/handoff
     ydb/core/blobstorage/vdisk/synclog
     ydb/core/protos
 )

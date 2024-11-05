@@ -2,6 +2,7 @@
 #include "schema.h"
 #include "name_table.h"
 #include "key_bound.h"
+#include "composite_compare.h"
 
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 
@@ -154,7 +155,8 @@ void YTreeNodeToUnversionedValue(
             builder->AddValue(MakeUnversionedSentinelValue(EValueType::Null, id, flags));
             break;
         default:
-            builder->AddValue(MakeUnversionedAnyValue(ConvertToYsonString(value).AsStringBuf(), id, flags));
+            value->MutableAttributes()->Clear();
+            builder->AddValue(MakeUnversionedCompositeValue(ConvertToYsonString(value).AsStringBuf(), id, flags));
             break;
     }
 }
@@ -331,7 +333,8 @@ TVersionedRow YsonToVersionedRow(
                 builder.AddValue(MakeVersionedSentinelValue(EValueType::Null, timestamp, id, flags));
                 break;
             default:
-                builder.AddValue(MakeVersionedAnyValue(ConvertToYsonString(value).AsStringBuf(), timestamp, id, flags));
+                value->MutableAttributes()->Clear();
+                builder.AddValue(MakeVersionedCompositeValue(ConvertToYsonString(value).AsStringBuf(), timestamp, id, flags));
                 break;
         }
     }
@@ -462,6 +465,25 @@ void FromUnversionedValue(TString* value, TUnversionedValue unversionedValue)
 
 void ToUnversionedValue(
     TUnversionedValue* unversionedValue,
+    const std::string& value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    ToUnversionedValue(unversionedValue, static_cast<TStringBuf>(value), rowBuffer, id, flags);
+}
+
+void FromUnversionedValue(std::string* value, TUnversionedValue unversionedValue)
+{
+    TStringBuf uncapturedValue;
+    FromUnversionedValue(&uncapturedValue, unversionedValue);
+    *value = std::string(uncapturedValue);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ToUnversionedValue(
+    TUnversionedValue* unversionedValue,
     TStringBuf value,
     const TRowBufferPtr& rowBuffer,
     int id,
@@ -473,7 +495,7 @@ void ToUnversionedValue(
 void FromUnversionedValue(TStringBuf* value, TUnversionedValue unversionedValue)
 {
     if (unversionedValue.Type == EValueType::Null) {
-        *value = TStringBuf{};
+        *value = {};
         return;
     }
     if (unversionedValue.Type != EValueType::String) {
@@ -481,6 +503,18 @@ void FromUnversionedValue(TStringBuf* value, TUnversionedValue unversionedValue)
             unversionedValue.Type);
     }
     *value = unversionedValue.AsStringBuf();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ToUnversionedValue(
+    TUnversionedValue* unversionedValue,
+    std::string_view value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    *unversionedValue = rowBuffer->CaptureValue(MakeUnversionedStringValue(TStringBuf(value), id, flags));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1565,6 +1599,68 @@ REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(
     NProto::THeavyColumnStatisticsExt,
     /*column_data_weights*/ 5,
     TUnversionedOwningRow)
+
+////////////////////////////////////////////////////////////////////////////////
+
+TUnversionedValueRangeTruncationResult TruncateUnversionedValues(
+    TUnversionedValueRange values,
+    const TRowBufferPtr& rowBuffer,
+    const TUnversionedValueRangeTruncationOptions& options)
+{
+    std::vector<TUnversionedValue> truncatedValues;
+    truncatedValues.reserve(values.size());
+
+    int truncatableValueCount = 0;
+    i64 remainingSize = options.MaxTotalSize;
+    for (const auto& value : values) {
+        if (IsStringLikeType(value.Type)) {
+            ++truncatableValueCount;
+        } else {
+            remainingSize -= EstimateRowValueSize(value);
+        }
+    }
+
+    auto maxSizePerValue = std::max<i64>(0, remainingSize) / std::max(truncatableValueCount, 1);
+
+    i64 resultSize = 0;
+    bool clipped = false;
+
+    for (const auto& value : values) {
+        if (Any(value.Flags & EValueFlags::Hunk)) {
+            // NB: This may be the case for ordered tables with attached hunk storage.
+            continue;
+        }
+
+        truncatedValues.push_back(value);
+        auto& truncatedValue = truncatedValues.back();
+
+        if (clipped) {
+            truncatedValue = MakeUnversionedNullValue(value.Id, value.Flags);
+        } else if (value.Type == EValueType::Any || value.Type == EValueType::Composite) {
+            if (auto truncatedYsonValue = TruncateYsonValue(TYsonStringBuf(value.AsStringBuf()), maxSizePerValue)) {
+                truncatedValue = rowBuffer->CaptureValue(MakeUnversionedStringLikeValue(value.Type, truncatedYsonValue->AsStringBuf(), value.Id, value.Flags));
+            } else {
+                truncatedValue = MakeUnversionedNullValue(value.Id, value.Flags);
+            }
+        } else if (value.Type == EValueType::String) {
+            truncatedValue.Length = std::min<ui32>(truncatedValue.Length, maxSizePerValue);
+        }
+
+        if (options.ClipAfterOverflow && IsStringLikeType(value.Type) && (truncatedValue.Type == EValueType::Null || truncatedValue.Length < value.Length)) {
+            clipped = true;
+        }
+
+        // This funciton also accounts for the representation of the id and type of the unversioned value.
+        // The limit can be slightly exceeded this way.
+        resultSize += EstimateRowValueSize(truncatedValue);
+
+        if (options.ClipAfterOverflow && resultSize >= options.MaxTotalSize) {
+            clipped = true;
+        }
+    }
+
+    return {MakeSharedRange(std::move(truncatedValues), rowBuffer), resultSize, clipped};
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

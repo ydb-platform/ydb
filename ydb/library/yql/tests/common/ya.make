@@ -1,5 +1,5 @@
 RECURSE(
-    udf_test
     test_framework
+    udf_test
 )
 

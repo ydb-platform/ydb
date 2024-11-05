@@ -7,7 +7,7 @@
 import io
 import os
 import sys
-
+import warnings
 
 from pyasn1 import debug
 from pyasn1 import error
@@ -17,8 +17,6 @@ from pyasn1.codec.streaming import isEndOfStream
 from pyasn1.codec.streaming import peekIntoStream
 from pyasn1.codec.streaming import readFromStream
 from pyasn1.compat import _MISSING
-from pyasn1.compat.integer import from_bytes
-from pyasn1.compat.octets import oct2int, octs2ints, ints2octs, null
 from pyasn1.error import PyAsn1Error
 from pyasn1.type import base
 from pyasn1.type import char
@@ -144,7 +142,7 @@ class IntegerPayloadDecoder(AbstractSimplePayloadDecoder):
                 yield chunk
 
         if chunk:
-            value = from_bytes(chunk, signed=True)
+            value = int.from_bytes(bytes(chunk), 'big', signed=True)
 
         else:
             value = 0
@@ -220,7 +218,7 @@ class BitStringPayloadDecoder(AbstractSimplePayloadDecoder):
         # All inner fragments are of the same type, treat them as octet string
         substrateFun = self.substrateCollector
 
-        bitString = self.protoComponent.fromOctetString(null, internalFormat=True)
+        bitString = self.protoComponent.fromOctetString(b'', internalFormat=True)
 
         current_position = substrate.tell()
 
@@ -231,7 +229,7 @@ class BitStringPayloadDecoder(AbstractSimplePayloadDecoder):
                 if isinstance(component, SubstrateUnderrunError):
                     yield component
 
-            trailingBits = oct2int(component[0])
+            trailingBits = component[0]
             if trailingBits > 7:
                 raise error.PyAsn1Error(
                     'Trailing bits overflow %s' % trailingBits
@@ -260,7 +258,7 @@ class BitStringPayloadDecoder(AbstractSimplePayloadDecoder):
         # All inner fragments are of the same type, treat them as octet string
         substrateFun = self.substrateCollector
 
-        bitString = self.protoComponent.fromOctetString(null, internalFormat=True)
+        bitString = self.protoComponent.fromOctetString(b'', internalFormat=True)
 
         while True:  # loop over fragments
 
@@ -277,7 +275,7 @@ class BitStringPayloadDecoder(AbstractSimplePayloadDecoder):
             if component is eoo.endOfOctets:
                 break
 
-            trailingBits = oct2int(component[0])
+            trailingBits = component[0]
             if trailingBits > 7:
                 raise error.PyAsn1Error(
                     'Trailing bits overflow %s' % trailingBits
@@ -325,7 +323,7 @@ class OctetStringPayloadDecoder(AbstractSimplePayloadDecoder):
         # All inner fragments are of the same type, treat them as octet string
         substrateFun = self.substrateCollector
 
-        header = null
+        header = b''
 
         original_position = substrate.tell()
         # head = popSubstream(substrate, length)
@@ -355,7 +353,7 @@ class OctetStringPayloadDecoder(AbstractSimplePayloadDecoder):
         # All inner fragments are of the same type, treat them as octet string
         substrateFun = self.substrateCollector
 
-        header = null
+        header = b''
 
         while True:  # loop over fragments
 
@@ -417,8 +415,6 @@ class ObjectIdentifierPayloadDecoder(AbstractSimplePayloadDecoder):
         if not chunk:
             raise error.PyAsn1Error('Empty substrate')
 
-        chunk = octs2ints(chunk)
-
         oid = ()
         index = 0
         substrateLen = len(chunk)
@@ -460,6 +456,54 @@ class ObjectIdentifierPayloadDecoder(AbstractSimplePayloadDecoder):
         yield self._createComponent(asn1Spec, tagSet, oid, **options)
 
 
+class RelativeOIDPayloadDecoder(AbstractSimplePayloadDecoder):
+    protoComponent = univ.RelativeOID(())
+
+    def valueDecoder(self, substrate, asn1Spec,
+                     tagSet=None, length=None, state=None,
+                     decodeFun=None, substrateFun=None,
+                     **options):
+        if tagSet[0].tagFormat != tag.tagFormatSimple:
+            raise error.PyAsn1Error('Simple tag format expected')
+
+        for chunk in readFromStream(substrate, length, options):
+            if isinstance(chunk, SubstrateUnderrunError):
+                yield chunk
+
+        if not chunk:
+            raise error.PyAsn1Error('Empty substrate')
+
+        reloid = ()
+        index = 0
+        substrateLen = len(chunk)
+        while index < substrateLen:
+            subId = chunk[index]
+            index += 1
+            if subId < 128:
+                reloid += (subId,)
+            elif subId > 128:
+                # Construct subid from a number of octets
+                nextSubId = subId
+                subId = 0
+                while nextSubId >= 128:
+                    subId = (subId << 7) + (nextSubId & 0x7F)
+                    if index >= substrateLen:
+                        raise error.SubstrateUnderrunError(
+                            'Short substrate for sub-OID past %s' % (reloid,)
+                        )
+                    nextSubId = chunk[index]
+                    index += 1
+                reloid += ((subId << 7) + nextSubId,)
+            elif subId == 128:
+                # ASN.1 spec forbids leading zeros (0x80) in OID
+                # encoding, tolerating it opens a vulnerability. See
+                # https://www.esat.kuleuven.be/cosic/publications/article-1432.pdf
+                # page 7
+                raise error.PyAsn1Error('Invalid octet 0x80 in RELATIVE-OID encoding')
+
+        yield self._createComponent(asn1Spec, tagSet, reloid, **options)
+
+
 class RealPayloadDecoder(AbstractSimplePayloadDecoder):
     protoComponent = univ.Real()
 
@@ -478,7 +522,7 @@ class RealPayloadDecoder(AbstractSimplePayloadDecoder):
             yield self._createComponent(asn1Spec, tagSet, 0.0, **options)
             return
 
-        fo = oct2int(chunk[0])
+        fo = chunk[0]
         chunk = chunk[1:]
         if fo & 0x80:  # binary encoding
             if not chunk:
@@ -490,7 +534,7 @@ class RealPayloadDecoder(AbstractSimplePayloadDecoder):
             n = (fo & 0x03) + 1
 
             if n == 4:
-                n = oct2int(chunk[0])
+                n = chunk[0]
                 chunk = chunk[1:]
 
             eo, chunk = chunk[:n], chunk[n:]
@@ -498,11 +542,11 @@ class RealPayloadDecoder(AbstractSimplePayloadDecoder):
             if not eo or not chunk:
                 raise error.PyAsn1Error('Real exponent screwed')
 
-            e = oct2int(eo[0]) & 0x80 and -1 or 0
+            e = eo[0] & 0x80 and -1 or 0
 
             while eo:  # exponent
                 e <<= 8
-                e |= oct2int(eo[0])
+                e |= eo[0]
                 eo = eo[1:]
 
             b = fo >> 4 & 0x03  # base bits
@@ -519,7 +563,7 @@ class RealPayloadDecoder(AbstractSimplePayloadDecoder):
 
             while chunk:  # value
                 p <<= 8
-                p |= oct2int(chunk[0])
+                p |= chunk[0]
                 chunk = chunk[1:]
 
             if fo & 0x40:  # sign bit
@@ -579,10 +623,10 @@ class ConstructedPayloadDecoderBase(AbstractConstructedPayloadDecoder):
     protoSequenceComponent = None
 
     def _getComponentTagMap(self, asn1Object, idx):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def _getComponentPositionByType(self, asn1Object, tagSet, idx):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def _decodeComponentsSchemaless(
             self, substrate, tagSet=None, decodeFun=None,
@@ -830,7 +874,8 @@ class ConstructedPayloadDecoderBase(AbstractConstructedPayloadDecoder):
             else:
                 inconsistency = asn1Object.isInconsistent
                 if inconsistency:
-                    raise inconsistency
+                    raise error.PyAsn1Error(
+                        f"ASN.1 object {asn1Object.__class__.__name__} is inconsistent")
 
         else:
             componentType = asn1Spec.componentType
@@ -1055,7 +1100,8 @@ class ConstructedPayloadDecoderBase(AbstractConstructedPayloadDecoder):
                 else:
                     inconsistency = asn1Object.isInconsistent
                     if inconsistency:
-                        raise inconsistency
+                        raise error.PyAsn1Error(
+                            f"ASN.1 object {asn1Object.__class__.__name__} is inconsistent")
 
         else:
             componentType = asn1Spec.componentType
@@ -1295,7 +1341,7 @@ class AnyPayloadDecoder(AbstractSimplePayloadDecoder):
 
         if isTagged:
             # tagged Any type -- consume header substrate
-            chunk = null
+            chunk = b''
 
             if LOG:
                 LOG('decoding as tagged ANY')
@@ -1421,6 +1467,7 @@ TAG_MAP = {
     univ.OctetString.tagSet: OctetStringPayloadDecoder(),
     univ.Null.tagSet: NullPayloadDecoder(),
     univ.ObjectIdentifier.tagSet: ObjectIdentifierPayloadDecoder(),
+    univ.RelativeOID.tagSet: RelativeOIDPayloadDecoder(),
     univ.Enumerated.tagSet: IntegerPayloadDecoder(),
     univ.Real.tagSet: RealPayloadDecoder(),
     univ.Sequence.tagSet: SequenceOrSequenceOfPayloadDecoder(),  # conflicts with SequenceOf
@@ -1454,10 +1501,6 @@ TYPE_MAP = {
     univ.Any.typeId: AnyPayloadDecoder()
 }
 
-# deprecated aliases, https://github.com/pyasn1/pyasn1/issues/9
-tagMap = TAG_MAP
-typeMap = TYPE_MAP
-
 # Put in non-ambiguous types for faster codec lookup
 for typeDecoder in TAG_MAP.values():
     if typeDecoder.protoComponent is not None:
@@ -1478,7 +1521,7 @@ for typeDecoder in TAG_MAP.values():
  stStop) = [x for x in range(10)]
 
 
-EOO_SENTINEL = ints2octs((0, 0))
+EOO_SENTINEL = bytes((0, 0))
 
 
 class SingleItemDecoder(object):
@@ -1636,7 +1679,7 @@ class SingleItemDecoder(object):
                     length = 0
                     for lengthOctet in encodedLength:
                         length <<= 8
-                        length |= oct2int(lengthOctet)
+                        length |= lengthOctet
                     size += 1
 
                 else:  # 128 means indefinite
@@ -1954,14 +1997,14 @@ class Decoder(object):
     def __call__(cls, substrate, asn1Spec=None, **options):
         """Turns BER/CER/DER octet stream into an ASN.1 object.
 
-        Takes BER/CER/DER octet-stream in form of :py:class:`bytes` (Python 3)
-        or :py:class:`str` (Python 2) and decode it into an ASN.1 object
+        Takes BER/CER/DER octet-stream in form of :py:class:`bytes`
+        and decode it into an ASN.1 object
         (e.g. :py:class:`~pyasn1.type.base.PyAsn1Item` derivative) which
         may be a scalar or an arbitrary nested structure.
 
         Parameters
         ----------
-        substrate: :py:class:`bytes` (Python 3) or :py:class:`str` (Python 2)
+        substrate: :py:class:`bytes`
             BER/CER/DER octet-stream to parse
 
         Keyword Args
@@ -2044,9 +2087,8 @@ class Decoder(object):
                 """
                 try:
                     substrate_gen = origSubstrateFun(asn1Object, substrate, length, options)
-                except TypeError:
-                    _type, _value, traceback = sys.exc_info()
-                    if traceback.tb_next:
+                except TypeError as _value:
+                    if _value.__traceback__.tb_next:
                         # Traceback depth > 1 means TypeError from inside user provided function
                         raise
                     # invariant maintained at Decoder.__call__ entry
@@ -2068,7 +2110,7 @@ class Decoder(object):
                 tail = next(readFromStream(substrate))
 
             except error.EndOfStreamError:
-                tail = null
+                tail = b''
 
             return asn1Object, tail
 
@@ -2091,7 +2133,7 @@ class Decoder(object):
 #:
 #: Parameters
 #: ----------
-#: substrate: :py:class:`bytes` (Python 3) or :py:class:`str` (Python 2)
+#: substrate: :py:class:`bytes`
 #:     BER octet-stream
 #:
 #: Keyword Args
@@ -2139,3 +2181,9 @@ class Decoder(object):
 #:     1 2 3
 #:
 decode = Decoder()
+
+def __getattr__(attr: str):
+    if newAttr := {"tagMap": "TAG_MAP", "typeMap": "TYPE_MAP"}.get(attr):
+        warnings.warn(f"{attr} is deprecated. Please use {newAttr} instead.", DeprecationWarning)
+        return globals()[newAttr]
+    raise AttributeError(attr)

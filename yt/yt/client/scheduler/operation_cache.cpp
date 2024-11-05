@@ -17,7 +17,7 @@ TOperationCache::TOperationCache(
     NProfiling::TProfiler profiler)
     : TAsyncExpiringCache(
         std::move(config),
-        SchedulerLogger.WithTag("Cache: Operation"),
+        SchedulerLogger().WithTag("Cache: Operation"),
         std::move(profiler))
     , Attributes_(std::move(attributes))
     , Client_(std::move(client))

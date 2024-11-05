@@ -19,7 +19,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         BLOG_D("THive::TTxSwitchDrainOn::Execute Node: " << NodeId
-                << " Persist: " << Settings.Persist << " KeepDown: " << Settings.KeepDown);
+                << " Persist: " << Settings.Persist << " DownPolicy: " << static_cast<int>(Settings.DownPolicy));
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
@@ -27,18 +27,21 @@ public:
                 Status = NKikimrProto::ALREADY; // another balancer is active on the node
             } else {
                 Status = NKikimrProto::OK;
-                if (!node->Drain && node->Down) {
-                    Settings.KeepDown = true;
-                }
                 node->Drain = true;
                 node->DrainInitiators.emplace_back(Initiator);
                 if (Settings.Persist) {
                     db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Drain, Schema::Node::DrainInitiators>(node->Drain, node->DrainInitiators);
                 }
-                if (Settings.KeepDown) {
+                if (Settings.DownPolicy != NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN) {
+                    if (!node->Down && Settings.DownPolicy == NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART) {
+                        node->BecomeUpOnRestart = true;
+                    }
                     node->SetDown(true);
                     if (Settings.Persist) {
-                        db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down>(true);
+                        db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::BecomeUpOnRestart>(node->BecomeUpOnRestart);
+                        if (Settings.DownPolicy == NKikimrHive::DRAIN_POLICY_KEEP_DOWN) {
+                            db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down>(true);
+                        }
                     }
                 }
                 Self->StartHiveDrain(NodeId, std::move(Settings));
@@ -84,7 +87,7 @@ public:
             node->Drain = false;
             node->DrainInitiators.clear();
             db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Drain, Schema::Node::DrainInitiators>(node->Drain, node->DrainInitiators);
-            if (!Settings.KeepDown) {
+            if (Settings.DownPolicy == NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN) {
                 // node->SetDown(false); // it has already been dropped by Drain actor
                 if (Settings.Persist) {
                     db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down>(false);

@@ -9,6 +9,21 @@
             "uri": "file://test.test_BlockGet_/results.txt"
         }
     ],
+    "test.test[BlockSplitMake]": [
+        {
+            "uri": "file://test.test_BlockSplitMake_/results.txt"
+        }
+    ],
+    "test.test[BlockStartOf]": [
+        {
+            "uri": "file://test.test_BlockStartOf_/results.txt"
+        }
+    ],
+    "test.test[BlockTmGet]": [
+        {
+            "uri": "file://test.test_BlockTmGet_/results.txt"
+        }
+    ],
     "test.test[BlockTo]": [
         {
             "uri": "file://test.test_BlockTo_/results.txt"
@@ -17,6 +32,11 @@
     "test.test[EndOf]": [
         {
             "uri": "file://test.test_EndOf_/results.txt"
+        }
+    ],
+    "test.test[FormatMicroseconds]": [
+        {
+            "uri": "file://test.test_FormatMicroseconds_/results.txt"
         }
     ],
     "test.test[Format]": [
@@ -32,6 +52,11 @@
     "test.test[Get]": [
         {
             "uri": "file://test.test_Get_/results.txt"
+        }
+    ],
+    "test.test[IgnoreCaseFuncs]": [
+        {
+            "uri": "file://test.test_IgnoreCaseFuncs_/results.txt"
         }
     ],
     "test.test[ImplicitSplit]": [

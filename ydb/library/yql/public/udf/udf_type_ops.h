@@ -204,6 +204,21 @@ inline THashType GetValueHash<EDataSlot::Interval64>(const TUnboxedValuePod& val
 }
 
 template <>
+inline THashType GetValueHash<EDataSlot::TzDate32>(const TUnboxedValuePod& value) {
+    return GetTzIntegerHash<i32>(value);
+}
+
+template <>
+inline THashType GetValueHash<EDataSlot::TzDatetime64>(const TUnboxedValuePod& value) {
+    return GetTzIntegerHash<i64>(value);
+}
+
+template <>
+inline THashType GetValueHash<EDataSlot::TzTimestamp64>(const TUnboxedValuePod& value) {
+    return GetTzIntegerHash<i64>(value);
+}
+
+template <>
 inline THashType GetValueHash<EDataSlot::Decimal>(const TUnboxedValuePod& value) {
     const auto pair = NYql::NDecimal::MakePair(value.GetInt128());
     return CombineHashes(pair.first, pair.second);
@@ -415,6 +430,21 @@ inline int CompareValues<EDataSlot::Interval64>(const TUnboxedValuePod& lhs, con
 }
 
 template <>
+inline int CompareValues<EDataSlot::TzDate32>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+    return CompareTzIntegers<i32>(lhs, rhs);
+}
+
+template <>
+inline int CompareValues<EDataSlot::TzDatetime64>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+    return CompareTzIntegers<i64>(lhs, rhs);
+}
+
+template <>
+inline int CompareValues<EDataSlot::TzTimestamp64>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+    return CompareTzIntegers<i64>(lhs, rhs);
+}
+
+template <>
 inline int CompareValues<EDataSlot::Decimal>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
     const auto x = lhs.GetInt128();
     const auto y = rhs.GetInt128();
@@ -602,6 +632,21 @@ inline bool EquateValues<EDataSlot::Timestamp64>(const TUnboxedValuePod& lhs, co
 template <>
 inline bool EquateValues<EDataSlot::Interval64>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
     return EquateIntegers<i64>(lhs, rhs);
+}
+
+template <>
+inline bool EquateValues<EDataSlot::TzDate32>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+    return EquateTzIntegers<i32>(lhs, rhs);
+}
+
+template <>
+inline bool EquateValues<EDataSlot::TzDatetime64>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+    return EquateTzIntegers<i64>(lhs, rhs);
+}
+
+template <>
+inline bool EquateValues<EDataSlot::TzTimestamp64>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+    return EquateTzIntegers<i64>(lhs, rhs);
 }
 
 template <>

@@ -1,7 +1,14 @@
-#include "library/cpp/testing/gtest_extensions/assertions.h"
 #include <yt/yt/core/test_framework/framework.h>
 
+#include <yt/yt/core/concurrency/action_queue.h>
+#include <yt/yt/core/concurrency/scheduler.h>
+
 #include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/misc/error_helpers.h>
+
+#include <yt/yt/core/net/local_address.h>
+
+#include <yt/yt/core/tracing/trace_context.h>
 
 #include <yt/yt/core/yson/string.h>
 
@@ -207,6 +214,12 @@ void IterateTestOverEveryRightOperand(TOverloadTest& tester)
     }
 }
 
+template <class T>
+void SetErrorAttribute(TError* error, TString key, const T& value)
+{
+    error->MutableAttributes()->SetYson(key, ConvertToYsonString(value));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TEST(TErrorTest, BitshiftOverloadsExplicitLeftOperand)
@@ -279,7 +292,7 @@ TEST(TErrorTest, BitshiftOverloadsImplicitLeftOperand)
     };
     IterateTestOverEveryRightOperand<
         decltype(adlResolutionTester),
-        /*LeftOperandHasUserDefinedOverload=*/ true>(adlResolutionTester);
+        /*LeftOperandHasUserDefinedOverload*/ true>(adlResolutionTester);
 
     // Make sure no ambiguous calls.
     auto genericErrorOrTester = [] (auto&& arg) {
@@ -474,8 +487,27 @@ TEST(TErrorTest, ErrorSkeletonStubImplementation)
 
 TEST(TErrorTest, FormatCtor)
 {
-    EXPECT_EQ("Some error %v", TError("Some error %v").GetMessage());
+    // EXPECT_EQ("Some error %v", TError("Some error %v").GetMessage()); // No longer compiles due to static analysis.
     EXPECT_EQ("Some error hello", TError("Some error %v", "hello").GetMessage());
+}
+
+TEST(TErrorTest, FindRecursive)
+{
+    auto inner = TError("Inner")
+        << TErrorAttribute("inner_attr", 42);
+    auto error = TError("Error")
+        << inner
+        << TErrorAttribute("attr", 8);
+
+    auto attr = FindAttribute<int>(error, "attr");
+    EXPECT_TRUE(attr);
+    EXPECT_EQ(*attr, 8);
+
+    EXPECT_FALSE(FindAttribute<int>(error, "inner_attr"));
+
+    auto innerAttr = FindAttributeRecursive<int>(error, "inner_attr");
+    EXPECT_TRUE(innerAttr);
+    EXPECT_EQ(*innerAttr, 42);
 }
 
 TEST(TErrorTest, TruncateSimple)
@@ -488,7 +520,7 @@ TEST(TErrorTest, TruncateSimple)
     EXPECT_EQ(error.GetMessage(), truncatedError.GetMessage());
     EXPECT_EQ(error.GetPid(), truncatedError.GetPid());
     EXPECT_EQ(error.GetTid(), truncatedError.GetTid());
-    EXPECT_EQ(error.GetSpanId(), truncatedError.GetSpanId());
+    EXPECT_EQ(GetSpanId(error), GetSpanId(truncatedError));
     EXPECT_EQ(error.GetDatetime(), truncatedError.GetDatetime());
     EXPECT_EQ(error.Attributes().Get<TString>("my_attr"), truncatedError.Attributes().Get<TString>("my_attr"));
     EXPECT_EQ(error.InnerErrors().size(), truncatedError.InnerErrors().size());
@@ -502,7 +534,7 @@ TEST(TErrorTest, TruncateLarge)
         << TError("Second inner error")
         << TError("Third inner error")
         << TError("Fourth inner error");
-    error.MutableAttributes()->Set("my_attr", "Some long long attr");
+    SetErrorAttribute(&error, "my_attr", "Some long long attr");
 
     auto truncatedError = error.Truncate(/*maxInnerErrorCount*/ 3, /*stringLimit*/ 10);
     EXPECT_EQ(error.GetCode(), truncatedError.GetCode());
@@ -528,7 +560,7 @@ TEST(TErrorTest, TruncateSimpleRValue)
     EXPECT_EQ(error.GetMessage(), truncatedError.GetMessage());
     EXPECT_EQ(error.GetPid(), truncatedError.GetPid());
     EXPECT_EQ(error.GetTid(), truncatedError.GetTid());
-    EXPECT_EQ(error.GetSpanId(), truncatedError.GetSpanId());
+    EXPECT_EQ(GetSpanId(error), GetSpanId(truncatedError));
     EXPECT_EQ(error.GetDatetime(), truncatedError.GetDatetime());
     EXPECT_EQ(error.Attributes().Get<TString>("my_attr"), truncatedError.Attributes().Get<TString>("my_attr"));
     EXPECT_EQ(error.InnerErrors().size(), truncatedError.InnerErrors().size());
@@ -542,7 +574,7 @@ TEST(TErrorTest, TruncateLargeRValue)
         << TError("Second inner error")
         << TError("Third inner error")
         << TError("Fourth inner error");
-    error.MutableAttributes()->Set("my_attr", "Some long long attr");
+    SetErrorAttribute(&error, "my_attr", "Some long long attr");
 
     auto errorCopy = error;
     auto truncatedError = std::move(errorCopy).Truncate(/*maxInnerErrorCount*/ 3, /*stringLimit*/ 10);
@@ -565,7 +597,7 @@ TEST(TErrorTest, TruncateConsistentOverloads)
         << TError("Second inner error")
         << TError("Third inner error")
         << TError("Fourth inner error");
-    error.MutableAttributes()->Set("my_attr", "Some long long attr");
+    SetErrorAttribute(&error, "my_attr", "Some long long attr");
 
     auto errorCopy = error;
     auto truncatedRValueError = std::move(errorCopy).Truncate(/*maxInnerErrorCount*/ 3, /*stringLimit*/ 10);
@@ -578,8 +610,8 @@ TEST(TErrorTest, TruncateConsistentOverloads)
 TEST(TErrorTest, TruncateWhitelist)
 {
     auto error = TError("Some error");
-    error.MutableAttributes()->Set("attr1", "Some long long attr");
-    error.MutableAttributes()->Set("attr2", "Some long long attr");
+    SetErrorAttribute(&error, "attr1", "Some long long attr");
+    SetErrorAttribute(&error, "attr2", "Some long long attr");
 
     THashSet<TStringBuf> myWhitelist = {"attr2"};
 
@@ -595,8 +627,8 @@ TEST(TErrorTest, TruncateWhitelist)
 TEST(TErrorTest, TruncateWhitelistRValue)
 {
     auto error = TError("Some error");
-    error.MutableAttributes()->Set("attr1", "Some long long attr");
-    error.MutableAttributes()->Set("attr2", "Some long long attr");
+    SetErrorAttribute(&error, "attr1", "Some long long attr");
+    SetErrorAttribute(&error, "attr2", "Some long long attr");
 
     THashSet<TStringBuf> myWhitelist = {"attr2"};
 
@@ -614,8 +646,8 @@ TEST(TErrorTest, TruncateWhitelistRValue)
 TEST(TErrorTest, TruncateWhitelistInnerErrors)
 {
     auto innerError = TError("Inner error");
-    innerError.MutableAttributes()->Set("attr1", "Some long long attr");
-    innerError.MutableAttributes()->Set("attr2", "Some long long attr");
+    SetErrorAttribute(&innerError, "attr1", "Some long long attr");
+    SetErrorAttribute(&innerError, "attr2", "Some long long attr");
 
     auto error = TError("Error") << innerError;
 
@@ -634,8 +666,8 @@ TEST(TErrorTest, TruncateWhitelistInnerErrors)
 TEST(TErrorTest, TruncateWhitelistInnerErrorsRValue)
 {
     auto innerError = TError("Inner error");
-    innerError.MutableAttributes()->Set("attr1", "Some long long attr");
-    innerError.MutableAttributes()->Set("attr2", "Some long long attr");
+    SetErrorAttribute(&innerError, "attr1", "Some long long attr");
+    SetErrorAttribute(&innerError, "attr2", "Some long long attr");
 
     auto error = TError("Error") << innerError;
 
@@ -651,6 +683,29 @@ TEST(TErrorTest, TruncateWhitelistInnerErrorsRValue)
     EXPECT_EQ(truncatedInnerError.GetMessage(), innerError.GetMessage());
     EXPECT_EQ("...<attribute truncated>...", truncatedInnerError.Attributes().Get<TString>("attr1"));
     EXPECT_EQ("Some long long attr", truncatedInnerError.Attributes().Get<TString>("attr2"));
+}
+
+TEST(TErrorTest, TruncateWhitelistSaveInnerError)
+{
+    auto genericInner = TError("GenericInner");
+    auto whitelistedInner = TError("Inner")
+        << TErrorAttribute("whitelisted_key", 42);
+
+    auto error = TError("Error")
+        << (genericInner << TErrorAttribute("foo", "bar"))
+        << whitelistedInner
+        << genericInner;
+
+    error = std::move(error).Truncate(1, 20, {
+        "whitelisted_key"
+    });
+    EXPECT_TRUE(!error.IsOK());
+    EXPECT_EQ(error.InnerErrors().size(), 2u);
+    EXPECT_EQ(error.InnerErrors()[0], whitelistedInner);
+    EXPECT_EQ(error.InnerErrors()[1], genericInner);
+
+    EXPECT_TRUE(FindAttributeRecursive<int>(error, "whitelisted_key"));
+    EXPECT_FALSE(FindAttributeRecursive<int>(error, "foo"));
 }
 
 TEST(TErrorTest, YTExceptionToError)
@@ -670,7 +725,7 @@ TEST(TErrorTest, CompositeYTExceptionToError)
         try {
             throw TSimpleException("inner message");
         } catch (const std::exception& ex) {
-            throw TCompositeException(ex, "outer message");
+            throw TSimpleException(ex, "outer message");
         }
     } catch (const std::exception& ex) {
         TError outerError(ex);
@@ -683,24 +738,55 @@ TEST(TErrorTest, CompositeYTExceptionToError)
     }
 }
 
+TEST(TErrorTest, YTExceptionWithAttributesToError)
+{
+    try {
+        throw TSimpleException("message")
+            << TExceptionAttribute{"Int64 value", static_cast<i64>(42)}
+            << TExceptionAttribute{"double value", 7.77}
+            << TExceptionAttribute{"bool value", false}
+            << TExceptionAttribute{"String value", "FooBar"};
+    } catch (const std::exception& ex) {
+        TError error(ex);
+        EXPECT_EQ(NYT::EErrorCode::Generic, error.GetCode());
+        EXPECT_EQ("message", error.GetMessage());
+
+        auto i64value = error.Attributes().Find<i64>("Int64 value");
+        EXPECT_TRUE(i64value);
+        EXPECT_EQ(*i64value, static_cast<i64>(42));
+
+        auto doubleValue = error.Attributes().Find<double>("double value");
+        EXPECT_TRUE(doubleValue);
+        EXPECT_EQ(*doubleValue, 7.77);
+
+        auto boolValue = error.Attributes().Find<bool>("bool value");
+        EXPECT_TRUE(boolValue);
+        EXPECT_EQ(*boolValue, false);
+
+        auto stringValue = error.Attributes().Find<TString>("String value");
+        EXPECT_TRUE(stringValue);
+        EXPECT_EQ(*stringValue, "FooBar");
+    }
+}
+
 TEST(TErrorTest, ErrorSanitizer)
 {
     auto checkSantizied = [&] (const TError& error) {
         EXPECT_FALSE(error.HasOriginAttributes());
-        EXPECT_FALSE(error.HasTracingAttributes());
+        EXPECT_FALSE(HasTracingAttributes(error));
 
-        EXPECT_EQ("<host-override>", error.GetHost());
+        EXPECT_EQ("<host-override>", GetHost(error));
         EXPECT_EQ(0, error.GetPid());
         EXPECT_EQ(NThreading::InvalidThreadId, error.GetTid());
-        EXPECT_EQ(NConcurrency::InvalidFiberId, error.GetFid());
-        EXPECT_EQ(NTracing::InvalidTraceId, error.GetTraceId());
-        EXPECT_EQ(NTracing::InvalidSpanId, error.GetSpanId());
+        EXPECT_EQ(NConcurrency::InvalidFiberId, GetFid(error));
+        EXPECT_EQ(NTracing::InvalidTraceId, GetTraceId(error));
+        EXPECT_EQ(NTracing::InvalidSpanId, GetSpanId(error));
     };
 
     auto checkNotSanitized = [&] (const TError& error) {
         EXPECT_TRUE(error.HasOriginAttributes());
 
-        EXPECT_FALSE(error.GetHost() == "<host-override>");
+        EXPECT_FALSE(GetHost(error) == "<host-override>");
         EXPECT_FALSE(error.GetPid() == 0);
 
         auto now = TInstant::Now();
@@ -747,18 +833,18 @@ TEST(TErrorTest, SimpleLoadAfterSave)
 
     TStreamSaveContext saveContext(&stream);
     TError savedError("error");
-    savedError.Save(saveContext);
+    TErrorSerializer::Save(saveContext, savedError);
 
     TStreamLoadContext loadContext(&stream);
     TError loadedError;
-    loadedError.Load(loadContext);
+    TErrorSerializer::Load(loadContext, loadedError);
 
     EXPECT_EQ(ToString(savedError), ToString(loadedError));
 }
 
 TEST(TErrorTest, AttributeSerialization)
 {
-    auto getWeededText = [](const TError& err) {
+    auto getWeededText = [] (const TError& err) {
         std::vector<TString> lines;
         for (const auto& line : StringSplitter(ToString(err)).Split('\n')) {
             if (!line.Contains("origin") && !line.Contains("datetime")) {
@@ -777,6 +863,130 @@ TEST(TErrorTest, AttributeSerialization)
         "        L1\n"
         "        L2\n"
         "        L3\n"));
+}
+
+TEST(TErrorTest, TraceContext)
+{
+    TError error;
+
+    NTracing::TTraceId traceId;
+    NTracing::TSpanId spanId;
+
+    // NB(arkady-e1ppa): Make sure that tracing data can be decoded
+    // even after traceContext was destroyed.
+    {
+        auto traceContext = NTracing::GetOrCreateTraceContext("Tester");
+        traceId = traceContext->GetTraceId();
+        spanId = traceContext->GetSpanId();
+
+        auto guard = NTracing::TCurrentTraceContextGuard(traceContext);
+
+        error = TError("Capture test");
+    }
+
+    EXPECT_EQ(GetTraceId(error), traceId);
+    EXPECT_EQ(GetSpanId(error), spanId);
+}
+
+TEST(TErrorTest, NativeHostName)
+{
+    auto hostName = "TestHost";
+    NNet::WriteLocalHostName(hostName);
+
+    auto error = TError("NativeHostTest");
+
+    EXPECT_TRUE(HasHost(error));
+    EXPECT_EQ(GetHost(error), TStringBuf(hostName));
+}
+
+TEST(TErrorTest, NativeFiberId)
+{
+    auto actionQueue = New<NConcurrency::TActionQueue>();
+
+    NConcurrency::WaitFor(BIND([] {
+        auto fiberId = NConcurrency::GetCurrentFiberId();
+
+        auto error = TError("TestNativeFiberId");
+
+        EXPECT_EQ(GetFid(error), fiberId);
+    }).AsyncVia(actionQueue->GetInvoker()).Run())
+        .ThrowOnError();
+}
+
+TEST(TErrorTest, MacroStaticAnalysis)
+{
+    auto swallow = [] (auto expr) {
+        try {
+            expr();
+        } catch (...) {
+        }
+    };
+
+    swallow([] {
+        THROW_ERROR_EXCEPTION("Foo");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION("Hello, %v", "World");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION(NYT::EErrorCode::Generic, "Foo");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION(NYT::EErrorCode::Generic, "Foo%v", "Bar");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION(NYT::EErrorCode::Generic, "Foo%v%v", "Bar", "Baz");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, "Foo");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, "Foo%v", "Bar");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, "Foo%v%v", "Bar", "Baz");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, NYT::EErrorCode::Generic, "Foo%v", "Bar");
+    });
+    swallow([] {
+        THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, NYT::EErrorCode::Generic, "Foo%v%v", "Bar", "Baz");
+    });
+}
+
+TEST(TErrorTest, WrapStaticAnalysis)
+{
+    TError error;
+    Y_UNUSED(error.Wrap());
+    Y_UNUSED(error.Wrap(std::exception{}));
+    Y_UNUSED(error.Wrap("Hello"));
+    Y_UNUSED(error.Wrap("Hello, %v", "World"));
+    Y_UNUSED(error.Wrap(TRuntimeFormat{"Hello, %v"}));
+}
+
+// NB(arkady-e1ppa): Uncomment these occasionally to see
+// that static analysis is still working.
+TEST(TErrorTest, MacroStaticAnalysisBrokenFormat)
+{
+    // auto swallow = [] (auto expr) {
+    //     try {
+    //         expr();
+    //     } catch (...) {
+    //     }
+    // };
+
+    // swallow([] {
+    //     THROW_ERROR_EXCEPTION("Hello, %v");
+    // });
+    // swallow([] {
+    //     THROW_ERROR_EXCEPTION(TErrorCode{}, "Foo%v");
+    // });
+    // swallow([] {
+    //     THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, "Foo%v");
+    // });
+    // swallow([] {
+    //     THROW_ERROR_EXCEPTION_IF_FAILED(TError{}, TErrorCode{}, "Foo%v");
+    // });
 }
 
 ////////////////////////////////////////////////////////////////////////////////

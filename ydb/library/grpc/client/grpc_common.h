@@ -1,7 +1,7 @@
 #pragma once
 
-#include <grpc++/grpc++.h>
-#include <grpc++/resource_quota.h>
+#include <grpcpp/grpcpp.h>
+#include <grpcpp/resource_quota.h>
 
 #include <ydb/library/grpc/common/constants.h>
 #include <util/datetime/base.h>

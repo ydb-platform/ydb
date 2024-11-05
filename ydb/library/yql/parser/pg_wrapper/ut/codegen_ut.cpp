@@ -1,3 +1,5 @@
+#include "../pg_compat.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/resource/resource.h>
 #include <ydb/library/yql/minikql/codegen/codegen.h>
@@ -158,12 +160,8 @@ Y_UNIT_TEST_SUITE(TPgCodegen) {
         kernelCtx.SetState(&state);
         FmgrInfo finfo;
         Zero(state.flinfo);
-        if (fixed) {
-            fmgr_info(NPg::LookupProc("date_eq", { 0, 0}).ProcId, &state.flinfo);
-        } else {
-            fmgr_info(NPg::LookupProc("textout", { 0} ).ProcId, &state.flinfo);
-        }
-
+        state.ProcDesc = fixed ? &NPg::LookupProc("date_eq", { 0, 0 }) : &NPg::LookupProc("textout", { 0 });
+        fmgr_info(state.ProcDesc->ProcId, &state.flinfo);
         state.context = nullptr;
         state.resultinfo = nullptr;
         state.fncollation = DEFAULT_COLLATION_OID;

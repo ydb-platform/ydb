@@ -11,6 +11,8 @@
 
 #endif
 
+#include <yt/yt/library/numeric/util.h>
+
 namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -33,13 +35,15 @@ TFingerprint GetFarmFingerprint(const TUnversionedValue& value)
             return NYT::FarmFingerprint(value.Data.String, value.Length);
 
         case EValueType::Int64:
-            return NYT::FarmFingerprint(std::bit_cast<ui64>(value.Data.Int64));
+            // NB: We use BitCast here instead of std::bit_cast for supporting build with C++17.
+            return NYT::FarmFingerprint(BitCast<ui64>(value.Data.Int64));
 
         case EValueType::Uint64:
             return NYT::FarmFingerprint(value.Data.Uint64);
 
         case EValueType::Double:
-            return NYT::FarmFingerprint(std::bit_cast<ui64>(value.Data.Double));
+            // NB: We use BitCast here instead of std::bit_cast for supporting build with C++17.
+            return NYT::FarmFingerprint(BitCast<ui64>(value.Data.Double));
 
         case EValueType::Boolean:
             return NYT::FarmFingerprint(static_cast<ui64>(value.Data.Boolean));
@@ -48,6 +52,7 @@ TFingerprint GetFarmFingerprint(const TUnversionedValue& value)
             return NYT::FarmFingerprint(0);
 
         case EValueType::Composite:
+        case EValueType::Any:
             return CompositeFarmHash(NYson::TYsonStringBuf(value.AsStringBuf()));
 
         default:
@@ -231,6 +236,80 @@ bool TBitwiseUnversionedValueEqual::operator()(const TUnversionedValue& lhs, con
             return ::memcmp(lhs.Data.String, rhs.Data.String, lhs.Length) == 0;
         default:
             return true;
+    }
+}
+
+void TBitwiseUnversionedValueEqual::FormatDiff(
+    TStringBuilderBase* builder,
+    const TUnversionedValue& lhs,
+    const TUnversionedValue& rhs)
+{
+    if (lhs.Id != rhs.Id) {
+        builder->AppendFormat("Value id mismatch: %v vs %v\n",
+            lhs.Id,
+            rhs.Id);
+        return;
+    }
+    if (lhs.Flags != rhs.Flags) {
+        builder->AppendFormat("Value flags mismatch: %v vs %v\n",
+            lhs.Flags,
+            rhs.Flags);
+        return;
+    }
+    if (lhs.Type != rhs.Type) {
+        builder->AppendFormat("Value type mismatch: %v vs %v\n",
+            lhs.Type,
+            rhs.Type);
+        return;
+    }
+    switch (lhs.Type) {
+        case EValueType::Int64:
+            if (lhs.Data.Int64 != rhs.Data.Int64) {
+                builder->AppendFormat("\"int64\" value mismatch: %v vs %v\n",
+                    lhs.Data.Int64,
+                    rhs.Data.Int64);
+            }
+            break;
+        case EValueType::Uint64:
+            if (lhs.Data.Uint64 != rhs.Data.Uint64) {
+                builder->AppendFormat("\"uint64\" value mismatch: %v vs %v\n",
+                    lhs.Data.Uint64,
+                    rhs.Data.Uint64);
+            }
+            break;
+        case EValueType::Double:
+            if (lhs.Data.Double != rhs.Data.Double) {
+                builder->AppendFormat("\"double\" value mismatch: %v vs %v\n",
+                    lhs.Data.Double,
+                    rhs.Data.Double);
+            }
+            break;
+        case EValueType::Boolean:
+            if (lhs.Data.Boolean != rhs.Data.Boolean) {
+                builder->AppendFormat("\"boolean\" value mismatch: %v vs %v\n",
+                    lhs.Data.Boolean,
+                    rhs.Data.Boolean);
+            }
+            break;
+        case EValueType::String:
+        case EValueType::Any:
+        case EValueType::Composite:
+            if (lhs.Length != rhs.Length) {
+                builder->AppendFormat("%Qlv value length mismatch: %v vs %v\n",
+                    lhs.Type,
+                    lhs.Length,
+                    rhs.Length);
+                break;
+            }
+            if (::memcmp(lhs.Data.String, rhs.Data.String, lhs.Length) != 0) {
+                builder->AppendFormat("%Qlv value mismatch: %v vs %v\n",
+                    lhs.Type,
+                    DumpRangeToHex(TRef::FromStringBuf(lhs.AsStringBuf())),
+                    DumpRangeToHex(TRef::FromStringBuf(rhs.AsStringBuf())));
+            }
+            break;
+        default:
+            break;
     }
 }
 

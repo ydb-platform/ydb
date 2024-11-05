@@ -22,8 +22,8 @@
 | Load balancing across all nodes of all local DCs | \+ | \+ | \+ | ? | \- | \- | \- |
 | **Credentials providers** |
 | Anonymous (default) | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
-| Static (user - password) | \+ | \+ | \+ | \+ | \- | \- | \- | \- |
-| Token: IAM, OAuth | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
+| Static (user - password) | \+ | \+ | \+ | \+ | \- | \- | \+ | \- |
+| Token: IAM, Access token | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
 | Service account (Yandex.Cloud specific) | \+ | \+ | \+ | \+ | \+ | \+ | \- | \+ |
 | Metadata (Yandex.Cloud specific) | \+ | \+ | \+ | \+ | \+ | \+ | \+ | \+ |
 | **Working with Table service sessions** |
@@ -124,12 +124,12 @@
 | in OpenTracing | \- | ? | \+ | \- | \- | \- | \- | \- |
 | **Examples** |
 | Auth |
-| \* token | ? | ? | \+ | \+ | \+ | \+ |  | \+ |
+| \* token | ? | ? | \+ | \+ | \+ | \+ | \+ | \+ |
 | \* anonymous | ? | ? | \+ | \+ | \+ | \+ |  | \+ |
 | \* environ | ? | ? | \+ | \+ | \+ | \- |  | \+ |
 | \* metadata | ? | ? | \+ | \+ | \+ | \+ |  | \+ |
 | \* service_account | ? | ? | \+ | \+ | \+ | \- |  | \+ |
-| \* static (username \+ password) | ? | ? | \+ | \+ | \+ | \+ |  | \- |
+| \* static (username \+ password) | ? | ? | \+ | \+ | \+ | \+ | \+ | \- |
 | Basic (series) | \+ | ? | \+ | \+ | \+ | \+ | \+ | \+ |
 | Bulk Upsert | \+/- | ? | \+ | \+ | \+ | \- |  | \- |
 | Containers (Struct,Variant,List,Tuple) | \- | ? | \+ | \- | \- | \- |  | \- |
@@ -143,3 +143,5 @@
 | URL Shortener (serverless yandex function) | ? | ? | \+ | ? | \+ | \- |  | \- |
 | Topic reader | \+ | \+ | \- | \- |  | \- |  | \- |
 | Topic writer | \- | \+ | \- | \- |  | \- |  | \- |
+
+{wide-content}

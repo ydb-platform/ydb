@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     operation.cpp
+    out.cpp
 )
 
 PEERDIR(

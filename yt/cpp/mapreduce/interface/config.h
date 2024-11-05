@@ -78,6 +78,7 @@ struct TConfig
     TString Prefix;
     TString ApiVersion;
     TString LogLevel;
+    TString LogPath;
 
     // Compression for data that is sent to YT cluster.
     EEncoding ContentEncoding;
@@ -103,7 +104,6 @@ struct TConfig
     TDuration PingTimeout;
     TDuration PingInterval;
 
-    bool UseAsyncTxPinger;
     int AsyncHttpClientThreads;
     int AsyncTxPingerPoolThreads;
 
@@ -125,6 +125,9 @@ struct TConfig
 
     TString RemoteTempFilesDirectory;
     TString RemoteTempTablesDirectory;
+    // @brief Keep temp tables produced by TTempTable (despite their name). Should not be used in user programs,
+    // but may be useful for setting via environment variable for debugging purposes.
+    bool KeepTempTables = false;
 
     //
     // Infer schemas for nonexstent tables from typed rows (e.g. protobuf)
@@ -154,6 +157,9 @@ struct TConfig
     /// @brief Used to prevent concurrent uploading of the same file to the file cache.
     /// NB: Each mode affects only users with the same mode enabled.
     EUploadDeduplicationMode CacheUploadDeduplicationMode;
+
+    // @brief Minimum byte size for files to undergo deduplication at upload
+    i64 CacheUploadDeduplicationThreshold;
 
     bool MountSandboxInTmpfs;
 
@@ -194,6 +200,9 @@ struct TConfig
 
     /// Which implemetation of table writer to use.
     ETableWriterVersion TableWriterVersion = ETableWriterVersion::Auto;
+
+    /// Redirects stdout to stderr for jobs.
+    bool RedirectStdoutToStderr = false;
 
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);

@@ -6,7 +6,7 @@ import pytest
 from hamcrest import assert_that, equal_to, has_item, has_properties
 
 from ydb.tests.library.common.local_db_scheme import get_scheme
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.predicates.executor import external_blobs_is_present
@@ -33,7 +33,7 @@ class TBaseTenant(object):
     @classmethod
     def setup_class(cls):
         configurator = KikimrConfigGenerator(additional_log_configs=cls.LOG_SETTINGS)
-        cls.kikimr = kikimr_cluster_factory(configurator)
+        cls.kikimr = KiKiMR(configurator)
         cls.kikimr.start()
         cls.tenant_path = cls.__create_tenant('common_tenant', ('hdd', 'hdd1', 'hdd2'))
         cls.driver = ydb.Driver(

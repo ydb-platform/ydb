@@ -29,7 +29,7 @@ namespace {
                             Three = 3 };
     Y_DECLARE_FLAGS(ETestFlags3, ETestFlag3);
     Y_DECLARE_OPERATORS_FOR_FLAGS(ETestFlags3);
-}
+} // namespace
 
 Y_UNIT_TEST_SUITE(TFlagsTest) {
     template <class Enum>
@@ -114,9 +114,9 @@ Y_UNIT_TEST_SUITE(TFlagsTest) {
     Y_UNIT_TEST(TestBaseType) {
         ui16 goodValue = 7;
         auto goodFlags = ETest1::FromBaseType(goodValue);
-        UNIT_ASSERT(goodFlags& ETestFlag1::Test1);
-        UNIT_ASSERT(goodFlags& ETestFlag1::Test2);
-        UNIT_ASSERT(goodFlags& ETestFlag1::Test4);
+        UNIT_ASSERT(goodFlags & ETestFlag1::Test1);
+        UNIT_ASSERT(goodFlags & ETestFlag1::Test2);
+        UNIT_ASSERT(goodFlags & ETestFlag1::Test4);
         UNIT_ASSERT_VALUES_EQUAL(goodValue, goodFlags.ToBaseType());
 
         // Passed value is not checked, but preserved as is
@@ -124,4 +124,4 @@ Y_UNIT_TEST_SUITE(TFlagsTest) {
         auto badFlags = ETest1::FromBaseType(badValue);
         UNIT_ASSERT_VALUES_EQUAL(badValue, badFlags.ToBaseType());
     }
-}
+} // Y_UNIT_TEST_SUITE(TFlagsTest)

@@ -52,6 +52,7 @@ private:
         void Init(NMonitoring::TDynamicCounterPtr group) {
             Group = group;
 
+            CurrentActivationTimeByActivity.resize(GetActivityTypeCount());
             ElapsedMicrosecByActivityBuckets.resize(GetActivityTypeCount());
             ReceivedEventsByActivityBuckets.resize(GetActivityTypeCount());
             ActorsAliveByActivityBuckets.resize(GetActivityTypeCount());
@@ -77,6 +78,7 @@ private:
                     }
                 }
 
+                *CurrentActivationTimeByActivity[i] = 0;
                 *ElapsedMicrosecByActivityBuckets[i] = ::NHPTimer::GetSeconds(ticks)*1000000;
                 *ReceivedEventsByActivityBuckets[i] = events;
                 *ActorsAliveByActivityBuckets[i] = actors;
@@ -87,6 +89,29 @@ private:
                     *UsageByActivityBuckets[i][j] = stats.UsageByActivity[i][j];
                 }
             }
+
+            auto setActivationTime = [&](TActivationTime activation) {
+                if (!ActorsAliveByActivityBuckets[activation.LastActivity]) {
+                    InitCountersForActivity(activation.LastActivity);
+                }
+                *CurrentActivationTimeByActivity[activation.LastActivity] = activation.TimeUs;
+            };
+            if (stats.CurrentActivationTime.TimeUs) {
+                setActivationTime(stats.CurrentActivationTime);
+            }
+            std::vector<TActivationTime> activationTimes = stats.AggregatedCurrentActivationTime;
+            Sort(activationTimes.begin(), activationTimes.end(), [](auto &left, auto &right) {
+                return left.LastActivity < right.LastActivity ||
+                    left.LastActivity == right.LastActivity && left.TimeUs > right.TimeUs;
+            });
+            ui32 prevActivity = Max<ui32>();
+            for (auto &activationTime : activationTimes) {
+                if (activationTime.LastActivity == prevActivity) {
+                    continue;
+                }
+                setActivationTime(activationTime);
+                prevActivity = activationTime.LastActivity;
+            }
         }
 
     private:
@@ -95,6 +120,8 @@ private:
 
             auto bucketName = TString(GetActivityTypeName(activityType));
 
+            CurrentActivationTimeByActivity[activityType] =
+                Group->GetSubgroup("sensor", "CurrentActivationTimeUsByActivity")->GetNamedCounter("activity", bucketName, false);
             ElapsedMicrosecByActivityBuckets[activityType] =
                 Group->GetSubgroup("sensor", "ElapsedMicrosecByActivity")->GetNamedCounter("activity", bucketName, true);
             ReceivedEventsByActivityBuckets[activityType] =
@@ -114,6 +141,7 @@ private:
     private:
         NMonitoring::TDynamicCounterPtr Group;
 
+        TVector<NMonitoring::TDynamicCounters::TCounterPtr> CurrentActivationTimeByActivity;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ElapsedMicrosecByActivityBuckets;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ReceivedEventsByActivityBuckets;
         TVector<NMonitoring::TDynamicCounters::TCounterPtr> ActorsAliveByActivityBuckets;
@@ -145,9 +173,16 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr PotentialMaxThreadCount;
         NMonitoring::TDynamicCounters::TCounterPtr DefaultThreadCount;
         NMonitoring::TDynamicCounters::TCounterPtr MaxThreadCount;
+        NMonitoring::TDynamicCounters::TCounterPtr CurrentThreadCountPercent;
+        NMonitoring::TDynamicCounters::TCounterPtr PotentialMaxThreadCountPercent;
+        NMonitoring::TDynamicCounters::TCounterPtr DefaultThreadCountPercent;
+        NMonitoring::TDynamicCounters::TCounterPtr MaxThreadCountPercent;
         NMonitoring::TDynamicCounters::TCounterPtr IsNeedy;
         NMonitoring::TDynamicCounters::TCounterPtr IsStarved;
         NMonitoring::TDynamicCounters::TCounterPtr IsHoggish;
+        NMonitoring::TDynamicCounters::TCounterPtr HasFullOwnSharedThread;
+        NMonitoring::TDynamicCounters::TCounterPtr HasHalfOfOwnSharedThread;
+        NMonitoring::TDynamicCounters::TCounterPtr HasHalfOfOtherSharedThread;
         NMonitoring::TDynamicCounters::TCounterPtr IncreasingThreadsByNeedyState;
         NMonitoring::TDynamicCounters::TCounterPtr IncreasingThreadsByExchange;
         NMonitoring::TDynamicCounters::TCounterPtr DecreasingThreadsByStarvedState;
@@ -178,7 +213,9 @@ private:
         double LastElapsedSeconds = 0;
         THPTimer UsageTimer;
         TString Name;
-        ui32 Threads;
+        double Threads;
+        double LimitThreads;
+        double DefaultThreads;
 
         void Init(NMonitoring::TDynamicCounters* group, const TString& poolName, ui32 threads) {
             LastElapsedSeconds = 0;
@@ -186,6 +223,8 @@ private:
             UsageTimer.Reset();
             Name = poolName;
             Threads = threads;
+            LimitThreads = threads;
+            DefaultThreads = threads;
 
             PoolGroup = group->GetSubgroup("execpool", poolName);
 
@@ -209,9 +248,18 @@ private:
             PotentialMaxThreadCount = PoolGroup->GetCounter("PotentialMaxThreadCount", false);
             DefaultThreadCount = PoolGroup->GetCounter("DefaultThreadCount", false);
             MaxThreadCount = PoolGroup->GetCounter("MaxThreadCount", false);
+
+            CurrentThreadCountPercent = PoolGroup->GetCounter("CurrentThreadCountPercent", false);
+            PotentialMaxThreadCountPercent  = PoolGroup->GetCounter("PotentialMaxThreadCountPercent", false);
+            DefaultThreadCountPercent  = PoolGroup->GetCounter("DefaultThreadCountPercent", false);
+            MaxThreadCountPercent  = PoolGroup->GetCounter("MaxThreadCountPercent", false);
+
             IsNeedy = PoolGroup->GetCounter("IsNeedy", false);
             IsStarved = PoolGroup->GetCounter("IsStarved", false);
             IsHoggish = PoolGroup->GetCounter("IsHoggish", false);
+            HasFullOwnSharedThread = PoolGroup->GetCounter("HasFullOwnSharedThread", false);
+            HasHalfOfOwnSharedThread = PoolGroup->GetCounter("HasHalfOfOwnSharedThread", false);
+            HasHalfOfOtherSharedThread = PoolGroup->GetCounter("HasHalfOfOtherSharedThread", false);
             IncreasingThreadsByNeedyState = PoolGroup->GetCounter("IncreasingThreadsByNeedyState", true);
             IncreasingThreadsByExchange = PoolGroup->GetCounter("IncreasingThreadsByExchange", true);
             DecreasingThreadsByStarvedState = PoolGroup->GetCounter("DecreasingThreadsByStarvedState", true);
@@ -244,8 +292,9 @@ private:
             MaxUtilizationTime = PoolGroup->GetCounter("MaxUtilizationTime", true);
         }
 
-        void Set(const TExecutorPoolStats& poolStats, const TExecutorThreadStats& stats, ui32 numThreads) {
+        void Set(const TExecutorPoolStats& poolStats, const TExecutorThreadStats& stats) {
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
+            double elapsedSeconds = ::NHPTimer::GetSeconds(stats.ElapsedTicks);
             *SentEvents         = stats.SentEvents;
             *ReceivedEvents     = stats.ReceivedEvents;
             *PreemptedEvents     = stats.PreemptedEvents;
@@ -253,7 +302,7 @@ private:
             *DestroyedActors    = stats.PoolDestroyedActors;
             *EmptyMailboxActivation = stats.EmptyMailboxActivation;
             *CpuMicrosec        = stats.CpuUs;
-            *ElapsedMicrosec    = ::NHPTimer::GetSeconds(stats.ElapsedTicks)*1000000;
+            *ElapsedMicrosec    = elapsedSeconds*1000000;
             *ParkedMicrosec     = ::NHPTimer::GetSeconds(stats.ParkedTicks)*1000000;
             *ActorRegistrations = stats.PoolActorRegistrations;
             *ActorsAlive        = stats.PoolActorRegistrations - stats.PoolDestroyedActors;
@@ -266,9 +315,20 @@ private:
             *PotentialMaxThreadCount = poolStats.PotentialMaxThreadCount;
             *DefaultThreadCount = poolStats.DefaultThreadCount;
             *MaxThreadCount = poolStats.MaxThreadCount;
+
+
+            *CurrentThreadCountPercent = poolStats.CurrentThreadCount * 100;
+            *PotentialMaxThreadCountPercent = poolStats.PotentialMaxThreadCount * 100;
+            *DefaultThreadCountPercent = poolStats.DefaultThreadCount * 100;
+            *MaxThreadCountPercent = poolStats.MaxThreadCount * 100;
+
             *IsNeedy = poolStats.IsNeedy;
             *IsStarved = poolStats.IsStarved;
             *IsHoggish = poolStats.IsHoggish;
+
+            *HasFullOwnSharedThread = poolStats.HasFullOwnSharedThread;
+            *HasHalfOfOwnSharedThread = poolStats.HasHalfOfOwnSharedThread;
+            *HasHalfOfOtherSharedThread = poolStats.HasHalfOfOtherSharedThread;
             *IncreasingThreadsByNeedyState = poolStats.IncreasingThreadsByNeedyState;
             *IncreasingThreadsByExchange = poolStats.IncreasingThreadsByExchange;
             *DecreasingThreadsByStarvedState = poolStats.DecreasingThreadsByStarvedState;
@@ -307,17 +367,16 @@ private:
             double seconds = UsageTimer.PassedReset();
 
             // TODO[serxa]: It doesn't account for contention. Use 1 - parkedTicksDelta / seconds / numThreads KIKIMR-11916
-            const double elapsed = NHPTimer::GetSeconds(stats.ElapsedTicks);
-            const double currentUsage = numThreads > 0 ? ((elapsed - LastElapsedSeconds) / seconds / numThreads) : 0;
-            LastElapsedSeconds = elapsed;
+            Threads = poolStats.CurrentThreadCount;
+            LimitThreads = poolStats.PotentialMaxThreadCount;
+            const double currentUsage = LimitThreads > 0 ? ((elapsedSeconds - LastElapsedSeconds) / seconds / LimitThreads) : 0;
 
             // update usage factor according to smoothness
             const double smoothness = 0.5;
             Usage = currentUsage * smoothness + Usage * (1.0 - smoothness);
+            LastElapsedSeconds = elapsedSeconds;
 #else
-            Y_UNUSED(poolStats);
             Y_UNUSED(stats);
-            Y_UNUSED(numThreads);
 #endif
         }
     };
@@ -387,7 +446,7 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            CFunc(TEvents::TSystem::Wakeup, Wakeup);
+            HFunc(TEvents::TEvWakeup, Wakeup);
         }
     }
 
@@ -396,33 +455,44 @@ private:
         Y_UNUSED(ctx);
     }
 
-    void Wakeup(const TActorContext &ctx) {
-        for (size_t poolId = 0; poolId < PoolCounters.size(); ++poolId) {
+    void Wakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
+        auto *event = ev->Get();
+        if (event->Tag == 0) {
+            StartOfCollecting = ctx.Now();
+        }
+        if (event->Tag < PoolCounters.size()) {
+            ui16 poolId = event->Tag;
             TVector<TExecutorThreadStats> stats;
+            TVector<TExecutorThreadStats> sharedStats;
             TExecutorPoolStats poolStats;
-            ctx.ExecutorThread.ActorSystem->GetPoolStats(poolId, poolStats, stats);
-            SetAggregatedCounters(PoolCounters[poolId], poolStats, stats);
+            ctx.ExecutorThread.ActorSystem->GetPoolStats(poolId, poolStats, stats, sharedStats);
+            SetAggregatedCounters(PoolCounters[poolId], poolStats, stats, sharedStats);
+            ctx.Schedule(TDuration::MilliSeconds(1), new TEvents::TEvWakeup(poolId + 1));
+            return;
         }
         THarmonizerStats harmonizerStats = ctx.ExecutorThread.ActorSystem->GetHarmonizerStats();
         ActorSystemCounters.Set(harmonizerStats);
-
         OnWakeup(ctx);
-
-        ctx.Schedule(TDuration::Seconds(IntervalSec), new TEvents::TEvWakeup());
+        ctx.Schedule(TDuration::Seconds(IntervalSec) - (ctx.Now() - StartOfCollecting), new TEvents::TEvWakeup(0));
     }
 
-    void SetAggregatedCounters(TExecutorPoolCounters& poolCounters, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& stats) {
+    void SetAggregatedCounters(TExecutorPoolCounters& poolCounters, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& stats, TVector<TExecutorThreadStats>& sharedStats) {
         // Sum all per-thread counters into the 0th element
-        for (ui32 idx = 1; idx < stats.size(); ++idx) {
-            stats[0].Aggregate(stats[idx]);
+        TExecutorThreadStats aggregated;
+        for (ui32 idx = 0; idx < stats.size(); ++idx) {
+            aggregated.Aggregate(stats[idx]);
+        }
+        for (ui32 idx = 0; idx < sharedStats.size(); ++idx) {
+            aggregated.Aggregate(sharedStats[idx]);
         }
         if (stats.size()) {
-            poolCounters.Set(poolStats, stats[0], stats.size() - 1);
+            poolCounters.Set(poolStats, aggregated);
         }
     }
 
 protected:
     const ui32 IntervalSec;
+    TInstant StartOfCollecting;
     NMonitoring::TDynamicCounterPtr Counters;
 
     TVector<TExecutorPoolCounters> PoolCounters;

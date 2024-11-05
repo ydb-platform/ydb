@@ -3,7 +3,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
@@ -194,7 +194,7 @@ public:
         CheckFinished();
     };
 
-    void LoadState(const NDqProto::TSinkState&) override { }
+    void LoadState(const TSinkState&) override { }
 
     void CommitState(const NDqProto::TCheckpoint&) override { }
 
@@ -304,7 +304,7 @@ private:
     }
 
 private:
-    NDqProto::TSinkState BuildState() { return {}; }
+    TSinkState BuildState() { return {}; }
 
     TString GetUrl() const {
         return GetSolomonUrl(WriteParams.Shard.GetEndpoint(),
@@ -333,6 +333,7 @@ private:
     NHttp::THttpOutgoingRequestPtr BuildSolomonRequest(const TString& data) {
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Url);
         FillAuth(httpRequest);
+        httpRequest->Set("x-client-id", "yql");
         httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/json");
         httpRequest->Set<&NHttp::THttpRequest::Body>(data);
         return httpRequest;

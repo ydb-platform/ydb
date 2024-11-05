@@ -15,6 +15,11 @@ select foo from (select null offset 0) as foo;
 select foo from (select 'xyzzy',1,null offset 0) as foo;
 -- VALUES is also legal as a standalone query or a set-operation member
 VALUES (1,2), (3,4+4), (7,77.7);
+VALUES (1,2), (3,4+4), (7,77.7)
+UNION ALL
+SELECT 2+2, 57
+UNION ALL
+TABLE int8_tbl;
 -- corner case: VALUES with no columns
 CREATE TEMP TABLE nocols();
 --

@@ -6,9 +6,9 @@
 
 namespace NYT::NYson {
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(EPathFilteringMode,
+DEFINE_ENUM(EYPathFilteringMode,
     (Blacklist)
     (Whitelist)
     (WhitelistWithForcedEntities)
@@ -34,7 +34,7 @@ DEFINE_ENUM(EPathFilteringMode,
 std::unique_ptr<NYson::IYsonConsumer> CreateYPathFilteringConsumer(
     NYson::IYsonConsumer* underlying,
     std::vector<NYPath::TYPath> paths,
-    EPathFilteringMode mode);
+    EYPathFilteringMode mode);
 
 ////////////////////////////////////////////////////////////////////////////////
 

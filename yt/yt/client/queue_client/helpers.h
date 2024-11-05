@@ -19,7 +19,7 @@ struct TCollectPartitionRowInfoParams
 
 //! Collect info (cumulative data weight and timestamp) from rows with given (tablet_index, row_index) pairs and
 //! return them as a tablet_index: (row_index: info) map.
-THashMap<int, THashMap<i64, TPartitionRowInfo>> CollectPartitionRowInfos(
+TFuture<THashMap<int, THashMap<i64, TPartitionRowInfo>>> CollectPartitionRowInfos(
     const NYPath::TYPath& path,
     const NApi::IClientPtr& client,
     const std::vector<std::pair<int, i64>>& tabletAndRowIndices,

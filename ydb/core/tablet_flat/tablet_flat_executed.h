@@ -42,8 +42,8 @@ protected:
     /**
      * Signal tablet as active and ready to process requests (from pipes).
      */
-    void SignalTabletActive(const TActorIdentity &id);
-    void SignalTabletActive(const TActorContext &ctx);
+    void SignalTabletActive(const TActorIdentity &id, TString &&versionInfo = {});
+    void SignalTabletActive(const TActorContext &ctx, TString &&versionInfo = {});
 
     /**
      * Must be overriden as an empty method. Previously default implementation
@@ -132,7 +132,7 @@ private:
             HANDLERS                                                                                \
             default:                                                                                \
                 if (!TTabletExecutedFlat::HandleDefaultEvents(ev, SelfId()))                             \
-                    Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected event type: %" PRIx32 " event: %s",       \
+                    Y_DEBUG_ABORT("%s: unexpected event type: %" PRIx32 " event: %s",       \
                                    __func__, ev->GetTypeRewrite(),                                  \
                                    ev->ToString().data());                                          \
         }                                                                                           \

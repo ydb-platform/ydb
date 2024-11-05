@@ -170,6 +170,7 @@ public:
     template <TStringBuf THttpRequest::* Header>
     static TStringBuf GetName();
     void Clear();
+    TString GetURL() const;
 };
 
 class THttpResponse {
@@ -197,7 +198,58 @@ public:
 };
 
 template <typename HeaderType, typename BufferType>
-class THttpParser : public HeaderType, public BufferType {
+class THttpBase : public HeaderType, public BufferType {
+protected:
+    // Returns raw, non-obfuscated data
+    TStringBuf GetRawData() const {
+        return TStringBuf(BufferType::Data(), BufferType::Size());
+    }
+
+public:
+    TString GetObfuscatedData() const {
+        THeaders headers(HeaderType::Headers);
+        TStringBuf authorization(headers["Authorization"]);
+        TStringBuf cookie(headers["Cookie"]);
+        TStringBuf set_cookie(headers["Set-Cookie"]);
+        TStringBuf x_ydb_auth_ticket(headers["x-ydb-auth-ticket"]);
+        TStringBuf x_yacloud_subjecttoken(headers["x-yacloud-subjecttoken"]);
+        TString data(GetRawData());
+        if (!authorization.empty()) {
+            auto pos = data.find(authorization);
+            if (pos != TString::npos) {
+                data.replace(pos, authorization.size(), TString("<obfuscated>"));
+            }
+        }
+        if (!cookie.empty()) {
+            auto pos = data.find(cookie);
+            if (pos != TString::npos) {
+                data.replace(pos, cookie.size(), TString("<obfuscated>"));
+            }
+        }
+        if (!set_cookie.empty()) {
+            auto pos = data.find(set_cookie);
+            if (pos != TString::npos) {
+                data.replace(pos, set_cookie.size(), TString("<obfuscated>"));
+            }
+        }
+        if (!x_ydb_auth_ticket.empty()) {
+            auto pos = data.find(x_ydb_auth_ticket);
+            if (pos != TString::npos) {
+                data.replace(pos, x_ydb_auth_ticket.size(), TString("<obfuscated>"));
+            }
+        }
+        if (!x_yacloud_subjecttoken.empty()) {
+            auto pos = data.find(x_yacloud_subjecttoken);
+            if (pos != TString::npos) {
+                data.replace(pos, x_yacloud_subjecttoken.size(), TString("<obfuscated>"));
+            }
+        }
+        return data;
+    }
+};
+
+template <typename HeaderType, typename BufferType>
+class THttpParser : public THttpBase<HeaderType, BufferType> {
 public:
     enum class EParseStage : ui8 {
         Method,
@@ -235,8 +287,7 @@ public:
     std::optional<size_t> TotalSize;
 
     THttpParser(const THttpParser& src)
-        : HeaderType(src)
-        , BufferType(src)
+        : THttpBase<HeaderType, BufferType>(src)
         , Stage(src.Stage)
         , LastSuccessStage(src.LastSuccessStage)
         , Line()
@@ -402,44 +453,6 @@ public:
         Advance(size);
     }
 
-    TStringBuf GetRawData() const {
-        return TStringBuf(BufferType::Data(), BufferType::Size());
-    }
-
-    TString GetObfuscatedData() const {
-        THeaders headers(HeaderType::Headers);
-        TStringBuf authorization(headers["Authorization"]);
-        TStringBuf cookie(headers["Cookie"]);
-        TStringBuf x_ydb_auth_ticket(headers["x-ydb-auth-ticket"]);
-        TStringBuf x_yacloud_subjecttoken(headers["x-yacloud-subjecttoken"]);
-        TString data(GetRawData());
-        if (!authorization.empty()) {
-            auto pos = data.find(authorization);
-            if (pos != TString::npos) {
-                data.replace(pos, authorization.size(), TString("<obfuscated>"));
-            }
-        }
-        if (!cookie.empty()) {
-            auto pos = data.find(cookie);
-            if (pos != TString::npos) {
-                data.replace(pos, cookie.size(), TString("<obfuscated>"));
-            }
-        }
-        if (!x_ydb_auth_ticket.empty()) {
-            auto pos = data.find(x_ydb_auth_ticket);
-            if (pos != TString::npos) {
-                data.replace(pos, x_ydb_auth_ticket.size(), TString("<obfuscated>"));
-            }
-        }
-        if (!x_yacloud_subjecttoken.empty()) {
-            auto pos = data.find(x_yacloud_subjecttoken);
-            if (pos != TString::npos) {
-                data.replace(pos, x_yacloud_subjecttoken.size(), TString("<obfuscated>"));
-            }
-        }
-        return data;
-    }
-
     static EParseStage GetInitialStage();
 
     THttpParser()
@@ -459,7 +472,7 @@ public:
 };
 
 template <typename HeaderType, typename BufferType>
-class THttpRenderer : public HeaderType, public BufferType {
+class THttpRenderer : public THttpBase<HeaderType, BufferType> {
 public:
     enum class ERenderStage {
         Init,
@@ -525,7 +538,7 @@ public:
         Append(": ");
         AppendParsedValue<name>(value);
         Append("\r\n");
-        HeaderType::Headers = TStringBuf(HeaderType::Headers.Data(), BufferType::Pos() - HeaderType::Headers.Data());
+        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), BufferType::Pos() - HeaderType::Headers.data());
     }
 
     void Set(TStringBuf name, TStringBuf value) {
@@ -539,7 +552,7 @@ public:
             (this->*cit->second) = TStringBuf(data, BufferType::Pos());
         }
         Append("\r\n");
-        HeaderType::Headers = TStringBuf(HeaderType::Headers.Data(), BufferType::Pos() - HeaderType::Headers.Data());
+        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), BufferType::Pos() - HeaderType::Headers.data());
     }
 
     void Set(const THeaders& headers) {
@@ -547,7 +560,7 @@ public:
         for (const auto& [name, value] : headers.Headers) {
             Set(name, value);
         }
-        HeaderType::Headers = TStringBuf(HeaderType::Headers.Data(), BufferType::Pos() - HeaderType::Headers.Data());
+        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), BufferType::Pos() - HeaderType::Headers.data());
     }
 
     static constexpr TStringBuf ALLOWED_CONTENT_ENCODINGS[] = {"deflate"};
@@ -561,7 +574,7 @@ public:
 
     void FinishHeader() {
         Append("\r\n");
-        HeaderType::Headers = TStringBuf(HeaderType::Headers.Data(), BufferType::Pos() - HeaderType::Headers.Data());
+        HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), BufferType::Pos() - HeaderType::Headers.data());
         Stage = ERenderStage::Body;
     }
 
@@ -653,10 +666,6 @@ public:
         }
         Y_ABORT_UNLESS(size == BufferType::Size());
     }
-
-    TStringBuf GetRawData() const {
-        return TStringBuf(BufferType::Data(), BufferType::Size());
-    }
 };
 
 template <>
@@ -695,6 +704,9 @@ using THttpIncomingRequestPtr = TIntrusivePtr<THttpIncomingRequest>;
 
 class THttpOutgoingResponse;
 using THttpOutgoingResponsePtr = TIntrusivePtr<THttpOutgoingResponse>;
+
+class THttpOutgoingRequest;
+using THttpOutgoingRequestPtr = TIntrusivePtr<THttpOutgoingRequest>;
 
 class THttpIncomingRequest :
         public THttpParser<THttpRequest, TSocketBuffer>,
@@ -743,6 +755,7 @@ public:
     THttpOutgoingResponsePtr CreateResponseString(TStringBuf data);
     THttpOutgoingResponsePtr CreateResponseBadRequest(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 400
     THttpOutgoingResponsePtr CreateResponseNotFound(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 404
+    THttpOutgoingResponsePtr CreateResponseTooManyRequests(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 429
     THttpOutgoingResponsePtr CreateResponseServiceUnavailable(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 503
     THttpOutgoingResponsePtr CreateResponseGatewayTimeout(TStringBuf html = TStringBuf(), TStringBuf contentType = "text/html"); // 504
     THttpOutgoingResponsePtr CreateResponse(TStringBuf status, TStringBuf message);
@@ -759,6 +772,7 @@ public:
     THttpOutgoingResponsePtr CreateIncompleteResponse(TStringBuf status, TStringBuf message, const THeaders& headers, TStringBuf body);
 
     THttpIncomingRequestPtr Duplicate();
+    THttpOutgoingRequestPtr Forward(TStringBuf baseUrl) const;
 
 private:
     THttpOutgoingResponsePtr ConstructResponse(TStringBuf status, TStringBuf message);
@@ -767,9 +781,6 @@ private:
 
 class THttpIncomingResponse;
 using THttpIncomingResponsePtr = TIntrusivePtr<THttpIncomingResponse>;
-
-class THttpOutgoingRequest;
-using THttpOutgoingRequestPtr = TIntrusivePtr<THttpOutgoingRequest>;
 
 class THttpIncomingResponse :
         public THttpParser<THttpResponse, TSocketBuffer>,

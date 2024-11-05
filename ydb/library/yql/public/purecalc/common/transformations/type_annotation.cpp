@@ -3,6 +3,7 @@
 #include <ydb/library/yql/public/purecalc/common/interface.h>
 #include <ydb/library/yql/public/purecalc/common/inspect_input.h>
 #include <ydb/library/yql/public/purecalc/common/names.h>
+#include <ydb/library/yql/public/purecalc/common/transformations/utils.h>
 
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
@@ -70,6 +71,7 @@ namespace {
     private:
         TTypeAnnotationContextPtr TypeAnnotationContext_;
         const TVector<const TStructExprType*>& InputStructs_;
+        TVector<const TStructExprType*>& RawInputTypes_;
         EProcessorMode ProcessorMode_;
         TString InputNodeName_;
 
@@ -77,11 +79,14 @@ namespace {
         TTypeAnnotator(
             TTypeAnnotationContextPtr typeAnnotationContext,
             const TVector<const TStructExprType*>& inputStructs,
+            TVector<const TStructExprType*>& rawInputTypes,
             EProcessorMode processorMode,
             TString nodeName
         )
             : TTypeAnnotatorBase(typeAnnotationContext)
+            , TypeAnnotationContext_(typeAnnotationContext)
             , InputStructs_(inputStructs)
+            , RawInputTypes_(rawInputTypes)
             , ProcessorMode_(processorMode)
             , InputNodeName_(std::move(nodeName))
         {
@@ -102,12 +107,29 @@ namespace {
 
             YQL_ENSURE(inputIndex < InputStructs_.size());
 
-            if (ProcessorMode_ != EProcessorMode::PullList) {
-                input->SetTypeAnn(ctx.MakeType<TStreamExprType>(InputStructs_[inputIndex]));
-            } else {
-                input->SetTypeAnn(ctx.MakeType<TListExprType>(InputStructs_[inputIndex]));
+            auto itemType = InputStructs_[inputIndex];
+
+            // XXX: Tweak the input expression type, if the spec supports blocks:
+            // 1. Add "_yql_block_length" attribute for internal usage.
+            // 2. Add block container to wrap the actual item type.
+            if (input->IsCallable(PurecalcBlockInputCallableName)) {
+                itemType = WrapBlockStruct(itemType, ctx);
             }
 
+            RawInputTypes_[inputIndex] = itemType;
+
+            TColumnOrder columnOrder;
+            for (const auto& i : itemType->GetItems()) {
+                columnOrder.AddColumn(TString(i->GetName()));
+            }
+
+            if (ProcessorMode_ != EProcessorMode::PullList) {
+                input->SetTypeAnn(ctx.MakeType<TStreamExprType>(itemType));
+            } else {
+                input->SetTypeAnn(ctx.MakeType<TListExprType>(itemType));
+            }
+
+            TypeAnnotationContext_->SetColumnOrder(*input, columnOrder, ctx);
             return TStatus::Ok;
         }
 
@@ -221,8 +243,9 @@ namespace {
 TAutoPtr<IGraphTransformer> NYql::NPureCalc::MakeTypeAnnotationTransformer(
     TTypeAnnotationContextPtr typeAnnotationContext,
     const TVector<const TStructExprType*>& inputStructs,
+    TVector<const TStructExprType*>& rawInputTypes,
     EProcessorMode processorMode,
     const TString& nodeName
 ) {
-    return new TTypeAnnotator(typeAnnotationContext, inputStructs, processorMode, nodeName);
+    return new TTypeAnnotator(typeAnnotationContext, inputStructs, rawInputTypes, processorMode, nodeName);
 }

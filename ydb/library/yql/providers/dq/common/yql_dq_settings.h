@@ -56,9 +56,12 @@ struct TDqSettings {
         static constexpr bool ExportStats = false;
         static constexpr ETaskRunnerStats TaskRunnerStats = ETaskRunnerStats::Basic;
         static constexpr ESpillingEngine SpillingEngine = ESpillingEngine::Disable;
-        static constexpr ui32 CostBasedOptimizationLevel = 0;
-        static constexpr ui32 MaxDPccpDPTableSize = 16400U;
-
+        static constexpr ui32 CostBasedOptimizationLevel = 4;
+        static constexpr ui32 MaxDPccpDPTableSize = 40000U;
+        static constexpr ui64 MaxAttachmentsSize = 2_GB;
+        static constexpr bool SplitStageOnDqReplicate = true;
+        static constexpr ui64 EnableSpillingNodes = 0;
+        static constexpr bool EnableSpillingInChannels = false;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -130,6 +133,14 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> DisableLLVMForBlockStages;
     NCommon::TConfSetting<bool, false> SplitStageOnDqReplicate;
 
+    NCommon::TConfSetting<ui64, false> EnableSpillingNodes;
+    NCommon::TConfSetting<bool, false> EnableSpillingInChannels;
+
+    NCommon::TConfSetting<ui64, false> _MaxAttachmentsSize;
+    NCommon::TConfSetting<bool, false> DisableCheckpoints;
+    NCommon::TConfSetting<bool, false> UseGraceJoinCoreForMap;
+    NCommon::TConfSetting<TString, false> Scheduler;
+
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>
     void Save(TProtoConfig& config) {
@@ -181,15 +192,18 @@ struct TDqSettings {
         SAVE_SETTING(ExportStats);
         SAVE_SETTING(TaskRunnerStats);
         SAVE_SETTING(SpillingEngine);
+        SAVE_SETTING(EnableSpillingInChannels);
+        SAVE_SETTING(DisableCheckpoints);
+        SAVE_SETTING(Scheduler);
 #undef SAVE_SETTING
     }
 
     TDqSettings::TPtr WithFillSettings(const IDataProvider::TFillSettings& fillSettings) const {
         auto copy = std::make_shared<TDqSettings>(*this);
-        if (fillSettings.RowsLimitPerWrite) {
+        if (fillSettings.RowsLimitPerWrite && !copy->_RowsLimitPerWrite.Get()) {
             copy->_RowsLimitPerWrite = *fillSettings.RowsLimitPerWrite;
         }
-        if (fillSettings.AllResultsBytesLimit) {
+        if (fillSettings.AllResultsBytesLimit && !copy->_AllResultsBytesLimit.Get()) {
             copy->_AllResultsBytesLimit = *fillSettings.AllResultsBytesLimit;
         }
 
@@ -206,8 +220,18 @@ struct TDqSettings {
         }
     }
 
-    bool IsSpillingEnabled() const {
+    bool IsSpillingEngineEnabled() const {
         return SpillingEngine.Get().GetOrElse(TDqSettings::TDefault::SpillingEngine) != ESpillingEngine::Disable;
+    }
+
+    bool IsSpillingInChannelsEnabled() const {
+        if (!IsSpillingEngineEnabled()) return false;
+        return EnableSpillingInChannels.Get().GetOrElse(TDqSettings::TDefault::EnableSpillingInChannels) != false;
+    }
+
+    ui64 GetEnabledSpillingNodes() const {
+        if (!IsSpillingEngineEnabled()) return 0;
+        return EnableSpillingNodes.Get().GetOrElse(TDqSettings::TDefault::EnableSpillingNodes);
     }
 
     bool IsDqReplicateEnabled(const TTypeAnnotationContext& typesCtx) const {

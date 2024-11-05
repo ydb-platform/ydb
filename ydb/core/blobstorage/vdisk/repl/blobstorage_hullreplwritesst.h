@@ -137,7 +137,7 @@ namespace NKikimr {
             Writer = std::make_unique<TWriter>(ReplCtx->VCtx, EWriterDataType::Replication, 1, ReplCtx->PDiskCtx->Dsk->Owner,
                 ReplCtx->PDiskCtx->Dsk->OwnerRound, ReplCtx->PDiskCtx->Dsk->ChunkSize,
                 ReplCtx->PDiskCtx->Dsk->AppendBlockSize, ReplCtx->PDiskCtx->Dsk->BulkWriteBlockSize,
-                HullDs->LogoBlobs->AllocSstId(), true, ReservedChunks, Arena);
+                HullDs->LogoBlobs->AllocSstId(), true, ReservedChunks, Arena, ReplCtx->GetAddHeader());
 
             // start collecting blobs
             State = EState::COLLECT;
@@ -157,7 +157,7 @@ namespace NKikimr {
 
             // create memory record for disk blob with correct length
             TMemRecLogoBlob memRec(ingress);
-            memRec.SetDiskBlob(TDiskPart(0, 0, Merger.GetDiskBlobRawSize()));
+            memRec.SetDiskBlob(TDiskPart(0, 0, Merger.GetDiskBlobRawSize(ReplCtx->GetAddHeader())));
 
             const bool success = Writer->Push(record.Id, memRec, &Merger);
             if (success) {

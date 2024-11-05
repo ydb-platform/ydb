@@ -41,16 +41,15 @@ namespace NKikimr {
         TFields(TIntrusivePtr<THullDs> hullDs,
                 TIntrusivePtr<TLsnMngr> &&lsnMngr,
                 TPDiskCtxPtr &&pdiskCtx,
-                TIntrusivePtr<THandoffDelegate> &&handoffDelegate,
                 const TActorId skeletonId,
                 bool runHandoff,
                 TActorSystem *as,
                 bool barrierValidation)
-            : LogoBlobsRunTimeCtx(std::make_shared<TLogoBlobsRunTimeCtx>(lsnMngr, pdiskCtx, handoffDelegate,
+            : LogoBlobsRunTimeCtx(std::make_shared<TLogoBlobsRunTimeCtx>(lsnMngr, pdiskCtx,
                         skeletonId, runHandoff, hullDs->LogoBlobs))
-            , BlocksRunTimeCtx(std::make_shared<TBlocksRunTimeCtx>(lsnMngr, pdiskCtx, handoffDelegate,
+            , BlocksRunTimeCtx(std::make_shared<TBlocksRunTimeCtx>(lsnMngr, pdiskCtx,
                         skeletonId, runHandoff, hullDs->Blocks))
-            , BarriersRunTimeCtx(std::make_shared<TBarriersRunTimeCtx>(lsnMngr, pdiskCtx, handoffDelegate,
+            , BarriersRunTimeCtx(std::make_shared<TBarriersRunTimeCtx>(lsnMngr, pdiskCtx,
                         skeletonId, runHandoff, hullDs->Barriers))
             , LsnMngr(std::move(lsnMngr))
             , ActorSystem(as)
@@ -76,14 +75,13 @@ namespace NKikimr {
     THull::THull(
             TIntrusivePtr<TLsnMngr> lsnMngr,
             TPDiskCtxPtr pdiskCtx,
-            TIntrusivePtr<THandoffDelegate> handoffDelegate,
             const TActorId skeletonId,
             bool runHandoff,
             THullDbRecovery &&uncond,
             TActorSystem *as,
             bool barrierValidation)
         : THullDbRecovery(std::move(uncond))
-        , Fields(std::make_unique<TFields>(HullDs, std::move(lsnMngr), std::move(pdiskCtx), std::move(handoffDelegate),
+        , Fields(std::make_unique<TFields>(HullDs, std::move(lsnMngr), std::move(pdiskCtx),
                 skeletonId, runHandoff,  as, barrierValidation))
     {}
 
@@ -194,7 +192,7 @@ namespace NKikimr {
         }
 
         ValidateWriteQuery(ctx, id, writtenBeyondBarrier);
-        return {NKikimrProto::OK, 0, false};
+        return {NKikimrProto::OK, "", false};
     }
 
     void THull::AddLogoBlob(
@@ -226,7 +224,7 @@ namespace NKikimr {
             Fields->AllowGarbageCollection);
     }
 
-    void THull::AddAnubisOsirisLogoBlob(
+    void THull::AddLogoBlob(
             const TActorContext &ctx,
             const TLogoBlobID &id,
             const TIngress &ingress,
@@ -261,7 +259,7 @@ namespace NKikimr {
                 // allocate lsn in case of success
                 *seg = Fields->LsnMngr->AllocLsnForHullAndSyncLog();
                 BlocksCache.UpdateInFlight(tabletID, g, seg->Point());
-                return {NKikimrProto::OK, 0, false};
+                return {NKikimrProto::OK, "", false};
             case TBlocksCache::EStatus::BLOCKED_PERS:
                 return {NKikimrProto::ALREADY, "already got", 0, false};
             case TBlocksCache::EStatus::BLOCKED_INFLIGH:
@@ -413,7 +411,14 @@ namespace NKikimr {
         const bool completeDel = NGc::CompleteDelCmd(collectGeneration, collectStep);
 
         if (!CheckGC(ctx, record))
-            return {NKikimrProto::ERROR, 0, false}; // record has duplicates
+            return {NKikimrProto::ERROR, "", false}; // record has duplicates
+
+        if (!collect && !record.KeepSize() && !record.DoNotKeepSize()) {
+            LOG_ERROR_S(ctx, NKikimrServices::BS_HULLRECS, HullDs->HullCtx->VCtx->VDiskLogPrefix
+                << "Db# Barriers ValidateGCCmd: empty garbage collection command"
+                << " TabletId# " << tabletID);
+            return {NKikimrProto::ERROR, "empty garbage collection command"};
+        }
 
         auto blockStatus = THullDbRecovery::IsBlocked(record);
         switch (blockStatus.Status) {
@@ -515,14 +520,11 @@ namespace NKikimr {
 
     ///////////////// SYNC //////////////////////////////////////////////////////
     TLsnSeg THull::AllocateLsnForSyncDataCmd(const TString &data) {
-        // count number of elements
-        ui32 counter = 0;
-        auto count = [&counter] (const void *) { counter++; };
-        // do job - count all elements
-        NSyncLog::TFragmentReader(data).ForEach(count, count, count, count);
+        NSyncLog::TFragmentReader fragment(data);
 
         // allocate LsnSeg; we reserve a diapason of lsns since we put multiple records
-        ui64 lsnAdvance = counter;
+        std::vector<const NSyncLog::TRecordHdr*> records = fragment.ListRecords();
+        ui64 lsnAdvance = records.size();
         Y_ABORT_UNLESS(lsnAdvance > 0);
         auto seg = Fields->LsnMngr->AllocLsnForHull(lsnAdvance);
 
@@ -538,7 +540,9 @@ namespace NKikimr {
             curLsn++;
         };
         // do job - update blocks cache
-        NSyncLog::TFragmentReader(data).ForEach(otherHandler, blockHandler, otherHandler, blockHandlerV2);
+        for (const NSyncLog::TRecordHdr* rec : records) {
+            NSyncLog::HandleRecordHdr(rec, otherHandler, blockHandler, otherHandler, blockHandlerV2);
+        }
         // check that all records are applied
         Y_DEBUG_ABORT_UNLESS(curLsn == seg.Last + 1);
 

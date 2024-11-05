@@ -45,16 +45,39 @@
     - complex.h:     contrib/libs/libm/include/complex.h
     - math.h:        contrib/libs/libm/include/math.h
 
-# Some more sysincl/addincl clashes.
-- source_filter: "^contrib/tools/bison/(bison|gnulib|m4)/src"
+- source_filter: "^contrib/libs/jemalloc/"
   includes:
-    - error.h:       contrib/tools/bison/gnulib/src/error.h
-    - fcntl.h:       contrib/tools/bison/gnulib/platform/posix/fcntl.h
-    - getopt.h:      contrib/tools/bison/gnulib/platform/posix/getopt.h
-    - obstack.h:     contrib/tools/bison/gnulib/src/obstack.h
-    - regex.h:       contrib/tools/bison/gnulib/src/regex.h
+    - unwind.h:       contrib/libs/libunwind/include/unwind.h
+
+- source_filter: "^contrib/libs/libunwind/"
+  includes:
+    - unwind.h:       contrib/libs/libunwind/include/unwind.h
+
+- source_filter: "^contrib/tools/bison/"
+  includes:
+    - error.h:       contrib/tools/bison/lib/error.h
+    - obstack.h:     contrib/tools/bison/lib/obstack.h
+    # ucrt headers are included by bison/lib in a very specific way
+    - ../ucrt/fcntl.h
+    - ../ucrt/locale.h
+    - ../ucrt/math.h
+    - ../ucrt/signal.h
+    - ../ucrt/sys/stat.h
+
+- source_filter: "^contrib/tools/m4/"
+  includes:
+    - error.h:       contrib/tools/m4/lib/error.h
+    - fcntl.h:       contrib/tools/m4/lib/fcntl.h
+    - obstack.h:     contrib/tools/m4/lib/obstack.h
+    - regex.h:       contrib/tools/m4/lib/regex.h
     - system.h
-    - unlocked-io.h: contrib/tools/bison/gnulib/src/unlocked-io.h
+    # ucrt headers are included by m4/lib in a very specific way
+    - ../ucrt/fcntl.h
+    - ../ucrt/locale.h
+    - ../ucrt/math.h
+    - ../ucrt/signal.h
+    - ../ucrt/sys/stat.h
+
 - source_filter: "^contrib/tools/make"
   includes:
     - fnmatch.h:     contrib/tools/make/glob/fnmatch.h
@@ -70,11 +93,6 @@
 - source_filter: "^contrib/libs/llvm"
   includes:
     - plugin-api.h # GNU linker plugin API.
-
-- source_filter: "^contrib/libs/musl"
-  includes:
-    - atomic.h:      contrib/libs/musl/src/internal/atomic.h
-    - bits/fenv.h:   contrib/libs/musl/arch/x86_64/bits/fenv.h
 
 - source_filter: "^contrib/libs/zbar"
   includes:
@@ -138,10 +156,22 @@
   includes:
     - mkl.h:         contrib/libs/intel/mkl/include/mkl.h
 
-# deprecated contrib with ADDINCL to libintl
-- source_filter: "^contrib/(deprecated/glib/glib|libs/gdk-pixbuf)"
+# Use gettext-stub which has a permissive license
+- source_filter: "^contrib/libs/gdk-pixbuf"
   includes:
-    - libintl.h:     contrib/deprecated/libintl/libintl.h
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
+
+- source_filter: "^contrib/restricted/glib"
+  includes:
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
+
+- source_filter: "^contrib/restricted/gst-plugins-base"
+  includes:
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
+
+- source_filter: "^contrib/restricted/gstreamer"
+  includes:
+    - libintl.h: contrib/restricted/gettext-stub/libintl.h
 
 - source_filter: "^contrib/libs/poco/Data/ODBC"
   includes:
@@ -161,6 +191,7 @@
 - source_filter: "^contrib/libs/libgit2"
   includes:
     - alloc.h:       contrib/libs/libgit2/src/util/alloc.h
+    - process.h:     contrib/libs/libgit2/src/util/process.h
     - thread.h:      contrib/libs/libgit2/src/util/thread.h
     - regexp.h:      contrib/libs/libgit2/src/util/regexp.h
     - util.h:        contrib/libs/libgit2/src/util/util.h
@@ -384,13 +415,6 @@
     - lwip/stats.h
     - lwip/sys.h
     - lwip/tcpip.h
-    # contrib/libs/connectedhomeip/src/crypto uses boringssl on OS_DARWIN
-    - openssl/aead.h:
-      - contrib/libs/connectedhomeip/third_party/boringssl/repo/src/include/openssl/aead.h
-    - openssl/base.h:
-      - contrib/libs/connectedhomeip/third_party/boringssl/repo/src/include/openssl/base.h
-    - openssl/is_boringssl.h:
-      - contrib/libs/connectedhomeip/third_party/boringssl/repo/src/include/openssl/is_boringssl.h
     # contrib/libs/connectedhomeip: src/lib/support, src/inet, src/system on OS_DARWIN
     - nlfaultinjection.hpp:
       - contrib/libs/connectedhomeip/third_party/nlfaultinjection/include/nlfaultinjection.hpp
@@ -492,6 +516,10 @@
     - tls.h: contrib/libs/glibcasm/glibc/sysdeps/x86_64/nptl/tls.h
     - unistd.h: contrib/libs/glibcasm/glibc/include/unistd.h
     - unwind.h: contrib/libs/glibcasm/glibc/sysdeps/generic/unwind.h
+    # These are stubs for actual resolving into system
+    - stdc-predef.h: contrib/libs/glibcasm/glibc/include/stdc-predef.h
+    - gnu/stubs.h: contrib/libs/glibcasm/glibc/include/gnu/stubs.h
+
 
 - source_filter: "^contrib/libs/libunwind/include/unwind.h"
   includes:
@@ -505,17 +533,29 @@
         - contrib/libs/glibcasm/glibc/include/stdint.h
         - contrib/libs/cxxsupp/libcxx/include/stdint.h
 
-- source_filter: "^contrib/tools/bison/bison/data"
+# protoc uses raw string literals with #include statements, which drive our include parser crazy
+- source_filter: "^contrib/libs/protoc"
   includes:
-    - position.hh
+    - "$base$google/protobuf/$path$"
+    - "google/protobuf/$path$"
+    - "$fwd_to$.$fwd_to_suffix$.h"
+    - "$fwd_to$.proto.h"
+    - "$name$.proto.h"
+    - "$path$"
+    - "$h_include$"
 
-- source_filter: "^contrib/libs/fp16/include/fp16/psimd.h"
+- source_filter: "^contrib/tools/bison/data"
   includes:
-    - psimd.h
+    - "]b4_location_include["
+
+- source_filter: "^contrib/libs/libheif"
+  includes:
+    - error.h:  contrib/libs/libheif/libheif/error.h
+    - file.h:   contrib/libs/libheif/libheif/file.h
 
 - source_filter: "^vendor/github.com/NVIDIA"
   includes:
-    - nvml.h: 
+    - nvml.h:
       - vendor/github.com/NVIDIA/go-dcgm/pkg/dcgm/nvml.h
       - vendor/github.com/NVIDIA/go-nvml/gen/nvml/nvml.h
       - vendor/github.com/NVIDIA/go-nvml/pkg/nvml/nvml.h

@@ -33,6 +33,8 @@
 
 namespace NYql {
 
+class TYtClusterConfig;
+
 namespace NCommon {
     class TMkqlCallableCompilerBase;
 }
@@ -104,6 +106,7 @@ public:
         OPTION_FIELD(TIntrusivePtr<IRandomProvider>, RandomProvider)
         OPTION_FIELD(TIntrusivePtr<ITimeProvider>, TimeProvider)
         OPTION_FIELD(TStatWriter, StatWriter)
+        OPTION_FIELD_DEFAULT(bool, CreateOperationTracker, true)
     };
 
     //////////////////////////////////////////////////////////////
@@ -140,6 +143,7 @@ public:
 
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD_DEFAULT(bool, Abort, false)
+        OPTION_FIELD_DEFAULT(bool, DetachSnapshotTxs, false)
     };
 
     struct TFinalizeResult : public NCommon::TOperationResult {
@@ -171,6 +175,7 @@ public:
         TString Path;
         TMaybe<TVector<TString>> Columns;
         TMaybe<TVector<NYT::TReadRange>> Ranges;
+        TMaybe<TString> AdditionalAttributes;
     };
 
     struct TCanonizePathsResult: public NCommon::TOperationResult {
@@ -378,6 +383,7 @@ public:
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TSecureParams, SecureParams)
+        OPTION_FIELD_DEFAULT(TSet<TString>, AdditionalSecurityTags, {})
     };
 
     struct TRunResult : public NCommon::TOperationResult {
@@ -399,6 +405,7 @@ public:
         OPTION_FIELD(TMaybe<ui32>, PublicId)
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD(TString, OperationHash)
+        OPTION_FIELD_DEFAULT(TSet<TString>, SecurityTags, {})
     };
 
     //////////////////////////////////////////////////////////////
@@ -508,10 +515,16 @@ public:
         OPTION_FIELD(TString, Cluster)
         OPTION_FIELD(TVector<TPathStatReq>, Paths)
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
+        OPTION_FIELD_DEFAULT(bool, Extended, false)
     };
 
     struct TPathStatResult: public NCommon::TOperationResult {
+        struct TExtendedResult {
+            THashMap<TString, i64> DataWeight;
+            THashMap<TString, ui64> EstimatedUniqueCounts;
+        };
         TVector<ui64> DataSize;
+        TVector<TMaybe<TExtendedResult>> Extended;
     };
 
     struct TFullResultTableOptions : public TCommonOptions {
@@ -555,6 +568,49 @@ public:
 
     struct TGetTablePartitionsResult: public NCommon::TOperationResult {
         NYT::TMultiTablePartitions Partitions;
+    };
+
+    struct TDownloadTablesReq {
+        using TSelf = TDownloadTablesReq;
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TString, Table)
+        OPTION_FIELD_DEFAULT(bool, Anonymous, false)
+        OPTION_FIELD(TString, TargetPath)
+    };
+
+    struct TDownloadTablesOptions : public TCommonOptions {
+        using TSelf = TDownloadTablesOptions;
+
+        TDownloadTablesOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TVector<TDownloadTablesReq>, Tables)
+        OPTION_FIELD_DEFAULT(ui32, Epoch, 0)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+    };
+
+    struct TDownloadTablesResult: public NCommon::TOperationResult {
+    };
+
+    struct TUploadTableOptions : public TCommonOptions {
+        using TSelf = TUploadTableOptions;
+
+        TUploadTableOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TString, Table)
+        OPTION_FIELD(TString, Path)
+        OPTION_FIELD(TString, Attrs)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+    };
+
+    struct TUploadTableResult: public NCommon::TOperationResult {
     };
 
 public:
@@ -605,6 +661,9 @@ public:
     virtual NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder) const = 0;
     virtual NYT::TRichYPath GetWriteTable(const TString& sessionId, const TString& cluster, const TString& table, const TString& tmpFolder) const = 0;
 
+    virtual NThreading::TFuture<TDownloadTablesResult> DownloadTables(TDownloadTablesOptions&& options) = 0;
+    virtual NThreading::TFuture<TUploadTableResult> UploadTable(TUploadTableOptions&& options) = 0;
+
     virtual TFullResultTableResult PrepareFullResultTable(TFullResultTableOptions&& options) = 0;
 
     virtual void SetStatUploader(IStatUploader::TPtr statUploader) = 0;
@@ -612,6 +671,8 @@ public:
     virtual void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) = 0;
 
     virtual TGetTablePartitionsResult GetTablePartitions(TGetTablePartitionsOptions&& options) = 0;
+
+    virtual void AddCluster(const TYtClusterConfig& cluster) = 0;
 };
 
 }

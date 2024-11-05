@@ -621,12 +621,23 @@ void TLockLocker::UpdateSchema(const TPathId& tableId, const TVector<NScheme::TT
     table->UpdateKeyColumnsTypes(keyColumnTypes);
 }
 
-void TLockLocker::RemoveSchema(const TPathId& tableId) {
+void TLockLocker::RemoveSchema(const TPathId& tableId, ILocksDb* db) {
+    // Make sure all persistent locks are removed from the database
+    for (auto& pr : Locks) {
+        if (pr.second->IsPersistent()) {
+            pr.second->PersistRemoveLock(db);
+        }
+        pr.second->OnRemoved();
+    }
+
     Tables.erase(tableId);
     Y_ABORT_UNLESS(Tables.empty());
     Locks.clear();
     ShardLocks.clear();
+    ExpireQueue.Clear();
     BrokenLocks.Clear();
+    BrokenPersistentLocks.Clear();
+    BrokenLocksCount_ = 0;
     CleanupPending.clear();
     CleanupCandidates.clear();
     PendingSubscribeLocks.clear();

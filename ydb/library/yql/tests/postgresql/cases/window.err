@@ -1603,17 +1603,6 @@ insert into numerics values
 (8, 'infinity', 'infinity', 'infinity'),
 (9, 'NaN', 'NaN', 'NaN');
 </sql-statement>
--stdin-:<main>: Error: Type annotation
-
-    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: AsList
-    	insert into numerics values
-	^
-        -stdin-:<main>:1:1: Error: Cannot infer common type for int4 and numeric
-        	insert into numerics values
-	^
-        -stdin-:<main>:1:1: Error: Cannot infer common type for numeric and int4
-        	insert into numerics values
-	^
 <sql-statement>
 select id, f_float4, first_value(id) over w, last_value(id) over w
 from numerics

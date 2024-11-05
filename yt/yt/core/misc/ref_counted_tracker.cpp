@@ -144,14 +144,14 @@ size_t TRefCountedTracker::TNamedSlot::ClampNonnegative(size_t allocated, size_t
 ////////////////////////////////////////////////////////////////////////////////
 
 // nullptr if not initialized or already destroyed
-YT_THREAD_LOCAL(TRefCountedTracker::TLocalSlots*) TRefCountedTracker::LocalSlots_;
+YT_DEFINE_THREAD_LOCAL(TRefCountedTracker::TLocalSlots*, RefCountedTrackerLocalSlots);
 
 // nullptr if not initialized or already destroyed
-YT_THREAD_LOCAL(TRefCountedTracker::TLocalSlot*) TRefCountedTracker::LocalSlotsBegin_;
+YT_DEFINE_THREAD_LOCAL(TRefCountedTracker::TLocalSlot*, RefCountedTrackerLocalSlotsBegin);
 
 //  0 if not initialized
 // -1 if already destroyed
-YT_THREAD_LOCAL(int) TRefCountedTracker::LocalSlotsSize_;
+YT_DEFINE_THREAD_LOCAL(int, RefCountedTrackerLocalSlotsSize);
 
 int TRefCountedTracker::GetTrackedThreadCount() const
 {
@@ -361,7 +361,7 @@ TRefCountedTracker::TNamedSlot TRefCountedTracker::GetSlot(TRefCountedTypeKey ty
 }
 
 #define INCREMENT_COUNTER_SLOW(name, delta) \
-    if (LocalSlotsSize_ < 0) { \
+    if (RefCountedTrackerLocalSlotsSize() < 0) { \
         auto guard = Guard(SpinLock_); \
         GetGlobalSlot(cookie)->name += delta; \
     } else { \
@@ -412,7 +412,7 @@ TRefCountedTracker::TLocalSlot* TRefCountedTracker::GetLocalSlot(TRefCountedType
 
             auto guard = Guard(this_->SpinLock_);
 
-            auto& localSlots = GetTlsRef(LocalSlots_);
+            auto& localSlots = RefCountedTrackerLocalSlots();
 
             if (this_->GlobalSlots_.size() < localSlots->size()) {
                 this_->GlobalSlots_.resize(std::max(localSlots->size(), this_->GlobalSlots_.size()));
@@ -424,33 +424,38 @@ TRefCountedTracker::TLocalSlot* TRefCountedTracker::GetLocalSlot(TRefCountedType
 
             YT_VERIFY(this_->AllLocalSlots_.erase(localSlots) == 1);
 
-            delete LocalSlots_;
-            LocalSlots_ = nullptr;
-            LocalSlotsBegin_ = nullptr;
-            LocalSlotsSize_ = -1;
+            delete localSlots;
+            localSlots = nullptr;
+            RefCountedTrackerLocalSlotsBegin() = nullptr;
+            RefCountedTrackerLocalSlotsSize() = -1;
         }
     };
 
-    YT_THREAD_LOCAL(TReclaimer) Reclaimer;
+    thread_local TReclaimer Reclaimer;
 
-    YT_VERIFY(LocalSlotsSize_ >= 0);
+    auto& refCountedTrackerLocalSlotsSize = RefCountedTrackerLocalSlotsSize();
+
+    YT_VERIFY(refCountedTrackerLocalSlotsSize >= 0);
 
     auto guard = Guard(SpinLock_);
 
-    if (!LocalSlots_) {
-        LocalSlots_ = new TLocalSlots();
-        YT_VERIFY(AllLocalSlots_.insert(GetTlsRef(LocalSlots_)).second);
+    auto& localSlotsBegin = RefCountedTrackerLocalSlotsBegin();
+    auto& localSlots = RefCountedTrackerLocalSlots();
+
+    if (!localSlots) {
+        localSlots = new TLocalSlots();
+        YT_VERIFY(AllLocalSlots_.insert(localSlots).second);
     }
 
     auto index = cookie.Underlying();
-    if (index >= std::ssize(*LocalSlots_)) {
-        LocalSlots_->resize(static_cast<size_t>(index) + 1);
+    if (index >= std::ssize(*localSlots)) {
+        localSlots->resize(2 * static_cast<size_t>(index) + 1);
     }
 
-    LocalSlotsBegin_ = LocalSlots_->data();
-    LocalSlotsSize_ = std::ssize(*LocalSlots_);
+    localSlotsBegin = localSlots->data();
+    refCountedTrackerLocalSlotsSize = std::ssize(*localSlots);
 
-    return LocalSlotsBegin_ + index;
+    return localSlotsBegin + index;
 }
 
 TRefCountedTracker::TGlobalSlot* TRefCountedTracker::GetGlobalSlot(TRefCountedTypeCookie cookie)

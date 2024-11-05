@@ -1,0 +1,15 @@
+{
+    "schema" = <"strict" = %true; "unique_keys" = %false> [
+        { "type" = "uint64"; "required" = %true; "name" = "row" };
+        { "type" = "uint16"; "required" = %true; "name" = "d" };
+        { "type" = "uint32"; "required" = %true; "name" = "dt" };
+        { "type" = "uint64"; "required" = %true; "name" = "ts" };
+    ];
+    "_yql_row_spec" = {
+        "TypePatch" = ["StructType";[
+            ["d"; ["DataType"; "Date"]];
+            ["dt"; ["DataType"; "Datetime"]];
+            ["ts" ;["DataType"; "Timestamp"]];
+        ]];
+    };
+}

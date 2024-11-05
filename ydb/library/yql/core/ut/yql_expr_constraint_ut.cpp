@@ -31,9 +31,8 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         auto ytGateway = CreateYtFileGateway(yqlNativeServices);
         auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
         typeAnnotationContext->RandomProvider = CreateDeterministicRandomProvider(1);
-        auto ytState = MakeIntrusive<TYtState>();
+        auto ytState = MakeIntrusive<TYtState>(typeAnnotationContext.Get());
         ytState->Gateway = ytGateway;
-        ytState->Types = typeAnnotationContext.Get();
 
         InitializeYtGateway(ytGateway, ytState);
         typeAnnotationContext->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
@@ -93,6 +92,25 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         TExprContext exprCtx;
         const auto exprRoot = ParseAndAnnotate(s, exprCtx);
         CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "Sorted(key[asc])");
+    }
+
+    Y_UNIT_TEST(SortByStablePickle) {
+        const auto s = R"((
+            (let mr_sink (DataSink 'yt (quote plato)))
+            (let list (AsList
+                (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
+                (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
+                (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
+            ))
+            (let sorted (Sort list '((Bool 'False) (Bool 'True)) (lambda '(item) '((Member item 'key) (StablePickle (Member item 'subkey))))))
+            (let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'renew))))
+            (let world (Commit! world mr_sink))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "Sort", "");
     }
 
     Y_UNIT_TEST(SortByTranspentIfPresent) {
@@ -423,6 +441,28 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TSortedConstraintNode>(exprRoot, "LazyList", "Sorted(x[asc];z[asc])");
     }
 
+    Y_UNIT_TEST(ExtractSortedTuple) {
+        const auto s = R"((
+            (let mr_sink (DataSink 'yt (quote plato)))
+            (let list (AsList
+                (AsStruct '('a (String '4)) '('b (String 'c)) '('c (String 'x)))
+                (AsStruct '('a (String '1)) '('b (String 'd)) '('c (String 'y)))
+                (AsStruct '('a (String '3)) '('b (String 'b)) '('c (String 'z)))
+            ))
+            (let sorted (Sort list '((Bool 'True) (Bool 'True)) (lambda '(item) '((Member item 'a) (Member item 'b)))))
+            (let map (OrderedFlatMap sorted (lambda '(item) (OptionalIf (== (Member item 'a) (String '1)) (AddMember item 'x '((Member item 'a) (Member item 'b)))))))
+            (let extract (ExtractMembers map '('x)))
+            (let world (Write! world mr_sink (Key '('table (String 'Output))) extract '('('mode 'renew))))
+            (let world (Commit! world mr_sink))
+            (return world)
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "OrderedFlatMap", "Sorted(a,x/0[asc];b,x/1[asc])");
+        CheckConstraint<TSortedConstraintNode>(exprRoot, "ExtractMembers", "Sorted(x[asc])");
+    }
+
     Y_UNIT_TEST(TopSort) {
         const auto s = R"((
             (let mr_sink (DataSink 'yt (quote plato)))
@@ -738,231 +778,6 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "Distinct((onekey,{onesubkey,twosubkey})(twovalue))");
     }
 
-    Y_UNIT_TEST(Passthrough) {
-        const auto s = R"((
-    (let mr_sink (DataSink 'yt (quote plato)))
-    (let list (AsList
-        (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
-        (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'w)))
-        (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'u)))
-    ))
-    (let list (FlatMap list (lambda '(item) (block '(
-        (let res (Map (Just item) (lambda '(m)
-            (AsStruct
-                '('key1 (Member m 'key))
-                '('key2 (Member m 'key))
-                '('subkey (Member m 'subkey))
-                '('value (Member m 'value))
-            )
-        )))
-        (let res (Map res (lambda '(m)
-            (AsStruct
-                '('p.key1 (Member m 'key1))
-                '('p.key2 (Member m 'key2))
-                '('p.subkey (Member m 'subkey))
-                '('value (Member m 'value))
-            )
-        )))
-        (return (Just (DivePrefixMembers (Unwrap res) '('p.))))
-    )))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
-    (return world)
-))";
-
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TPassthroughConstraintNode>(exprRoot, "DivePrefixMembers", "Passthrough(key1:key,key2:key,subkey:subkey)");
-        CheckConstraint<TPassthroughConstraintNode>(exprRoot, "Unwrap", "Passthrough(p.key1:key,p.key2:key,p.subkey:subkey,value:value)");
-
-    }
-
-    Y_UNIT_TEST(PassthroughOverTuple) {
-        const auto s = R"((
-    (let mr_sink (DataSink 'yt (quote plato)))
-    (let list (AsList
-        (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
-        (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
-        (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
-    ))
-    (let list (FlatMap list (lambda '(item) (block '(
-        (let res (Map (Just item) (lambda '(m)
-            '(
-                (Member m 'key)
-                (Member m 'key)
-                (Member m 'subkey)
-                (Member m 'value)
-            )
-        )))
-        (let res (Map res (lambda '(m)
-            (AsStruct
-                '('p.key1 (Nth m '0))
-                '('p.key2 (Nth m '1))
-                '('p.subkey (Nth m '2))
-                '('value (Nth m '3))
-            )
-        )))
-        (return (Just (DivePrefixMembers (Unwrap res) '('p.))))
-    )))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
-    (return world)
-))";
-
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TPassthroughConstraintNode>(exprRoot, "DivePrefixMembers", "Passthrough(key1:key,key2:key,subkey:subkey)");
-        CheckConstraint<TPassthroughConstraintNode>(exprRoot, "Unwrap", "Passthrough(p.key1:key,p.key2:key,p.subkey:subkey,value:value)");
-    }
-
-    Y_UNIT_TEST(PassthroughOverWideFlow) {
-        const auto s = R"((
-    (let mr_sink (DataSink 'yt (quote plato)))
-    (let list (AsList
-        (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
-        (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
-        (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
-    ))
-    (let list (FlatMap list (lambda '(item) (block '(
-        (let res (ExpandMap (ToFlow (Just item)) (lambda '(m)
-            (Member m 'key)
-            (Member m 'key)
-            (Member m 'subkey)
-            (Member m 'value)
-        )))
-        (let res (WideMap res (lambda '(m0 m1 m2 m3) m0 m2 m3 m1)))
-        (let res (NarrowMap res (lambda '(m0 m1 m2 m3)
-            (AsStruct
-                '('p.key1 m0)
-                '('p.key2 m3)
-                '('p.subkey m1)
-                '('value m2)
-            )
-        )))
-        (return (Just (DivePrefixMembers (Unwrap (Head (Collect res))) '('p.))))
-    )))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
-    (return world)
-))";
-
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TPassthroughConstraintNode>(exprRoot, "DivePrefixMembers", "Passthrough(key1:key,key2:key,subkey:subkey)");
-        CheckConstraint<TPassthroughConstraintNode>(exprRoot, "Collect", "Passthrough(p.key1:key,p.key2:key,p.subkey:subkey,value:value)");
-    }
-
-    Y_UNIT_TEST(PassthroughExOverWideFlow) {
-        const auto s = R"((
-    (let mr_sink (DataSink 'yt (quote plato)))
-    (let list (AsList
-        (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
-        (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
-        (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
-    ))
-    (let list (FlatMap list (lambda '(item) (block '(
-        (let res (ExpandMap (ToFlow (Just item)) (lambda '(m)
-            (Member m 'key)
-            (Member m 'key)
-            (Member m 'subkey)
-            (Member m 'value)
-        )))
-        (let res (WideMap res (lambda '(m0 m1 m2 m3) (AsStruct '('xxx m0) '('yyy m2)) '(m1 m3))))
-        (let res (WideMap res (lambda '(s0 t1) '((Member s0 'xxx) (Nth t1 '1)) (ReplaceMember s0 'xxx (Nth t1 '0)))))
-        (let res (NarrowMap res (lambda '(t0 s1) (AddMember (AddMember s1 'one (Nth t0 '1)) 'two (Nth t0 '0)))))
-        (return (Just (Unwrap (Head (Collect res)))))
-    )))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
-    (return world)
-))";
-
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TPassthroughConstraintNode>(exprRoot, "Unwrap", "Passthrough(one:value,two:key,xxx:key,yyy:subkey)");
-    }
-
-    Y_UNIT_TEST(PassthroughCondense1) {
-        const auto s = R"((
-    (let mr_sink (DataSink 'yt (quote plato)))
-    (let list (AsList
-        (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
-        (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
-        (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
-    ))
-    (let list (FlatMap list (lambda '(item) (block '(
-        (let res (Condense1 (ToFlow (Just item))
-            (lambda '(m)
-                (AsStruct
-                    '('p.key1 (Member m 'key))
-                    '('p.key2 (Member m 'key))
-                    '('p.subkey (Member m 'subkey))
-                    '('value (Member m 'value))
-                )
-            )
-            (lambda '(i s) (Bool 'false))
-            (lambda '(i s)
-                (AsStruct
-                    '('p.key1 (Member i 'key))
-                    '('p.key2 (Member s 'p.key2))
-                    '('p.subkey (Member i 'subkey))
-                    '('value (Member s 'value))
-                )
-            )
-        ))
-        (return (Just (DivePrefixMembers (Unwrap (Last (Collect res))) '('p.))))
-    )))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
-    (return world)
-))";
-
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TPassthroughConstraintNode>(exprRoot, "DivePrefixMembers", "Passthrough(key1:key,key2:key,subkey:subkey)");
-        CheckConstraint<TPassthroughConstraintNode>(exprRoot, "Collect", "Passthrough(p.key1:key,p.key2:key,p.subkey:subkey,value:value)");
-    }
-
-    Y_UNIT_TEST(PassthroughWideCondense1) {
-        const auto s = R"((
-    (let mr_sink (DataSink 'yt (quote plato)))
-    (let list (AsList
-        (AsStruct '('key (String '4)) '('subkey (String 'c)) '('value (String 'v)))
-        (AsStruct '('key (String '1)) '('subkey (String 'd)) '('value (String 'v)))
-        (AsStruct '('key (String '3)) '('subkey (String 'b)) '('value (String 'v)))
-    ))
-    (let list (FlatMap list (lambda '(item) (block '(
-        (let res (ExpandMap (ToFlow (Just item)) (lambda '(m)
-            (Member m 'key)
-            (Member m 'key)
-            (Member m 'subkey)
-            (Member m 'value)
-        )))
-        (let res (WideCondense1 res
-            (lambda '(m0 m1 m2 m3) m0 m1 m2 m3)
-            (lambda '(i0 i1 i2 i3 s0 s1 s2 s3) (Bool 'false))
-            (lambda '(i0 i1 i2 i3 s0 s1 s2 s3) i0 s1 i2 s3)
-        ))
-        (let res (NarrowMap res (lambda '(m0 m1 m2 m3)
-            (AsStruct
-                '('p.key1 m0)
-                '('p.key2 m1)
-                '('p.subkey m2)
-                '('value m3)
-            )
-        )))
-        (return (Just (DivePrefixMembers (Unwrap (Head (Collect res))) '('p.))))
-    )))))
-    (let world (Write! world mr_sink (Key '('table (String 'Output))) list '('('mode 'renew))))
-    (let world (Commit! world mr_sink))
-    (return world)
-))";
-        TExprContext exprCtx;
-        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-        CheckConstraint<TPassthroughConstraintNode>(exprRoot, "DivePrefixMembers", "Passthrough(key1:key,key2:key,subkey:subkey)");
-        CheckConstraint<TPassthroughConstraintNode>(exprRoot, "Collect", "Passthrough(p.key1:key,p.key2:key,p.subkey:subkey,value:value)");
-    }
-
     Y_UNIT_TEST(Visit) {
         const auto s = R"((
 (let mr_sink (DataSink 'yt (quote plato)))
@@ -997,7 +812,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         TExprContext exprCtx;
         const auto exprRoot = ParseAndAnnotate(s, exprCtx);
         CheckConstraint<TMultiConstraintNode>(exprRoot, "Extend", "Multi(0:{},1:{},2:{})");
-        CheckConstraint<TMultiConstraintNode>(exprRoot, "Visit", "Multi(1:{Passthrough(key:key,value:value)})");
+        CheckConstraint<TMultiConstraintNode>(exprRoot, "Visit", "Multi(1:{})");
         CheckConstraint<TVarIndexConstraintNode>(exprRoot, "Visit", "VarIndex(1:0)");
         CheckConstraint<TMultiConstraintNode>(exprRoot, "FlatMap", "Multi(1:{})");
         CheckConstraint<TMultiConstraintNode>(exprRoot, "VariantItem", "");
@@ -1489,6 +1304,34 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key,subkey))");
     }
 
+    Y_UNIT_TEST(PartitionsByKeysWithCondense1AndStablePickle) {
+        const auto s = R"(
+(
+    (let mr_sink (DataSink 'yt (quote plato)))
+    (let list (AsList
+        (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
+        (AsStruct '('key (Just (String '1))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
+        (AsStruct '('key (Just (String '4))) '('subkey (Just (String 'b))) '('value (Just (String 'z))))
+    ))
+    (let extractor (lambda '(item) '((Member item 'key) (StablePickle(Member item 'subkey)))))
+    (let aggr (PartitionsByKeys list extractor (Void) (Void)
+        (lambda '(stream) (Condense1 stream (lambda '(row) row)
+            (lambda '(row state) (IsKeySwitch row state extractor extractor))
+            (lambda '(row state) (AsStruct '('key (Member row 'key)) '('subkey (Member row 'subkey)) '('value (Coalesce (Member row 'value) (Member state 'value)))))
+        ))
+    ))
+    (let world (Write! world mr_sink (Key '('table (String 'Output))) (Skip aggr (Uint64 '1)) '('('mode 'renew))))
+    (let world (Commit! world mr_sink))
+    (return world)
+)
+    )";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique((key,subkey))");
+        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key,subkey))");
+    }
+
     Y_UNIT_TEST(PartitionsByKeysWithCondense1WithSingleItemTupleKey) {
         const auto s = R"(
 (
@@ -1517,6 +1360,36 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         const auto exprRoot = ParseAndAnnotate(s, exprCtx);
         CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique((key))");
         CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct((key))");
+    }
+
+    Y_UNIT_TEST(PartitionsByKeysWithCondense1WithPairItemsTupleKeyAndDuplicateOut) {
+        const auto s = R"(
+(
+    (let mr_sink (DataSink 'yt (quote plato)))
+    (let list (AsList
+        (AsStruct '('key '((Just (String '4)) (Just (String '%)))) '('subkey (Just (String 'c))) '('value (Just (String 'x))))
+        (AsStruct '('key '((Just (String '1)) (Just (String '€)))) '('subkey (Just (String 'b))) '('value (Just (String 'y))))
+        (AsStruct '('key '((Just (String '4)) (Just (String '$)))) '('subkey (Just (String 'b))) '('value (Just (String 'z))))
+    ))
+    (let extractor (lambda '(row) '((Nth (Member row 'key) '0) (Nth (Member row 'key) '1))))
+    (let aggr (PartitionsByKeys list (lambda '(item) (Member item 'key)) (Void) (Void)
+        (lambda '(stream) (Map (Condense1 stream extractor
+            (lambda '(row state) (IsKeySwitch row state extractor (lambda '(item) item)))
+            (lambda '(row state) state)
+        )
+            (lambda '(item) (AsStruct '('one '(item)) '('two '(item))))
+        ))
+    ))
+    (let world (Write! world mr_sink (Key '('table (String 'Output))) (Skip aggr (Uint64 '1)) '('('mode 'renew))))
+    (let world (Commit! world mr_sink))
+    (return world)
+)
+    )";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "Skip", "Unique(({one,two}))");
+        CheckConstraint<TDistinctConstraintNode>(exprRoot, "Skip", "Distinct(({one,two}))");
     }
 
     Y_UNIT_TEST(ShuffleByKeysInputUnique) {
@@ -1699,7 +1572,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'Inner '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '()))
+    (let join (GraceJoinCore flow1 flow2 'Inner '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lk lv rk rs rv) (AsStruct '('lk lk) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -1742,7 +1615,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'Left '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '()))
+    (let join (GraceJoinCore flow1 flow2 'Left '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lk lv rk rs rv) (AsStruct '('lk lk) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -1785,7 +1658,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'Full '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '()))
+    (let join (GraceJoinCore flow1 flow2 'Full '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lk lv rk rs rv) (AsStruct '('lk lk) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -1828,7 +1701,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'Right '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '()))
+    (let join (GraceJoinCore flow1 flow2 'Right '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lk lv rk rs rv) (AsStruct '('lk lk) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -1871,7 +1744,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'Exclusion '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '()))
+    (let join (GraceJoinCore flow1 flow2 'Exclusion '('0 '1) '('0 '1) '('0 '0 '2 '1) '('0 '2 '1 '3 '2 '4) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lk lv rk rs rv) (AsStruct '('lk lk) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -1914,7 +1787,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'LeftSemi '('0 '1) '('0 '1) '('0 '2 '1 '1 '2 '0) '() '()))
+    (let join (GraceJoinCore flow1 flow2 'LeftSemi '('0 '1) '('0 '1) '('0 '2 '1 '1 '2 '0) '() '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lv ls lk) (AsStruct '('lk lk) '('lv lv) '('ls ls))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -1957,7 +1830,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'LeftOnly '('0 '1) '('0 '1) '('0 '1 '2 '0) '() '()))
+    (let join (GraceJoinCore flow1 flow2 'LeftOnly '('0 '1) '('0 '1) '('0 '1 '2 '0) '() '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(lv lk) (AsStruct '('lk lk) '('lv lv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2001,7 +1874,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'RightOnly '('0 '1) '('0 '1) '() '('0 '2 '1 '1 '2 '0) '()))
+    (let join (GraceJoinCore flow1 flow2 'RightOnly '('0 '1) '('0 '1) '() '('0 '2 '1 '1 '2 '0) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(rv rs rk) (AsStruct '('rk rk) '('rv rv) '('rs rs))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2044,7 +1917,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'RightSemi '('0 '1) '('0 '1) '() '('0 '1 '2 '0) '()))
+    (let join (GraceJoinCore flow1 flow2 'RightSemi '('0 '1) '('0 '1) '() '('0 '1 '2 '0) '() '() '()))
     (let list (Collect (NarrowMap join (lambda '(rv rk) (AsStruct '('rk rk) '('rv rv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2087,7 +1960,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
     (let flow1 (ExpandMap (ToFlow list1) (lambda '(item) (Member item 'key1) (Member item 'subkey1) (Member item 'value1))))
     (let flow2 (ExpandMap (ToFlow list2) (lambda '(item) (Member item 'key2) (Member item 'subkey2) (Member item 'value2))))
 
-    (let join (GraceJoinCore flow1 flow2 'Inner '('0 '1) '('0 '1) '('0 '0 '1 '1 '2 '2) '('0 '3 '1 '4 '2 '5) '('LeftAny 'RightAny)))
+    (let join (GraceJoinCore flow1 flow2 'Inner '('0 '1) '('0 '1) '('0 '0 '1 '1 '2 '2) '('0 '3 '1 '4 '2 '5) '() '() '('LeftAny 'RightAny)))
     (let list (Collect (NarrowMap join (lambda '(lk ls lv rk rs rv) (AsStruct '('lk lk) '('ls ls) '('lv lv) '('rk rk) '('rs rs) '('rv rv))))))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2130,7 +2003,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let dict (ToDict list2 (lambda '(item) '((Member item 'key2) (Member item 'subkey2))) (lambda '(item) '((Member item 'subkey2) (Member item 'value2))) '('One 'Hashed)))
 
-    (let join (MapJoinCore (ToFlow list1) dict 'Inner '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v)))
+    (let join (MapJoinCore (ToFlow list1) dict 'Inner '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v) '() '()))
     (let list (Collect join))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2172,7 +2045,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let dict (ToDict list2 (lambda '(item) '((Member item 'key2) (Member item 'subkey2))) (lambda '(item) '((Member item 'subkey2) (Member item 'value2))) '('Many 'Hashed)))
 
-    (let join (MapJoinCore (ToFlow list1) dict 'Inner '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v)))
+    (let join (MapJoinCore (ToFlow list1) dict 'Inner '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v) '() '()))
     (let list (Collect join))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2214,7 +2087,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let dict (ToDict list2 (lambda '(item) '((Member item 'key2) (Member item 'subkey2))) (lambda '(item) '((Member item 'subkey2) (Member item 'value2))) '('One 'Hashed)))
 
-    (let join (MapJoinCore (ToFlow list1) dict 'Left '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v)))
+    (let join (MapJoinCore (ToFlow list1) dict 'Left '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v) '() '()))
     (let list (Collect join))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2256,7 +2129,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let dict (ToDict list2 (lambda '(item) '((Member item 'key2) (Member item 'subkey2))) (lambda '(item) '((Member item 'subkey2) (Member item 'value2))) '('Many 'Hashed)))
 
-    (let join (MapJoinCore (ToFlow list1) dict 'Left '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v)))
+    (let join (MapJoinCore (ToFlow list1) dict 'Left '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '('0 's '1 'v) '() '()))
     (let list (Collect join))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2298,7 +2171,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let dict (ToDict list2 (lambda '(item) '((Member item 'key2) (Member item 'subkey2))) (lambda '(item) '()) '('One 'Hashed)))
 
-    (let join (MapJoinCore (ToFlow list1) dict 'LeftSemi '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '()))
+    (let join (MapJoinCore (ToFlow list1) dict 'LeftSemi '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'subkey1 'subkey 'value1 'value) '() '() '()))
     (let list (Collect join))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -2340,7 +2213,7 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
 
     (let dict (ToDict list2 (lambda '(item) '((Member item 'key2) (Member item 'subkey2))) (lambda '(item) '()) '('One 'Hashed)))
 
-    (let join (MapJoinCore (ToFlow list1) dict 'LeftOnly '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'value1 'value) '()))
+    (let join (MapJoinCore (ToFlow list1) dict 'LeftOnly '('key1 'subkey1) '('key2 'subkey2) '('key1 'key 'value1 'value) '() '() '()))
     (let list (Collect join))
 
     (let res_sink (DataSink 'yt (quote plato)))
@@ -3417,6 +3290,35 @@ Y_UNIT_TEST_SUITE(TYqlExprConstraints) {
         const auto exprRoot = ParseAndAnnotate(s, exprCtx);
         CheckConstraint<TUniqueConstraintNode>(exprRoot, "LazyList", "");
         CheckConstraint<TDistinctConstraintNode>(exprRoot, "LazyList", "");
+    }
+
+    Y_UNIT_TEST(GroupByHop) {
+        const TStringBuf s = R"((
+(let list (AsList
+    (AsStruct '('"time" (String '"2024-01-01T00:00:01Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
+    (AsStruct '('"time" (String '"2024-01-01T00:00:02Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
+    (AsStruct '('"time" (String '"2024-01-01T00:00:03Z")) '('"user" (Int32 '"1")) '('"data" (Null)))
+))
+(let input (FlatMap list (lambda '(row) (Just (AsStruct '('"data" (Member row '"data")) '('group0 (AsList (Member row '"user"))) '('"time" (Member row '"time")) '('"user" (Member row '"user")))))))
+(let keySelector (lambda '(row) '((StablePickle (Member row '"data")) (StablePickle (Member row 'group0)))))
+(let sortKeySelector (lambda '(row) (SafeCast (Member row '"time") (OptionalType (DataType 'Timestamp)))))
+(let res (PartitionsByKeys input keySelector (Bool 'true) sortKeySelector (lambda '(row) (block '(
+  (let interval (Interval '1000000))
+  (let map (lambda '(item) (AsStruct)))
+  (let reduce (lambda '(lhs rhs) (AsStruct)))
+  (let hopping (MultiHoppingCore (Iterator row) keySelector sortKeySelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('_yql_time time) '('"data" (Nth key '"0")) '('group0 (Nth key '"1")))) '"0"))
+  (return (ForwardList (FlatMap hopping (lambda '(row) (Just (AsStruct '('_yql_time (Member row '_yql_time)) '('"data" (Unpickle (NullType) (Member row '"data"))) '('group0 (Unpickle (ListType (DataType 'Int32)) (Member row 'group0)))))))))
+)))))
+
+(let res_sink (DataSink 'yt (quote plato)))
+(let world (Write! world res_sink (Key '('table (String 'Output))) res '('('mode 'renew))))
+(return (Commit! world res_sink))
+        ))";
+
+        TExprContext exprCtx;
+        const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+        CheckConstraint<TDistinctConstraintNode>(exprRoot, "PartitionsByKeys", "Distinct((data,group0))");
+        CheckConstraint<TUniqueConstraintNode>(exprRoot, "PartitionsByKeys", "Unique((data,group0))");
     }
 }
 

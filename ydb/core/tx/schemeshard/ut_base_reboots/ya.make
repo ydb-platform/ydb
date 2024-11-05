@@ -5,7 +5,7 @@ IF (NOT WITH_VALGRIND)
 
     SPLIT_FACTOR(60)
 
-    IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+    IF (SANITIZER_TYPE OR WITH_VALGRIND)
         TIMEOUT(3600)
         SIZE(LARGE)
         TAG(ya:fat)
@@ -28,7 +28,6 @@ IF (NOT WITH_VALGRIND)
 
     SRCS(
         ut_base_reboots.cpp
-        ut_allocate_reboot_pq.cpp
     )
 
     END()

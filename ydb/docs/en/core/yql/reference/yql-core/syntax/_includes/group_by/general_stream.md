@@ -31,7 +31,7 @@ Functions with omitted `HOP_START` and `HOP_END` parameters, return a value of t
 
 The **tumbling window** known in other systems is a special case of a **hopping window** when `interval` == `hop`.
 
-**Examples:**
+## Examples
 
 ```yql
 SELECT STREAM

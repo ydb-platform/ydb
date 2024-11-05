@@ -1,11 +1,10 @@
 LLVM_BC(
-    postgresql/src/backend/access/brin/brin_minmax.c
-    postgresql/src/backend/access/gin/ginfast.c
-    postgresql/src/backend/commands/extension.c
     postgresql/src/backend/tsearch/dict_ispell.c
+    postgresql/src/backend/utils/adt/amutils.c
     postgresql/src/backend/utils/adt/dbsize.c
-    postgresql/src/backend/utils/adt/float.c
-    postgresql/src/backend/utils/adt/name.c
+    postgresql/src/backend/utils/adt/rangetypes_selfuncs.c
+    postgresql/src/backend/utils/adt/rowtypes.c
+    postgresql/src/backend/utils/adt/trigfuncs.c
     postgresql/src/backend/utils/adt/varchar.c
     pg_kernels.10.cpp
 
@@ -36,172 +35,25 @@ LLVM_BC(
     arrow_bpcharsend
     arrow_bpchartypmodin
     arrow_bpchartypmodout
-    arrow_brin_minmax_add_value
-    arrow_brin_minmax_consistent
-    arrow_brin_minmax_opcinfo
-    arrow_brin_minmax_union
     arrow_btbpchar_pattern_cmp
     arrow_btbpchar_pattern_sortsupport
-    arrow_btfloat48cmp
-    arrow_btfloat4cmp
-    arrow_btfloat4sortsupport
-    arrow_btfloat84cmp
-    arrow_btfloat8cmp
-    arrow_btfloat8sortsupport
-    arrow_btnamecmp
-    arrow_btnamesortsupport
+    arrow_btrecordcmp
+    arrow_btrecordimagecmp
     arrow_char_bpchar
-    arrow_current_schema
-    arrow_current_schemas
-    arrow_current_user
-    arrow_dacos
-    arrow_dacosd
-    arrow_dacosh
-    arrow_dasin
-    arrow_dasind
-    arrow_dasinh
-    arrow_datan
-    arrow_datan2
-    arrow_datan2d
-    arrow_datand
-    arrow_datanh
-    arrow_dcbrt
-    arrow_dceil
-    arrow_dcos
-    arrow_dcosd
-    arrow_dcosh
-    arrow_dcot
-    arrow_dcotd
-    arrow_degrees
-    arrow_dexp
-    arrow_dfloor
     arrow_dispell_init
     arrow_dispell_lexize
-    arrow_dlog1
-    arrow_dlog10
-    arrow_dpi
-    arrow_dpow
-    arrow_drandom
-    arrow_dround
-    arrow_dsign
-    arrow_dsin
-    arrow_dsind
-    arrow_dsinh
-    arrow_dsqrt
-    arrow_dtan
-    arrow_dtand
-    arrow_dtanh
-    arrow_dtof
-    arrow_dtoi2
-    arrow_dtoi4
-    arrow_dtrunc
-    arrow_float48div
-    arrow_float48eq
-    arrow_float48ge
-    arrow_float48gt
-    arrow_float48le
-    arrow_float48lt
-    arrow_float48mi
-    arrow_float48mul
-    arrow_float48ne
-    arrow_float48pl
-    arrow_float4_accum
-    arrow_float4abs
-    arrow_float4div
-    arrow_float4eq
-    arrow_float4ge
-    arrow_float4gt
-    arrow_float4in
-    arrow_float4larger
-    arrow_float4le
-    arrow_float4lt
-    arrow_float4mi
-    arrow_float4mul
-    arrow_float4ne
-    arrow_float4out
-    arrow_float4pl
-    arrow_float4recv
-    arrow_float4send
-    arrow_float4smaller
-    arrow_float4um
-    arrow_float4up
-    arrow_float84div
-    arrow_float84eq
-    arrow_float84ge
-    arrow_float84gt
-    arrow_float84le
-    arrow_float84lt
-    arrow_float84mi
-    arrow_float84mul
-    arrow_float84ne
-    arrow_float84pl
-    arrow_float8_accum
-    arrow_float8_avg
-    arrow_float8_combine
-    arrow_float8_corr
-    arrow_float8_covar_pop
-    arrow_float8_covar_samp
-    arrow_float8_regr_accum
-    arrow_float8_regr_avgx
-    arrow_float8_regr_avgy
-    arrow_float8_regr_combine
-    arrow_float8_regr_intercept
-    arrow_float8_regr_r2
-    arrow_float8_regr_slope
-    arrow_float8_regr_sxx
-    arrow_float8_regr_sxy
-    arrow_float8_regr_syy
-    arrow_float8_stddev_pop
-    arrow_float8_stddev_samp
-    arrow_float8_var_pop
-    arrow_float8_var_samp
-    arrow_float8abs
-    arrow_float8div
-    arrow_float8eq
-    arrow_float8ge
-    arrow_float8gt
-    arrow_float8in
-    arrow_float8larger
-    arrow_float8le
-    arrow_float8lt
-    arrow_float8mi
-    arrow_float8mul
-    arrow_float8ne
-    arrow_float8out
-    arrow_float8pl
-    arrow_float8recv
-    arrow_float8send
-    arrow_float8smaller
-    arrow_float8um
-    arrow_float8up
-    arrow_ftod
-    arrow_ftoi2
-    arrow_ftoi4
-    arrow_gin_clean_pending_list
+    arrow_hash_record
+    arrow_hash_record_extended
     arrow_hashbpchar
     arrow_hashbpcharextended
-    arrow_i2tod
-    arrow_i2tof
-    arrow_i4tod
-    arrow_i4tof
-    arrow_in_range_float4_float8
-    arrow_in_range_float8_float8
     arrow_name_bpchar
-    arrow_nameconcatoid
-    arrow_nameeq
-    arrow_namege
-    arrow_namegt
-    arrow_namein
-    arrow_namele
-    arrow_namelt
-    arrow_namene
-    arrow_nameout
-    arrow_namerecv
-    arrow_namesend
     arrow_pg_database_size_name
     arrow_pg_database_size_oid
-    arrow_pg_extension_config_dump
     arrow_pg_filenode_relation
+    arrow_pg_index_column_has_property
+    arrow_pg_index_has_property
+    arrow_pg_indexam_has_property
+    arrow_pg_indexam_progress_phasename
     arrow_pg_indexes_size
     arrow_pg_relation_filenode
     arrow_pg_relation_filepath
@@ -213,9 +65,24 @@ LLVM_BC(
     arrow_pg_tablespace_size_name
     arrow_pg_tablespace_size_oid
     arrow_pg_total_relation_size
-    arrow_radians
-    arrow_session_user
-    arrow_setseed
+    arrow_rangesel
+    arrow_record_eq
+    arrow_record_ge
+    arrow_record_gt
+    arrow_record_image_eq
+    arrow_record_image_ge
+    arrow_record_image_gt
+    arrow_record_image_le
+    arrow_record_image_lt
+    arrow_record_image_ne
+    arrow_record_in
+    arrow_record_le
+    arrow_record_lt
+    arrow_record_ne
+    arrow_record_out
+    arrow_record_recv
+    arrow_record_send
+    arrow_suppress_redundant_updates_trigger
     arrow_varchar
     arrow_varchar_support
     arrow_varcharin
@@ -224,5 +91,4 @@ LLVM_BC(
     arrow_varcharsend
     arrow_varchartypmodin
     arrow_varchartypmodout
-    arrow_width_bucket_float8
 )

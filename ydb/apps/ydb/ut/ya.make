@@ -1,7 +1,13 @@
 UNITTEST()
 
-TIMEOUT(600)
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    TIMEOUT(2400)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    TIMEOUT(600)
+    SIZE(MEDIUM)
+ENDIF()
 
 DEPENDS(
     ydb/apps/ydb
@@ -14,6 +20,9 @@ SRCS(
     workload-topic.cpp
     workload-transfer-topic-to-table.cpp
     run_ydb.cpp
+    supported_codecs.cpp
+    supported_codecs_fixture.cpp
+    ydb-dump.cpp
 )
 
 PEERDIR(

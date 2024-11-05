@@ -7,6 +7,8 @@
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/mind/hive/hive.h>
 
+#include "checks.h"
+
 using namespace NKikimr;
 using namespace NKikimr::NSchemeShard;
 
@@ -70,8 +72,8 @@ public:
 
         txState->ClearShardsInProgress();
         TString columnShardTxBody;
+        const auto seqNo = context.SS->StartRound(*txState);
         {
-            auto seqNo = context.SS->StartRound(*txState);
             NKikimrTxColumnShard::TSchemaTxBody tx;
             context.SS->FillSeqNo(tx, seqNo);
 
@@ -96,7 +98,7 @@ public:
                     context.SS->TabletID(),
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
-                    columnShardTxBody,
+                    columnShardTxBody, seqNo,
                     context.SS->SelectProcessingParams(txState->TargetPathId));
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
@@ -327,12 +329,10 @@ public:
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
-            if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard()) {
-                result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                    "OLAP schema operations are not supported");
-                return result;
-            }
+        if (AppData()->ColumnShardConfig.GetDisabledOnSchemeShard() && context.SS->OlapStores.empty()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "OLAP schema operations are not supported");
+            return result;
         }
 
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
@@ -396,9 +396,17 @@ public:
             return result;
         }
 
+        auto domainInfo = parentPath.DomainInfo();
+        const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+
         TProposeErrorCollector errors(*result);
-        TOlapStoreInfo::TPtr storeInfo = new TOlapStoreInfo;
+        TOlapStoreInfo::TPtr storeInfo = std::make_shared<TOlapStoreInfo>();
         if (!storeInfo->ParseFromRequest(createDescription, errors)) {
+            return result;
+        }
+
+        if (!NKikimr::NSchemeShard::NOlap::CheckLimits(limits, storeInfo, errStr)) {
+            result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
         }
 
@@ -438,7 +446,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        TOlapStoreInfo::TPtr pending = new TOlapStoreInfo;
+        TOlapStoreInfo::TPtr pending = std::make_shared<TOlapStoreInfo>();
         pending->AlterData = storeInfo;
         context.SS->OlapStores[pathId] = pending;
         context.SS->PersistOlapStore(db, pathId, *pending);
@@ -474,12 +482,11 @@ public:
         context.OnComplete.ActivateTx(OperationId);
 
         context.SS->PersistTxState(db, OperationId);
-        context.SS->PersistPath(db, dstPath.Base()->PathId);
 
         if (!acl.empty()) {
             dstPath.Base()->ApplyACL(acl);
-            context.SS->PersistACL(db, dstPath.Base());
         }
+        context.SS->PersistPath(db, dstPath.Base()->PathId);
 
         context.SS->PersistUpdateNextPathId(db);
         context.SS->PersistUpdateNextShardIdx(db);

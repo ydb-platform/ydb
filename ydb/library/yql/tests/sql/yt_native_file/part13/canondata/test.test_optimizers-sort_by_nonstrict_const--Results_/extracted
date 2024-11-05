@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Error: Optimization
+
+    <tmp_path>/program.sql:<main>:4:30: Error: Member not found: date
+    	select * from Input order by date, double;
+	                             ^
+    <tmp_path>/program.sql:<main>:4:36: Error: Member not found: double
+    	select * from Input order by date, double;
+	                                   ^

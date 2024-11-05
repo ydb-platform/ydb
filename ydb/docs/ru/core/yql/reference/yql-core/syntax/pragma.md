@@ -8,6 +8,10 @@
 
 {% include [x](_includes/pragma/files.md) %}
 
+{% if backend_name == "YDB" %}
+
 {% include [x](_includes/pragma/ydb.md) %}
+
+{% endif %}
 
 {% include [x](_includes/pragma/debug.md) %}

@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/ydb_convert/ydb_convert.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -20,12 +21,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     auto& record = propose->Record;
 
-    if (importInfo->UserSID) {
-        record.SetOwner(*importInfo->UserSID);
-    }
-
     auto& modifyScheme = *record.AddTransaction();
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
     modifyScheme.SetInternal(true);
 
     const TPath domainPath = TPath::Init(importInfo->DomainPathId, ss);
@@ -37,12 +34,41 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 
     modifyScheme.SetWorkingDir(wdAndPath.first);
 
-    auto& tableDesc = *modifyScheme.MutableCreateTable();
+    auto* indexedTable = modifyScheme.MutableCreateIndexedTable();
+    auto& tableDesc = *(indexedTable->MutableTableDescription());
     tableDesc.SetName(wdAndPath.second);
 
     Y_ABORT_UNLESS(ss->TableProfilesLoaded);
     Ydb::StatusIds::StatusCode status;
-    if (!FillTableDescription(modifyScheme, item.Scheme, ss->TableProfiles, status, error)) {
+    if (!FillTableDescription(modifyScheme, item.Scheme, ss->TableProfiles, status, error, true)) {
+        return nullptr;
+    }
+
+    for(const auto& column: item.Scheme.columns()) {
+        switch (column.default_value_case()) {
+            case Ydb::Table::ColumnMeta::kFromSequence: {
+                const auto& fromSequence = column.from_sequence();
+
+                auto* seqDesc = indexedTable->MutableSequenceDescription()->Add();
+                if (!FillSequenceDescription(*seqDesc, fromSequence, status, error)) {
+                    return nullptr;
+                }
+
+                break;
+            }
+            case Ydb::Table::ColumnMeta::kFromLiteral: {
+                break;
+            }
+            default: break;
+        }
+    }
+
+    if (importInfo->UserSID) {
+        record.SetOwner(*importInfo->UserSID);
+    }
+    FillOwner(record, item.Permissions);
+
+    if (!FillACL(modifyScheme, item.Permissions, error)) {
         return nullptr;
     }
 

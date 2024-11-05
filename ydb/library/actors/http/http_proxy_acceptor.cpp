@@ -57,6 +57,8 @@ protected:
         Endpoint->Proxy = Owner;
         Endpoint->WorkerName = event->Get()->WorkerName;
         Endpoint->Secure = event->Get()->Secure;
+        Endpoint->RateLimiter.Limit = event->Get()->MaxRequestsPerSecond;
+        Endpoint->RateLimiter.Period = TDuration::Seconds(1);
         int err = 0;
         if (Endpoint->Secure) {
             if (!event->Get()->SslCertificatePem.empty()) {

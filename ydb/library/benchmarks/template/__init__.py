@@ -50,7 +50,7 @@ class Builder:
         self.vars.update(v)
 
     def expose_vars(self, name: str):
-        m = self.env.get_template(name).module
+        m = self.env.get_template(name).make_module(self.vars)
         for k, v in m.__dict__.items():
             if not k.startswith("_"):
                 self.vars[k] = v
@@ -61,7 +61,7 @@ class Builder:
     def build(self, name: str, expose_all=False):
         t = self.env.get_template(name)
         if expose_all:
-            t.render({})
+            t.render(self.vars)
             for k in self.loader.loaded.keys():
                 if k != name:
                     self.expose_vars(k)
@@ -126,11 +126,11 @@ class ResultFormatter:
                         row[i] = row[i][0]
 
             for i in doubles:
-                if row[i] != 'NULL':
+                if row[i] != 'NULL' and row[i] is not None:
                     row[i] = self._format_double(float(row[i]))
 
             for i in dates:
-                if row[i] != 'NULL':
+                if row[i] != 'NULL' and row[i] is not None:
                     row[i] = self._format_date(float(row[i]))
 
     def format(self, res):

@@ -500,9 +500,18 @@ private:
 public:
     void RunYqlSchemeQuery(TString query, bool expectSuccess = true) {
         auto tableClient = NYdb::NTable::TTableClient(*Driver);
-        auto result = tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
-            return session.ExecuteSchemeQuery(query).GetValueSync();
-        });
+
+        NYdb::TStatus result(NYdb::EStatus::SUCCESS, NYql::TIssues());
+        for (size_t i = 0; i < 10; ++i) {
+            result = tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
+                return session.ExecuteSchemeQuery(query).GetValueSync();
+            });
+            if (!expectSuccess || result.IsSuccess()) {
+                break;
+            }
+            Sleep(TDuration::Seconds(1));
+        }
+
         if (expectSuccess) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         } else {

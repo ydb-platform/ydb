@@ -10,6 +10,8 @@
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/config/init/mock.h>
+#include <ydb/core/base/counters.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -17,6 +19,7 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
+#include <ydb/core/config/init/init.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/ptr.h>
@@ -34,6 +37,8 @@
 #define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
 
 namespace NKikimr::NConsole {
+
+using namespace NConfig;
 
 const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem,
@@ -59,6 +64,9 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::AllowEditYamlInUiItem,
     (ui32)NKikimrConsole::TConfigItem::BackgroundCleaningConfigItem,
     (ui32)NKikimrConsole::TConfigItem::TracingConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::BlobStorageConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::MetadataCacheConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::MemoryControllerConfigItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({
@@ -161,6 +169,8 @@ public:
 
     TDynBitMap FilterKinds(const TDynBitMap& in);
 
+    void UpdateCandidateStartupConfig(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
+
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
     void Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
@@ -232,7 +242,14 @@ private:
     const std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
     const NKikimrConfig::TAppConfig BaseConfig;
     NKikimrConfig::TAppConfig CurrentConfig;
+    NKikimrConfig::TAppConfig CandidateStartupConfig;
+    bool StartupConfigProcessError = false;
+    bool StartupConfigProcessDiff = false;
+    TString StartupConfigInfo;
+    ::NMonitoring::TDynamicCounters::TCounterPtr StartupConfigChanged;
     const std::optional<TDebugInfo> DebugInfo;
+    std::shared_ptr<NConfig::TRecordedInitialConfiguratorDeps> RecordedInitialConfiguratorDeps;
+    std::vector<TString> Args;
     ui64 NextRequestCookie;
     TVector<TActorId> HttpRequests;
     TActorId CommonSubscriptionClient;
@@ -257,7 +274,10 @@ TConfigsDispatcher::TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInf
         , ItemsServeRules(initInfo.ItemsServeRules)
         , BaseConfig(initInfo.InitialConfig)
         , CurrentConfig(initInfo.InitialConfig)
+        , CandidateStartupConfig(initInfo.InitialConfig)
         , DebugInfo(initInfo.DebugInfo)
+        , RecordedInitialConfiguratorDeps(std::move(initInfo.RecordedInitialConfiguratorDeps))
+        , Args(initInfo.Args)
         , NextRequestCookie(Now().GetValue())
 {}
 
@@ -270,6 +290,10 @@ void TConfigsDispatcher::Bootstrap()
         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
         mon->RegisterActorPage(actorsMonPage, "configs_dispatcher", "Configs Dispatcher", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
     }
+    TIntrusivePtr<NMonitoring::TDynamicCounters> rootCounters = AppData()->Counters;
+    TIntrusivePtr<NMonitoring::TDynamicCounters> authCounters = GetServiceCounters(rootCounters, "config");
+    NMonitoring::TDynamicCounterPtr counters = authCounters->GetSubgroup("subsystem", "ConfigsDispatcher");
+    StartupConfigChanged = counters->GetCounter("StartupConfigChanged", true);
 
     auto commonClient = CreateConfigsSubscriber(
         SelfId(),
@@ -277,7 +301,13 @@ void TConfigsDispatcher::Bootstrap()
         CurrentConfig,
         0,
         true,
-        1);
+        1,
+        {},
+        {},
+        TNodeInfo{
+            .Tenant = Labels.contains("tenant") ? Labels.at("tenant") : TString(""),
+            .NodeType = Labels.contains("node_type") ? Labels.at("node_type") : TString(""),
+        });
     CommonSubscriptionClient = RegisterWithSameMailbox(commonClient);
 
     Become(&TThis::StateInit);
@@ -392,7 +422,12 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
     response.InsertValue("current_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(CurrentConfig, NYamlConfig::GetProto2JsonConfig()), true));
 
     if (DebugInfo) {
-        response.InsertValue("initial_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->StaticConfig, NYamlConfig::GetProto2JsonConfig()), true));
+        // TODO: write custom json serializer for security fields
+        // for now json info not documented and used only for some very specifigc
+        // debug purproses, so we can disable it for now without any risks
+        // and postpone implementation
+        //
+        // response.InsertValue("initial_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->StaticConfig, NYamlConfig::GetProto2JsonConfig()), true));
         response.InsertValue("initial_cms_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->OldDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
         response.InsertValue("initial_cms_yaml_json_config", NJson::ReadJsonFastTree(NProtobufJson::Proto2Json(DebugInfo->NewDynConfig, NYamlConfig::GetProto2JsonConfig()), true));
     }
@@ -536,6 +571,33 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                 str << "<br />" << Endl;
                 COLLAPSED_REF_CONTENT("debug-info", "Debug info") {
                     DIV_CLASS("tab-left") {
+                        COLLAPSED_REF_CONTENT("args", "Startup process args") {
+                            PRE() {
+                                for (auto& arg : Args) {
+                                    str << "\"" << arg << "\" ";
+                                }
+                            }
+                        }
+                        str << "<br />" << Endl;
+                        COLLAPSED_REF_CONTENT("candidate-startup-config", "Candidate startup config") {
+                            str << "<div class=\"alert alert-primary tab-left\" role=\"alert\">" << Endl;
+                            if (StartupConfigProcessError) {
+                                str << "<b>Error: </b>" << Endl;
+                                PRE() {
+                                    str << StartupConfigInfo;
+                                }
+                            } else if (StartupConfigProcessDiff) {
+                                str << "<b>Configs are different: </b>" << Endl;
+                                PRE() {
+                                    str << StartupConfigInfo;
+                                }
+                            } else {
+                                str << "<b>Configs are same.</b>" << Endl;
+                            }
+                            str << "</div>" << Endl;
+                            NHttp::OutputConfigHTML(str, CandidateStartupConfig);
+                        }
+                        str << "<br />" << Endl;
                         COLLAPSED_REF_CONTENT("effective-config-debug-info", "Effective config debug info") {
                             NHttp::OutputConfigDebugInfoHTML(
                                 str,
@@ -700,9 +762,111 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
     HttpRequests.clear();
 }
 
+class TConfigurationResult
+    : public IConfigurationResult
+{
+public:
+    // TODO make ref
+    const NKikimrConfig::TAppConfig& GetConfig() const {
+        return Config;
+    }
+
+    bool HasYamlConfig() const {
+        return !YamlConfig.empty();
+    }
+
+    const TString& GetYamlConfig() const {
+        return YamlConfig;
+    }
+
+    TMap<ui64, TString> GetVolatileYamlConfigs() const {
+        return VolatileYamlConfigs;
+    }
+
+    NKikimrConfig::TAppConfig Config;
+    TString YamlConfig;
+    TMap<ui64, TString> VolatileYamlConfigs;
+};
+
+void TConfigsDispatcher::UpdateCandidateStartupConfig(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)
+try {
+    if (!RecordedInitialConfiguratorDeps) {
+        CandidateStartupConfig = {};
+        StartupConfigProcessError = true;
+        StartupConfigProcessDiff = false;
+        StartupConfigInfo = "Startup params not recorded. Corresponding functionality won't work.";
+        *StartupConfigChanged = 0;
+        return;
+    }
+
+    auto &rec = ev->Get()->Record;
+
+    auto dcClient = std::make_unique<TDynConfigClientMock>();
+    auto configs = std::make_shared<TConfigurationResult>();
+    dcClient->SavedResult = configs;
+    configs->Config = rec.GetRawConsoleConfig();
+    configs->YamlConfig = rec.GetYamlConfig();
+    // TODO volatile
+    RecordedInitialConfiguratorDeps->DynConfigClient = std::move(dcClient);
+    auto deps = RecordedInitialConfiguratorDeps->GetDeps();
+    NConfig::TInitialConfigurator initCfg(deps);
+
+    std::vector<const char*> argv;
+
+    for (const auto& arg : Args) {
+        argv.push_back(arg.data());
+    }
+
+    NLastGetopt::TOpts opts;
+    initCfg.RegisterCliOptions(opts);
+    deps.ProtoConfigFileProvider.RegisterCliOptions(opts);
+
+    NLastGetopt::TOptsParseResultException parseResult(&opts, argv.size(), argv.data());
+
+    initCfg.ValidateOptions(opts, parseResult);
+    initCfg.Parse(parseResult.GetFreeArgs());
+
+    NKikimrConfig::TAppConfig appConfig;
+    ui32 nodeId;
+    TKikimrScopeId scopeId;
+    TString tenantName;
+    TBasicKikimrServicesMask servicesMask;
+    TString clusterName;
+    NConfig::TConfigsDispatcherInitInfo configsDispatcherInitInfo;
+
+    initCfg.Apply(
+        appConfig,
+        nodeId,
+        scopeId,
+        tenantName,
+        servicesMask,
+        clusterName,
+        configsDispatcherInitInfo);
+
+    CandidateStartupConfig = appConfig;
+    StartupConfigProcessError = false;
+    StartupConfigProcessDiff = false;
+    StartupConfigInfo.clear();
+    google::protobuf::util::MessageDifferencer md;
+    auto fieldComparator = google::protobuf::util::DefaultFieldComparator();
+    md.set_field_comparator(&fieldComparator);
+    md.ReportDifferencesToString(&StartupConfigInfo);
+    StartupConfigProcessDiff = !md.Compare(BaseConfig, CandidateStartupConfig);
+    *StartupConfigChanged = StartupConfigProcessDiff ? 1 : 0;
+}
+catch (...) {
+    CandidateStartupConfig = {};
+    StartupConfigProcessError = true;
+    StartupConfigProcessDiff = false;
+    StartupConfigInfo = "Got exception while processing candidate config.";
+    *StartupConfigChanged = 1;
+}
+
 void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev)
 {
     auto &rec = ev->Get()->Record;
+
+    UpdateCandidateStartupConfig(ev);
 
     CurrentConfig = rec.GetConfig();
 
@@ -770,7 +934,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         if (subscription->Yaml && YamlConfigEnabled) {
             ReplaceConfigItems(YamlProtoConfig, trunc, FilterKinds(subscription->Kinds), BaseConfig);
         } else {
-            Y_FOR_EACH_BIT(kind, kinds) {
+            Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
                 if (affectedKinds.contains(kind)) {
                     hasAffectedKinds = true;
                 }
@@ -784,15 +948,15 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             ReplaceConfigItems(ev->Get()->Record.GetConfig(), trunc, FilterKinds(kinds), BaseConfig);
         }
 
-        if (hasAffectedKinds || !CompareConfigs(subscription->CurrentConfig.Config, trunc) || CurrentStateFunc() == &TThis::StateInit) {
+        if (hasAffectedKinds || !CompareConfigs(subscription->CurrentConfig.Config, trunc, FilterKinds(kinds)) || CurrentStateFunc() == &TThis::StateInit) {
             subscription->UpdateInProcess = MakeHolder<TEvConsole::TEvConfigNotificationRequest>();
             subscription->UpdateInProcess->Record.MutableConfig()->CopyFrom(trunc);
             subscription->UpdateInProcess->Record.SetLocal(true);
-            Y_FOR_EACH_BIT(kind, kinds) {
+            Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
                 subscription->UpdateInProcess->Record.AddItemKinds(kind);
             }
             subscription->UpdateInProcessCookie = ++NextRequestCookie;
-            subscription->UpdateInProcessConfigVersion = FilterVersion(ev->Get()->Record.GetConfig().GetVersion(), kinds);
+            subscription->UpdateInProcessConfigVersion = FilterVersion(ev->Get()->Record.GetConfig().GetVersion(), FilterKinds(kinds));
 
             if (YamlConfigEnabled) {
                 UpdateYamlVersion(subscription);
@@ -889,6 +1053,12 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
         "SetConfigSubscriptionRequest handler");
     Y_UNUSED(nonYamlKinds);
     auto kinds = KindsToBitMap(ev->Get()->ConfigItemKinds);
+
+    auto truncKinds = FilterKinds(kinds);
+    if (truncKinds.Empty() && !kinds.Empty()) {
+        return;
+    }
+
     auto subscriberActor = ev->Get()->Subscriber ? ev->Get()->Subscriber : ev->Sender;
 
     auto subscription = FindSubscription(kinds);

@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_localrecovery.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_many.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_outofspace.h>
+#include <ydb/core/blobstorage/ut_vdisk/lib/test_bad_blobid.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_brokendevice.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_repl.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/test_simplebs.h>
@@ -262,14 +263,14 @@ Y_UNIT_TEST_SUITE(TBsVDiskManyPutGetCheckSize) {
             TMsgPackInfo(100'000, 672),
             TMsgPackInfo(17'026, 1)
         }));
-        TManyPutOneGet testOk(false, msgPacks, UNK, 0, 257, false);
+        TManyPutOneGet testOk(false, msgPacks, UNK, DefaultTestTabletId, 257, false);
         TestRun<TManyPutOneGet, TFastVDiskSetupHndOff>(&testOk, TDuration::Minutes(100), DefChunkSize, DefDiskSize,
                 1, 1, NKikimr::TErasureType::ErasureNone);
         std::shared_ptr<TVector<TMsgPackInfo>> failMsgPacks(std::unique_ptr<TVector<TMsgPackInfo>>(new TVector<TMsgPackInfo>{
             TMsgPackInfo(100'000, 672),
             TMsgPackInfo(17'027, 1)
         }));
-        TManyPutOneGet testError(false, failMsgPacks, UNK, 0, 257, true);
+        TManyPutOneGet testError(false, failMsgPacks, UNK, DefaultTestTabletId, 257, true);
         TestRun<TManyPutOneGet, TFastVDiskSetupHndOff>(&testError, TDuration::Minutes(100), DefChunkSize, DefDiskSize,
                 1, 1, NKikimr::TErasureType::ErasureNone);
     }
@@ -412,16 +413,6 @@ Y_UNIT_TEST_SUITE(TBsVDiskBrokenPDisk) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-// HANDOFF MOVE DEL
-///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsVDiskHandoffMoveDel) {
-    Y_UNIT_TEST(HandoffMoveDel) {
-        TTestHandoffMoveDel test;
-        TestRun<TTestHandoffMoveDel, TFastVDiskSetupCompacted>(&test, TIMEOUT);
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////
 // Huge
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 Y_UNIT_TEST_SUITE(TBsHuge) {
@@ -477,6 +468,20 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
     Y_UNIT_TEST(WriteRestartReadHuge) {
         auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         auto settings = TWriteRestartReadSettings::OneSetup(1000, 65u << 10u, HUGEB, vdiskSetup);
+        WriteRestartRead(settings, TIMEOUT);
+    }
+
+    Y_UNIT_TEST(WriteRestartReadHugeIncreased) {
+        auto vdiskWriteSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(8u << 10u);
+        auto vdiskReadSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(60u << 10u);
+        auto settings = TWriteRestartReadSettings(1000, 20u << 10u, HUGEB, vdiskWriteSetup, vdiskReadSetup);
+        WriteRestartRead(settings, TIMEOUT);
+    }
+
+    Y_UNIT_TEST(WriteRestartReadHugeDecreased) {
+        auto vdiskWriteSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(60 << 10u);
+        auto vdiskReadSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(8u << 10u);
+        auto settings = TWriteRestartReadSettings(1000, 20u << 10u, HUGEB, vdiskWriteSetup, vdiskReadSetup);
         WriteRestartRead(settings, TIMEOUT);
     }
 
@@ -551,6 +556,30 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
         auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         TChaoticWriteRestartWriteSettings settings(
             TWriteRestartReadSettings::OneSetup(300, 65u << 10u, HUGEB, vdiskSetup),
+            500,
+            TDuration::Seconds(10),
+            TDuration::Seconds(0));
+        ChaoticWriteRestartWrite(settings, TIMEOUT);
+    }
+
+    Y_UNIT_TEST(ChaoticWriteRestartHugeIncreased) {
+        auto vdiskSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(8u << 10u);
+        auto vdiskSecondSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(60u << 10u);
+        TChaoticWriteRestartWriteSettings settings(
+            TWriteRestartReadSettings::OneSetup(300, 20u << 10u, HUGEB, vdiskSetup),
+            vdiskSecondSetup,
+            500,
+            TDuration::Seconds(10),
+            TDuration::Seconds(0));
+        ChaoticWriteRestartWrite(settings, TIMEOUT);
+    }
+
+    Y_UNIT_TEST(ChaoticWriteRestartHugeDecreased) {
+        auto vdiskSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(60u << 10u);
+        auto vdiskSecondSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(8u << 10u);
+        TChaoticWriteRestartWriteSettings settings(
+            TWriteRestartReadSettings::OneSetup(300, 20u << 10u, HUGEB, vdiskSetup),
+            vdiskSecondSetup,
             500,
             TDuration::Seconds(10),
             TDuration::Seconds(0));
@@ -853,5 +882,17 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
         bool success1 = Conf.Run<TSyncLogTestWrite>(&test, TIMEOUT, 1, false);
         Conf.Shutdown();
         UNIT_ASSERT(success1);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+// BAD BLOBID
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+Y_UNIT_TEST_SUITE(TBsVDiskBadBlobId) {
+    // Ensure that putting blob with bad id results in ERROR status
+
+    Y_UNIT_TEST(PutBlobWithBadId) {
+        TWriteAndExpectError test;
+        TestRun<TWriteAndExpectError, TDefaultVDiskSetup>(&test, TIMEOUT);
     }
 }

@@ -65,17 +65,20 @@ namespace NActors {
     }
 #endif
 
-    TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity)
+    TExecutorPoolBase::TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue)
         : TExecutorPoolBaseMailboxed(poolId)
         , PoolThreads(threads)
         , ThreadsAffinity(affinity)
-#ifdef RING_ACTIVATION_QUEUE
-        , Activations(threads == 1)
-#endif
-    {}
+    {
+        if (useRingQueue) {
+            Activations.emplace<TRingActivationQueue>(threads == 1);
+        } else {
+            Activations.emplace<TUnorderedCacheActivationQueue>();
+        }
+    }
 
     TExecutorPoolBase::~TExecutorPoolBase() {
-        while (Activations.Pop(0))
+        while (std::visit([](auto &x){return x.Pop(0);}, Activations))
             ;
     }
 
@@ -149,6 +152,7 @@ namespace NActors {
 
     TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingWriteCounter, const TActorId& parentId) {
         NHPTimer::STime hpstart = GetCycleCountFast();
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_REGISTER, false> activityGuard(hpstart);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         ui32 at = actor->GetActivityType();
         Y_DEBUG_ABORT_UNLESS(at < Stats.ActorsAliveByActivity.size());
@@ -236,6 +240,7 @@ namespace NActors {
 
     TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId) {
         NHPTimer::STime hpstart = GetCycleCountFast();
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_REGISTER, false> activityGuard(hpstart);
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
         ui32 at = actor->GetActivityType();
         if (at >= Stats.MaxActivityType())

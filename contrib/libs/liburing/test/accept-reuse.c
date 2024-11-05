@@ -46,7 +46,7 @@ int main(int argc, char **argv)
 		return T_EXIT_SKIP;
 
 	memset(&params, 0, sizeof(params));
-	ret = io_uring_queue_init_params(4, &io_uring, &params);
+	ret = t_io_uring_init_sqarray(4, &io_uring, &params);
 	if (ret) {
 		fprintf(stderr, "io_uring_init_failed: %d\n", ret);
 		return T_EXIT_FAIL;

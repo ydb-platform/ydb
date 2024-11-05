@@ -20,8 +20,8 @@ join
 on
     c.c_custkey = o.o_custkey
 where
-    cast(o.o_orderdate as timestamp) >= $border and
-    cast(o.o_orderdate as timestamp) < ($border + Interval("P90D"))
+    o.o_orderdate >= $border
+    and o.o_orderdate < ($border + Interval("P90D"))
 );
 $join2 = (
 select

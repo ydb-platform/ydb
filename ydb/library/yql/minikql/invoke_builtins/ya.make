@@ -1,15 +1,9 @@
-OWNER(
-    g:yql
-    g:yql_ydb_core
-)
-
 LIBRARY()
 
 SRCS(
 )
 
-PEERDIR(
-)
+PEERDIR()
 
 YQL_LAST_ABI_VERSION()
 

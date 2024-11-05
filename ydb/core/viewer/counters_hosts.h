@@ -1,25 +1,24 @@
 #pragma once
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/core/mon.h>
-#include <ydb/library/actors/interconnect/interconnect.h>
+#include "viewer.h"
 #include <library/cpp/json/json_writer.h>
 #include <ydb/core/base/nameservice.h>
-#include <ydb/library/services/services.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include "viewer.h"
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 
-namespace NKikimr {
-namespace NViewer {
+namespace NKikimr::NViewer {
 
 using namespace NActors;
 using namespace NNodeWhiteboard;
 
 class TCountersHostsList : public TActorBootstrapped<TCountersHostsList> {
+    using TBase = TActorBootstrapped<TCountersHostsList>;
+
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
     TMap<TNodeId, THolder<TEvWhiteboard::TEvSystemStateResponse>> NodesResponses;
+    THashSet<TActorId> TcpProxies;
     ui32 NodesRequested = 0;
     ui32 NodesReceived = 0;
     bool StaticNodesOnly = false;
@@ -35,47 +34,48 @@ public:
         , Event(ev)
     {}
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap() {
         const auto& params(Event->Get()->Request.GetParams());
         StaticNodesOnly = FromStringWithDefault<bool>(params.Get("static_only"), StaticNodesOnly);
         DynamicNodesOnly = FromStringWithDefault<bool>(params.Get("dynamic_only"), DynamicNodesOnly);
         const TActorId nameserviceId = GetNameserviceActorId();
-        ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
-        ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
+        Send(nameserviceId, new TEvInterconnect::TEvListNodes());
+        Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
         Become(&TThis::StateRequestedList);
     }
 
     STFUNC(StateRequestedList) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvInterconnect::TEvNodesInfo, Handle);
-            CFunc(TEvents::TSystem::Wakeup, Timeout);
+            hFunc(TEvInterconnect::TEvNodesInfo, Handle);
+            cFunc(TEvents::TSystem::Wakeup, Timeout);
         }
     }
 
     STFUNC(StateRequestedSysInfo) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
-            HFunc(TEvents::TEvUndelivered, Undelivered);
-            HFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
-            CFunc(TEvents::TSystem::Wakeup, Timeout);
+            hFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
+            hFunc(TEvents::TEvUndelivered, Undelivered);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
+            hFunc(TEvInterconnect::TEvNodeConnected, Connected);
+            cFunc(TEvents::TSystem::Wakeup, Timeout);
         }
     }
 
-    void SendRequest(ui32 nodeId, const TActorContext& ctx) {
+    void SendRequest(ui32 nodeId) {
         TActorId whiteboardServiceId = MakeNodeWhiteboardServiceId(nodeId);
         THolder<TEvWhiteboard::TEvSystemStateRequest> request = MakeHolder<TEvWhiteboard::TEvSystemStateRequest>();
-        ctx.Send(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
-        ++NodesRequested;
+        Send(whiteboardServiceId, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, nodeId);
+        NodesRequested++;
     }
 
-    void NodeStateInfoReceived(const TActorContext& ctx) {
+    void NodeStateInfoReceived() {
         ++NodesReceived;
         if (NodesRequested == NodesReceived) {
-            ReplyAndDie(ctx);
+            ReplyAndDie();
         }
     }
 
-    void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
         NodesInfo = ev->Release();
         ui32 minAllowedNodeId = std::numeric_limits<ui32>::min();
         ui32 maxAllowedNodeId = std::numeric_limits<ui32>::max();
@@ -90,33 +90,38 @@ public:
         }
         for (const auto& nodeInfo : NodesInfo->Nodes) {
             if (nodeInfo.NodeId >= minAllowedNodeId && nodeInfo.NodeId <= maxAllowedNodeId) {
-                SendRequest(nodeInfo.NodeId, ctx);
+                SendRequest(nodeInfo.NodeId);
             }
         }
         Become(&TThis::StateRequestedSysInfo);
     }
 
-    void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         NodesResponses[nodeId] = ev->Release();
-        NodeStateInfoReceived(ctx);
+        NodeStateInfoReceived();
     }
 
-    void Undelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
+    void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
         ui32 nodeId = ev.Get()->Cookie;
         if (NodesResponses.emplace(nodeId, nullptr).second) {
-            NodeStateInfoReceived(ctx);
+            NodeStateInfoReceived();
         }
     }
 
-    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx) {
+    void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         ui32 nodeId = ev->Get()->NodeId;
+        TcpProxies.erase(ev->Sender);
         if (NodesResponses.emplace(nodeId, nullptr).second) {
-            NodeStateInfoReceived(ctx);
+            NodeStateInfoReceived();
         }
     }
 
-    void ReplyAndDie(const TActorContext& ctx) {
+    void Connected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
+        TcpProxies.insert(ev->Sender);
+    }
+
+    void ReplyAndDie() {
         TStringStream text;
         for (const auto& [nodeId, sysInfo] : NodesResponses) {
             if (sysInfo) {
@@ -147,14 +152,20 @@ public:
                 }
             }
         }
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKTEXT(Event->Get()) + text.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        Die(ctx);
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKTEXT(Event->Get()) + text.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        PassAway();
     }
 
-    void Timeout(const TActorContext &ctx) {
-        ReplyAndDie(ctx);
+    void PassAway() {
+        for (auto &tcpPorxy: TcpProxies) {
+            Send(tcpPorxy, new TEvents::TEvUnsubscribe);
+        }
+        TBase::PassAway();
+    }
+
+    void Timeout() {
+        ReplyAndDie();
     }
 };
 
-}
 }

@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package Ydb.ObjectStorage.V1;
+option java_package = "com.yandex.ydb.object_storage.v1";
+
+import "ydb/public/api/protos/draft/ydb_object_storage.proto";
+
+service ObjectStorageService {
+    rpc List(ObjectStorage.ListingRequest) returns (ObjectStorage.ListingResponse);
+}

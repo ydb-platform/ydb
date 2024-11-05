@@ -1,0 +1,129 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     LicenseRef-scancode-unknown-license-reference 27ff83b6d7e95b709c1a8b94532ebef1
+BELONGS ya.make
+    License text:
+        Please read the file [COPYING](https://github.com/cubicdaiya/dtl/blob/master/COPYING).
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 22.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        README.md [685:685]
+
+KEEP     LicenseRef-scancode-unknown-license-reference AND BSD-3-Clause 3d436eacb955b50a8f94435e0ba12145
+BELONGS ya.make
+    License text:
+           In short, Diff Template Library is distributed under so called "BSD license",
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        dtl/Diff.hpp [4:4]
+        dtl/Diff3.hpp [4:4]
+        dtl/Lcs.hpp [4:4]
+        dtl/Sequence.hpp [4:4]
+        dtl/Ses.hpp [4:4]
+        dtl/dtl.hpp [4:4]
+        dtl/functors.hpp [4:4]
+        dtl/variables.hpp [4:4]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        dtl/Diff.hpp [4:4]
+        dtl/Diff3.hpp [4:4]
+        dtl/Lcs.hpp [4:4]
+        dtl/Sequence.hpp [4:4]
+        dtl/Ses.hpp [4:4]
+        dtl/dtl.hpp [4:4]
+        dtl/functors.hpp [4:4]
+        dtl/variables.hpp [4:4]
+
+KEEP     BSD-3-Clause         56b06256bb85447fc6145d2460ad8aca
+BELONGS ya.make
+FILE_INCLUDE CONTRIBUTORS found in files: COPYING at line 20, COPYING at line 24
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [6:30]
+
+KEEP     LicenseRef-scancode-unknown-license-reference AND BSD-3-Clause d9ebc19a46340bfaf128a098aade97ed
+BELONGS ya.make
+    License text:
+        In short, Diff Template Library is distributed under so called "BSD license",
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 11.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        COPYING [1:1]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        COPYING [1:1]
+
+KEEP     BSD-3-Clause         f915ab3bdea0afd017f002b31f72027d
+BELONGS ya.make
+FILE_INCLUDE CONTRIBUTORS found in files: dtl/Diff.hpp at line 23, dtl/Diff.hpp at line 27, dtl/Diff3.hpp at line 23, dtl/Diff3.hpp at line 27, dtl/Lcs.hpp at line 23, dtl/Lcs.hpp at line 27, dtl/Sequence.hpp at line 23, dtl/Sequence.hpp at line 27, dtl/Ses.hpp at line 23, dtl/Ses.hpp at line 27, dtl/dtl.hpp at line 23, dtl/dtl.hpp at line 27, dtl/functors.hpp at line 23, dtl/functors.hpp at line 27, dtl/variables.hpp at line 23, dtl/variables.hpp at line 27
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        dtl/Diff.hpp [9:33]
+        dtl/Diff3.hpp [9:33]
+        dtl/Lcs.hpp [9:33]
+        dtl/Sequence.hpp [9:33]
+        dtl/Ses.hpp [9:33]
+        dtl/dtl.hpp [9:33]
+        dtl/functors.hpp [9:33]
+        dtl/variables.hpp [9:33]

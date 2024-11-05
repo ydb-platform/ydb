@@ -177,7 +177,7 @@ namespace NKikimr::NBlobDepot {
         switch (Event->GetTypeRewrite()) {
 #define XX(TYPE) \
             case TEvBlobStorage::TYPE: \
-                response = Event->Get<TEvBlobStorage::T##TYPE>()->MakeErrorResponse(status, errorReason, Agent.VirtualGroupId); \
+                response = Event->Get<TEvBlobStorage::T##TYPE>()->MakeErrorResponse(status, errorReason, TGroupId::FromValue(Agent.VirtualGroupId)); \
                 static_cast<TEvBlobStorage::T##TYPE##Result&>(*response).ExecutionRelay = std::move(ExecutionRelay); \
                 break; \
             //

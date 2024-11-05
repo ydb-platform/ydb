@@ -1,13 +1,46 @@
 #pragma once
 
-#include "yson_struct_enum.h"
+#include "yson_struct_public.h"
 
 #include <yt/yt/core/yson/public.h>
 #include <yt/yt/core/ypath/public.h>
 #include <yt/yt/core/ytree/public.h>
-#include <yt/yt/core/misc/optional.h>
+
+#include <library/cpp/yt/misc/optional.h>
 
 namespace NYT::NYTree {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NPrivate {
+
+// Least common denominator between INodePtr
+// and TYsonPullParserCursor.
+// Maybe something else in the future.
+template <class T>
+struct TYsonSourceTraits
+{
+    static constexpr bool IsValid = false;
+
+    static INodePtr AsNode(T& source)
+        requires false;
+
+    static bool IsEmpty(T& source)
+        requires false;
+
+    static void Advance(T& source)
+        requires false;
+
+    template <CStdVector TVector, class TFiller>
+    static void FillVector(T& source, TVector& vector, TFiller filler)
+        requires false;
+
+    template <CAnyMap TMap, class TFiller>
+    static void FillMap(T& source, TMap& map, TFiller filler)
+        requires false;
+};
+
+} // namespace NPrivate
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -43,7 +76,7 @@ struct IYsonStructParameter
 
     virtual void Save(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const = 0;
 
-    virtual void Postprocess(const TYsonStructBase* self, const NYPath::TYPath& path) const = 0;
+    virtual void PostprocessParameter(const TYsonStructBase* self, const NYPath::TYPath& path) const = 0;
 
     virtual void SetDefaultsInitialized(TYsonStructBase* self) = 0;
 
@@ -55,6 +88,8 @@ struct IYsonStructParameter
     virtual IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* self) const = 0;
 
     virtual void WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const = 0;
+
+    virtual bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const = 0;
 };
 
 DECLARE_REFCOUNTED_STRUCT(IYsonStructParameter)
@@ -68,7 +103,7 @@ struct IYsonStructMeta
     virtual const std::vector<std::pair<TString, IYsonStructParameterPtr>>& GetParameterSortedList() const = 0;
     virtual void SetDefaultsOfInitializedStruct(TYsonStructBase* target) const = 0;
     virtual const THashSet<TString>& GetRegisteredKeys() const = 0;
-    virtual void Postprocess(TYsonStructBase* target, const TYPath& path) const = 0;
+    virtual void PostprocessStruct(TYsonStructBase* target, const TYPath& path) const = 0;
     virtual IYsonStructParameterPtr GetParameter(const TString& keyOrAlias) const = 0;
     virtual void LoadParameter(TYsonStructBase* target, const TString& key, const NYTree::INodePtr& node) const = 0;
 
@@ -95,10 +130,14 @@ struct IYsonStructMeta
 
     virtual void WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const = 0;
 
+    virtual bool CompareStructs(
+        const TYsonStructBase* lhs,
+        const TYsonStructBase* rhs) const = 0;
+
     virtual ~IYsonStructMeta() = default;
 };
 
-///////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TYsonStructMeta
     : public IYsonStructMeta
@@ -113,7 +152,7 @@ public:
     IYsonStructParameterPtr GetParameter(const TString& keyOrAlias) const override;
     void LoadParameter(TYsonStructBase* target, const TString& key, const NYTree::INodePtr& node) const override;
 
-    void Postprocess(TYsonStructBase* target, const TYPath& path) const override;
+    void PostprocessStruct(TYsonStructBase* target, const TYPath& path) const override;
 
     void LoadStruct(
         TYsonStructBase* target,
@@ -139,6 +178,10 @@ public:
     void WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const override;
 
     void FinishInitialization(const std::type_info& structType);
+
+    bool CompareStructs(
+        const TYsonStructBase* lhs,
+        const TYsonStructBase* rhs) const override;
 
 private:
     friend class TYsonStructRegistry;
@@ -204,7 +247,7 @@ class TYsonStructParameter
     : public IYsonStructParameter
 {
 public:
-    using TPostprocessor = std::function<void(const TValue&)>;
+    using TValidator = std::function<void(const TValue&)>;
     using TValueType = typename TOptionalTraits<TValue>::TValue;
 
     TYsonStructParameter(
@@ -227,7 +270,7 @@ public:
         const TLoadParameterOptions& options,
         const std::function<void()>& validate) override;
 
-    void Postprocess(const TYsonStructBase* self, const NYPath::TYPath& path) const override;
+    void PostprocessParameter(const TYsonStructBase* self, const NYPath::TYPath& path) const override;
     void SetDefaultsInitialized(TYsonStructBase* self) override;
     void Save(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const override;
     bool CanOmitValue(const TYsonStructBase* self) const override;
@@ -237,6 +280,8 @@ public:
     IMapNodePtr GetRecursiveUnrecognized(const TYsonStructBase* self) const override;
 
     void WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const override;
+
+    bool CompareParameter(const TYsonStructBase* lhsSelf, const TYsonStructBase* rhsSelf) const override;
 
     // Mark as optional. Field will be default-initialized if `init` is true, initialization is skipped otherwise.
     TYsonStructParameter& Optional(bool init = true);
@@ -250,7 +295,7 @@ public:
     TYsonStructParameter& DontSerializeDefault();
     // Register general purpose validator for parameter. Used by other validators.
     // It is called after deserialization.
-    TYsonStructParameter& CheckThat(TPostprocessor validator);
+    TYsonStructParameter& CheckThat(TValidator validator);
     // Register validator that checks value to be greater than given value.
     TYsonStructParameter& GreaterThan(TValueType value);
     // Register validator that checks value to be greater than or equal to given value.
@@ -278,7 +323,7 @@ private:
     std::unique_ptr<IYsonFieldAccessor<TValue>> FieldAccessor_;
     std::optional<std::function<TValue()>> DefaultCtor_;
     bool SerializeDefault_ = true;
-    std::vector<TPostprocessor> Postprocessors_;
+    std::vector<TValidator> Validators_;
     std::vector<TString> Aliases_;
     bool TriviallyInitializedIntrusivePtr_ = false;
     bool Optional_ = false;

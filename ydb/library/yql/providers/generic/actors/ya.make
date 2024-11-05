@@ -2,7 +2,8 @@ LIBRARY()
 
 SRCS(
     yql_generic_read_actor.cpp
-    yql_generic_source_factory.cpp
+    yql_generic_lookup_actor.cpp
+    yql_generic_provider_factories.cpp
     yql_generic_token_provider.cpp
 )
 
@@ -20,3 +21,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

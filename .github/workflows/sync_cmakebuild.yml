@@ -1,7 +1,7 @@
 name: Sync cmakebuild with main
 on:
   schedule:
-    - cron: "0 * * * *"
+    - cron: "0 * * * *"  # At minute 0 every hour
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}
@@ -40,6 +40,11 @@ jobs:
           echo "Merge did not bring any changes, exiting"
           exit
         fi
+        # Generate ydb/core/base/generate with python codegen under ya
+        ./ya make ydb/core/base/generated/
+        ydb/core/base/generated/codegen/codegen ydb/core/base/generated/runtime_feature_flags.h.in ydb/core/base/generated/runtime_feature_flags.h
+        ydb/core/base/generated/codegen/codegen ydb/core/base/generated/runtime_feature_flags.cpp.in ydb/core/base/generated/runtime_feature_flags.cpp
+        # Generate cmakelists using pregenerated ydb/core/base/generated/runtime_feature_flags.*
         ./generate_cmake -k
         echo ${mainsha} > ydb/ci/cmakegen.txt
         git add .

@@ -26,18 +26,13 @@ struct TKqlTransformContext : TThrRefBase {
     NKqpProto::TKqpStatsQuery QueryStats;
     std::shared_ptr<const NKqpProto::TKqpPhyQuery> PhysicalQuery;
 
-    TVector<TSimpleSharedPtr<NKikimrMiniKQL::TResult>> MkqlResults;
-    TVector<NKikimrMiniKQL::TResult> PhysicalQueryResults;
-
     NYql::TExprNode::TPtr ExplainTransformerInput; // Explain transformer must work after other transformers, but use input before peephole
     TMaybe<NYql::NNodes::TKiDataQueryBlocks> DataQueryBlocks;
 
     void Reset() {
         ReplyTarget = {};
-        MkqlResults.clear();
         QueryStats = {};
         PhysicalQuery = nullptr;
-        PhysicalQueryResults.clear();
         ExplainTransformerInput = nullptr;
         DataQueryBlocks = Nothing();
     }

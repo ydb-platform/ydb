@@ -12,6 +12,8 @@
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
+#include <yt/yt/core/ytree/ypath_client.h>
+
 namespace NYT::NRpc {
 
 using namespace NConcurrency;
@@ -21,16 +23,21 @@ using namespace NRpc::NProto;
 using namespace NTracing;
 
 using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TServiceContextBase::TServiceContextBase(
     std::unique_ptr<TRequestHeader> header,
     TSharedRefArray requestMessage,
+    TMemoryUsageTrackerGuard memoryGuard,
+    IMemoryUsageTrackerPtr memoryUsageTracker,
     NLogging::TLogger logger,
     NLogging::ELogLevel logLevel)
     : RequestHeader_(std::move(header))
     , RequestMessage_(std::move(requestMessage))
+    , RequestMemoryGuard_(std::move(memoryGuard))
+    , MemoryUsageTracker_(std::move(memoryUsageTracker))
     , Logger(std::move(logger))
     , LogLevel_(logLevel)
 {
@@ -39,14 +46,18 @@ TServiceContextBase::TServiceContextBase(
 
 TServiceContextBase::TServiceContextBase(
     TSharedRefArray requestMessage,
+    TMemoryUsageTrackerGuard memoryGuard,
+    IMemoryUsageTrackerPtr memoryUsageTracker,
     NLogging::TLogger logger,
     NLogging::ELogLevel logLevel)
     : RequestHeader_(new TRequestHeader())
     , RequestMessage_(std::move(requestMessage))
+    , RequestMemoryGuard_(std::move(memoryGuard))
+    , MemoryUsageTracker_(std::move(memoryUsageTracker))
     , Logger(std::move(logger))
     , LogLevel_(logLevel)
 {
-    YT_VERIFY(ParseRequestHeader(RequestMessage_, RequestHeader_.get()));
+    YT_VERIFY(TryParseRequestHeader(RequestMessage_, RequestHeader_.get()));
     Initialize();
 }
 
@@ -67,6 +78,10 @@ void TServiceContextBase::Initialize()
     RequestAttachments_ = std::vector<TSharedRef>(
         RequestMessage_.Begin() + 2,
         RequestMessage_.End());
+    TotalSize_ = TypicalRequestSize +
+        GetMessageHeaderSize(RequestMessage_) +
+        GetMessageBodySize(RequestMessage_) +
+        GetTotalMessageAttachmentSize(RequestMessage_);
 }
 
 void TServiceContextBase::Reply(const TError& error)
@@ -120,7 +135,7 @@ void TServiceContextBase::ReplyEpilogue()
         LoggingEnabled_ &&
         TDispatcher::Get()->ShouldAlertOnMissingRequestInfo())
     {
-        static const auto& Logger = RpcServerLogger;
+        static constexpr auto& Logger = RpcServerLogger;
         YT_LOG_ALERT("Missing request info (RequestId: %v, Method: %v.%v)",
             RequestId_,
             RequestHeader_->service(),
@@ -192,7 +207,7 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
     // COMPAT(danilalexeev): legacy RPC codecs.
     if (IsResponseBodySerializedWithCompression()) {
         if (RequestHeader_->has_response_codec()) {
-            header.set_codec(static_cast<int>(ResponseCodec_));
+            header.set_codec(ToProto(ResponseCodec_));
         } else {
             ResponseBody_ = PushEnvelope(ResponseBody_, ResponseCodec_);
             ResponseAttachments_ = DecompressAttachments(ResponseAttachments_, ResponseCodec_);
@@ -299,6 +314,11 @@ TRequestId TServiceContextBase::GetRequestId() const
     return RequestId_;
 }
 
+i64 TServiceContextBase::GetTotalSize() const
+{
+    return TotalSize_;
+}
+
 TBusNetworkStatistics TServiceContextBase::GetBusNetworkStatistics() const
 {
     return {};
@@ -309,7 +329,7 @@ const IAttributeDictionary& TServiceContextBase::GetEndpointAttributes() const
     return EmptyAttributes();
 }
 
-const TString& TServiceContextBase::GetEndpointDescription() const
+const std::string& TServiceContextBase::GetEndpointDescription() const
 {
     static const TString EmptyEndpointDescription;
     return EmptyEndpointDescription;
@@ -353,6 +373,9 @@ std::optional<TDuration> TServiceContextBase::GetExecutionDuration() const
 {
     return std::nullopt;
 }
+
+void TServiceContextBase::RecordThrottling(TDuration /*throttleDuration*/)
+{ }
 
 TTraceContextPtr TServiceContextBase::GetTraceContext() const
 {
@@ -450,6 +473,11 @@ void TServiceContextBase::SetRawResponseInfo(TString info, bool incremental)
     }
 }
 
+const IMemoryUsageTrackerPtr& TServiceContextBase::GetMemoryUsageTracker() const
+{
+    return MemoryUsageTracker_;
+}
+
 const NLogging::TLogger& TServiceContextBase::GetLogger() const
 {
     return Logger;
@@ -506,7 +534,7 @@ const NYTree::IAttributeDictionary& TServiceContextWrapper::GetEndpointAttribute
     return UnderlyingContext_->GetEndpointAttributes();
 }
 
-const TString& TServiceContextWrapper::GetEndpointDescription() const
+const std::string& TServiceContextWrapper::GetEndpointDescription() const
 {
     return UnderlyingContext_->GetEndpointDescription();
 }
@@ -556,6 +584,11 @@ std::optional<TDuration> TServiceContextWrapper::GetExecutionDuration() const
     return UnderlyingContext_->GetExecutionDuration();
 }
 
+void TServiceContextWrapper::RecordThrottling(TDuration throttleDuration)
+{
+    return UnderlyingContext_->RecordThrottling(throttleDuration);
+}
+
 TTraceContextPtr TServiceContextWrapper::GetTraceContext() const
 {
     return UnderlyingContext_->GetTraceContext();
@@ -589,6 +622,11 @@ std::string TServiceContextWrapper::GetMethod() const
 TRealmId TServiceContextWrapper::GetRealmId() const
 {
     return UnderlyingContext_->GetRealmId();
+}
+
+i64 TServiceContextWrapper::GetTotalSize() const
+{
+    return UnderlyingContext_->GetTotalSize();
 }
 
 const TAuthenticationIdentity& TServiceContextWrapper::GetAuthenticationIdentity() const
@@ -722,6 +760,11 @@ void TServiceContextWrapper::SuppressMissingRequestInfoCheck()
 void TServiceContextWrapper::SetRawResponseInfo(TString info, bool incremental)
 {
     UnderlyingContext_->SetRawResponseInfo(std::move(info), incremental);
+}
+
+const IMemoryUsageTrackerPtr& TServiceContextWrapper::GetMemoryUsageTracker() const
+{
+    return UnderlyingContext_->GetMemoryUsageTracker();
 }
 
 const NLogging::TLogger& TServiceContextWrapper::GetLogger() const
@@ -879,14 +922,20 @@ void TServerBase::ApplyConfig()
     VERIFY_SPINLOCK_AFFINITY(ServicesLock_);
 
     auto newAppliedConfig = New<TServerConfig>();
-    newAppliedConfig->EnableErrorCodeCounting = DynamicConfig_->EnableErrorCodeCounting.value_or(StaticConfig_->EnableErrorCodeCounting);
+    newAppliedConfig->EnableErrorCodeCounter = DynamicConfig_->EnableErrorCodeCounter.value_or(StaticConfig_->EnableErrorCodeCounter);
     newAppliedConfig->EnablePerUserProfiling = DynamicConfig_->EnablePerUserProfiling.value_or(StaticConfig_->EnablePerUserProfiling);
-    newAppliedConfig->HistogramTimerProfiling = DynamicConfig_->HistogramTimerProfiling.value_or(StaticConfig_->HistogramTimerProfiling);
+    newAppliedConfig->TimeHistogram = DynamicConfig_->TimeHistogram.value_or(StaticConfig_->TimeHistogram);
     newAppliedConfig->TracingMode = DynamicConfig_->TracingMode.value_or(StaticConfig_->TracingMode);
     newAppliedConfig->Services = StaticConfig_->Services;
 
     for (const auto& [name, node] : DynamicConfig_->Services) {
-        newAppliedConfig->Services[name] = node;
+        auto it = newAppliedConfig->Services.find(name);
+        if (it != newAppliedConfig->Services.end()) {
+            const auto& [_, staticConfigNode] = *it;
+            newAppliedConfig->Services[name] = NYTree::PatchNode(staticConfigNode, node);
+        } else {
+            newAppliedConfig->Services[name] = node;
+        }
     }
 
     AppliedConfig_ = newAppliedConfig;
@@ -941,7 +990,7 @@ TFuture<void> TServerBase::Stop(bool graceful)
     YT_LOG_INFO("Stopping RPC server (Graceful: %v)",
         graceful);
 
-    return DoStop(graceful).Apply(BIND([this, this_ = MakeStrong(this)] () {
+    return DoStop(graceful).Apply(BIND([this, this_ = MakeStrong(this)] {
         YT_LOG_INFO("RPC server stopped");
     }));
 }

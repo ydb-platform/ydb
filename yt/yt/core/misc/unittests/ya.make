@@ -22,8 +22,8 @@ SRCS(
     checksum_ut.cpp
     codicil_ut.cpp
     concurrent_cache_ut.cpp
+    consistent_hashing_ut.cpp
     default_map_ut.cpp
-    dnf_ut.cpp
     digest_ut.cpp
     ema_counter_ut.cpp
     enum_ut.cpp
@@ -55,6 +55,7 @@ SRCS(
     pattern_formatter_ut.cpp
     persistent_queue_ut.cpp
     phoenix_ut.cpp
+    phoenix_compatibility_ut.cpp
     pool_allocator_ut.cpp
     proc_ut.cpp
     random_ut.cpp
@@ -65,8 +66,8 @@ SRCS(
     sliding_window_ut.cpp
     sync_cache_ut.cpp
     spsc_queue_ut.cpp
+    statistic_path_ut.cpp
     statistics_ut.cpp
-    string_ut.cpp
     sync_expiring_cache_ut.cpp
     time_formula_ut.cpp
     tls_destructor_ut.cpp

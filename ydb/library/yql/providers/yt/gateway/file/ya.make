@@ -5,6 +5,7 @@ SRCS(
     yql_yt_file_mkql_compiler.cpp
     yql_yt_file_services.cpp
     yql_yt_file.cpp
+    yql_yt_file_text_yson.cpp
 )
 
 PEERDIR(

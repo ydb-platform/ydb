@@ -328,6 +328,11 @@ ui64 TTxCoordinator::AlignPlanStep(ui64 step) {
 void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorContext &ctx) {
     //LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID() << " HANDLE EvPlanTick LastPlanned " << VolatileState.LastPlanned);
 
+    if (VolatileState.Preserved) {
+        // Avoid planning any new transactions, wait until we are stopped
+        return;
+    }
+
     ui64 next = ev->Get()->Step;
     while (!PendingPlanTicks.empty() && PendingPlanTicks.front() <= next) {
         PendingPlanTicks.pop_front();
@@ -556,8 +561,14 @@ void TTxCoordinator::TryInitMonCounters(const TActorContext &ctx) {
 }
 
 void TTxCoordinator::SendMediatorStep(TMediator &mediator, const TActorContext &ctx) {
+    if (VolatileState.Preserved) {
+        // We don't want to send new steps when state has been preserved and
+        // potentially sent to newer generations.
+        return;
+    }
+
     if (!mediator.Active) {
-        // We don't want to update LastSentStep when mediators are not empty
+        // We don't want to update LastSentStep when mediators are not connected
         return;
     }
 

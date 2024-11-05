@@ -85,6 +85,7 @@ class TBlockExprType;
 class TScalarExprType;
 
 const size_t DefaultMistypeDistance = 3;
+const TString YqlVirtualPrefix = "_yql_virtual_";
 
 extern const TStringBuf ZeroString;
 
@@ -151,10 +152,11 @@ void ReportError(TExprContext& ctx, const TIssue& issue);
 
 class TTypeAnnotationNode {
 protected:
-    TTypeAnnotationNode(ETypeAnnotationKind kind, ui32 flags, ui64 hash)
+    TTypeAnnotationNode(ETypeAnnotationKind kind, ui32 flags, ui64 hash, ui64 usedPgExtensions)
         : Kind(kind)
         , Flags(flags)
         , Hash(hash)
+        , UsedPgExtensions(usedPgExtensions)
     {
     }
 
@@ -277,6 +279,10 @@ public:
         return Hash;
     }
 
+    ui64 GetUsedPgExtensions() const {
+        return UsedPgExtensions;
+    }
+
     bool Equals(const TTypeAnnotationNode& node) const;
     void Accept(TTypeAnnotationVisitor& visitor) const;
 
@@ -309,10 +315,21 @@ protected:
         return flags;
     }
 
+    template <typename T>
+    static ui64 CombinePgExtensions(const T& items) {
+        ui64 mask = 0;
+        for (auto& item : items) {
+            mask |= item->GetUsedPgExtensions();
+        }
+
+        return mask;
+    }
+
 private:
     const ETypeAnnotationKind Kind;
     const ui32 Flags;
     const ui64 Hash;
+    const ui64 UsedPgExtensions;
 };
 
 class TUnitExprType : public TTypeAnnotationNode {
@@ -321,7 +338,7 @@ public:
 
     TUnitExprType(ui64 hash)
         : TTypeAnnotationNode(KindValue,
-            TypeNonComputable | TypeNonPersistable, hash)
+            TypeNonComputable | TypeNonPersistable, hash, 0)
     {
     }
 
@@ -340,7 +357,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Tuple;
 
     TTupleExprType(ui64 hash, const TTypeAnnotationNode::TListType& items)
-        : TTypeAnnotationNode(KindValue, CombineFlags(items), hash)
+        : TTypeAnnotationNode(KindValue, CombineFlags(items), hash, CombinePgExtensions(items))
         , Items(items)
     {
     }
@@ -389,7 +406,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Multi;
 
     TMultiExprType(ui64 hash, const TTypeAnnotationNode::TListType& items)
-        : TTypeAnnotationNode(KindValue, CombineFlags(items), hash)
+        : TTypeAnnotationNode(KindValue, CombineFlags(items), hash, CombinePgExtensions(items))
         , Items(items)
     {
     }
@@ -444,7 +461,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Item;
 
     TItemExprType(ui64 hash, const TStringBuf& name, const TTypeAnnotationNode* itemType)
-        : TTypeAnnotationNode(KindValue, itemType->GetFlags(), hash)
+        : TTypeAnnotationNode(KindValue, itemType->GetFlags(), hash, itemType->GetUsedPgExtensions())
         , Name(name)
         , ItemType(itemType)
     {
@@ -464,6 +481,8 @@ public:
         return Name;
     }
 
+    TStringBuf GetCleanName(bool isVirtual) const;
+
     const TTypeAnnotationNode* GetItemType() const {
         return ItemType;
     }
@@ -471,6 +490,8 @@ public:
     bool operator==(const TItemExprType& other) const {
         return GetName() == other.GetName() && GetItemType() == other.GetItemType();
     }
+
+    const TItemExprType* GetCleanItem(bool isVirtual, TExprContext& ctx) const;
 
 private:
     const TStringBuf Name;
@@ -496,7 +517,7 @@ public:
     };
 
     TStructExprType(ui64 hash, const TVector<const TItemExprType*>& items)
-        : TTypeAnnotationNode(KindValue, TypeNonComparable | CombineFlags(items), hash)
+        : TTypeAnnotationNode(KindValue, TypeNonComparable | CombineFlags(items), hash, CombinePgExtensions(items))
         , Items(items)
     {
     }
@@ -532,24 +553,35 @@ public:
         return it - Items.begin();
     }
 
-    TMaybe<ui32> FindItemI(const TStringBuf& name) const {
-        auto strict = FindItem(name);
-        if (strict) {
-            return strict;
-        }
+    TMaybe<ui32> FindItemI(const TStringBuf& name, bool* isVirtual) const {
+        for (ui32 v = 0; v < 2; ++v) {
+            if (isVirtual) {
+                *isVirtual = v > 0;
+            }
 
-        TMaybe<ui32> ret;
-        for (ui32 i = 0; i < Items.size(); ++i) {
-            if (AsciiEqualsIgnoreCase(name, Items[i]->GetName())) {
-                if (ret) {
-                    return Nothing();
+            auto nameToSearch = (v ? YqlVirtualPrefix : "") + name;
+            auto strict = FindItem(nameToSearch);
+            if (strict) {
+                return strict;
+            }
+
+            TMaybe<ui32> ret;
+            for (ui32 i = 0; i < Items.size(); ++i) {
+                if (AsciiEqualsIgnoreCase(nameToSearch, Items[i]->GetName())) {
+                    if (ret) {
+                        return Nothing();
+                    }
+
+                    ret = i;
                 }
+            }
 
-                ret = i;
+            if (ret) {
+                return ret;
             }
         }
 
-        return ret;
+        return Nothing();
     }
 
     const TTypeAnnotationNode* FindItemType(const TStringBuf& name) const {
@@ -607,7 +639,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::List;
 
     TListExprType(ui64 hash, const TTypeAnnotationNode* itemType)
-        : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeHasDynamicSize, hash)
+        : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeHasDynamicSize, hash, itemType->GetUsedPgExtensions())
         , ItemType(itemType)
     {
     }
@@ -634,7 +666,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Stream;
 
     TStreamExprType(ui64 hash, const TTypeAnnotationNode* itemType)
-        : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeNonPersistable, hash)
+        : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeNonPersistable, hash, itemType->GetUsedPgExtensions())
         , ItemType(itemType)
     {
     }
@@ -661,7 +693,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Flow;
 
     TFlowExprType(ui64 hash, const TTypeAnnotationNode* itemType)
-        : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeNonPersistable, hash)
+        : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeNonPersistable, hash, itemType->GetUsedPgExtensions())
         , ItemType(itemType)
     {
     }
@@ -688,7 +720,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Block;
 
     TBlockExprType(ui64 hash, const TTypeAnnotationNode* itemType)
-        : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeNonPersistable, hash)
+        : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeNonPersistable, hash, itemType->GetUsedPgExtensions())
         , ItemType(itemType)
     {
     }
@@ -715,7 +747,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Scalar;
 
     TScalarExprType(ui64 hash, const TTypeAnnotationNode* itemType)
-        : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeNonPersistable, hash)
+        : TTypeAnnotationNode(KindValue, itemType->GetFlags() | TypeNonPersistable, hash, itemType->GetUsedPgExtensions())
         , ItemType(itemType)
     {
     }
@@ -742,7 +774,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Data;
 
     TDataExprType(ui64 hash, EDataSlot slot)
-        : TTypeAnnotationNode(KindValue, GetFlags(slot), hash)
+        : TTypeAnnotationNode(KindValue, GetFlags(slot), hash, 0)
         , Slot(slot)
     {
     }
@@ -837,7 +869,7 @@ public:
 
     // TODO: TypeHasDynamicSize for Pg types
     TPgExprType(ui64 hash, ui32 typeId)
-        : TTypeAnnotationNode(KindValue, GetFlags(typeId), hash)
+        : TTypeAnnotationNode(KindValue, GetFlags(typeId), hash, GetPgExtensionsMask(typeId))
         , TypeId(typeId)
     {
     }
@@ -859,10 +891,13 @@ public:
 
 private:
     ui32 GetFlags(ui32 typeId);
+    ui64 GetPgExtensionsMask(ui32 typeId);
 
 private:
     ui32 TypeId;
 };
+
+ui64 MakePgExtensionMask(ui32 extensionIndex);
 
 class TWorldExprType : public TTypeAnnotationNode {
 public:
@@ -870,7 +905,7 @@ public:
 
     TWorldExprType(ui64 hash)
         : TTypeAnnotationNode(KindValue,
-            TypeNonComposable | TypeNonComputable | TypeNonPersistable | TypeNonInspectable, hash)
+            TypeNonComposable | TypeNonComputable | TypeNonPersistable | TypeNonInspectable, hash, 0)
     {
     }
 
@@ -889,7 +924,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Optional;
 
     TOptionalExprType(ui64 hash, const TTypeAnnotationNode* itemType)
-        : TTypeAnnotationNode(KindValue, GetFlags(itemType), hash)
+        : TTypeAnnotationNode(KindValue, GetFlags(itemType), hash, itemType->GetUsedPgExtensions())
         , ItemType(itemType)
     {
     }
@@ -929,7 +964,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Variant;
 
     TVariantExprType(ui64 hash, const TTypeAnnotationNode* underlyingType)
-        : TTypeAnnotationNode(KindValue, MakeFlags(underlyingType), hash)
+        : TTypeAnnotationNode(KindValue, MakeFlags(underlyingType), hash, underlyingType->GetUsedPgExtensions())
         , UnderlyingType(underlyingType)
     {
     }
@@ -961,7 +996,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Type;
 
     TTypeExprType(ui64 hash, const TTypeAnnotationNode* type)
-        : TTypeAnnotationNode(KindValue, TypeNonPersistable | TypeNonComputable, hash)
+        : TTypeAnnotationNode(KindValue, TypeNonPersistable | TypeNonComputable, hash, 0)
         , Type(type)
     {
     }
@@ -989,7 +1024,8 @@ public:
 
     TDictExprType(ui64 hash, const TTypeAnnotationNode* keyType, const TTypeAnnotationNode* payloadType)
         : TTypeAnnotationNode(KindValue, TypeNonComparable | TypeHasDynamicSize |
-                              keyType->GetFlags() | payloadType->GetFlags(), hash)
+                              keyType->GetFlags() | payloadType->GetFlags(), hash,
+                              keyType->GetUsedPgExtensions() | payloadType->GetUsedPgExtensions())
         , KeyType(keyType)
         , PayloadType(payloadType)
     {
@@ -1026,7 +1062,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Void;
 
     TVoidExprType(ui64 hash)
-        : TTypeAnnotationNode(KindValue, 0, hash)
+        : TTypeAnnotationNode(KindValue, 0, hash, 0)
     {
     }
 
@@ -1045,7 +1081,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Null;
 
     TNullExprType(ui64 hash)
-        : TTypeAnnotationNode(KindValue, TypeHasNull, hash)
+        : TTypeAnnotationNode(KindValue, TypeHasNull, hash, 0)
     {
     }
 
@@ -1085,7 +1121,7 @@ public:
 
     TCallableExprType(ui64 hash, const TTypeAnnotationNode* returnType, const TVector<TArgumentInfo>& arguments
         , size_t optionalArgumentsCount, const TStringBuf& payload)
-        : TTypeAnnotationNode(KindValue, MakeFlags(returnType), hash)
+        : TTypeAnnotationNode(KindValue, MakeFlags(returnType), hash, returnType->GetUsedPgExtensions())
         , ReturnType(returnType)
         , Arguments(arguments)
         , OptionalArgumentsCount(optionalArgumentsCount)
@@ -1191,7 +1227,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Generic;
 
     TGenericExprType(ui64 hash)
-        : TTypeAnnotationNode(KindValue, TypeNonComputable, hash)
+        : TTypeAnnotationNode(KindValue, TypeNonComputable, hash, 0)
     {
     }
 
@@ -1210,7 +1246,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Resource;
 
     TResourceExprType(ui64 hash, const TStringBuf& tag)
-        : TTypeAnnotationNode(KindValue, TypeNonPersistable | TypeHasManyValues, hash)
+        : TTypeAnnotationNode(KindValue, TypeNonPersistable | TypeHasManyValues, hash, 0)
         , Tag(tag)
     {}
 
@@ -1237,7 +1273,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Tagged;
 
     TTaggedExprType(ui64 hash, const TTypeAnnotationNode* baseType, const TStringBuf& tag)
-        : TTypeAnnotationNode(KindValue, baseType->GetFlags(), hash)
+        : TTypeAnnotationNode(KindValue, baseType->GetFlags(), hash, baseType->GetUsedPgExtensions())
         , BaseType(baseType)
         , Tag(tag)
     {}
@@ -1274,7 +1310,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Error;
 
     TErrorExprType(ui64 hash, const TIssue& error)
-        : TTypeAnnotationNode(KindValue, 0, hash)
+        : TTypeAnnotationNode(KindValue, 0, hash, 0)
         , Error(error)
     {}
 
@@ -1299,7 +1335,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::EmptyList;
 
     TEmptyListExprType(ui64 hash)
-        : TTypeAnnotationNode(KindValue, 0, hash)
+        : TTypeAnnotationNode(KindValue, 0, hash, 0)
     {
     }
 
@@ -1318,7 +1354,7 @@ public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::EmptyDict;
 
     TEmptyDictExprType(ui64 hash)
-        : TTypeAnnotationNode(KindValue, 0, hash)
+        : TTypeAnnotationNode(KindValue, 0, hash, 0)
     {
     }
 
@@ -1955,6 +1991,11 @@ public:
         return Make(Position_, (EType)Type_, TListType(Children_), Content(), Flags_, newUniqueId);
     }
 
+    TPtr CloneWithPosition(ui64 newUniqueId, TPositionHandle pos) const {
+        ENSURE_NOT_DELETED
+        return Make(pos, (EType)Type_, TListType(Children_), Content(), Flags_, newUniqueId);
+    }
+
     static TPtr NewNode(TPositionHandle position, EType type, TListType&& children, const TStringBuf& content, ui32 flags, ui64 uniqueId) {
         return Make(position, type, std::move(children), content, flags, uniqueId);
     }
@@ -2484,6 +2525,7 @@ struct TExprContext : private TNonCopyable {
     ui64 StringsAllocationLimit = 100000000;
     ui64 RepeatTransformLimit = 1000000;
     ui64 RepeatTransformCounter = 0;
+    ui64 TypeAnnNodeRepeatLimit = 1000;
 
     TGcNodeConfig GcConfig;
 
@@ -2529,6 +2571,8 @@ struct TExprContext : private TNonCopyable {
     TExprNode::TPtr RenameNode(const TExprNode& node, const TStringBuf& name);
     [[nodiscard]]
     TExprNode::TPtr ShallowCopy(const TExprNode& node);
+    [[nodiscard]]
+    TExprNode::TPtr ShallowCopyWithPosition(const TExprNode& node, TPositionHandle pos);
     [[nodiscard]]
     TExprNode::TPtr ChangeChildren(const TExprNode& node, TExprNode::TListType&& children);
     [[nodiscard]]
@@ -2675,6 +2719,8 @@ struct TExprContext : private TNonCopyable {
     template <typename T, typename... Args>
     const T* MakeConstraint(Args&&... args);
 
+    TConstraintSet MakeConstraintSet(const NYT::TNode& serializedConstraints);
+
     void AddError(const TIssue& error) {
         ENSURE_NOT_FROZEN_CTX
         IssueManager.RaiseIssue(error);
@@ -2791,8 +2837,9 @@ bool CompareExprTrees(const TExprNode*& one, const TExprNode*& two);
 
 bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNodeMap<ui32>& argsMap);
 
-void GatherParents(const TExprNode& node, TParentsMap& parentsMap, bool withLeaves = false);
-void GatherParentsMulti(const TExprNode& node, TParentsMultiMap& parentsMap, bool withLeaves = false);
+TString MakeCacheKey(const TExprNode& root);
+
+void GatherParents(const TExprNode& node, TParentsMap& parentsMap);
 
 struct TConvertToAstSettings {
     ui32 AnnotationFlags = 0;
@@ -2800,6 +2847,8 @@ struct TConvertToAstSettings {
     std::function<bool(const TExprNode&)> NoInlineFunc;
     bool PrintArguments = false;
     bool AllowFreeArgs = false;
+    bool NormalizeAtomFlags = false;
+    IAllocator* Allocator = TDefaultAllocator::Instance();
 };
 
 TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TConvertToAstSettings& settings);

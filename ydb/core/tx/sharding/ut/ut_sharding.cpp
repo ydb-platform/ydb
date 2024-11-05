@@ -1,6 +1,6 @@
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/tx/sharding/sharding.h>
-#include <ydb/core/formats/arrow/hash/xx_hash.h>
+#include <ydb/library/formats/arrow/hash/xx_hash.h>
 
 #include <ydb/library/actors/core/av_bootstrapped.h>
 #include <library/cpp/protobuf/json/proto2json.h>

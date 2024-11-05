@@ -599,6 +599,16 @@ Y_UNIT_TEST_SUITE(ComputationPatternCache) {
                 auto guard = entry->Env.BindAllocator();
                 entry->Pattern = MakeComputationPattern(explorer, progReturn, {}, opts);
             }
+
+            // XXX: There is no way to accurately define how the entry's
+            // allocator obtains the memory pages: using the free ones from the
+            // global page pool or the ones directly requested by <mmap>. At the
+            // same time, it is the total allocated bytes (not just the number
+            // of the borrowed pages) that is a good estimate of the memory
+            // consumed by the pattern cache entry for real life workload.
+            // Hence, to avoid undesired cache flushes, release the free pages
+            // of the allocator of the particular entry.
+            alloc.ReleaseFreePages();
             cache.EmplacePattern(TString((char)('a' + i)), entry);
         }
 
@@ -618,6 +628,42 @@ Y_UNIT_TEST_SUITE(ComputationPatternCache) {
             auto value = graph->GetValue();
             UNIT_ASSERT_EQUAL(NYql::NUdf::TStringRef("qwerty"), value.AsStringRef());
         }
+    }
+
+    Y_UNIT_TEST(DoubleNotifyPatternCompiled) {
+        class TMockComputationPattern final : public IComputationPattern {
+        public:
+            explicit TMockComputationPattern(size_t codeSize) : Size_(codeSize) {}
+
+            void Compile(TString, IStatsRegistry*) override { Compiled_ = true; }
+            bool IsCompiled() const override { return Compiled_; }
+            size_t CompiledCodeSize() const override { return Size_; }
+            void RemoveCompiledCode() override { Compiled_ = false; }
+            THolder<IComputationGraph> Clone(const TComputationOptsFull&) override { return {}; }
+            bool GetSuitableForCache() const override { return true; }
+
+        private:
+            const size_t Size_;
+            bool Compiled_ = false;
+        };
+
+        const TString key = "program";
+        const ui32 cacheSize = 2;
+        TComputationPatternLRUCache cache({cacheSize, cacheSize});
+
+        auto entry = std::make_shared<TPatternCacheEntry>();
+        entry->Pattern = MakeIntrusive<TMockComputationPattern>(1u);
+        cache.EmplacePattern(key, entry);
+
+        for (ui32 i = 0; i < cacheSize + 1; ++i) {
+            entry->Pattern->Compile("", nullptr);
+            cache.NotifyPatternCompiled(key);
+        }
+
+        entry = std::make_shared<TPatternCacheEntry>();
+        entry->Pattern = MakeIntrusive<TMockComputationPattern>(cacheSize + 1);
+        entry->Pattern->Compile("", nullptr);
+        cache.EmplacePattern(key, entry);
     }
 
     Y_UNIT_TEST(AddPerf) {

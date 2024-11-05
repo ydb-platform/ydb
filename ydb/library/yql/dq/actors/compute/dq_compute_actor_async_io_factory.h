@@ -25,6 +25,15 @@ concept TSourceCreatorFuncPtr = requires(T f, TProto* settings, IDqAsyncIoFactor
     { f(settings, std::move(args)) } -> TCastsToAsyncInputPair;
 };
 
+template <class T>
+concept TCastsToAsyncLookupPair =
+    std::is_convertible_v<T, std::pair<IDqAsyncLookupSource*, NActors::IActor*>>;
+
+template <class T, class TDataSourceProto>
+concept TLookupSourceCreatorFunc = requires(T f, TDataSourceProto&& dataSource, IDqAsyncIoFactory::TLookupSourceArguments&& args) {
+    { f(std::move(dataSource), std::move(args)) } -> TCastsToAsyncLookupPair;
+};
+
 template <class T, class TProto>
 concept TInputTransformCreatorFunc = requires(T f, TProto&& settings, IDqAsyncIoFactory::TInputTransformArguments&& args) {
     { f(std::move(settings), std::move(args)) } -> TCastsToAsyncInputPair;
@@ -47,6 +56,7 @@ concept TOutputTransformCreatorFunc = requires(T f, TProto&& settings, IDqAsyncI
 class TDqAsyncIoFactory : public IDqAsyncIoFactory {
 public:
     using TSourceCreatorFunction = std::function<std::pair<IDqComputeActorAsyncInput*, NActors::IActor*>(TSourceArguments&& args)>;
+    using TLookupSourceCreatorFunction = std::function<std::pair<IDqAsyncLookupSource*, NActors::IActor*>(TLookupSourceArguments&& args)>;
     using TSinkCreatorFunction = std::function<std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>(TSinkArguments&& args)>;
     using TInputTransformCreatorFunction = std::function<std::pair<IDqComputeActorAsyncInput*, NActors::IActor*>(TInputTransformArguments&& args)>;
     using TOutputTransformCreatorFunction = std::function<std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>(TOutputTransformArguments&& args)>;
@@ -98,6 +108,21 @@ public:
                 TProtoMsg settings;
                 YQL_ENSURE(settingsAny.UnpackTo(&settings), "Failed to unpack settings of type \"" << type << "\"");
                 return creator(std::move(settings), std::move(args));
+        });
+    }
+
+    void RegisterLookupSource(const TString& type, TLookupSourceCreatorFunction creator);
+    template <class TLookupSourceProtoMsg, TLookupSourceCreatorFunc<TLookupSourceProtoMsg> TCreatorFunc>
+    void RegisterLookupSource(const TString& type, TCreatorFunc creator) {
+        RegisterLookupSource(type,
+            [creator = std::move(creator), type](TLookupSourceArguments&& args)
+            {
+                YQL_ENSURE(args.LookupSource.Is<TLookupSourceProtoMsg>(),
+                    "LookupSource \"" << type << "\" settings are expected to have protobuf type " << TLookupSourceProtoMsg::descriptor()->full_name()
+                    << ", but got " << args.LookupSource.type_url());
+                TLookupSourceProtoMsg dataSource;
+                YQL_ENSURE(args.LookupSource.UnpackTo(&dataSource), "Failed to unpack settings of type \"" << type << "\"");
+                return creator(std::move(dataSource), std::move(args));
         });
     }
 
@@ -154,12 +179,14 @@ public:
 
     // Creation
     std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSource(TSourceArguments&& args) const override;
+    std::pair<IDqAsyncLookupSource*, NActors::IActor*> CreateDqLookupSource(TStringBuf type, TLookupSourceArguments&& args) const override;
     std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSink(TSinkArguments&& args) const override;
     std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqInputTransform(TInputTransformArguments&& args) override;
     std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqOutputTransform(TOutputTransformArguments&& args) override;
 
 private:
     THashMap<TString, TSourceCreatorFunction> SourceCreatorsByType;
+    THashMap<TString, TLookupSourceCreatorFunction> LookupSourceCreatorsByType;
     THashMap<TString, TSinkCreatorFunction> SinkCreatorsByType;
     THashMap<TString, TInputTransformCreatorFunction> InputTransformCreatorsByType;
     THashMap<TString, TOutputTransformCreatorFunction> OutputTransformCreatorsByType;

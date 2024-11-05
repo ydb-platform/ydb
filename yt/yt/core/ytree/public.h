@@ -65,6 +65,7 @@ class TTypedYPathResponse;
 DECLARE_REFCOUNTED_CLASS(TServiceCombiner)
 
 using NYPath::TYPath;
+using NYPath::TYPathBuf;
 
 //! Default limit for List and Get requests to virtual nodes.
 constexpr i64 DefaultVirtualChildLimit = 1000;

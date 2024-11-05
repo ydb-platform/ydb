@@ -29,7 +29,7 @@ namespace NYT::NFormats {
 using namespace NTableClient;
 using namespace NComplexTypes;
 
-static const auto& Logger = FormatsLogger;
+static constexpr auto& Logger = FormatsLogger;
 
 using TBodyWriter = std::function<void(TMutableRef)>;
 using TBatchColumn = IUnversionedColumnarRowBatch::TColumn;
@@ -49,14 +49,14 @@ const TString AlignmentString(ArrowAlignment, 0);
 
 flatbuffers::Offset<flatbuffers::String> SerializeString(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
-    const TString& str)
+    const std::string& str)
 {
     return flatbufBuilder->CreateString(str.data(), str.length());
 }
 
 std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> SerializeColumnType(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
-    TColumnSchema schema)
+    const TColumnSchema& schema)
 {
     auto simpleType = CastToV1Type(schema.LogicalType()).first;
     switch (simpleType) {
@@ -275,7 +275,7 @@ struct TRecordBatchSerializationContext final
 template <class T>
 TMutableRange<T> GetTypedValues(TMutableRef ref)
 {
-    return MakeMutableRange(
+    return TMutableRange(
         reinterpret_cast<T*>(ref.Begin()),
         reinterpret_cast<T*>(ref.End()));
 }
@@ -696,7 +696,8 @@ void SerializeDoubleColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG("Adding double column (ColumnId: %v, StartIndex: %v, ValueCount: %v)",
+    YT_LOG_DEBUG(
+        "Adding double column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
         column->Id,
         column->StartIndex,
         column->ValueCount,
@@ -725,7 +726,8 @@ void SerializeFloatColumn(
     YT_VERIFY(column->Values->BaseValue == 0);
     YT_VERIFY(!column->Values->ZigZagEncoded);
 
-    YT_LOG_DEBUG("Adding float column (ColumnId: %v, StartIndex: %v, ValueCount: %v)",
+    YT_LOG_DEBUG(
+        "Adding float column (ColumnId: %v, StartIndex: %v, ValueCount: %v, Rle: %v)",
         column->Id,
         column->StartIndex,
         column->ValueCount,
@@ -919,7 +921,7 @@ auto SerializeRecordBatch(
             YT_VERIFY(current == dstRef.End());
         });
 }
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 class TArrowWriter
     : public TSchemalessFormatWriterBase
@@ -1266,8 +1268,7 @@ private:
             auto keyValueOffsett = org::apache::arrow::flatbuf::CreateKeyValue(
                 flatbufBuilder,
                 flatbufBuilder.CreateString("TableId"),
-                flatbufBuilder.CreateString(std::to_string(tableIndex))
-            );
+                flatbufBuilder.CreateString(std::to_string(tableIndex)));
             customMetadata.push_back(keyValueOffsett);
         }
 
@@ -1354,7 +1355,7 @@ private:
         auto [recordBatchOffset, bodySize, bodyWriter] = SerializeRecordBatch(
             &flatbufBuilder,
             typedColumn.Column->ValueCount,
-            MakeRange({typedColumn}));
+            TRange({typedColumn}));
 
         auto dictionaryBatchOffset = org::apache::arrow::flatbuf::CreateDictionaryBatch(
             flatbufBuilder,
@@ -1434,7 +1435,7 @@ private:
                 output->Write(&metadataAlignSize, sizeof(ui32));
                 output->Write(metadataPtr, metadataSize);
 
-                output->Write(AlignmentString.Data(), metadataAlignSize - metadataSize);
+                output->Write(AlignmentString.data(), metadataAlignSize - metadataSize);
 
                 // Body
                 if (message.BodyWriter) {

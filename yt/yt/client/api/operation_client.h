@@ -84,7 +84,22 @@ struct TGetJobSpecOptions
 struct TGetJobStderrOptions
     : public TTimeoutOptions
     , public TMasterReadOptions
-{ };
+{
+    std::optional<i64> Limit;
+    std::optional<i64> Offset;
+};
+
+struct TGetJobTraceOptions
+    : public TTimeoutOptions
+    , public TMasterReadOptions
+{
+    std::optional<NJobTrackerClient::TJobId> JobId;
+    std::optional<NScheduler::TJobTraceId> TraceId;
+    std::optional<i64> FromTime;
+    std::optional<i64> ToTime;
+    std::optional<i64> FromEventIndex;
+    std::optional<i64> ToEventIndex;
+};
 
 struct TGetJobFailContextOptions
     : public TTimeoutOptions
@@ -219,6 +234,10 @@ struct TAbortJobOptions
     std::optional<TDuration> InterruptTimeout;
 };
 
+struct TDumpJobProxyLogOptions
+    : public TTimeoutOptions
+{ };
+
 struct TGetOperationOptions
     : public TTimeoutOptions
     , public TMasterReadOptions
@@ -267,6 +286,7 @@ struct TOperation
     NYson::TYsonString Result;
 
     NYson::TYsonString SlotIndexPerPoolTree;
+    NYson::TYsonString SchedulingAttributesPerPoolTree;
     NYson::TYsonString Alerts;
     NYson::TYsonString AlertEvents;
 
@@ -329,6 +349,7 @@ struct TJob
     std::optional<TString> Pool;
     std::optional<TString> MonitoringDescriptor;
     std::optional<ui64> JobCookie;
+    NYson::TYsonString ArchiveFeatures;
 
     std::optional<bool> IsStale;
 
@@ -336,6 +357,18 @@ struct TJob
 };
 
 void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey);
+
+struct TJobTraceEvent
+{
+    NJobTrackerClient::TOperationId OperationId;
+    NJobTrackerClient::TJobId JobId;
+    NScheduler::TJobTraceId TraceId;
+    i64 EventIndex;
+    TString Event;
+    TInstant EventTime;
+};
+
+void Serialize(const TJobTraceEvent& traceEvent, NYson::IYsonConsumer* consumer);
 
 struct TListJobsStatistics
 {
@@ -353,6 +386,27 @@ struct TListJobsResult
     TListJobsStatistics Statistics;
 
     std::vector<TError> Errors;
+};
+
+struct TGetJobStderrResponse
+{
+    //   0
+    //   |<-                        stderr full log                  ->|
+    //   [                     [<-       Data        ->]               ]
+    //                         |<-  request.Offset
+    //                         |<-  request.Limit    ->|
+    //                                                 |<- EndOffset
+    //                                                                 |<- TotalSize
+
+    TSharedRef Data;
+
+    // Total current stderr size.
+    i64 TotalSize = 0;
+
+    // Index of the last byte of the result in the full stderr.
+    i64 EndOffset = 0;
+
+    static TGetJobStderrResponse MakeJobStderr(const TSharedRef& data, const TGetJobStderrOptions& options = {});
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -408,10 +462,14 @@ struct IOperationClient
         NJobTrackerClient::TJobId jobId,
         const TGetJobSpecOptions& options = {}) = 0;
 
-    virtual TFuture<TSharedRef> GetJobStderr(
+    virtual TFuture<TGetJobStderrResponse> GetJobStderr(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const TGetJobStderrOptions& options = {}) = 0;
+
+    virtual TFuture<std::vector<TJobTraceEvent>> GetJobTrace(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TGetJobTraceOptions& options = {}) = 0;
 
     virtual TFuture<TSharedRef> GetJobFailContext(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
@@ -443,6 +501,12 @@ struct IOperationClient
     virtual TFuture<void> AbortJob(
         NJobTrackerClient::TJobId jobId,
         const TAbortJobOptions& options = {}) = 0;
+
+    virtual TFuture<void> DumpJobProxyLog(
+        NJobTrackerClient::TJobId jobId,
+        NJobTrackerClient::TOperationId operationId,
+        const NYPath::TYPath& path,
+        const TDumpJobProxyLogOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

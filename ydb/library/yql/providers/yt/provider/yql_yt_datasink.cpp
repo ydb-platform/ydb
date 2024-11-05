@@ -104,6 +104,7 @@ public:
         , PhysicalOptProposalTransformer_([this]() { return CreateYtPhysicalOptProposalTransformer(State_); })
         , PhysicalFinalizingTransformer_([this]() {
             auto transformer = CreateYtPhysicalFinalizingTransformer(State_);
+            transformer = CreateYtBlockInputFilterTransformer(State_, std::move(transformer));
             if (State_->IsHybridEnabled())
                 transformer = CreateYtDqHybridTransformer(State_, std::move(transformer));
             return transformer;
@@ -161,13 +162,33 @@ public:
         }
 
         writer.OnBeginMap();
-            NCommon::WriteStatistics(writer, totalOnly, State_->Statistics, false);
+            NCommon::WriteStatistics(writer, totalOnly, State_->Statistics, true, false);
+            writer.OnKeyedItem("HybridTotal");
+            writer.OnBeginMap();
+            for (const auto& [subFolder, stats] : State_->HybridStatistics) {
+                if (subFolder.empty()) {
+                    NCommon::WriteStatistics(writer, totalOnly, {{0, stats}}, false, false);
+                } else {
+                    writer.OnKeyedItem(subFolder);
+                    NCommon::WriteStatistics(writer, totalOnly, {{0, stats}}, false);
+                }
+            }
+            writer.OnEndMap();
             writer.OnKeyedItem("Hybrid");
             writer.OnBeginMap();
-                for (const auto& [opName, stats] : State_->HybridStatistics) {
-                    writer.OnKeyedItem(opName);
-                    NCommon::WriteStatistics(writer, totalOnly, {{0, stats}});
+            for (const auto& [opName, hybridStats] : State_->HybridOpStatistics) {
+                writer.OnKeyedItem(opName);
+                writer.OnBeginMap();
+                for (const auto& [subFolder, stats] : hybridStats) {
+                    if (subFolder.empty()) {
+                        NCommon::WriteStatistics(writer, totalOnly, {{0, stats}}, false, false);
+                    } else {
+                        writer.OnKeyedItem(subFolder);
+                        NCommon::WriteStatistics(writer, totalOnly, {{0, stats}}, false);
+                    }
                 }
+                writer.OnEndMap();
+            }
             writer.OnEndMap();
         writer.OnEndMap();
 
@@ -243,11 +264,31 @@ public:
                     ctx);
                 res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings, std::move(settings));
             }
+            if (auto columnGroup = NYql::GetSetting(*res->Child(TYtWriteTable::idx_Settings), EYtSettingType::ColumnGroups)) {
+                const TString normalized = NormalizeColumnGroupSpec(columnGroup->Tail().Content());
+                res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings,
+                    NYql::UpdateSettingValue(*res->Child(TYtWriteTable::idx_Settings),
+                        EYtSettingType::ColumnGroups,
+                        ctx.NewAtom(res->Child(TYtWriteTable::idx_Settings)->Pos(), normalized, TNodeFlags::MultilineContent),
+                        ctx)
+                    );
+            } else if (NYql::HasSetting(*res->Child(TYtWriteTable::idx_Table)->Child(TYtTable::idx_Settings), EYtSettingType::Anonymous)) {
+                if (const auto mode = State_->Configuration->ColumnGroupMode.Get().GetOrElse(EColumnGroupMode::Disable); mode != EColumnGroupMode::Disable) {
+                    res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings,
+                        NYql::AddSetting(*res->Child(TYtWriteTable::idx_Settings),
+                            EYtSettingType::ColumnGroups,
+                            ctx.NewAtom(res->Child(TYtWriteTable::idx_Settings)->Pos(), NYql::GetSingleColumnGroupSpec(), TNodeFlags::MultilineContent),
+                            ctx)
+                        );
+                }
+            }
             auto mutationId = ++NextMutationId_;
-            res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings, 
+            res = ctx.ChangeChild(*res, TYtWriteTable::idx_Settings,
                 NYql::AddSetting(*res->Child(TYtWriteTable::idx_Settings),
                     EYtSettingType::MutationId,
-                    ctx.NewAtom(res->Child(TYtWriteTable::idx_Settings)->Pos(), ToString(mutationId)), ctx));
+                    ctx.NewAtom(res->Child(TYtWriteTable::idx_Settings)->Pos(), mutationId),
+                    ctx)
+                );
             if (State_->Configuration->UseSystemColumns.Get().GetOrElse(DEFAULT_USE_SYS_COLUMNS)) {
                 res = ctx.ChangeChild(*res, TYtWriteTable::idx_Content,
                     ctx.Builder(node->Pos())
@@ -323,7 +364,7 @@ public:
         return false;
     }
 
-    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
+    void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer, bool withLimits) override {
         if (auto maybeOp = TMaybeNode<TYtTransientOpBase>(&node)) {
             writer.OnKeyedItem("InputColumns");
             auto op = maybeOp.Cast();
@@ -347,7 +388,7 @@ public:
                 for (auto section: op.Input()) {
                     writer.OnListItem();
                     writer.OnBeginList();
-                    for (ui64 i = 0; i < section.Paths().Size(); ++i) {
+                    for (ui32 i = 0; i < Min((ui32)section.Paths().Size(), (withLimits && State_->PlanLimits) ? State_->PlanLimits : Max<ui32>()); ++i) {
                         writer.OnListItem();
                         writer.OnUint64Scalar(ndx++);
                     }
@@ -447,10 +488,12 @@ public:
         writer.OnStringScalar(node.Child(1)->Content());
     }
 
-    void GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) override {
+    ui32 GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs, bool withLimits) override {
+        ui32 count = 0;
         if (auto maybeOp = TMaybeNode<TYtTransientOpBase>(&node)) {
             auto op = maybeOp.Cast();
             for (auto section: op.Input()) {
+                ui32 i = 0;
                 for (auto path: section.Paths()) {
                     if (auto maybeTable = path.Table().Maybe<TYtTable>()) {
                         inputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), path.Raw(), MakeTableDisplayName(maybeTable.Cast(), false), false));
@@ -459,40 +502,58 @@ public:
                         auto tmpTable = GetOutTable(path.Table());
                         inputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), tmpTable.Raw(), MakeTableDisplayName(tmpTable, false), true));
                     }
+                    if (withLimits && State_->PlanLimits && ++i >= State_->PlanLimits) {
+                        break;
+                    }
                 }
+                count += section.Paths().Size();
             }
         }
         else if (auto maybePublish = TMaybeNode<TYtPublish>(&node)) {
             auto publish = maybePublish.Cast();
+            ui32 i = 0;
             for (auto out: publish.Input()) {
                 auto tmpTable = GetOutTable(out);
                 inputs.push_back(TPinInfo(nullptr, publish.DataSink().Raw(), tmpTable.Raw(), MakeTableDisplayName(tmpTable, false), true));
+                if (withLimits && State_->PlanLimits && ++i >= State_->PlanLimits) {
+                    break;
+                }
             }
+            count = publish.Input().Size();
         } else if (auto maybeStatOut = TMaybeNode<TYtStatOut>(&node)) {
             auto statOut = maybeStatOut.Cast();
             auto table = GetOutTable(statOut.Input());
             inputs.push_back(TPinInfo(nullptr, statOut.DataSink().Raw(), table.Raw(), MakeTableDisplayName(table, false), true));
+            count = 1;
         }
+        return count;
     }
 
-    void GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) override {
+    ui32 GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs, bool withLimits) override {
+        Y_UNUSED(withLimits);
+        ui32 count = 0;
         if (auto maybeOp = TMaybeNode<TYtOutputOpBase>(&node)) {
             auto op = maybeOp.Cast();
             for (auto table: op.Output()) {
                 outputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), table.Raw(), MakeTableDisplayName(table, true), true));
             }
+            count = op.Output().Size();
         }
         else if (auto maybePublish = TMaybeNode<TYtPublish>(&node)) {
             auto publish = maybePublish.Cast();
             outputs.push_back(TPinInfo(nullptr, publish.DataSink().Raw(), publish.Publish().Raw(), MakeTableDisplayName(publish.Publish(), true), false));
+            count = 1;
         } else if (auto maybeStatOut = TMaybeNode<TYtStatOut>(&node)) {
             auto statOut = maybeStatOut.Cast();
             auto statTable = statOut.Table();
             outputs.push_back(TPinInfo(nullptr, statOut.DataSink().Raw(), statTable.Raw(), "(tmp)", true));
+            count = 1;
         } else if (auto maybeWrite = TMaybeNode<TYtWriteTable>(&node)) {
             auto write = maybeWrite.Cast();
             outputs.push_back(TPinInfo(nullptr, write.DataSink().Raw(), write.Table().Raw(), MakeTableDisplayName(write.Table(), true), true));
+            count = 1;
         }
+        return count;
     }
 
     void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {

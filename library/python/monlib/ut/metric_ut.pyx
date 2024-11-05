@@ -12,14 +12,12 @@ from util.generic.string cimport TStringBuf, TString
 from util.generic.maybe cimport TMaybe
 from util.generic.ptr cimport THolder
 
+from libcpp.utility cimport move
+
 from cython.operator cimport dereference as deref
 
 import pytest
 import unittest
-
-
-cdef extern from "<utility>" namespace "std" nogil:
-    cdef IHistogramCollectorPtr&& move(IHistogramCollectorPtr t)
 
 
 class TestMetric(unittest.TestCase):

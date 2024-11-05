@@ -2,8 +2,9 @@
 
 Группирует результаты `SELECT` по значениям указанных столбцов или выражений. Вместе с `GROUP BY` часто применяются [агрегатные функции](../../../builtins/aggregation.md) (`COUNT`, `MAX`, `MIN`, `SUM`, `AVG`) для выполнения вычислений в каждой группе.
 
-**Синтаксис**
-```sql
+### Синтаксис
+
+```yql
 SELECT                             -- В SELECT можно использовать:
     column1,                       -- ключевые колонки, заданные в GROUP BY
     key_n,                         -- именованные выражения, заданные в GROUP BY
@@ -31,19 +32,19 @@ GROUP BY
 
 Также в YQL доступен механизм фабрик агрегатных функций, реализованный с помощью функций [`AGGREGATION_FACTORY`](../../../builtins/basic.md#aggregationfactory) и [`AGGREGATE_BY`](../../../builtins/aggregation.md#aggregateby).
 
-**Примеры**
+### Примеры
 
-```sql
+```yql
 SELECT key, COUNT(*) FROM my_table
 GROUP BY key;
 ```
 
-```sql
+```yql
 SELECT double_key, COUNT(*) FROM my_table
 GROUP BY key + key AS double_key;
 ```
 
-```sql
+```yql
 SELECT
    double_key,                           -- ОК: ключевая колонка
    COUNT(*) AS group_size,               -- OK: COUNT(*)
@@ -60,8 +61,8 @@ GROUP BY
 ```
 
 
-{% note warning "Внимание" %}
+{% note warning %}
 
-Возможность указывать имя для колонки или выражения в `GROUP BY .. AS foo` является расширением YQL. Такое имя становится видимым в `WHERE` несмотря на то, что фильтрация по `WHERE` выполняется [раньше](../../select.md#selectexec) группировки. В частности, если в таблице `T` есть две колонки `foo` и `bar`, то в запросе `SELECT foo FROM T WHERE foo > 0 GROUP BY bar AS foo` фильтрация фактически произойдет по колонке `bar` из исходной таблицы.
+Возможность указывать имя для колонки или выражения в `GROUP BY .. AS foo` является расширением YQL. Такое имя становится видимым в `WHERE` несмотря на то, что фильтрация по `WHERE` выполняется [раньше](../../select/index.md#selectexec) группировки. В частности, если в таблице `T` есть две колонки `foo` и `bar`, то в запросе `SELECT foo FROM T WHERE foo > 0 GROUP BY bar AS foo` фильтрация фактически произойдет по колонке `bar` из исходной таблицы.
 
 {% endnote %}

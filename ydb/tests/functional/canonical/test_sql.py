@@ -6,8 +6,9 @@ import decimal
 import functools
 import uuid
 
-from ydb.tests.library.common import yatest_common
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+import yatest
+
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.canonical import set_canondata_root, is_oss
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -36,7 +37,7 @@ mute_sdk_loggers()
 
 
 def find_files(data_folder, ext):
-    resources_root = yatest_common.source_path(data_folder)
+    resources_root = yatest.common.source_path(data_folder)
     directories = [resources_root]
     files = []
     while len(directories) > 0:
@@ -63,7 +64,7 @@ def get_queries(data_folder):
 
 
 def canonical_filename(query, suffix):
-    return os.path.join(yatest_common.output_path(), query.replace('/', '_') + suffix)
+    return os.path.join(yatest.common.output_path(), query.replace('/', '_') + suffix)
 
 
 def write_output_file(data, filename):
@@ -108,13 +109,14 @@ class BaseCanonicalTest(object):
         set_canondata_root('ydb/tests/functional/canonical/canondata')
 
         cls.database = '/local'
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             KikimrConfigGenerator(
-                load_udfs=True,
+                udfs_path=yatest.common.build_path("yql/udfs"),
                 domain_name='local',
                 use_in_memory_pdisks=True,
                 disable_iterator_reads=True,
-                disable_iterator_lookups=True
+                disable_iterator_lookups=True,
+                extra_feature_flags=["enable_resource_pools"]
             )
         )
         cls.cluster.start()
@@ -200,7 +202,7 @@ class BaseCanonicalTest(object):
 
     @classmethod
     def read_data_rows(cls, s):
-        f_path = yatest_common.source_path(os.path.join(cls.data_folder, s))
+        f_path = yatest.common.source_path(os.path.join(cls.data_folder, s))
         with open(f_path, 'r') as r:
             return json.loads(r.read())
 
@@ -267,7 +269,7 @@ class BaseCanonicalTest(object):
 
     @classmethod
     def read_query_text(cls, query_name):
-        with open(yatest_common.source_path(os.path.join(cls.data_folder, query_name)), 'r') as reader:
+        with open(yatest.common.source_path(os.path.join(cls.data_folder, query_name)), 'r') as reader:
             return reader.read()
 
     @staticmethod
@@ -276,7 +278,7 @@ class BaseCanonicalTest(object):
 
     @staticmethod
     def canonical_results(query, results):
-        return yatest_common.canonical_file(
+        return yatest.common.canonical_file(
             local=True,
             universal_lines=True,
             path=write_output_file(
@@ -296,7 +298,7 @@ class BaseCanonicalTest(object):
 
     @staticmethod
     def canonical_plan(query, query_plan):
-        return yatest_common.canonical_file(
+        return yatest.common.canonical_file(
             local=True,
             universal_lines=True,
             path=write_output_file(
@@ -394,7 +396,7 @@ class BaseCanonicalTest(object):
     def read_config(self, query_name):
         dr = os.path.dirname(query_name)
         fl = os.path.basename(query_name)
-        cfg_json = yatest_common.source_path(os.path.join(self.data_folder, dr, 'test_config.json'))
+        cfg_json = yatest.common.source_path(os.path.join(self.data_folder, dr, 'test_config.json'))
         if not os.path.exists(cfg_json):
             return {}
         cfg = json.loads(self.read_query_text(cfg_json))
@@ -449,6 +451,16 @@ class BaseCanonicalTest(object):
                 )
             )
 
+    def remove_optimizer_estimates(self, query_plan):
+        if 'Plans' in query_plan:
+            for p in query_plan['Plans']:
+                self.remove_optimizer_estimates(p)
+        if 'Operators' in query_plan:
+            for op in query_plan['Operators']:
+                for key in ['A-Cpu', 'A-Rows', 'E-Cost', 'E-Rows', 'E-Size']:
+                    if key in op:
+                        del op[key]
+
     def run_test_case(self, query_name, kind):
         self.initialize_common(query_name, kind)
         query = self.format_query(self.read_query_text(query_name))
@@ -465,6 +477,8 @@ class BaseCanonicalTest(object):
                 for q in plan['queries']:
                     if 'SimplifiedPlan' in q:
                         del q['SimplifiedPlan']
+                    if 'Plan' in q:
+                        self.remove_optimizer_estimates(q['Plan'])
             canons['script_plan'] = self.canonical_plan(query_name, self.pretty_json(plan))
             self.compare_tables_test(canons, config, query_name)
         elif kind == 'plan':

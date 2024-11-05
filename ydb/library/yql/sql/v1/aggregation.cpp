@@ -49,7 +49,7 @@ public:
     TAggregationFactory(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode,
         bool multi = false, bool validateArgs = true)
         : IAggregation(pos, name, func, aggMode), Factory(!func.empty() ?
-            BuildBind(Pos, aggMode == EAggregateMode::OverWindow ? "window_module" : "aggregate_module", func) : nullptr),
+            BuildBind(Pos, aggMode == EAggregateMode::OverWindow || aggMode == EAggregateMode::OverWindowDistinct ? "window_module" : "aggregate_module", func) : nullptr),
         Multi(multi), ValidateArgs(validateArgs), DynamicFactory(!Factory)
     {
         if (aggMode != EAggregateMode::OverWindow && !func.empty() && AggApplyFuncs.contains(func)) {
@@ -176,7 +176,7 @@ protected:
             ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
             return false;
         }
-        if (AggMode == EAggregateMode::Distinct) {
+        if (AggMode == EAggregateMode::Distinct || AggMode == EAggregateMode::OverWindowDistinct) {
             const auto column = Expr->GetColumnName();
             if (!column) {
                 // TODO: improve TBasicAggrFunc::CollectPreaggregateExprs()
@@ -1392,6 +1392,78 @@ private:
 
 TAggregationPtr BuildPGFactoryAggregation(TPosition pos, const TString& name, EAggregateMode aggMode) {
     return new TPGFactoryAggregation(pos, name, aggMode);
+}
+
+class TNthValueFactoryAggregation final : public TAggregationFactory {
+public:
+public:
+    TNthValueFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
+        : TAggregationFactory(pos, name, factory, aggMode)
+        , FakeSource(BuildFakeSource(pos))
+    {
+    }
+
+private:
+    bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
+        ui32 adjustArgsCount = isFactory ? 0 : 1;
+        ui32 expectedArgs = (1 + adjustArgsCount);
+        if (exprs.size() != expectedArgs) {
+            ctx.Error(Pos) << "NthValue aggregation " << (isFactory ? "factory " : "") << "function require "
+                << expectedArgs << " arguments, given: " << exprs.size();
+            return false;
+        }
+
+        if (BlockWindowAggregationWithoutFrameSpec(Pos, GetName(), src, ctx)) {
+            return false;
+        }
+
+        Index = exprs[adjustArgsCount];
+        if (!Index->Init(ctx, FakeSource.Get())) {
+            return false;
+        }
+
+        if (!isFactory) {
+            Expr = exprs[0];
+            Name = src->MakeLocalName(Name);
+        }
+
+        if (!Init(ctx, src)) {
+            return false;
+        }
+
+        if (!isFactory) {
+            node.Add("Member", "row", Q(Name));
+            if (IsOverWindow()) {
+                src->AddTmpWindowColumn(Name);
+            }
+        }
+
+        return true;
+    }
+
+    TNodePtr DoClone() const final {
+        return new TNthValueFactoryAggregation(Pos, Name, Func, AggMode);
+    }
+
+    TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
+        Y_UNUSED(ctx);
+        Y_UNUSED(allowAggApply);
+        auto apply = Y("Apply", Factory, type, BuildLambda(Pos, Y("row"), many ? Y("Unwrap", Expr) : Expr));
+        AddFactoryArguments(apply);
+        return apply;
+    }
+
+    void AddFactoryArguments(TNodePtr& apply) const final {
+        apply = L(apply, Index);
+    }
+
+private:
+    TSourcePtr FakeSource;
+    TNodePtr Index;
+};
+
+TAggregationPtr BuildNthFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode) {
+    return new TNthValueFactoryAggregation(pos, name, factory, aggMode);
 }
 
 } // namespace NSQLTranslationV1

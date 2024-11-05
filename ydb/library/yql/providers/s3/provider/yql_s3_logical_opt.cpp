@@ -1,15 +1,19 @@
 #include "yql_s3_provider_impl.h"
 
-#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
-#include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/pushdown/collection.h>
+#include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
+#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/provider/yql_s3_settings.h>
+#include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <util/generic/size_literals.h>
@@ -19,6 +23,15 @@ namespace NYql {
 using namespace NNodes;
 
 namespace {
+
+struct TPushdownSettings: public NPushdown::TSettings {
+    TPushdownSettings()
+        : NPushdown::TSettings(NLog::EComponent::ProviderS3)
+    {
+        using EFlag = NPushdown::TSettings::EFeatureFlag;
+        Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 | EFlag::DateTimeTypes | EFlag::TimestampCtor);
+    }
+};
 
 using namespace NYql::NS3Details;
 
@@ -172,7 +185,141 @@ public:
         AddHandler(0, &TDqSourceWrap::Match, HNDL(MergeS3Paths));
         AddHandler(0, &TDqSourceWrap::Match, HNDL(CleanupExtraColumns));
         AddHandler(0, &TCoTake::Match, HNDL(PushDownLimit));
+        AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToS3ReadObject));
+        AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToDqSourceWrap));
 #undef HNDL
+    }
+
+    TMaybeNode<TExprBase> PushFilterToS3ReadObject(TExprBase node, TExprContext& ctx) const {
+        if (!State_->Configuration->UsePredicatePushdown.Get().GetOrElse(false)) {
+            return node;
+        }
+
+        auto flatmap = node.Cast<TCoFlatMap>();
+        auto maybeRight = flatmap.Input().Maybe<TCoRight>();
+        if (!maybeRight) {
+            return node;
+        }
+
+        auto maybeS3ReadObject = maybeRight.Cast().Input().Maybe<TS3ReadObject>();
+        if (!maybeS3ReadObject) {
+            return node;
+        }
+
+        TS3ReadObject s3ReadObject = maybeS3ReadObject.Cast();
+        if (!IsEmptyFilterPredicate(s3ReadObject.FilterPredicate())) {
+            YQL_CLOG(TRACE, ProviderS3) << "Push filter. Lambda is already not empty";
+            return node;
+        }
+
+        auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos());
+        if (!newFilterLambda) {
+            return node;
+        }
+
+        return Build<TCoFlatMap>(ctx, flatmap.Pos())
+            .InitFrom(flatmap) // Leave existing filter in flatmap for the case of not applying predicate in connector
+            .Input<TCoRight>()
+                .Input<TS3ReadObject>()
+                    .InitFrom(s3ReadObject)
+                    .FilterPredicate(newFilterLambda.Cast())
+                    .Build()
+                .Build()
+            .Done();
+    }
+
+    TMaybeNode<TExprBase> PushFilterToDqSourceWrap(TExprBase node, TExprContext& ctx) const {
+        if (!State_->Configuration->UsePredicatePushdown.Get().GetOrElse(false)) {
+            return node;
+        }
+
+        auto flatmap = node.Cast<TCoFlatMap>();
+        auto maybeSourceWrap = flatmap.Input().Maybe<TDqSourceWrap>();
+        if (!maybeSourceWrap) {
+            return node;
+        }
+
+        TDqSourceWrap sourceWrap = maybeSourceWrap.Cast();
+        auto maybeS3ParseSettings = sourceWrap.Input().Maybe<TS3ParseSettings>();
+        if (!maybeS3ParseSettings) {
+            return node;
+        }
+
+        TS3ParseSettings s3ParseSettings = maybeS3ParseSettings.Cast();
+        if (!IsEmptyFilterPredicate(s3ParseSettings.FilterPredicate())) {
+            YQL_CLOG(TRACE, ProviderGeneric) << "Push filter. Lambda is already not empty";
+            return node;
+        }
+
+        auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos());
+        if (!newFilterLambda) {
+            return node;
+        }
+
+        return Build<TCoFlatMap>(ctx, flatmap.Pos())
+            .InitFrom(flatmap) // Leave existing filter in flatmap for the case of not applying predicate in connector
+            .Input<TDqSourceWrap>()
+                .InitFrom(sourceWrap)
+                .Input<TS3ParseSettings>()
+                    .InitFrom(s3ParseSettings)
+                    .FilterPredicate(newFilterLambda.Cast())
+                    .Build()
+                .Build()
+            .Done();
+    }
+
+   static NPushdown::TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicateTree,
+                                                                TExprContext& ctx, TPositionHandle pos)
+    {
+        if (predicateTree.CanBePushed) {
+            return predicateTree;
+        }
+
+        if (predicateTree.Op != NPushdown::EBoolOp::And) {
+            return NPushdown::TPredicateNode(); // Not valid, => return the same node from optimizer
+        }
+
+        std::vector<NPushdown::TPredicateNode> pushable;
+        for (auto& predicate : predicateTree.Children) {
+            if (predicate.CanBePushed) {
+                pushable.emplace_back(predicate);
+            }
+        }
+        NPushdown::TPredicateNode predicateToPush;
+        predicateToPush.SetPredicates(pushable, ctx, pos);
+        return predicateToPush;
+    }
+
+    TMaybeNode<TCoLambda> MakePushdownPredicate(const TCoLambda& lambda, TExprContext& ctx, const TPositionHandle& pos) const {
+        auto lambdaArg = lambda.Args().Arg(0).Ptr();
+
+        YQL_CLOG(TRACE, ProviderS3) << "Push filter. Initial filter lambda: " << NCommon::ExprToPrettyString(ctx, lambda.Ref());
+
+        auto maybeOptionalIf = lambda.Body().Maybe<TCoOptionalIf>();
+        if (!maybeOptionalIf.IsValid()) { // Nothing to push
+            return {};
+        }
+
+        TCoOptionalIf optionalIf = maybeOptionalIf.Cast();
+        NPushdown::TPredicateNode predicateTree(optionalIf.Predicate());
+        NPushdown::CollectPredicates(optionalIf.Predicate(), predicateTree, lambdaArg.Get(), TExprBase(lambdaArg), TPushdownSettings());
+        YQL_ENSURE(predicateTree.IsValid(), "Collected filter predicates are invalid");
+
+        NPushdown::TPredicateNode predicateToPush = SplitForPartialPushdown(predicateTree, ctx, pos);
+        if (!predicateToPush.IsValid()) {
+            return {};
+        }
+
+        auto newFilterLambda = Build<TCoLambda>(ctx, pos)
+            .Args({"filter_row"})
+            .Body<TExprApplier>()
+                .Apply(predicateToPush.ExprNode.Cast())
+                .With(TExprBase(lambdaArg), "filter_row")
+                .Build()
+            .Done();
+
+        YQL_CLOG(INFO, ProviderS3) << "Push filter lambda: " << NCommon::ExprToPrettyString(ctx, *newFilterLambda.Ptr());
+        return newFilterLambda;
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
@@ -233,8 +380,15 @@ public:
                                 fileSizeLimit = it->second;
                             }
                         }
+
+                        ui64 userSizeLimit = std::numeric_limits<ui64>::max();
                         if (formatName == "parquet") {
                             fileSizeLimit = State_->Configuration->BlockFileSizeLimit;
+                        } else if (formatName == "raw") {
+                            const auto sizeLimitParam = dqSource.Input().Cast<TS3SourceSettings>().SizeLimit().Maybe<TCoAtom>();
+                            if (sizeLimitParam.IsValid()) {
+                                userSizeLimit = FromString<ui64>(sizeLimitParam.Cast().StringValue());
+                            }
                         }
 
                         for (const TS3Path& batch : maybeS3SourceSettings.Cast().Paths()) {
@@ -245,13 +399,14 @@ public:
                             UnpackPathsList(packed, isTextEncoded, paths);
 
                             for (auto& entry : paths) {
-                                if (entry.Size > fileSizeLimit) {
+                                const ui64 bytesUsed = std::min(entry.Size, userSizeLimit);
+                                if (bytesUsed > fileSizeLimit) {
                                     ctx.AddError(TIssue(ctx.GetPosition(batch.Pos()),
                                         TStringBuilder() << "Size of object " << entry.Path << " = " << entry.Size << " and exceeds limit = " << fileSizeLimit << " specified for format " << formatName));
                                     hasErr = true;
                                     return false;
                                 }
-                                totalSize += entry.Size;
+                                totalSize += bytesUsed;
                                 ++count;
                             }
                         }
@@ -673,7 +828,7 @@ public:
                     .RowsLimitHint(count.Literal())
                     .Build()
             .Build()
-        .Done();   
+        .Done();
     }
 
     TMaybeNode<TExprBase> PushDownLimit(TExprBase node, TExprContext& ctx) const {

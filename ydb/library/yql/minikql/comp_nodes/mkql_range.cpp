@@ -214,11 +214,14 @@ bool CanConvertToPointRange(const TExpandedRange& range, const TRangeTypeInfo& t
         case EDataSlot::Uint64: return IsAdjacentNumericValues<ui64>(left, right);
 
         case EDataSlot::Date:     return IsAdjacentNumericValues<ui16>(left, right);
+        case EDataSlot::Date32:   return IsAdjacentNumericValues<i32>(left, right);
         case EDataSlot::Datetime: return IsAdjacentNumericValues<ui32>(left, right);
-        default:
-            Y_ENSURE(*slot == EDataSlot::Timestamp);
+        case EDataSlot::Timestamp: return IsAdjacentNumericValues<ui64>(left, right);
+        case EDataSlot::Datetime64: return IsAdjacentNumericValues<i64>(left, right);
+        case EDataSlot::Timestamp64: return IsAdjacentNumericValues<i64>(left, right);
+        default: break;
     }
-    return IsAdjacentNumericValues<ui64>(left, right);
+    MKQL_ENSURE(false, "Unsupported type: " << *slot);
 }
 
 bool RangeIsEmpty(const TExpandedRange& range, const TRangeTypeInfo& typeInfo) {

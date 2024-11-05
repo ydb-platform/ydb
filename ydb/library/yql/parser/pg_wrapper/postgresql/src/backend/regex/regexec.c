@@ -137,36 +137,45 @@ struct vars
  * forward declarations
  */
 /* === regexec.c === */
-static struct dfa *getsubdfa(struct vars *, struct subre *);
-static struct dfa *getladfa(struct vars *, int);
-static int	find(struct vars *, struct cnfa *, struct colormap *);
-static int	cfind(struct vars *, struct cnfa *, struct colormap *);
-static int	cfindloop(struct vars *, struct cnfa *, struct colormap *, struct dfa *, struct dfa *, chr **);
-static void zapallsubs(regmatch_t *, size_t);
-static void zaptreesubs(struct vars *, struct subre *);
-static void subset(struct vars *, struct subre *, chr *, chr *);
-static int	cdissect(struct vars *, struct subre *, chr *, chr *);
-static int	ccondissect(struct vars *, struct subre *, chr *, chr *);
-static int	crevcondissect(struct vars *, struct subre *, chr *, chr *);
-static int	cbrdissect(struct vars *, struct subre *, chr *, chr *);
-static int	caltdissect(struct vars *, struct subre *, chr *, chr *);
-static int	citerdissect(struct vars *, struct subre *, chr *, chr *);
-static int	creviterdissect(struct vars *, struct subre *, chr *, chr *);
+static struct dfa *getsubdfa(struct vars *v, struct subre *t);
+static struct dfa *getladfa(struct vars *v, int n);
+static int	find(struct vars *v, struct cnfa *cnfa, struct colormap *cm);
+static int	cfind(struct vars *v, struct cnfa *cnfa, struct colormap *cm);
+static int	cfindloop(struct vars *v, struct cnfa *cnfa, struct colormap *cm,
+					  struct dfa *d, struct dfa *s, chr **coldp);
+static void zapallsubs(regmatch_t *p, size_t n);
+static void zaptreesubs(struct vars *v, struct subre *t);
+static void subset(struct vars *v, struct subre *sub, chr *begin, chr *end);
+static int	cdissect(struct vars *v, struct subre *t, chr *begin, chr *end);
+static int	ccondissect(struct vars *v, struct subre *t, chr *begin, chr *end);
+static int	crevcondissect(struct vars *v, struct subre *t, chr *begin, chr *end);
+static int	cbrdissect(struct vars *v, struct subre *t, chr *begin, chr *end);
+static int	caltdissect(struct vars *v, struct subre *t, chr *begin, chr *end);
+static int	citerdissect(struct vars *v, struct subre *t, chr *begin, chr *end);
+static int	creviterdissect(struct vars *v, struct subre *t, chr *begin, chr *end);
 
 /* === rege_dfa.c === */
-static chr *longest(struct vars *, struct dfa *, chr *, chr *, int *);
-static chr *shortest(struct vars *, struct dfa *, chr *, chr *, chr *, chr **, int *);
-static int	matchuntil(struct vars *, struct dfa *, chr *, struct sset **, chr **);
-static chr *dfa_backref(struct vars *, struct dfa *, chr *, chr *, chr *, bool);
-static chr *lastcold(struct vars *, struct dfa *);
-static struct dfa *newdfa(struct vars *, struct cnfa *, struct colormap *, struct smalldfa *);
-static void freedfa(struct dfa *);
-static unsigned hash(unsigned *, int);
-static struct sset *initialize(struct vars *, struct dfa *, chr *);
-static struct sset *miss(struct vars *, struct dfa *, struct sset *, color, chr *, chr *);
-static int	lacon(struct vars *, struct cnfa *, chr *, color);
-static struct sset *getvacant(struct vars *, struct dfa *, chr *, chr *);
-static struct sset *pickss(struct vars *, struct dfa *, chr *, chr *);
+static chr *longest(struct vars *v, struct dfa *d,
+					chr *start, chr *stop, int *hitstopp);
+static chr *shortest(struct vars *v, struct dfa *d, chr *start, chr *min,
+					 chr *max, chr **coldp, int *hitstopp);
+static int	matchuntil(struct vars *v, struct dfa *d, chr *probe,
+					   struct sset **lastcss, chr **lastcp);
+static chr *dfa_backref(struct vars *v, struct dfa *d, chr *start,
+						chr *min, chr *max, bool shortest);
+static chr *lastcold(struct vars *v, struct dfa *d);
+static struct dfa *newdfa(struct vars *v, struct cnfa *cnfa,
+						  struct colormap *cm, struct smalldfa *sml);
+static void freedfa(struct dfa *d);
+static unsigned hash(unsigned *uv, int n);
+static struct sset *initialize(struct vars *v, struct dfa *d, chr *start);
+static struct sset *miss(struct vars *v, struct dfa *d, struct sset *css,
+						 color co, chr *cp, chr *start);
+static int	lacon(struct vars *v, struct cnfa *pcnfa, chr *cp, color co);
+static struct sset *getvacant(struct vars *v, struct dfa *d, chr *cp,
+							  chr *start);
+static struct sset *pickss(struct vars *v, struct dfa *d, chr *cp,
+						   chr *start);
 
 
 /*
@@ -183,7 +192,7 @@ pg_regexec(regex_t *re,
 		   int flags)
 {
 	struct vars var;
-	register struct vars *v = &var;
+	struct vars *v = &var;
 	int			st;
 	size_t		n;
 	size_t		i;
@@ -215,25 +224,30 @@ pg_regexec(regex_t *re,
 		return REG_NOMATCH;
 	backref = (v->g->info & REG_UBACKREF) ? 1 : 0;
 	v->eflags = flags;
-	if (v->g->cflags & REG_NOSUB)
-		nmatch = 0;				/* override client */
-	v->nmatch = nmatch;
-	if (backref)
+	if (backref && nmatch <= v->g->nsub)
 	{
-		/* need work area */
-		if (v->g->nsub + 1 <= LOCALMAT)
+		/* need larger work area */
+		v->nmatch = v->g->nsub + 1;
+		if (v->nmatch <= LOCALMAT)
 			v->pmatch = mat;
 		else
-			v->pmatch = (regmatch_t *) MALLOC((v->g->nsub + 1) *
-											  sizeof(regmatch_t));
+			v->pmatch = (regmatch_t *) MALLOC(v->nmatch * sizeof(regmatch_t));
 		if (v->pmatch == NULL)
 			return REG_ESPACE;
-		v->nmatch = v->g->nsub + 1;
+		zapallsubs(v->pmatch, v->nmatch);
 	}
 	else
+	{
+		/* we can store results directly in caller's array */
 		v->pmatch = pmatch;
-	if (v->nmatch > 0)
-		zapallsubs(v->pmatch, v->nmatch);
+		/* ensure any extra entries in caller's array are filled with -1 */
+		if (nmatch > 0)
+			zapallsubs(pmatch, nmatch);
+		/* then forget about extra entries, to avoid useless work in find() */
+		if (nmatch > v->g->nsub + 1)
+			nmatch = v->g->nsub + 1;
+		v->nmatch = nmatch;
+	}
 	v->details = details;
 	v->start = (chr *) string;
 	v->search_start = (chr *) string + search_start;
@@ -294,12 +308,20 @@ pg_regexec(regex_t *re,
 	else
 		st = find(v, &v->g->tree->cnfa, &v->g->cmap);
 
-	/* copy (portion of) match vector over if necessary */
-	if (st == REG_OKAY && v->pmatch != pmatch && nmatch > 0)
+	/* on success, ensure caller's match vector is filled correctly */
+	if (st == REG_OKAY && nmatch > 0)
 	{
-		zapallsubs(pmatch, nmatch);
-		n = (nmatch < v->nmatch) ? nmatch : v->nmatch;
-		memcpy(VS(pmatch), VS(v->pmatch), n * sizeof(regmatch_t));
+		if (v->pmatch != pmatch)
+		{
+			/* copy portion of match vector over from (larger) work area */
+			assert(nmatch <= v->nmatch);
+			memcpy(VS(pmatch), VS(v->pmatch), nmatch * sizeof(regmatch_t));
+		}
+		if (v->g->cflags & REG_NOSUB)
+		{
+			/* don't expose possibly-partial sub-match results to caller */
+			zapallsubs(pmatch, nmatch);
+		}
 	}
 
 	/* clean up */
@@ -742,8 +764,7 @@ cdissect(struct vars *v,
 	MDEBUG(("%d: cdissect %c %ld-%ld\n", t->id, t->op, LOFF(begin), LOFF(end)));
 
 	/* handy place to check for operation cancel */
-	if (CANCEL_REQUESTED(v->re))
-		return REG_CANCEL;
+	INTERRUPT(v->re);
 	/* ... and stack overrun */
 	if (STACK_TOO_DEEP(v->re))
 		return REG_ETOOBIG;
@@ -778,7 +799,6 @@ cdissect(struct vars *v,
 			break;
 		case '(':				/* no-op capture node */
 			assert(t->child != NULL);
-			assert(t->capno > 0);
 			er = cdissect(v, t->child, begin, end);
 			break;
 		default:

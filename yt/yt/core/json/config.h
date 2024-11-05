@@ -1,5 +1,7 @@
 #pragma once
 
+#include "public.h"
+
 #include <yt/yt/core/ytree/yson_struct.h>
 
 namespace NYT::NJson {
@@ -25,9 +27,9 @@ public:
     EJsonAttributesMode AttributesMode;
     bool Plain;
     bool EncodeUtf8;
-    i64 MemoryLimit = 256_MB;
-    int NestingLevelLimit = 0;
 
+    i64 MemoryLimit;
+    int NestingLevelLimit;
     std::optional<int> StringLengthLimit;
 
     bool Stringify;

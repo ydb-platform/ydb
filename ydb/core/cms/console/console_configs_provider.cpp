@@ -8,6 +8,7 @@
 #include <ydb/core/mon/mon.h>
 
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 
 namespace NKikimr::NConsole {
 

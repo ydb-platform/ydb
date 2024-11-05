@@ -19,7 +19,7 @@ public:
     static TNamedPipePtr FromPath(const TString& path);
 
     NNet::IConnectionReaderPtr CreateAsyncReader();
-    NNet::IConnectionWriterPtr CreateAsyncWriter();
+    NNet::IConnectionWriterPtr CreateAsyncWriter(bool useDeliveryFence = false);
 
     TString GetPath() const;
 
@@ -91,7 +91,7 @@ private:
     friend class TPipeFactory;
 };
 
-TString ToString(const TPipe& pipe);
+void FormatValue(TStringBuilderBase* builder, const TPipe& pipe, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

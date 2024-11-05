@@ -183,6 +183,15 @@ public:
             return array;
         }
 
+        case NYql::ETypeAnnotationKind::Pg: {
+            auto castedType = type->UserCast<NYql::TPgExprType>(Pos_, *exprCtxPtr);
+            if (!castedType) {
+                UdfTerminate(exprCtxPtr->IssueManager.GetIssues().ToString().data());
+            }
+
+            return MakeString(castedType->GetName());
+        }
+
         default:
             MKQL_ENSURE(false, "Unsupported kind:" << Kind);
         }
@@ -237,6 +246,9 @@ template IComputationNode* WrapSplitType<NYql::ETypeAnnotationKind::Variant>
     (TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
 template IComputationNode* WrapSplitType<NYql::ETypeAnnotationKind::Callable>
+    (TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
+
+template IComputationNode* WrapSplitType<NYql::ETypeAnnotationKind::Pg>
     (TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
 }

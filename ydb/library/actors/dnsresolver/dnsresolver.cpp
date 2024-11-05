@@ -172,7 +172,13 @@ namespace NDnsResolver {
             memset(&options, 0, sizeof(options));
             int optmask = 0;
 
-            options.flags = ARES_FLAG_STAYOPEN;
+            if (Options.ForceTcp) {
+                options.flags |= ARES_FLAG_USEVC;
+            }
+            if (Options.KeepSocket) {
+                options.flags |= ARES_FLAG_STAYOPEN;
+            }
+
             optmask |= ARES_OPT_FLAGS;
 
             options.sock_state_cb = &TThis::SockStateCallback;

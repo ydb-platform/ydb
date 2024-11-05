@@ -1,0 +1,37 @@
+GO_LIBRARY()
+IF (OS_DARWIN AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND RACE AND NOT CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND NOT RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        bytealg.go
+        compare_arm64.s
+        compare_native.go
+        count_arm64.s
+        count_native.go
+        equal_arm64.s
+        equal_generic.go
+        equal_native.go
+        index_arm64.go
+        index_arm64.s
+        index_native.go
+        indexbyte_arm64.s
+        indexbyte_native.go
+        lastindexbyte_generic.go
+    )
+ELSEIF (OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND RACE AND NOT CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        bytealg.go
+        compare_amd64.s
+        compare_native.go
+        count_amd64.s
+        count_native.go
+        equal_amd64.s
+        equal_generic.go
+        equal_native.go
+        index_amd64.go
+        index_amd64.s
+        index_native.go
+        indexbyte_amd64.s
+        indexbyte_native.go
+        lastindexbyte_generic.go
+    )
+ENDIF()
+END()

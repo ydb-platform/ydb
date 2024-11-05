@@ -4,9 +4,9 @@
 
 #include <yt/yt/core/net/connection.h>
 
-////////////////////////////////////////////////////////////////////////////////
-
 namespace NYT::NHttp::NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
 
 TReusableConnectionState::TReusableConnectionState(
     NNet::IConnectionPtr connection,
@@ -17,11 +17,11 @@ TReusableConnectionState::TReusableConnectionState(
 
 TReusableConnectionState::~TReusableConnectionState()
 {
-    if (Reusable && OwningPool && Connection->IsIdle()) {
+    if (Reusable && OwningPool && Connection->IsReusable()) {
         OwningPool->Release(std::move(Connection));
     }
 }
 
-} // namespace NDetail
-
 ////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NHttp::NDetail

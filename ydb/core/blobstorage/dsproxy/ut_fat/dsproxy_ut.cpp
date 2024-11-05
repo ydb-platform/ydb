@@ -35,6 +35,7 @@
 #include <ydb/library/actors/interconnect/mock/ic_mock.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/util/affinity.h>
+#include <ydb/library/pdisk_io/aio.h>
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -377,7 +378,8 @@ protected:
                     auto& msgId = *x->Record.MutableMsgQoS()->MutableMsgId();
                     msgId.SetMsgId(1);
                     msgId.SetSequenceId(1);
-                    GroupQueues->Send(*this, BsInfo->GetTopology(), std::move(x), 0, NWilson::TTraceId(), false);
+                    auto queueId = x->Record.GetMsgQoS().GetExtQueueId();
+                    GroupQueues->Send(*this, BsInfo->GetTopology(), std::move(x), 0, NWilson::TTraceId(), vDiskId, queueId);
                   break;
                 }
                 [[fallthrough]];
@@ -3403,9 +3405,25 @@ class TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob : public TTe
                 batched[1] = GetPut(blobIds[1], Data2);
 
                 TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(HandleClass);
-                IActor *reqActor = CreateBlobStorageGroupPutRequest(BsInfo, GroupQueues,
-                        Mon, batched, false, PerDiskStatsPtr, kind,TInstant::Now(),
-                        StoragePoolCounters, HandleClass, Tactic, false);
+                IActor *reqActor = CreateBlobStorageGroupPutRequest(
+                        TBlobStorageGroupMultiPutParameters{
+                            .Common = {
+                                .GroupInfo = BsInfo,
+                                .GroupQueues = GroupQueues,
+                                .Mon = Mon,
+                                .Now = TMonotonic::Now(),
+                                .StoragePoolCounters = StoragePoolCounters,
+                                .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batched),
+                                .LatencyQueueKind = kind,
+                            },
+                            .Events = batched,
+                            .TimeStatsEnabled = false,
+                            .Stats = PerDiskStatsPtr,
+                            .HandleClass = HandleClass,
+                            .Tactic = Tactic,
+                            .EnableRequestMod3x3ForMinLatency = false,
+                            .AccelerationParams = TAccelerationParams{},
+                        });
 
                 ctx.Register(reqActor);
                 break;
@@ -4188,8 +4206,20 @@ public:
         TIntrusivePtr<TDsProxyNodeMon> dsProxyNodeMon(new TDsProxyNodeMon(counters, true));
         TDsProxyPerPoolCounters perPoolCounters(counters);
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
+        TControlWrapper enablePutBatching(args.EnablePutBatching, false, true);
+        TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
+        TControlWrapper slowDiskThreshold(DefaultSlowDiskThreshold * 1000, 1, 1000000);
+        TControlWrapper predictedDelayMultiplier(DefaultPredictedDelayMultiplier * 1000, 1, 1000000);
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(bsInfo), false,
-            dsProxyNodeMon, TIntrusivePtr(storagePoolCounters), args.EnablePutBatching, DefaultEnableVPatch)};
+                dsProxyNodeMon, TIntrusivePtr(storagePoolCounters),
+                TBlobStorageProxyParameters{
+                    .EnablePutBatching = enablePutBatching,
+                    .EnableVPatch = enableVPatch,
+                    .SlowDiskThreshold = slowDiskThreshold,
+                    .PredictedDelayMultiplier = predictedDelayMultiplier,
+                }
+            )
+        };
         TActorSetupCmd bsproxySetup(proxyActor.release(), TMailboxType::Revolving, 3);
         setup1->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(env->ProxyId, std::move(bsproxySetup)));
 
@@ -4252,6 +4282,7 @@ public:
                 vDiskConfig->GCOnlySynced = false;
                 vDiskConfig->HullCompLevelRateThreshold = 0.1;
                 vDiskConfig->SkeletonFrontQueueBackpressureCheckMsgId = false;
+                vDiskConfig->UseCostTracker = false;
 
                 IActor* vDisk = CreateVDisk(vDiskConfig, bsInfo, counters);
                 TActorSetupCmd vDiskSetup(vDisk, TMailboxType::Revolving, 0);

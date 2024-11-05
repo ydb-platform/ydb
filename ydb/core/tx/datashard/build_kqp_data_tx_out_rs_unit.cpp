@@ -83,15 +83,9 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
 
         auto allocGuard = tasksRunner.BindAllocator(txc.GetMemoryLimit() - dataTx->GetTxSize());
 
-        NKqp::NRm::TKqpResourcesRequest req;
-        req.MemoryPool = NKqp::NRm::EKqpMemoryPool::DataQuery;
-        req.Memory = txc.GetMemoryLimit();
-        ui64 taskId = dataTx->GetFirstKqpTaskId();
-
-        NKqp::GetKqpResourceManager()->NotifyExternalResourcesAllocated(tx->GetTxId(), taskId, req);
-
+        NKqp::GetKqpResourceManager()->GetCounters()->RmExternalMemory->Add(txc.GetMemoryLimit());
         Y_DEFER {
-            NKqp::GetKqpResourceManager()->NotifyExternalResourcesFreed(tx->GetTxId(), taskId);
+            NKqp::GetKqpResourceManager()->GetCounters()->RmExternalMemory->Sub(txc.GetMemoryLimit());
         };
 
         LOG_T("Operation " << *op << " (build_kqp_data_tx_out_rs) at " << tabletId

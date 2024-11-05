@@ -5,3 +5,5 @@ typname,
 typnamespace,
 typtype
 from pg_catalog.pg_type
+order by oid
+

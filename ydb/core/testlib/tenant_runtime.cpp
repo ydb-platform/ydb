@@ -4,6 +4,8 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/base/feature_flags_service.h>
+#include <ydb/core/cms/console/feature_flags_configurator.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/labels_maintainer.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -820,6 +822,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
     TAppPrepare app;
 
     app.FeatureFlags = Extension.GetFeatureFlags();
+    app.ImmediateControlsConfig = Extension.GetImmediateControlsConfig();
     app.ClearDomainsAndHive();
 
     ui32 planResolution = 500;
@@ -854,7 +857,9 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         app.AddHive(Config.HiveId);
     }
 
-    for (size_t i = 0; i< Config.Nodes.size(); ++i) {
+    app.InitIcb(Config.Nodes.size());
+
+    for (size_t i = 0; i < Config.Nodes.size(); ++i) {
         AddLocalService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(GetNodeId(i)),
                         TActorSetupCmd(new TFakeNodeWhiteboardService, TMailboxType::Simple, 0), i);
     }
@@ -1035,13 +1040,18 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
             }
             labels.emplace("node_id", ToString(i));
             auto aid = Register(CreateConfigsDispatcher(
-                    NKikimr::NConsole::TConfigsDispatcherInitInfo {
+                    NKikimr::NConfig::TConfigsDispatcherInitInfo {
                         .InitialConfig = Extension,
                         .Labels = labels,
                     }
                 ));
             EnableScheduleForActor(aid, true);
             RegisterService(MakeConfigsDispatcherID(GetNodeId(0)), aid, 0);
+            if (Config.RegisterFeatureFlagsConfigurator) {
+                RegisterService(
+                    MakeFeatureFlagsServiceID(),
+                    Register(CreateFeatureFlagsConfigurator()));
+            }
         }
 
         Register(NKikimr::CreateLabelsMaintainer(Extension.GetMonitoringConfig()),

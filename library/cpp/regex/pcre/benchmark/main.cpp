@@ -17,19 +17,19 @@ static TVector<TString> GenerateHaystacks() {
     // Generate long randomized haystacks to prevent cache hit
     TVector<TString> result(Reserve(HaystacksCount));
     for (size_t i = 0; i < HaystacksCount; ++i) {
-        result.push_back(TString::Join(ComplexPattern.SubString(MinPrefix + i, ComplexPattern.Size() - MinPrefix - i), ComplexPattern.SubString(0, MinPrefix + i)));
+        result.push_back(TString::Join(ComplexPattern.SubString(MinPrefix + i, ComplexPattern.size() - MinPrefix - i), ComplexPattern.SubString(0, MinPrefix + i)));
     }
     return result;
 }
 
 static const TVector<TString> Haystacks{GenerateHaystacks()};
 
-static const NPcre::TPcre<char> Simple{SimplePattern.Data()};
-static const NPcre::TPcre<char> SimpleStudy{SimplePattern.Data(), NPcre::EOptimize::Study};
-static const NPcre::TPcre<char> SimpleJIT{SimplePattern.Data(), NPcre::EOptimize::JIT};
-static const NPcre::TPcre<char> Complex{ComplexPattern.Data()};
-static const NPcre::TPcre<char> ComplexStudy{ComplexPattern.Data(), NPcre::EOptimize::Study};
-static const NPcre::TPcre<char> ComplexJIT{ComplexPattern.Data(), NPcre::EOptimize::JIT};
+static const NPcre::TPcre<char> Simple{SimplePattern.data()};
+static const NPcre::TPcre<char> SimpleStudy{SimplePattern.data(), NPcre::EOptimize::Study};
+static const NPcre::TPcre<char> SimpleJIT{SimplePattern.data(), NPcre::EOptimize::JIT};
+static const NPcre::TPcre<char> Complex{ComplexPattern.data()};
+static const NPcre::TPcre<char> ComplexStudy{ComplexPattern.data(), NPcre::EOptimize::Study};
+static const NPcre::TPcre<char> ComplexJIT{ComplexPattern.data(), NPcre::EOptimize::JIT};
 
 static void Benchmark(benchmark::State& state, const NPcre::TPcre<char>& pattern) {
     for (auto _ : state) {

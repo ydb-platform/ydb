@@ -18,7 +18,7 @@ class TMultiplexingBandConfig
 {
 public:
     int TosLevel;
-    THashMap<TString, int> NetworkToTosLevel;
+    THashMap<std::string, int> NetworkToTosLevel;
 
     REGISTER_YSON_STRUCT(TMultiplexingBandConfig);
 
@@ -35,10 +35,12 @@ class TTcpDispatcherConfig
 public:
     int ThreadPoolSize;
 
+    TDuration ThreadPoolPollingPeriod;
+
     //! Used for profiling export and alerts.
     std::optional<i64> NetworkBandwidth;
 
-    THashMap<TString, std::vector<NNet::TIP6Network>> Networks;
+    THashMap<std::string, std::vector<NNet::TIP6Network>> Networks;
 
     TEnumIndexedArray<EMultiplexingBand, TMultiplexingBandConfigPtr> MultiplexingBands;
 
@@ -62,9 +64,11 @@ class TTcpDispatcherDynamicConfig
 public:
     std::optional<int> ThreadPoolSize;
 
+    std::optional<TDuration> ThreadPoolPollingPeriod;
+
     std::optional<i64> NetworkBandwidth;
 
-    std::optional<THashMap<TString, std::vector<NNet::TIP6Network>>> Networks;
+    std::optional<THashMap<std::string, std::vector<NNet::TIP6Network>>> Networks;
 
     std::optional<TEnumIndexedArray<EMultiplexingBand, TMultiplexingBandConfigPtr>> MultiplexingBands;
 
@@ -91,6 +95,9 @@ public:
 
     TDuration ReadStallTimeout;
     TDuration WriteStallTimeout;
+
+    std::optional<TDuration> ConnectionStartDelay;
+    std::optional<TDuration> PacketDecoderDelay;
 
     bool VerifyChecksums;
     bool GenerateChecksums;
@@ -119,12 +126,12 @@ class TBusServerConfig
 {
 public:
     std::optional<int> Port;
-    std::optional<TString> UnixDomainSocketPath;
+    std::optional<std::string> UnixDomainSocketPath;
     int MaxBacklogSize;
     int MaxSimultaneousConnections;
 
     static TBusServerConfigPtr CreateTcp(int port);
-    static TBusServerConfigPtr CreateUds(const TString& socketPath);
+    static TBusServerConfigPtr CreateUds(const std::string& socketPath);
 
     REGISTER_YSON_STRUCT(TBusServerConfig);
 
@@ -139,11 +146,11 @@ class TBusClientConfig
     : public TBusConfig
 {
 public:
-    std::optional<TString> Address;
-    std::optional<TString> UnixDomainSocketPath;
+    std::optional<std::string> Address;
+    std::optional<std::string> UnixDomainSocketPath;
 
-    static TBusClientConfigPtr CreateTcp(const TString& address);
-    static TBusClientConfigPtr CreateUds(const TString& socketPath);
+    static TBusClientConfigPtr CreateTcp(const std::string& address);
+    static TBusClientConfigPtr CreateUds(const std::string& socketPath);
 
     REGISTER_YSON_STRUCT(TBusClientConfig);
 

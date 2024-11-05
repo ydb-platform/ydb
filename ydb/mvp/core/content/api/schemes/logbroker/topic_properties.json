@@ -1,0 +1,24 @@
+{
+    "properties": {
+        "abcService": {
+            "$ref": "#/definitions/StringOrDefaultValue"
+        },
+        "allowUnauthenticatedRead": {
+            "$ref": "#/definitions/BoolOrDefaultValue"
+        },
+        "allowUnauthenticatedWrite": {
+            "$ref": "#/definitions/BoolOrDefaultValue"
+        },
+        "partitionsCount": {
+            "$ref": "#/definitions/IntOrDefaultValue"
+        },
+        "responsible": {
+            "$ref": "#/definitions/StringArrayOrDefaultValue"
+        },
+        "retentionPeriodSec": {
+            "$ref": "#/definitions/IntOrDefaultValue"
+        }
+    },
+    "title": "TopicProperties",
+    "type": "object"
+}

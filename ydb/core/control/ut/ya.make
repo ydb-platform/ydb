@@ -16,6 +16,10 @@ PEERDIR(
     ydb/core/mon
     ydb/library/yql/sql/pg_dummy
     ydb/services/ydb
+    ydb/services/persqueue_v1
+    ydb/services/kesus
+    ydb/services/persqueue_cluster_discovery
+    ydb/library/yql/minikql/comp_nodes/llvm14
     ydb/library/yql/public/udf/service/exception_policy
 )
 

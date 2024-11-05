@@ -183,6 +183,40 @@ void TOperation::ClearImmediateConflicts() {
     ImmediateConflicts.clear();
 }
 
+void TOperation::AddRepeatableReadConflict(const TOperation::TPtr &op) {
+    Y_ABORT_UNLESS(this != op.Get());
+    Y_DEBUG_ABORT_UNLESS(IsImmediate());
+    Y_DEBUG_ABORT_UNLESS(!op->IsImmediate());
+
+    if (IsMvccSnapshotRepeatable()) {
+        AddDependency(op);
+        return;
+    }
+
+    if (RepeatableReadConflicts.insert(op).second) {
+        op->RepeatableReadConflicts.insert(this);
+    }
+}
+
+void TOperation::PromoteRepeatableReadConflicts() {
+    Y_ABORT_UNLESS(IsImmediate());
+
+    for (auto& op : RepeatableReadConflicts) {
+        Y_DEBUG_ABORT_UNLESS(op->RepeatableReadConflicts.contains(this));
+        op->RepeatableReadConflicts.erase(this);
+        AddDependency(op);
+    }
+    RepeatableReadConflicts.clear();
+}
+
+void TOperation::ClearRepeatableReadConflicts() {
+    for (auto& op : RepeatableReadConflicts) {
+        Y_DEBUG_ABORT_UNLESS(op->RepeatableReadConflicts.contains(this));
+        op->RepeatableReadConflicts.erase(this);
+    }
+    RepeatableReadConflicts.clear();
+}
+
 void TOperation::AddVolatileDependency(ui64 txId) {
     VolatileDependencies.insert(txId);
 }
@@ -294,6 +328,11 @@ bool TOperation::OnStopping(TDataShard&, const TActorContext&)
     // By default operations don't do anything when stopping
     // However they may become ready so add to candidates
     return true;
+}
+
+void TOperation::OnCleanup(TDataShard&, std::vector<std::unique_ptr<IEventHandle>>&)
+{
+    // By default operation does nothing
 }
 
 } // namespace NDataShard

@@ -29,6 +29,6 @@ RECURSE(
     compstrat
     fresh
     generic
-    test
     recovery
+    test
 )

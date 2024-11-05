@@ -49,7 +49,7 @@ TIntrusivePtr<TSamplingThrottlingControl> TSamplingThrottlingConfigurator::GetCo
     return control;
 }
 
-void TSamplingThrottlingConfigurator::UpdateSettings(TSettings<double, TThrottlingSettings> settings) {
+void TSamplingThrottlingConfigurator::UpdateSettings(TSettings<double, TWithTag<TThrottlingSettings>> settings) {
     auto enrichedSettings = GenerateThrottlers(std::move(settings));
     PropagateUnspecifiedRequest(enrichedSettings.SamplingRules);
     PropagateUnspecifiedRequest(enrichedSettings.ExternalThrottlingRules);
@@ -61,9 +61,15 @@ void TSamplingThrottlingConfigurator::UpdateSettings(TSettings<double, TThrottli
 }
 
 TSettings<double, TIntrusivePtr<TThrottler>> TSamplingThrottlingConfigurator::GenerateThrottlers(
-    TSettings<double, TThrottlingSettings> settings) {
-    return settings.MapThrottler([this](const TThrottlingSettings& settings) {
-        return MakeIntrusive<TThrottler>(settings.MaxTracesPerMinute, settings.MaxTracesBurst, TimeProvider);
+    TSettings<double, TWithTag<TThrottlingSettings>> settings) {
+    THashMap<size_t, TIntrusivePtr<TThrottler>> throttlers;
+    return settings.MapThrottler([this, &throttlers](const TWithTag<TThrottlingSettings>& settings) {
+        if (auto it = throttlers.FindPtr(settings.Tag)) {
+            return *it;
+        }
+        auto throttler = MakeIntrusive<TThrottler>(settings.Value.MaxTracesPerMinute, settings.Value.MaxTracesBurst, TimeProvider);
+        throttlers[settings.Tag] = throttler;
+        return throttler;
     });
 }
 

@@ -2,6 +2,7 @@
 #include "yql_yt_provider_impl.h"
 #include "yql_yt_op_settings.h"
 #include "yql_yt_op_hash.h"
+#include "yql_yt_optimize.h"
 
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
@@ -38,7 +39,7 @@ using namespace NNodes;
 
 namespace {
 
-bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TString* usedCluster, bool supportsReads, bool supportsDq, TNodeSet& visited) {
+bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TString* usedCluster, bool supportsDq, TNodeSet& visited) {
     if (!visited.insert(&lambdaBody).second) {
         return true;
     }
@@ -50,14 +51,14 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
     if (auto maybeLength = TMaybeNode<TYtLength>(&lambdaBody)) {
         if (auto maybeRead = maybeLength.Input().Maybe<TYtReadTable>()) {
             auto read = maybeRead.Cast();
-            if (supportsReads && usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
                 return false;
             }
             syncList.emplace(read.Ptr(), syncList.size());
         }
         if (auto maybeOutput = maybeLength.Input().Maybe<TYtOutput>()) {
             auto output = maybeOutput.Cast();
-            if (supportsReads && usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
                 return false;
             }
             syncList.emplace(output.Operation().Ptr(), syncList.size());
@@ -68,14 +69,14 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
     if (auto maybeContent = TMaybeNode<TYtTableContent>(&lambdaBody)) {
         if (auto maybeRead = maybeContent.Input().Maybe<TYtReadTable>()) {
             auto read = maybeRead.Cast();
-            if (supportsReads && usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
                return false;
             }
             syncList.emplace(read.Ptr(), syncList.size());
         }
         if (auto maybeOutput = maybeContent.Input().Maybe<TYtOutput>()) {
             auto output = maybeOutput.Cast();
-            if (supportsReads && usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
                 return false;
             }
             syncList.emplace(output.Operation().Ptr(), syncList.size());
@@ -83,20 +84,20 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
         return true;
     }
 
-    if (auto maybeContent = TMaybeNode<TDqReadWideWrap>(&lambdaBody)) {
+    if (auto maybeContent = TMaybeNode<TDqReadWrapBase>(&lambdaBody)) {
         if (!supportsDq) {
             return false;
         }
         if (auto maybeRead = maybeContent.Input().Maybe<TYtReadTable>()) {
             auto read = maybeRead.Cast();
-            if (supportsReads && usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
                 return false;
             }
             syncList.emplace(read.Ptr(), syncList.size());
         }
         if (auto maybeOutput = maybeContent.Input().Maybe<TYtOutput>()) {
             auto output = maybeOutput.Cast();
-            if (supportsReads && usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
                 return false;
             }
             syncList.emplace(output.Operation().Ptr(), syncList.size());
@@ -108,28 +109,26 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
         return false;
     }
 
-    if (supportsReads) {
-        if (auto maybeRead = TMaybeNode<TCoRight>(&lambdaBody).Input().Maybe<TYtReadTable>()) {
-            auto read = maybeRead.Cast();
-            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
-                return false;
-            }
-            syncList.emplace(read.Ptr(), syncList.size());
-            return true;
-        } else if (auto out = TMaybeNode<TYtOutput>(&lambdaBody)) {
-            auto op = GetOutputOp(out.Cast());
-            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{op.DataSink().Cluster().Value()})) {
-                return false;
-            }
-            syncList.emplace(out.Cast().Operation().Ptr(), syncList.size());
-            return true;
+    if (auto maybeRead = TMaybeNode<TCoRight>(&lambdaBody).Input().Maybe<TYtReadTable>()) {
+        auto read = maybeRead.Cast();
+        if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
+            return false;
         }
+        syncList.emplace(read.Ptr(), syncList.size());
+        return true;
+    } else if (auto out = TMaybeNode<TYtOutput>(&lambdaBody)) {
+        auto op = GetOutputOp(out.Cast());
+        if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{op.DataSink().Cluster().Value()})) {
+            return false;
+        }
+        syncList.emplace(out.Cast().Operation().Ptr(), syncList.size());
+        return true;
     }
 
     if (auto right = TMaybeNode<TCoRight>(&lambdaBody).Input()) {
         if (auto maybeCons = right.Maybe<TCoCons>()) {
             syncList.emplace(maybeCons.Cast().World().Ptr(), syncList.size());
-            return IsYtIsolatedLambdaImpl(maybeCons.Cast().Input().Ref(), syncList, usedCluster, supportsReads, supportsDq, visited);
+            return IsYtIsolatedLambdaImpl(maybeCons.Cast().Input().Ref(), syncList, usedCluster, supportsDq, visited);
         }
 
         if (right.Cast().Raw()->IsCallable("PgReadTable!")) {
@@ -148,7 +147,7 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
     }
 
     for (auto& child : lambdaBody.Children()) {
-        if (!IsYtIsolatedLambdaImpl(*child, syncList, usedCluster, supportsReads, supportsDq, visited)) {
+        if (!IsYtIsolatedLambdaImpl(*child, syncList, usedCluster, supportsDq, visited)) {
             return false;
         }
     }
@@ -293,22 +292,22 @@ bool UpdateUsedCluster(TString& usedCluster, const TString& newCluster) {
     return true;
 }
 
-bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, bool supportsReads, bool supportsDq) {
+bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, bool supportsDq) {
     TNodeSet visited;
-    return IsYtIsolatedLambdaImpl(lambdaBody, syncList, nullptr, supportsReads, supportsDq, visited);
+    return IsYtIsolatedLambdaImpl(lambdaBody, syncList, nullptr, supportsDq, visited);
 }
 
-bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsReads, bool supportsDq) {
+bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsDq) {
     TNodeSet visited;
-    return IsYtIsolatedLambdaImpl(lambdaBody, syncList, &usedCluster, supportsReads, supportsDq, visited);
+    return IsYtIsolatedLambdaImpl(lambdaBody, syncList, &usedCluster, supportsDq, visited);
 }
 
-bool IsYtCompleteIsolatedLambda(const TExprNode& lambda, TSyncMap& syncList, bool supportsReads, bool supportsDq) {
-    return lambda.IsComplete() && IsYtIsolatedLambda(lambda, syncList, supportsReads, supportsDq);
+bool IsYtCompleteIsolatedLambda(const TExprNode& lambda, TSyncMap& syncList, bool supportsDq) {
+    return lambda.IsComplete() && IsYtIsolatedLambda(lambda, syncList, supportsDq);
 }
 
-bool IsYtCompleteIsolatedLambda(const TExprNode& lambda, TSyncMap& syncList, TString& usedCluster, bool supportsReads, bool supportsDq) {
-    return lambda.IsComplete() && IsYtIsolatedLambda(lambda, syncList, usedCluster, supportsReads, supportsDq);
+bool IsYtCompleteIsolatedLambda(const TExprNode& lambda, TSyncMap& syncList, TString& usedCluster, bool supportsDq) {
+    return lambda.IsComplete() && IsYtIsolatedLambda(lambda, syncList, usedCluster, supportsDq);
 }
 
 TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, TYtState::TPtr state) {
@@ -714,6 +713,11 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
     auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, *state->Types);
 
     TExprNode::TPtr optimized;
+    status = UpdateTableContentMemoryUsage(list, optimized, state, ctx, true);
+    if (status.Level == IGraphTransformer::TStatus::Error) {
+        return SyncStatus(status);
+    }
+
     bool hasNonDeterministicFunctions = false;
     status = PeepHoleOptimizeNode(list, optimized, ctx, *state->Types, typeTransformer.Get(), hasNonDeterministicFunctions);
     if (status.Level == IGraphTransformer::TStatus::Error) {
@@ -976,8 +980,8 @@ IGraphTransformer::TStatus UpdateTableMeta(const TExprNode::TPtr& tableNode, TEx
                     tableInfo.RowSpec->CopyTypeOrders(*nativeType);
                 }
                 if (prevRowSpec->IsSorted()) {
-                    tableInfo.RowSpec->CopySortness(*prevRowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
-                    tableInfo.RowSpec->MakeCommonSortness(*prevRowSpec); // Truncated keys with changed types
+                    tableInfo.RowSpec->CopySortness(ctx, *prevRowSpec, TYqlRowSpecInfo::ECopySort::WithDesc);
+                    tableInfo.RowSpec->MakeCommonSortness(ctx, *prevRowSpec); // Truncated keys with changed types
                 }
             }
         }
@@ -1089,12 +1093,13 @@ TExprNode::TPtr ResetOutTableMeta(const TExprNode::TPtr& tableNode, TExprContext
     return ctx.ChangeChildren(*tableNode, std::move(children));
 }
 
-TExprNode::TPtr ResetTablesMeta(const TExprNode::TPtr& input, TExprContext& ctx, bool resetTmpOnly) {
+TExprNode::TPtr ResetTablesMeta(const TExprNode::TPtr& input, TExprContext& ctx, bool resetTmpOnly, bool isEvaluationInProgress) {
     TNodeSet tables;
     TNodeSet outTables;
     VisitExpr(input, [&](const TExprNode::TPtr& node) {
         if (auto maybeTable = TMaybeNode<TYtTable>(node)) {
-            if (!resetTmpOnly) {
+            const bool isAnonymous = NYql::HasSetting(maybeTable.Cast().Settings().Ref(), EYtSettingType::Anonymous);
+            if (!resetTmpOnly && !(isEvaluationInProgress && isAnonymous)) {
                 if (!TCoVoid::Match(maybeTable.Stat().Raw()) || !TCoVoid::Match(maybeTable.Meta().Raw()) || !TCoVoid::Match(maybeTable.RowSpec().Raw())) {
                     tables.insert(maybeTable.Raw());
                 }
@@ -1102,8 +1107,10 @@ TExprNode::TPtr ResetTablesMeta(const TExprNode::TPtr& input, TExprContext& ctx,
             return false;
         }
         else if (auto maybeTable = TMaybeNode<TYtOutTable>(node)) {
-            if (!TCoVoid::Match(maybeTable.Stat().Raw()) || maybeTable.Cast().Name().Value()) {
-                outTables.insert(maybeTable.Raw());
+            if (!isEvaluationInProgress) {
+                if (!TCoVoid::Match(maybeTable.Stat().Raw()) || maybeTable.Cast().Name().Value()) {
+                    outTables.insert(maybeTable.Raw());
+                }
             }
             return false;
         }
@@ -1418,7 +1425,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
         bool sortIsChanged = false;
         for (size_t i = 0; i < rowSpecs.size(); ++i) {
             if (!rowSpecs[i].first) {
-                sortIsChanged = outTable.RowSpec->ClearSortness();
+                sortIsChanged = outTable.RowSpec->ClearSortness(ctx);
                 continue;
             }
             if (0 == i) {
@@ -1432,11 +1439,11 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
                         ? TYqlRowSpecInfo::ECopySort::Exact
                         : TYqlRowSpecInfo::ECopySort::WithDesc;
                 }
-                sortIsChanged = outTable.RowSpec->CopySortness(*rowSpecs[i].first, mode);
+                sortIsChanged = outTable.RowSpec->CopySortness(ctx, *rowSpecs[i].first, mode);
             } else {
-                sortIsChanged = outTable.RowSpec->MakeCommonSortness(*rowSpecs[i].first) || sortIsChanged;
+                sortIsChanged = outTable.RowSpec->MakeCommonSortness(ctx, *rowSpecs[i].first) || sortIsChanged;
                 if (rowSpecs[i].second && !sortConstraintEnabled) {
-                    sortIsChanged = outTable.RowSpec->KeepPureSortOnly() || sortIsChanged;
+                    sortIsChanged = outTable.RowSpec->KeepPureSortOnly(ctx) || sortIsChanged;
                 }
             }
         }
@@ -1506,7 +1513,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
                         .Body("stream")
                         .Done().Ptr();
 
-                    mapOutTable.RowSpec->CopySortness(*rowSpecs[i].first, sortConstraintEnabled ? TYqlRowSpecInfo::ECopySort::WithDesc : TYqlRowSpecInfo::ECopySort::Pure);
+                    mapOutTable.RowSpec->CopySortness(ctx, *rowSpecs[i].first, sortConstraintEnabled ? TYqlRowSpecInfo::ECopySort::WithDesc : TYqlRowSpecInfo::ECopySort::Pure);
                     if (sortConstraintEnabled) {
                         TKeySelectorBuilder builder(path.Pos(), ctx, useNativeDescSort, scheme.Cast<TStructExprType>());
                         builder.ProcessRowSpec(*mapOutTable.RowSpec);
@@ -2162,5 +2169,22 @@ bool HasYtRowNumber(const TExprNode& node) {
     return hasRowNumber;
 }
 
+bool IsYtTableSuitableForArrowInput(NNodes::TExprBase tableNode, std::function<void(const TString&)> unsupportedHandler) {
+    auto meta = TYtTableBaseInfo::GetMeta(tableNode);
+    if (meta->InferredScheme) {
+        unsupportedHandler("can't use arrow input on tables with inferred schema");
+        return false;
+    }
+    if (auto table = tableNode.Maybe<TYtTable>(); table && NYql::HasAnySetting(table.Cast().Settings().Ref(), EYtSettingType::UserColumns | EYtSettingType::UserSchema)) {
+        unsupportedHandler("can't use arrow input on tables with overridden schema/columns");
+        return false;
+    }
+    if (meta->Attrs.contains(SCHEMA_MODE_ATTR_NAME) && meta->Attrs[SCHEMA_MODE_ATTR_NAME] == "weak") {
+        unsupportedHandler("can't use arrow input on tables with weak schema");
+        return false;
+    }
+
+    return true;
+}
 
 } // NYql

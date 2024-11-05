@@ -34,31 +34,14 @@ import json
 from google.auth import _helpers
 from google.auth import credentials
 from google.auth import exceptions
+from google.auth import iam
 from google.auth import jwt
 from google.auth import metrics
 
-_IAM_SCOPE = ["https://www.googleapis.com/auth/iam"]
-
-_IAM_ENDPOINT = (
-    "https://iamcredentials.googleapis.com/v1/projects/-"
-    + "/serviceAccounts/{}:generateAccessToken"
-)
-
-_IAM_SIGN_ENDPOINT = (
-    "https://iamcredentials.googleapis.com/v1/projects/-"
-    + "/serviceAccounts/{}:signBlob"
-)
-
-_IAM_IDTOKEN_ENDPOINT = (
-    "https://iamcredentials.googleapis.com/v1/"
-    + "projects/-/serviceAccounts/{}:generateIdToken"
-)
 
 _REFRESH_ERROR = "Unable to acquire impersonated credentials"
 
 _DEFAULT_TOKEN_LIFETIME_SECS = 3600  # 1 hour in seconds
-
-_DEFAULT_TOKEN_URI = "https://oauth2.googleapis.com/token"
 
 
 def _make_iam_token_request(
@@ -83,7 +66,7 @@ def _make_iam_token_request(
             `iamcredentials.googleapis.com` is not enabled or the
             `Service Account Token Creator` is not assigned
     """
-    iam_endpoint = iam_endpoint_override or _IAM_ENDPOINT.format(principal)
+    iam_endpoint = iam_endpoint_override or iam._IAM_ENDPOINT.format(principal)
 
     body = json.dumps(body).encode("utf-8")
 
@@ -225,7 +208,9 @@ class Credentials(
         # added to refresh correctly. User credentials cannot have
         # their original scopes modified.
         if isinstance(self._source_credentials, credentials.Scoped):
-            self._source_credentials = self._source_credentials.with_scopes(_IAM_SCOPE)
+            self._source_credentials = self._source_credentials.with_scopes(
+                iam._IAM_SCOPE
+            )
             # If the source credential is service account and self signed jwt
             # is needed, we need to create a jwt credential inside it
             if (
@@ -241,6 +226,7 @@ class Credentials(
         self.expiry = _helpers.utcnow()
         self._quota_project_id = quota_project_id
         self._iam_endpoint_override = iam_endpoint_override
+        self._cred_file_path = None
 
     def _metric_header_for_usage(self):
         return metrics.CRED_TYPE_SA_IMPERSONATE
@@ -290,7 +276,7 @@ class Credentials(
     def sign_bytes(self, message):
         from google.auth.transport.requests import AuthorizedSession
 
-        iam_sign_endpoint = _IAM_SIGN_ENDPOINT.format(self._target_principal)
+        iam_sign_endpoint = iam._IAM_SIGN_ENDPOINT.format(self._target_principal)
 
         body = {
             "payload": base64.b64encode(message).decode("utf-8"),
@@ -331,29 +317,40 @@ class Credentials(
     def requires_scopes(self):
         return not self._target_scopes
 
-    @_helpers.copy_docstring(credentials.CredentialsWithQuotaProject)
-    def with_quota_project(self, quota_project_id):
-        return self.__class__(
+    @_helpers.copy_docstring(credentials.Credentials)
+    def get_cred_info(self):
+        if self._cred_file_path:
+            return {
+                "credential_source": self._cred_file_path,
+                "credential_type": "impersonated credentials",
+                "principal": self._target_principal,
+            }
+        return None
+
+    def _make_copy(self):
+        cred = self.__class__(
             self._source_credentials,
             target_principal=self._target_principal,
             target_scopes=self._target_scopes,
             delegates=self._delegates,
             lifetime=self._lifetime,
-            quota_project_id=quota_project_id,
-            iam_endpoint_override=self._iam_endpoint_override,
-        )
-
-    @_helpers.copy_docstring(credentials.Scoped)
-    def with_scopes(self, scopes, default_scopes=None):
-        return self.__class__(
-            self._source_credentials,
-            target_principal=self._target_principal,
-            target_scopes=scopes or default_scopes,
-            delegates=self._delegates,
-            lifetime=self._lifetime,
             quota_project_id=self._quota_project_id,
             iam_endpoint_override=self._iam_endpoint_override,
         )
+        cred._cred_file_path = self._cred_file_path
+        return cred
+
+    @_helpers.copy_docstring(credentials.CredentialsWithQuotaProject)
+    def with_quota_project(self, quota_project_id):
+        cred = self._make_copy()
+        cred._quota_project_id = quota_project_id
+        return cred
+
+    @_helpers.copy_docstring(credentials.Scoped)
+    def with_scopes(self, scopes, default_scopes=None):
+        cred = self._make_copy()
+        cred._target_scopes = scopes or default_scopes
+        return cred
 
 
 class IDTokenCredentials(credentials.CredentialsWithQuotaProject):
@@ -425,7 +422,7 @@ class IDTokenCredentials(credentials.CredentialsWithQuotaProject):
     def refresh(self, request):
         from google.auth.transport.requests import AuthorizedSession
 
-        iam_sign_endpoint = _IAM_IDTOKEN_ENDPOINT.format(
+        iam_sign_endpoint = iam._IAM_IDTOKEN_ENDPOINT.format(
             self._target_credentials.signer_email
         )
 

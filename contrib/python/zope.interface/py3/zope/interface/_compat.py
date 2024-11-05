@@ -29,6 +29,7 @@ def _normalize_name(name):
         return name
     raise TypeError("name must be a string or ASCII-only bytes")
 
+
 PYPY = hasattr(sys, 'pypy_version_info')
 
 
@@ -57,7 +58,7 @@ def _c_optimizations_available():
     try:
         from zope.interface import _zope_interface_coptimizations as c_opt
         return c_opt
-    except catch: # pragma: no cover (only Jython doesn't build extensions)
+    except catch:  # pragma: no cover (only Jython doesn't build extensions)
         return False
 
 
@@ -120,7 +121,7 @@ def _use_c_impl(py_impl, name=None, globs=None):
             return py_impl
 
         c_opt = _c_optimizations_available()
-        if not c_opt: # pragma: no cover (only Jython doesn't build extensions)
+        if not c_opt:  # pragma: no cover (Jython doesn't build extensions)
             return py_impl
 
         __traceback_info__ = c_opt

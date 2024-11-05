@@ -73,6 +73,7 @@ message TKqpExecutionExtraStats {
 message TKqpStatsQuery {
     // Basic stats
     uint64 DurationUs = 1;
+    uint64 QueuedTimeUs = 9;
     TKqpStatsCompile Compilation = 2;
 
     reserved 3; // repeated TKqpStatsExecution Executions = 3;

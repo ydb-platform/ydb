@@ -349,6 +349,7 @@ TRuntimeNode BuildDqYtInputCall(
         }
 
         TVector<TRuntimeNode> tableTuples;
+        ui64 tableOffset = 0;
         for (auto p: section.Paths()) {
             TYtPathInfo pathInfo(p);
             // Table may have aux columns. Exclude them by specifying explicit columns from the type
@@ -385,16 +386,21 @@ TRuntimeNode BuildDqYtInputCall(
                 ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(pathInfo.Table->IsTemp ? TString() : tableName),
                 ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(pathNode)),
                 ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(skiffNode)),
+                ctx.ProgramBuilder.NewDataLiteral(tableOffset)
             }));
+            YQL_ENSURE(pathInfo.Table->Stat);
+            tableOffset += pathInfo.Table->Stat->RecordsCount;
         }
         groups.push_back(ctx.ProgramBuilder.NewList(tableTuples.front().GetStaticType(), tableTuples));
         // All sections have the same sampling settings
         if (samplingSpec.IsUndefined()) {
             if (auto sampling = GetSampleParams(section.Settings().Ref())) {
-                YQL_ENSURE(sampling->Mode != EYtSampleMode::System);
                 samplingSpec["sampling_rate"] = sampling->Percentage / 100.;
                 if (sampling->Repeat) {
                     samplingSpec["sampling_seed"] = static_cast<i64>(sampling->Repeat);
+                }
+                if (sampling->Mode == EYtSampleMode::System) {
+                    samplingSpec["sampling_mode"] = "block";
                 }
             }
         }
@@ -446,17 +452,21 @@ void RegisterYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             TYtTableContent tableContent(&node);
             TMaybe<ui64> itemsCount;
+            TString name = ToString(TYtTableContent::CallableName());
             if (auto setting = NYql::GetSetting(tableContent.Settings().Ref(), EYtSettingType::ItemsCount)) {
                 itemsCount = FromString<ui64>(setting->Child(1)->Content());
             }
+            if (NYql::HasSetting(tableContent.Settings().Ref(), EYtSettingType::Small)) {
+                name.prepend("Small");
+            }
             if (auto maybeRead = tableContent.Input().Maybe<TYtReadTable>()) {
                 auto read = maybeRead.Cast();
-                return BuildTableContentCall(
+                return BuildTableContentCall(name,
                     NCommon::BuildType(node, *node.GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder),
                     read.DataSource().Cluster().Value(), read.Input().Ref(), itemsCount, ctx, true);
             } else {
                 auto output = tableContent.Input().Cast<TYtOutput>();
-                return BuildTableContentCall(
+                return BuildTableContentCall(name,
                     NCommon::BuildType(node, *node.GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder),
                     GetOutputOp(output).DataSink().Cluster().Value(), output.Ref(), itemsCount, ctx, true);
             }
@@ -496,9 +506,10 @@ void RegisterDqYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, con
                 for (const auto& flag : wrapper.Flags())
                     if (solid = flag.Value() == "Solid")
                         break;
+                // at this moment, we know, that rpc reader is enabled (see dq_opts + CanBlockRead at integration)
                 return ctx.ProgramBuilder.BlockExpandChunked(
                     solid
-                    ? BuildDqYtInputCall<false>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, inflight, timeout, true && inflight)
+                    ? BuildDqYtInputCall<false>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, 1, timeout, true && inflight)
                     : BuildDqYtInputCall<true>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, inflight, timeout, true && inflight)
                 );
             }
@@ -527,7 +538,7 @@ void RegisterDqYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, con
                         break;
 
                 if (solid)
-                    return BuildDqYtInputCall<false>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, isRPC, timeout, false);
+                    return BuildDqYtInputCall<false>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, isRPC > 0 ? 1 : 0, timeout, false);
                 else
                     return BuildDqYtInputCall<true>(outputType, inputItemType, cluster, tokenName, ytRead.Input(), state, ctx, isRPC, timeout, false);
             }

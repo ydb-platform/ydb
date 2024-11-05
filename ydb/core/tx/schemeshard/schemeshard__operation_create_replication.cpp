@@ -258,7 +258,8 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsLikeDirectory();
+                .IsLikeDirectory()
+                .FailOnRestrictedCreateInTempZone();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -317,6 +318,11 @@ public:
             return result;
         }
 
+        if (desc.HasState()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot create replication with explicit state");
+            return result;
+        }
+
         path.MaterializeLeaf(owner);
         path->CreateTxId = OperationId.GetTxId();
         path->LastTxId = OperationId.GetTxId();
@@ -328,6 +334,11 @@ public:
         parentPath->IncAliveChildren();
         parentPath.DomainInfo()->IncPathsInside();
 
+        if (desc.GetConfig().GetSrcConnectionParams().GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {
+            desc.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken(BUILTIN_ACL_ROOT);
+        }
+
+        desc.MutableState()->MutableStandBy();
         auto replication = TReplicationInfo::Create(std::move(desc));
         context.SS->Replications[path->PathId] = replication;
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);
@@ -353,11 +364,10 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        context.SS->PersistPath(db, path->PathId);
         if (!acl.empty()) {
             path->ApplyACL(acl);
-            context.SS->PersistACL(db, path.Base());
         }
+        context.SS->PersistPath(db, path->PathId);
 
         context.SS->PersistReplication(db, path->PathId, *replication);
         context.SS->PersistReplicationAlter(db, path->PathId, *replication->AlterData);

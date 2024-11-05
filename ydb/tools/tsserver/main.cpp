@@ -1,3 +1,7 @@
+#include <util/system/platform.h>
+
+#if defined(_linux_)
+
 #include <stdio.h>
 #include <sys/epoll.h>
 #include <ydb/core/protos/test_shard.pb.h>
@@ -80,3 +84,11 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
+#else
+
+int main(int /*argc*/, char* /*argv*/[]) {
+    return 1;
+}
+
+#endif

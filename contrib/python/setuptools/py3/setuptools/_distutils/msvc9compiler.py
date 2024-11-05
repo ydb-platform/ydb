@@ -13,23 +13,22 @@ for older versions of VS in distutils.msvccompiler.
 # ported to VS2005 and VS 2008 by Christian Heimes
 
 import os
+import re
 import subprocess
 import sys
-import re
 import warnings
+import winreg
 
+from ._log import log
+from .ccompiler import CCompiler, gen_lib_options
 from .errors import (
+    CompileError,
     DistutilsExecError,
     DistutilsPlatformError,
-    CompileError,
     LibError,
     LinkError,
 )
-from .ccompiler import CCompiler, gen_lib_options
-from ._log import log
 from .util import get_platform
-
-import winreg
 
 warnings.warn(
     "msvc9compiler is deprecated and slated to be removed "
@@ -145,7 +144,7 @@ class MacroExpander:
         self.load_macros(version)
 
     def set_macro(self, macro, path, key):
-        self.macros["$(%s)" % macro] = Reg.get_value(path, key)
+        self.macros[f"$({macro})"] = Reg.get_value(path, key)
 
     def load_macros(self, version):
         self.set_macro("VCInstallDir", self.vsbase + r"\Setup\VC", "productdir")
@@ -175,7 +174,7 @@ you can try compiling with MingW32, by passing "-c mingw32" to setup.py."""
                 except RegError:
                     continue
                 key = RegEnumKey(h, 0)
-                d = Reg.get_value(base, r"{}\{}".format(p, key))
+                d = Reg.get_value(base, rf"{p}\{key}")
                 self.macros["$(FrameworkVersion)"] = d["version"]
 
     def sub(self, s):
@@ -244,23 +243,23 @@ def find_vcvarsall(version):
     """
     vsbase = VS_BASE % version
     try:
-        productdir = Reg.get_value(r"%s\Setup\VC" % vsbase, "productdir")
+        productdir = Reg.get_value(rf"{vsbase}\Setup\VC", "productdir")
     except KeyError:
         log.debug("Unable to find productdir in registry")
         productdir = None
 
     if not productdir or not os.path.isdir(productdir):
-        toolskey = "VS%0.f0COMNTOOLS" % version
+        toolskey = f"VS{version:0.0f}0COMNTOOLS"
         toolsdir = os.environ.get(toolskey, None)
 
         if toolsdir and os.path.isdir(toolsdir):
             productdir = os.path.join(toolsdir, os.pardir, os.pardir, "VC")
             productdir = os.path.abspath(productdir)
             if not os.path.isdir(productdir):
-                log.debug("%s is not a valid directory" % productdir)
+                log.debug(f"{productdir} is not a valid directory")
                 return None
         else:
-            log.debug("Env var %s is not set or invalid" % toolskey)
+            log.debug(f"Env var {toolskey} is not set or invalid")
     if not productdir:
         log.debug("No productdir found")
         return None
@@ -281,7 +280,7 @@ def query_vcvarsall(version, arch="x86"):
         raise DistutilsPlatformError("Unable to find vcvarsall.bat")
     log.debug("Calling 'vcvarsall.bat %s' (version=%s)", arch, version)
     popen = subprocess.Popen(
-        '"{}" {} & set'.format(vcvarsall, arch),
+        f'"{vcvarsall}" {arch} & set',
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
@@ -347,7 +346,7 @@ class MSVCCompiler(CCompiler):
     static_lib_format = shared_lib_format = '%s%s'
     exe_extension = '.exe'
 
-    def __init__(self, verbose=0, dry_run=0, force=0):
+    def __init__(self, verbose=False, dry_run=False, force=False):
         super().__init__(verbose, dry_run, force)
         self.__version = VERSION
         self.__root = r"Software\Microsoft\VisualStudio"
@@ -363,16 +362,14 @@ class MSVCCompiler(CCompiler):
         assert not self.initialized, "don't init multiple times"
         if self.__version < 8.0:
             raise DistutilsPlatformError(
-                "VC %0.1f is not supported by this module" % self.__version
+                f"VC {self.__version:0.1f} is not supported by this module"
             )
         if plat_name is None:
             plat_name = get_platform()
         # sanity check for platforms to prevent obscure errors later.
         ok_plats = 'win32', 'win-amd64'
         if plat_name not in ok_plats:
-            raise DistutilsPlatformError(
-                "--plat-name must be one of {}".format(ok_plats)
-            )
+            raise DistutilsPlatformError(f"--plat-name must be one of {ok_plats}")
 
         if (
             "DISTUTILS_USE_SDK" in os.environ
@@ -408,9 +405,9 @@ class MSVCCompiler(CCompiler):
 
             if len(self.__paths) == 0:
                 raise DistutilsPlatformError(
-                    "Python was built with %s, "
+                    f"Python was built with {self.__product}, "
                     "and extensions need to be built with the same "
-                    "version of the compiler, but it isn't installed." % self.__product
+                    "version of the compiler, but it isn't installed."
                 )
 
             self.cc = self.find_exe("cl.exe")
@@ -463,7 +460,7 @@ class MSVCCompiler(CCompiler):
 
     # -- Worker methods ------------------------------------------------
 
-    def object_filenames(self, source_filenames, strip_dir=0, output_dir=''):
+    def object_filenames(self, source_filenames, strip_dir=False, output_dir=''):
         # Copied from ccompiler.py, extended to return .res as 'object'-file
         # for .rc input file
         if output_dir is None:
@@ -477,7 +474,7 @@ class MSVCCompiler(CCompiler):
                 # Better to raise an exception instead of silently continuing
                 # and later complain about sources and targets having
                 # different lengths
-                raise CompileError("Don't know how to compile %s" % src_name)
+                raise CompileError(f"Don't know how to compile {src_name}")
             if strip_dir:
                 base = os.path.basename(base)
             if ext in self._rc_extensions:
@@ -494,7 +491,7 @@ class MSVCCompiler(CCompiler):
         output_dir=None,
         macros=None,
         include_dirs=None,
-        debug=0,
+        debug=False,
         extra_preargs=None,
         extra_postargs=None,
         depends=None,
@@ -564,9 +561,7 @@ class MSVCCompiler(CCompiler):
                 continue
             else:
                 # how to handle this file?
-                raise CompileError(
-                    "Don't know how to compile {} to {}".format(src, obj)
-                )
+                raise CompileError(f"Don't know how to compile {src} to {obj}")
 
             output_opt = "/Fo" + obj
             try:
@@ -583,7 +578,7 @@ class MSVCCompiler(CCompiler):
         return objects
 
     def create_static_lib(
-        self, objects, output_libname, output_dir=None, debug=0, target_lang=None
+        self, objects, output_libname, output_dir=None, debug=False, target_lang=None
     ):
         if not self.initialized:
             self.initialize()
@@ -611,7 +606,7 @@ class MSVCCompiler(CCompiler):
         library_dirs=None,
         runtime_library_dirs=None,
         export_symbols=None,
-        debug=0,
+        debug=False,
         extra_preargs=None,
         extra_postargs=None,
         build_temp=None,
@@ -687,7 +682,7 @@ class MSVCCompiler(CCompiler):
             mfinfo = self.manifest_get_embed_info(target_desc, ld_args)
             if mfinfo is not None:
                 mffilename, mfid = mfinfo
-                out_arg = '-outputresource:{};{}'.format(output_filename, mfid)
+                out_arg = f'-outputresource:{output_filename};{mfid}'
                 try:
                     self.spawn(['mt.exe', '-nologo', '-manifest', mffilename, out_arg])
                 except DistutilsExecError as msg:
@@ -698,8 +693,8 @@ class MSVCCompiler(CCompiler):
     def manifest_setup_ldargs(self, output_filename, build_temp, ld_args):
         # If we need a manifest at all, an embedded manifest is recommended.
         # See MSDN article titled
-        # "How to: Embed a Manifest Inside a C/C++ Application"
-        # (currently at http://msdn2.microsoft.com/en-us/library/ms235591(VS.80).aspx)
+        # "Understanding manifest generation for C/C++ programs"
+        # (currently at https://learn.microsoft.com/en-us/cpp/build/understanding-manifest-generation-for-c-cpp-programs)
         # Ask the linker to generate the manifest in the temp dir, so
         # we can check it, and possibly embed it, later.
         temp_manifest = os.path.join(
@@ -710,7 +705,7 @@ class MSVCCompiler(CCompiler):
     def manifest_get_embed_info(self, target_desc, ld_args):
         # If a manifest should be embedded, return a tuple of
         # (manifest_filename, resource_id).  Returns None if no manifest
-        # should be embedded.  See http://bugs.python.org/issue7833 for why
+        # should be embedded.  See https://bugs.python.org/issue7833 for why
         # we want to avoid any manifest for extension modules if we can)
         for arg in ld_args:
             if arg.startswith("/MANIFESTFILE:"):
@@ -788,7 +783,7 @@ class MSVCCompiler(CCompiler):
     def library_option(self, lib):
         return self.library_filename(lib)
 
-    def find_library_file(self, dirs, lib, debug=0):
+    def find_library_file(self, dirs, lib, debug=False):
         # Prefer a debugging library if found (and requested), but deal
         # with it if we don't have one.
         if debug:

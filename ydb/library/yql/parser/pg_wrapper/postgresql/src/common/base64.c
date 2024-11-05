@@ -3,7 +3,7 @@
  * base64.c
  *	  Encoding and decoding routines for base64 without whitespace.
  *
- * Copyright (c) 2001-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2001-2023, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -224,7 +224,7 @@ int
 pg_b64_enc_len(int srclen)
 {
 	/* 3 bytes will be converted to 4 */
-	return (srclen + 2) * 4 / 3;
+	return (srclen + 2) / 3 * 4;
 }
 
 /*

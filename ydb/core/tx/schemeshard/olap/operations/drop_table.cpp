@@ -3,7 +3,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/tx/tiering/cleaner_task.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -70,7 +69,7 @@ public:
                     context.SS->TabletID(),
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
-                    columnShardTxBody,
+                    columnShardTxBody, seqNo,
                     context.SS->SelectProcessingParams(txState->TargetPathId));
 
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
@@ -296,11 +295,6 @@ public:
              TEvPrivate::TEvOperationPlan::EventType});
     }
 
-    bool HandleReply(NBackgroundTasks::TEvAddTaskResult::TPtr& ev, TOperationContext& context) override {
-        Y_ABORT_UNLESS(ev->Get()->IsSuccess());
-        return Finish(context);
-    }
-
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -311,23 +305,7 @@ public:
             DebugHint() << " ProgressState"
             << ", at schemeshard: " << ssId);
 
-        if (!NBackgroundTasks::TServiceOperator::IsEnabled()) {
-            return Finish(context);
-        }
-        NSchemeShard::TPath path = NSchemeShard::TPath::Init(txState->TargetPathId, context.SS);
-        auto tableInfo = context.SS->ColumnTables.GetVerified(path.Base()->PathId);
-        const TString& tieringId = tableInfo->Description.GetTtlSettings().GetUseTiering();
-        if (!tieringId) {
-            return Finish(context);
-        }
-
-        {
-            NBackgroundTasks::TTask task(std::make_shared<NColumnShard::NTiers::TTaskCleanerActivity>(
-                tieringId, txState->TargetPathId.LocalPathId), nullptr);
-            task.SetId(OperationId.SerializeToString());
-            context.SS->SelfId().Send(NBackgroundTasks::MakeServiceId(context.SS->SelfId().NodeId()), new NBackgroundTasks::TEvAddTask(std::move(task)));
-            return false;
-        }
+        return Finish(context);
     }
 };
 
@@ -412,7 +390,7 @@ public:
         auto tableInfo = context.SS->ColumnTables.GetVerified(path.Base()->PathId);
         if (tableInfo->IsStandalone()) {
             NIceDb::TNiceDb db(context.GetDB());
-            for (auto shardIdx : tableInfo->OwnedColumnShards) {
+            for (auto shardIdx : tableInfo->BuildOwnedColumnShardsVerified()) {
                 Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
                 txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::DropParts);
 
@@ -420,7 +398,7 @@ public:
                 context.SS->PersistShardTx(db, shardIdx, opTxId);
             }
         } else {
-            auto& storePathId = *tableInfo->OlapStorePathId;
+            auto storePathId = tableInfo->GetOlapStorePathIdVerified();
             TPath storePath = TPath::Init(storePathId, context.SS);
             {
                 TPath::TChecker checks = storePath.Check();
@@ -452,7 +430,7 @@ public:
             context.SS->PersistLastTxId(db, storePath.Base());
 
             // TODO: we need to know all shards where this table has ever been created
-            for (ui64 columnShardId : tableInfo->ColumnShards) {
+            for (ui64 columnShardId : tableInfo->GetColumnShards()) {
                 auto tabletId = TTabletId(columnShardId);
                 auto shardIdx = context.SS->TabletIdToShardIdx.at(tabletId);
 

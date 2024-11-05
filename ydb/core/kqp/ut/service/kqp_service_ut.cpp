@@ -67,6 +67,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
     }
 
     Y_UNIT_TEST(CloseSessionsWithLoad) {
+        UNIT_FAIL("Fast fail to avoid 10 min time waste, https://github.com/ydb-platform/ydb/issues/5349");
+
         auto kikimr = std::make_shared<TKikimrRunner>();
         kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
         kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
@@ -170,7 +172,6 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
     Y_UNIT_TEST(SessionBusy) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetUseSessionBusyStatus(true);
 
         auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetTableClient();
@@ -190,7 +191,6 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
     Y_UNIT_TEST(SessionBusyRetryOperation) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetUseSessionBusyStatus(true);
 
         auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetTableClient();
@@ -222,7 +222,6 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
     Y_UNIT_TEST(SessionBusyRetryOperationSync) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetUseSessionBusyStatus(true);
 
         auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetTableClient();

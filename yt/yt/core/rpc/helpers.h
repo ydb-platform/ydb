@@ -62,7 +62,8 @@ IChannelPtr CreateFailureDetectingChannel(
     IChannelPtr underlyingChannel,
     std::optional<TDuration> acknowledgementTimeout,
     TCallback<void(const IChannelPtr&, const TError& error)> onFailure,
-    TCallback<bool(const TError&)> isError = BIND(IsChannelFailureError));
+    TCallback<bool(const TError&)> isError = BIND(IsChannelFailureError),
+    TCallback<TError(TError)> maybeTransformError = {});
 
 NTracing::TTraceContextPtr GetOrCreateHandlerTraceContext(
     const NProto::TRequestHeader& header,
@@ -92,7 +93,10 @@ void WriteAuthenticationIdentityToProto(T* proto, const TAuthenticationIdentity&
 template <class T>
 TAuthenticationIdentity ParseAuthenticationIdentityFromProto(const T& proto);
 
-std::vector<TString> AddressesFromEndpointSet(const NServiceDiscovery::TEndpointSet& endpointSet);
+std::vector<std::string> AddressesFromEndpointSet(
+    const NServiceDiscovery::TEndpointSet& endpointSet,
+    bool useIPv4 = false,
+    bool useIPv6 = false);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -117,8 +121,8 @@ std::vector<TSharedRef> DecompressAttachments(
 template <class E>
 int FeatureIdToInt(E featureId);
 
-std::optional<TError> TryEnrichClientRequestError(
-    const TError& error,
+void EnrichClientRequestError(
+    TError* error,
     TFeatureIdFormatter featureIdFormatter);
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -26,13 +26,12 @@ inline ui8 LoadByteUnaligned(const ui8* bitmap, size_t bitmapOffset) {
 
 template<typename T>
 inline T SelectArg(ui8 isFirst, T first, T second) {
-    static_assert(std::is_arithmetic<T>::value);
-    if constexpr (std::is_floating_point<T>::value) {
-        return isFirst ? first : second;
-    } else {
+    if constexpr (std::is_arithmetic_v<T> && !std::is_floating_point_v<T>) {
         // isFirst == 1 -> mask 0xFF..FF, isFirst == 0 -> mask 0x00..00
         T mask = -T(isFirst);
         return (first & mask) | (second & ~mask);
+    } else {
+        return isFirst ? first : second;
     }
 }
 
@@ -157,6 +156,7 @@ inline size_t CompressBitmap(const ui8* src, size_t srcOffset,
 
 using NYql::NUdf::CompressAsSparseBitmap;
 using NYql::NUdf::CompressArray;
+using NYql::NUdf::DecompressToSparseBitmap;
 
 } // namespace NMiniKQL
 } // namespace NKikimr

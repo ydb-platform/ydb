@@ -32,8 +32,9 @@ namespace {
             : Writer(new NYson::TYsonWriter(&PartialStream, format, ::NYson::EYsonType::Node, true))
         {}
 
-        void Init(bool discard, const TString& label, TMaybe<TPosition> pos) override {
+        void Init(bool discard, const TString& label, TMaybe<TPosition> pos, bool unordered) override {
             Discard = discard;
+            Unordered = unordered;
             if (!Discard) {
                 Writer->OnBeginMap();
                 if (label) {
@@ -72,6 +73,10 @@ namespace {
                     Writer->OnKeyedItem("Truncated");
                     Writer->OnBooleanScalar(true);
                 }
+                if (Unordered) {
+                    Writer->OnKeyedItem("Unordered");
+                    Writer->OnBooleanScalar(true);
+                }
                 Writer->OnEndMap();
             }
         }
@@ -92,6 +97,7 @@ namespace {
         TStringStream PartialStream;
         TAutoPtr<NYson::TYsonWriter> Writer;
         bool Discard = false;
+        bool Unordered = false;
     };
 
     IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TTypeAnnotationNode* listType, TExprContext& ctx) {
@@ -155,11 +161,13 @@ namespace {
         auto structType = itemType->Cast<TStructExprType>();
         TSet<TString> usedFields;
         TExprNode::TListType orderedFields;
+        TColumnOrder order;
         for (size_t i = 0; i < columns->ChildrenSize(); ++i) {
             auto child = columns->ChildPtr(i);
             if (child->IsAtom()) {
                 orderedFields.push_back(child);
-                if (!structType->FindItem(child->Content())) {
+                auto rightName = order.AddColumn(TString(child->Content()));
+                if (!structType->FindItem(rightName)) {
                     if (hasAutoNames) {
                         columns = {};
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
@@ -169,13 +177,13 @@ namespace {
                     return IGraphTransformer::TStatus::Error;
                 }
 
-                if (!usedFields.insert(TString(child->Content())).second) {
+                if (!usedFields.insert(rightName).second) {
                     if (hasAutoNames) {
                         columns = {};
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
                     }
                     ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() <<
-                        "Duplicate field in hint: " << child->Content()));
+                        "Duplicate field in hint: " << rightName));
                     return IGraphTransformer::TStatus::Error;
                 }
             } else if (child->Child(0)->Content() == "auto") {
@@ -536,6 +544,7 @@ namespace {
             auto rowsLimit = fillSettings.RowsLimitPerWrite;
             bool discard = false;
             TString label;
+            bool unordered = false;
             for (auto setting : options.Cast()) {
                 if (setting.Name().Value() == "take") {
                     auto value = FromString<ui64>(setting.Value().Cast<TCoAtom>().Value());
@@ -548,6 +557,8 @@ namespace {
                     discard = true;
                 } else if (setting.Name().Value() == "label") {
                     label = TString(setting.Value().Cast<TCoAtom>().Value());
+                } else if (setting.Name().Value() == "unordered") {
+                    unordered = true;
                 }
             }
 
@@ -560,7 +571,7 @@ namespace {
                 YQL_ENSURE(Config->WriterFactory);
                 ResultWriter = Config->WriterFactory();
                 ResultWriter->Init(discard, label, Config->SupportsResultPosition ?
-                    TMaybe<TPosition>(ctx.GetPosition(input.Pos())) : Nothing());
+                    TMaybe<TPosition>(ctx.GetPosition(input.Pos())) : Nothing(), unordered);
             }
 
             if (input.Maybe<TResIf>() || input.Maybe<TResFor>()) {
@@ -1074,8 +1085,12 @@ namespace {
                                 if (!EnsureAtom(*setting->Child(1), ctx)) {
                                     return IGraphTransformer::TStatus::Error;
                                 }
+                            } else if (content == "unordered") {
+                                if (!EnsureTupleMaxSize(*setting, 1, ctx)) {
+                                    return IGraphTransformer::TStatus::Error;
+                                }
                             } else {
-                                ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), "Expected label,discard,ref,autoref,type,take or columns atom"));
+                                ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), "Expected label,discard,ref,autoref,type,unordered,take or columns atom"));
                                 return IGraphTransformer::TStatus::Error;
                             }
 
@@ -1134,7 +1149,7 @@ namespace {
                                 YQL_CLOG(INFO, ProviderResult) << "Setting result column order: " << FormatColumnOrder(dataOrder);
                                 auto settings = RemoveSetting(res.Settings().Ref(), "columns", ctx);
                                 TExprNodeList columnsList;
-                                for (auto& col : *dataOrder) {
+                                for (auto& [col, gen_col] : *dataOrder) {
                                     columnsList.push_back(ctx.NewAtom(settings->Pos(), col));
                                 }
                                 settings = AddSetting(*settings, settings->Pos(), "columns", ctx.NewList(settings->Pos(), std::move(columnsList)), ctx);
@@ -1494,7 +1509,8 @@ namespace {
             return false;
         }
 
-        void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
+        void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer, bool withLimits) override {
+            Y_UNUSED(withLimits);
             if (auto resPull = TMaybeNode<TResPull>(&node)) {
                 auto dataSourceName = resPull.Cast().DelegatedSource().Value();
                 auto dataSource = Config->Types.DataSourceMap.FindPtr(dataSourceName);

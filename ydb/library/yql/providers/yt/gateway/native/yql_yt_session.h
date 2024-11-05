@@ -38,6 +38,7 @@ struct TSession: public TThrRefBase {
     NYT::TNode CreateTableAttrs() const;
 
     void EnsureInitializedSemaphore(const TYtSettings::TConstPtr& settings);
+    void InitLocalCalcSemaphore(const TYtSettings::TConstPtr& settings);
 
     const TString UserName_;
     const TOperationProgressWriter ProgressWriter_;
@@ -50,9 +51,13 @@ struct TSession: public TThrRefBase {
     TOperationTracker::TPtr OpTracker_;
     NThreading::TAsyncSemaphore::TPtr OperationSemaphore;
     TMutex Mutex_;
+    THolder<TFastSemaphore> LocalCalcSemaphore_;
 
     TTransactionCache TxCache_;
     TString SessionId_;
+
+private:
+    void StopQueueAndTracker();
 };
 
 } // NNative

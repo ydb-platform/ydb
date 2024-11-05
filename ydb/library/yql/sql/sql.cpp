@@ -15,21 +15,21 @@
 namespace NSQLTranslation {
 
     NYql::TAstParseResult SqlToYql(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion)
+        NYql::TWarningRules* warningRules, NYql::TStmtParseInfo* stmtParseInfo, TTranslationSettings* effectiveSettings)
     {
         NYql::TAstParseResult result;
         TTranslationSettings parsedSettings(settings);
-        google::protobuf::Arena arena;
-        if (!parsedSettings.Arena) {
-            parsedSettings.Arena = &arena;
-        }
 
         if (!ParseTranslationSettings(query, parsedSettings, result.Issues)) {
             return result;
         }
+        if (effectiveSettings) {
+            *effectiveSettings = parsedSettings;
+        }
 
-        if (actualSyntaxVersion) {
-            *actualSyntaxVersion = parsedSettings.SyntaxVersion;
+        google::protobuf::Arena arena;
+        if (!parsedSettings.Arena) {
+            parsedSettings.Arena = &arena;
         }
 
         if (!parsedSettings.DeclaredNamedExprs.empty() && !parsedSettings.PgParser && parsedSettings.SyntaxVersion != 1) {
@@ -38,8 +38,14 @@ namespace NSQLTranslation {
             return result;
         }
 
+        if (parsedSettings.PgParser && parsedSettings.PGDisable) {
+            result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
+                "PG syntax is disabled"));
+            return result;
+        }
+
         if (parsedSettings.PgParser) {
-            return NSQLTranslationPG::PGToYql(query, parsedSettings);
+            return NSQLTranslationPG::PGToYql(query, parsedSettings, stmtParseInfo);
         }
 
         switch (parsedSettings.SyntaxVersion) {
@@ -94,7 +100,7 @@ namespace NSQLTranslation {
 
                 return NSQLTranslationV0::SqlAST(query, queryName, issues, maxErrors, settings.Arena);
             case 1:
-                return NSQLTranslationV1::SqlAST(query, queryName, issues, maxErrors, parsedSettings.AnsiLexer, settings.Arena);
+                return NSQLTranslationV1::SqlAST(query, queryName, issues, maxErrors, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.TestAntlr4, settings.Arena);
             default:
                 issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));
@@ -129,7 +135,7 @@ namespace NSQLTranslation {
 
                 return NSQLTranslationV0::MakeLexer();
             case 1:
-                return NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer);
+                return NSQLTranslationV1::MakeLexer(parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
             default:
                 issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));
@@ -164,7 +170,7 @@ namespace NSQLTranslation {
     }
 
     TVector<NYql::TAstParseResult> SqlToAstStatements(const TString& query, const TTranslationSettings& settings,
-        NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion)
+        NYql::TWarningRules* warningRules, ui16* actualSyntaxVersion, TVector<NYql::TStmtParseInfo>* stmtParseInfo)
     {
         TVector<NYql::TAstParseResult> result;
         NYql::TIssues issues;
@@ -188,8 +194,14 @@ namespace NSQLTranslation {
             return {};
         }
 
+        if (parsedSettings.PgParser && parsedSettings.PGDisable) {
+            issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
+                "PG syntax is disabled"));
+            return result;
+        }
+
         if (parsedSettings.PgParser) {
-            return NSQLTranslationPG::PGToYqlStatements(query, parsedSettings);
+            return NSQLTranslationPG::PGToYqlStatements(query, parsedSettings, stmtParseInfo);
         }
 
         switch (parsedSettings.SyntaxVersion) {
@@ -198,7 +210,7 @@ namespace NSQLTranslation {
                     "V0 syntax is disabled"));
                 return {};
             case 1:
-                return NSQLTranslationV1::SqlToAstStatements(query, parsedSettings, warningRules);
+                return NSQLTranslationV1::SqlToAstStatements(query, parsedSettings, warningRules, stmtParseInfo);
             default:
                 issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));

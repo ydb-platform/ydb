@@ -36,6 +36,12 @@ protected:
         }
         opts
             .AddLongOption(
+                Format("%v-schema", argumentName),
+                Format("print %v schema and exit", argumentName))
+            .OptionalValue(YsonSchemaFormat_, "FORMAT")
+            .StoreResult(&ConfigSchema_);
+        opts
+            .AddLongOption(
                 Format("%v-template", argumentName),
                 Format("print %v template and exit", argumentName))
             .SetFlag(&ConfigTemplate_);
@@ -56,6 +62,12 @@ protected:
             return;
         }
 
+        opts
+            .AddLongOption(
+                Format("dynamic-%v-schema", argumentName),
+                Format("print %v schema and exit", argumentName))
+            .OptionalValue(YsonSchemaFormat_, "FORMAT")
+            .StoreResult(&DynamicConfigSchema_);
         opts
             .AddLongOption(
                 Format("dynamic-%v-template", argumentName),
@@ -95,6 +107,20 @@ protected:
             config->Save(&writer);
             Cout << Flush;
         };
+        auto printSchema = [] (const auto& config, TString format) {
+            if (format == YsonSchemaFormat_) {
+                using namespace NYson;
+                TYsonWriter writer(&Cout, EYsonFormat::Pretty);
+                config->WriteSchema(&writer);
+                Cout << Endl;
+            } else {
+                THROW_ERROR_EXCEPTION("Unknown schema format %v", format);
+            }
+        };
+        if (!ConfigSchema_.empty()) {
+            printSchema(New<TConfig>(), ConfigSchema_);
+            return true;
+        }
         if (ConfigTemplate_) {
             print(New<TConfig>());
             return true;
@@ -105,6 +131,10 @@ protected:
         }
 
         if constexpr (!std::is_same_v<TDynamicConfig, void>) {
+            if (!DynamicConfigSchema_.empty()) {
+                printSchema(New<TDynamicConfig>(), DynamicConfigSchema_);
+                return true;
+            }
             if (DynamicConfigTemplate_) {
                 print(New<TDynamicConfig>());
                 return true;
@@ -154,10 +184,14 @@ private:
     const TString ArgumentName_;
 
     TString ConfigPath_;
+    TString ConfigSchema_;
     bool ConfigTemplate_;
     bool ConfigActual_;
+    TString DynamicConfigSchema_;
     bool DynamicConfigTemplate_ = false;
     NYTree::EUnrecognizedStrategy UnrecognizedStrategy_ = NYTree::EUnrecognizedStrategy::KeepRecursive;
+
+    static constexpr auto YsonSchemaFormat_ = "yson-schema";
 
     TIntrusivePtr<TConfig> Config_;
     NYTree::INodePtr ConfigNode_;

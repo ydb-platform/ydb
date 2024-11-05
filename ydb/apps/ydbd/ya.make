@@ -1,5 +1,9 @@
 PROGRAM(ydbd)
 
+IF (NOT SANITIZER_TYPE)  # for some reasons some tests with asan are failed, see comment in CPPCOM-32
+    NO_EXPORT_DYNAMIC_SYMBOLS()
+ENDIF()
+
 IF (OS_LINUX)
     ALLOCATOR(TCMALLOC_256K)
 ENDIF()
@@ -28,6 +32,7 @@ IF (ARCH_X86_64)
 ENDIF()
 
 PEERDIR(
+    ydb/apps/version
     ydb/core/driver_lib/run
     ydb/core/protos
     ydb/core/security
@@ -47,6 +52,7 @@ PEERDIR(
     ydb/library/yql/udfs/common/histogram
     ydb/library/yql/udfs/common/hyperloglog
     ydb/library/yql/udfs/common/ip_base
+    ydb/library/yql/udfs/common/knn
     ydb/library/yql/udfs/common/json
     ydb/library/yql/udfs/common/json2
     ydb/library/yql/udfs/common/math
@@ -62,27 +68,6 @@ PEERDIR(
     ydb/library/yql/udfs/common/yson2
     ydb/library/yql/udfs/logs/dsv
     ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
-)
-
-#
-# DON'T ALLOW NEW DEPENDENCIES WITHOUT EXPLICIT APPROVE FROM  kikimr-dev@ or fomichev@
-#
-CHECK_DEPENDENT_DIRS(
-    ALLOW_ONLY
-    PEERDIRS
-    arc/api/public
-    build/internal/platform
-    build/platform
-    certs
-    contrib
-    library
-    tools/archiver
-    tools/enum_parser/enum_parser
-    tools/enum_parser/enum_serialization_runtime
-    tools/rescompressor
-    tools/rorescompiler
-    util
-    ydb
 )
 
 YQL_LAST_ABI_VERSION()

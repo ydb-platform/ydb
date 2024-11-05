@@ -50,7 +50,7 @@ namespace NTest {
             } else if (cache == EWreck::Forward) {
                 Y_ABORT_UNLESS(Direction == EDirection::Forward, "ForwardEnv may only be used with forward iteration");
 
-                TWrap wrap(eggs, { nullptr, 4 /* worst case: main, next, groups, blobs */, false }, std::forward<TArgs>(args)...);
+                TWrap wrap(eggs, { nullptr, 10 /* worst case: main, next, groups, blobs, plus b-tree index */, false }, std::forward<TArgs>(args)...);
 
                 auto make = []() { return new TForwardEnv(512, 1024); };
 
@@ -110,7 +110,7 @@ namespace NTest {
 
             /*_ 5x_xxx +inf lookups logic. It could seem test has lack of it
                 but inf logic completely implemented in key cmp functions and
-                isn't related to iterators. Each key cmp functon should have
+                isn't related to iterators. Each key cmp function should have
                 special tests for its +inf.
              */
         }
@@ -120,7 +120,15 @@ namespace NTest {
             auto originEnv = wrap.template Displace<IPages>(make());
 
             { /*_ 60_000 Full sequence scan of all saved records */
-                wrap.To(60000).Seek({}, ESeek::Lower);
+                wrap.To(60000);
+
+                // load index
+                for (ui32 attempt = 0; attempt < 20; attempt++) {
+                    wrap.Seek({}, ESeek::Lower);
+                    if (wrap.GetReady() != EReady::Page) {
+                        break;
+                    }
+                }
 
                 if constexpr (Direction == EDirection::Reverse) {
                     auto it = Mass.Saved.end();
@@ -128,13 +136,15 @@ namespace NTest {
                         wrap.Is(*--it).Next();
                     }
                 } else {
-                    for (auto &row: Mass.Saved) wrap.Is(row).Next();
+                    for (auto i : xrange(Mass.Saved.Size())) {
+                        wrap.Is(Mass.Saved[i]).Next();
+                    }
                 }
 
                 wrap.Is(EReady::Gone); /* should have no more rows */
             }
 
-            /*_ 61_xxx Sequentional reads with random starts   */
+            /*_ 61_xxx Sequential reads with random starts   */
 
             if (rnd) wrap.template Displace<IPages>(make());
 
@@ -144,7 +154,15 @@ namespace NTest {
                 ui64 len = Rnd.Uniform(256, 999);
                 auto it = Mass.Saved.Any(Rnd);
 
-                wrap.To(61000 + seq).Seek(*it, ESeek::Lower);
+                wrap.To(61000 + seq);
+
+                // load index
+                for (ui32 attempt = 0; attempt < 20; attempt++) {
+                    wrap.Seek(*it, ESeek::Lower);
+                    if (wrap.GetReady() != EReady::Page) {
+                        break;
+                    }
+                }
 
                 if constexpr (Direction == EDirection::Reverse) {
                     while (len-- > 0) {

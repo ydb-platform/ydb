@@ -3,7 +3,7 @@
  * ts_parse.c
  *		main parse functions for tsearch
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  *
  *
  * IDENTIFICATION
@@ -16,6 +16,7 @@
 
 #include "tsearch/ts_cache.h"
 #include "tsearch/ts_utils.h"
+#include "varatt.h"
 
 #define IGNORE_LONGLEXEME	1
 
@@ -49,7 +50,7 @@ typedef struct
 
 	/*
 	 * fields to store last variant to lexize (basically, thesaurus or similar
-	 * to, which wants	several lexemes
+	 * to, which wants several lexemes
 	 */
 
 	ParsedLex  *lastRes;
@@ -248,7 +249,7 @@ LexizeExec(LexizeData *ld, ParsedLex **correspondLexem)
 		dict = lookup_ts_dictionary_cache(ld->curDictId);
 
 		/*
-		 * Dictionary ld->curDictId asks  us about following words
+		 * Dictionary ld->curDictId asks us about following words
 		 */
 
 		while (ld->curSub)
@@ -288,7 +289,7 @@ LexizeExec(LexizeData *ld, ParsedLex **correspondLexem)
 				}
 			}
 
-			ld->dictState.isend = (curVal->type == 0) ? true : false;
+			ld->dictState.isend = (curVal->type == 0);
 			ld->dictState.getnext = false;
 
 			res = (TSLexeme *) DatumGetPointer(FunctionCall4(&(dict->lexize),
@@ -354,7 +355,7 @@ void
 parsetext(Oid cfgId, ParsedText *prs, char *buf, int buflen)
 {
 	int			type,
-				lenlemm;
+				lenlemm = 0;	/* silence compiler warning */
 	char	   *lemm = NULL;
 	LexizeData	ldata;
 	TSLexeme   *norms;
@@ -409,7 +410,7 @@ parsetext(Oid cfgId, ParsedText *prs, char *buf, int buflen)
 				if (prs->curwords == prs->lenwords)
 				{
 					prs->lenwords *= 2;
-					prs->words = (ParsedWord *) repalloc((void *) prs->words, prs->lenwords * sizeof(ParsedWord));
+					prs->words = (ParsedWord *) repalloc(prs->words, prs->lenwords * sizeof(ParsedWord));
 				}
 
 				if (ptr->flags & TSL_ADDPOS)
@@ -433,13 +434,15 @@ parsetext(Oid cfgId, ParsedText *prs, char *buf, int buflen)
 /*
  * Headline framework
  */
+
+/* Add a word to prs->words[] */
 static void
 hladdword(HeadlineParsedText *prs, char *buf, int buflen, int type)
 {
-	while (prs->curwords >= prs->lenwords)
+	if (prs->curwords >= prs->lenwords)
 	{
 		prs->lenwords *= 2;
-		prs->words = (HeadlineWordEntry *) repalloc((void *) prs->words, prs->lenwords * sizeof(HeadlineWordEntry));
+		prs->words = (HeadlineWordEntry *) repalloc(prs->words, prs->lenwords * sizeof(HeadlineWordEntry));
 	}
 	memset(&(prs->words[prs->curwords]), 0, sizeof(HeadlineWordEntry));
 	prs->words[prs->curwords].type = (uint8) type;
@@ -449,6 +452,14 @@ hladdword(HeadlineParsedText *prs, char *buf, int buflen, int type)
 	prs->curwords++;
 }
 
+/*
+ * Add pos and matching-query-item data to the just-added word.
+ * Here, buf/buflen represent a processed lexeme, not raw token text.
+ *
+ * If the query contains more than one matching item, we replicate
+ * the last-added word so that each item can be pointed to.  The
+ * duplicate entries are marked with repeated = 1.
+ */
 static void
 hlfinditem(HeadlineParsedText *prs, TSQuery query, int32 pos, char *buf, int buflen)
 {
@@ -459,7 +470,7 @@ hlfinditem(HeadlineParsedText *prs, TSQuery query, int32 pos, char *buf, int buf
 	while (prs->curwords + query->size >= prs->lenwords)
 	{
 		prs->lenwords *= 2;
-		prs->words = (HeadlineWordEntry *) repalloc((void *) prs->words, prs->lenwords * sizeof(HeadlineWordEntry));
+		prs->words = (HeadlineWordEntry *) repalloc(prs->words, prs->lenwords * sizeof(HeadlineWordEntry));
 	}
 
 	word = &(prs->words[prs->curwords - 1]);
@@ -529,7 +540,7 @@ void
 hlparsetext(Oid cfgId, HeadlineParsedText *prs, TSQuery query, char *buf, int buflen)
 {
 	int			type,
-				lenlemm;
+				lenlemm = 0;	/* silence compiler warning */
 	char	   *lemm = NULL;
 	LexizeData	ldata;
 	TSLexeme   *norms;
@@ -584,12 +595,14 @@ hlparsetext(Oid cfgId, HeadlineParsedText *prs, TSQuery query, char *buf, int bu
 			else
 				addHLParsedLex(prs, query, lexs, NULL);
 		} while (norms);
-
 	} while (type > 0);
 
 	FunctionCall1(&(prsobj->prsend), PointerGetDatum(prsdata));
 }
 
+/*
+ * Generate the headline, as a text object, from HeadlineParsedText.
+ */
 text *
 generateHeadline(HeadlineParsedText *prs)
 {
@@ -629,7 +642,6 @@ generateHeadline(HeadlineParsedText *prs)
 					memcpy(ptr, prs->fragdelim, prs->fragdelimlen);
 					ptr += prs->fragdelimlen;
 				}
-
 			}
 			if (wrd->replace)
 			{

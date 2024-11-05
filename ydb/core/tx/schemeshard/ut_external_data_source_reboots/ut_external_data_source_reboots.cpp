@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTestReboots) {
                 TestDropExternalDataSource(runtime, ++t.TxId, "/MyRoot", "ExternalDataSource");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalDataSource"),
                                    {NLs::PathNotExist});
             }
         });

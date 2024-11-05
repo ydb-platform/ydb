@@ -29,6 +29,4 @@ SRCS(
     proxy_ut_helpers.cpp
 )
 
-REQUIREMENTS(ram:32)
-
 END()

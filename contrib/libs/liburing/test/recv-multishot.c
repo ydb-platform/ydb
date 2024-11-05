@@ -58,7 +58,7 @@ static int test(struct args *args)
 	int const N = 8;
 	int const N_BUFFS = N * 64;
 	int const N_CQE_OVERFLOW = 4;
-	int const min_cqes = 2;
+	int const min_cqes = args->early_error ? 2 : 8;
 	int const NAME_LEN = sizeof(struct sockaddr_storage);
 	int const CONTROL_LEN = CMSG_ALIGN(sizeof(struct sockaddr_storage))
 					+ sizeof(struct cmsghdr);
@@ -238,7 +238,11 @@ static int test(struct args *args)
 	usleep(1000);
 
 	if ((args->stream && !early_error) || recv_cqes < min_cqes) {
-		ret = io_uring_wait_cqes(&ring, &cqe, 1, &timeout, NULL);
+		unsigned int to_wait = 1;
+
+		if (recv_cqes < min_cqes)
+			to_wait = min_cqes - recv_cqes;
+		ret = io_uring_wait_cqes(&ring, &cqe, to_wait, &timeout, NULL);
 		if (ret && ret != -ETIME) {
 			fprintf(stderr, "wait final failed: %d\n", ret);
 			ret = -1;
@@ -272,7 +276,7 @@ static int test(struct args *args)
 		 */
 		bool const early_last = args->early_error == ERROR_EARLY_OVERFLOW &&
 					!args->wait_each &&
-					i == N_CQE_OVERFLOW &&
+					i >= N_CQE_OVERFLOW &&
 					!(cqe->flags & IORING_CQE_F_MORE);
 
 		bool const should_be_last =

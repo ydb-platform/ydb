@@ -17,13 +17,15 @@ public:
     }
 
     void DeleteRequest(const NActors::TActorId& id);
-    void AddRequest(const NActors::TActorId& id);
+    void AddRequest(const NActors::TActorId& id, uint64_t queryNo);
+    NActors::TActorId FindActorId(uint64_t queryNo);
 
 private:
     TMutex Mutex;
     const TString Username;
     NActors::TActorSystem* ActorSystem;
-    THashSet<NActors::TActorId> Requests;
+    THashMap<NActors::TActorId, uint64_t> ActorId2QueryNo;
+    THashMap<uint64_t, NActors::TActorId> QueryNo2ActorId;
 };
 
 class TSessionStorage {

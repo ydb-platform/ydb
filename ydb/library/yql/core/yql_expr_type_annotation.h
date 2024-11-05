@@ -130,7 +130,7 @@ bool EnsureWideStreamType(const TExprNode& node, TExprContext& ctx);
 bool EnsureWideStreamType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool IsWideBlockType(const TTypeAnnotationNode& type);
 bool IsWideSequenceBlockType(const TTypeAnnotationNode& type);
-bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types);
+bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types, bool reportUnspported = false);
 bool EnsureSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types);
 bool EnsureWideBlockType(TPositionHandle position, const TTypeAnnotationNode& type, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar = true);
 bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar = true);
@@ -154,6 +154,7 @@ bool EnsureCallableType(const TExprNode& node, TExprContext& ctx);
 bool EnsureCallableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureResourceType(const TExprNode& node, TExprContext& ctx);
 bool EnsureTaggedType(const TExprNode& node, TExprContext& ctx);
+bool EnsureTaggedType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 
 bool EnsureComposableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureOneOrTupleOfDataOrOptionalOfData(const TExprNode& node, TExprContext& ctx);
@@ -173,8 +174,8 @@ bool EnsureInspectable(const TExprNode& node, TExprContext& ctx);
 bool EnsureInspectableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureListOrOptionalType(const TExprNode& node, TExprContext& ctx);
 bool EnsureListOrOptionalListType(const TExprNode& node, TExprContext& ctx);
-bool EnsureStructOrOptionalStructType(const TExprNode& node, TExprContext& ctx);
-bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
+bool EnsureStructOrOptionalStructType(const TExprNode& node, bool& isOptional, const TStructExprType*& structType, TExprContext& ctx);
+bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnotationNode& type, bool& isOptional, const TStructExprType*& structType, TExprContext& ctx);
 bool EnsureSeqType(const TExprNode& node, TExprContext& ctx, bool* isStream = nullptr);
 bool EnsureSeqType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx, bool* isStream = nullptr);
 bool EnsureSeqOrOptionalType(const TExprNode& node, TExprContext& ctx);
@@ -263,6 +264,7 @@ bool IsDataTypeIntegral(EDataSlot dataSlot);
 bool IsDataTypeSigned(EDataSlot dataSlot);
 bool IsDataTypeUnsigned(EDataSlot dataSlot);
 bool IsDataTypeDate(EDataSlot dataSlot);
+bool IsDataTypeBigDate(EDataSlot dataSlot);
 bool IsDataTypeTzDate(EDataSlot dataSlot);
 EDataSlot WithTzDate(EDataSlot dataSlot);
 EDataSlot WithoutTzDate(EDataSlot dataSlot);
@@ -339,7 +341,7 @@ bool GetMinMaxResultType(const TPositionHandle& pos, const TTypeAnnotationNode& 
 IGraphTransformer::TStatus ExtractPgTypesFromMultiLambda(TExprNode::TPtr& lambda, TVector<ui32>& argTypes,
     bool& needRetype, TExprContext& ctx);
 
-void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, const TVector<ui32>& argTypes);
+void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypes);
 TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggregateDesc& aggDesc, bool onWindow,
     const TExprNode::TPtr& lambda, const TVector<ui32>& argTypes, const TTypeAnnotationNode* itemType, TExprContext& ctx);
 

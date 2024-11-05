@@ -52,8 +52,6 @@
 #include <util/string/type.h>
 #include <util/system/env.h>
 
-#include <exception>
-
 using namespace NYT::NDetail::NRawClient;
 
 namespace NYT {
@@ -1245,6 +1243,14 @@ IFileReaderPtr TClient::GetJobStderr(
     return NRawClient::GetJobStderr(Context_, operationId, jobId, options);
 }
 
+std::vector<TJobTraceEvent> TClient::GetJobTrace(
+    const TOperationId& operationId,
+    const TGetJobTraceOptions& options)
+{
+    CheckShutdown();
+    return NRawClient::GetJobTrace(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, operationId, options);
+}
+
 TNode::TListType TClient::SkyShareTable(
     const std::vector<TYPath>& tablePaths,
     const TSkyShareTableOptions& options)
@@ -1361,6 +1367,7 @@ TClientPtr CreateClientImpl(
     context.ProxyAddress = options.ProxyAddress_;
 
     context.ServerName = serverName;
+    ApplyProxyUrlAliasingRules(context.ServerName);
 
     if (context.ServerName.find('.') == TString::npos &&
         context.ServerName.find(':') == TString::npos &&
@@ -1448,9 +1455,6 @@ IClientPtr CreateClientFromEnv(const TCreateClientOptions& options)
     if (!serverName) {
         ythrow yexception() << "YT_PROXY is not set";
     }
-
-    NDetail::ApplyProxyUrlAliasingRules(serverName);
-
     return NDetail::CreateClientImpl(serverName, options);
 }
 

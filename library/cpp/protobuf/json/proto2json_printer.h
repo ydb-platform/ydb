@@ -60,6 +60,9 @@ namespace NProtobufJson {
         template <class T>
         bool NeedStringifyNumber(T value) const;
 
+        template <class T>
+        bool NeedStringifyRepeatedNumber(T value) const;
+
         bool TryPrintAny(const NProtoBuf::Message& proto, IJsonOutput& json);
         void PrintFields(const NProtoBuf::Message& proto, IJsonOutput& json);
 

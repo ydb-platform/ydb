@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_drivemodel_db.h>
@@ -19,6 +20,7 @@ namespace NKikimr {
     struct TNodeWardenConfig : public TThrRefBase {
         NKikimrConfig::TBlobStorageConfig BlobStorageConfig;
         NKikimrConfig::TStaticNameserviceConfig NameserviceConfig;
+        std::optional<NKikimrConfig::TDomainsConfig> DomainsConfig;
         TIntrusivePtr<IPDiskServiceFactory> PDiskServiceFactory;
         TIntrusivePtr<TAllVDiskKinds> AllVDiskKinds;
         TIntrusivePtr<NPDisk::TDriveModelDb> AllDriveModels;
@@ -33,9 +35,12 @@ namespace NKikimr {
         bool CachePDisks = false;
         bool CacheVDisks = false;
         bool EnableVDiskCooldownTimeout = false;
+        TDuration RequestReportingThrottlerDelay = TDuration::Seconds(60);
+        TDuration LongRequestThreshold = TDuration::Seconds(50);
 
         // debugging options
         bool VDiskReplPausedAtStart = false;
+        bool UseActorSystemTimeInBSQueue = false;
 
         TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
             : PDiskServiceFactory(pDiskServiceFactory)

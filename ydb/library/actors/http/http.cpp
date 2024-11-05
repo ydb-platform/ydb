@@ -68,6 +68,10 @@ void THttpRequest::Clear() {
     new (this) THttpRequest(); // reset all fields
 }
 
+TString THttpRequest::GetURL() const {
+    return UrlUnescapeRet(URL);
+}
+
 template <>
 bool THttpParser<THttpRequest, TSocketBuffer>::HaveBody() const {
     if (!Body.empty()) {
@@ -442,6 +446,10 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseNotFound(TStringBuf
     return CreateResponse("404", "Not Found", contentType, html);
 }
 
+THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseTooManyRequests(TStringBuf html, TStringBuf contentType) {
+    return CreateResponse("429", "Too Many Requests", contentType, html);
+}
+
 THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseServiceUnavailable(TStringBuf html, TStringBuf contentType) {
     return CreateResponse("503", "Service Unavailable", contentType, html);
 }
@@ -534,6 +542,26 @@ THttpIncomingRequestPtr THttpIncomingRequest::Duplicate() {
     THttpIncomingRequestPtr request = new THttpIncomingRequest(*this);
     request->Reparse();
     request->Timer.Reset();
+    return request;
+}
+
+THttpOutgoingRequestPtr THttpIncomingRequest::Forward(TStringBuf baseUrl) const {
+    TStringBuf newScheme;
+    TStringBuf newHost;
+    TStringBuf emptyUri; // it supposed to be be empty
+    if (!CrackURL(baseUrl, newScheme, newHost, emptyUri)) {
+        // TODO(xenoxeno)
+        Y_ABORT("Invalid URL specified");
+    }
+    THttpOutgoingRequestPtr request = new THttpOutgoingRequest(Method, newScheme, newHost, GetURL(), Protocol, Version);
+    THeadersBuilder newHeaders(Headers);
+    newHeaders.Erase("Accept-Encoding");
+    newHeaders.Set("Host", newHost);
+    request->Set(newHeaders);
+    if (Body) {
+        request->SetBody(Body);
+    }
+    request->Finish();
     return request;
 }
 

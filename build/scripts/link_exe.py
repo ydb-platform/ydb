@@ -6,9 +6,14 @@ import subprocess
 import optparse
 import textwrap
 
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import process_command_files as pcf
+import thinlto_cache
 
 from process_whole_archive_option import ProcessWholeArchiveOption
+from fix_py2_protobuf import fix_py2
 
 
 def get_leaks_suppressions(cmd):
@@ -30,6 +35,7 @@ CUDA_LIBRARIES = {
     '-lcudart_static': '-lcudart',
     '-lcudnn_static': '-lcudnn',
     '-lcufft_static_nocallback': '-lcufft',
+    '-lcupti_static': '-lcupti',
     '-lcurand_static': '-lcurand',
     '-lcusolver_static': '-lcusolver',
     '-lcusparse_static': '-lcusparse',
@@ -41,6 +47,21 @@ CUDA_LIBRARIES = {
     '-lnvinfer_plugin_static': '-lnvinfer_plugin',
     '-lnvonnxparser_static': '-lnvonnxparser',
     '-lnvparsers_static': '-lnvparsers',
+    '-lnvrtc_static': '-lnvrtc',
+    '-lnvrtc-builtins_static': '-lnvrtc-builtins',
+    '-lnvptxcompiler_static': '',
+    '-lnppc_static': '-lnppc',
+    '-lnppial_static': '-lnppial',
+    '-lnppicc_static': '-lnppicc',
+    '-lnppicom_static': '-lnppicom',
+    '-lnppidei_static': '-lnppidei',
+    '-lnppif_static': '-lnppif',
+    '-lnppig_static': '-lnppig',
+    '-lnppim_static': '-lnppim',
+    '-lnppist_static': '-lnppist',
+    '-lnppisu_static': '-lnppisu',
+    '-lnppitc_static': '-lnppitc',
+    '-lnpps_static': '-lnpps',
 }
 
 
@@ -65,7 +86,9 @@ class CUDAManager:
 
     def _known_fatbin_libs(self, libs):
         libs_wo_device_code = {
-            '-lcudart_static'
+            '-lcudart_static',
+            '-lcupti_static',
+            '-lnppc_static',
         }
         return set(libs) - libs_wo_device_code
 
@@ -97,37 +120,25 @@ class CUDAManager:
         f.write(script)
 
 
-def process_cuda_libraries(cmd, cuda_manager, build_root):
-    if not cuda_manager.has_cuda_fatbins(cmd):
-        return cmd
+def tmpdir_generator(base_path, prefix):
+    for idx in itertools.count():
+        path = os.path.abspath(os.path.join(base_path, prefix + '_' + str(idx)))
+        os.makedirs(path)
+        yield path
 
-    def tmpdir_generator(prefix):
-        for idx in itertools.count():
-            path = os.path.abspath(os.path.join(build_root, prefix + '_' + str(idx)))
-            os.makedirs(path)
-            yield path
 
-    # add custom linker script
-    to_dirpath = next(tmpdir_generator('cuda_linker_script'))
-    script_path = os.path.join(to_dirpath, 'script')
-    with open(script_path, 'w') as f:
-        cuda_manager.write_linker_script(f)
-    flags_with_linker = list(cmd) + ['-Wl,--script={}'.format(script_path)]
+def process_cuda_library_by_external_tool(cmd, build_root, tool_name, callable_tool_executor, allowed_cuda_libs):
+    tmpdir_gen = tmpdir_generator(build_root, 'cuda_' + tool_name + '_libs')
 
-    if not cuda_manager.can_prune_libs:
-        return flags_with_linker
-
-    tmpdir_gen = tmpdir_generator('cuda_pruned_libs')
-
-    flags_pruned = []
+    new_flags = []
     cuda_deps = set()
 
     # Because each directory flag only affects flags that follow it,
     # for correct pruning we need to process that in reversed order
-    for flag in reversed(flags_with_linker):
-        if flag in cuda_manager.fatbin_libs:
+    for flag in reversed(cmd):
+        if flag in allowed_cuda_libs:
             cuda_deps.add('lib' + flag[2:] + '.a')
-            flag += '_pruned'
+            flag += '_' + tool_name
         elif flag.startswith('-L') and os.path.exists(flag[2:]) and os.path.isdir(flag[2:]) and any(f in cuda_deps for f in os.listdir(flag[2:])):
             from_dirpath = flag[2:]
             from_deps = list(cuda_deps & set(os.listdir(from_dirpath)))
@@ -137,19 +148,57 @@ def process_cuda_libraries(cmd, cuda_manager, build_root):
 
                 for f in from_deps:
                     from_path = os.path.join(from_dirpath, f)
-                    to_path = os.path.join(to_dirpath, f[:-2] + '_pruned.a')
-                    cuda_manager.prune_lib(from_path, to_path)
+                    to_path = os.path.join(to_dirpath, f[:-2] + '_' + tool_name +'.a')
+                    callable_tool_executor(from_path, to_path)
                     cuda_deps.remove(f)
 
                 # do not remove current directory
                 # because it can contain other libraries we want link to
-                # instead we just add new directory with pruned libs
-                flags_pruned.append('-L' + to_dirpath)
+                # instead we just add new directory with processed by tool libs
+                new_flags.append('-L' + to_dirpath)
 
-        flags_pruned.append(flag)
+        new_flags.append(flag)
 
     assert not cuda_deps, ('Unresolved CUDA deps: ' + ','.join(cuda_deps))
-    return reversed(flags_pruned)
+    return reversed(new_flags)
+
+
+def process_cuda_libraries_by_objcopy(cmd, build_root, objcopy_exe):
+    if not objcopy_exe:
+        return cmd
+
+    def run_objcopy(from_path, to_path):
+        rename_section_command = [objcopy_exe, "--rename-section", ".ctors=.init_array", from_path, to_path]
+        subprocess.check_call(rename_section_command)
+
+    possible_libraries = set(CUDA_LIBRARIES.keys())
+    possible_libraries.update([
+        '-lcudadevrt',
+        '-lcufilt',
+        '-lculibos',
+    ])
+    possible_libraries.update([
+        lib_name + "_pruner" for lib_name in possible_libraries
+    ])
+
+    return process_cuda_library_by_external_tool(list(cmd), build_root, 'objcopy', run_objcopy, possible_libraries)
+
+
+def process_cuda_libraries_by_nvprune(cmd, cuda_manager, build_root):
+    if not cuda_manager.has_cuda_fatbins(cmd):
+        return cmd
+
+    # add custom linker script
+    to_dirpath = next(tmpdir_generator(build_root, 'cuda_linker_script'))
+    script_path = os.path.join(to_dirpath, 'script')
+    with open(script_path, 'w') as f:
+        cuda_manager.write_linker_script(f)
+    flags_with_linker = list(cmd) + ['-Wl,--script={}'.format(script_path)]
+
+    if not cuda_manager.can_prune_libs:
+        return flags_with_linker
+
+    return process_cuda_library_by_external_tool(flags_with_linker, build_root, 'pruner', cuda_manager.prune_lib, cuda_manager.fatbin_libs)
 
 
 def remove_excessive_flags(cmd):
@@ -259,16 +308,18 @@ def parse_args():
     parser.add_option('--custom-step')
     parser.add_option('--python')
     parser.add_option('--source-root')
+    parser.add_option('--build-root')
     parser.add_option('--clang-ver')
     parser.add_option('--dynamic-cuda', action='store_true')
     parser.add_option('--cuda-architectures',
                       help='List of supported CUDA architectures, separated by ":" (e.g. "sm_52:compute_70:lto_90a"')
     parser.add_option('--nvprune-exe')
-    parser.add_option('--build-root')
+    parser.add_option('--objcopy-exe')
     parser.add_option('--arch')
     parser.add_option('--linker-output')
     parser.add_option('--whole-archive-peers', action='append')
     parser.add_option('--whole-archive-libs', action='append')
+    thinlto_cache.add_options(parser)
     return parser.parse_args()
 
 
@@ -277,25 +328,19 @@ if __name__ == '__main__':
     args = pcf.skip_markers(args)
 
     cmd = fix_blas_resolving(args)
+    cmd = fix_py2(cmd)
     cmd = remove_excessive_flags(cmd)
     if opts.musl:
         cmd = fix_cmd_for_musl(cmd)
 
     cmd = fix_sanitize_flag(cmd, opts)
 
-    if 'ld.lld' in str(cmd):
-        if '-fPIE' in str(cmd) or '-fPIC' in str(cmd):
-            # support explicit PIE
-            pass
-        else:
-            cmd.append('-Wl,-no-pie')
-
-
     if opts.dynamic_cuda:
         cmd = fix_cmd_for_dynamic_cuda(cmd)
     else:
         cuda_manager = CUDAManager(opts.cuda_architectures, opts.nvprune_exe)
-        cmd = process_cuda_libraries(cmd, cuda_manager, opts.build_root)
+        cmd = process_cuda_libraries_by_nvprune(cmd, cuda_manager, opts.build_root)
+        cmd = process_cuda_libraries_by_objcopy(cmd, opts.build_root, opts.objcopy_exe)
     cmd = ProcessWholeArchiveOption(opts.arch, opts.whole_archive_peers, opts.whole_archive_libs).construct_cmd(cmd)
 
     if opts.custom_step:
@@ -313,5 +358,8 @@ if __name__ == '__main__':
     else:
         stdout = sys.stdout
 
+    thinlto_cache.preprocess(opts, cmd)
     rc = subprocess.call(cmd, shell=False, stderr=sys.stderr, stdout=stdout)
+    thinlto_cache.postprocess(opts)
+
     sys.exit(rc)

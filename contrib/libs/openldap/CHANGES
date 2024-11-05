@@ -1,5 +1,41 @@
 OpenLDAP 2.6 Change Log
 
+OpenLDAP 2.6.8 Release (2024/05/21)
+	Fixed libldap exit handling with OpenSSL3 again (ITS#9952)
+	Fixed libldap OpenSSL channel binding digest (ITS#10216)
+	Fixed slapd handling of large uid/gids peercred auth (ITS#10211)
+	Fixed slapd-asyncmeta/meta target structure allocations (ITS#10197)
+	Fixed slapd-meta with dynlist (ITS#10164)
+	Fixed slapd-meta binds when proxying internal op (ITS#10165)
+	Added slapo-nestgroup overlay (ITS#10161)
+	Added slapo-memberof 'addcheck' option (ITS#10167)
+	Fixed slapo-accesslog startup initialization (ITS#10170)
+	Fixed slapo-constraint double free on invalid attr (ITS#10204)
+	Fixed slapo-dynlist with abandoned operations (ITS#10044)
+	Build
+		Fixed build with gcc14.x (ITS#10166)
+		Fixed back-perl with clang15 (ITS#10177)
+		Fixed to reduce systemd dependencies (ITS#10214)
+	Contrib
+		Added slapo-alias contrib module (ITS#10104, ITS#10182)
+		Fixed slapo-autogroup to work with slapo-dynlist (ITS#10185)
+		Fixed smbk5pwd implicit function declaration (ITS#10206)
+	Documentation
+		Fixed slapo-memberof exattr requirements (ITS#7400)
+		Fixed slapo-memberof is no longer deprecated (ITS#7400)
+	Minor Cleanup
+		ITS#9921
+		ITS#10103
+		ITS#10171
+		ITS#10172
+		ITS#10173
+		ITS#10179
+		ITS#10183
+		ITS#10186
+		ITS#10188
+		ITS#10193
+		ITS#10209
+
 OpenLDAP 2.6.7 Release (2024/01/29)
 	Added slapo-dynlist option to disable filter support (ITS#10025)
 	Fixed liblber missing newline on long msg (ITS#10105)
@@ -152,6 +188,7 @@ OpenLDAP 2.6.3 Release (2022/07/14)
 	Fixed slapo-unique to not release NULL entry (ITS#8245)
 	Build Environment
 		Added slapd-watcher -c contextDN option (ITS#9865)
+		Fixed tests to use SCRAM-SHA-256 instead of DIGEST-MD5 (ITS#10208)
 		Fixed librewrite declaration of calloc (ITS#9841)
 		Fixed parallel builds (ITS#9840)
 		Fixed test020 to skip back-wt (ITS#9859)

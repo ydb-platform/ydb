@@ -1,4 +1,4 @@
-OWNER(g:ymake)
+SUBSCRIBER(g:ymake)
 
 PY23_LIBRARY()
 

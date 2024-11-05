@@ -8,8 +8,10 @@
 #include <ydb/library/yql/core/url_preprocessing/interface/url_preprocessing.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
 #include <ydb/library/yql/core/yql_user_data.h>
+#include <ydb/library/yql/core/qplayer/storage/interface/yql_qstorage.h>
 #include <ydb/library/yql/providers/config/yql_config_provider.h>
 #include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/sql/sql.h>
 
@@ -30,7 +32,6 @@ namespace NMiniKQL {
 
 namespace NYql {
 
-class TGatewaysConfig;
 class TProgram;
 using TProgramPtr = TIntrusivePtr<TProgram>;
 class TProgramFactory;
@@ -63,13 +64,15 @@ public:
 
     TProgramPtr Create(
             const TFile& file,
-            const TString& sessionId = TString());
+            const TString& sessionId = TString(),
+            const TQContext& qContext = {});
 
     TProgramPtr Create(
             const TString& filename,
             const TString& sourceCode,
             const TString& sessionId = TString(),
-            EHiddenMode hiddenMode = EHiddenMode::Disable);
+            EHiddenMode hiddenMode = EHiddenMode::Disable,
+            const TQContext& qContext = {});
 
     void UnrepeatableRandom();
 private:
@@ -189,28 +192,14 @@ public:
     [[nodiscard]]
     NThreading::TFuture<void> Abort();
 
-    inline TIssues Issues() {
-        if (ExprCtx_) {
-            return ExprCtx_->IssueManager.GetIssues();
-        } else {
-            return {};
-        }
-    }
-
-    inline TIssues CompletedIssues() const {
-        if (ExprCtx_) {
-            return ExprCtx_->IssueManager.GetCompletedIssues();
-        } else {
-            return {};
-        }
-    }
+    TIssues Issues() const;
+    TIssues CompletedIssues() const;
+    void FinalizeIssues();
 
     void Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanPlan = false);
 
     inline void PrintErrorsTo(IOutputStream& out) const {
-        if (ExprCtx_) {
-            ExprCtx_->IssueManager.GetIssues().PrintWithProgramTo(out, Filename_, SourceCode_);
-        }
+        Issues().PrintWithProgramTo(out, Filename_, SourceCode_);
     }
 
     inline const TAstNode* AstRoot() const {
@@ -234,7 +223,7 @@ public:
         return ResultProviderConfig_->CommittedResults;
     }
 
-    TMaybe<TString> GetQueryAst();
+    TMaybe<TString> GetQueryAst(TMaybe<size_t> memoryLimit = {});
     TMaybe<TString> GetQueryPlan(const TPlanSettings& settings = {});
 
     void SetDiagnosticFormat(NYson::EYsonFormat format) {
@@ -331,6 +320,11 @@ public:
         AbortHidden_ = std::move(func);
     }
 
+    TMaybe<TSet<TString>> GetUsedClusters() {
+        CollectUsedClusters();
+        return UsedClusters_;
+    }
+
 private:
     TProgram(
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -354,7 +348,8 @@ private:
         const TString& runner,
         bool enableRangeComputeFor,
         const IArrowResolver::TPtr& arrowResolver,
-        EHiddenMode hiddenMode);
+        EHiddenMode hiddenMode,
+        const TQContext& qContext);
 
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
     TTypeAnnotationContextPtr GetAnnotationContext() const;
@@ -374,45 +369,51 @@ private:
 
     bool FillParseResult(NYql::TAstParseResult&& astRes, NYql::TWarningRules* warningRules = nullptr);
     TString GetSessionId() const;
-    TString TakeSessionId();
 
     NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransformWithFallback(bool applyAsyncChanges);
     void SaveExprRoot();
 
 private:
     std::optional<bool> CheckFallbackIssues(const TIssues& issues);
+    void HandleSourceCode(TString& sourceCode);
+    void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
+        const NSQLTranslation::TTranslationSettings*& currentSettings);
 
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
     const TIntrusivePtr<ITimeProvider> TimeProvider_;
     const ui64 NextUniqueId_;
+
+    TAstNode* AstRoot_;
+    std::unique_ptr<TMemoryPool> AstPool_;
+    const IModuleResolver::TPtr Modules_;
+    TAutoPtr<TExprContext> ExprCtx_;
+    TTypeAnnotationContextPtr TypeCtx_;
+
     TVector<TDataProviderInitializer> DataProvidersInit_;
     TAdaptiveLock DataProvidersLock_;
     TVector<TDataProviderInfo> DataProviders_;
     TYqlOperationOptions OperationOptions_;
     TCredentials::TPtr Credentials_;
     const IUrlListerManagerPtr UrlListerManager_;
-    const IUdfResolver::TPtr UdfResolver_;
+    IUdfResolver::TPtr UdfResolver_;
     const TUdfIndex::TPtr UdfIndex_;
     const TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;
     const TFileStoragePtr FileStorage_;
     TUserDataTable SavedUserDataTable_;
-    const TUserDataStorage::TPtr UserDataStorage_;
+    TUserDataStorage::TPtr UserDataStorage_;
     const TGatewaysConfig* GatewaysConfig_;
+    TGatewaysConfig LoadedGatewaysConfig_;
     TString Filename_;
     TString SourceCode_;
     ESourceSyntax SourceSyntax_;
     ui16 SyntaxVersion_;
 
-    TAstNode* AstRoot_;
-    std::unique_ptr<TMemoryPool> AstPool_;
-    TAutoPtr<TExprContext> ExprCtx_;
-    const IModuleResolver::TPtr Modules_;
     TExprNode::TPtr ExprRoot_;
     TExprNode::TPtr SavedExprRoot_;
     mutable TAdaptiveLock SessionIdLock_;
     TString SessionId_;
-    TTypeAnnotationContextPtr TypeCtx_;
+    NThreading::TFuture<void> CloseLastSessionFuture_;
     TAutoPtr<IPlanBuilder> PlanBuilder_;
     TAutoPtr<IGraphTransformer> Transformer_;
     TIntrusivePtr<TResultProviderConfig> ResultProviderConfig_;
@@ -440,6 +441,11 @@ private:
     const EHiddenMode HiddenMode_ = EHiddenMode::Disable;
     THiddenQueryAborter AbortHidden_ = [](){};
     TMaybe<TString> LineageStr_;
+
+    TQContext QContext_;
+    TIssues FinalIssues_;
 };
+
+void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags);
 
 } // namspace NYql

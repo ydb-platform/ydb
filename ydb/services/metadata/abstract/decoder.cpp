@@ -43,6 +43,17 @@ bool TDecoderBase::Read(const i32 columnIdx, ui64& result, const Ydb::Value& r) 
     return false;
 }
 
+bool TDecoderBase::Read(const i32 columnIdx, i64& result, const Ydb::Value& r) const {
+    if (columnIdx >= (i32)r.items().size() || columnIdx < 0) {
+        return false;
+    }
+    if (r.items()[columnIdx].has_int64_value()) {
+        result = r.items()[columnIdx].int64_value();
+        return true;
+    }
+    return false;
+}
+
 bool TDecoderBase::Read(const i32 columnIdx, ui32& result, const Ydb::Value& r) const {
     if (columnIdx >= (i32)r.items().size() || columnIdx < 0) {
         return false;

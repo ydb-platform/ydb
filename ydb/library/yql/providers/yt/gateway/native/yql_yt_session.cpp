@@ -20,13 +20,23 @@ TSession::TSession(IYtGateway::TOpenSessionOptions&& options, size_t numThreads)
     , TimeProvider_(std::move(options.TimeProvider()))
     , DeterministicMode_(GetEnv("YQL_DETERMINISTIC_MODE"))
     , OperationSemaphore(nullptr)
+    , LocalCalcSemaphore_(nullptr)
     , TxCache_(UserName_)
     , SessionId_(options.SessionId_)
 {
     InitYtApiOnce(OperationOptions_.AttrsYson);
 
     Queue_ = TAsyncQueue::Make(numThreads, "YtGateway");
-    OpTracker_ = MakeIntrusive<TOperationTracker>();
+    if (options.CreateOperationTracker()) {
+        OpTracker_ = MakeIntrusive<TOperationTracker>();
+    }
+}
+
+void TSession::StopQueueAndTracker() {
+    if (OpTracker_) {
+        OpTracker_->Stop();
+    }
+    Queue_->Stop();
 }
 
 void TSession::Close() {
@@ -38,13 +48,11 @@ void TSession::Close() {
         TxCache_.AbortAll();
     } catch (...) {
         YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();
-        OpTracker_->Stop();
-        Queue_->Stop();
+        StopQueueAndTracker();
         throw;
     }
 
-    OpTracker_->Stop();
-    Queue_->Stop();
+    StopQueueAndTracker();
 }
 
 NYT::TNode TSession::CreateSpecWithDesc(const TVector<std::pair<TString, TString>>& code) const {
@@ -60,6 +68,15 @@ void TSession::EnsureInitializedSemaphore(const TYtSettings::TConstPtr& settings
         if (!OperationSemaphore) {
             const size_t parallelOperationsLimit = settings->ParallelOperationsLimit.Get().GetOrElse(1U << 20);
             OperationSemaphore = NThreading::TAsyncSemaphore::Make(parallelOperationsLimit);
+        }
+    }
+}
+
+void TSession::InitLocalCalcSemaphore(const TYtSettings::TConstPtr& settings) {
+    with_lock(Mutex_) {
+        if(!LocalCalcSemaphore_) {
+            const size_t localCalcLimit = settings->LocalCalcLimit.Get().GetOrElse(1U);
+            LocalCalcSemaphore_ = MakeHolder<TFastSemaphore>(localCalcLimit);
         }
     }
 }

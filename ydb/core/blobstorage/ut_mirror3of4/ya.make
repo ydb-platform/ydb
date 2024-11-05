@@ -9,6 +9,7 @@ SIZE(MEDIUM)
 TIMEOUT(600)
 
 PEERDIR(
+    ydb/apps/version
     ydb/library/actors/interconnect/mock
     library/cpp/testing/unittest
     ydb/core/blobstorage/backpressure
@@ -21,6 +22,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/repl
     ydb/core/tx/scheme_board
     ydb/core/util
+    ydb/core/util/actorsys_test
 )
 
 END()

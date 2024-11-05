@@ -16,7 +16,21 @@ class Database:
                 # so we'd better make it first on our own
                 self.name = name[:63].lower()
             case EDataSourceKind.CLICKHOUSE:
-                self.name = name[:255]
+                # We use preinitialized database when working with ClickHouse.
+                self.name = "db"
+            case EDataSourceKind.MS_SQL_SERVER:
+                # For this kind of database this name is provided by the external logic
+                self.name = name
+            case EDataSourceKind.MYSQL:
+                # For this kind of database this name is provided by the external logic
+                self.name = name
+            case EDataSourceKind.ORACLE:
+                # Oracle is not sensitive for identifiers until they are inclosed in quota marks,
+                # therefore, we'd better use uppercase for ease of testing
+                self.name = name[:127].upper()  # TODO: is it needed? max length of Oracle table name is 128 bytes/chars
+            case EDataSourceKind.YDB:
+                # We use preinitialized database when working with YDB.
+                self.name = "local"
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 
@@ -29,8 +43,6 @@ class Database:
 
     def create(self) -> str:
         match self.kind:
-            case EDataSourceKind.CLICKHOUSE:
-                return f"CREATE DATABASE IF NOT EXISTS {self.name} ENGINE = Memory"
             case EDataSourceKind.POSTGRESQL:
                 return f"CREATE DATABASE {self.name}"
             case _:
@@ -45,6 +57,14 @@ class Database:
                 return f"Database {self.name} doesn't exist"
             case EDataSourceKind.POSTGRESQL:
                 return f'database "{self.name}" does not exist'
+            case EDataSourceKind.YDB:
+                raise Exception("Fix me first in YQ-3315")
+            case EDataSourceKind.MS_SQL_SERVER:
+                return 'Cannot open database'
+            case EDataSourceKind.MYSQL:
+                return 'Unknown database'
+            case EDataSourceKind.ORACLE:
+                raise Exception("Fix me first in YQ-3413")
             case _:
                 raise Exception(f'invalid data source: {self.kind}')
 
@@ -53,6 +73,14 @@ class Database:
             case EDataSourceKind.CLICKHOUSE:
                 return 'table does not exist'
             case EDataSourceKind.POSTGRESQL:
+                return 'table does not exist'
+            case EDataSourceKind.YDB:
+                return 'issues = [{\'Path not found\'}])'
+            case EDataSourceKind.MS_SQL_SERVER:
+                return 'table does not exist'
+            case EDataSourceKind.MYSQL:
+                return 'table does not exist'
+            case EDataSourceKind.ORACLE:
                 return 'table does not exist'
             case _:
                 raise Exception(f'invalid data source: {self.kind}')

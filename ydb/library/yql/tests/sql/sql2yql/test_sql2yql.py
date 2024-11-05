@@ -13,7 +13,8 @@ def get_sql2yql_cmd(suite, case, case_file, out_dir, ansi_lexer, test_format, te
     cmd = [
         SQLRUN_PATH,
         case_file,
-        '--syntax-version=1'
+        '--syntax-version=1',
+        '--test-antlr4',
     ]
 
     if ansi_lexer:
@@ -39,6 +40,9 @@ def get_sql2yql_cmd(suite, case, case_file, out_dir, ansi_lexer, test_format, te
     if suite == 'streaming':
         cmd.append('--cluster=pq@pq')
         cmd.append('--cluster=solomon@solomon')
+    if suite == 'solomon':
+        cmd.append('--cluster=local_solomon@solomon')
+
     if SQL_FLAGS:
         cmd.append('--flags=%s' % ','.join(SQL_FLAGS))
 

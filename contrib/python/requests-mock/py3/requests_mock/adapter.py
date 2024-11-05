@@ -10,12 +10,11 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import urllib.parse
 import weakref
 
 from requests.adapters import BaseAdapter
 from requests.utils import requote_uri
-import six
-from six.moves.urllib import parse as urlparse
 
 from requests_mock import exceptions
 from requests_mock.request import _RequestObjectProxy
@@ -99,8 +98,8 @@ class _Matcher(_RequestHistoryTracker):
         self._additional_matcher = additional_matcher
 
         # url can be a regex object or ANY so don't always run urlparse
-        if isinstance(url, six.string_types):
-            url_parts = urlparse.urlparse(url)
+        if isinstance(url, str):
+            url_parts = urllib.parse.urlparse(url)
             self._scheme = url_parts.scheme.lower()
             self._netloc = url_parts.netloc.lower()
             self._path = requote_uri(url_parts.path or '/')
@@ -155,10 +154,11 @@ class _Matcher(_RequestHistoryTracker):
             return False
 
         # construct our own qs structure as we remove items from it below
-        request_qs = urlparse.parse_qs(request.query, keep_blank_values=True)
-        matcher_qs = urlparse.parse_qs(self._query, keep_blank_values=True)
+        request_qs = urllib.parse.parse_qs(request.query,
+                                           keep_blank_values=True)
+        matcher_qs = urllib.parse.parse_qs(self._query, keep_blank_values=True)
 
-        for k, vals in six.iteritems(matcher_qs):
+        for k, vals in matcher_qs.items():
             for v in vals:
                 try:
                     request_qs.get(k, []).remove(v)
@@ -166,14 +166,14 @@ class _Matcher(_RequestHistoryTracker):
                     return False
 
         if self._complete_qs:
-            for v in six.itervalues(request_qs):
+            for v in request_qs.values():
                 if v:
                     return False
 
         return True
 
     def _match_headers(self, request):
-        for k, vals in six.iteritems(self._request_headers):
+        for k, vals in self._request_headers.items():
 
             try:
                 header = request.headers[k]
@@ -182,7 +182,7 @@ class _Matcher(_RequestHistoryTracker):
                 # difference, in 2 they are just whatever the user inputted in
                 # 1 they are bytes. Let's optionally handle both and look at
                 # removing this when we depend on requests 2.
-                if not isinstance(k, six.text_type):
+                if not isinstance(k, str):
                     return False
 
                 try:

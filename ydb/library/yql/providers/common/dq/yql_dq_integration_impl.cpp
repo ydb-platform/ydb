@@ -32,6 +32,11 @@ TMaybe<TOptimizerStatistics> TDqIntegrationBase::ReadStatistics(const TExprNode:
     return Nothing();
 }
 
+TExprNode::TPtr TDqIntegrationBase::RecaptureWrite(const TExprNode::TPtr& write, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    return write;
+}
+
 TMaybe<bool> TDqIntegrationBase::CanWrite(const TExprNode&, TExprContext&) {
     return Nothing();
 }
@@ -51,7 +56,14 @@ bool TDqIntegrationBase::CanFallback() {
     return false;
 }
 
-void TDqIntegrationBase::FillSourceSettings(const TExprNode&, ::google::protobuf::Any&, TString&, size_t) {
+void TDqIntegrationBase::FillSourceSettings(const TExprNode&, ::google::protobuf::Any&, TString&, size_t, TExprContext&) {
+}
+
+void TDqIntegrationBase::FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) {
+    Y_UNUSED(node);
+    Y_UNUSED(settings);
+    Y_UNUSED(sourceType);
+    YQL_ENSURE(false);
 }
 
 void TDqIntegrationBase::FillSinkSettings(const TExprNode&, ::google::protobuf::Any&, TString&) {

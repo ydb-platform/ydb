@@ -103,7 +103,7 @@ protected:
                 }
 
             default:
-                return NextStep::Finish;
+                return Settings_.RetryUndefined_ ? NextStep::RetrySlowBackoff : NextStep::Finish;
         }
     }
 

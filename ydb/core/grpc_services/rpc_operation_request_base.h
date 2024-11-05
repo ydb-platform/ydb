@@ -47,14 +47,14 @@ protected:
 
     void ResolveDatabase() {
         LOG_D("Resolve database"
-            << ": name# " << this->DatabaseName);
+            << ": name# " << this->GetDatabaseName());
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        request->DatabaseName = this->DatabaseName;
+        request->DatabaseName = this->GetDatabaseName();
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-        entry.Path = NKikimr::SplitPath(this->DatabaseName);
+        entry.Path = NKikimr::SplitPath(this->GetDatabaseName());
 
         this->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
     }

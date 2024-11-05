@@ -11,6 +11,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
 
+#include <util/generic/size_literals.h>
 #include <util/stream/input.h>
 #include <util/stream/output.h>
 #include <util/stream/str.h>
@@ -82,6 +83,28 @@ static TNode CreateEmptyNodeByType(::NYson::EYsonType type)
     return result;
 }
 
+static TNode NodeFromYsonStream(IInputStream* input, ::NYson::EYsonType type, bool consumeUntilEof)
+{
+    TNode result = CreateEmptyNodeByType(type);
+
+    ui64 bufferSizeLimit = 64_KB;
+    if (!consumeUntilEof) {
+        // Other values might be in the stream, so reading one symbol at a time.
+        bufferSizeLimit = 1;
+    }
+
+    TNodeBuilder builder(&result);
+    ::NYson::TYsonParser parser(
+        &builder,
+        input,
+        type,
+        /*enableLinePositionInfo*/ false,
+        bufferSizeLimit,
+        consumeUntilEof);
+    parser.Parse();
+    return result;
+}
+
 TNode NodeFromYsonString(const TStringBuf input, ::NYson::EYsonType type)
 {
     TMemoryInput stream(input);
@@ -104,12 +127,12 @@ TString NodeToCanonicalYsonString(const TNode& node, NYson::EYsonFormat format)
 
 TNode NodeFromYsonStream(IInputStream* input, ::NYson::EYsonType type)
 {
-    TNode result = CreateEmptyNodeByType(type);
+    return NodeFromYsonStream(input, type, /*consumeUntilEof*/ true);
+}
 
-    TNodeBuilder builder(&result);
-    ::NYson::TYsonParser parser(&builder, input, type);
-    parser.Parse();
-    return result;
+TNode NodeFromYsonStreamNonGreedy(IInputStream* input, ::NYson::EYsonType type)
+{
+    return NodeFromYsonStream(input, type, /*consumeUntilEof*/ false);
 }
 
 void NodeToYsonStream(const TNode& node, IOutputStream* output, NYson::EYsonFormat format)

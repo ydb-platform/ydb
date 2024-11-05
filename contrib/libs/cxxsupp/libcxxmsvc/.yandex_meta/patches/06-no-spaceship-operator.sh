@@ -1,0 +1,1 @@
+sed -i 's/#if _LIBCPP_STD_VER > 17/#if _LIBCPP_STD_VER > 17 \&\& !defined(_LIBCPP_HAS_NO_SPACESHIP_OPERATOR)/' include/__compare/is_eq.h

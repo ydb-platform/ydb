@@ -4,9 +4,9 @@ Converts a table where all columns must be structures to a table with columns co
 
 The names of the source column structures are not used and not returned in the result. Be sure that the structure element names aren't repeated in the source columns.
 
-**Example**
+### Example
 
-```sql
+```yql
 SELECT x, y, z
 FROM (
   SELECT

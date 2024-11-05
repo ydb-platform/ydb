@@ -183,6 +183,8 @@ public:
     void OffloadAlloc(ui64 size);
     void OffloadFree(ui64 size) noexcept;
 
+    static void DoCleanupGlobalFreeList(ui64 targetSize = 4 * 64 * 1024 * 1024);
+
     static ui64 GetGlobalPagePoolSize();
 
     ui64 GetLimit() const noexcept {
@@ -214,6 +216,23 @@ public:
 
     static void ResetGlobalsUT();
 
+    void SetMaximumLimitValueReached(bool isReached) noexcept {
+        IsMaximumLimitValueReached = isReached;
+    }
+
+    bool GetMaximumLimitValueReached() const noexcept {
+        return IsMaximumLimitValueReached;
+    }
+
+    bool IsMemoryYellowZoneEnabled() const noexcept {
+        return IsMemoryYellowZoneReached;
+    }
+
+    void ForcefullySetMemoryYellowZone(bool isEnabled) noexcept {
+        IsMemoryYellowZoneReached = isEnabled;
+        IsMemoryYellowZoneForcefullyChanged = true;
+    }
+
 protected:
     void* Alloc(size_t size);
     void Free(void* ptr, size_t size) noexcept;
@@ -221,7 +240,11 @@ protected:
     void UpdatePeaks() {
         PeakAllocated = Max(PeakAllocated, GetAllocated());
         PeakUsed = Max(PeakUsed, GetUsed());
+
+        UpdateMemoryYellowZone();
     }
+
+    void UpdateMemoryYellowZone();
 
     bool TryIncreaseLimit(ui64 required);
 
@@ -253,8 +276,36 @@ protected:
 
     TIncreaseMemoryLimitCallback IncreaseMemoryLimitCallback;
     const TSourceLocation DebugInfo;
+
+    // Indicates when memory limit is almost reached.
+    bool IsMemoryYellowZoneReached = false;
+    // Indicates that memory yellow zone was enabled or disabled forcefully.
+    // If the value of this variable is true, then the limits specified below will not be applied and
+    // changing the value can only be done manually.
+    bool IsMemoryYellowZoneForcefullyChanged = false;
+    // This theshold is used to determine is memory limit is almost reached.
+    // If TIncreaseMemoryLimitCallback is set this thresholds should be ignored.
+    // The yellow zone turns on when memory consumption reaches 80% and turns off when consumption drops below 50%.
+    const ui8 EnableMemoryYellowZoneThreshold = 80;
+    const ui8 DisableMemoryYellowZoneThreshold = 50;
+
+    // This flag indicates that value of memory limit reached it's maximum.
+    // Next TryIncreaseLimit call most likely will return false.
+    bool IsMaximumLimitValueReached = false;
 };
 
 using TAlignedPagePool = TAlignedPagePoolImpl<>;
+
+template<typename TMmap = TSystemMmap>
+void* GetAlignedPage(ui64 size);
+
+template<typename TMmap = TSystemMmap>
+void ReleaseAlignedPage(void* mem, ui64 size);
+
+template<typename TMmap = TSystemMmap>
+i64 GetTotalMmapedBytes();
+template<typename TMmap = TSystemMmap>
+i64 GetTotalFreeListBytes();
+
 
 } // NKikimr

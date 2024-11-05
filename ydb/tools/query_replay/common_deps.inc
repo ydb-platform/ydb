@@ -47,6 +47,8 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/core/tx/tx_proxy
     ydb/library/yql/core/services/mounts
     ydb/library/yql/minikql/comp_nodes/llvm14
+    ydb/library/yql/providers/yt/codec/codegen
+    ydb/library/yql/providers/yt/comp_nodes/llvm14
     ydb/library/yql/public/udf/service/exception_policy
     ydb/public/api/protos
     ydb/public/lib/base

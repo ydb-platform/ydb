@@ -3,7 +3,7 @@
  * ts_type.h
  *	  Definitions for the tsvector and tsquery types
  *
- * Copyright (c) 1998-2021, PostgreSQL Global Development Group
+ * Copyright (c) 1998-2023, PostgreSQL Global Development Group
  *
  * src/include/tsearch/ts_type.h
  *
@@ -111,12 +111,27 @@ typedef TSVectorData *TSVector;
 #define POSDATAPTR(x,e) (_POSVECPTR(x,e)->pos)
 
 /*
- * fmgr interface macros
+ * fmgr interface functions
  */
 
-#define DatumGetTSVector(X)			((TSVector) PG_DETOAST_DATUM(X))
-#define DatumGetTSVectorCopy(X)		((TSVector) PG_DETOAST_DATUM_COPY(X))
-#define TSVectorGetDatum(X)			PointerGetDatum(X)
+static inline TSVector
+DatumGetTSVector(Datum X)
+{
+	return (TSVector) PG_DETOAST_DATUM(X);
+}
+
+static inline TSVector
+DatumGetTSVectorCopy(Datum X)
+{
+	return (TSVector) PG_DETOAST_DATUM_COPY(X);
+}
+
+static inline Datum
+TSVectorGetDatum(const TSVectorData *X)
+{
+	return PointerGetDatum(X);
+}
+
 #define PG_GETARG_TSVECTOR(n)		DatumGetTSVector(PG_GETARG_DATUM(n))
 #define PG_GETARG_TSVECTOR_COPY(n)	DatumGetTSVectorCopy(PG_GETARG_DATUM(n))
 #define PG_RETURN_TSVECTOR(x)		return TSVectorGetDatum(x)
@@ -169,9 +184,9 @@ typedef struct
 #define OP_PHRASE		4		/* highest code, tsquery_cleanup.c */
 #define OP_COUNT		4
 
-extern const int tsearch_op_priority[OP_COUNT];
+extern PGDLLIMPORT const int tsearch_op_priority[OP_COUNT];
 
-/* get operation priority  by its code*/
+/* get operation priority by its code */
 #define OP_PRIORITY(x)	( tsearch_op_priority[(x) - 1] )
 /* get QueryOperator priority */
 #define QO_PRIORITY(x)	OP_PRIORITY(((QueryOperator *) (x))->oper)
@@ -227,14 +242,29 @@ typedef TSQueryData *TSQuery;
 #define GETOPERAND(x)	( (char*)GETQUERY(x) + ((TSQuery)(x))->size * sizeof(QueryItem) )
 
 /*
- * fmgr interface macros
+ * fmgr interface functions
  * Note, TSQuery type marked as plain storage, so it can't be toasted
  * but PG_DETOAST_DATUM_COPY is used for simplicity
  */
 
-#define DatumGetTSQuery(X)			((TSQuery) DatumGetPointer(X))
-#define DatumGetTSQueryCopy(X)		((TSQuery) PG_DETOAST_DATUM_COPY(X))
-#define TSQueryGetDatum(X)			PointerGetDatum(X)
+static inline TSQuery
+DatumGetTSQuery(Datum X)
+{
+	return (TSQuery) DatumGetPointer(X);
+}
+
+static inline TSQuery
+DatumGetTSQueryCopy(Datum X)
+{
+	return (TSQuery) PG_DETOAST_DATUM_COPY(X);
+}
+
+static inline Datum
+TSQueryGetDatum(const TSQueryData *X)
+{
+	return PointerGetDatum(X);
+}
+
 #define PG_GETARG_TSQUERY(n)		DatumGetTSQuery(PG_GETARG_DATUM(n))
 #define PG_GETARG_TSQUERY_COPY(n)	DatumGetTSQueryCopy(PG_GETARG_DATUM(n))
 #define PG_RETURN_TSQUERY(x)		return TSQueryGetDatum(x)

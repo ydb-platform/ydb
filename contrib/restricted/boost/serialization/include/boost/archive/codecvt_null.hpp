@@ -52,7 +52,7 @@ class codecvt_null;
 template<>
 class codecvt_null<char> : public std::codecvt<char, char, std::mbstate_t>
 {
-    bool do_always_noconv() const noexcept BOOST_OVERRIDE {
+    bool do_always_noconv() const BOOST_NOEXCEPT_OR_NOTHROW BOOST_OVERRIDE {
         return true;
     }
 public:
@@ -88,15 +88,15 @@ class BOOST_SYMBOL_VISIBLE codecvt_null<wchar_t> :
         wchar_t * & next2
     ) const BOOST_OVERRIDE;
 
-    BOOST_SYMBOL_EXPORT virtual int do_encoding( ) const noexcept BOOST_OVERRIDE {
+    BOOST_SYMBOL_EXPORT int do_encoding( ) const BOOST_NOEXCEPT_OR_NOTHROW BOOST_OVERRIDE {
         return sizeof(wchar_t) / sizeof(char);
     }
 
-    BOOST_SYMBOL_EXPORT bool do_always_noconv() const throw() BOOST_OVERRIDE {
+    BOOST_SYMBOL_EXPORT bool do_always_noconv() const BOOST_NOEXCEPT_OR_NOTHROW BOOST_OVERRIDE {
         return false;
     }
 
-    BOOST_SYMBOL_EXPORT int do_max_length( ) const noexcept BOOST_OVERRIDE {
+    BOOST_SYMBOL_EXPORT int do_max_length( ) const BOOST_NOEXCEPT_OR_NOTHROW BOOST_OVERRIDE {
         return do_encoding();
     }
 public:

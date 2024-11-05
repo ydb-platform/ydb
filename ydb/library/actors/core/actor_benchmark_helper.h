@@ -31,7 +31,8 @@ struct TTestEndDecorator : TDecorator {
     }
 
     ~TTestEndDecorator() {
-        if (AtomicDecrement(*ActorsAlive) == 0) {
+        auto alive = AtomicDecrement(*ActorsAlive);
+        if (alive == 0) {
             Pad->Unpark();
         }
     }
@@ -115,6 +116,8 @@ struct TActorBenchmark {
         ui32 Neighbours = 0;
         TEventSharedCounters *SharedCounters;
         ui32 InFlight = 1;
+        bool ToSchedule = false;
+        TDuration DelayForScheduling = TDuration::MicroSeconds(1);
     };
 
     class TSendReceiveActor : public TActorBootstrapped<TSendReceiveActor> {
@@ -136,6 +139,8 @@ struct TActorBenchmark {
             , EndlessSending(params.EndlessSending)
             , IsLeader(OwnEventsCounter)
             , InFlight(params.InFlight)
+            , ToSchedule(params.ToSchedule)
+            , DelayForScheduling(params.DelayForScheduling)
         {}
 
         ~TSendReceiveActor() {
@@ -176,7 +181,9 @@ struct TActorBenchmark {
             if (own) {
                 --OwnEventsCounter;
             }
-            if (SendingType == ESendingType::Lazy) {
+            if (ToSchedule) {
+                TActivationContext::Schedule(DelayForScheduling, ev.Release());
+            } else if (SendingType == ESendingType::Lazy) {
                 ctx.Send<ESendingType::Lazy>(ev);
             } else if (SendingType == ESendingType::Tail) {
                 ctx.Send<ESendingType::Tail>(ev);
@@ -259,6 +266,8 @@ struct TActorBenchmark {
         bool IsLeader = false;
         ui32 InFlight = 1;
         ui32 ReceiveTurn = 0;
+        bool ToSchedule = false;
+        TDuration DelayForScheduling = TDuration::MicroSeconds(1);
     };
 
     static void AddBasicPool(THolder<TActorSystemSetup>& setup, ui32 threads, bool activateEveryEvent, bool hasSharedThread) {

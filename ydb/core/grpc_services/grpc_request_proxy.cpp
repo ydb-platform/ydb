@@ -15,8 +15,6 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
-#include <shared_mutex>
-
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -88,7 +86,7 @@ private:
     void Handle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
-            requestBaseCtx->LegacyFinishSpan();
+            requestBaseCtx->FinishSpan();
             TGRpcRequestProxyHandleMethods::Handle(event, ctx);
         }
     }
@@ -96,7 +94,7 @@ private:
     void Handle(TEvListEndpointsRequest::TPtr& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
-            requestBaseCtx->LegacyFinishSpan();
+            requestBaseCtx->FinishSpan();
             TGRpcRequestProxy::Handle(event, ctx);
         }
     }
@@ -104,6 +102,7 @@ private:
     void Handle(TEvProxyRuntimeEvent::TPtr& event, const TActorContext&) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
+            requestBaseCtx->FinishSpan();
             event->Release().Release()->Pass(*this);
         }
     }
@@ -116,6 +115,11 @@ private:
             record->GetInternalToken(),
             record->GetAuthState().State == NYdbGrpc::TAuthState::EAuthState::AS_UNAVAILABLE,
             NYql::TIssues()});
+    }
+
+    void Handle(TEvRequestAuthAndCheck::TPtr& ev, const TActorContext&) {
+        ev->Get()->FinishSpan();
+        ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
     }
 
     // returns true and defer event if no updates for given database
@@ -135,21 +139,20 @@ private:
         return true;
     }
 
-    template <typename TEvent>
+    template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
-        IRequestProxyCtx* requestBaseCtx = event->Get();
-
         LogRequest(event);
 
+        IRequestProxyCtx* requestBaseCtx = event->Get();
         if (!SchemeCache) {
             const TString error = "Grpc proxy is not ready to accept request, no proxy service";
             LOG_ERROR_S(ctx, NKikimrServices::GRPC_SERVER, error);
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, error);
             requestBaseCtx->RaiseIssue(issue);
             requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+            requestBaseCtx->FinishSpan();
             return;
         }
-
 
         MaybeStartTracing(*requestBaseCtx);
 
@@ -162,6 +165,7 @@ private:
 
         if (state.State == NYdbGrpc::TAuthState::AS_FAIL) {
             requestBaseCtx->ReplyUnauthenticated();
+            requestBaseCtx->FinishSpan();
             return;
         }
 
@@ -170,7 +174,8 @@ private:
             const TString error = "Unable to resolve token";
             const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
             requestBaseCtx->RaiseIssue(issue);
-            requestBaseCtx->ReplyUnavaliable();
+            requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+            requestBaseCtx->FinishSpan();
             return;
         }
 
@@ -186,8 +191,9 @@ private:
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
             } else {
-                if (!AllowYdbRequestsWithoutDatabase && DynamicNode) {
-                    requestBaseCtx->ReplyUnauthenticated("Requests without specified database is not allowed");
+                if (!AllowYdbRequestsWithoutDatabase && DynamicNode && !std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
+                    requestBaseCtx->ReplyUnauthenticated("Requests without specified database are not allowed");
+                    requestBaseCtx->FinishSpan();
                     return;
                 } else {
                     databaseName = RootDatabase;
@@ -198,6 +204,7 @@ private:
             if (databaseName.empty()) {
                 Counters->IncDatabaseUnavailableCounter();
                 requestBaseCtx->ReplyUnauthenticated("Empty database name");
+                requestBaseCtx->FinishSpan();
                 return;
             }
             auto it = Databases.find(databaseName);
@@ -211,7 +218,9 @@ private:
                     LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "Limit for deferred events per database %s reached", databaseName.c_str());
                     const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
                     requestBaseCtx->RaiseIssue(issue);
-                    requestBaseCtx->ReplyUnavaliable();
+                    requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+                    requestBaseCtx->FinishSpan();
+                    return;
                 }
                 return;
             }
@@ -232,6 +241,7 @@ private:
                         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
                         requestBaseCtx->RaiseIssue(issue);
                         requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
+                        requestBaseCtx->FinishSpan();
                         return;
                     }
                 }
@@ -243,6 +253,7 @@ private:
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, "database unavailable");
                 requestBaseCtx->RaiseIssue(issue);
                 requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+                requestBaseCtx->FinishSpan();
                 return;
             }
 
@@ -251,6 +262,7 @@ private:
                 LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
                     "Client was disconnected before processing request (grpc request proxy)");
                 requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+                requestBaseCtx->FinishSpan();
                 return;
             }
 
@@ -268,6 +280,8 @@ private:
         const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, "Can't authenticate request");
         requestBaseCtx->RaiseIssue(issue);
         requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+        requestBaseCtx->FinishSpan();
+        return;
     }
 
     void ForgetDatabase(const TString& database);
@@ -286,7 +300,8 @@ private:
     virtual void PassAway() override {
         for (auto& [_, queue] : DeferredEvents) {
             for (TEventReqHolder& req : queue) {
-                req.Ctx->ReplyUnavaliable();
+                req.Ctx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+                req.Ctx->FinishSpan();
             }
         }
 
@@ -405,15 +420,36 @@ void TGRpcRequestProxyImpl::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) 
 
 bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
     const auto& state = ctx.GetAuthState();
-    return state.State == NYdbGrpc::TAuthState::AS_OK ||
-           state.State == NYdbGrpc::TAuthState::AS_FAIL && state.NeedAuth == false ||
-           state.NeedAuth == false && !ctx.GetYdbToken();
+    if (state.State == NYdbGrpc::TAuthState::AS_OK) {
+        return true;
+    }
+
+    const bool authorizationParamsAreSet = ctx.GetYdbToken() || !ctx.FindClientCertPropertyValues().empty();
+    if (!state.NeedAuth && !authorizationParamsAreSet) {
+        return true;
+    }
+
+    if (!state.NeedAuth && state.State == NYdbGrpc::TAuthState::AS_FAIL) {
+        if (AppData()->EnforceUserTokenCheckRequirement && authorizationParamsAreSet) {
+            return false;
+        }
+        return true;
+    }
+    return false;
 }
 
 void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
+    auto isTracingDecided = ctx.IsTracingDecided();
+    if (!isTracingDecided) {
+        return;
+    }
+    if (std::exchange(*isTracingDecided, true)) {
+        return;
+    }
+
     NWilson::TTraceId traceId;
     if (const auto otelHeader = ctx.GetPeerMetaValues(NYdb::OTEL_TRACE_HEADER)) {
-        traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef());
+        traceId = NWilson::TTraceId::FromTraceparentHeader(otelHeader.GetRef(), TComponentTracingLevels::ProductionVerbose);
     }
     TracingControl->HandleTracing(traceId, ctx.GetRequestDiscriminator());
     if (traceId) {
@@ -421,6 +457,7 @@ void TGRpcRequestProxyImpl::MaybeStartTracing(IRequestProxyCtx& ctx) {
         if (auto database = ctx.GetDatabaseName()) {
             grpcRequestProxySpan.Attribute("database", std::move(*database));
         }
+        grpcRequestProxySpan.Attribute("request_type", ctx.GetRequestName());
         ctx.StartTracing(std::move(grpcRequestProxySpan));
     }
 }
@@ -483,6 +520,7 @@ void TGRpcRequestProxyImpl::ForgetDatabase(const TString& database) {
         while (!queue.empty()) {
             Counters->IncDatabaseUnavailableCounter();
             queue.front().Ctx->ReplyUnauthenticated("Unknown database");
+            queue.front().Ctx->FinishSpan();
             queue.pop_front();
         }
         DeferredEvents.erase(itDeferredEvents);
@@ -557,7 +595,6 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TRefreshTokenGenericRequest, PreHandle);
         HFunc(TRefreshTokenStreamWriteSpecificRequest, PreHandle);
-        HFunc(TEvLoginRequest, PreHandle);
         HFunc(TEvListEndpointsRequest, PreHandle);
         HFunc(TEvBiStreamPingRequest, PreHandle);
         HFunc(TEvStreamPQWriteRequest, PreHandle);
@@ -571,6 +608,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
         HFunc(TEvCoordinationSessionRequest, PreHandle);
         HFunc(TEvNodeCheckRequest, PreHandle);
         HFunc(TEvProxyRuntimeEvent, PreHandle);
+        HFunc(TEvRequestAuthAndCheck, PreHandle);
 
         default:
             Y_ABORT("Unknown request: %u\n", ev->GetTypeRewrite());

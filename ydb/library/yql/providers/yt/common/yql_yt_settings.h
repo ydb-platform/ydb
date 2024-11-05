@@ -64,6 +64,11 @@ enum class EInferSchemaMode {
     RPC        = 2ULL  /* "rpc" */,
 };
 
+enum class EColumnGroupMode {
+    Disable     /* "disable" */,
+    Single      /* "single" */,
+    PerUsage    /* "perusage", "per-usage" */,
+};
 
 struct TYtSettings {
     using TConstPtr = std::shared_ptr<const TYtSettings>;
@@ -84,6 +89,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui32, false> InferSchemaTableCountThreshold;
     NCommon::TConfSetting<NSize::TSize, false> DefaultCalcMemoryLimit;
     NCommon::TConfSetting<ui32, false> ParallelOperationsLimit;
+    NCommon::TConfSetting<ui32, false> LocalCalcLimit;
     NCommon::TConfSetting<EQueryCacheMode, false> QueryCacheMode;
     NCommon::TConfSetting<bool, false> QueryCacheIgnoreTableRevision;
     NCommon::TConfSetting<TString, false> QueryCacheSalt;
@@ -102,6 +108,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TString, false> _ImpersonationUser;
     NCommon::TConfSetting<EInferSchemaMode, false> InferSchemaMode;
     NCommon::TConfSetting<ui32, false> BatchListFolderConcurrency;
+    NCommon::TConfSetting<bool, false> ForceTmpSecurity;
 
     // Job runtime
     NCommon::TConfSetting<TString, true> Pool;
@@ -159,6 +166,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TString, true> PublishedAutoMerge;
     NCommon::TConfSetting<TString, true> TemporaryAutoMerge;
     NCommon::TConfSetting<TVector<TString>, true> LayerPaths;
+    NCommon::TConfSetting<TString, true> DockerImage;
     NCommon::TConfSetting<NYT::TNode, true> JobEnv;
     NCommon::TConfSetting<NYT::TNode, true> OperationSpec;
     NCommon::TConfSetting<NYT::TNode, true> Annotations;
@@ -176,6 +184,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui32, true> MaxSpeculativeJobCountPerTask;
     NCommon::TConfSetting<NSize::TSize, true> LLVMMemSize;
     NCommon::TConfSetting<NSize::TSize, true> LLVMPerNodeMemSize;
+    NCommon::TConfSetting<ui64, true> LLVMNodeCountLimit;
     NCommon::TConfSetting<NSize::TSize, true> SamplingIoBlockSize;
     NCommon::TConfSetting<NYT::TNode, true> PublishedMedia;
     NCommon::TConfSetting<NYT::TNode, true> TemporaryMedia;
@@ -188,11 +197,15 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, true> _UseKeyBoundApi;
     NCommon::TConfSetting<TString, true> NetworkProject;
     NCommon::TConfSetting<bool, true> _EnableYtPartitioning;
-    NCommon::TConfSetting<bool, true> _ForceJobSizeAdjuster;
+    NCommon::TConfSetting<bool, true> ForceJobSizeAdjuster;
     NCommon::TConfSetting<bool, true> EnforceJobUtc;
     NCommon::TConfSetting<bool, true> UseRPCReaderInDQ;
     NCommon::TConfSetting<size_t, true> DQRPCReaderInflight;
     NCommon::TConfSetting<TDuration, true> DQRPCReaderTimeout;
+    NCommon::TConfSetting<TSet<TString>, true> BlockReaderSupportedTypes;
+    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> BlockReaderSupportedDataTypes;
+    NCommon::TConfSetting<TSet<TString>, true> JobBlockInputSupportedTypes;
+    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> JobBlockInputSupportedDataTypes;
 
     // Optimizers
     NCommon::TConfSetting<bool, true> _EnableDq;
@@ -216,6 +229,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui32, false> MaxInputTables;
     NCommon::TConfSetting<ui32, false> MaxInputTablesForSortedMerge;
     NCommon::TConfSetting<ui32, false> MaxOutputTables;
+    NCommon::TConfSetting<bool, false> DisableFuseOperations;
     NCommon::TConfSetting<NSize::TSize, false> MaxExtraJobMemoryToFuseOperations;
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseOperations;
     NCommon::TConfSetting<ui32, false> MaxOperationFiles;
@@ -236,11 +250,12 @@ struct TYtSettings {
     NCommon::TConfSetting<NSize::TSize, false> TableContentMinAvgChunkSize;
     NCommon::TConfSetting<ui32, false> TableContentMaxInputTables;
     NCommon::TConfSetting<ui32, false> TableContentMaxChunksForNativeDelivery;
-    NCommon::TConfSetting<bool, false> TableContentLocalExecution;
+    NCommon::TConfSetting<NSize::TSize, false> TableContentLocalExecution;
     NCommon::TConfSetting<bool, false> UseTypeV2;
     NCommon::TConfSetting<bool, false> UseNativeYtTypes;
     NCommon::TConfSetting<bool, false> UseNativeDescSort;
     NCommon::TConfSetting<bool, false> UseIntermediateSchema;
+    NCommon::TConfSetting<bool, false> UseIntermediateStreams;
     NCommon::TConfSetting<bool, false> UseFlow;
     NCommon::TConfSetting<ui16, false> WideFlowLimit;
     NCommon::TConfSetting<bool, false> UseSystemColumns;
@@ -260,12 +275,17 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> JoinCommonUseMapMultiOut;
     NCommon::TConfSetting<bool, false> UseAggPhases;
     NCommon::TConfSetting<bool, false> UsePartitionsByKeysForFinalAgg;
-    NCommon::TConfSetting<bool, false> _EnableWriteReorder;
     NCommon::TConfSetting<double, false> MaxCpuUsageToFuseMultiOuts;
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseMultiOuts;
     NCommon::TConfSetting<ui64, false> ApplyStoredConstraints;
     NCommon::TConfSetting<bool, false> ViewIsolation;
     NCommon::TConfSetting<bool, false> PartitionByConstantKeysViaMap;
+    NCommon::TConfSetting<EColumnGroupMode, false> ColumnGroupMode;
+    NCommon::TConfSetting<ui16, false> MinColumnGroupSize;
+    NCommon::TConfSetting<ui16, false> MaxColumnGroups;
+    NCommon::TConfSetting<ui64, false> ExtendedStatsMaxChunkCount;
+    NCommon::TConfSetting<bool, false> JobBlockInput;
+    NCommon::TConfSetting<bool, false> _EnableYtDqProcessWriteConstraints;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);
@@ -277,7 +297,7 @@ inline TString GetTablesTmpFolder(const TYtSettings& settings) {
 struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher {
     using TPtr = TIntrusivePtr<TYtConfiguration>;
 
-    TYtConfiguration();
+    TYtConfiguration(TTypeAnnotationContext& typeCtx);
     TYtConfiguration(const TYtConfiguration&) = delete;
 
     template <class TProtoConfig, typename TFilter>
@@ -318,7 +338,11 @@ public:
         TYtSettings::TConstPtr Snapshot;
     };
 
-    TYtVersionedConfiguration() = default;
+    TYtVersionedConfiguration(TTypeAnnotationContext& types)
+        : TYtConfiguration(types)
+    {
+    }
+    
     ~TYtVersionedConfiguration() = default;
 
     size_t FindNodeVer(const TExprNode& node);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/include/client.h>
 
 #include <ydb/public/api/protos/ydb_federation_discovery.pb.h>
 
@@ -134,6 +134,7 @@ struct TReadSessionEvent {
     using TCommitOffsetAcknowledgementEvent = TFederated<NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>;
     using TStartPartitionSessionEvent = TFederated<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>;
     using TStopPartitionSessionEvent = TFederated<NTopic::TReadSessionEvent::TStopPartitionSessionEvent>;
+    using TEndPartitionSessionEvent = TFederated<NTopic::TReadSessionEvent::TEndPartitionSessionEvent>;
     using TPartitionSessionStatusEvent = TFederated<NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>;
     using TPartitionSessionClosedEvent = TFederated<NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>;
 
@@ -202,6 +203,7 @@ struct TReadSessionEvent {
                                 TCommitOffsetAcknowledgementEvent,
                                 TStartPartitionSessionEvent,
                                 TStopPartitionSessionEvent,
+                                TEndPartitionSessionEvent,
                                 TPartitionSessionStatusEvent,
                                 TPartitionSessionClosedEvent,
                                 TSessionClosedEvent>;
@@ -351,6 +353,13 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
         FLUENT_SETTING(std::function<void(TReadSessionEvent::TStopPartitionSessionEvent&)>,
                        StopPartitionSessionHandler);
 
+        //! Function to handle end partition session events.
+        //! If this handler is set, end partition session events will be handled by handler,
+        //! otherwise sent to TReadSession::GetEvent().
+        //! Default value is empty function (not set).
+        FLUENT_SETTING(std::function<void(TReadSessionEvent::TEndPartitionSessionEvent&)>,
+                       EndPartitionSessionHandler);
+
         //! Function to handle partition session status events.
         //! If this handler is set, partition session status events will be handled by handler,
         //! otherwise sent to TReadSession::GetEvent().
@@ -496,12 +505,17 @@ public:
     // executors from settings are passed to subclients
     TFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings = {});
 
+    void ProvideCodec(NTopic::ECodec codecId, THolder<NTopic::ICodec>&& codecImpl);
+
     //! Create read session.
     std::shared_ptr<IFederatedReadSession> CreateReadSession(const TFederatedReadSessionSettings& settings);
 
     //! Create write session.
     // std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings);
     std::shared_ptr<NTopic::IWriteSession> CreateWriteSession(const TFederatedWriteSessionSettings& settings);
+
+protected:
+    void OverrideCodec(NTopic::ECodec codecId, THolder<NTopic::ICodec>&& codecImpl);
 
 private:
     std::shared_ptr<TImpl> Impl_;
@@ -527,6 +541,8 @@ template<>
 void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TStartPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
 template<>
 void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TStopPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
+template<>
+void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TEndPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
 template<>
 void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TPartitionSessionStatusEvent>>::DebugString(TStringBuilder& res, bool) const;
 template<>

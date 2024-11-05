@@ -11,6 +11,7 @@ SRCS(
     cypress.cpp
     errors.cpp
     format.cpp
+    helpers.cpp
     job_counters.cpp
     job_statistics.cpp
     io.cpp
@@ -22,13 +23,14 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/protobuf
+    library/cpp/protobuf/runtime
     library/cpp/type_info
     library/cpp/threading/future
     library/cpp/yson/node
     yt/cpp/mapreduce/interface/logging
     yt/yt_proto/yt/formats
     yt/yt/library/tvm
+    yt/yt/core
 )
 
 GENERATE_ENUM_SERIALIZATION(client_method_options.h)
@@ -43,4 +45,6 @@ GENERATE_ENUM_SERIALIZATION(protobuf_format.h)
 
 END()
 
-RECURSE_FOR_TESTS(ut)
+RECURSE_FOR_TESTS(
+    ut
+)

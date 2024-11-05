@@ -179,7 +179,9 @@ public:
 
     bool Reverse = false;
 
-    std::shared_ptr<TEvDataShard::TEvRead> Request;
+    // The original event handle
+    TEvDataShard::TEvRead::TPtr Ev;
+    TEvDataShard::TEvRead* Request = nullptr;
 
     // parallel to Request->Keys, but real data only in indices,
     // where in Request->Keys we have key prefix (here we have properly extended one).
@@ -203,6 +205,7 @@ public:
     TActorId SessionId;
     TMonotonic StartTs;
     bool IsFinished = false;
+    bool ReadContinuePending = false;
 
     // note that we send SeqNo's starting from 1
     ui64 SeqNo = 0;

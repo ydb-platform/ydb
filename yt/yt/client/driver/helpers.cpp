@@ -14,7 +14,7 @@ namespace NYT::NDriver {
 using namespace NObjectClient;
 using namespace NTracing;
 
-///////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 bool operator==(const TEtag& lhs, const TEtag& rhs)
 {
@@ -44,9 +44,9 @@ TErrorOr<TEtag> ParseEtag(TStringBuf etagString)
     return result;
 }
 
-TString ToString(const TEtag& Etag)
+void FormatValue(TStringBuilderBase* builder, const TEtag& tag, TStringBuf /*spec*/)
 {
-    return Format("%v:%v", Etag.Id, Etag.Revision);
+    builder->AppendFormat("%v:%v", tag.Id, tag.Revision);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

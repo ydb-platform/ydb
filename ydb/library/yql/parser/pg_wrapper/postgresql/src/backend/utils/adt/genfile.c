@@ -4,7 +4,7 @@
  *		Functions for direct access to files
  *
  *
- * Copyright (c) 2004-2021, PostgreSQL Global Development Group
+ * Copyright (c) 2004-2023, PostgreSQL Global Development Group
  *
  * Author: Andreas Pflug <pgadmin@pse-consulting.de>
  *
@@ -29,6 +29,7 @@
 #include "mb/pg_wchar.h"
 #include "miscadmin.h"
 #include "postmaster/syslogger.h"
+#include "replication/slot.h"
 #include "storage/fd.h"
 #include "utils/acl.h"
 #include "utils/builtins.h"
@@ -58,11 +59,11 @@ convert_and_check_filename(text *arg)
 	canonicalize_path(filename);	/* filename can change length here */
 
 	/*
-	 * Members of the 'pg_read_server_files' role are allowed to access any
-	 * files on the server as the PG user, so no need to do any further checks
-	 * here.
+	 * Roles with privileges of the 'pg_read_server_files' role are allowed to
+	 * access any files on the server as the PG user, so no need to do any
+	 * further checks here.
 	 */
-	if (is_member_of_role(GetUserId(), ROLE_PG_READ_SERVER_FILES))
+	if (has_privs_of_role(GetUserId(), ROLE_PG_READ_SERVER_FILES))
 		return filename;
 
 	/*
@@ -71,12 +72,6 @@ convert_and_check_filename(text *arg)
 	 */
 	if (is_absolute_path(filename))
 	{
-		/* Disallow '/a/b/data/..' */
-		if (path_contains_parent_reference(filename))
-			ereport(ERROR,
-					(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-					 errmsg("reference to parent directory (\"..\") not allowed")));
-
 		/*
 		 * Allow absolute paths if within DataDir or Log_directory, even
 		 * though Log_directory might be outside DataDir.
@@ -91,7 +86,7 @@ convert_and_check_filename(text *arg)
 	else if (!path_is_relative_and_below_cwd(filename))
 		ereport(ERROR,
 				(errcode(ERRCODE_INSUFFICIENT_PRIVILEGE),
-				 errmsg("path must be in or below the current directory")));
+				 errmsg("path must be in or below the data directory")));
 
 	return filename;
 }
@@ -283,81 +278,50 @@ pg_read_file(PG_FUNCTION_ARGS)
  *
  * No superuser check done here- instead privileges are handled by the
  * GRANT system.
+ *
+ * If read_to_eof is true, bytes_to_read must be -1, otherwise negative values
+ * are not allowed for bytes_to_read.
  */
-Datum
-pg_read_file_v2(PG_FUNCTION_ARGS)
+static text *
+pg_read_file_common(text *filename_t, int64 seek_offset, int64 bytes_to_read,
+					bool read_to_eof, bool missing_ok)
 {
-	text	   *filename_t = PG_GETARG_TEXT_PP(0);
-	int64		seek_offset = 0;
-	int64		bytes_to_read = -1;
-	bool		missing_ok = false;
-	char	   *filename;
-	text	   *result;
+	if (read_to_eof)
+		Assert(bytes_to_read == -1);
+	else if (bytes_to_read < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("requested length cannot be negative")));
 
-	/* handle optional arguments */
-	if (PG_NARGS() >= 3)
-	{
-		seek_offset = PG_GETARG_INT64(1);
-		bytes_to_read = PG_GETARG_INT64(2);
-
-		if (bytes_to_read < 0)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("requested length cannot be negative")));
-	}
-	if (PG_NARGS() >= 4)
-		missing_ok = PG_GETARG_BOOL(3);
-
-	filename = convert_and_check_filename(filename_t);
-
-	result = read_text_file(filename, seek_offset, bytes_to_read, missing_ok);
-	if (result)
-		PG_RETURN_TEXT_P(result);
-	else
-		PG_RETURN_NULL();
+	return read_text_file(convert_and_check_filename(filename_t),
+						  seek_offset, bytes_to_read, missing_ok);
 }
 
 /*
  * Read a section of a file, returning it as bytea
+ *
+ * Parameters are interpreted the same as pg_read_file_common().
  */
-Datum
-pg_read_binary_file(PG_FUNCTION_ARGS)
+static bytea *
+pg_read_binary_file_common(text *filename_t,
+						   int64 seek_offset, int64 bytes_to_read,
+						   bool read_to_eof, bool missing_ok)
 {
-	text	   *filename_t = PG_GETARG_TEXT_PP(0);
-	int64		seek_offset = 0;
-	int64		bytes_to_read = -1;
-	bool		missing_ok = false;
-	char	   *filename;
-	bytea	   *result;
+	if (read_to_eof)
+		Assert(bytes_to_read == -1);
+	else if (bytes_to_read < 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+				 errmsg("requested length cannot be negative")));
 
-	/* handle optional arguments */
-	if (PG_NARGS() >= 3)
-	{
-		seek_offset = PG_GETARG_INT64(1);
-		bytes_to_read = PG_GETARG_INT64(2);
-
-		if (bytes_to_read < 0)
-			ereport(ERROR,
-					(errcode(ERRCODE_INVALID_PARAMETER_VALUE),
-					 errmsg("requested length cannot be negative")));
-	}
-	if (PG_NARGS() >= 4)
-		missing_ok = PG_GETARG_BOOL(3);
-
-	filename = convert_and_check_filename(filename_t);
-
-	result = read_binary_file(filename, seek_offset,
-							  bytes_to_read, missing_ok);
-	if (result)
-		PG_RETURN_BYTEA_P(result);
-	else
-		PG_RETURN_NULL();
+	return read_binary_file(convert_and_check_filename(filename_t),
+							seek_offset, bytes_to_read, missing_ok);
 }
 
 
 /*
- * Wrapper functions for the 1 and 3 argument variants of pg_read_file_v2()
- * and pg_read_binary_file().
+ * Wrapper functions for the variants of SQL functions pg_read_file() and
+ * pg_read_binary_file().
  *
  * These are necessary to pass the sanity check in opr_sanity, which checks
  * that all built-in functions that share the implementing C function take
@@ -366,25 +330,126 @@ pg_read_binary_file(PG_FUNCTION_ARGS)
 Datum
 pg_read_file_off_len(PG_FUNCTION_ARGS)
 {
-	return pg_read_file_v2(fcinfo);
+	text	   *filename_t = PG_GETARG_TEXT_PP(0);
+	int64		seek_offset = PG_GETARG_INT64(1);
+	int64		bytes_to_read = PG_GETARG_INT64(2);
+	text	   *ret;
+
+	ret = pg_read_file_common(filename_t, seek_offset, bytes_to_read,
+							  false, false);
+	if (!ret)
+		PG_RETURN_NULL();
+
+	PG_RETURN_TEXT_P(ret);
+}
+
+Datum
+pg_read_file_off_len_missing(PG_FUNCTION_ARGS)
+{
+	text	   *filename_t = PG_GETARG_TEXT_PP(0);
+	int64		seek_offset = PG_GETARG_INT64(1);
+	int64		bytes_to_read = PG_GETARG_INT64(2);
+	bool		missing_ok = PG_GETARG_BOOL(3);
+	text	   *ret;
+
+	ret = pg_read_file_common(filename_t, seek_offset, bytes_to_read,
+							  false, missing_ok);
+
+	if (!ret)
+		PG_RETURN_NULL();
+
+	PG_RETURN_TEXT_P(ret);
 }
 
 Datum
 pg_read_file_all(PG_FUNCTION_ARGS)
 {
-	return pg_read_file_v2(fcinfo);
+	text	   *filename_t = PG_GETARG_TEXT_PP(0);
+	text	   *ret;
+
+	ret = pg_read_file_common(filename_t, 0, -1, true, false);
+
+	if (!ret)
+		PG_RETURN_NULL();
+
+	PG_RETURN_TEXT_P(ret);
+}
+
+Datum
+pg_read_file_all_missing(PG_FUNCTION_ARGS)
+{
+	text	   *filename_t = PG_GETARG_TEXT_PP(0);
+	bool		missing_ok = PG_GETARG_BOOL(1);
+	text	   *ret;
+
+	ret = pg_read_file_common(filename_t, 0, -1, true, missing_ok);
+
+	if (!ret)
+		PG_RETURN_NULL();
+
+	PG_RETURN_TEXT_P(ret);
 }
 
 Datum
 pg_read_binary_file_off_len(PG_FUNCTION_ARGS)
 {
-	return pg_read_binary_file(fcinfo);
+	text	   *filename_t = PG_GETARG_TEXT_PP(0);
+	int64		seek_offset = PG_GETARG_INT64(1);
+	int64		bytes_to_read = PG_GETARG_INT64(2);
+	text	   *ret;
+
+	ret = pg_read_binary_file_common(filename_t, seek_offset, bytes_to_read,
+									 false, false);
+	if (!ret)
+		PG_RETURN_NULL();
+
+	PG_RETURN_BYTEA_P(ret);
+}
+
+Datum
+pg_read_binary_file_off_len_missing(PG_FUNCTION_ARGS)
+{
+	text	   *filename_t = PG_GETARG_TEXT_PP(0);
+	int64		seek_offset = PG_GETARG_INT64(1);
+	int64		bytes_to_read = PG_GETARG_INT64(2);
+	bool		missing_ok = PG_GETARG_BOOL(3);
+	text	   *ret;
+
+	ret = pg_read_binary_file_common(filename_t, seek_offset, bytes_to_read,
+									 false, missing_ok);
+	if (!ret)
+		PG_RETURN_NULL();
+
+	PG_RETURN_BYTEA_P(ret);
 }
 
 Datum
 pg_read_binary_file_all(PG_FUNCTION_ARGS)
 {
-	return pg_read_binary_file(fcinfo);
+	text	   *filename_t = PG_GETARG_TEXT_PP(0);
+	text	   *ret;
+
+	ret = pg_read_binary_file_common(filename_t, 0, -1, true, false);
+
+	if (!ret)
+		PG_RETURN_NULL();
+
+	PG_RETURN_BYTEA_P(ret);
+}
+
+Datum
+pg_read_binary_file_all_missing(PG_FUNCTION_ARGS)
+{
+	text	   *filename_t = PG_GETARG_TEXT_PP(0);
+	bool		missing_ok = PG_GETARG_BOOL(1);
+	text	   *ret;
+
+	ret = pg_read_binary_file_common(filename_t, 0, -1, true, missing_ok);
+
+	if (!ret)
+		PG_RETURN_NULL();
+
+	PG_RETURN_BYTEA_P(ret);
 }
 
 /*
@@ -482,12 +547,8 @@ pg_ls_dir(PG_FUNCTION_ARGS)
 	char	   *location;
 	bool		missing_ok = false;
 	bool		include_dot_dirs = false;
-	bool		randomAccess;
-	TupleDesc	tupdesc;
-	Tuplestorestate *tupstore;
 	DIR		   *dirdesc;
 	struct dirent *de;
-	MemoryContext oldcontext;
 
 	location = convert_and_check_filename(PG_GETARG_TEXT_PP(0));
 
@@ -500,29 +561,7 @@ pg_ls_dir(PG_FUNCTION_ARGS)
 			include_dot_dirs = PG_GETARG_BOOL(2);
 	}
 
-	/* check to see if caller supports us returning a tuplestore */
-	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("set-valued function called in context that cannot accept a set")));
-	if (!(rsinfo->allowedModes & SFRM_Materialize))
-		ereport(ERROR,
-				(errcode(ERRCODE_SYNTAX_ERROR),
-				 errmsg("materialize mode required, but it is not allowed in this context")));
-
-	/* The tupdesc and tuplestore must be created in ecxt_per_query_memory */
-	oldcontext = MemoryContextSwitchTo(rsinfo->econtext->ecxt_per_query_memory);
-
-	tupdesc = CreateTemplateTupleDesc(1);
-	TupleDescInitEntry(tupdesc, (AttrNumber) 1, "pg_ls_dir", TEXTOID, -1, 0);
-
-	randomAccess = (rsinfo->allowedModes & SFRM_Materialize_Random) != 0;
-	tupstore = tuplestore_begin_heap(randomAccess, false, work_mem);
-	rsinfo->returnMode = SFRM_Materialize;
-	rsinfo->setResult = tupstore;
-	rsinfo->setDesc = tupdesc;
-
-	MemoryContextSwitchTo(oldcontext);
+	InitMaterializedSRF(fcinfo, MAT_SRF_USE_EXPECTED_DESC);
 
 	dirdesc = AllocateDir(location);
 	if (!dirdesc)
@@ -546,7 +585,8 @@ pg_ls_dir(PG_FUNCTION_ARGS)
 		values[0] = CStringGetTextDatum(de->d_name);
 		nulls[0] = false;
 
-		tuplestore_putvalues(tupstore, tupdesc, values, nulls);
+		tuplestore_putvalues(rsinfo->setResult, rsinfo->setDesc,
+							 values, nulls);
 	}
 
 	FreeDir(dirdesc);
@@ -576,36 +616,10 @@ static Datum
 pg_ls_dir_files(FunctionCallInfo fcinfo, const char *dir, bool missing_ok)
 {
 	ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
-	bool		randomAccess;
-	TupleDesc	tupdesc;
-	Tuplestorestate *tupstore;
 	DIR		   *dirdesc;
 	struct dirent *de;
-	MemoryContext oldcontext;
 
-	/* check to see if caller supports us returning a tuplestore */
-	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
-		ereport(ERROR,
-				(errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-				 errmsg("set-valued function called in context that cannot accept a set")));
-	if (!(rsinfo->allowedModes & SFRM_Materialize))
-		ereport(ERROR,
-				(errcode(ERRCODE_SYNTAX_ERROR),
-				 errmsg("materialize mode required, but it is not allowed in this context")));
-
-	/* The tupdesc and tuplestore must be created in ecxt_per_query_memory */
-	oldcontext = MemoryContextSwitchTo(rsinfo->econtext->ecxt_per_query_memory);
-
-	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
-		elog(ERROR, "return type must be a row type");
-
-	randomAccess = (rsinfo->allowedModes & SFRM_Materialize_Random) != 0;
-	tupstore = tuplestore_begin_heap(randomAccess, false, work_mem);
-	rsinfo->returnMode = SFRM_Materialize;
-	rsinfo->setResult = tupstore;
-	rsinfo->setDesc = tupdesc;
-
-	MemoryContextSwitchTo(oldcontext);
+	InitMaterializedSRF(fcinfo, 0);
 
 	/*
 	 * Now walk the directory.  Note that we must do this within a single SRF
@@ -653,7 +667,7 @@ pg_ls_dir_files(FunctionCallInfo fcinfo, const char *dir, bool missing_ok)
 		values[2] = TimestampTzGetDatum(time_t_to_timestamptz(attrib.st_mtime));
 		memset(nulls, 0, sizeof(nulls));
 
-		tuplestore_putvalues(tupstore, tupdesc, values, nulls);
+		tuplestore_putvalues(rsinfo->setResult, rsinfo->setDesc, values, nulls);
 	}
 
 	FreeDir(dirdesc);
@@ -719,4 +733,47 @@ Datum
 pg_ls_archive_statusdir(PG_FUNCTION_ARGS)
 {
 	return pg_ls_dir_files(fcinfo, XLOGDIR "/archive_status", true);
+}
+
+/*
+ * Function to return the list of files in the pg_logical/snapshots directory.
+ */
+Datum
+pg_ls_logicalsnapdir(PG_FUNCTION_ARGS)
+{
+	return pg_ls_dir_files(fcinfo, "pg_logical/snapshots", false);
+}
+
+/*
+ * Function to return the list of files in the pg_logical/mappings directory.
+ */
+Datum
+pg_ls_logicalmapdir(PG_FUNCTION_ARGS)
+{
+	return pg_ls_dir_files(fcinfo, "pg_logical/mappings", false);
+}
+
+/*
+ * Function to return the list of files in the pg_replslot/<replication_slot>
+ * directory.
+ */
+Datum
+pg_ls_replslotdir(PG_FUNCTION_ARGS)
+{
+	text	   *slotname_t;
+	char		path[MAXPGPATH];
+	char	   *slotname;
+
+	slotname_t = PG_GETARG_TEXT_PP(0);
+
+	slotname = text_to_cstring(slotname_t);
+
+	if (!SearchNamedReplicationSlot(slotname, true))
+		ereport(ERROR,
+				(errcode(ERRCODE_UNDEFINED_OBJECT),
+				 errmsg("replication slot \"%s\" does not exist",
+						slotname)));
+
+	snprintf(path, sizeof(path), "pg_replslot/%s", slotname);
+	return pg_ls_dir_files(fcinfo, path, false);
 }

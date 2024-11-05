@@ -3,7 +3,7 @@
 #include "flat_page_conf.h"
 #include "flat_page_label.h"
 #include "flat_page_data.h"
-#include "flat_page_index.h"
+#include "flat_page_flat_index.h"
 #include "flat_part_iface.h"
 #include "flat_part_pinout.h"
 #include "flat_row_state.h"
@@ -552,14 +552,14 @@ namespace NPage {
     };
 
 
-    class TIndexWriter {
+    class TFlatIndexWriter {
     public:
-        TIndexWriter(TIntrusiveConstPtr<TPartScheme> scheme, const TConf &conf, TGroupId groupId)
+        TFlatIndexWriter(TIntrusiveConstPtr<TPartScheme> scheme, const TConf &conf, TGroupId groupId)
             : Scheme(std::move(scheme))
             , MinSize(conf.Groups[groupId.Index].IndexMin)
             , GroupId(groupId)
             , GroupInfo(Scheme->GetLayout(groupId))
-            , DataPageBuilder(EPage::Index, groupId.IsMain() ? 3 : 2, false, 0 /* no extra data before block */)
+            , DataPageBuilder(EPage::FlatIndex, groupId.IsMain() ? 3 : 2, false, 0 /* no extra data before block */)
         {
 
         }
@@ -573,7 +573,7 @@ namespace NPage {
         {
             Y_ABORT_UNLESS(key.size() == GroupInfo.KeyTypes.size());
 
-            TPgSize ret = TPgSizeOf<NPage::TIndex::TRecord>::Value;
+            TPgSize ret = TPgSizeOf<NPage::TFlatIndex::TRecord>::Value;
             ret += sizeof(TPgSize);
 
             ret += GroupInfo.IdxRecFixedSize;
@@ -611,12 +611,12 @@ namespace NPage {
         {
             DataPageBuilder.PushOffset(recordSize);
 
-            auto &rec = DataPageBuilder.Place<NPage::TIndex::TRecord>();
+            auto &rec = DataPageBuilder.Place<NPage::TFlatIndex::TRecord>();
             rec.SetRowId(row);
             rec.SetPageId(page);
 
             for (const auto &info: GroupInfo.ColsKeyIdx) {
-                DataPageBuilder.Place<NPage::TIndex::TItem>().Null = true;
+                DataPageBuilder.Place<NPage::TFlatIndex::TItem>().Null = true;
                 DataPageBuilder.Zero(info.FixedSize);
             }
 

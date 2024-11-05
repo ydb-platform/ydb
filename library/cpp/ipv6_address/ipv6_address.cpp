@@ -118,6 +118,7 @@ TIpv6Address TIpv6Address::FromString(TStringBuf str) noexcept {
 TString TIpv6Address::ToString(bool* ok) const noexcept {
     return ToString(true, ok);
 }
+
 TString TIpv6Address::ToString(bool PrintScopeId, bool* ok) const noexcept {
     TString result;
     bool isOk = true;
@@ -271,14 +272,17 @@ IOutputStream& operator<<(IOutputStream& out, const TIpv6Address& ipv6Address) n
 }
 
 TString THostAddressAndPort::ToString() const noexcept {
-    TStringStream Str;
-    Str << *this;
-    return Str.Str();
+    return ToString({});
 }
 
-IOutputStream& operator<<(IOutputStream& Out, const THostAddressAndPort& HostAddressAndPort) noexcept {
-    Out << HostAddressAndPort.Ip << ":" << HostAddressAndPort.Port;
-    return Out;
+TString THostAddressAndPort::ToString(THostAddressAndPortPrintOptions options) const noexcept {
+    bool isBrackets = Ip.IsIpv6();
+    return TString::Join(
+        isBrackets ? "[" : "",
+        Ip.ToString(options.PrintScopeId),
+        isBrackets ? "]:" : ":",
+        ::ToString(Port)
+    );
 }
 
 namespace {

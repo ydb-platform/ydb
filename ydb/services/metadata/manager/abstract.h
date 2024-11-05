@@ -14,10 +14,24 @@
 
 #include <library/cpp/threading/future/core/future.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/yql/sql/settings/translation_settings.h>
 
 namespace NKikimr::NMetadata::NModifications {
 
 using TOperationParsingResult = TConclusion<NInternal::TTableRecord>;
+
+class TAlterOperationContext {
+private:
+    YDB_READONLY_DEF(TString, SessionId);
+    YDB_READONLY_DEF(TString, TransactionId);
+    YDB_READONLY_DEF(NInternal::TTableRecords, RestoreObjectIds);
+public:
+    TAlterOperationContext(const TString& sessionId, const TString& transactionId, const NInternal::TTableRecords& RestoreObjectIds)
+        : SessionId(sessionId)
+        , TransactionId(transactionId)
+        , RestoreObjectIds(RestoreObjectIds) {
+        }
+};
 
 class TColumnInfo {
 private:
@@ -62,8 +76,10 @@ public:
     private:
         YDB_ACCESSOR_DEF(std::optional<NACLib::TUserToken>, UserToken);
         YDB_ACCESSOR_DEF(TString, Database);
+        YDB_ACCESSOR_DEF(TString, DatabaseId);
         using TActorSystemPtr = TActorSystem*;
         YDB_ACCESSOR_DEF(TActorSystemPtr, ActorSystem);
+        YDB_ACCESSOR_DEF(NSQLTranslation::TTranslationSettings, TranslationSettings);
     };
 
     class TInternalModificationContext {
@@ -132,14 +148,14 @@ protected:
         TInternalModificationContext& context) const = 0;
     virtual void DoPrepareObjectsBeforeModification(std::vector<TObject>&& patchedObjects,
         typename IAlterPreparationController<TObject>::TPtr controller,
-        const TInternalModificationContext& context) const = 0;
+        const TInternalModificationContext& context, const TAlterOperationContext& alterContext) const = 0;
 public:
     using TPtr = std::shared_ptr<IObjectOperationsManager<TObject>>;
 
     TOperationParsingResult BuildPatchFromSettings(const NYql::TObjectSettingsImpl& settings,
         IOperationsManager::TInternalModificationContext& context) const {
         TOperationParsingResult result = DoBuildPatchFromSettings(settings, context);
-        if (result) {
+        if (result.IsSuccess()) {
             if (!settings.GetFeaturesExtractor().IsFinished()) {
                 return TConclusionStatus::Fail("undefined params: " + settings.GetFeaturesExtractor().GetRemainedParamsString());
             }
@@ -149,8 +165,8 @@ public:
 
     void PrepareObjectsBeforeModification(std::vector<TObject>&& patchedObjects,
         typename NModifications::IAlterPreparationController<TObject>::TPtr controller,
-        const TInternalModificationContext& context) const {
-        return DoPrepareObjectsBeforeModification(std::move(patchedObjects), controller, context);
+        const TInternalModificationContext& context, const TAlterOperationContext& alterContext) const {
+        return DoPrepareObjectsBeforeModification(std::move(patchedObjects), controller, context, alterContext);
     }
 };
 

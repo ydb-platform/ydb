@@ -144,6 +144,7 @@ TFollowerTabletInfo& TLeaderTabletInfo::AddFollower(TFollowerGroup& followerGrou
     } else {
         follower.Id = followerId;
     }
+    follower.NodeFilter = followerGroup.NodeFilter;
     Hive.UpdateCounterTabletsTotal(+1);
     Hive.UpdateDomainTabletsTotal(ObjectDomain, +1);
     return follower;
@@ -337,15 +338,15 @@ const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLe
     return nullptr;
 }
 
-TString TLeaderTabletInfo::GetChannelStoragePoolName(const TTabletChannelInfo& channel) {
+TString TLeaderTabletInfo::GetChannelStoragePoolName(const TTabletChannelInfo& channel) const {
     return channel.StoragePool.empty() ? DEFAULT_STORAGE_POOL_NAME : channel.StoragePool;
 }
 
-TString TLeaderTabletInfo::GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel) {
+TString TLeaderTabletInfo::GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel) const {
     return channel.PoolKind.empty() ? DEFAULT_STORAGE_POOL_NAME : channel.PoolKind;
 }
 
-TString TLeaderTabletInfo::GetChannelStoragePoolName(ui32 channelId) {
+TString TLeaderTabletInfo::GetChannelStoragePoolName(ui32 channelId) const {
     if (BoundChannels.size() > channelId) {
         return BoundChannels[channelId].GetStoragePoolName();
     }
@@ -355,7 +356,7 @@ TString TLeaderTabletInfo::GetChannelStoragePoolName(ui32 channelId) {
     return DEFAULT_STORAGE_POOL_NAME;
 }
 
-TStoragePoolInfo& TLeaderTabletInfo::GetStoragePool(ui32 channelId) {
+TStoragePoolInfo& TLeaderTabletInfo::GetStoragePool(ui32 channelId) const {
     TStoragePoolInfo& storagePool = Hive.GetStoragePool(GetChannelStoragePoolName(channelId));
     return storagePool;
 }
@@ -364,6 +365,26 @@ void TLeaderTabletInfo::ActualizeTabletStatistics(TInstant now) {
     TTabletInfo::ActualizeTabletStatistics(now);
     for (TTabletInfo& follower : Followers) {
         follower.ActualizeTabletStatistics(now);
+    }
+}
+
+void TLeaderTabletInfo::RestoreDeletedHistory(TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+    while (!DeletedHistory.empty()) {
+        const auto& entry = DeletedHistory.front();
+        if (entry.Channel >= TabletStorageInfo->Channels.size()) {
+            continue;
+        }
+        TabletStorageInfo->Channels[entry.Channel].History.push_back(entry.Entry);
+        db.Table<Schema::TabletChannelGen>().Key(Id, entry.Channel, entry.Entry.FromGeneration).Update<Schema::TabletChannelGen::DeletedAtGeneration>(0);
+        DeletedHistory.pop();
+    }
+
+    for (auto& channel : TabletStorageInfo->Channels) {
+        using TEntry = decltype(channel.History)::value_type;
+        std::sort(channel.History.begin(), channel.History.end(), [] (const TEntry& lhs, const TEntry& rhs) {
+            return lhs.FromGeneration < rhs.FromGeneration;
+        });
     }
 }
 

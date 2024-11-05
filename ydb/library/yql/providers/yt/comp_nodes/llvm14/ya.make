@@ -1,10 +1,5 @@
 LIBRARY()
 
-OWNER(
-    g:yql
-    g:yql_ydb_core
-)
-
 NO_COMPILER_WARNINGS()
 
 PEERDIR(

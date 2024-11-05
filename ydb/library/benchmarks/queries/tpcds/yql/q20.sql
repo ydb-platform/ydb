@@ -8,16 +8,16 @@ select  item.i_item_id
        ,item.i_class
        ,item.i_current_price
        ,sum(cs_ext_sales_price) as itemrevenue
-       ,sum(cs_ext_sales_price)*100/sum(sum(cs_ext_sales_price)) over
+       ,$upscale(sum(cs_ext_sales_price)*100)/sum($upscale(sum(cs_ext_sales_price))) over
            (partition by item.i_class) as revenueratio
  from	{{catalog_sales}} as catalog_sales
      cross join {{item}} as item
      cross join {{date_dim}} as date_dim
  where cs_item_sk = i_item_sk
-   and i_category in ('Shoes', 'Electronics', 'Children')
+   and i_category in ('Sports', 'Books', 'Home')
    and cs_sold_date_sk = d_date_sk
- and cast(d_date as date) between cast('2001-03-14' as date)
- 				and (cast('2001-03-14' as date) + DateTime::IntervalFromDays(30))
+ and cast(d_date as date) between cast('1999-02-22' as date)
+ 				and (cast('1999-02-22' as date) + DateTime::IntervalFromDays(30))
  group by item.i_item_id
          ,item.i_item_desc
          ,item.i_category

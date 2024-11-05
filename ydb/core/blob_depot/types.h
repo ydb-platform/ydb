@@ -117,6 +117,10 @@ namespace NKikimr::NBlobDepot {
                 type == EBlobType::VG_FOOTER_BLOB || type == EBlobType::VG_GC_BLOB);
             return cookie >> typeBits;
         }
+
+        explicit operator TGenStep() const {
+            return {Generation, Step};
+        }
     };
 
     class TGivenIdRange {
@@ -194,65 +198,6 @@ namespace NKikimr::NBlobDepot {
         }
         return true;
     }
-
-    class TGenStep {
-        ui64 Value = 0;
-
-    public:
-        TGenStep() = default;
-        TGenStep(const TGenStep&) = default;
-        TGenStep &operator=(const TGenStep& other) = default;
-
-        explicit TGenStep(ui64 value)
-            : Value(value)
-        {}
-
-        TGenStep(ui32 gen, ui32 step)
-            : Value(ui64(gen) << 32 | step)
-        {}
-
-        explicit TGenStep(const TLogoBlobID& id)
-            : TGenStep(id.Generation(), id.Step())
-        {}
-        
-        explicit TGenStep(const TBlobSeqId& id)
-            : TGenStep(id.Generation, id.Step)
-        {}
-
-        explicit operator ui64() const {
-            return Value;
-        }
-
-        ui32 Generation() const {
-            return Value >> 32;
-        }
-
-        ui32 Step() const {
-            return Value;
-        }
-
-        void Output(IOutputStream& s) const {
-            s << Generation() << ":" << Step();
-        }
-
-        TString ToString() const {
-            TStringStream s;
-            Output(s);
-            return s.Str();
-        }
-
-        TGenStep Previous() const {
-            Y_ABORT_UNLESS(Value);
-            return TGenStep(Value - 1);
-        }
-
-        friend bool operator ==(const TGenStep& x, const TGenStep& y) { return x.Value == y.Value; }
-        friend bool operator !=(const TGenStep& x, const TGenStep& y) { return x.Value != y.Value; }
-        friend bool operator < (const TGenStep& x, const TGenStep& y) { return x.Value <  y.Value; }
-        friend bool operator <=(const TGenStep& x, const TGenStep& y) { return x.Value <= y.Value; }
-        friend bool operator > (const TGenStep& x, const TGenStep& y) { return x.Value >  y.Value; }
-        friend bool operator >=(const TGenStep& x, const TGenStep& y) { return x.Value >= y.Value; }
-    };
 
 #define BDEV(MARKER, TEXT, ...) \
     do { \

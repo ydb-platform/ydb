@@ -7,6 +7,8 @@
 
 #include <yt/yt/client/formats/parser.h>
 
+#include <yt/yt/library/decimal/decimal.h>
+
 #include <library/cpp/yt/memory/chunked_output_stream.h>
 
 #include <util/stream/buffer.h>
@@ -19,10 +21,13 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/api.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/util/decimal.h>
+
 namespace NYT::NFormats {
 
 using namespace NTableClient;
 using TUnversionedRowValues = std::vector<NTableClient::TUnversionedValue>;
+using namespace NDecimal;
 
 namespace {
 
@@ -31,7 +36,7 @@ namespace {
 void ThrowOnError(const arrow::Status& status)
 {
     if (!status.ok()) {
-        THROW_ERROR_EXCEPTION("Arrow error occurred: %Qv", status.message());
+        THROW_ERROR_EXCEPTION("Arrow error [%v]: %Qv", status.CodeAsString(), status.message());
     }
 }
 
@@ -158,6 +163,20 @@ public:
         return ParseNull();
     }
 
+    arrow::Status Visit(const arrow::Decimal128Type& type) override
+    {
+        return ParseStringLikeArray<arrow::Decimal128Array>([&] (const TStringBuf& value, i64 columnId) {
+            return MakeDecimalBinaryValue<TDecimal::TValue128>(value, columnId, type.precision());
+        });
+    }
+
+    arrow::Status Visit(const arrow::Decimal256Type& type) override
+    {
+        return ParseStringLikeArray<arrow::Decimal256Array>([&] (const TStringBuf& value, i64 columnId) {
+            return MakeDecimalBinaryValue<TDecimal::TValue256>(value, columnId, type.precision());
+        });
+    }
+
 private:
     const i64 ColumnId_;
 
@@ -209,7 +228,7 @@ private:
     }
 
     template <typename ArrayType>
-    arrow::Status ParseStringLikeArray()
+    arrow::Status ParseStringLikeArray(auto makeUnversionedValueFunc)
     {
         auto array = std::static_pointer_cast<ArrayType>(Array_);
         for (int rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
@@ -225,10 +244,21 @@ private:
                 BufferForStringLikeValues_->Advance(element.size());
                 auto value = TStringBuf(buffer, element.size());
 
-                (*RowValues_)[rowIndex] = MakeUnversionedStringValue(value, ColumnId_);
+                (*RowValues_)[rowIndex] = makeUnversionedValueFunc(value, ColumnId_);
             }
         }
         return arrow::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow::Status ParseStringLikeArray()
+    {
+        // Note that MakeUnversionedStringValue actually has third argument in its signature,
+        // which leads to a "too few arguments" in the point of its invocation if we try to pass
+        // it directly to ParseStringLikeArray.
+        return ParseStringLikeArray<ArrayType>([] (const TStringBuf& value, i64 columnId) {
+            return MakeUnversionedStringValue(value, columnId);
+        });
     }
 
     arrow::Status ParseBoolean()
@@ -251,6 +281,32 @@ private:
             (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
         }
         return arrow::Status::OK();
+    }
+
+    template <class TUnderlyingValueType>
+    TUnversionedValue MakeDecimalBinaryValue(const TStringBuf& value, i64 columnId, int precision)
+    {
+        // NB: Arrow wire representation of Decimal128 is little-endian and (obviously) 128 bit,
+        // while YT in-memory representation of Decimal is big-endian, variadic-length of either 32 bit, 64 bit or 128 bit,
+        // and MSB-flipped to ensure lexical sorting order.
+        // Representation of Decimal256 is similar, but only 256 bits.
+        TUnderlyingValueType decimalValue;
+        YT_VERIFY(value.size() == sizeof(decimalValue));
+        std::memcpy(&decimalValue, value.data(), value.size());
+
+        const auto maxByteCount = sizeof(decimalValue);
+        char* buffer = BufferForStringLikeValues_->Preallocate(maxByteCount);
+        TStringBuf decimalBinary;
+        if constexpr (std::is_same_v<TUnderlyingValueType, TDecimal::TValue128>) {
+            decimalBinary = TDecimal::WriteBinary128Variadic(precision, decimalValue, buffer, maxByteCount);
+        } else if constexpr (std::is_same_v<TUnderlyingValueType, TDecimal::TValue256>) {
+            decimalBinary = TDecimal::WriteBinary256(precision, decimalValue, buffer, maxByteCount);
+        } else {
+            static_assert(std::is_same_v<TUnderlyingValueType, TDecimal::TValue256>, "Unexpected decimal type");
+        }
+        BufferForStringLikeValues_->Advance(decimalBinary.size());
+
+        return MakeUnversionedStringValue(decimalBinary, columnId);
     }
 };
 
@@ -552,12 +608,14 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 void CheckArrowType(
+    auto ytTypeOrMetatype,
     const std::shared_ptr<arrow::DataType>& arrowType,
     std::initializer_list<arrow::Type::type> allowedTypes)
 {
     if (std::find(allowedTypes.begin(), allowedTypes.end(), arrowType->id()) == allowedTypes.end()) {
-        THROW_ERROR_EXCEPTION("Unexpected arrow type %Qv",
-            arrowType->name());
+        THROW_ERROR_EXCEPTION("Unexpected arrow type %Qv for YT type or metatype %Qlv",
+            arrowType->name(),
+            ytTypeOrMetatype);
     }
 }
 
@@ -573,6 +631,7 @@ void CheckMatchingArrowTypes(
 
         case ESimpleLogicalValueType::Interval:
             CheckArrowType(
+                columnType,
                 column->type(),
                 {
                     arrow::Type::INT8,
@@ -597,6 +656,7 @@ void CheckMatchingArrowTypes(
         case ESimpleLogicalValueType::Datetime:
         case ESimpleLogicalValueType::Timestamp:
             CheckArrowType(
+                columnType,
                 column->type(),
                 {
                     arrow::Type::UINT8,
@@ -611,6 +671,7 @@ void CheckMatchingArrowTypes(
         case ESimpleLogicalValueType::Json:
         case ESimpleLogicalValueType::Utf8:
             CheckArrowType(
+                columnType,
                 column->type(),
                 {
                     arrow::Type::STRING,
@@ -618,13 +679,16 @@ void CheckMatchingArrowTypes(
                     arrow::Type::LARGE_STRING,
                     arrow::Type::LARGE_BINARY,
                     arrow::Type::FIXED_SIZE_BINARY,
-                    arrow::Type::DICTIONARY
+                    arrow::Type::DICTIONARY,
+                    arrow::Type::DECIMAL128,
+                    arrow::Type::DECIMAL256,
                 });
             break;
 
         case ESimpleLogicalValueType::Float:
         case ESimpleLogicalValueType::Double:
             CheckArrowType(
+                columnType,
                 column->type(),
                 {
                     arrow::Type::HALF_FLOAT,
@@ -636,12 +700,14 @@ void CheckMatchingArrowTypes(
 
         case ESimpleLogicalValueType::Boolean:
             CheckArrowType(
+                columnType,
                 column->type(),
                 {arrow::Type::BOOL, arrow::Type::DICTIONARY});
             break;
 
         case ESimpleLogicalValueType::Any:
             CheckArrowType(
+                columnType,
                 column->type(),
                 {
                     arrow::Type::INT8,
@@ -679,6 +745,7 @@ void CheckMatchingArrowTypes(
         case ESimpleLogicalValueType::Null:
         case ESimpleLogicalValueType::Void:
             CheckArrowType(
+                columnType,
                 column->type(),
                 {
                     arrow::Type::NA,
@@ -688,6 +755,7 @@ void CheckMatchingArrowTypes(
 
         case ESimpleLogicalValueType::Uuid:
             CheckArrowType(
+                columnType,
                 column->type(),
                 {
                     arrow::Type::STRING,
@@ -698,6 +766,13 @@ void CheckMatchingArrowTypes(
                     arrow::Type::DICTIONARY
                 });
             break;
+
+        case ESimpleLogicalValueType::Date32:
+        case ESimpleLogicalValueType::Datetime64:
+        case ESimpleLogicalValueType::Timestamp64:
+        case ESimpleLogicalValueType::Interval64:
+            THROW_ERROR_EXCEPTION("Unexpected column type %Qv",
+                columnType);
     }
 }
 
@@ -742,9 +817,10 @@ void PrepareArrayForComplexType(
     int columnIndex,
     int columnId)
 {
-    switch (denullifiedLogicalType->GetMetatype()) {
+    switch (auto metatype = denullifiedLogicalType->GetMetatype()) {
         case ELogicalMetatype::List:
             CheckArrowType(
+                metatype,
                 column->type(),
                 {
                     arrow::Type::LIST,
@@ -754,6 +830,7 @@ void PrepareArrayForComplexType(
 
         case ELogicalMetatype::Dict:
             CheckArrowType(
+                metatype,
                 column->type(),
                 {
                     arrow::Type::MAP,
@@ -763,39 +840,56 @@ void PrepareArrayForComplexType(
 
         case ELogicalMetatype::Struct:
             CheckArrowType(
+                metatype,
                 column->type(),
                 {
                     arrow::Type::STRUCT,
                     arrow::Type::BINARY
                 });
             break;
+
         case ELogicalMetatype::Decimal:
+            CheckArrowType(
+                metatype,
+                column->type(),
+                {
+                    arrow::Type::DECIMAL128,
+                    arrow::Type::DECIMAL256
+                });
+            break;
+
         case ELogicalMetatype::Optional:
         case ELogicalMetatype::Tuple:
         case ELogicalMetatype::VariantTuple:
         case ELogicalMetatype::VariantStruct:
-            CheckArrowType(column->type(), {arrow::Type::BINARY});
+            CheckArrowType(metatype, column->type(), {arrow::Type::BINARY});
             break;
 
         default:
             THROW_ERROR_EXCEPTION("Unexpected arrow type in complex type %Qv", column->type()->name());
     }
 
-    if (column->type()->id() == arrow::Type::BINARY) {
+    if (column->type()->id() == arrow::Type::BINARY ||
+        column->type()->id() == arrow::Type::DECIMAL128 ||
+        column->type()->id() == arrow::Type::DECIMAL256)
+    {
         TUnversionedRowValues stringValues(rowsValues[columnIndex].size());
         TArraySimpleVisitor visitor(columnId, column, bufferForStringLikeValues, &stringValues);
         ThrowOnError(column->type()->Accept(&visitor));
         for (int offset = 0; offset < std::ssize(rowsValues[columnIndex]); offset++) {
             if (column->IsNull(offset)) {
                 rowsValues[columnIndex][offset] = MakeUnversionedNullValue(columnId);
+            } else if (column->type()->id() == arrow::Type::DECIMAL128 || column->type()->id() == arrow::Type::DECIMAL256) {
+                rowsValues[columnIndex][offset] = MakeUnversionedStringValue(stringValues[offset].AsStringBuf(), columnId);
             } else {
+                // TODO(max): is it even correct? Binary is not necessarily a correct YSON...
                 rowsValues[columnIndex][offset] = MakeUnversionedCompositeValue(stringValues[offset].AsStringBuf(), columnId);
             }
         }
     } else {
         for (int rowIndex = 0; rowIndex < std::ssize(rowsValues[columnIndex]); rowIndex++) {
             if (column->IsNull(rowIndex)) {
-                rowsValues[rowIndex][columnIndex] = MakeUnversionedNullValue(columnId);
+                rowsValues[columnIndex][rowIndex] = MakeUnversionedNullValue(columnId);
             } else {
                 TBuffer valueBuffer;
                 TBufferOutput out(valueBuffer);
@@ -976,8 +1070,8 @@ public:
 
     void Read(TStringBuf data) override
     {
-        i64 restSize = data.Size();
-        const char* currentPtr = data.Data();
+        i64 restSize = data.size();
+        const char* currentPtr = data.data();
         while (restSize > 0) {
             i64 nextRequiredSize = Decoder_->next_required_size();
             auto currentSize = std::min(nextRequiredSize, restSize);

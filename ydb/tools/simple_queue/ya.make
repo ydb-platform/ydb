@@ -1,12 +1,11 @@
-OWNER(g:kikimr)
-PY2_PROGRAM(simple_queue)
+PY3_PROGRAM(simple_queue)
 
 PY_SRCS(
     __main__.py
 )
 
 PEERDIR(
-    contrib/python/ydb
+    ydb/public/sdk/python
     library/python/monlib
 )
 

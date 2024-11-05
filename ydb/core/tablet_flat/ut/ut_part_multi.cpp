@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TPartMulti) {
                 TPartCook(lay, { }).Add(zzz).Finish().Lone(),
             }};
 
-        TCheckIt wrap(eggs, { });
+        TCheckIter wrap(eggs, { });
 
         wrap.To(10).Has(foo).Has(bar);
         wrap.To(11).NoVal(*TSchemedCookRow(*lay).Col(555_u32, "foo", 10.));
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(TPartMulti) {
                 TPartCook(lay, { }).Add(zzz).Finish().Lone(),
             }};
 
-        TCheckReverseIt wrap(eggs, { });
+        TCheckReverseIter wrap(eggs, { });
 
         wrap.To(10).Has(foo).Has(bar);
         wrap.To(11).NoVal(*TSchemedCookRow(*lay).Col(555_u32, "foo", 10.));

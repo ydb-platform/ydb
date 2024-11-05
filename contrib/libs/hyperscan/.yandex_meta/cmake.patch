@@ -1,0 +1,7 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 83197af..297a3b3 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -203,1 +203,1 @@
+-            message(SEND_ERROR "Something went wrong determining gcc tune: -mtune=${GNUCC_ARCH} not valid")
++            set(TUNE_FLAG native)

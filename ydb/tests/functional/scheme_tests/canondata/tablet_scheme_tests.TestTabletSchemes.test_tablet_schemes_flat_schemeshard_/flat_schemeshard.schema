@@ -7,6 +7,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "TempDirOwnerActorId",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "Id",
                 "ColumnType": "Uint64"
@@ -91,6 +96,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,
@@ -356,6 +362,11 @@
                 "ColumnId": 12,
                 "ColumnName": "OwnerActorId",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "IncrementalBackupConfig",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -373,7 +384,8 @@
                     9,
                     10,
                     11,
-                    12
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1442,6 +1454,11 @@
                 "ColumnId": 31,
                 "ColumnName": "ServerlessComputeResourcesMode",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 32,
+                "ColumnName": "ColumnTableColumnsLimit",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -1478,7 +1495,8 @@
                     28,
                     29,
                     30,
-                    31
+                    31,
+                    32
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -2936,6 +2954,21 @@
                 "ColumnId": 13,
                 "ColumnName": "UserSID",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "StartTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "EndTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "PeerName",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -2954,7 +2987,10 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14,
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3190,6 +3226,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "TempDirOwnerActorId",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "OwnerPathId",
                 "ColumnType": "Uint64"
@@ -3274,6 +3315,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,
@@ -3567,6 +3609,11 @@
                 "ColumnId": 13,
                 "ColumnName": "OwnerActorId",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "IncrementalBackupConfig",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -3585,7 +3632,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4752,6 +4800,11 @@
                 "ColumnId": 33,
                 "ColumnName": "AlterMainTableTxDone",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 34,
+                "ColumnName": "CreationConfig",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -4790,7 +4843,8 @@
                     30,
                     31,
                     32,
-                    33
+                    33,
+                    34
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5683,6 +5737,21 @@
                 "ColumnId": 10,
                 "ColumnName": "UserSID",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "StartTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "EndTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "PeerName",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -5698,7 +5767,10 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11,
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5773,6 +5845,11 @@
                 "ColumnId": 10,
                 "ColumnName": "Issue",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "Permissions",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -5788,7 +5865,8 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6787,6 +6865,16 @@
                 "ColumnId": 32,
                 "ColumnName": "MemDataSize",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 33,
+                "ColumnName": "StoragePoolsStats",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 34,
+                "ColumnName": "ByKeyFilterSize",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -6824,7 +6912,9 @@
                     29,
                     30,
                     31,
-                    32
+                    32,
+                    33,
+                    34
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7253,6 +7343,11 @@
                 "ColumnId": 3,
                 "ColumnName": "QueryText",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "CapturedContext",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -7261,7 +7356,182 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1
+            }
+        }
+    },
+    {
+        "TableId": 109,
+        "TableName": "BackgroundSessions",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "ClassName",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "Identifier",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "StatusChannel",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "LogicDescription",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "Progress",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "State",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1
+            }
+        }
+    },
+    {
+        "TableId": 110,
+        "TableName": "ResourcePool",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "OwnerPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "LocalPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "AlterVersion",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "Properties",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1
+            }
+        }
+    },
+    {
+        "TableId": 111,
+        "TableName": "BackupCollection",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "OwnerPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "LocalPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "AlterVersion",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "Description",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

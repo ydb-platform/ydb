@@ -181,7 +181,20 @@ private:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
+class IBoxedValue7 : public IBoxedValue6 {
+friend struct TBoxedValueAccessor;
+private:
+    virtual bool Load2(const TUnboxedValue& state) = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
+class IBoxedValue : public IBoxedValue7 {
+protected:
+    IBoxedValue();
+};
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
 class IBoxedValue : public IBoxedValue6 {
 protected:
     IBoxedValue();
@@ -222,7 +235,7 @@ UDF_ASSERT_TYPE_SIZE(IBoxedValuePtr, 8);
 ///////////////////////////////////////////////////////////////////////////////
 struct TBoxedValueAccessor
 {
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
 
 #define METHOD_MAP(xx) \
     xx(HasFastListLength) \
@@ -266,7 +279,54 @@ struct TBoxedValueAccessor
     xx(Unused4) \
     xx(Unused5) \
     xx(Unused6) \
-    xx(WideFetch)
+    xx(WideFetch) \
+    xx(Load2)
+
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
+
+#define METHOD_MAP(xx) \
+    xx(HasFastListLength) \
+    xx(GetListLength) \
+    xx(GetEstimatedListLength) \
+    xx(GetListIterator) \
+    xx(GetListRepresentation) \
+    xx(ReverseListImpl) \
+    xx(SkipListImpl) \
+    xx(TakeListImpl) \
+    xx(ToIndexDictImpl) \
+    xx(GetDictLength) \
+    xx(GetDictIterator) \
+    xx(GetKeysIterator) \
+    xx(GetPayloadsIterator) \
+    xx(Contains) \
+    xx(Lookup) \
+    xx(GetElement) \
+    xx(GetElements) \
+    xx(Run) \
+    xx(GetResourceTag) \
+    xx(GetResource) \
+    xx(HasListItems) \
+    xx(HasDictItems) \
+    xx(GetVariantIndex) \
+    xx(GetVariantItem) \
+    xx(Fetch) \
+    xx(Skip) \
+    xx(Next) \
+    xx(NextPair) \
+    xx(Apply) \
+    xx(GetTraverseCount) \
+    xx(GetTraverseItem) \
+    xx(Save) \
+    xx(Load) \
+    xx(Push) \
+    xx(IsSortedDict) \
+    xx(Unused1) \
+    xx(Unused2) \
+    xx(Unused3) \
+    xx(Unused4) \
+    xx(Unused5) \
+    xx(Unused6) \
+    xx(WideFetch) \
 
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
 
@@ -555,6 +615,10 @@ struct TBoxedValueAccessor
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
     static inline EFetchStatus WideFetch(IBoxedValue& value, TUnboxedValue* result, ui32 width);
 #endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
+    static inline bool Load2(IBoxedValue& value, const TUnboxedValue& data);
+#endif
 };
 
 #define MAP_HANDLER(xx) template<> inline uintptr_t TBoxedValueAccessor::GetMethodPtr<TBoxedValueAccessor::EMethod::xx>() { return GetMethodPtr(&IBoxedValue::xx); }
@@ -643,6 +707,10 @@ private:
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 30)
     EFetchStatus WideFetch(TUnboxedValue* result, ui32 width) override;
 #endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
+    bool Load2(const TUnboxedValue& value) override;
+#endif
 };
 
 class TBoxedValueLink: public TBoxedValueBase
@@ -674,10 +742,37 @@ UDF_ASSERT_TYPE_SIZE(TBoxedValue, 32);
 ///////////////////////////////////////////////////////////////////////////////
 // TUnboxedValuePod
 ///////////////////////////////////////////////////////////////////////////////
+
+struct TRawEmbeddedValue {
+    char Buffer[0xE];
+    ui8 Size;
+    ui8 Meta;
+};
+
+struct TRawBoxedValue {
+    IBoxedValue* Value;
+    ui8 Reserved[7];
+    ui8 Meta;
+};
+
+struct TRawStringValue {
+    static constexpr ui32 OffsetLimit = 1 << 24;
+
+    TStringValue::TData* Value;
+    ui32 Size;
+    union {
+        struct {
+            ui8 Skip[3];
+            ui8 Meta;
+        };
+        ui32 Offset;
+    };
+};
+
 class TUnboxedValuePod
 {
 friend class TUnboxedValue;
-protected:
+public:
     enum class EMarkers : ui8 {
         Empty = 0,
         Embedded,
@@ -685,7 +780,6 @@ protected:
         Boxed,
     };
 
-public:
     inline TUnboxedValuePod() noexcept = default;
     inline ~TUnboxedValuePod() noexcept = default;
 
@@ -714,7 +808,7 @@ public:
     inline bool IsEmbedded() const { return EMarkers::Embedded == Raw.GetMarkers(); }
 
     // Data accessors
-    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
+    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result || std::is_same_v<T, NYql::NDecimal::TInt128>>>
     inline T Get() const;
     template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
     inline T GetOrDefault(T ifEmpty) const;
@@ -733,6 +827,8 @@ public:
 
     inline TStringValue AsStringValue() const;
     inline IBoxedValuePtr AsBoxed() const;
+    inline TStringValue::TData* AsRawStringValue() const;
+    inline IBoxedValue* AsRawBoxed() const;
     inline bool UniqueBoxed() const;
 
     // special values
@@ -815,6 +911,10 @@ public:
     inline EFetchStatus WideFetch(TUnboxedValue *result, ui32 width) const;
 #endif
 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
+    inline bool Load2(const TUnboxedValue& value);
+#endif
+
     inline bool TryMakeVariant(ui32 index);
 
     inline void SetTimezoneId(ui16 id);
@@ -824,29 +924,11 @@ protected:
     union TRaw {
         ui64 Halfs[2] = {0, 0};
 
-        struct {
-            char Buffer[0xE];
-            ui8 Size;
-            ui8 Meta;
-        } Embedded;
-
-        struct {
-            IBoxedValue* Value;
-            ui8 Reserved[7];
-            ui8 Meta;
-        } Boxed;
-
-        struct {
-            TStringValue::TData* Value;
-            ui32 Size;
-            union {
-                ui32 Offset;
-                struct {
-                    ui8 Skip[3];
-                    ui8 Meta;
-                };
-            };
-        } String;
+        TRawEmbeddedValue Embedded;
+        
+        TRawBoxedValue Boxed;
+        
+        TRawStringValue String;
 
         struct {
             union {
@@ -888,7 +970,7 @@ public:
     inline i32 RefCount() const noexcept;
 
     static constexpr ui32 InternalBufferSize = sizeof(TRaw::Embedded.Buffer);
-    static constexpr ui32 OffsetLimit = 1U << 24U;
+    static constexpr ui32 OffsetLimit = TRawStringValue::OffsetLimit;
 };
 
 UDF_ASSERT_TYPE_SIZE(TUnboxedValuePod, 16);
@@ -1220,6 +1302,13 @@ inline void TBoxedValueBase::Unused6() {
 inline EFetchStatus TBoxedValueBase::WideFetch(TUnboxedValue *result, ui32 width) {
     Y_UNUSED(result);
     Y_UNUSED(width);
+    Y_ABORT("Not implemented");
+}
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
+inline bool TBoxedValueBase::Load2(const TUnboxedValue& value) {
+    Y_UNUSED(value);
     Y_ABORT("Not implemented");
 }
 #endif

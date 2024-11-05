@@ -5,6 +5,7 @@
 #include "taxi_coroutine_unsafe_check.h"
 #include "taxi_dangling_config_ref_check.h"
 
+#include "ascii_compare_ignore_case_check.h"
 #include "usage_restriction_checks.h"
 
 using namespace clang::ast_matchers;
@@ -21,6 +22,7 @@ namespace clang::tidy::arcadia {
             // https://st.yandex-team.ru/IGNIETFERRO-1863
             CheckFactories.registerCheck<TypeidNameRestrictionCheck>(
                 "arcadia-typeid-name-restriction");
+            CheckFactories.registerCheck<AsciiCompareIgnoreCaseCheck>("arcadia-ascii-compare-ignorecase");
         }
     };
 

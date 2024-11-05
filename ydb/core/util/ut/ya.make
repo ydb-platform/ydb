@@ -26,7 +26,6 @@ SRCS(
     cache_ut.cpp
     circular_queue_ut.cpp
     concurrent_rw_hash_ut.cpp
-    count_min_sketch_ut.cpp
     event_priority_queue_ut.cpp
     fast_tls_ut.cpp
     fragmented_buffer_ut.cpp

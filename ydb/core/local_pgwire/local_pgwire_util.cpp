@@ -38,6 +38,14 @@ TString ColumnPrimitiveValueToString(NYdb::TValueParser& valueParser) {
             return valueParser.GetTimestamp().ToString();
         case NYdb::EPrimitiveType::Interval:
             return TStringBuilder() << valueParser.GetInterval();
+        case NYdb::EPrimitiveType::Date32:
+            return TStringBuilder() << valueParser.GetDate32();
+        case NYdb::EPrimitiveType::Datetime64:
+            return TStringBuilder() << valueParser.GetDatetime64();
+        case NYdb::EPrimitiveType::Timestamp64:
+            return TStringBuilder() << valueParser.GetTimestamp64();
+        case NYdb::EPrimitiveType::Interval64:
+            return TStringBuilder() << valueParser.GetInterval64();
         case NYdb::EPrimitiveType::TzDate:
             return valueParser.GetTzDate();
         case NYdb::EPrimitiveType::TzDatetime:

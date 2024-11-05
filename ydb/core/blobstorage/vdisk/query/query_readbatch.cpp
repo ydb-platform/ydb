@@ -44,23 +44,38 @@ namespace NKikimr {
         if (QueryPartId && !parts.Get(QueryPartId - 1)) {
             return; // we have no requested part here
         }
-        ui32 partOffs = data.Offset + TDiskBlob::HeaderSize; // current part offset in the data chunk
+
+        const auto& gtype = Ctx->VCtx->Top->GType;
+        ui32 blobSize = 0;
+        for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {
+            blobSize += gtype.PartSize(TLogoBlobID(CurID, i + 1));
+        }
+
+        ui32 partOffs = data.Offset;
+        if (data.Size == TDiskBlob::HeaderSize + blobSize) { // skip the header, if it is present
+            partOffs += TDiskBlob::HeaderSize;
+        } else {
+            Y_ABORT_UNLESS(blobSize == data.Size);
+        }
+
         for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {
             const TLogoBlobID partId(CurID, i + 1);
-            const ui32 partSize = Ctx->VCtx->Top->GType.PartSize(partId);
+            const ui32 partSize = gtype.PartSize(partId);
             if (QueryPartId == 0 || QueryPartId == i + 1) {
                 FoundAnything = true;
                 auto& tmpItem = TmpItems[i];
-                if ((QueryShift >= partSize && partSize) || QuerySize > partSize - QueryShift) {
+                if ((partSize ? QueryShift >= partSize : QueryShift) || QuerySize > partSize - QueryShift) {
                     tmpItem.UpdateWithError(partId, Cookie);
+                } else if (!partSize) {
+                    tmpItem.UpdateWithMemItem(partId, Cookie, TRope());
                 } else if (tmpItem.ShouldUpdateWithDisk()) {
                     const ui32 size = QuerySize ? QuerySize : partSize - QueryShift;
-                    if (!size) { // for metadata reads
-                        tmpItem.UpdateWithMemItem(partId, Cookie, TRope());
-                    } else {
-                        tmpItem.UpdateWithDiskItem(partId, Cookie, TDiskPart(data.ChunkIdx, partOffs + QueryShift, size));
-                    }
+                    Y_DEBUG_ABORT_UNLESS(size);
+                    tmpItem.UpdateWithDiskItem(partId, Cookie, TDiskPart(data.ChunkIdx, partOffs + QueryShift, size));
                 }
+            }
+            if (QueryPartId && QueryPartId <= i + 1) {
+                break;
             }
             partOffs += partSize;
         }
@@ -84,7 +99,7 @@ namespace NKikimr {
                 if (QueryPartId == 0 || QueryPartId == partId) {
                     FoundAnything = true;
                     auto& item = TmpItems[partId - 1];
-                    if ((QueryShift >= partSize && partSize) || QuerySize > partSize - QueryShift) {
+                    if ((partSize ? QueryShift >= partSize : QueryShift) || QuerySize > partSize - QueryShift) {
                         item.UpdateWithError(blobId, Cookie);
                     } else if (item.ShouldUpdateWithMem()) {
                         const ui32 size = QuerySize ? QuerySize : partSize - QueryShift;

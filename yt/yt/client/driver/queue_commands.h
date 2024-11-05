@@ -80,11 +80,11 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPullConsumerCommand
-    : public TTypedCommand<NApi::TPullConsumerOptions>
+class TPullQueueConsumerCommand
+    : public TTypedCommand<NApi::TPullQueueConsumerOptions>
 {
 public:
-    REGISTER_YSON_STRUCT_LITE(TPullConsumerCommand);
+    REGISTER_YSON_STRUCT_LITE(TPullQueueConsumerCommand);
 
     static void Register(TRegistrar registrar);
 
@@ -100,15 +100,15 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TAdvanceConsumerOptions
+struct TAdvanceQueueConsumerOptions
     : public TTabletWriteOptions
 { };
 
-class TAdvanceConsumerCommand
-    : public TTypedCommand<TAdvanceConsumerOptions>
+class TAdvanceQueueConsumerCommand
+    : public TTypedCommand<TAdvanceQueueConsumerOptions>
 {
 public:
-    REGISTER_YSON_STRUCT_LITE(TAdvanceConsumerCommand);
+    REGISTER_YSON_STRUCT_LITE(TAdvanceQueueConsumerCommand);
 
     static void Register(TRegistrar registrar);
 
@@ -119,6 +119,66 @@ private:
     std::optional<i64> OldOffset;
     i64 NewOffset;
     std::optional<bool> ClientSide;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TCreateQueueProducerSessionCommand
+    : public TTypedCommand<NApi::TCreateQueueProducerSessionOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TCreateQueueProducerSessionCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYPath::TRichYPath ProducerPath;
+    NYPath::TRichYPath QueuePath;
+    NQueueClient::TQueueProducerSessionId SessionId;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TRemoveQueueProducerSessionCommand
+    : public TTypedCommand<NApi::TRemoveQueueProducerSessionOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TRemoveQueueProducerSessionCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYPath::TRichYPath ProducerPath;
+    NYPath::TRichYPath QueuePath;
+    NQueueClient::TQueueProducerSessionId SessionId;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TPushQueueProducerOptions
+    : public NApi::TPushQueueProducerOptions
+    , public TTabletWriteOptions
+{ };
+
+class TPushQueueProducerCommand
+    : public TTypedCommand<TPushQueueProducerOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TPushQueueProducerCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYPath::TRichYPath ProducerPath;
+    NYPath::TRichYPath QueuePath;
+    NQueueClient::TQueueProducerSessionId SessionId;
+    NQueueClient::TQueueProducerEpoch Epoch;
 
     void DoExecute(ICommandContextPtr context) override;
 };

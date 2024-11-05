@@ -203,6 +203,10 @@ private:
             CASE(ESimpleLogicalValueType::Interval)
             CASE(ESimpleLogicalValueType::Void)
             CASE(ESimpleLogicalValueType::Uuid)
+            CASE(ESimpleLogicalValueType::Date32)
+            CASE(ESimpleLogicalValueType::Datetime64)
+            CASE(ESimpleLogicalValueType::Timestamp64)
+            CASE(ESimpleLogicalValueType::Interval64)
 #undef CASE
         }
         YT_ABORT();
@@ -231,8 +235,7 @@ private:
         if (Cursor_.GetCurrent().GetType() == EYsonItemType::EndList) {
             THROW_ERROR_EXCEPTION(EErrorCode::SchemaViolation,
                 "Cannot parse %Qv; empty yson",
-                GetDescription(fieldId),
-                Cursor_.GetCurrent().GetType());
+                GetDescription(fieldId));
         }
         ValidateLogicalType(type.GetElement(), fieldId.OptionalElement());
         if (Cursor_.GetCurrent().GetType() != EYsonItemType::EndList) {
@@ -445,7 +448,7 @@ private:
         Cursor_.Next();
     }
 
-    TString GetDescription(const TFieldId& fieldId) const
+    std::string GetDescription(const TFieldId& fieldId) const
     {
         return fieldId.GetDescriptor(RootDescriptor_).GetDescription();
     }
@@ -506,7 +509,7 @@ private:
         {
             std::vector<int> path;
             const auto* current = this;
-            while (current->Parent_ != nullptr) {
+            while (current->Parent_) {
                 path.push_back(current->SiblingIndex_);
                 current = current->Parent_;
             }

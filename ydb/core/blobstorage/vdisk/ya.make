@@ -11,7 +11,6 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/anubis_osiris
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/defrag
-    ydb/core/blobstorage/vdisk/handoff
     ydb/core/blobstorage/vdisk/huge
     ydb/core/blobstorage/vdisk/hulldb
     ydb/core/blobstorage/vdisk/hullop
@@ -33,13 +32,11 @@ RECURSE(
     balance
     common
     defrag
-    handoff
     huge
     hulldb
     hullop
     ingress
     localrecovery
-    protos
     query
     repl
     scrub

@@ -2,10 +2,11 @@
 
 #include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
 #include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/public/udf/udf_data_type.h>
 
 #include <library/cpp/yson/node/node_io.h>
-
 #include <library/cpp/regex/pcre/regexp.h>
+#include <library/cpp/string_utils/parse_size/parse_size.h>
 
 #include <util/generic/yexception.h>
 #include <util/generic/size_literals.h>
@@ -53,7 +54,7 @@ void MediaValidator(const NYT::TNode& value) {
     }
 }
 
-TYtConfiguration::TYtConfiguration()
+TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
 {
     const auto codecValidator = [] (const TString&, TString str) {
         if (!ValidateCompressionCodecValue(str)) {
@@ -143,12 +144,16 @@ TYtConfiguration::TYtConfiguration()
     // See https://wiki.yandex-team.ru/yt/userdoc/chunkowners/#replikacija
     REGISTER_SETTING(*this, PublishedErasureCodec).Parser([](const TString& v) { return FromString<NYT::EErasureCodecAttr>(v); });
     REGISTER_SETTING(*this, TemporaryErasureCodec).Parser([](const TString& v) { return FromString<NYT::EErasureCodecAttr>(v); });
-    REGISTER_SETTING(*this, ClientMapTimeout);
+    REGISTER_SETTING(*this, ClientMapTimeout).Deprecated();
     REGISTER_SETTING(*this, CoreDumpPath).NonEmpty();
     REGISTER_SETTING(*this, UseTmpfs);
     REGISTER_SETTING(*this, SuspendIfAccountLimitExceeded);
     REGISTER_SETTING(*this, ExtraTmpfsSize);
-    REGISTER_SETTING(*this, OptimizeFor).Parser([](const TString& v) { return FromString<NYT::EOptimizeForAttr>(v); });
+    REGISTER_SETTING(*this, OptimizeFor)
+        .Parser([](const TString& v) {
+            return FromString<NYT::EOptimizeForAttr>(v);
+        });
+
     REGISTER_SETTING(*this, DefaultCluster)
         .Validator([this] (const TString&, TString value) {
             if (!ValidClusters.contains(value)) {
@@ -159,10 +164,12 @@ TYtConfiguration::TYtConfiguration()
         .ValueSetter([this](const TString& cluster, bool value) {
             Y_UNUSED(cluster);
             UseNativeYtTypes = value;
-        });
+        })
+        .Warning("Pragma UseTypeV2 is deprecated. Use UseNativeYtTypes instead");
     REGISTER_SETTING(*this, UseNativeYtTypes);
     REGISTER_SETTING(*this, UseNativeDescSort);
-    REGISTER_SETTING(*this, UseIntermediateSchema);
+    REGISTER_SETTING(*this, UseIntermediateSchema).Deprecated();
+    REGISTER_SETTING(*this, UseIntermediateStreams);
     REGISTER_SETTING(*this, StaticPool);
     REGISTER_SETTING(*this, UseFlow)
         .ValueSetter([this](const TString&, bool value) {
@@ -181,15 +188,13 @@ TYtConfiguration::TYtConfiguration()
             }
         });
     REGISTER_SETTING(*this, ExpirationDeadline)
-        .Lower(Now())
+        .Lower(typeCtx.QContext.CanRead() ? TInstant::Zero() : Now())
         .ValueSetter([this] (const TString& cluster, TInstant value) {
             ExpirationDeadline[cluster] = value;
-            ExpirationInterval.Clear();
         });
     REGISTER_SETTING(*this, ExpirationInterval)
         .ValueSetter([this] (const TString& cluster, TDuration value) {
             ExpirationInterval[cluster] = value;
-            ExpirationDeadline.Clear();
         });
     REGISTER_SETTING(*this, ScriptCpu).Lower(1.0).GlobalOnly();
     REGISTER_SETTING(*this, PythonCpu).Lower(1.0).GlobalOnly();
@@ -215,25 +220,9 @@ TYtConfiguration::TYtConfiguration()
         .NonEmpty()
         .ValueSetter([this] (const TString& cluster, TSet<TString> trees) {
             HybridDqExecution = false;
-            if (ALL_CLUSTERS == cluster) {
-                PoolTrees.UpdateAll([&trees] (const TString&, TSet<TString>& val) {
-                    val.insert(trees.begin(), trees.end());
-                });
-            } else {
-                PoolTrees[cluster].insert(trees.begin(), trees.end());
-            }
+            PoolTrees[cluster] = trees;
         });
-    REGISTER_SETTING(*this, TentativePoolTrees)
-        .NonEmpty()
-        .ValueSetter([this] (const TString& cluster, TSet<TString> trees) {
-            if (ALL_CLUSTERS == cluster) {
-                TentativePoolTrees.UpdateAll([&trees] (const TString&, TSet<TString>& val) {
-                    val.insert(trees.begin(), trees.end());
-                });
-            } else {
-                TentativePoolTrees[cluster].insert(trees.begin(), trees.end());
-            }
-        });
+    REGISTER_SETTING(*this, TentativePoolTrees).NonEmpty();
     REGISTER_SETTING(*this, TentativeTreeEligibilitySampleJobCount);
     REGISTER_SETTING(*this, TentativeTreeEligibilityMaxJobDurationRatio);
     REGISTER_SETTING(*this, TentativeTreeEligibilityMinJobDuration);
@@ -263,7 +252,17 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, TableContentTmpFolder);
     REGISTER_SETTING(*this, TableContentColumnarStatistics);
     REGISTER_SETTING(*this, TableContentUseSkiff);
-    REGISTER_SETTING(*this, TableContentLocalExecution);
+    REGISTER_SETTING(*this, TableContentLocalExecution)
+        .Parser([](const TString& v) {
+            // backward compatible parse from bool
+            bool value = true;
+            if (!v || TryFromString<bool>(v, value)) {
+                return value ? 10_MB : 0_MB;
+            } else {
+                return NSize::ParseSize(v);
+            }
+        })
+        .Upper(5_GB);
     REGISTER_SETTING(*this, DisableJobSplitting);
     REGISTER_SETTING(*this, UseColumnarStatistics)
         .Parser([](const TString& v) {
@@ -277,10 +276,16 @@ TYtConfiguration::TYtConfiguration()
         })
         ;
     REGISTER_SETTING(*this, ParallelOperationsLimit).Lower(1);
+    REGISTER_SETTING(*this, LocalCalcLimit).Lower(1);
     REGISTER_SETTING(*this, DefaultCalcMemoryLimit);
     REGISTER_SETTING(*this, LayerPaths).NonEmpty()
         .ValueSetter([this](const TString& cluster, const TVector<TString>& value) {
             LayerPaths[cluster] = value;
+            HybridDqExecution = false;
+        });
+    REGISTER_SETTING(*this, DockerImage).NonEmpty()
+        .ValueSetter([this](const TString& cluster, const TString& value) {
+            DockerImage[cluster] = value;
             HybridDqExecution = false;
         });
     REGISTER_SETTING(*this, _EnableDq);
@@ -289,7 +294,8 @@ TYtConfiguration::TYtConfiguration()
         .ValueSetter([this] (const TString& cluster, ui32 value) {
             Y_UNUSED(cluster);
             MaxInputTables = value;
-        });
+        })
+        .Warning("Pragma ExtendTableLimit is deprecated. Use MaxInputTables instead");
     REGISTER_SETTING(*this, CommonJoinCoreLimit);
     REGISTER_SETTING(*this, CombineCoreLimit).Lower(1_MB); // Min 1Mb
     REGISTER_SETTING(*this, SwitchLimit).Lower(1_MB); // Min 1Mb
@@ -304,11 +310,12 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, MapJoinUseFlow);
     REGISTER_SETTING(*this, EvaluationTableSizeLimit).Upper(10_MB); // Max 10Mb
     REGISTER_SETTING(*this, LookupJoinLimit).Upper(10_MB); // Same as EvaluationTableSizeLimit
-    REGISTER_SETTING(*this, LookupJoinMaxRows).Upper(1000);
+    REGISTER_SETTING(*this, LookupJoinMaxRows).Upper(10000);
     REGISTER_SETTING(*this, DisableOptimizers);
     REGISTER_SETTING(*this, MaxInputTables).Lower(2).Upper(3000); // 3000 - default max limit on YT clusters
     REGISTER_SETTING(*this, MaxOutputTables).Lower(1).Upper(100); // https://ml.yandex-team.ru/thread/yt/166633186212752141/
     REGISTER_SETTING(*this, MaxInputTablesForSortedMerge).Lower(2).Upper(1000); // https://st.yandex-team.ru/YTADMINREQ-16742
+    REGISTER_SETTING(*this, DisableFuseOperations);
     REGISTER_SETTING(*this, MaxExtraJobMemoryToFuseOperations);
     REGISTER_SETTING(*this, MaxReplicationFactorToFuseOperations).Lower(1.0);
     REGISTER_SETTING(*this, MaxOperationFiles).Lower(2).Upper(1000);
@@ -324,7 +331,8 @@ TYtConfiguration::TYtConfiguration()
             if (!value) {
                 JoinCollectColumnarStatistics = EJoinCollectColumnarStatisticsMode::Disable;
             }
-        });
+        })
+        .Warning("Pragma JoinUseColumnarStatistics is deprecated. Use JoinCollectColumnarStatistics instead");
     REGISTER_SETTING(*this, JoinCollectColumnarStatistics)
         .Parser([](const TString& v) { return FromString<EJoinCollectColumnarStatisticsMode>(v); });
     REGISTER_SETTING(*this, JoinColumnarStatisticsFetcherMode)
@@ -380,6 +388,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, MaxSpeculativeJobCountPerTask);
     REGISTER_SETTING(*this, LLVMMemSize);
     REGISTER_SETTING(*this, LLVMPerNodeMemSize);
+    REGISTER_SETTING(*this, LLVMNodeCountLimit);
     REGISTER_SETTING(*this, SamplingIoBlockSize);
     REGISTER_SETTING(*this, BinaryTmpFolder);
     REGISTER_SETTING(*this, BinaryExpirationInterval);
@@ -435,23 +444,45 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, DqPruneKeyFilterLambda);
     REGISTER_SETTING(*this, MergeAdjacentPointRanges);
     REGISTER_SETTING(*this, KeyFilterForStartsWith);
-    REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(1000);
+    REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(10000);
     REGISTER_SETTING(*this, MaxChunksForDqRead).Lower(1);
     REGISTER_SETTING(*this, NetworkProject);
     REGISTER_SETTING(*this, FileCacheTtl);
     REGISTER_SETTING(*this, _ImpersonationUser);
     REGISTER_SETTING(*this, InferSchemaMode).Parser([](const TString& v) { return FromString<EInferSchemaMode>(v); });
-    REGISTER_SETTING(*this, BatchListFolderConcurrency).Lower(1); // Upper bound on concurrent batch folder list requests https://yt.yandex-team.ru/docs/api/commands#execute_batch 
+    REGISTER_SETTING(*this, BatchListFolderConcurrency).Lower(1); // Upper bound on concurrent batch folder list requests https://yt.yandex-team.ru/docs/api/commands#execute_batch
+    REGISTER_SETTING(*this, ForceTmpSecurity);
     REGISTER_SETTING(*this, JoinCommonUseMapMultiOut);
     REGISTER_SETTING(*this, _EnableYtPartitioning);
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
-    REGISTER_SETTING(*this, _ForceJobSizeAdjuster);
-    REGISTER_SETTING(*this, _EnableWriteReorder);
+    REGISTER_SETTING(*this, ForceJobSizeAdjuster);
     REGISTER_SETTING(*this, EnforceJobUtc);
     REGISTER_SETTING(*this, UseRPCReaderInDQ);
     REGISTER_SETTING(*this, DQRPCReaderInflight).Lower(1);
     REGISTER_SETTING(*this, DQRPCReaderTimeout);
+    REGISTER_SETTING(*this, BlockReaderSupportedTypes);
+    REGISTER_SETTING(*this, BlockReaderSupportedDataTypes)
+        .Parser([](const TString& v) {
+            TSet<TString> vec;
+            StringSplitter(v).SplitBySet(",").AddTo(&vec);
+            TSet<NUdf::EDataSlot> res;
+            for (auto& s: vec) {
+                res.emplace(NUdf::GetDataSlot(s));
+            }
+            return res;
+        });
+    REGISTER_SETTING(*this, JobBlockInputSupportedTypes);
+    REGISTER_SETTING(*this, JobBlockInputSupportedDataTypes)
+        .Parser([](const TString& v) {
+            TSet<TString> vec;
+            StringSplitter(v).SplitBySet(",").AddTo(&vec);
+            TSet<NUdf::EDataSlot> res;
+            for (auto& s: vec) {
+                res.emplace(NUdf::GetDataSlot(s));
+            }
+            return res;
+        });
     REGISTER_SETTING(*this, MaxCpuUsageToFuseMultiOuts).Lower(1.0);
     REGISTER_SETTING(*this, MaxReplicationFactorToFuseMultiOuts).Lower(1.0);
     REGISTER_SETTING(*this, ApplyStoredConstraints)
@@ -469,6 +500,15 @@ TYtConfiguration::TYtConfiguration()
         });
     REGISTER_SETTING(*this, ViewIsolation);
     REGISTER_SETTING(*this, PartitionByConstantKeysViaMap);
+    REGISTER_SETTING(*this, ColumnGroupMode)
+        .Parser([](const TString& v) {
+            return FromString<EColumnGroupMode>(v);
+        });
+    REGISTER_SETTING(*this, MinColumnGroupSize).Lower(2);
+    REGISTER_SETTING(*this, MaxColumnGroups);
+    REGISTER_SETTING(*this, ExtendedStatsMaxChunkCount);
+    REGISTER_SETTING(*this, JobBlockInput);
+    REGISTER_SETTING(*this, _EnableYtDqProcessWriteConstraints);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

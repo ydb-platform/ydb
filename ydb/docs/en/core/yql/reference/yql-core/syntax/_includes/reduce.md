@@ -12,9 +12,13 @@ Rules for passing UDF arguments:
 
 * If `TableRows()` is specified as a UDF argument, then the UDF must accept one argument: a lazy iterator over strings, with the type `Stream<Struct...>>`. In this case, the output type of the function can only be `Stream<OutputType>` or `List<OutputType>`. It's guaranteed that the data in the input iterator is grouped by the key and, if necessary, sorted according to the `PRESORT` section. With `TableRows()`, you can only use `USING ALL`.
 * With `USING`:
+
     * The UDF must accept two arguments: the current key is passed to the first argument, and a lazy iterator with values corresponding to this key is passed to the second argument.
+
 * With `USING ALL`:
+
     * The UDF must accept one argument: a lazy iterator over `Tuples`, where the first item in the tuple is a key, and the second item is a lazy iterator with values corresponding to this key.
+
 * The key to be passed to the UDF follows the rule below. If there is only one key column, then only its value is used in the key. If there are multiple columns (columns are listed similarly to `GROUP BY` separated by commas), then the key is a `Tuple` with values from the listed columns in the specified order.
 * When you call `REDUCE` from a query, only the expression whose values will be passed as iterator items follows the UDF name in parentheses (the second UDF argument for `USING` or the second item of the tuple for `USING ALL`).
 
@@ -24,7 +28,7 @@ In `REDUCE`, you can pass multiple inputs (the input here means a table, a [rang
 
 After `USING`, in `REDUCE` you can optionally specify `ASSUME ORDER BY` with a list of columns. The result of such a `REDUCE` statement is treated as sorted, but without actually running a sort. Sort check is performed at the query execution stage. It supports setting the sort order using the keywords `ASC` (ascending order) and `DESC` (descending order). Expressions are not supported in `ASSUME ORDER BY`.
 
-**Examples:**
+## Examples
 
 ```yql
 REDUCE my_table

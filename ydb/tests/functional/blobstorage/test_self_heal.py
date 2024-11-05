@@ -3,7 +3,7 @@
 from hamcrest import is_
 
 from ydb.tests.library.common.wait_for import wait_for_and_assert
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.predicates import blobstorage
 
 
@@ -13,7 +13,7 @@ TIMEOUT_SECONDS = 480
 class TestEnableSelfHeal(object):
     @classmethod
     def setup_class(cls):
-        cls.kikimr_cluster = kikimr_cluster_factory()
+        cls.kikimr_cluster = KiKiMR()
         cls.kikimr_cluster.start()
         cls.client = cls.kikimr_cluster.client
         cls.client.update_self_heal(True)

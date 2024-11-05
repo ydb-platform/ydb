@@ -54,7 +54,7 @@ statement stream query
 SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname) ORDER BY depname, salary;
 
 statement stream query
-SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY salary, depname;
+SELECT depname, empno, salary, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY salary, depname, empno;
 
 -- with GROUP BY
 statement stream query
@@ -65,7 +65,7 @@ statement stream query
 SELECT depname, empno, salary, sum(salary) OVER w FROM empsalary WINDOW w AS (PARTITION BY depname) ORDER BY depname, salary, empno;
 
 statement stream query
-SELECT depname, empno, salary, rank() OVER w AS r FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY r;
+SELECT depname, empno, salary, rank() OVER w AS r FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary) ORDER BY r, empno;
 
 -- empty window specification
 statement stream query

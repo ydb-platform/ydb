@@ -1,7 +1,5 @@
 LIBRARY()
 
-OWNER(g:kikimr)
-
 IF (OS_WINDOWS)
     CFLAGS(
         -DKIKIMR_DISABLE_YT

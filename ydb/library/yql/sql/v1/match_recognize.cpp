@@ -22,7 +22,7 @@ public:
             std::pair<TPosition, TVector<TSortSpecificationPtr>>&& sortSpecs,
             std::pair<TPosition, TVector<TNamedFunction>>&& measures,
             std::pair<TPosition, ERowsPerMatch>&& rowsPerMatch,
-            std::pair<TPosition, TAfterMatchSkipTo>&& skipTo,
+            std::pair<TPosition, NYql::NMatchRecognize::TAfterMatchSkipTo>&& skipTo,
             std::pair<TPosition, NYql::NMatchRecognize::TRowPattern>&& pattern,
             std::pair<TPosition, TNodePtr>&& subset,
             std::pair<TPosition, TVector<TNamedFunction>>&& definitions
@@ -43,6 +43,12 @@ public:
         ));
     }
 private:
+    TMatchRecognize(const TMatchRecognize& other)
+        : TAstListNode(other.Pos)
+    {
+        Nodes = CloneContainer(other.Nodes);
+    }
+
     TNodePtr BuildBlockStatements(
             TPosition pos,
             ISource* source,
@@ -51,7 +57,7 @@ private:
             std::pair<TPosition, TVector<TSortSpecificationPtr>>&& sortSpecs,
             std::pair<TPosition, TVector<TNamedFunction>>&& measures,
             std::pair<TPosition, ERowsPerMatch>&& rowsPerMatch,
-            std::pair<TPosition, TAfterMatchSkipTo>&& skipTo,
+            std::pair<TPosition, NYql::NMatchRecognize::TAfterMatchSkipTo>&& skipTo,
             std::pair<TPosition, NYql::NMatchRecognize::TRowPattern>&& pattern,
             std::pair<TPosition, TNodePtr>&& subset,
             std::pair<TPosition, TVector<TNamedFunction>>&& definitions

@@ -24,18 +24,43 @@ struct TEvPipeCache {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PIPECACHE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PIPECACHE)");
 
+    struct TEvForwardOptions {
+        // When true (the default) pipe cache will establish a new connection
+        // automatically as needed. Specifying false is useful when precise
+        // connection management is required, e.g. when client subscribes with
+        // the first message and wants all subsequent messages to use the same
+        // pipe.
+        bool AutoConnect = true;
+        // When true (the default) pipe cache will subscribe sender to the pipe
+        // state and will send TEvDeliveryProblem with the specified
+        // SubscribeCookie on pipe connection failure. Note that only one
+        // subscription per sender/tablet pair may be active at any given time,
+        // and new subscription overrides any previous subscription. Sender must
+        // make sure to send TEvUnlink to unsubscribe from the pipe state when
+        // subscription is no longer necessary.
+        bool Subscribe = true;
+        ui64 SubscribeCookie = 0;
+    };
+
     struct TEvForward : public TEventLocal<TEvForward, EvForward> {
     public:
         THolder<IEventBase> Ev;
         const ui64 TabletId;
-        const bool Subscribe;
-        const ui64 SubscribeCookie;
+        const TEvForwardOptions Options;
 
         TEvForward(IEventBase *ev, ui64 tabletId, bool subscribe = true, ui64 subscribeCookie = 0)
             : Ev(ev)
             , TabletId(tabletId)
-            , Subscribe(subscribe)
-            , SubscribeCookie(subscribeCookie)
+            , Options{
+                .Subscribe = subscribe,
+                .SubscribeCookie = subscribeCookie,
+            }
+        {}
+
+        TEvForward(IEventBase *ev, ui64 tabletId, const TEvForwardOptions& options)
+            : Ev(ev)
+            , TabletId(tabletId)
+            , Options(options)
         {}
     };
 
@@ -49,11 +74,23 @@ struct TEvPipeCache {
 
     struct TEvDeliveryProblem : public TEventLocal<TEvDeliveryProblem, EvDeliveryProblem> {
         const ui64 TabletId;
+        const bool Connected;
         const bool NotDelivered;
+        const bool IsDeleted;
 
+        TEvDeliveryProblem(ui64 tabletId, bool connected, bool notDelivered, bool isDeleted)
+            : TabletId(tabletId)
+            , Connected(connected)
+            , NotDelivered(notDelivered)
+            , IsDeleted(isDeleted)
+        {}
+
+        // For compatibility with existing tests
         TEvDeliveryProblem(ui64 tabletId, bool notDelivered)
             : TabletId(tabletId)
+            , Connected(notDelivered ? false : true)
             , NotDelivered(notDelivered)
+            , IsDeleted(false)
         {}
     };
 
@@ -94,19 +131,26 @@ struct TEvPipeCache {
     };
 };
 
-struct TPipePeNodeCacheConfig : public TAtomicRefCount<TPipePeNodeCacheConfig>{
-    ui64 TabletCacheLimit;
-    TDuration PipeRefreshTime;
-    NTabletPipe::TClientConfig PipeConfig;
+struct TPipePerNodeCacheConfig : public TAtomicRefCount<TPipePerNodeCacheConfig>{
+    ui64 TabletCacheLimit = 500000;
+    TDuration PipeRefreshTime = TDuration::Zero();
+    NTabletPipe::TClientConfig PipeConfig = DefaultPipeConfig();
     ::NMonitoring::TDynamicCounterPtr Counters;
 
-    TPipePeNodeCacheConfig()
-        : TabletCacheLimit(500000)
-        , PipeRefreshTime(TDuration::Seconds(30))
-    {}
+    TPipePerNodeCacheConfig() = default;
+
+    static NTabletPipe::TClientConfig DefaultPipeConfig();
+    static NTabletPipe::TClientConfig DefaultPersistentPipeConfig();
 };
 
-IActor* CreatePipePeNodeCache(const TIntrusivePtr<TPipePeNodeCacheConfig> &config);
-TActorId MakePipePeNodeCacheID(bool allowFollower);
+enum class EPipePerNodeCache {
+    Leader,
+    Follower,
+    Persistent,
+};
+
+IActor* CreatePipePerNodeCache(const TIntrusivePtr<TPipePerNodeCacheConfig> &config);
+TActorId MakePipePerNodeCacheID(EPipePerNodeCache kind);
+TActorId MakePipePerNodeCacheID(bool allowFollower);
 
 }

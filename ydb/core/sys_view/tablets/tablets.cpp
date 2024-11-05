@@ -180,7 +180,7 @@ private:
         record.SetFrom(FromTabletId);
         record.SetTo(ToTabletId);
 
-        auto pipeCache = MakePipePeNodeCacheID(false);
+        auto pipeCache = MakePipePerNodeCacheID(false);
         Send(pipeCache, new TEvPipeCache::TEvForward(request.Release(), HiveId, true),
             IEventHandle::FlagTrackDelivery);
     }
@@ -202,7 +202,7 @@ private:
 
         record.SetBatchSizeLimit(BatchSize);
 
-        auto pipeCache = MakePipePeNodeCacheID(false);
+        auto pipeCache = MakePipePerNodeCacheID(false);
         Send(pipeCache, new TEvPipeCache::TEvForward(request.Release(), HiveId, true),
             IEventHandle::FlagTrackDelivery);
     }
@@ -338,7 +338,7 @@ private:
     }
 
     void PassAway() override {
-        Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         TBase::PassAway();
     }
 

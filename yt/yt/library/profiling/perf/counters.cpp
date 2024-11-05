@@ -224,10 +224,10 @@ void EnablePerfCounters()
 {
     auto owner = LeakyRefCountedSingleton<TCounterOwner>();
 
-    auto exportCounter = [&] (const TString& category, const TString& name, EPerfEventType type) {
+    auto exportCounter = [&] (const std::string& category, const std::string& name, EPerfEventType type) {
         try {
             owner->Counters.emplace_back(new TPerfEventCounter{type});
-            TProfiler{category}.AddFuncCounter(name, owner, [counter=owner->Counters.back().get()] () {
+            TProfiler{category}.AddFuncCounter(name, owner, [counter=owner->Counters.back().get()] {
                 return counter->Read();
             });
         } catch (const std::exception&) {

@@ -7,7 +7,7 @@
 #include <yt/yt/core/net/local_address.h>
 
 #include <yt/yt/core/misc/checksum.h>
-#include <yt/yt/core/misc/memory_reference_tracker.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
@@ -27,7 +27,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static const auto& Logger = RpcClientLogger;
+static constexpr auto& Logger = RpcClientLogger;
 static const auto LightInvokerDurationWarningThreshold = TDuration::MilliSeconds(10);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -40,7 +40,8 @@ TClientContext::TClientContext(
     TFeatureIdFormatter featureIdFormatter,
     bool responseIsHeavy,
     TAttachmentsOutputStreamPtr requestAttachmentsStream,
-    TAttachmentsInputStreamPtr responseAttachmentsStream)
+    TAttachmentsInputStreamPtr responseAttachmentsStream,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
     : RequestId_(requestId)
     , TraceContext_(std::move(traceContext))
     , Service_(std::move(service))
@@ -49,6 +50,7 @@ TClientContext::TClientContext(
     , ResponseHeavy_(responseIsHeavy)
     , RequestAttachmentsStream_(std::move(requestAttachmentsStream))
     , ResponseAttachmentsStream_(std::move(responseAttachmentsStream))
+    , MemoryUsageTracker_(std::move(memoryUsageTracker))
 { }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -81,6 +83,7 @@ TClientRequest::TClientRequest(const TClientRequest& other)
     , RequestCodec_(other.RequestCodec_)
     , ResponseCodec_(other.ResponseCodec_)
     , GenerateAttachmentChecksums_(other.GenerateAttachmentChecksums_)
+    , MemoryUsageTracker_(other.MemoryUsageTracker_)
     , Channel_(other.Channel_)
     , StreamingEnabled_(other.StreamingEnabled_)
     , SendBaggage_(other.SendBaggage_)
@@ -217,22 +220,22 @@ void TClientRequest::RequireServerFeature(int featureId)
     Header_.add_required_server_feature_ids(featureId);
 }
 
-const TString& TClientRequest::GetUser() const
+const std::string& TClientRequest::GetUser() const
 {
     return User_;
 }
 
-void TClientRequest::SetUser(const TString& user)
+void TClientRequest::SetUser(const std::string& user)
 {
     User_ = user;
 }
 
-const TString& TClientRequest::GetUserTag() const
+const std::string& TClientRequest::GetUserTag() const
 {
     return UserTag_;
 }
 
-void TClientRequest::SetUserTag(const TString& tag)
+void TClientRequest::SetUserTag(const std::string& tag)
 {
     UserTag_ = tag;
 }
@@ -347,7 +350,8 @@ TClientContextPtr TClientRequest::CreateClientContext()
         FeatureIdFormatter_,
         ResponseHeavy_,
         RequestAttachmentsStream_,
-        ResponseAttachmentsStream_);
+        ResponseAttachmentsStream_,
+        MemoryUsageTracker_ ? MemoryUsageTracker_ : Channel_->GetChannelMemoryTracker());
 }
 
 void TClientRequest::OnPullRequestAttachmentsStream()
@@ -445,8 +449,8 @@ void TClientRequest::PrepareHeader()
 
     // COMPAT(danilalexeev): legacy RPC codecs
     if (!EnableLegacyRpcCodecs_) {
-        Header_.set_request_codec(ToProto<int>(RequestCodec_));
-        Header_.set_response_codec(ToProto<int>(ResponseCodec_));
+        Header_.set_request_codec(ToProto(RequestCodec_));
+        Header_.set_response_codec(ToProto(ResponseCodec_));
     }
 
     if (StreamingEnabled_) {
@@ -520,7 +524,7 @@ size_t TClientResponse::GetTotalSize() const
     return ResponseMessage_.ByteSize();
 }
 
-void TClientResponse::HandleError(const TError& error)
+void TClientResponse::HandleError(TError error)
 {
     auto prevState = State_.exchange(EState::Done);
     if (prevState == EState::Done) {
@@ -529,22 +533,15 @@ void TClientResponse::HandleError(const TError& error)
         return;
     }
 
-    auto invokeHandler = [&] (const TError& error) {
-        GetInvoker()->Invoke(
-            BIND(&TClientResponse::DoHandleError, MakeStrong(this), error));
-    };
-
-    auto optionalEnrichedError = TryEnrichClientRequestError(
-        error,
+    EnrichClientRequestError(
+        &error,
         ClientContext_->GetFeatureIdFormatter());
-    if (optionalEnrichedError) {
-        invokeHandler(*optionalEnrichedError);
-    } else {
-        invokeHandler(error);
-    }
+
+    GetInvoker()->Invoke(
+        BIND(&TClientResponse::DoHandleError, MakeStrong(this), std::move(error)));
 }
 
-void TClientResponse::DoHandleError(const TError& error)
+void TClientResponse::DoHandleError(TError error)
 {
     NProfiling::TWallTimer timer;
 
@@ -622,18 +619,17 @@ void TClientResponse::Deserialize(TSharedRefArray responseMessage)
         THROW_ERROR_EXCEPTION(NRpc::EErrorCode::ProtocolError, "Error deserializing response body");
     }
 
-    auto compressedAttachments = MakeRange(ResponseMessage_.Begin() + 2, ResponseMessage_.End());
+    auto compressedAttachments = TRange(ResponseMessage_.Begin() + 2, ResponseMessage_.End());
+    auto memoryUsageTracker = ClientContext_->GetMemoryUsageTracker();
+
     if (attachmentCodecId == NCompression::ECodec::None) {
-        Attachments_.clear();
-        Attachments_.reserve(compressedAttachments.Size());
-        for (auto& attachment : compressedAttachments) {
-            struct TCopiedAttachmentTag
-            { };
-            auto copiedAttachment = TSharedMutableRef::MakeCopy<TCopiedAttachmentTag>(attachment);
-            Attachments_.push_back(std::move(copiedAttachment));
-        }
+        Attachments_ = compressedAttachments.ToVector();
     } else {
         Attachments_ = DecompressAttachments(compressedAttachments, attachmentCodecId);
+    }
+
+    for (auto& attachment : Attachments_) {
+        attachment = TrackMemory(memoryUsageTracker, attachment);
     }
 }
 
@@ -644,7 +640,7 @@ void TClientResponse::HandleAcknowledgement()
     State_.compare_exchange_strong(expected, EState::Ack);
 }
 
-void TClientResponse::HandleResponse(TSharedRefArray message, TString address)
+void TClientResponse::HandleResponse(TSharedRefArray message, const std::string& address)
 {
     auto prevState = State_.exchange(EState::Done);
     YT_ASSERT(prevState == EState::Sent || prevState == EState::Ack);
@@ -652,14 +648,14 @@ void TClientResponse::HandleResponse(TSharedRefArray message, TString address)
     GetInvoker()->Invoke(BIND(&TClientResponse::DoHandleResponse,
         MakeStrong(this),
         Passed(std::move(message)),
-        Passed(std::move(address))));
+        address));
 }
 
-void TClientResponse::DoHandleResponse(TSharedRefArray message, TString address)
+void TClientResponse::DoHandleResponse(TSharedRefArray message, const std::string& address)
 {
     NProfiling::TWallTimer timer;
 
-    Address_ = std::move(address);
+    Address_ = address;
 
     try {
         Deserialize(std::move(message));

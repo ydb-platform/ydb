@@ -102,7 +102,7 @@ class Extension:
         depends=None,
         language=None,
         optional=None,
-        **kw  # To catch unknown keywords
+        **kw,  # To catch unknown keywords
     ):
         if not isinstance(name, str):
             raise AssertionError("'name' must be a string")
@@ -130,22 +130,16 @@ class Extension:
         if len(kw) > 0:
             options = [repr(option) for option in kw]
             options = ', '.join(sorted(options))
-            msg = "Unknown Extension options: %s" % options
+            msg = f"Unknown Extension options: {options}"
             warnings.warn(msg)
 
     def __repr__(self):
-        return '<{}.{}({!r}) at {:#x}>'.format(
-            self.__class__.__module__,
-            self.__class__.__qualname__,
-            self.name,
-            id(self),
-        )
+        return f'<{self.__class__.__module__}.{self.__class__.__qualname__}({self.name!r}) at {id(self):#x}>'
 
 
 def read_setup_file(filename):  # noqa: C901
     """Reads a Setup file and returns Extension instances."""
-    from distutils.sysconfig import parse_makefile, expand_makefile_vars, _variable_rx
-
+    from distutils.sysconfig import _variable_rx, expand_makefile_vars, parse_makefile
     from distutils.text_file import TextFile
     from distutils.util import split_quoted
 
@@ -156,11 +150,11 @@ def read_setup_file(filename):  # noqa: C901
     #   <module> ... [<sourcefile> ...] [<cpparg> ...] [<library> ...]
     file = TextFile(
         filename,
-        strip_comments=1,
-        skip_blanks=1,
-        join_lines=1,
-        lstrip_ws=1,
-        rstrip_ws=1,
+        strip_comments=True,
+        skip_blanks=True,
+        join_lines=True,
+        lstrip_ws=True,
+        rstrip_ws=True,
     )
     try:
         extensions = []
@@ -173,7 +167,7 @@ def read_setup_file(filename):  # noqa: C901
                 continue
 
             if line[0] == line[-1] == "*":
-                file.warn("'%s' lines not handled yet" % line)
+                file.warn(f"'{line}' lines not handled yet")
                 continue
 
             line = expand_makefile_vars(line, vars)
@@ -239,7 +233,7 @@ def read_setup_file(filename):  # noqa: C901
                     # and append it to sources.  Hmmmm.
                     ext.extra_objects.append(word)
                 else:
-                    file.warn("unrecognized argument '%s'" % word)
+                    file.warn(f"unrecognized argument '{word}'")
 
             extensions.append(ext)
     finally:

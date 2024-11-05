@@ -3,7 +3,7 @@
  * pg_operator_d.h
  *    Macro definitions for pg_operator
  *
- * Portions Copyright (c) 1996-2021, PostgreSQL Global Development Group
+ * Portions Copyright (c) 1996-2023, PostgreSQL Global Development Group
  * Portions Copyright (c) 1994, Regents of the University of California
  *
  * NOTES
@@ -19,6 +19,8 @@
 #define PG_OPERATOR_D_H
 
 #define OperatorRelationId 2617
+#define OperatorOidIndexId 2688
+#define OperatorNameNspIndexId 2689
 
 #define Anum_pg_operator_oid 1
 #define Anum_pg_operator_oprname 2
@@ -43,6 +45,7 @@
 #define Int4EqualOperator 96
 #define Int4LessOperator 97
 #define TextEqualOperator 98
+#define TextPrefixOperator 3877
 #define NameEqualTextOperator 254
 #define NameLessTextOperator 255
 #define NameGreaterEqualTextOperator 257

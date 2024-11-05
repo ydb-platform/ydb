@@ -1,3 +1,3 @@
-``` bash
+```bash
 npm install ydb-sdk
 ```

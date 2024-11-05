@@ -6,7 +6,7 @@
 
 select
     ps_partkey,
-    sum(ps_supplycost * ps_availqty::numeric) as value
+    sum(ps_supplycost * ps_availqty) as value
 from
     {{partsupp}},
     {{supplier}},
@@ -14,12 +14,12 @@ from
 where
     ps_suppkey = s_suppkey
     and s_nationkey = n_nationkey
-    and n_name = 'CANADA'
+    and n_name = 'GERMANY'
 group by
     ps_partkey having
-        sum(ps_supplycost * ps_availqty::numeric) > (
+        sum(ps_supplycost * ps_availqty) > (
             select
-                sum(ps_supplycost * ps_availqty::numeric) * 0.0001000000::numeric
+                sum(ps_supplycost * ps_availqty) * 0.0001000000
             from
                 {{partsupp}},
                 {{supplier}},
@@ -27,7 +27,7 @@ group by
             where
                 ps_suppkey = s_suppkey
                 and s_nationkey = n_nationkey
-                and n_name = 'CANADA'
+                and n_name = 'GERMANY'
         )
 order by
     value desc;

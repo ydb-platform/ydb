@@ -9,6 +9,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
+#include <ydb/core/protos/replication.pb.h>
 
 #include <util/string/split.h>
 #include <util/string/strip.h>
@@ -54,6 +55,27 @@ TKikimrPathId TKikimrPathId::Parse(const TStringBuf& str) {
     return TKikimrPathId(FromString<ui64>(ownerStr), FromString<ui64>(idStr));
 }
 
+void TReplicationSettings::TOAuthToken::Serialize(NKikimrReplication::TOAuthToken& proto) const {
+    if (Token) {
+        proto.SetToken(Token);
+    }
+    if (TokenSecretName) {
+        proto.SetTokenSecretName(TokenSecretName);
+    }
+}
+
+void TReplicationSettings::TStaticCredentials::Serialize(NKikimrReplication::TStaticCredentials& proto) const {
+    if (UserName) {
+        proto.SetUser(UserName);
+    }
+    if (Password) {
+        proto.SetPassword(Password);
+    }
+    if (PasswordSecretName) {
+        proto.SetPasswordSecretName(PasswordSecretName);
+    }
+}
+
 TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString& path, TCreateDirFunc createDir) {
     auto partsHolder = std::make_shared<TVector<TString>>(NKikimr::SplitPath(path));
     auto& parts = *partsHolder;
@@ -70,43 +92,6 @@ TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString
     return pathPromise.GetFuture();
 }
 
-void IKikimrGateway::BuildIndexMetadata(TTableMetadataResult& loadTableMetadataResult) {
-    auto tableMetadata = loadTableMetadataResult.Metadata;
-    YQL_ENSURE(tableMetadata);
-
-    if (tableMetadata->Indexes.empty()) {
-        return;
-    }
-
-    const auto& cluster = tableMetadata->Cluster;
-    const auto& tableName = tableMetadata->Name;
-    const size_t indexesCount = tableMetadata->Indexes.size();
-
-    NKikimr::NTableIndex::TTableColumns tableColumns;
-    tableColumns.Columns.reserve(tableMetadata->Columns.size());
-    for (auto& column: tableMetadata->Columns) {
-        tableColumns.Columns.insert_noresize(column.first);
-    }
-    tableColumns.Keys = tableMetadata->KeyColumnNames;
-
-    tableMetadata->SecondaryGlobalIndexMetadata.resize(indexesCount);
-    for (size_t i = 0; i < indexesCount; i++) {
-        const auto& index = tableMetadata->Indexes[i];
-        auto indexTablePath = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(tableName, index.Name);
-        NKikimr::NTableIndex::TTableColumns indexTableColumns = NKikimr::NTableIndex::CalcTableImplDescription(
-                    tableColumns,
-                    NKikimr::NTableIndex::TIndexColumns{index.KeyColumns, {}});
-
-        TKikimrTableMetadataPtr indexTableMetadata = new TKikimrTableMetadata(cluster, indexTablePath);
-        indexTableMetadata->DoesExist = true;
-        indexTableMetadata->KeyColumnNames = indexTableColumns.Keys;
-        for (auto& column: indexTableColumns.Columns) {
-            indexTableMetadata->Columns[column] = tableMetadata->Columns.at(column);
-        }
-
-        tableMetadata->SecondaryGlobalIndexMetadata[i] = indexTableMetadata;
-    }
-}
 
 bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error) {
     using namespace NNodes;
@@ -191,31 +176,49 @@ EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
     }
 }
 
-void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull) {
-    auto* typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
-    if (typeDesc) {
-        Y_ABORT_UNLESS(!notNull, "It is not allowed to create NOT NULL pg columns");
-        auto* pg = protoType.mutable_pg_type();
-        pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
-        pg->set_type_modifier(NKikimr::NPg::TypeModFromPgTypeName(typeName));
-        pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
-        pg->set_typlen(0);
-        pg->set_typmod(0);
-        return;
+bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type& protoType, TString& error) {
+    switch (typeNode->GetKind()) {
+    case ETypeAnnotationKind::Pg: {
+        const auto pgTypeNode = typeNode->Cast<TPgExprType>();
+        const TString typeName = pgTypeNode->GetName();
+        const auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
+        if (typeDesc) {
+            Y_ABORT_UNLESS(!notNull, "It is not allowed to create NOT NULL pg columns");
+            auto* pg = protoType.mutable_pg_type();
+            pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+            pg->set_type_modifier(NKikimr::NPg::TypeModFromPgTypeName(typeName));
+            pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
+            pg->set_typlen(0);
+            pg->set_typmod(0);
+            return true;
+        }
     }
-
-    NUdf::EDataSlot dataSlot = NUdf::GetDataSlot(typeName);
-    if (dataSlot == NUdf::EDataSlot::Decimal) {
-        auto decimal = notNull ? protoType.mutable_decimal_type() :
-            protoType.mutable_optional_type()->mutable_item()->mutable_decimal_type();
-        // We have no params right now
-        // TODO: Fix decimal params support for kikimr
-        decimal->set_precision(22);
-        decimal->set_scale(9);
-    } else {
-        auto& primitive = notNull ? protoType : *protoType.mutable_optional_type()->mutable_item();
-        auto id = NUdf::GetDataTypeInfo(dataSlot).TypeId;
-        primitive.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+    case ETypeAnnotationKind::Data: {
+        const auto dataTypeNode = typeNode->Cast<TDataExprType>();
+        const TStringBuf typeName = dataTypeNode->GetName();
+        NUdf::EDataSlot dataSlot = NUdf::GetDataSlot(typeName);
+        if (dataSlot == NUdf::EDataSlot::Decimal) {
+            auto dataExprTypeNode = typeNode->Cast<TDataExprParamsType>();
+            ui32 precision = FromString(dataExprTypeNode->GetParamOne());
+            ui32 scale = FromString(dataExprTypeNode->GetParamTwo());
+            if (!NKikimr::NScheme::TDecimalType::Validate(precision, scale, error)) {
+                return false;
+            }
+            auto decimal = notNull ? protoType.mutable_decimal_type() :
+                protoType.mutable_optional_type()->mutable_item()->mutable_decimal_type();
+            decimal->set_precision(precision);
+            decimal->set_scale(scale);
+        } else {
+            auto& primitive = notNull ? protoType : *protoType.mutable_optional_type()->mutable_item();
+            auto id = NUdf::GetDataTypeInfo(dataSlot).TypeId;
+            primitive.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
+        }
+        return true;
+    }
+    default: {
+        error = TStringBuilder() << "Unexpected node kind: " << typeNode->GetKind();
+        return false;
+    }
     }
 }
 
@@ -343,6 +346,26 @@ static std::shared_ptr<THashMap<TString, Ydb::Topic::Codec>> GetCodecsMapping() 
     return codecsMapping;
 }
 
+static std::shared_ptr<THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> GetAutoPartitioningStrategiesMapping() {
+    static std::shared_ptr<THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> strategiesMapping;
+    if (!strategiesMapping) {
+        strategiesMapping = MakeEnumMapping<Ydb::Topic::AutoPartitioningStrategy>(
+            Ydb::Topic::AutoPartitioningStrategy_descriptor(), "auto_partitioning_strategy_");
+
+        const TString prefix = "scale_";
+        for (const auto& [key, value] : *strategiesMapping) {
+            if (key.StartsWith(prefix)) {
+                TString newKey = key;
+                newKey.erase(0, prefix.length());
+
+                Y_ABORT_UNLESS(strategiesMapping->find(newKey) == strategiesMapping->end());
+                (*strategiesMapping)[newKey] = value;
+            }
+        }
+    }
+    return strategiesMapping;
+}
+
 static std::shared_ptr<THashMap<TString, Ydb::Topic::MeteringMode>> GetMeteringModesMapping() {
     static std::shared_ptr<THashMap<TString, Ydb::Topic::MeteringMode>> metModesMapping;
     if (metModesMapping == nullptr) {
@@ -357,6 +380,18 @@ bool GetTopicMeteringModeFromString(const TString& meteringMode, Ydb::Topic::Met
     auto mapping = GetMeteringModesMapping();
     auto normMode = to_lower(meteringMode);
     auto iter = mapping->find(normMode);
+    if (iter.IsEnd()) {
+        return false;
+    } else {
+        result = iter->second;
+        return true;
+    }
+}
+
+bool GetTopicAutoPartitioningStrategyFromString(const TString& strategy, Ydb::Topic::AutoPartitioningStrategy& result) {
+    auto mapping = GetAutoPartitioningStrategiesMapping();
+    auto normStrategy = to_lower(strategy);
+    auto iter = mapping->find(normStrategy);
     if (iter.IsEnd()) {
         return false;
     } else {

@@ -1,8 +1,3 @@
-OWNER(
-    g:yql
-    g:yql_ydb_core
-)
-
 LIBRARY()
 
 END()
@@ -12,3 +7,6 @@ RECURSE(
     no_llvm
 )
 
+RECURSE_FOR_TESTS(
+    ut
+)

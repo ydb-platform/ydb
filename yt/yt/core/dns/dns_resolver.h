@@ -17,7 +17,6 @@ struct TDnsResolveOptions
 };
 
 void FormatValue(TStringBuilderBase* builder, const TDnsResolveOptions options, TStringBuf spec);
-TString ToString(const TDnsResolveOptions& options);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -25,7 +24,7 @@ struct IDnsResolver
     : public TRefCounted
 {
     virtual TFuture<NNet::TNetworkAddress> Resolve(
-        const TString& hostName,
+        const std::string& hostName,
         const TDnsResolveOptions& options) = 0;
 };
 

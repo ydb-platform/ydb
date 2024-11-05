@@ -1,0 +1,755 @@
+{
+  "sensors": [
+    {
+      "labels": {
+        "name": "stream.get_records.bytes_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 105,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "stream.get_records.records_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 5,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "stream.get_records.success_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 1,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "stream.outgoing_bytes_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 105,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "stream.outgoing_records_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 5,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "stream.put_records.bytes_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 40,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "stream.put_records.success_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 5,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "stream.put_records.successfull_records_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 5,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "stream.put_records.total_records_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 5,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "sensor": "CounterLookups",
+        "counters": "utils",
+        "component": "grpc"
+      },
+      "value": 2,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "sensor": "CounterLookups",
+        "counters": "utils",
+        "component": "ydb"
+      },
+      "value": 13,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.grpc.request.bytes",
+        "method": "ListEndpoints",
+        "counters": "ydb",
+        "api_service": "discovery"
+      },
+      "value": 0,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.grpc.request.count",
+        "method": "ListEndpoints",
+        "counters": "ydb",
+        "api_service": "discovery"
+      },
+      "value": 0,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.grpc.request.dropped_count",
+        "method": "ListEndpoints",
+        "counters": "ydb",
+        "api_service": "discovery"
+      },
+      "value": 0,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.grpc.request.inflight_bytes",
+        "method": "ListEndpoints",
+        "counters": "ydb",
+        "api_service": "discovery"
+      },
+      "value": 0,
+      "kind": "GAUGE"
+    },
+    {
+      "labels": {
+        "name": "api.grpc.request.inflight_count",
+        "method": "ListEndpoints",
+        "counters": "ydb",
+        "api_service": "discovery"
+      },
+      "value": 0,
+      "kind": "GAUGE"
+    },
+    {
+      "labels": {
+        "name": "api.grpc.response.bytes",
+        "method": "ListEndpoints",
+        "counters": "ydb",
+        "api_service": "discovery"
+      },
+      "value": 0,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.grpc.response.dropped_count",
+        "method": "ListEndpoints",
+        "counters": "ydb",
+        "api_service": "discovery"
+      },
+      "value": 0,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.grpc.response.count",
+        "method": "ListEndpoints",
+        "counters": "ydb",
+        "status": "RESOURCE_EXHAUSTED",
+        "api_service": "discovery"
+      },
+      "value": 0,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.grpc.response.count",
+        "method": "ListEndpoints",
+        "counters": "ydb",
+        "status": "UNAUTHENTICATED",
+        "api_service": "discovery"
+      },
+      "value": 0,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.data_streams.get_records.messages",
+        "topic": "test-counters-stream",
+        "cloud_id": "cloud4",
+        "database_id": "database4",
+        "folder_id": "folder4",
+        "database": "/Root"
+      },
+      "value": 5,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.data_streams.put_records.successfull_messages",
+        "topic": "test-counters-stream",
+        "cloud_id": "cloud4",
+        "database_id": "database4",
+        "folder_id": "folder4",
+        "database": "/Root"
+      },
+      "value": 5,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.data_streams.put_records.total_messages",
+        "topic": "test-counters-stream",
+        "cloud_id": "cloud4",
+        "database_id": "database4",
+        "folder_id": "folder4",
+        "database": "/Root"
+      },
+      "value": 5,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "database": "/Root",
+        "cloud_id": "cloud4",
+        "name": "api.http.data_streams.response.count",
+        "method": "CreateStream",
+        "code": "200",
+        "database_id": "database4",
+        "topic": "test-counters-stream",
+        "folder_id": "folder4"
+      },
+      "value": 1,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.data_streams.request.count",
+        "topic": "test-counters-stream",
+        "cloud_id": "cloud4",
+        "database_id": "database4",
+        "method": "CreateStream",
+        "folder_id": "folder4",
+        "database": "/Root"
+      },
+      "value": 1,
+      "kind": "RATE"
+    },
+    {
+      "hist": {
+        "inf": 0,
+        "buckets": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "bounds": [
+          100,
+          200,
+          500,
+          1000,
+          2000,
+          5000,
+          10000,
+          30000
+        ]
+      },
+      "labels": {
+        "name": "api.http.data_streams.response.duration_milliseconds",
+        "topic": "test-counters-stream",
+        "cloud_id": "cloud4",
+        "database_id": "database4",
+        "method": "CreateStream",
+        "folder_id": "folder4",
+        "database": "/Root"
+      },
+      "kind": "HIST_RATE"
+    },
+    {
+      "labels": {
+        "database": "/Root",
+        "cloud_id": "cloud4",
+        "name": "api.http.data_streams.response.count",
+        "method": "GetRecords",
+        "code": "200",
+        "database_id": "database4",
+        "topic": "test-counters-stream",
+        "folder_id": "folder4"
+      },
+      "value": 1,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.data_streams.request.count",
+        "topic": "test-counters-stream",
+        "cloud_id": "cloud4",
+        "database_id": "database4",
+        "method": "GetRecords",
+        "folder_id": "folder4",
+        "database": "/Root"
+      },
+      "value": 1,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.data_streams.response.bytes",
+        "topic": "test-counters-stream",
+        "cloud_id": "cloud4",
+        "database_id": "database4",
+        "method": "GetRecords",
+        "folder_id": "folder4",
+        "database": "/Root"
+      },
+      "value": 105,
+      "kind": "RATE"
+    },
+    {
+      "hist": {
+        "inf": 0,
+        "buckets": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "bounds": [
+          100,
+          200,
+          500,
+          1000,
+          2000,
+          5000,
+          10000,
+          30000
+        ]
+      },
+      "labels": {
+        "name": "api.http.data_streams.response.duration_milliseconds",
+        "topic": "test-counters-stream",
+        "cloud_id": "cloud4",
+        "database_id": "database4",
+        "method": "GetRecords",
+        "folder_id": "folder4",
+        "database": "/Root"
+      },
+      "kind": "HIST_RATE"
+    },
+    {
+      "labels": {
+        "database": "/Root",
+        "cloud_id": "cloud4",
+        "name": "api.http.data_streams.response.count",
+        "method": "GetShardIterator",
+        "code": "200",
+        "database_id": "database4",
+        "topic": "test-counters-stream",
+        "folder_id": "folder4"
+      },
+      "value": 1,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.data_streams.request.count",
+        "topic": "test-counters-stream",
+        "cloud_id": "cloud4",
+        "database_id": "database4",
+        "method": "GetShardIterator",
+        "folder_id": "folder4",
+        "database": "/Root"
+      },
+      "value": 1,
+      "kind": "RATE"
+    },
+    {
+      "hist": {
+        "inf": 0,
+        "buckets": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "bounds": [
+          100,
+          200,
+          500,
+          1000,
+          2000,
+          5000,
+          10000,
+          30000
+        ]
+      },
+      "labels": {
+        "name": "api.http.data_streams.response.duration_milliseconds",
+        "topic": "test-counters-stream",
+        "cloud_id": "cloud4",
+        "database_id": "database4",
+        "method": "GetShardIterator",
+        "folder_id": "folder4",
+        "database": "/Root"
+      },
+      "kind": "HIST_RATE"
+    },
+    {
+      "labels": {
+        "database": "/Root",
+        "cloud_id": "cloud4",
+        "name": "api.http.data_streams.response.count",
+        "method": "PutRecords",
+        "code": "200",
+        "database_id": "database4",
+        "topic": "test-counters-stream",
+        "folder_id": "folder4"
+      },
+      "value": 5,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.data_streams.request.bytes",
+        "topic": "test-counters-stream",
+        "cloud_id": "cloud4",
+        "database_id": "database4",
+        "method": "PutRecords",
+        "folder_id": "folder4",
+        "database": "/Root"
+      },
+      "value": 40,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.data_streams.request.count",
+        "topic": "test-counters-stream",
+        "cloud_id": "cloud4",
+        "database_id": "database4",
+        "method": "PutRecords",
+        "folder_id": "folder4",
+        "database": "/Root"
+      },
+      "value": 5,
+      "kind": "RATE"
+    },
+    {
+      "hist": {
+        "inf": 0,
+        "buckets": [
+          5,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "bounds": [
+          100,
+          200,
+          500,
+          1000,
+          2000,
+          5000,
+          10000,
+          30000
+        ]
+      },
+      "labels": {
+        "name": "api.http.data_streams.response.duration_milliseconds",
+        "topic": "test-counters-stream",
+        "cloud_id": "cloud4",
+        "database_id": "database4",
+        "method": "PutRecords",
+        "folder_id": "folder4",
+        "database": "/Root"
+      },
+      "kind": "HIST_RATE"
+    },
+    {
+      "hist": {
+        "inf": 0,
+        "buckets": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "bounds": [
+          100,
+          200,
+          500,
+          1000,
+          2000,
+          5000,
+          10000,
+          30000
+        ]
+      },
+      "labels": {
+        "name": "api.http.requests_duration_milliseconds",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "method": "CreateStream",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "kind": "HIST_RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.requests_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "method": "CreateStream",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 1,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.success_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "method": "CreateStream",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 1,
+      "kind": "RATE"
+    },
+    {
+      "hist": {
+        "inf": 0,
+        "buckets": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "bounds": [
+          100,
+          200,
+          500,
+          1000,
+          2000,
+          5000,
+          10000,
+          30000
+        ]
+      },
+      "labels": {
+        "name": "api.http.requests_duration_milliseconds",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "method": "GetRecords",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "kind": "HIST_RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.requests_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "method": "GetRecords",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 1,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.success_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "method": "GetRecords",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 1,
+      "kind": "RATE"
+    },
+    {
+      "hist": {
+        "inf": 0,
+        "buckets": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "bounds": [
+          100,
+          200,
+          500,
+          1000,
+          2000,
+          5000,
+          10000,
+          30000
+        ]
+      },
+      "labels": {
+        "name": "api.http.requests_duration_milliseconds",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "method": "GetShardIterator",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "kind": "HIST_RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.requests_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "method": "GetShardIterator",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 1,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.success_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "method": "GetShardIterator",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 1,
+      "kind": "RATE"
+    },
+    {
+      "hist": {
+        "inf": 0,
+        "buckets": [
+          5,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "bounds": [
+          100,
+          200,
+          500,
+          1000,
+          2000,
+          5000,
+          10000,
+          30000
+        ]
+      },
+      "labels": {
+        "name": "api.http.requests_duration_milliseconds",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "method": "PutRecords",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "kind": "HIST_RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.requests_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "method": "PutRecords",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 5,
+      "kind": "RATE"
+    },
+    {
+      "labels": {
+        "name": "api.http.success_per_second",
+        "stream": "test-counters-stream",
+        "cloud": "cloud4",
+        "method": "PutRecords",
+        "folder": "folder4",
+        "database": "database4"
+      },
+      "value": 5,
+      "kind": "RATE"
+    }
+  ]
+}

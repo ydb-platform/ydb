@@ -370,7 +370,7 @@ TYtSection MakeEmptySection(TYtSection section, NNodes::TYtDSink dataSink, bool 
     if (section.Paths().Size() == 1) {
         auto srcTableInfo = TYtTableBaseInfo::Parse(section.Paths().Item(0).Table());
         if (keepSortness && srcTableInfo->RowSpec && srcTableInfo->RowSpec->IsSorted()) {
-            outTable.RowSpec->CopySortness(*srcTableInfo->RowSpec, TYqlRowSpecInfo::ECopySort::WithCalc);
+            outTable.RowSpec->CopySortness(ctx, *srcTableInfo->RowSpec, TYqlRowSpecInfo::ECopySort::WithCalc);
         }
     }
     outTable.SetUnique(section.Ref().GetConstraint<TDistinctConstraintNode>(), section.Pos(), ctx);
@@ -424,7 +424,9 @@ TExprNode::TPtr OptimizeReadWithSettings(const TExprNode::TPtr& node, bool allow
     return res;
 }
 
-IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& input, TExprNode::TPtr& output, const TYtState::TPtr& state, TExprContext& ctx) {
+IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& input, TExprNode::TPtr& output, const TYtState::TPtr& state,
+    TExprContext& ctx, bool estimateTableContentWeight)
+{
     auto current = input;
     output.Reset();
     for (;;) {
@@ -447,10 +449,10 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
 
         TExprNode::TPtr newCurrent;
         auto status = OptimizeExpr(current, newCurrent,
-            [&parentsMap, current, state](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+            [&parentsMap, current, state, estimateTableContentWeight](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
                 if (auto maybeContent = TMaybeNode<TYtTableContent>(node)) {
                     auto content = maybeContent.Cast();
-                    if (NYql::HasSetting(content.Settings().Ref(), EYtSettingType::MemUsage)) {
+                    if (NYql::HasAnySetting(content.Settings().Ref(), EYtSettingType::MemUsage | EYtSettingType::Small)) {
                         return node;
                     }
 
@@ -498,6 +500,7 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                     }
 
                     ui64 memUsage = 0;
+                    ui64 dataWeight = 0;
                     ui64 itemsCount = 0;
                     bool useItemsCount = !NYql::HasSetting(content.Settings().Ref(), EYtSettingType::ItemsCount);
 
@@ -506,7 +509,7 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                         memUsage = 16_MB;
                         useItemsCount = false;
                     }
-                    else {
+                    if (estimateTableContentWeight || !factors.empty()) {
                         if (auto maybeRead = content.Input().Maybe<TYtReadTable>()) {
                             TVector<ui64> records;
                             TVector<TYtPathInfo::TPtr> tableInfos;
@@ -556,6 +559,7 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                                         for (auto& factor: factors) {
                                             memUsage += factor.first * dataSizes->at(i) + factor.second * records.at(i);
                                         }
+                                        dataWeight += dataSizes->at(i);
                                     }
                                 } else {
                                     return {};
@@ -571,6 +575,7 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                                     memUsage += factor.first * dataSize + factor.second * records;
                                 }
                                 itemsCount += records;
+                                dataWeight += dataSize;
                             }
                             else {
                                 YQL_CLOG(INFO, ProviderYt) << "Assume 1Gb memory usage for YtTableContent #"
@@ -585,6 +590,9 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                     settings = NYql::AddSetting(*settings, EYtSettingType::MemUsage, ctx.NewAtom(node->Pos(), ToString(memUsage), TNodeFlags::Default), ctx);
                     if (useItemsCount) {
                         settings = NYql::AddSetting(*settings, EYtSettingType::ItemsCount, ctx.NewAtom(node->Pos(), ToString(itemsCount), TNodeFlags::Default), ctx);
+                    }
+                    if (estimateTableContentWeight && dataWeight < state->Configuration->TableContentLocalExecution.Get().GetOrElse(DEFAULT_TABLE_CONTENT_LOCAL_EXEC)) {
+                        settings = NYql::AddSetting(*settings, EYtSettingType::Small, {}, ctx);
                     }
 
                     return ctx.WrapByCallableIf(wrapToCollect, "Collect", ctx.ChangeChild(*node, TYtTableContent::idx_Settings, std::move(settings)));
@@ -641,6 +649,7 @@ private:
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
         pipeline->Add(CreateYtPeepholeTransformer(State_, {}), "Peephole");
         pipeline->Add(CreateYtWideFlowTransformer(State_), "WideFlow");
+        pipeline->Add(CreateYtBlockInputTransformer(State_), "BlockInput");
     }
 
     void AfterOptimize(TTransformationPipeline*) const final {}
@@ -649,9 +658,9 @@ private:
 };
 
 IGraphTransformer::TStatus PeepHoleOptimizeBeforeExec(TExprNode::TPtr input, TExprNode::TPtr& output,
-    const TYtState::TPtr& state, bool& hasNonDeterministicFunctions, TExprContext& ctx)
+    const TYtState::TPtr& state, bool& hasNonDeterministicFunctions, TExprContext& ctx, bool estimateTableContentWeight)
 {
-    if (const auto status = UpdateTableContentMemoryUsage(input, output, state, ctx);
+    if (const auto status = UpdateTableContentMemoryUsage(input, output, state, ctx, estimateTableContentWeight);
         status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
     }

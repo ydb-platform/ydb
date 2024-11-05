@@ -3,9 +3,9 @@
 import functools
 import os.path
 
-from .errors import DistutilsFileError
-from .py39compat import zip_strict
 from ._functools import splat
+from .compat.py39 import zip_strict
+from .errors import DistutilsFileError
 
 
 def _newer(source, target):
@@ -24,7 +24,7 @@ def newer(source, target):
     Raises DistutilsFileError if 'source' does not exist.
     """
     if not os.path.exists(source):
-        raise DistutilsFileError("file '%s' does not exist" % os.path.abspath(source))
+        raise DistutilsFileError(f"file '{os.path.abspath(source)}' does not exist")
 
     return _newer(source, target)
 

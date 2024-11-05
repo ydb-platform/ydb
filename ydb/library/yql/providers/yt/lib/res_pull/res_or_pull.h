@@ -135,6 +135,17 @@ protected:
 
     TMkqlIOSpecs Specs;
     TMkqlWriterImpl SkiffWriter;
+
+    // This vector contains the permutation of the columns that should be applied to the rows of a (single)
+    // output table to transform it from "shuffled" to "alphabetic" order.
+    // Absense of the vector means that columns were not provided and thus transforming rows
+    // is not possible (and thus is not required).
+    // i-th element of the permutation means that i-th value of the "shuffled" row is p[i]-th value of the "alphabetic" row.
+    TMaybe<TVector<ui32>> AlphabeticPermutation;
+
+    // Returns a permutation such that i-th column in alphabetic order is at positions[i].
+    // If columns is empty, returns an identity permutation.
+    static TMaybe<TVector<ui32>> CreateAlphabeticPositions(NKikimr::NMiniKQL::TType* inputType, const TVector<TString>& columns);
 };
 
 }

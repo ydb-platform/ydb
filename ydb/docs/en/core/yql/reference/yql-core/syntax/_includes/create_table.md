@@ -25,7 +25,7 @@ The table is created automatically during the first [INSERT INTO](insert_into.md
 
 The `CREATE TABLE` call creates a {% if concept_table %}[table]({{ concept_table }}){% else %}table{% endif %} with the specified data schema{% if feature_map_tables %} and key columns (`PRIMARY KEY`){% endif %}. {% if feature_secondary_index == true %}It lets you define secondary indexes on the created table.{% endif %}
 
-    CREATE TABLE table_name (
+    CREATE [TEMPORARY | TEMP] TABLE table_name (
         column1 type1,
 {% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
         ...
@@ -48,25 +48,40 @@ The `CREATE TABLE` call creates a {% if concept_table %}[table]({{ concept_table
 {% if feature_olap_tables %}#{% endif %}## Columns {#row-columns}
 
 {% if feature_column_container_type == true %}
+
 In non-key columns, you can use any data types, but for key columns, only [primitive ones](../../types/primitive.md). When specifying complex types (for example, `List<String>`), the type is enclosed in double quotes.
+
 {% else %}
+
 For the key and non-key columns, you can only use [primitive](../../types/primitive.md) data types.
+
 {% endif %}
 
 {% if feature_not_null == true %}
+
 Without additional modifiers, a column gets an [optional type](../../types/optional.md) and allows `NULL` values to be written. To create a non-optional type, use `NOT NULL`.
+
 {% else %}
+
 {% if feature_not_null_for_pk %}
+
 All columns are [optional](../../types/optional.md) by default and can be assigned NULL values. The `NOT NULL` limit can only be specified for columns that are part of the primary key..
+
 {% else %}
+
 All columns allow writing `NULL` values, that is, they are [optional](../../types/optional.md).
-{% endif %}
-{% endif %}
-{% if feature_map_tables %}
-It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. Those columns become part of the key in the listed order.
+
 {% endif %}
 
-**Example**
+{% endif %}
+
+{% if feature_map_tables %}
+
+It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. Those columns become part of the key in the listed order.
+
+{% endif %}
+
+### Example
 
     CREATE TABLE my_table (
 {% if feature_not_null_for_pk %}        a Uint64 NOT NULL,{% else %}        a Uint64,{% endif %}
@@ -78,29 +93,31 @@ It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. T
 {% endif %}
     )
 
-
 {% if feature_secondary_index %}
+
 {% if feature_olap_tables %}#{% endif %}## Secondary indexes {#secondary_index}
 
-The INDEX construct is used to define a {% if concept_secondary_index %}[secondary index]({{ concept_secondary_index }}){% else %}secondary index{% endif %} in a table:
+The `INDEX` clause is used to define a {% if concept_secondary_index %}[secondary index]({{ concept_secondary_index }}){% else %}secondary index{% endif %} in a table:
 
-```sql
+```yql
 CREATE TABLE table_name (
     ...
-    INDEX <index_name> GLOBAL [SYNC|ASYNC] ON ( <index_columns> ) COVER ( <cover_columns> ),
+    INDEX <index_name> GLOBAL [UNIQUE] [SYNC|ASYNC] ON ( <index_columns> ) COVER ( <cover_columns> ),
     ...
 )
 ```
 
 Where:
+
 * **Index_name** is the unique name of the index to be used to access data.
 * **SYNC/ASYNC** indicates synchronous/asynchronous data writes to the index. If not specified, synchronous.
+* **UNIQUE** indicates that the index should guarantee the uniqueness of the indexed column set, thereby enforcing the unique constraint.
 * **Index_columns** is a list of comma-separated names of columns in the created table to be used for a search in the index.
 * **Cover_columns** is a list of comma-separated names of columns in the created table, which will be stored in the index in addition to the search columns, making it possible to fetch additional data without accessing the table for it.
 
-**Example**
+#### Example
 
-```sql
+```yql
 CREATE TABLE my_table (
     a Uint64,
     b Bool,
@@ -108,17 +125,32 @@ CREATE TABLE my_table (
     d Date,
     INDEX idx_d GLOBAL ON (d),
     INDEX idx_ba GLOBAL ASYNC ON (b, a) COVER (c),
+    INDEX idx_bc GLOBAL UNIQUE SYNC ON (b, c),
     PRIMARY KEY (a)
 )
 ```
 {% endif %}
 
+{% if feature_temp_tables %}
+
+{% if feature_olap_tables %}#{%endif%}## Creating a temporary table {#temporary_tables}
+```yql
+CREATE TEMPORARY TABLE table_name (
+    ...
+);
+```
+
+{% include [temp-table-description.md](../../../../_includes/temp-table-description.md) %}
+
+{% endif %}
+
 {% if feature_map_tables and concept_table %}
+
 {% if feature_olap_tables %}#{% endif %}## Additional parameters {#row-additional}
 
 You can also specify a number of {{ backend_name }}-specific parameters for the table. When you create a table, those parameters are listed in the ```WITH``` clause:
 
-```sql
+```yql
 CREATE TABLE table_name (...)
 WITH (
     key1 = value1,
@@ -133,9 +165,7 @@ For a list of valid parameter names and values, see the [{{ backend_name }} tabl
 
 For example, this code will create a table with enabled automatic partitioning by partition size and the preferred size of each partition is 512 MB:
 
-<small>Listing 4</small>
-
-```sql
+```yql
 CREATE TABLE my_table (
     id Uint64,
     title Utf8,
@@ -158,7 +188,7 @@ By default, all columns are in the same group named ```default```.  If necessary
 
 In the example below, for the created table, the ```family_large``` group of columns is added and set for the ```series_info``` column, and the parameters for the default group, which is set by ```default``` for all other columns, are also redefined.
 
-```sql
+```yql
 CREATE TABLE series_with_families (
     series_id Uint64,
     title Utf8,
@@ -198,7 +228,7 @@ Column-oriented {{ ydb-short-name }} tables are in the Preview mode.
 
 The `CREATE TABLE` statement creates a [column-oriented](../../../../concepts/datamodel/table.md#olap-data-types) table with the specified data schema and key columns (`PRIMARY KEY`).
 
-```sql
+```yql
 CREATE TABLE table_name (
     column1 type1,
     column2 type2 NOT NULL,
@@ -224,9 +254,9 @@ Make sure to add the `PRIMARY KEY` and `PARTITION BY` clauses with a non-empty l
 
 If you omit modifiers, a column is assigned an [optional](../../types/optional.md) type and can accept `NULL` values. To create a non-optional type, use `NOT NULL`.
 
-**Example**
+#### Example
 
-```sql
+```yql
 CREATE TABLE my_table (
     a Uint64 NOT NULL,
     b String,
@@ -235,7 +265,7 @@ CREATE TABLE my_table (
 )
 PARTITION BY HASH(b)
 WITH (
-STORE = COLUMN
+    STORE = COLUMN
 )
 ```
 
@@ -243,7 +273,7 @@ STORE = COLUMN
 
 You can also specify a number of {{ backend_name }}-specific parameters for the table. When you create a table, those parameters are listed in the ```WITH``` clause:
 
-```sql
+```yql
 CREATE TABLE table_name (...)
 WITH (
     key1 = value1,
@@ -260,7 +290,7 @@ Supported parameters in column-oriented tables:
 
 For example, the following code creates a column-oriented table with ten partitions:
 
-```sql
+```yql
 CREATE TABLE my_table (
     id Uint64,
     title Utf8,

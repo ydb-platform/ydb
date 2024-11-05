@@ -1,0 +1,33 @@
+--- contrib/libs/protobuf/src/google/protobuf/json/internal/descriptor_traits.h	(2babb01d30e285a96044041b98053d9edbb48b2a)
++++ contrib/libs/protobuf/src/google/protobuf/json/internal/descriptor_traits.h	(aa368d72b2d33c8c4857d03624b10b97d2161d61)
+@@ -232,6 +232,9 @@ struct Proto2Descriptor {
+   static absl::string_view FieldJsonName(Field f) {
+     return f->has_json_name() ? f->json_name() : f->camelcase_name();
+   }
++  static bool HasJsonName(Field f) {
++    return f->has_json_name();
++  }
+   static absl::string_view FieldFullName(Field f) { return f->full_name(); }
+ 
+   static absl::string_view FieldTypeName(Field f) {
+@@ -399,6 +402,9 @@ struct Proto3Type {
+   static absl::string_view FieldJsonName(Field f) {
+     return f->proto().json_name();
+   }
++  static bool HasJsonName(Field f) {
++    return true;
++  }
+   static absl::string_view FieldFullName(Field f) { return f->proto().name(); }
+ 
+   static absl::string_view FieldTypeName(Field f) {
+--- contrib/libs/protobuf/src/google/protobuf/json/internal/unparser.cc	(2babb01d30e285a96044041b98053d9edbb48b2a)
++++ contrib/libs/protobuf/src/google/protobuf/json/internal/unparser.cc	(aa368d72b2d33c8c4857d03624b10b97d2161d61)
+@@ -399,7 +399,7 @@ absl::Status WriteField(JsonWriter& writer, const Msg<Traits>& msg,
+     // with an uppercase letter, and the Json name does not, we uppercase it.
+     absl::string_view original_name = Traits::FieldName(field);
+     absl::string_view json_name = Traits::FieldJsonName(field);
+-    if (writer.options().allow_legacy_syntax &&
++    if (writer.options().allow_legacy_syntax && !Traits::HasJsonName(field) &&
+         absl::ascii_isupper(original_name[0]) &&
+         !absl::ascii_isupper(json_name[0])) {
+       writer.Write(MakeQuoted(absl::ascii_toupper(original_name[0]),

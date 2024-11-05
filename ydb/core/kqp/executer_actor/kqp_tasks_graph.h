@@ -91,9 +91,12 @@ struct TStageInfoMeta {
 struct TGraphMeta {
     IKqpGateway::TKqpSnapshot Snapshot;
     TMaybe<ui64> LockTxId;
+    ui32 LockNodeId;
     std::unordered_map<ui64, TActorId> ResultChannelProxies;
     TActorId ExecuterId;
     bool UseFollowers = false;
+    bool AllowInconsistentReads = false;
+    bool AllowWithSpilling = false;
     TIntrusivePtr<TProtoArenaHolder> Arena;
     TString Database;
     NKikimrConfig::TTableServiceConfig::EChannelTransportVersion ChannelTransportVersion;
@@ -115,6 +118,10 @@ struct TGraphMeta {
     void SetLockTxId(TMaybe<ui64> lockTxId) {
         LockTxId = lockTxId;
     }
+
+    void SetLockNodeId(ui32 lockNodeId) {
+        LockNodeId = lockNodeId;
+    }
 };
 
 struct TTaskInputMeta {
@@ -125,6 +132,7 @@ struct TTaskInputMeta {
 };
 
 struct TTaskOutputMeta {
+    NKikimrKqp::TKqpTableSinkSettings* SinkSettings = nullptr;
     THashMap<ui64, const TKeyDesc::TPartitionInfo*> ShardPartitions;
 };
 
@@ -168,6 +176,7 @@ public:
     ui32 Type = Unknown;
 
     TActorId ResultChannelActorId;
+    bool Completed = false;
     THashMap<TString, TString> TaskParams; // Params for sources/sinks
     TVector<TString> ReadRanges; // Partitioning for sources
     THashMap<TString, TString> SecureParams;

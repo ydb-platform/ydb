@@ -1,3 +1,4 @@
+from collections import Counter
 import pytest
 import requests
 import time
@@ -63,7 +64,7 @@ async def launch(running_example, name):
     resps = await asyncio.gather(*map(get_async, urls))
     data = [resp.status_code for resp in resps]
 
-    assert data == [200, 429, 429]
+    assert Counter(data) == Counter([200, 429, 429])
 
 
 def test_async(running_example):

@@ -67,15 +67,18 @@ struct TDomainsInfo : public TThrRefBase {
         const TVector<ui64> Mediators;
         const TVector<ui64> TxAllocators;
         const ui64 DomainPlanResolution;
+        const ui32 TimecastBucketsPerMediator;
         const TStoragePoolKinds StoragePoolTypes;
 
-        static constexpr ui32 TimecastBucketsPerMediator = 2; // <- any sense in making this configurable? may be for debug?..
+        static constexpr ui64 DefaultPlanResolution = 500;
+        static constexpr ui32 DefaultTimecastBucketsPerMediator = 2;
 
     private:
         //don't reinterpret any data
         TDomain(const TString &name, ui32 domainUid, ui64 schemeRootId,
                 TVectorUi64 coordinators, TVectorUi64 mediators, TVectorUi64 allocators,
-                ui64 domainPlanResolution, const TStoragePoolKinds *poolTypes);
+                ui64 domainPlanResolution, ui32 timecastBucketsPerMediator,
+                const TStoragePoolKinds *poolTypes);
 
      public:
         ~TDomain();
@@ -84,8 +87,23 @@ struct TDomainsInfo : public TThrRefBase {
         static TDomain::TPtr ConstructEmptyDomain(const TString &name, ui32 domainId = 0)
         {
             const ui64 schemeRoot = 0;
-            ui64 planResolution = 500;
-            return new TDomain(name, domainId, schemeRoot, {}, {}, {}, planResolution, nullptr);
+            return new TDomain(name, domainId, schemeRoot, {}, {}, {},
+                    DefaultPlanResolution, DefaultTimecastBucketsPerMediator, nullptr);
+        }
+
+        template <typename TUidsContainerUi64>
+        static TDomain::TPtr ConstructDomainWithExplicitTabletIds(const TString &name, ui32 domainUid, ui64 schemeRoot,
+                                            ui64 planResolution, ui32 timecastBucketsPerMediator,
+                                            const TUidsContainerUi64 &coordinatorUids,
+                                            const TUidsContainerUi64 &mediatorUids,
+                                            const TUidsContainerUi64 &allocatorUids,
+                                            const TStoragePoolKinds &poolTypes)
+        {
+            return new TDomain(name, domainUid, schemeRoot,
+                            TVectorUi64(coordinatorUids.begin(), coordinatorUids.end()),
+                            TVectorUi64(mediatorUids.begin(), mediatorUids.end()),
+                            TVectorUi64(allocatorUids.begin(), allocatorUids.end()),
+                            planResolution, timecastBucketsPerMediator, &poolTypes);
         }
 
         template <typename TUidsContainerUi64>
@@ -100,7 +118,7 @@ struct TDomainsInfo : public TThrRefBase {
                             TVectorUi64(coordinatorUids.begin(), coordinatorUids.end()),
                             TVectorUi64(mediatorUids.begin(), mediatorUids.end()),
                             TVectorUi64(allocatorUids.begin(), allocatorUids.end()),
-                            planResolution, &poolTypes);
+                            planResolution, DefaultTimecastBucketsPerMediator, &poolTypes);
         }
 
         template <typename TUidsContainerUi64>
@@ -114,7 +132,7 @@ struct TDomainsInfo : public TThrRefBase {
                             TVectorUi64(coordinatorUids.begin(), coordinatorUids.end()),
                             TVectorUi64(mediatorUids.begin(), mediatorUids.end()),
                             TVectorUi64(allocatorUids.begin(), allocatorUids.end()),
-                            planResolution, nullptr);
+                            planResolution, DefaultTimecastBucketsPerMediator, nullptr);
         }
 
         ui32 DomainRootTag() const {
@@ -196,10 +214,10 @@ struct TDomainsInfo : public TThrRefBase {
     /*[[deprecated]]*/ ui32 GetDomainUidByTabletId(ui64) const { return GetDomain()->DomainUid; }
     /*[[deprecated]]*/ ui32 GetDefaultHiveUid(ui32) const { return TDomain::DefaultHiveUid; }
     /*[[deprecated]]*/ void AddHive(ui32, ui64 hive) { AddHive(hive); }
-    /*[[deprecated]]*/ static ui64 MakeTxCoordinatorID(ui32, ui32 uid) { return MakeTxCoordinatorIDFixed(uid); }
-    /*[[deprecated]]*/ static ui64 MakeTxCoordinatorIDFixed(ui32, ui32 uid) { return MakeTxCoordinatorIDFixed(uid); }
-    /*[[deprecated]]*/ static ui64 MakeTxMediatorID(ui32, ui32 uid) { return MakeTxMediatorIDFixed(uid); }
-    /*[[deprecated]]*/ static ui64 MakeTxAllocatorID(ui32, ui32 uid) { return MakeTxAllocatorIDFixed(uid); }
+    /*[[deprecated]]*/ static ui64 MakeTxCoordinatorID(ui32, ui32 uid) { return MakeTabletID(true, 0x800000 | uid); }
+    /*[[deprecated]]*/ static ui64 MakeTxCoordinatorIDFixed(ui32, ui32 uid) { return MakeTabletID(true, 0x800000 | uid); }
+    /*[[deprecated]]*/ static ui64 MakeTxMediatorID(ui32, ui32 uid) { return MakeTabletID(true, 0x810000 | uid); }
+    /*[[deprecated]]*/ static ui64 MakeTxAllocatorID(ui32, ui32 uid) { return MakeTabletID(true, 0x820000 | uid); }
 };
 
 }

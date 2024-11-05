@@ -190,7 +190,7 @@ public:
 
     bool IsEmpty() const;
 
-    void Profile(const TProfiler& profiler);
+    void Profile(const TWeakProfiler& profiler);
     void ValidateOptions(const TSensorOptions& options);
 
     void AddCounter(TCounterStatePtr counter);
@@ -207,7 +207,7 @@ public:
     int Collect();
 
     void ReadSensors(
-        const TString& name,
+        const std::string& name,
         TReadOptions readOptions,
         TTagWriter* tagWriter,
         ::NMonitoring::IMetricConsumer* consumer) const;
@@ -219,7 +219,7 @@ public:
         const TTagRegistry& tagRegistry,
         NYTree::TFluentAny fluent) const;
 
-    void DumpCube(NProto::TCube* cube) const;
+    void DumpCube(NProto::TCube* cube, const std::vector<TTagId>& extraTags) const;
 
     int GetGridFactor() const;
     int GetObjectCount() const;

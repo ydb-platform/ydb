@@ -4,37 +4,39 @@
 
 * Присвоение короткого имени (алиаса) столбцам или таблицам в рамках запроса.
 * Указание именованных аргументов при вызове функций.
-* При явном приведении типов данных для указания целевого типа, см. [CAST](#cast).
+* При явном приведении типов данных для указания целевого типа, см. [CAST](../../../syntax/expressions.md#cast).
+
+### Примеры
 
 {% if select_command != "SELECT STREAM" %}
-**Примеры:**
 
-``` yql
+```yql
 SELECT key AS k FROM my_table;
 ```
 
-``` yql
+```yql
 SELECT t.key FROM my_table AS t;
 ```
 
-``` yql
+```yql
 SELECT
     MyFunction(key, 123 AS my_optional_arg)
 FROM my_table;
 ```
 {% else %}
-**Примеры:**
-``` yql
+
+```yql
 SELECT STREAM key AS k FROM my_stream;
 ```
 
-``` yql
+```yql
 SELECT STREAM s.key FROM my_stream AS s;
 ```
 
-``` yql
+```yql
 SELECT STREAM
     MyFunction(key, 123 AS my_optional_arg)
 FROM my_stream;
 ```
+
 {% endif %}

@@ -5,6 +5,8 @@
 #include <yt/yt/core/concurrency/scheduler.h>
 #include <yt/yt/core/concurrency/thread_pool.h>
 
+#include <yt/yt/core/misc/finally.h>
+
 namespace NYT {
 namespace {
 
@@ -12,7 +14,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TestCancelableRunWithBoundedConcurrency, TestSimple)
+TEST(TCancelableRunWithBoundedConcurrencyTest, Simple)
 {
     int x = 0;
 
@@ -30,7 +32,7 @@ TEST(TestCancelableRunWithBoundedConcurrency, TestSimple)
     EXPECT_EQ(x, 1);
 }
 
-TEST(TestCancelableRunWithBoundedConcurrency, TestManyCallbacks)
+TEST(TCancelableRunWithBoundedConcurrencyTest, ManyCallbacks)
 {
     auto threadPool = CreateThreadPool(4, "ThreadPool");
 
@@ -55,7 +57,7 @@ TEST(TestCancelableRunWithBoundedConcurrency, TestManyCallbacks)
     EXPECT_EQ(x, callbackCount);
 }
 
-TEST(TestCancelableRunWithBoundedConcurrency, TestCancelation)
+TEST(TCancelableRunWithBoundedConcurrencyTest, Cancelation)
 {
     auto threadPool = CreateThreadPool(4, "ThreadPool");
 
@@ -90,6 +92,36 @@ TEST(TestCancelableRunWithBoundedConcurrency, TestCancelation)
 
     EXPECT_EQ(x, 9);
     EXPECT_EQ(canceledCount, 4);
+}
+
+TEST(TAllSucceededBoundedConcurrencyTest, CancelOthers)
+{
+    using TCounter = std::atomic<int>;
+
+    auto pool = CreateThreadPool(5, "ThreadPool");
+
+    auto numDone = std::make_shared<TCounter>(0);
+
+    std::vector<TCallback<TFuture<void>()>> callbacks;
+
+    for (int i = 0; i < 9; ++i) {
+        callbacks.push_back(BIND([numDone] {
+            if (numDone->fetch_add(1) == 3) {
+                THROW_ERROR_EXCEPTION("Testing");
+            }
+
+            while (true) {
+                Yield();
+            }
+        }).AsyncVia(pool->GetInvoker()));
+    }
+
+    auto error = WaitFor(RunWithAllSucceededBoundedConcurrency(std::move(callbacks), 4));
+
+    EXPECT_FALSE(error.IsOK());
+    EXPECT_EQ(error.GetMessage(), TString("Testing"));
+
+    EXPECT_EQ(numDone->load(), 4);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

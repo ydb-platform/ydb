@@ -17,7 +17,11 @@ namespace NYql {
             NYT::TNode RowSpec;
         };
 
-        virtual TString ConvertNodeToSkiff(const TDqStatePtr state, const IDataProvider::TFillSettings& fillSettings, const NYT::TNode& rowSpec, const NYT::TNode& item) = 0;
+        virtual TString ConvertNodeToSkiff(
+            const TDqStatePtr state,
+            const IDataProvider::TFillSettings& fillSettings,
+            const NYT::TNode& rowSpec, const NYT::TNode& item,
+            const TVector<TString>& columns) = 0;
         virtual TYtType ParseYTType(const TExprNode& node, TExprContext& ctx, const TMaybe<NYql::TColumnOrder>& columns) = 0;
     };
     using ISkiffConverterPtr = TIntrusivePtr<ISkiffConverter>;

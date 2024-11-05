@@ -8,6 +8,9 @@ SELECT
     Unicode::TryToUint64("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16);
 
 SELECT
+    Unicode::TryToUint64("0", 1);
+
+SELECT
     Unicode::TryToUint64("0x1234abcd", 16),
     Unicode::TryToUint64("0X4", 16),
     Unicode::TryToUint64("0644", 8),

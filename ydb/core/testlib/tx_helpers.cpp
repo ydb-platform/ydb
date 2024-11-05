@@ -6,30 +6,64 @@
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/protos/tx_proxy.pb.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
 namespace NKikimr {
 
-NKikimrProto::EReplyStatus LocalSchemeTx(TTestActorRuntime& runtime, ui64 tabletId, const TString& schemeChangesStr, bool dryRun,
-                    NTabletFlatScheme::TSchemeChanges& scheme, TString& err) {
+NKikimrProto::EReplyStatus LocalQuery(TTestActorRuntime& runtime, ui64 tabletId,
+    const TString& program, NKikimrMiniKQL::TResult& result)
+{
     TActorId sender = runtime.AllocateEdgeActor();
 
-    auto evTx = new TEvTablet::TEvLocalSchemeTx;
-    evTx->Record.SetDryRun(dryRun);
-    auto schemeChanges = evTx->Record.MutableSchemeChanges();
-    bool parseResult = ::google::protobuf::TextFormat::ParseFromString(schemeChangesStr, schemeChanges);
-    UNIT_ASSERT_C(parseResult, "protobuf parsing failed");
+    auto* req = new TEvTablet::TEvLocalMKQL;
+    auto* tx = req->Record.MutableProgram();
+    tx->MutableProgram()->SetText(program);
 
-    ForwardToTablet(runtime, tabletId, sender, evTx);
+    ForwardToTablet(runtime, tabletId, sender, req);
 
-    TAutoPtr<IEventHandle> handle;
-    auto event = runtime.GrabEdgeEvent<TEvTablet::TEvLocalSchemeTxResponse>(handle);
-    UNIT_ASSERT(event);
+    auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(sender);
+    UNIT_ASSERT(ev);
+    auto* msg = ev->Get();
 
-    err = event->Record.GetErrorReason();
-    scheme.CopyFrom(event->Record.GetFullScheme());
+    result = msg->Record.GetExecutionEngineEvaluatedResponse();
 
     // emulate enum behavior from proto3
-    return static_cast<NKikimrProto::EReplyStatus>(event->Record.GetStatus());
+    return static_cast<NKikimrProto::EReplyStatus>(msg->Record.GetStatus());
+}
+
+NKikimrProto::EReplyStatus LocalSchemeTx(TTestActorRuntime& runtime, ui64 tabletId,
+    const NTabletFlatScheme::TSchemeChanges& schemeChanges, bool dryRun,
+    NTabletFlatScheme::TSchemeChanges& scheme, TString& err)
+{
+    TActorId sender = runtime.AllocateEdgeActor();
+
+    auto* req = new TEvTablet::TEvLocalSchemeTx;
+    *req->Record.MutableSchemeChanges() = schemeChanges;
+    req->Record.SetDryRun(dryRun);
+
+    ForwardToTablet(runtime, tabletId, sender, req);
+
+    auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvLocalSchemeTxResponse>(sender);
+    UNIT_ASSERT(ev);
+    auto* msg = ev->Get();
+
+    err = msg->Record.GetErrorReason();
+    scheme.CopyFrom(msg->Record.GetFullScheme());
+
+    // emulate enum behavior from proto3
+    return static_cast<NKikimrProto::EReplyStatus>(msg->Record.GetStatus());
+}
+
+NKikimrProto::EReplyStatus LocalSchemeTx(TTestActorRuntime& runtime, ui64 tabletId,
+    const TString& schemeChangesStr, bool dryRun,
+    NTabletFlatScheme::TSchemeChanges& scheme, TString& err)
+{
+    NTabletFlatScheme::TSchemeChanges schemeChanges;
+    bool parseResult = ::google::protobuf::TextFormat::ParseFromString(schemeChangesStr, &schemeChanges);
+    UNIT_ASSERT_C(parseResult, "protobuf parsing failed");
+
+    return LocalSchemeTx(runtime, tabletId, schemeChanges, dryRun, scheme, err);
 }
 
 ui64 GetExecutorCacheSize(TTestActorRuntime& runtime, ui64 tabletId) {

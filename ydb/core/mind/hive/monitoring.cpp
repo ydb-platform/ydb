@@ -1,11 +1,11 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
+#include <library/cpp/digest/md5/md5.h>
 #include <util/string/vector.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include "hive_impl.h"
-#include "hive_transactions.h"
 #include "hive_schema.h"
 #include "hive_log.h"
 #include "monitoring.h"
@@ -13,7 +13,9 @@
 namespace NKikimr {
 namespace NHive {
 
-TLoggedMonTransaction::TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& ev) {
+TLoggedMonTransaction::TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& ev, THive* self) {
+    Index = ++self->OperationsLogIndex;
+
     const auto& query = ev->Get()->ExtendedQuery;
     if (query) {
         NACLib::TUserToken token(query->GetUserToken());
@@ -21,16 +23,11 @@ TLoggedMonTransaction::TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr
     }
 }
 
-bool TLoggedMonTransaction::Prepare(NIceDb::TNiceDb& db) {
-    Timestamp = TActivationContext::Now();
-    auto rowset = db.Table<Schema::OperationsLog>().Key(Timestamp.MilliSeconds()).Select();
-    return rowset.IsReady() && !rowset.HaveValue<Schema::OperationsLog::Operation>();
-}
-
 void TLoggedMonTransaction::WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op) {
     TStringStream str;
     NJson::WriteJson(&str, &op);
-    db.Table<Schema::OperationsLog>().Key(Timestamp.MilliSeconds()).Update<Schema::OperationsLog::User, Schema::OperationsLog::Operation>(User, str.Str());
+    TInstant timestamp = TActivationContext::Now();
+    db.Table<Schema::OperationsLog>().Key(Index).Update<Schema::OperationsLog::User, Schema::OperationsLog::OperationTimestamp, Schema::OperationsLog::Operation>(User, timestamp.MilliSeconds(), str.Str());
 }
 
 class TTxMonEvent_DbState : public TTransactionBase<THive> {
@@ -249,7 +246,7 @@ public:
         if (WaitingOnly) {
             tabletIdIndex.reserve(Self->BootQueue.WaitQueue.size());
             for (const TBootQueue::TBootQueueRecord& rec : Self->BootQueue.WaitQueue) {
-                TTabletInfo* tablet = Self->FindTablet(rec.TabletId);
+                TTabletInfo* tablet = Self->FindTablet(rec.TabletId, rec.FollowerId);
                 if (tablet != nullptr) {
                     tabletIdIndex.push_back({tabletIndexFunction(*tablet), tablet});
                 }
@@ -477,7 +474,7 @@ public:
     }
 
     void RenderHTMLPage(IOutputStream &out) {
-        // out << "<script>$('.container').css('width', 'auto');</script>";
+        out << "<script>$('.container').css('width', 'auto');</script>";
         out << "<table class='table table-sortable'>";
         out << "<thead>";
         out << "<tr>";
@@ -700,7 +697,7 @@ public:
 
     TTxMonEvent_Settings(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
         : TBase(hive)
-        , TLoggedMonTransaction(ev)
+        , TLoggedMonTransaction(ev, hive)
         , Source(source)
         , Event(ev->Release())
     {}
@@ -781,9 +778,6 @@ public:
         const auto& params(Event->Cgi());
         NIceDb::TNiceDb db(txc.DB);
 
-        if (!Prepare(db)) {
-            return false;
-        }
         NJson::TJsonValue jsonOperation;
         auto& configUpdates = jsonOperation["ConfigUpdates"];
 
@@ -800,6 +794,7 @@ public:
         UpdateConfig(db, "MinNetworkScatterToBalance", configUpdates);
         UpdateConfig(db, "MinCounterScatterToBalance", configUpdates);
         UpdateConfig(db, "MaxNodeUsageToKick", configUpdates, TSchemeIds::State::MaxNodeUsageToKick);
+        UpdateConfig(db, "NodeUsageRangeToKick", configUpdates);
         UpdateConfig(db, "ResourceChangeReactionPeriod", configUpdates, TSchemeIds::State::ResourceChangeReactionPeriod);
         UpdateConfig(db, "TabletKickCooldownPeriod", configUpdates, TSchemeIds::State::TabletKickCooldownPeriod);
         UpdateConfig(db, "SpreadNeighbours", configUpdates, TSchemeIds::State::SpreadNeighbours);
@@ -841,6 +836,8 @@ public:
         UpdateConfig(db, "MinStorageScatterToBalance", configUpdates);
         UpdateConfig(db, "MinGroupUsageToBalance", configUpdates);
         UpdateConfig(db, "StorageBalancerInflight", configUpdates);
+        UpdateConfig(db, "LessSystemTabletsMoves", configUpdates);
+        UpdateConfig(db, "ScaleRecommendationRefreshFrequency", configUpdates);
 
         if (params.contains("BalancerIgnoreTabletTypes")) {
             auto value = params.Get("BalancerIgnoreTabletTypes");
@@ -1146,6 +1143,7 @@ public:
         ShowConfig(out, "MinCounterScatterToBalance");
         ShowConfig(out, "MinNodeUsageToBalance");
         ShowConfig(out, "MaxNodeUsageToKick");
+        ShowConfig(out, "NodeUsageRangeToKick");
         ShowConfig(out, "ResourceChangeReactionPeriod");
         ShowConfig(out, "TabletKickCooldownPeriod");
         ShowConfig(out, "NodeSelectStrategy");
@@ -1186,7 +1184,9 @@ public:
         ShowConfig(out, "MinStorageScatterToBalance");
         ShowConfig(out, "MinGroupUsageToBalance");
         ShowConfig(out, "StorageBalancerInflight");
+        ShowConfig(out, "LessSystemTabletsMoves");
         ShowConfigForBalancerIgnoreTabletTypes(out);
+        ShowConfig(out, "ScaleRecommendationRefreshFrequency");
 
         out << "<div class='row' style='margin-top:40px'>";
         out << "<div class='col-sm-2' style='padding-top:30px;text-align:right'><label for='allowedMetrics'>AllowedMetrics:</label></div>";
@@ -1315,7 +1315,7 @@ public:
 
     TTxMonEvent_TabletAvailability(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
         : TBase(hive)
-        , TLoggedMonTransaction(ev)
+        , TLoggedMonTransaction(ev, hive)
         , Source(source)
         , Event(ev->Release())
     {
@@ -1335,9 +1335,6 @@ public:
         Node = Self->FindNode(NodeId);
         if (Node == nullptr) {
             return true;
-        }
-        if (!Prepare(db)) {
-            return false;
         }
 
         NJson::TJsonValue jsonOperation;
@@ -2504,7 +2501,7 @@ public:
 
     TTxMonEvent_SetDown(const TActorId& source, TNodeId nodeId, bool down, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
         : TBase(hive)
-        , TLoggedMonTransaction(ev)
+        , TLoggedMonTransaction(ev, hive)
         , Source(source)
         , NodeId(nodeId)
         , Down(down)
@@ -2514,9 +2511,6 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
-        if (!Prepare(db)) {
-            return false;
-        }
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
             node->SetDown(Down);
@@ -2547,7 +2541,7 @@ public:
 
     TTxMonEvent_SetFreeze(const TActorId& source, TNodeId nodeId, bool freeze, TSelf* hive, NMon::TEvRemoteHttpInfo::TPtr& ev)
         : TBase(hive)
-        , TLoggedMonTransaction(ev)
+        , TLoggedMonTransaction(ev, hive)
         , Source(source)
         , NodeId(nodeId)
         , Freeze(freeze)
@@ -2557,9 +2551,6 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
-        if (!Prepare(db)) {
-            return false;
-        }
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
             node->SetFreeze(Freeze);
@@ -2691,9 +2682,9 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Wait) {
-            Self->Execute(Self->CreateSwitchDrainOn(NodeId, {.Persist = true, .KeepDown = true}, WaitActorId));
+            Self->Execute(Self->CreateSwitchDrainOn(NodeId, {}, WaitActorId));
         } else {
-            Self->Execute(Self->CreateSwitchDrainOn(NodeId, {.Persist = true, .KeepDown = true}, {}));
+            Self->Execute(Self->CreateSwitchDrainOn(NodeId, {}, {}));
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"SCHEDULED\"}"));
         }
     }
@@ -3792,11 +3783,11 @@ public:
     TIntrusivePtr<TTabletStorageInfo> Info;
     ui32 KnownGeneration = 0;
 
-    TTxMonEvent_ResetTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
+    TTxMonEvent_ResetTablet(const TActorId& source, TTabletId tabletId, TSelf* hive)
         : TBase(hive)
         , Source(source)
+        , TabletId(tabletId)
     {
-        TabletId = FromStringWithDefault<TTabletId>(ev->Get()->Cgi().Get("tablet"), TabletId);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_RESET_TABLET; }
@@ -4033,8 +4024,14 @@ public:
             auto group = tabletChannelGenRowset.GetValue<Schema::TabletChannelGen::Group>();
             bool filterOk = (filterTabletId == id) || (filterGroupId == group) || (filterTabletId == (ui64)-1 && filterGroupId == (ui64)-1);
             if (filterOk) {
+                TLeaderTabletInfo* tablet = Self->FindTablet(id);
                 ui32 channel = tabletChannelGenRowset.GetValue<Schema::TabletChannelGen::Channel>();
-                out << "<tr>";
+                bool isLatest = (tablet && tablet->TabletStorageInfo->Version == tabletChannelGenRowset.GetValueOrDefault<Schema::TabletChannelGen::Version>(0));
+                if (isLatest) {
+                    out << "<tr style='font-weight:bold'>";
+                } else {
+                    out << "<tr>";
+                }
                 out << "<td><a href='../tablets?TabletID=" << id << "'>" << id << "</a></td>";
                 out << "<td>" << channel << "</td>";
                 out << "<td>" << group << "</td>";
@@ -4050,7 +4047,6 @@ public:
                     out << "<td></td>";
                 }
                 TString unitSize;
-                TTabletInfo* tablet = Self->FindTablet(id);
                 if (tablet) {
                     TLeaderTabletInfo& leader = tablet->GetLeader();
                     if (channel < leader.GetChannelCount()) {
@@ -4325,7 +4321,11 @@ public:
         for (ui64 cnt = 0; !operationsRowset.EndOfSet() && cnt < MaxCount; ++cnt) {
             TString user = operationsRowset.GetValue<Schema::OperationsLog::User>();
             out << "<tr>";
-            out << "<td>" << TInstant::MilliSeconds(operationsRowset.GetValue<Schema::OperationsLog::Timestamp>()) << "</td>";
+            out << "<td>";
+            if (operationsRowset.HaveValue<Schema::OperationsLog::OperationTimestamp>()) {
+                out << TInstant::MilliSeconds(operationsRowset.GetValue<Schema::OperationsLog::OperationTimestamp>());
+            }
+            out << "</td>";
             out << "<td>" << (user.empty() ? "anonymous" : user.c_str()) << "</td>";
             out << "<td>";
             out << operationsRowset.GetValue<Schema::OperationsLog::Operation>();
@@ -4344,6 +4344,32 @@ public:
 
     void Complete(const TActorContext&) override {}
 };
+
+bool THive::IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
+    NMon::TEvRemoteHttpInfo* httpInfo = ev->Get();
+    if (httpInfo->Method != HTTP_METHOD_POST) {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"only POST method is allowed\"}"));
+        return false;
+    }
+    if (!GetEnableDestroyOperations()) {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"destroy operations are disabled\"}"));
+        return false;
+    }
+    TCgiParameters cgi(httpInfo->Cgi());
+    TStringBuilder keyData;
+    keyData << cgi.Get("tablet") << cgi.Get("owner") << cgi.Get("owner_idx");
+    if (keyData.empty()) {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"tablet, owner or owner_idx parameters not set\"}"));
+        return false;
+    }
+    TString key = MD5::Data(keyData);
+    if (key != cgi.Get("key")) {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"error\":\"key parameter is incorrect\"}"));
+        return false;
+    }
+    return true;
+}
+
 void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
     if (!ReadyForConnections) {
         return Execute(new TTxMonEvent_NotReady(ev->Sender, this), ctx);
@@ -4410,9 +4436,6 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     if (page == "ObjectStats") {
         return Execute(new TTxMonEvent_ObjectStats(ev->Sender, this), ctx);
     }
-    if (page == "ResetTablet") {
-        return Execute(new TTxMonEvent_ResetTablet(ev->Sender, ev, this), ctx);
-    }
     if (page == "CreateTablet") {
         ui64 owner = FromStringWithDefault<ui64>(cgi.Get("owner"), 0);
         ui64 ownerIdx = FromStringWithDefault<ui64>(cgi.Get("owner_idx"), 0);
@@ -4422,16 +4445,24 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
         ctx.RegisterWithSameMailbox(new TCreateTabletActor(ev->Sender, owner, ownerIdx, type, channelsProfile, followers, this));
         return;
     }
-    if (page == "DeleteTablet") {
-        if (cgi.Has("owner") && cgi.Has("owner_idx")) {
-            ui64 owner = FromStringWithDefault<ui64>(cgi.Get("owner"), 0);
-            ui64 ownerIdx = FromStringWithDefault<ui64>(cgi.Get("owner_idx"), 0);
-            ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, owner, ownerIdx, this));
-        } else if (cgi.Has("tablet")) {
+    if (page == "ResetTablet") {
+        if (IsSafeOperation(ev, ctx)) {
             TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);
-            ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, tabletId, this));
-        } else {
-            ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"Error\": \"tablet or (owner, owner_idx) params must be specified\"}"));
+            return Execute(new TTxMonEvent_ResetTablet(ev->Sender, tabletId, this), ctx);
+        }
+    }
+    if (page == "DeleteTablet") {
+        if (IsSafeOperation(ev, ctx)) {
+            if (cgi.Has("owner") && cgi.Has("owner_idx")) {
+                ui64 owner = FromStringWithDefault<ui64>(cgi.Get("owner"), 0);
+                ui64 ownerIdx = FromStringWithDefault<ui64>(cgi.Get("owner_idx"), 0);
+                ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, owner, ownerIdx, this));
+            } else if (cgi.Has("tablet")) {
+                TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);
+                ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, tabletId, this));
+            } else {
+                ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes("{\"Error\": \"tablet or (owner, owner_idx) params must be specified\"}"));
+            }
         }
         return;
     }

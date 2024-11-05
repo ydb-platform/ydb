@@ -48,7 +48,7 @@ struct IConnection
     virtual TClusterTag GetClusterTag() const = 0;
     virtual const TString& GetLoggingTag() const = 0;
     virtual const TString& GetClusterId() const = 0;
-    virtual const std::optional<TString>& GetClusterName() const = 0;
+    virtual const std::optional<std::string>& GetClusterName() const = 0;
     virtual IInvokerPtr GetInvoker() = 0;
 
     // TODO(gritukan): Fix alien transaction creation for RPC proxy connection

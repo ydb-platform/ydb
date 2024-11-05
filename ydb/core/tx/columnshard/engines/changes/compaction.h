@@ -25,13 +25,14 @@ protected:
         NeedGranuleStatusProvide = false;
     }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
-        return std::make_shared<NDataLocks::TListPortionsLock>(SwitchedPortions);
+        const THashSet<ui64> pathIds = { GranuleMeta->GetPathId() };
+        return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), pathIds);
     }
 
 public:
-    std::vector<TPortionInfo> SwitchedPortions; // Portions that would be replaced by new ones
+    std::vector<TPortionDataAccessor> SwitchedPortions; // Portions that would be replaced by new ones
 
-    TCompactColumnEngineChanges(const TSplitSettings& splitSettings, std::shared_ptr<TGranuleMeta> granule, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const TSaverContext& saverContext);
+    TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionDataAccessor>& portions, const TSaverContext& saverContext);
     ~TCompactColumnEngineChanges();
 
     static TString StaticTypeName() {

@@ -2,12 +2,11 @@
 #include "defs.h"
 
 #include "schemeshard_identificators.h"
-#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
 
-struct TEvPrivate {
+namespace TEvPrivate {
     enum EEv {
         EvProgressOperation = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
         EvOperationPlanStep,

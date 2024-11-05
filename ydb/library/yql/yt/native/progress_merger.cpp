@@ -21,6 +21,14 @@ void TNodeProgress::Serialize(::NYson::TYsonWriter& writer) const
         writer.OnKeyedItem("remoteId");
         writer.OnStringScalar(Progress_.RemoteId);
 
+        writer.OnKeyedItem("remoteData");
+        writer.OnBeginMap();
+        for (const auto& it : Progress_.RemoteData) {
+            writer.OnKeyedItem(it.first);
+            writer.OnStringScalar(it.second);
+        }
+        writer.OnEndMap();
+
         writer.OnKeyedItem("stages");
         writer.OnBeginMap();
         for (size_t index = 0; index < Stages_.size(); index++) {

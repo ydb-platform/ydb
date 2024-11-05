@@ -143,7 +143,7 @@ namespace NUnifiedAgent {
         std::call_once(GrpcConfigured, []() {
             const auto limitStr = GetEnv("UA_GRPC_EXECUTOR_THREADS_LIMIT");
             ui64 limit;
-            if (limitStr.Empty() || !TryFromString(limitStr, limit)) {
+            if (limitStr.empty() || !TryFromString(limitStr, limit)) {
                 limit = 2;
             }
             grpc_core::Executor::SetThreadsLimit(limit);

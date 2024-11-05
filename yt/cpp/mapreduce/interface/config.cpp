@@ -193,13 +193,13 @@ void TConfig::Reset()
     Prefix = GetEnv("YT_PREFIX");
     ApiVersion = GetEnv("YT_VERSION", "v3");
     LogLevel = GetEnv("YT_LOG_LEVEL", "error");
+    LogPath = GetEnv("YT_LOG_PATH");
 
     ContentEncoding = GetEncoding("YT_CONTENT_ENCODING");
     AcceptEncoding = GetEncoding("YT_ACCEPT_ENCODING");
 
     GlobalTxId = GetEnv("YT_TRANSACTION", "");
 
-    UseAsyncTxPinger = false;
     AsyncHttpClientThreads = 1;
     AsyncTxPingerPoolThreads = 1;
 
@@ -212,6 +212,7 @@ void TConfig::Reset()
     LoadTimings();
 
     CacheUploadDeduplicationMode = GetUploadingDeduplicationMode("YT_UPLOAD_DEDUPLICATION", EUploadDeduplicationMode::Host);
+    CacheUploadDeduplicationThreshold = 10_MB;
 
     RetryCount = Max(GetInt("YT_RETRY_COUNT", 10), 1);
     ReadRetryCount = Max(GetInt("YT_READ_RETRY_COUNT", 30), 1);
@@ -223,6 +224,7 @@ void TConfig::Reset()
         "//tmp/yt_wrapper/table_storage");
     RemoteTempTablesDirectory = GetEnv("YT_TEMP_DIR",
         RemoteTempTablesDirectory);
+    KeepTempTables = GetBool("YT_KEEP_TEMP_TABLES");
 
     InferTableSchema = false;
 

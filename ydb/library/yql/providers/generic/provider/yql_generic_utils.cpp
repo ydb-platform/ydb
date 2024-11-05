@@ -19,4 +19,4 @@ namespace NYql {
 
         return sb;
     }
-}
+} // namespace NYql

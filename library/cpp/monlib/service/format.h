@@ -21,9 +21,11 @@ namespace NMonitoring {
         auto it = FindIf(std::begin(headers), std::end(headers),
             [=] (const auto& h) {
                 if constexpr (NPrivate::THasName<std::decay_t<decltype(h)>>::value) {
-                    return AsciiCompareIgnoreCase(h.Name(), TStringBuf("accept-encoding")) == 0;
-                } else if (isPlainPair) {
-                    return AsciiCompareIgnoreCase(h.first, TStringBuf("accept-encoding")) == 0;
+                    return AsciiEqualsIgnoreCase(h.Name(), TStringBuf("accept-encoding"));
+                } else if constexpr (isPlainPair) {
+                    return AsciiEqualsIgnoreCase(h.first, TStringBuf("accept-encoding"));
+                } else {
+                    static_assert(TDependentFalse<decltype(h)>);
                 }
             });
 
@@ -66,9 +68,11 @@ namespace NMonitoring {
         auto it = FindIf(std::begin(headers), std::end(headers),
             [=] (const auto& h) {
                 if constexpr (NPrivate::THasName<std::decay_t<decltype(h)>>::value) {
-                    return AsciiCompareIgnoreCase(h.Name(), TStringBuf("accept")) == 0;
-                } else if (isPlainPair) {
-                    return AsciiCompareIgnoreCase(h.first, TStringBuf("accept")) == 0;
+                    return AsciiEqualsIgnoreCase(h.Name(), TStringBuf("accept"));
+                } else if constexpr (isPlainPair) {
+                    return AsciiEqualsIgnoreCase(h.first, TStringBuf("accept"));
+                } else {
+                    static_assert(TDependentFalse<decltype(h)>);
                 }
             });
 

@@ -1,5 +1,6 @@
 #include "scrub_actor_impl.h"
 #include "restore_corrupted_blob_actor.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
 
 namespace NKikimr {
 
@@ -8,7 +9,7 @@ namespace NKikimr {
         if (const auto it = UnreadableBlobs.find(fullId); it != UnreadableBlobs.end()) {
             STLOGX(GetActorContext(), PRI_NOTICE, BS_VDISK_SCRUB, VDS39, VDISKP(LogPrefix,
                 "dropped garbage unreadable blob"), (BlobId, it->first), (UnreadableParts, it->second.UnreadableParts));
-            *UnreadableBlobsFound -= it->second.UnreadableParts.CountBits();
+            MonGroup.UnreadableBlobsFound() -= it->second.UnreadableParts.CountBits();
             UnreadableBlobs.erase(it);
         }
     }
@@ -50,7 +51,7 @@ namespace NKikimr {
                 UnreadableBlobs.try_emplace(fullId, corrupted, corruptedPart);
             }
 
-            *UnreadableBlobsFound += corrupted.CountBits() - prevCorrupted.CountBits();
+            MonGroup.UnreadableBlobsFound() += corrupted.CountBits() - prevCorrupted.CountBits();
         }
     }
 
@@ -60,7 +61,7 @@ namespace NKikimr {
             STLOGX(GetActorContext(), PRI_NOTICE, BS_VDISK_SCRUB, VDS42, VDISKP(LogPrefix,
                 "read parts of previously unreadable blob"), (BlobId, it->first),
                 (UnreadablePartsBefore, it->second.UnreadableParts), (ReadableParts, readable));
-            *UnreadableBlobsFound -= (it->second.UnreadableParts & readable).CountBits();
+            MonGroup.UnreadableBlobsFound() -= (it->second.UnreadableParts & readable).CountBits();
             if ((it->second.UnreadableParts &= ~readable).Empty()) {
                 UnreadableBlobs.erase(it);
             }
@@ -112,12 +113,12 @@ namespace NKikimr {
                         "recovered parts of previously unreadable blob"), (BlobId, it->first),
                         (UnreadablePartsBefore, data.UnreadableParts), (RecoveredParts, item.Needed));
 
-                    *UnreadableBlobsFound -= (data.UnreadableParts & item.Needed).CountBits();
+                    MonGroup.UnreadableBlobsFound() -= (data.UnreadableParts & item.Needed).CountBits();
                     if ((data.UnreadableParts &= ~item.Needed).Empty()) {
                         UnreadableBlobs.erase(it);
                     }
-
-                    ++*BlobsFixed;
+                    ++MonGroup.BlobsFixed();
+                    
                 } else {
                     STLOG(PRI_WARN, BS_VDISK_SCRUB, VDS07, VDISKP(LogPrefix, "failed to restore corrupted blob"),
                         (BlobId, item.BlobId), (Status, item.Status));
@@ -174,7 +175,7 @@ namespace NKikimr {
             if (iter.Seek(id); iter.Valid() && iter.GetCurKey().LogoBlobID() == id) {
                 iter.PutToMerger(&merger);
                 merger.Finish();
-                keepData = barriers.Keep(id, merger.GetMemRec(), merger.GetMemRecsMerged(), snap.HullCtx->AllowKeepFlags,
+                keepData = barriers.Keep(id, merger.GetMemRec(), {}, snap.HullCtx->AllowKeepFlags,
                     true /*allowGarbageCollection*/).KeepData;
                 merger.Clear();
             }

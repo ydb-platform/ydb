@@ -367,8 +367,8 @@ SIMPLE_TEST_BEGIN(TSimple3PutRangeGetAllForward, TBasePut3ForRange)
 using TBasePut3ForRange::SendReadRequests;
 void SendReadRequests(const TActorContext &ctx) {
     ExpectedSetAll();
-    TLogoBlobID from(0, 0, 0, 0, 0, 0, 1);
-    TLogoBlobID to(0, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
+    TLogoBlobID from(DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
+    TLogoBlobID to(DefaultTestTabletId, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
     TBasePut3ForRange::SendReadRequests(ctx, from, to);
 }
 SIMPLE_TEST_END(TSimple3PutRangeGetAllForward, TBasePut3ForRange)
@@ -378,8 +378,8 @@ SIMPLE_TEST_BEGIN(TSimple3PutRangeGetAllBackward, TBasePut3ForRange)
 using TBasePut3ForRange::SendReadRequests;
 void SendReadRequests(const TActorContext &ctx) {
     ExpectedSetAll();
-    TLogoBlobID from(0, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
-    TLogoBlobID to  (0, 0, 0, 0, 0, 0, 1);
+    TLogoBlobID from(DefaultTestTabletId, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
+    TLogoBlobID to  (DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
     TBasePut3ForRange::SendReadRequests(ctx, from, to);
 }
 SIMPLE_TEST_END(TSimple3PutRangeGetAllBackward, TBasePut3ForRange)
@@ -390,8 +390,8 @@ SIMPLE_TEST_BEGIN(TSimple3PutRangeGetNothingForward, TBasePut3ForRange)
 using TBasePut3ForRange::SendReadRequests;
 void SendReadRequests(const TActorContext &ctx) {
     ExpectedSetNothing();
-    TLogoBlobID from(1, 0, 0, 0, 0, 0, 1);
-    TLogoBlobID to(1, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
+    TLogoBlobID from(DefaultTestTabletId + 1, 0, 0, 0, 0, 0, 1);
+    TLogoBlobID to(DefaultTestTabletId + 1, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
     TBasePut3ForRange::SendReadRequests(ctx, from, to);
 }
 SIMPLE_TEST_END(TSimple3PutRangeGetNothingForward, TBasePut3ForRange)
@@ -401,8 +401,8 @@ SIMPLE_TEST_BEGIN(TSimple3PutRangeGetNothingBackward, TBasePut3ForRange)
 using TBasePut3ForRange::SendReadRequests;
 void SendReadRequests(const TActorContext &ctx) {
     ExpectedSetNothing();
-    TLogoBlobID from(1, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
-    TLogoBlobID to  (1, 0, 0, 0, 0, 0, 1);
+    TLogoBlobID from(DefaultTestTabletId + 1, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
+    TLogoBlobID to  (DefaultTestTabletId + 1, 0, 0, 0, 0, 0, 1);
     TBasePut3ForRange::SendReadRequests(ctx, from, to);
 }
 SIMPLE_TEST_END(TSimple3PutRangeGetNothingBackward, TBasePut3ForRange)
@@ -413,8 +413,8 @@ SIMPLE_TEST_BEGIN(TSimple3PutRangeGetMiddleForward, TBasePut3ForRange)
 using TBasePut3ForRange::SendReadRequests;
 void SendReadRequests(const TActorContext &ctx) {
     ExpectedSetMiddle();
-    TLogoBlobID from(0, 1, 17, 0, 0, 0, 1);
-    TLogoBlobID to  (0, 1, 32, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
+    TLogoBlobID from(DefaultTestTabletId, 1, 17, 0, 0, 0, 1);
+    TLogoBlobID to  (DefaultTestTabletId, 1, 32, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
     TBasePut3ForRange::SendReadRequests(ctx, from, to);
 }
 SIMPLE_TEST_END(TSimple3PutRangeGetMiddleForward, TBasePut3ForRange)
@@ -424,8 +424,8 @@ SIMPLE_TEST_BEGIN(TSimple3PutRangeGetMiddleBackward, TBasePut3ForRange)
 using TBasePut3ForRange::SendReadRequests;
 void SendReadRequests(const TActorContext &ctx) {
     ExpectedSetMiddle();
-    TLogoBlobID from(0, 1, 32, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
-    TLogoBlobID to  (0, 1, 17, 0, 0, 0, 1);
+    TLogoBlobID from(DefaultTestTabletId, 1, 32, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
+    TLogoBlobID to  (DefaultTestTabletId, 1, 17, 0, 0, 0, 1);
     TBasePut3ForRange::SendReadRequests(ctx, from, to);
 }
 SIMPLE_TEST_END(TSimple3PutRangeGetMiddleBackward, TBasePut3ForRange)
@@ -464,7 +464,7 @@ public:
         : TActorBootstrapped<TSimpleGetFromEmptyDBActor>()
         , Conf(conf)
         , VDiskInfo(Conf->VDisks->Get(0))
-        , LogoBlobID1(0, 1, 1, 0, 0, 0)
+        , LogoBlobID1(DefaultTestTabletId, 1, 1, 0, 0, 0)
     {}
 };
 
@@ -484,8 +484,8 @@ class TRangeGetFromEmptyDBActor : public TActorBootstrapped<TRangeGetFromEmptyDB
     void Bootstrap(const TActorContext &ctx) {
         Become(&TThis::StateFunc);
 
-        TLogoBlobID from(0, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
-        TLogoBlobID to  (0, 0, 0, 0, 0, 0, 1);
+        TLogoBlobID from(DefaultTestTabletId, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
+        TLogoBlobID to  (DefaultTestTabletId, 0, 0, 0, 0, 0, 1);
         LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskInfo.VDiskID, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, from, to, 10);

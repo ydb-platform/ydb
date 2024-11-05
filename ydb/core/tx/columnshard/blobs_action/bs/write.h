@@ -11,9 +11,7 @@ private:
     TBlobBatch BlobBatch;
     std::shared_ptr<IBlobManager> Manager;
 protected:
-    virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) override {
-        return BlobBatch.SendWriteBlobRequest(data, blobId, TInstant::Max(), TActorContext::AsActorContext());
-    }
+    virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) override;
 
     virtual void DoOnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) override {
         return BlobBatch.OnBlobWriteResult(blobId.GetLogoBlobId(), status);
@@ -28,9 +26,7 @@ protected:
     }
 
     virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) override;
-    virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, const bool /*blobsWroteSuccessfully*/) override {
-
-    }
+    virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, const bool blobsWroteSuccessfully) override;
 public:
     virtual bool NeedDraftTransaction() const override {
         return false;

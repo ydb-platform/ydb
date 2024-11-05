@@ -1,0 +1,80 @@
+commit 95c5a57badd5a8cddce3fae7be593d1de3e1f9f7 (HEAD -> snappy-std)
+author: thegeorg
+date: 2021-08-03T16:56:11+03:00
+
+    Restore partial TString support
+
+--- a/snappy.cc
++++ b/snappy.cc
+@@ -73,6 +73,7 @@
+ #include <string>
+ #include <utility>
+ #include <vector>
++#include <util/generic/string.h>
+ 
+ namespace snappy {
+ 
+@@ -1847,6 +1847,20 @@ bool Uncompress(const char* compressed, size_t n, std::string* uncompressed) {
+                        string_as_array(uncompressed));
+ }
+
++bool Uncompress(const char* compressed, size_t n, TString* uncompressed) {
++  size_t ulength;
++  if (!GetUncompressedLength(compressed, n, &ulength)) {
++    return false;
++  }
++  // On 32-bit builds: max_size() < kuint32max.  Check for that instead
++  // of crashing (e.g., consider externally specified compressed data).
++  if (ulength > uncompressed->max_size()) {
++    return false;
++  }
++  uncompressed->ReserveAndResize(ulength);
++  return RawUncompress(compressed, n, uncompressed->begin());
++}
++
+ // A Writer that drops everything on the floor and just does validation
+ class SnappyDecompressionValidator {
+  private:
+@@ -1901,6 +1901,16 @@ size_t Compress(const char* input, size_t input_length,
+   return compressed_length;
+ }
+ 
++size_t Compress(const char* input, size_t input_length, TString* compressed) {
++  // Pre-grow the buffer to the max length of the compressed output
++  compressed->ReserveAndResize(MaxCompressedLength(input_length));
++
++  size_t compressed_length;
++  RawCompress(input, input_length, compressed->begin(), &compressed_length);
++  compressed->resize(compressed_length);
++  return compressed_length;
++}
++
+ // -----------------------------------------------------------------------
+ // Sink interface
+ // -----------------------------------------------------------------------
+--- a/snappy.h
++++ b/snappy.h
+@@ -42,6 +42,7 @@
+ #include <stdint.h>
+
+ #include <string>
++#include <util/generic/fwd.h>
+
+ #include "snappy-stubs-public.h"
+ 
+@@ -75,4 +77,6 @@ namespace snappy {
+   size_t Compress(const char* input, size_t input_length,
+                   std::string* compressed);
++  size_t Compress(const char* input, size_t input_length,
++                  TString* compressed);
+   size_t Compress(const char* input, size_t input_length,
+				   std::string* compressed, CompressionOptions options);
+@@ -84,6 +88,8 @@ namespace snappy {
+   // returns false if the message is corrupted and could not be decompressed
+   bool Uncompress(const char* compressed, size_t compressed_length,
+                   std::string* uncompressed);
++  bool Uncompress(const char* compressed, size_t compressed_length,
++                  TString* uncompressed);
+ 
+   // Decompresses "compressed" to "*uncompressed".
+   //

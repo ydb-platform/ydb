@@ -37,6 +37,7 @@ public:
         PrintAst = 0x0100,
         PrintExpr = 0x0200,
         PrintTraceOpt = 0x0400,
+        WithFinalIssues = 0x0800,
     };
 
 public:
@@ -105,6 +106,7 @@ public:
         } else if (lang == TStringBuf("sql")) {
             options |= TYqlAction::SqlProgram;
         }
+        options |= TYqlAction::WithFinalIssues;
 
         TStringStream output;
         NJson::TJsonWriter writer(&output, false);

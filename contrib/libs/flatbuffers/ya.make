@@ -2,13 +2,13 @@
 
 LIBRARY()
 
-VERSION(23.5.26)
-
-ORIGINAL_SOURCE(https://github.com/google/flatbuffers/archive/v23.5.26.tar.gz)
-
 LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+
+VERSION(24.3.25)
+
+ORIGINAL_SOURCE(https://github.com/google/flatbuffers/archive/v24.3.25.tar.gz)
 
 PEERDIR(
     contrib/restricted/abseil-cpp/absl/base
@@ -37,5 +37,4 @@ END()
 
 RECURSE(
     flatc
-    samples
 )

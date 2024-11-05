@@ -16,19 +16,23 @@ class TFiberSchedulerThread
 {
 public:
     TFiberSchedulerThread(
-        const TString& threadGroupName,
-        const TString& threadName,
-        NThreading::EThreadPriority threadPriority = NThreading::EThreadPriority::Normal,
-        int shutdownPriority = 0);
+        TString threadGroupName,
+        TString threadName,
+        NThreading::TThreadOptions options = {});
 
     //! Empty callback signals about stopping.
     virtual TClosure OnExecute() = 0;
 
 private:
-    void ThreadMain() override;
-
     const TString ThreadGroupName_;
+
+    void ThreadMain() override;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr int DefaultMaxIdleFibers = 5'000;
+void UpdateMaxIdleFibers(int maxIdleFibers);
 
 ////////////////////////////////////////////////////////////////////////////////
 

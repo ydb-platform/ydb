@@ -2,7 +2,6 @@
 
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h>
-#include <ydb/core/blobstorage/vdisk/handoff/handoff_delegate.h>
 
 namespace NKikimr {
 
@@ -20,7 +19,6 @@ namespace NKikimr {
     public:
         TIntrusivePtr<TLsnMngr> LsnMngr;
         TPDiskCtxPtr PDiskCtx;
-        TIntrusivePtr<THandoffDelegate> HandoffDelegate;
         const TActorId SkeletonId;
         const bool RunHandoff;
         const TIntrusivePtr<TLevelIndex<TKey, TMemRec>> LevelIndex;
@@ -32,13 +30,11 @@ namespace NKikimr {
     public:
         TLevelIndexRunTimeCtx(TIntrusivePtr<TLsnMngr> lsnMngr,
                 TPDiskCtxPtr pdiskCtx,
-                TIntrusivePtr<THandoffDelegate> handoffDelegate,
                 const TActorId skeletonId,
                 bool runHandoff,
                 TIntrusivePtr<TLevelIndex<TKey, TMemRec>> levelIndex)
             : LsnMngr(std::move(lsnMngr))
             , PDiskCtx(std::move(pdiskCtx))
-            , HandoffDelegate(std::move(handoffDelegate))
             , SkeletonId(skeletonId)
             , RunHandoff(runHandoff)
             , LevelIndex(std::move(levelIndex))

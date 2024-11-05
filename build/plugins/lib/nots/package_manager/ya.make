@@ -1,4 +1,4 @@
-OWNER(g:frontend-build-platform)
+SUBSCRIBER(g:frontend_build_platform)
 
 PY3_LIBRARY()
 
@@ -12,6 +12,7 @@ PY_SRCS(
 PEERDIR(
     build/plugins/lib/nots/package_manager/base
     build/plugins/lib/nots/package_manager/pnpm
+    build/plugins/lib/nots/package_manager/npm
 )
 
 END()
@@ -19,4 +20,5 @@ END()
 RECURSE(
     base
     pnpm
+    npm
 )

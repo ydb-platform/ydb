@@ -23,7 +23,7 @@ A single run of the `tools rename` command executes a single rename transaction 
 
 | Parameter name | Parameter description |
 | --- | --- |
-| `--item <property>=<value>,...` | Description of the rename operation. Can be specified multiple times if multiple rename operations need to be executed within a single transaction.</br></br>Required properties:</br><ul><li>`source`, `src`, and `s`: Path to the source table.</li><li>`destination`, `dst`, and `d`: Path to the destination table. If the destination path contains folders, they must be [created in advance](../../dir.md#mkdir).</li></ul>Advanced properties:</br><ul> <li>`replace`, `force`: Overwrite the destination table. If `True`, the destination table is overwritten with its data deleted. `False`: If the destination table exists, an error is returned and the entire rename transaction is canceled. Default value: `False`.</li></ul> |
+| `--item <property>=<value>,...` | Description of the rename operation. Can be specified multiple times if multiple rename operations need to be executed within a single transaction.<br/><br/>Required properties:<br/><ul><li>`source`, `src`, and `s`: Path to the source table.</li><li>`destination`, `dst`, and `d`: Path to the destination table. If the destination path contains folders, they must be [created in advance](../../dir.md#mkdir).</li></ul>Advanced properties:<br/><ul> <li>`replace`, `force`: Overwrite the destination table. If `True`, the destination table is overwritten with its data deleted. `False`: If the destination table exists, an error is returned and the entire rename transaction is canceled. Default value: `False`.</li></ul> |
 | `--timeout <value>` | Operation timeout, ms. |
 
 When including multiple rename operations in a single `tools rename` call, they're executed in the specified order, but within a single transaction. This lets you rotate the table under load without data loss: the first operation is renaming the working table to the backup one and the second is renaming the new table to the working one.
@@ -68,4 +68,3 @@ When including multiple rename operations in a single `tools rename` call, they'
     --item source=prod-project/main_table,destination=prod-project/main_table.backup \
     --item source=pre-prod-project/main_table,destination=prod-project/main_table
   ```
-

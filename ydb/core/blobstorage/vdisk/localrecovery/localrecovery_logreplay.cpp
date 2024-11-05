@@ -230,6 +230,9 @@ namespace NKikimr {
                 TLogoBlobID genId(id, 0);
                 LocRecCtx->HullDbRecovery->ReplayAddHugeLogoBlobCmd(ctx, genId, ingress, diskAddr, lsn,
                         THullDbRecovery::RECOVERY);
+                if (diskAddr.ChunkIdx && diskAddr.Size) {
+                    LocRecCtx->RepairedHuge->RegisterBlob(diskAddr);
+                }
             }
 
             // skip records that already in synclog
@@ -429,10 +432,9 @@ namespace NKikimr {
 
         void ApplySyncDataByRecord(const TActorContext &ctx, ui64 recordLsn) {
             // count number of records
-            ui64 recsNum = 0;
-            auto count = [&recsNum] (const void *) { recsNum++; };
             NSyncLog::TFragmentReader fragment(LocalSyncDataMsg.Data);
-            fragment.ForEach(count, count, count, count);
+            std::vector<const NSyncLog::TRecordHdr*> records = fragment.ListRecords();
+            ui64 recsNum = records.size();
 
             // calculate lsn
             Y_DEBUG_ABORT_UNLESS(recordLsn >= recsNum, "recordLsn# %" PRIu64 " recsNum# %" PRIu64,
@@ -465,7 +467,9 @@ namespace NKikimr {
             };
 
             // apply local sync data
-            fragment.ForEach(blobHandler, blockHandler, barrierHandler, blockHandlerV2);
+            for (const NSyncLog::TRecordHdr* rec : records) {
+                NSyncLog::HandleRecordHdr(rec, blobHandler, blockHandler, barrierHandler, blockHandlerV2);
+            }
         }
 
         void PutLogoBlobsBatchToHull(
@@ -755,7 +759,7 @@ namespace NKikimr {
             }
 
             TEvAnubisOsirisPut put(AnubisOsirisPutMsg);
-            TEvAnubisOsirisPut::THullDbInsert insert = put.PrepareInsert(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk);
+            THullDbInsert insert = put.PrepareInsert(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk);
             const bool fromVPutCommand = false;
             PutLogoBlobToHullAndSyncLog(ctx, record.Lsn, insert.Id, insert.Ingress, TString(), fromVPutCommand);
             return EDispatchStatus::Success;

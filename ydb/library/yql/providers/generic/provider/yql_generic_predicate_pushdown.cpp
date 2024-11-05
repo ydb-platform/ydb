@@ -1,13 +1,26 @@
 #include "yql_generic_predicate_pushdown.h"
 
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
-
+#include <ydb/core/fq/libs/common/util.h>
 #include <util/string/cast.h>
 
 namespace NYql {
 
     using namespace NNodes;
     using namespace NConnector::NApi;
+
+    TString FormatColumn(const TString& value);
+    TString FormatValue(const Ydb::TypedValue& value);
+    TString FormatNull(const TExpression_TNull&);
+    TString FormatExpression(const TExpression& expression);
+    TString FormatArithmeticalExpression(const TExpression_TArithmeticalExpression& expression);
+    TString FormatNegation(const TPredicate_TNegation& negation);
+    TString FormatComparison(const TPredicate_TComparison comparison);
+    TString FormatConjunction(const TPredicate_TConjunction& conjunction, bool topLevel);
+    TString FormatDisjunction(const TPredicate_TDisjunction& disjunction);
+    TString FormatIsNull(const TPredicate_TIsNull& isNull);
+    TString FormatIsNotNull(const TPredicate_TIsNotNull& isNotNull);
+    TString FormatPredicate(const TPredicate& predicate, bool topLevel);
 
     namespace {
 
@@ -67,6 +80,7 @@ namespace NYql {
             MATCH_ATOM(Double, DOUBLE, double, double);
             MATCH_ATOM(String, STRING, bytes, TString);
             MATCH_ATOM(Utf8, UTF8, text, TString);
+            MATCH_ATOM(Timestamp, TIMESTAMP, int64, i64);
             MATCH_ARITHMETICAL(Sub, SUB);
             MATCH_ARITHMETICAL(Add, ADD);
             MATCH_ARITHMETICAL(Mul, MUL);
@@ -98,6 +112,8 @@ namespace NYql {
             EXPR_NODE_TO_COMPARE_TYPE(TCoCmpLessOrEqual, LE);
             EXPR_NODE_TO_COMPARE_TYPE(TCoCmpGreater, G);
             EXPR_NODE_TO_COMPARE_TYPE(TCoCmpGreaterOrEqual, GE);
+            EXPR_NODE_TO_COMPARE_TYPE(TCoAggrEqual, IND);
+            EXPR_NODE_TO_COMPARE_TYPE(TCoAggrNotEqual, ID);
 
             if (proto->operation() == TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED) {
                 err << "unknown operation: " << compare.Raw()->Content();
@@ -184,7 +200,228 @@ namespace NYql {
             err << "unknown predicate: " << predicate.Raw()->Content();
             return false;
         }
+    }
 
+    TString FormatColumn(const TString& value) {
+        return NFq::EncloseAndEscapeString(value, '`');
+    }
+
+    TString FormatValue(const Ydb::TypedValue& value) {
+        switch (value.value().value_case()) {
+            case  Ydb::Value::kBoolValue:
+                return ToString(value.value().bool_value());
+            case Ydb::Value::kInt32Value:
+                return ToString(value.value().int32_value());
+            case Ydb::Value::kUint32Value:
+                return ToString(value.value().uint32_value());
+            case Ydb::Value::kInt64Value:
+                return ToString(value.value().int64_value());
+            case Ydb::Value::kUint64Value:
+                return ToString(value.value().uint64_value());
+            case Ydb::Value::kFloatValue:
+                return ToString(value.value().float_value());
+            case Ydb::Value::kDoubleValue:
+                return ToString(value.value().double_value());
+            case Ydb::Value::kBytesValue:
+                return NFq::EncloseAndEscapeString(value.value().bytes_value(), '"');
+            case Ydb::Value::kTextValue:
+                return NFq::EncloseAndEscapeString(value.value().text_value(), '"');
+            default:
+                throw yexception() << "ErrUnimplementedTypedValue, value case " << static_cast<ui64>(value.value().value_case());
+        }
+    }
+
+    TString FormatNull(const TExpression_TNull&) {
+        return "NULL";
+    }
+
+    TString FormatExpression(const TExpression& expression) {
+        switch (expression.payload_case()) {
+            case TExpression::kColumn:
+                return FormatColumn(expression.column());
+            case TExpression::kTypedValue:
+                return FormatValue(expression.typed_value());
+            case TExpression::kArithmeticalExpression:
+                return FormatArithmeticalExpression(expression.arithmetical_expression());
+            case TExpression::kNull:
+                return FormatNull(expression.null());
+            default:
+                throw yexception() << "UnimplementedExpression, payload_case " << static_cast<ui64>(expression.payload_case());
+        }
+    }
+
+    TString FormatArithmeticalExpression(const TExpression_TArithmeticalExpression& expression) {
+        TString operation;
+        switch (expression.operation()) {
+            case TExpression_TArithmeticalExpression::MUL:
+                operation = " * ";
+                break;
+            case TExpression_TArithmeticalExpression::ADD:
+                operation = " + ";
+                break;
+            case TExpression_TArithmeticalExpression::SUB:
+                operation = " - ";
+                break;
+            case TExpression_TArithmeticalExpression::BIT_AND:
+                operation = " & ";
+                break;
+            case TExpression_TArithmeticalExpression::BIT_OR:
+                operation = " | ";
+                break;
+            case TExpression_TArithmeticalExpression::BIT_XOR:
+                operation = " ^ ";
+                break;
+            default:
+                throw yexception() << "ErrUnimplementedArithmeticalExpression, operation " << static_cast<ui64>(expression.operation());
+        }
+
+        auto left = FormatExpression(expression.left_value());
+        auto right = FormatExpression(expression.right_value());
+        return left + operation + right;
+    }
+
+    TString FormatNegation(const TPredicate_TNegation& negation) {
+        auto pred = FormatPredicate(negation.operand(), false);
+        return "(NOT " + pred + ")";
+    }
+
+    TString FormatConjunction(const TPredicate_TConjunction& conjunction, bool /*topLevel*/) {
+        ui32 succeeded = 0;
+        TStringStream stream;
+        TString first;
+
+        for (const auto& predicate : conjunction.operands()) {
+            auto statement = FormatPredicate(predicate, false);
+
+            if (succeeded > 0) {
+                if (succeeded == 1) {
+                    stream << "(";
+                    stream << first;
+                }
+                stream << " AND ";
+                stream << statement;
+            } else {
+                first = statement;
+            }
+            succeeded++;
+        }
+
+        if (succeeded == 0) {
+            throw yexception() << "failed to format AND statement, no operands";
+        }
+
+        if (succeeded == 1) {
+            stream << first;
+        } else {
+            stream << ")";
+        }
+        return stream.Str();
+    }
+
+    TString FormatDisjunction(const TPredicate_TDisjunction& disjunction) {
+        TStringStream stream;
+        TString first;
+        ui32 cnt = 0;
+
+        for (const auto& predicate : disjunction.operands()) {
+            auto statement = FormatPredicate(predicate, false);
+
+            if (cnt > 0) {
+                if (cnt == 1) {
+                    stream << "(";
+                    stream << first;
+                }
+
+                stream << " OR ";
+                stream << statement;
+            } else {
+                first = statement;
+            }
+            cnt++;
+        }
+
+        if (cnt == 0) {
+            throw yexception() << "failed to format OR statement: no operands";
+        }
+
+        if (cnt == 1) {
+            stream << first;
+        } else {
+            stream << ")";
+        }
+
+        return stream.Str();
+    }
+
+    TString FormatIsNull(const TPredicate_TIsNull& isNull) {
+        auto statement = FormatExpression(isNull.value());
+        return "(" + statement + " IS NULL)";
+    }
+
+    TString FormatIsNotNull(const TPredicate_TIsNotNull& isNotNull) {
+        auto statement = FormatExpression(isNotNull.value());
+        return "(" + statement + " IS NOT NULL)";
+    }
+
+    TString FormatComparison(TPredicate_TComparison comparison) {
+        TString operation;
+
+        switch (comparison.operation()) {
+        case TPredicate_TComparison::L:
+            operation = " < ";
+            break;
+        case TPredicate_TComparison::LE:
+            operation = " <= ";
+            break;
+        case TPredicate_TComparison::EQ:
+            operation = " = ";
+            break;
+        case TPredicate_TComparison::NE:
+            operation = " <> ";
+            break;
+        case TPredicate_TComparison::GE:
+            operation = " >= ";
+            break;
+        case TPredicate_TComparison::G:
+            operation = " > ";
+            break;
+        case TPredicate_TComparison::IND:
+            operation = " IS NOT DISTINCT FROM ";
+            break;
+        case TPredicate_TComparison::ID:
+            operation = " IS DISTINCT FROM ";
+            break;
+        default:
+            throw yexception() << "UnimplementedOperation, operation " << static_cast<ui64>(comparison.operation());
+        }
+
+        auto left = FormatExpression(comparison.left_value());
+        auto right = FormatExpression(comparison.right_value());
+
+        return left + operation + right;
+    }
+
+    TString FormatPredicate(const TPredicate& predicate, bool topLevel ) {
+        switch (predicate.payload_case()) {
+            case TPredicate::PAYLOAD_NOT_SET:
+                return {};
+            case TPredicate::kNegation:
+                return FormatNegation(predicate.negation());
+            case TPredicate::kConjunction:
+                return FormatConjunction(predicate.conjunction(), topLevel);
+            case TPredicate::kDisjunction:
+                return FormatDisjunction(predicate.disjunction());
+            case TPredicate::kIsNull:
+                return FormatIsNull(predicate.is_null());
+            case TPredicate::kIsNotNull:
+                return FormatIsNotNull(predicate.is_not_null());
+            case TPredicate::kComparison:
+                return FormatComparison(predicate.comparison());
+            case TPredicate::kBoolExpression:
+                return FormatExpression(predicate.bool_expression().value());
+            default:
+                throw yexception() << "UnimplementedPredicateType, payload_case " << static_cast<ui64>(predicate.payload_case());
+        }
     }
 
     bool IsEmptyFilterPredicate(const TCoLambda& lambda) {
@@ -199,4 +436,11 @@ namespace NYql {
         return SerializePredicate(predicate.Body(), proto, predicate.Args().Arg(0), err);
     }
 
+    TString FormatWhere(const TPredicate& predicate) {
+        auto stream = FormatPredicate(predicate, true);
+        if (stream.empty()) {
+            return "";
+        }
+        return "WHERE " + stream;
+    }
 } // namespace NYql

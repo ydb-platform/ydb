@@ -6,23 +6,45 @@ namespace NKikimr::NOlap {
 
 using namespace NKikimr::NColumnShard;
 
+bool TBlobManagerDb::LoadGCBarrierPreparation(TGenStep& genStep) {
+    ui64 gen = 0;
+    ui64 step = 0;
+    NIceDb::TNiceDb db(Database);
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::GCBarrierPreparationGen, gen) ||
+        !Schema::GetSpecialValueOpt(db, Schema::EValueIds::GCBarrierPreparationStep, step))
+    {
+        return false;
+    }
+    genStep = TGenStep(gen, step);
+    return true;
+}
+
+void TBlobManagerDb::SaveGCBarrierPreparation(const TGenStep& genStep) {
+    SaveGCBarrierPreparation(Database, genStep);
+}
+
+void TBlobManagerDb::SaveGCBarrierPreparation(NTable::TDatabase& database, const TGenStep& genStep) {
+    NIceDb::TNiceDb db(database);
+    Schema::SaveSpecialValue(db, Schema::EValueIds::GCBarrierPreparationGen, genStep.Generation());
+    Schema::SaveSpecialValue(db, Schema::EValueIds::GCBarrierPreparationStep, genStep.Step());
+}
+
 bool TBlobManagerDb::LoadLastGcBarrier(TGenStep& lastCollectedGenStep) {
     NIceDb::TNiceDb db(Database);
     ui64 gen = 0;
     ui64 step = 0;
-    if (!Schema::GetSpecialValue(db, Schema::EValueIds::LastGcBarrierGen, gen) ||
-        !Schema::GetSpecialValue(db, Schema::EValueIds::LastGcBarrierStep, step))
-    {
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastGcBarrierGen, gen) ||
+        !Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastGcBarrierStep, step)) {
         return false;
     }
-    lastCollectedGenStep = {gen, step};
+    lastCollectedGenStep = TGenStep(gen, step);
     return true;
 }
 
 void TBlobManagerDb::SaveLastGcBarrier(const TGenStep& lastCollectedGenStep) {
     NIceDb::TNiceDb db(Database);
-    Schema::SaveSpecialValue(db, Schema::EValueIds::LastGcBarrierGen, std::get<0>(lastCollectedGenStep));
-    Schema::SaveSpecialValue(db, Schema::EValueIds::LastGcBarrierStep, std::get<1>(lastCollectedGenStep));
+    Schema::SaveSpecialValue(db, Schema::EValueIds::LastGcBarrierGen, lastCollectedGenStep.Generation());
+    Schema::SaveSpecialValue(db, Schema::EValueIds::LastGcBarrierStep, lastCollectedGenStep.Step());
 }
 
 bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTabletsByBlob& blobsToDelete,
@@ -44,7 +66,7 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToKeep::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
             AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
-
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "LOAD_KEEP")("blob_id", unifiedBlobId.ToStringNew());
             blobsToKeep.push_back(unifiedBlobId);
             if (!rowset.Next()) {
                 return false;
@@ -63,6 +85,7 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
             const TString blobIdStr = rowset.GetValue<Schema::BlobsToDelete::BlobId>();
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, dsGroupSelector, error);
             AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "LOAD_DELETE")("blob_id", unifiedBlobId.ToStringNew());
             blobsToDeleteLocal.Add(selfTabletId, unifiedBlobId);
             if (!rowset.Next()) {
                 return false;
@@ -98,6 +121,7 @@ void TBlobManagerDb::AddBlobToKeep(const TUnifiedBlobId& blobId) {
 }
 
 void TBlobManagerDb::EraseBlobToKeep(const TUnifiedBlobId& blobId) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_BS)("event", "ERASE_KEEP")("blob_id", blobId.ToStringNew());
     NIceDb::TNiceDb db(Database);
     db.Table<Schema::BlobsToKeep>().Key(blobId.ToStringLegacy()).Delete();
     db.Table<Schema::BlobsToKeep>().Key(blobId.ToStringNew()).Delete();
@@ -118,8 +142,8 @@ void TBlobManagerDb::EraseBlobToDelete(const TUnifiedBlobId& blobId, const TTabl
 }
 
 bool TBlobManagerDb::LoadTierLists(const TString& storageId, TTabletsByBlob& blobsToDelete, std::deque<TUnifiedBlobId>& draftBlobsToDelete, const TTabletId selfTabletId) {
-    draftBlobsToDelete.clear();
     TTabletsByBlob localBlobsToDelete;
+    std::deque<TUnifiedBlobId> localDraftBlobsToDelete;
 
     NIceDb::TNiceDb db(Database);
 
@@ -176,7 +200,7 @@ bool TBlobManagerDb::LoadTierLists(const TString& storageId, TTabletsByBlob& blo
             TUnifiedBlobId unifiedBlobId = TUnifiedBlobId::ParseFromString(blobIdStr, nullptr, error);
             AFL_VERIFY(unifiedBlobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
 
-            draftBlobsToDelete.emplace_back(std::move(unifiedBlobId));
+            localDraftBlobsToDelete.emplace_back(std::move(unifiedBlobId));
             if (!rowset.Next()) {
                 return false;
             }
@@ -184,6 +208,7 @@ bool TBlobManagerDb::LoadTierLists(const TString& storageId, TTabletsByBlob& blo
     }
     
     std::swap(localBlobsToDelete, blobsToDelete);
+    std::swap(localDraftBlobsToDelete, draftBlobsToDelete);
 
     return true;
 }

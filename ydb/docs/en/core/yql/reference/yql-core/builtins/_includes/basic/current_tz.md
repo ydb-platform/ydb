@@ -2,9 +2,9 @@
 
 `CurrentTzDate()`, `CurrentTzDatetime()`, and `CurrentTzTimestamp()`: Get the current date and/or time in the [IANA time zone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) specified in the first argument. The result data type is specified at the end of the function name.
 
-The arguments that follow are optional and work same as [RANDOM](#random).
+The arguments that follow are optional and work same as [RANDOM](../../basic.md#random).
 
-**Examples**
+### Examples
 
 ```yql
 SELECT CurrentTzDate("Europe/Moscow");
@@ -20,12 +20,12 @@ Adding the time zone information to the date/time in UTC. In the result of `SELE
 
 Arguments:
 
-1. Date: the type is `Date``Datetime`/`Timestamp`.
+1. Date: the type is `Date`/`Datetime`/`Timestamp`.
 2. [The IANA name of the time zone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
 
 Result type: `TzDate`/`TzDatetime`/`TzTimestamp`, depending on the input data type.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT AddTimezone(Datetime("2018-02-01T12:00:00Z"), "Europe/Moscow");
@@ -41,7 +41,7 @@ Arguments:
 
 Result type: `Date`/`Datetime`/`Timestamp`, depending on the input data type.
 
-**Examples**
+### Examples
 
 ```yql
 SELECT RemoveTimezone(TzDatetime("2018-02-01T12:00:00,Europe/Moscow"));

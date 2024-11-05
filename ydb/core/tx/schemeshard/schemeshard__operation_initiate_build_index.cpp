@@ -88,7 +88,9 @@ public:
             found = true;
 
             Y_ABORT_UNLESS(index->AlterData);
-            context.SS->DescribeTableIndex(childPathId, childName, index->AlterData, *initiate->MutableIndexDescription());
+            context.SS->DescribeTableIndex(childPathId, childName, index->AlterData, false, false,
+                *initiate->MutableIndexDescription()
+            );
         }
 
         txState->ClearShardsInProgress();

@@ -39,36 +39,45 @@ struct TEvScanExchange {
 
     class TEvSendData: public NActors::TEventLocal<TEvSendData, EvSendData> {
     private:
-        YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, ArrowBatch);
+        YDB_READONLY_DEF(std::shared_ptr<arrow::Table>, ArrowBatch);
         YDB_ACCESSOR_DEF(TVector<TOwnedCellVec>, Rows);
         YDB_READONLY(ui64, TabletId, 0);
         YDB_ACCESSOR_DEF(std::vector<ui32>, DataIndexes);
+        YDB_READONLY_DEF(TLocksInfo, LocksInfo);
     public:
         ui32 GetRowsCount() const {
             return ArrowBatch ? ArrowBatch->num_rows() : Rows.size();
         }
 
-        TEvSendData(const std::shared_ptr<arrow::RecordBatch>& arrowBatch, const ui64 tabletId)
+        TEvSendData(const std::shared_ptr<arrow::Table>& arrowBatch, const ui64 tabletId, const TLocksInfo& locksInfo)
             : ArrowBatch(arrowBatch)
             , TabletId(tabletId)
+            , LocksInfo(locksInfo)
         {
             Y_ABORT_UNLESS(ArrowBatch);
             Y_ABORT_UNLESS(ArrowBatch->num_rows());
         }
 
-        TEvSendData(const std::shared_ptr<arrow::RecordBatch>& arrowBatch, const ui64 tabletId, std::vector<ui32>&& dataIndexes)
+        TEvSendData(const std::shared_ptr<arrow::Table>& arrowBatch, const ui64 tabletId, std::vector<ui32>&& dataIndexes, const TLocksInfo& locksInfo)
             : ArrowBatch(arrowBatch)
             , TabletId(tabletId)
             , DataIndexes(std::move(dataIndexes))
+            , LocksInfo(locksInfo)
         {
             Y_ABORT_UNLESS(ArrowBatch);
             Y_ABORT_UNLESS(ArrowBatch->num_rows());
         }
 
-        TEvSendData(TVector<TOwnedCellVec>&& rows, const ui64 tabletId)
+        TEvSendData(TVector<TOwnedCellVec>&& rows, const ui64 tabletId, const TLocksInfo& locksInfo)
             : Rows(std::move(rows))
-            , TabletId(tabletId) {
+            , TabletId(tabletId)
+            , LocksInfo(locksInfo) {
             Y_ABORT_UNLESS(Rows.size());
+        }
+
+        TEvSendData(const ui64 tabletId, const TLocksInfo& locksInfo)
+            : TabletId(tabletId)
+            , LocksInfo(locksInfo) {
         }
     };
 

@@ -221,10 +221,12 @@ order by y1, y2;
 statement query
 select x1, x2, y1, y2 from x left join y on (x.x1 = y.y1)
 where x2 is not null
+order by x1, x2, y1, y2
 
 statement query
 select x1, x2, y1, y2 from x left join y on (x.x1 = y.y1)
 where y2 is not null
+order by x1, x2, y1, y2
 
 statement query
 select x1, x2, y1, y2, xx1, xx2 from

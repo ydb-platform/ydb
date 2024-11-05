@@ -48,11 +48,6 @@ The following package is required to build the libnghttp2 library:
 
 * pkg-config >= 0.20
 
-To build and run the unit test programs, the following package is
-required:
-
-* cunit >= 2.1
-
 To build the documentation, you need to install:
 
 * sphinx (http://sphinx-doc.org/)
@@ -66,8 +61,8 @@ To build and run the application programs (``nghttp``, ``nghttpd``,
 ``nghttpx`` and ``h2load``) in the ``src`` directory, the following packages
 are required:
 
-* OpenSSL >= 1.1.1; or LibreSSL >= 3.8.1; or aws-lc >= 1.19.0; or
-  BoringSSL
+* OpenSSL >= 1.1.1; or wolfSSL >= 5.7.0; or LibreSSL >= 3.8.1; or
+  aws-lc >= 1.19.0; or BoringSSL
 * libev >= 4.11
 * zlib >= 1.2.3
 * libc-ares >= 1.7.5
@@ -100,6 +95,11 @@ To mitigate heap fragmentation in long running server programs
      Alpine Linux currently does not support malloc replacement
      due to musl limitations. See details in issue `#762 <https://github.com/nghttp2/nghttp2/issues/762>`_.
 
+For BoringSSL or aws-lc build, to enable :rfc:`8879` TLS Certificate
+Compression in applications, the following library is required:
+
+* libbrotli-dev >= 1.0.9
+
 To enable mruby support for nghttpx, `mruby
 <https://github.com/mruby/mruby>`_ is required.  We need to build
 mruby with C++ ABI explicitly turned on, and probably need other
@@ -125,10 +125,10 @@ following libraries are required:
 
 * `OpenSSL with QUIC support
   <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_; or
-  LibreSSL (does not support 0RTT); or aws-lc; or
+  wolfSSL; or LibreSSL (does not support 0RTT); or aws-lc; or
   `BoringSSL <https://boringssl.googlesource.com/boringssl/>`_ (commit
-  f42be90d665b6a376177648ccbb76fbbd6497c13)
-* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 1.0.0
+  e13f7e2ff5432205f09b4679c8a7715f1c130372)
+* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 1.4.0
 * `nghttp3 <https://github.com/ngtcp2/nghttp3>`_ >= 1.1.0
 
 Use ``--enable-http3`` configure option to enable HTTP/3 feature for
@@ -144,14 +144,14 @@ Use ``--with-libbpf`` configure option to build eBPF program.
 libelf-dev is needed to build libbpf.
 
 For Ubuntu 20.04, you can build libbpf from `the source code
-<https://github.com/libbpf/libbpf/releases/tag/v1.3.0>`_.  nghttpx
-requires eBPF program for reloading its configuration and hot swapping
-its executable.
+<https://github.com/libbpf/libbpf/releases>`_.  nghttpx requires eBPF
+program for reloading its configuration and hot swapping its
+executable.
 
 Compiling libnghttp2 C source code requires a C99 compiler.  gcc 4.8
-is known to be adequate.  In order to compile the C++ source code, gcc
->= 6.0 or clang >= 6.0 is required.  C++ source code requires C++14
-language features.
+is known to be adequate.  In order to compile the C++ source code,
+C++20 compliant compiler is required.  At least g++ >= 12 and
+clang++ >= 15 are known to work.
 
 .. note::
 
@@ -205,7 +205,7 @@ required packages:
 
     sudo apt-get install g++ clang make binutils autoconf automake \
       autotools-dev libtool pkg-config \
-      zlib1g-dev libcunit1-dev libssl-dev libxml2-dev libev-dev \
+      zlib1g-dev libssl-dev libxml2-dev libev-dev \
       libevent-dev libjansson-dev \
       libc-ares-dev libjemalloc-dev libsystemd-dev \
       ruby-dev bison libelf-dev
@@ -337,23 +337,24 @@ connections alive during reload.
 
 The detailed steps to build HTTP/3 enabled h2load and nghttpx follow.
 
-Build custom OpenSSL:
+Build aws-lc:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b OpenSSL_1_1_1w+quic https://github.com/quictls/openssl
-   $ cd openssl
-   $ ./config --prefix=$PWD/build --openssldir=/etc/ssl
-   $ make -j$(nproc)
-   $ make install_sw
+   $ git clone --depth 1 -b v1.34.2 https://github.com/aws/aws-lc
+   $ cd aws-lc
+   $ cmake -B build -DDISABLE_GO=ON --install-prefix=$PWD/opt
+   $ make -j$(nproc) -C build
+   $ cmake --install build
    $ cd ..
 
 Build nghttp3:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.1.0 https://github.com/ngtcp2/nghttp3
+   $ git clone --depth 1 -b v1.5.0 https://github.com/ngtcp2/nghttp3
    $ cd nghttp3
+   $ git submodule update --init --depth 1
    $ autoreconf -i
    $ ./configure --prefix=$PWD/build --enable-lib-only
    $ make -j$(nproc)
@@ -364,11 +365,13 @@ Build ngtcp2:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.2.0 https://github.com/ngtcp2/ngtcp2
+   $ git clone --depth 1 -b v1.7.0 https://github.com/ngtcp2/ngtcp2
    $ cd ngtcp2
+   $ git submodule update --init --depth 1
    $ autoreconf -i
-   $ ./configure --prefix=$PWD/build --enable-lib-only \
-         PKG_CONFIG_PATH="$PWD/../openssl/build/lib/pkgconfig"
+   $ ./configure --prefix=$PWD/build --enable-lib-only --with-boringssl \
+         BORINGSSL_CFLAGS="-I$PWD/../aws-lc/opt/include" \
+         BORINGSSL_LIBS="-L$PWD/../aws-lc/opt/lib -lssl -lcrypto"
    $ make -j$(nproc)
    $ make install
    $ cd ..
@@ -378,7 +381,7 @@ from source:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v1.3.0 https://github.com/libbpf/libbpf
+   $ git clone --depth 1 -b v1.4.5 https://github.com/libbpf/libbpf
    $ cd libbpf
    $ PREFIX=$PWD/build make -C src install
    $ cd ..
@@ -391,10 +394,10 @@ Build nghttp2:
    $ cd nghttp2
    $ git submodule update --init
    $ autoreconf -i
-   $ ./configure --with-mruby --with-neverbleed --enable-http3 --with-libbpf \
-         CC=clang-14 CXX=clang++-14 \
-         PKG_CONFIG_PATH="$PWD/../openssl/build/lib/pkgconfig:$PWD/../nghttp3/build/lib/pkgconfig:$PWD/../ngtcp2/build/lib/pkgconfig:$PWD/../libbpf/build/lib64/pkgconfig" \
-         LDFLAGS="$LDFLAGS -Wl,-rpath,$PWD/../openssl/build/lib -Wl,-rpath,$PWD/../libbpf/build/lib64"
+   $ ./configure --with-mruby --enable-http3 --with-libbpf \
+         CC=clang-15 CXX=clang++-15 \
+         PKG_CONFIG_PATH="$PWD/../aws-lc/opt/lib/pkgconfig:$PWD/../nghttp3/build/lib/pkgconfig:$PWD/../ngtcp2/build/lib/pkgconfig:$PWD/../libbpf/build/lib64/pkgconfig" \
+         LDFLAGS="$LDFLAGS -Wl,-rpath,$PWD/../aws-lc/opt/lib -Wl,-rpath,$PWD/../libbpf/build/lib64"
    $ make -j$(nproc)
 
 The eBPF program ``reuseport_kern.o`` should be found under bpf
@@ -479,7 +482,7 @@ Previously nghttp2 library did not send client magic, which is first
 24 bytes byte string of client connection preface, and client
 applications have to send it by themselves.  Since v1.0.0, client
 magic is sent by library via first call of ``nghttp2_session_send()``
-or ``nghttp2_session_mem_send()``.
+or ``nghttp2_session_mem_send2()``.
 
 The client applications which send client magic must remove the
 relevant code.
@@ -1445,17 +1448,6 @@ full real name when contributing!
 See `Contribution Guidelines
 <https://nghttp2.org/documentation/contribute.html>`_ for more
 details.
-
-Reporting vulnerability
------------------------
-
-If you find a vulnerability in our software, please send the email to
-"tatsuhiro.t at gmail dot com" about its details instead of submitting
-issues on github issue page.  It is a standard practice not to
-disclose vulnerability information publicly until a fixed version is
-released, or mitigation is worked out.
-
-In the future, we may setup a dedicated mail address for this purpose.
 
 Versioning
 ----------

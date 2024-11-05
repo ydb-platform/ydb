@@ -90,6 +90,52 @@ private:
     }
 };
 
+extern const char A[] = "a";
+using TNamedA = TNamedArg<i32, A>;
+
+//////////////////////////////////////////////////////////////////////////////
+// TNamedArgUdf
+//////////////////////////////////////////////////////////////////////////////
+
+class TNamedArgUdf: public TBoxedValue {
+public:
+    static TStringRef Name() {
+        static auto name = TStringRef::Of("NamedArgUdf");
+        return name;
+    }
+
+private:
+    TUnboxedValue Run(
+            const IValueBuilder* valueBuilder,
+            const TUnboxedValuePod* args) const override
+    {
+        Y_UNUSED(valueBuilder);
+        auto res = args[0] ? args[0].Get<i32>() : 123;
+        return TUnboxedValuePod(res + 1);
+    }
+};
+
+//////////////////////////////////////////////////////////////////////////////
+// TReturnNamedArgCallable
+//////////////////////////////////////////////////////////////////////////////
+
+class TReturnNamedArgCallable: public TBoxedValue {
+public:
+    static TStringRef Name() {
+        static auto name = TStringRef::Of("ReturnNamedArgCallable");
+        return name;
+    }
+
+    TUnboxedValue Run(
+            const IValueBuilder* valueBuilder,
+            const TUnboxedValuePod* args) const override
+    {
+        Y_UNUSED(valueBuilder);
+        Y_UNUSED(args);
+        return TUnboxedValuePod(new TNamedArgUdf());
+    }
+};
+
 //////////////////////////////////////////////////////////////////////////////
 // TCallablesModule
 //////////////////////////////////////////////////////////////////////////////
@@ -153,6 +199,18 @@ public:
 
                 if (!typesOnly) {
                     builder.Implementation(new TMul);
+                }
+            } else if (TNamedArgUdf::Name() == name) {
+                builder.SimpleSignature<int(TNamedA)>();
+
+                if (!typesOnly) {
+                    builder.Implementation(new TNamedArgUdf());
+                }
+            } else if (TReturnNamedArgCallable::Name() == name) {
+                builder.Returns(builder.Callable()->Returns<int>().Arg<int>().Name(A));
+
+                if (!typesOnly) {
+                    builder.Implementation(new TReturnNamedArgCallable());
                 }
             }
         } catch (const std::exception& e) {

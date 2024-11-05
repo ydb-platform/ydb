@@ -78,6 +78,7 @@ DECLARE_REFCOUNTED_CLASS(TAttachmentsInputStream)
 DECLARE_REFCOUNTED_CLASS(TAttachmentsOutputStream)
 
 DECLARE_REFCOUNTED_STRUCT(IViablePeerRegistry)
+DECLARE_REFCOUNTED_STRUCT(IDiscoverRequestHook)
 DECLARE_REFCOUNTED_STRUCT(IPeerDiscovery)
 DECLARE_REFCOUNTED_CLASS(TDynamicChannelPool)
 
@@ -104,7 +105,7 @@ using TTypedServiceContext = TGenericTypedServiceContext<
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_CLASS(THistogramExponentialBounds)
-DECLARE_REFCOUNTED_CLASS(THistogramConfig)
+DECLARE_REFCOUNTED_CLASS(TTimeHistogramConfig)
 DECLARE_REFCOUNTED_CLASS(TServerConfig)
 DECLARE_REFCOUNTED_CLASS(TServiceCommonConfig)
 DECLARE_REFCOUNTED_CLASS(TServerDynamicConfig)
@@ -115,6 +116,7 @@ DECLARE_REFCOUNTED_CLASS(TRetryingChannelConfig)
 DECLARE_REFCOUNTED_CLASS(TViablePeerRegistryConfig)
 DECLARE_REFCOUNTED_CLASS(TDynamicChannelPoolConfig)
 DECLARE_REFCOUNTED_CLASS(TServiceDiscoveryEndpointsConfig)
+DECLARE_REFCOUNTED_CLASS(TBalancingChannelConfigBase)
 DECLARE_REFCOUNTED_CLASS(TBalancingChannelConfig)
 DECLARE_REFCOUNTED_CLASS(TThrottlingChannelConfig)
 DECLARE_REFCOUNTED_CLASS(TThrottlingChannelDynamicConfig)
@@ -141,13 +143,11 @@ extern const TRealmId NullRealmId;
 using TMutationId = TGuid;
 extern const TMutationId NullMutationId;
 
-extern const TString RootUserName;
+extern const std::string RootUserName;
 
 constexpr int TypicalMessagePartCount = 8;
 
 using TFeatureIdFormatter = const std::function<std::optional<TStringBuf>(int featureId)>*;
-
-using TDiscoverRequestHook = TCallback<void(NProto::TReqDiscover*)>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -184,7 +184,8 @@ YT_DEFINE_ERROR_ENUM(
     ((Overloaded)                   (118)) // The server is currently overloaded and unable to handle additional requests.
                                            // The client should try to reduce their request rate until the server has had a chance to recover.
     ((SslError)                     (static_cast<int>(NBus::EErrorCode::SslError)))
-    ((MemoryOverflow)               (120))
+    ((MemoryPressure)               (120))
+    ((GlobalDiscoveryError)         (121)) // Single peer discovery interrupts discovery session.
 );
 
 DEFINE_ENUM(EMessageFormat,

@@ -1,11 +1,11 @@
 <tmp_path>/program.sql:<main>: Warning: Type annotation
 
-    <tmp_path>/program.sql:<main>:4:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    <tmp_path>/program.sql:<main>:3:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
     	SELECT
 	^
-        <tmp_path>/program.sql:<main>:5:6: Warning: At function: *
+        <tmp_path>/program.sql:<main>:4:6: Warning: At function: *
         	    2*(key+subkey),1ul+key+key+key,subkey+2ul,key
 	     ^
-            <tmp_path>/program.sql:<main>:5:6: Warning: Integral type implicit bitcast: Int32 and Uint64
+            <tmp_path>/program.sql:<main>:4:6: Warning: Integral type implicit bitcast: Int32 and Uint64
             	    2*(key+subkey),1ul+key+key+key,subkey+2ul,key
 	     ^

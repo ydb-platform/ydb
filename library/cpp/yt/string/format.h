@@ -1,6 +1,9 @@
 #pragma once
 
+#include "format_string.h"
 #include "string_builder.h"
+
+#include <util/generic/string.h>
 
 namespace NYT {
 
@@ -54,15 +57,18 @@ namespace NYT {
  *
  */
 
-template <size_t Length, class... TArgs>
-void Format(TStringBuilderBase* builder, const char (&format)[Length], TArgs&&... args);
 template <class... TArgs>
-void Format(TStringBuilderBase* builder, TStringBuf format, TArgs&&... args);
+TString Format(TFormatString<TArgs...> format, TArgs&&... args);
 
-template <size_t Length, class... TArgs>
-TString Format(const char (&format)[Length], TArgs&&... args);
+////////////////////////////////////////////////////////////////////////////////
+
 template <class... TArgs>
-TString Format(TStringBuf format, TArgs&&... args);
+void Format(TStringBuilderBase* builder, TFormatString<TArgs...> format, TArgs&&... args);
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+TString ToStringViaBuilder(const T& value, TStringBuf spec = TStringBuf("v"));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -101,6 +107,19 @@ struct TFormatterWrapper
     TFormatter Formatter;
 };
 
+// Allows insertion of text conditionally.
+// Usage:
+/*
+NYT::Format(
+    "Value is %v%v",
+    42,
+    MakeFormatterWrapper([&] (auto* builder) {
+        if (PossiblyMissingInfo_) {
+            builder->AppendString(", PossiblyMissingInfo: ");
+            FormatValue(builder, PossiblyMissingInfo_, "v");
+        }
+    }));
+ */
 template <class TFormatter>
 TFormatterWrapper<TFormatter> MakeFormatterWrapper(
     TFormatter&& formatter);
@@ -114,7 +133,7 @@ template <class... TArgs>
 void FormatValue(
     TStringBuilderBase* builder,
     const TLazyMultiValueFormatter<TArgs...>& value,
-    TStringBuf /*format*/);
+    TStringBuf /*spec*/);
 
 //! A wrapper for a bunch of values that formats them lazily on demand.
 /*!
@@ -131,10 +150,17 @@ class TLazyMultiValueFormatter
 public:
     TLazyMultiValueFormatter(TStringBuf format, TArgs&&... args);
 
+    // NB(arkady-e1ppa): We actually have to
+    // forward declare this method as above
+    // and friend-declare it as specialization
+    // here because clang is stupid and would
+    // treat this friend declartion as a hidden friend
+    // declaration which in turn is treated as a separate symbol
+    // causing linker to not find the actual definition.
     friend void FormatValue<>(
         TStringBuilderBase* builder,
         const TLazyMultiValueFormatter& value,
-        TStringBuf /*format*/);
+        TStringBuf /*spec*/);
 
 private:
     const TStringBuf Format_;
@@ -143,6 +169,36 @@ private:
 
 template <class ... Args>
 auto MakeLazyMultiValueFormatter(TStringBuf format, Args&&... args);
+
+////////////////////////////////////////////////////////////////////////////////
+
+/*
+    Example:
+
+    FormatVector("One: %v, Two: %v, Three: %v", {1, 2, 3})
+    => "One: 1, Two: 2, Three: 3"
+*/
+template <size_t Length, class TVector>
+void FormatVector(
+    TStringBuilderBase* builder,
+    const char (&format)[Length],
+    const TVector& vec);
+
+template <class TVector>
+void FormatVector(
+    TStringBuilderBase* builder,
+    TStringBuf format,
+    const TVector& vec);
+
+template <size_t Length, class TVector>
+TString FormatVector(
+    const char (&format)[Length],
+    const TVector& vec);
+
+template <class TVector>
+TString FormatVector(
+    TStringBuf format,
+    const TVector& vec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

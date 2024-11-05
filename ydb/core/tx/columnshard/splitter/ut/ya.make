@@ -9,6 +9,7 @@ PEERDIR(
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/engines/portions
     ydb/core/tx/columnshard/common
+    ydb/core/tx/columnshard/blobs_action
     ydb/core/tx/columnshard/data_sharing
     ydb/core/kqp/common
     ydb/library/yql/parser/pg_wrapper
@@ -16,6 +17,9 @@ PEERDIR(
     ydb/core/persqueue
     ydb/core/kqp/session_actor
     ydb/core/tx/tx_proxy
+    ydb/core/tx/columnshard/engines/storage/chunks
+    ydb/core/tx/columnshard/engines/storage/indexes/max
+    ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch
     ydb/core/tx
     ydb/core/mind
     ydb/library/yql/minikql/comp_nodes/llvm14
@@ -38,6 +42,7 @@ CFLAGS(
 
 SRCS(
     ut_splitter.cpp
+    batch_slice.cpp
 )
 
 END()

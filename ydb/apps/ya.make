@@ -1,6 +1,6 @@
 RECURSE(
-    ydbd
-    ydb
     dstool
     pgwire
+    ydb
+    ydbd
 )

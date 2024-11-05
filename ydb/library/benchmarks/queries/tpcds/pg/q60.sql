@@ -13,13 +13,13 @@ with ss as (
   i_item_id
 from
  {{item}}
-where i_category in ('Children'))
+where i_category in ('Music'))
  and     ss_item_sk              = i_item_sk
  and     ss_sold_date_sk         = d_date_sk
  and     d_year                  = 1998
- and     d_moy                   = 10
+ and     d_moy                   = 9
  and     ss_addr_sk              = ca_address_sk
- and     ca_gmt_offset           = -5::numeric
+ and     ca_gmt_offset           = -5
  group by i_item_id),
  cs as (
  select
@@ -34,13 +34,13 @@ where i_category in ('Children'))
   i_item_id
 from
  {{item}}
-where i_category in ('Children'))
+where i_category in ('Music'))
  and     cs_item_sk              = i_item_sk
  and     cs_sold_date_sk         = d_date_sk
  and     d_year                  = 1998
- and     d_moy                   = 10
+ and     d_moy                   = 9
  and     cs_bill_addr_sk         = ca_address_sk
- and     ca_gmt_offset           = -5::numeric
+ and     ca_gmt_offset           = -5
  group by i_item_id),
  ws as (
  select
@@ -55,13 +55,13 @@ where i_category in ('Children'))
   i_item_id
 from
  {{item}}
-where i_category in ('Children'))
+where i_category in ('Music'))
  and     ws_item_sk              = i_item_sk
  and     ws_sold_date_sk         = d_date_sk
  and     d_year                  = 1998
- and     d_moy                   = 10
+ and     d_moy                   = 9
  and     ws_bill_addr_sk         = ca_address_sk
- and     ca_gmt_offset           = -5::numeric
+ and     ca_gmt_offset           = -5
  group by i_item_id)
   select
   i_item_id

@@ -181,6 +181,21 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
 
             return IGraphTransformer::TStatus::Repeat;
         }
+    } else if (expectedType.GetKind() == ETypeAnnotationKind::Resource && sourceType.GetKind() == ETypeAnnotationKind::Resource) {
+        const auto from = sourceType.Cast<TResourceExprType>()->GetTag();
+        const auto to = expectedType.Cast<TResourceExprType>()->GetTag();
+        if (from == "DateTime2.TM" && to == "DateTime2.TM64") {
+            node = ctx.Builder(node->Pos())
+                .Callable("Apply")
+                    .Callable(0, "Udf")
+                        .Atom(0, "DateTime2.Convert", TNodeFlags::Default)
+                    .Seal()
+                    .Add(1, std::move(node))
+                .Seal()
+                .Build();
+
+            return IGraphTransformer::TStatus::Repeat;
+        }
     } else if (expectedType.GetKind() == ETypeAnnotationKind::Resource && sourceType.GetKind() == ETypeAnnotationKind::Data) {
         const auto fromSlot = sourceType.Cast<TDataExprType>()->GetSlot();
         const auto to = expectedType.Cast<TResourceExprType>()->GetTag();
@@ -232,8 +247,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 .Build();
 
             return IGraphTransformer::TStatus::Repeat;
-
-        } else if ((GetDataTypeInfo(fromSlot).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)) && to == "DateTime2.TM") {
+        } else if ((GetDataTypeInfo(fromSlot).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)) && (to == "DateTime2.TM" || to == "DateTime2.TM64")) {
             node = ctx.Builder(node->Pos())
                 .Callable("Apply")
                     .Callable(0, "Udf")
@@ -318,10 +332,25 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         if (IsDataTypeNumeric(from) && IsDataTypeNumeric(to)) {
             allow = GetNumericDataTypeLevel(to) >= GetNumericDataTypeLevel(from);
             isSafe = false;
-        } else if (from == EDataSlot::Date && (to == EDataSlot::TzDate || to == EDataSlot::Datetime || to == EDataSlot::Timestamp || to == EDataSlot::TzDatetime || to == EDataSlot::TzTimestamp)) {
+        } else if (from == EDataSlot::Date && (
+                    to == EDataSlot::Date32 ||
+                    to == EDataSlot::TzDate ||
+                    to == EDataSlot::Datetime ||
+                    to == EDataSlot::Timestamp ||
+                    to == EDataSlot::TzDatetime ||
+                    to == EDataSlot::TzTimestamp ||
+                    to == EDataSlot::Datetime64 ||
+                    to == EDataSlot::Timestamp64))
+        {
             allow = true;
             useCast = true;
-        } else if (from == EDataSlot::Datetime && (to == EDataSlot::TzDatetime || to == EDataSlot::Timestamp || to == EDataSlot::TzTimestamp)) {
+        } else if (from == EDataSlot::Datetime && (
+                    to == EDataSlot::Datetime64 ||
+                    to == EDataSlot::TzDatetime ||
+                    to == EDataSlot::Timestamp ||
+                    to == EDataSlot::TzTimestamp ||
+                    to == EDataSlot::Timestamp64))
+        {
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::TzDate && (to == EDataSlot::TzDatetime || to == EDataSlot::TzTimestamp)) {
@@ -330,13 +359,16 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         } else if (from == EDataSlot::TzDatetime && to == EDataSlot::TzTimestamp) {
             allow = true;
             useCast = true;
-        } else if (from == EDataSlot::Timestamp && to == EDataSlot::TzTimestamp) {
+        } else if (from == EDataSlot::Timestamp && (to == EDataSlot::TzTimestamp || to == EDataSlot::Timestamp64)) {
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::Date32 && (to == EDataSlot::Datetime64 || to == EDataSlot::Timestamp64)) {
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::Datetime64 && (to == EDataSlot::Timestamp64)) {
+            allow = true;
+            useCast = true;
+        } else if (from == EDataSlot::Interval && (to == EDataSlot::Interval64)) {
             allow = true;
             useCast = true;
         } else if (from == EDataSlot::Json && to == EDataSlot::Utf8) {
@@ -389,7 +421,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         if (allow) {
             if (!isSafe && !flags.Test(NConvertFlags::AllowUnsafeConvert)) {
                 auto castResult = NKikimr::NUdf::GetCastResult(from, to);
-                if (!castResult || *castResult & NKikimr::NUdf::Impossible) {
+                if (*castResult & NKikimr::NUdf::Impossible) {
                     return IGraphTransformer::TStatus::Error;
                 }
 
@@ -1336,18 +1368,20 @@ const TPgExprType* CommonType(TPositionHandle pos, const TPgExprType* one, const
     if (one->GetId() == two->GetId()) {
         return one;
     }
+    const NPg::TTypeDesc* commonTypeDesc = nullptr;
+    if (const auto issue = NPg::LookupCommonType({one->GetId(), two->GetId()},
+        [&ctx, &pos](size_t i) {
+            Y_UNUSED(i);
 
-    if (one->GetName() == "unknown") {
-        return two;
+            return ctx.GetPosition(pos);
+        }, commonTypeDesc))
+    {
+        if constexpr (!Silent) {
+            ctx.AddError(*issue);
+        }
+        return nullptr;
     }
-
-    if (two->GetName() == "unknown") {
-        return one;
-    }
-
-    if constexpr (!Silent)
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Cannot infer common type for " << one->GetName() << " and " << two->GetName()));
-    return nullptr;
+    return ctx.MakeType<TPgExprType>(commonTypeDesc->TypeId);
 }
 
 template<bool Silent>
@@ -3106,12 +3140,20 @@ bool IsWideSequenceBlockType(const TTypeAnnotationNode& type) {
     return IsWideBlockType(*itemType);
 }
 
-bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types) {
+bool IsSupportedAsBlockType(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, TTypeAnnotationContext& types,
+    bool reportUnspported)
+{
     if (!types.ArrowResolver) {
         return false;
     }
 
-    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), { &type }, ctx);
+    IArrowResolver::TUnsupportedTypeCallback onUnsupportedType;
+    if (reportUnspported) {
+        onUnsupportedType  = [&types](const auto& typeKindOrSlot) {
+            std::visit([&types](const auto& value) { types.IncNoBlockType(value); }, typeKindOrSlot);
+        };
+    }
+    auto resolveStatus = types.ArrowResolver->AreTypesSupported(ctx.GetPosition(pos), { &type }, ctx, onUnsupportedType);
     YQL_ENSURE(resolveStatus != IArrowResolver::ERROR);
     return resolveStatus == IArrowResolver::OK;
 }
@@ -3436,6 +3478,19 @@ bool EnsureTaggedType(const TExprNode& node, TExprContext& ctx) {
 
     if (node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Tagged) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected tagged type, but got: " << *node.GetTypeAnn()));
+        return false;
+    }
+
+    return true;
+}
+
+bool EnsureTaggedType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Tagged) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected tagged type, but got: " << type));
         return false;
     }
 
@@ -3961,7 +4016,7 @@ bool EnsureAnySeqType(TPositionHandle position, const TTypeAnnotationNode& type,
     return false;
 }
 
-bool EnsureStructOrOptionalStructType(const TExprNode& node, TExprContext& ctx) {
+bool EnsureStructOrOptionalStructType(const TExprNode& node, bool& isOptional, const TStructExprType*& structType, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx)) {
         return false;
     }
@@ -3972,10 +4027,11 @@ bool EnsureStructOrOptionalStructType(const TExprNode& node, TExprContext& ctx) 
         return false;
     }
 
-    return EnsureStructOrOptionalStructType(node.Pos(), *node.GetTypeAnn(), ctx);
+    return EnsureStructOrOptionalStructType(node.Pos(), *node.GetTypeAnn(), isOptional, structType, ctx);
 }
-
-bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnotationNode& type, bool& isOptional,
+    const TStructExprType*& structType, TExprContext& ctx)
+{
     if (HasError(&type, ctx)) {
         return false;
     }
@@ -3985,6 +4041,7 @@ bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnot
         ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected either struct or optional of struct, but got: " << type));
         return false;
     }
+
     if (kind == ETypeAnnotationKind::Optional) {
         auto itemType = type.Cast<TOptionalExprType>()->GetItemType();
         kind = itemType->GetKind();
@@ -3992,6 +4049,11 @@ bool EnsureStructOrOptionalStructType(TPositionHandle position, const TTypeAnnot
             ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected either struct or optional of struct, but got: " << type));
             return false;
         }
+        isOptional = true;
+        structType = itemType->Cast<TStructExprType>();
+    } else {
+        isOptional = false;
+        structType = type.Cast<TStructExprType>();
     }
 
     return true;
@@ -4195,6 +4257,10 @@ bool IsDataTypeTzDate(EDataSlot dataSlot) {
     return NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::TzDateType;
 }
 
+bool IsDataTypeBigDate(EDataSlot dataSlot) {
+    return (NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::BigDateType);
+}
+
 EDataSlot WithTzDate(EDataSlot dataSlot) {
     if (dataSlot == EDataSlot::Date) {
         return EDataSlot::TzDate;
@@ -4206,6 +4272,18 @@ EDataSlot WithTzDate(EDataSlot dataSlot) {
 
     if (dataSlot == EDataSlot::Timestamp) {
         return EDataSlot::TzTimestamp;
+    }
+
+    if (dataSlot == EDataSlot::Date32) {
+        return EDataSlot::TzDate32;
+    }
+
+    if (dataSlot == EDataSlot::Datetime64) {
+        return EDataSlot::TzDatetime64;
+    }
+
+    if (dataSlot == EDataSlot::Timestamp64) {
+        return EDataSlot::TzTimestamp64;
     }
 
     return dataSlot;
@@ -4222,6 +4300,18 @@ EDataSlot WithoutTzDate(EDataSlot dataSlot) {
 
     if (dataSlot == EDataSlot::TzTimestamp) {
         return EDataSlot::Timestamp;
+    }
+
+    if (dataSlot == EDataSlot::TzDate32) {
+        return EDataSlot::Date32;
+    }
+
+    if (dataSlot == EDataSlot::TzDatetime64) {
+        return EDataSlot::Datetime64;
+    }
+
+    if (dataSlot == EDataSlot::TzTimestamp64) {
+        return EDataSlot::Timestamp64;
     }
 
     return dataSlot;
@@ -4291,14 +4381,24 @@ TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool wa
 
     if ((IsDataTypeDate(dataSlot1) || IsDataTypeTzDate(dataSlot1)) && (IsDataTypeDate(dataSlot2) || IsDataTypeTzDate(dataSlot2))) {
         // date < tzdate
-        auto norm1 = WithoutTzDate(dataSlot1);
-        auto norm2 = WithoutTzDate(dataSlot2);
-        auto ret = GetDateTypeByLevel(Max(GetDateTypeLevel(norm1), GetDateTypeLevel(norm2)));
+        auto level1 = GetDateTypeLevel(WithoutTzDate(dataSlot1));
+        auto level2 = GetDateTypeLevel(WithoutTzDate(dataSlot2));
+        constexpr auto narrowDateMask = 3;
+        auto level = Max(level1 & narrowDateMask, level2 & narrowDateMask);
+        auto bigDateBit = (narrowDateMask + 1) & (level1 | level2);
+        auto ret = GetDateTypeByLevel(level | bigDateBit);
+
         if (IsDataTypeTzDate(dataSlot1) || IsDataTypeTzDate(dataSlot2)) {
             ret = WithTzDate(ret);
         }
 
         return ret;
+    }
+
+    if (IsDataTypeInterval(dataSlot1) && IsDataTypeInterval(dataSlot2)) {
+        return (dataSlot1 == EDataSlot::Interval64 || dataSlot2 == EDataSlot::Interval64) 
+            ? EDataSlot::Interval64
+            : EDataSlot::Interval;
     }
 
     return {};
@@ -4824,21 +4924,53 @@ bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node) {
         collectionType = collectionType->Cast<TOptionalExprType>()->GetItemType();
     }
 
+    auto lookupType = node.Lookup().Ref().GetTypeAnn();
+
     const auto collectionKind = collectionType->GetKind();
     bool result = false;
     switch (collectionKind) {
         case ETypeAnnotationKind::Tuple:
         {
             const auto tupleType = collectionType->Cast<TTupleExprType>();
-            result = AnyOf(tupleType->GetItems(), [](const auto& item) { return item->HasOptionalOrNull(); } );
+            for (const auto& item : tupleType->GetItems()) {
+                if (item->HasOptionalOrNull()) {
+                    result = true;
+                    break;
+                }
+
+                auto cmp = CanCompare<true>(lookupType, item);
+                if (cmp == ECompareOptions::Optional || cmp == ECompareOptions::Null) {
+                    result = true;
+                    break;
+                }
+            }
+            
             break;
         }
-        case ETypeAnnotationKind::Dict:
-            result = collectionType->Cast<TDictExprType>()->GetKeyType()->HasOptionalOrNull();
+        case ETypeAnnotationKind::Dict: {
+            if (collectionType->Cast<TDictExprType>()->GetKeyType()->HasOptionalOrNull()) {
+                result = true;
+            } else {
+                auto cmp = CanCompare<true>(lookupType, collectionType->Cast<TDictExprType>()->GetKeyType());
+                if (cmp == ECompareOptions::Optional || cmp == ECompareOptions::Null) {
+                    result = true;
+                }
+            }
+
             break;
-        case ETypeAnnotationKind::List:
-            result = collectionType->Cast<TListExprType>()->GetItemType()->HasOptionalOrNull();
+        }
+        case ETypeAnnotationKind::List: {
+            if (collectionType->Cast<TListExprType>()->GetItemType()->HasOptionalOrNull()) {
+                result = true;
+            } else {
+                auto cmp = CanCompare<true>(lookupType, collectionType->Cast<TListExprType>()->GetItemType());
+                if (cmp == ECompareOptions::Optional || cmp == ECompareOptions::Null) {
+                    result = true;
+                }
+            }
+
             break;
+        }
         case ETypeAnnotationKind::EmptyDict:
         case ETypeAnnotationKind::EmptyList:
         case ETypeAnnotationKind::Null:
@@ -4913,16 +5045,22 @@ EDataSlot GetNumericDataTypeByLevel(ui32 level) {
 }
 
 ui32 GetDateTypeLevel(EDataSlot dataSlot) {
-    if (dataSlot == EDataSlot::Date)
+    switch (dataSlot) {
+    case EDataSlot::Date:
         return 0;
-
-    if (dataSlot == EDataSlot::Datetime)
+    case EDataSlot::Datetime:
         return 1;
-
-    if (dataSlot == EDataSlot::Timestamp)
+    case EDataSlot::Timestamp:
         return 2;
-
-    ythrow yexception() << "Unknown date type: " << NKikimr::NUdf::GetDataTypeInfo(dataSlot).Name;
+    case EDataSlot::Date32:
+        return 4;
+    case EDataSlot::Datetime64:
+        return 5;
+    case EDataSlot::Timestamp64:
+        return 6;
+    default:
+        ythrow yexception() << "Unknown date type: " << NKikimr::NUdf::GetDataTypeInfo(dataSlot).Name;
+    }
 }
 
 EDataSlot GetDateTypeByLevel(ui32 level) {
@@ -4933,6 +5071,12 @@ EDataSlot GetDateTypeByLevel(ui32 level) {
         return EDataSlot::Datetime;
     case 2:
         return EDataSlot::Timestamp;
+    case 4:
+        return EDataSlot::Date32;
+    case 5:
+        return EDataSlot::Datetime64;
+    case 6:
+        return EDataSlot::Timestamp64;
     default:
         ythrow yexception() << "Unknown date level: " << level;
     }
@@ -5947,14 +6091,7 @@ bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertT
         }
 
         auto slot = unpacked->Cast<TDataExprType>()->GetSlot();
-        auto convertedTypeId = ConvertToPgType(slot);
-        if (!convertedTypeId) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "Type is not compatible to PG: " << slot));
-            return false;
-        }
-
-        pgType = *convertedTypeId;
+        pgType = ConvertToPgType(slot);
         convertToPg = true;
         return true;
     } else if (type->GetKind() != ETypeAnnotationKind::Pg) {
@@ -6357,7 +6494,7 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
     if (aggDesc.FinalFuncId) {
         const ui32 originalAggResultType = NPg::LookupProc(aggDesc.FinalFuncId).ResultType;
         ui32 aggResultType = originalAggResultType;
-        AdjustReturnType(aggResultType, aggDesc.ArgTypes, argTypes);
+        AdjustReturnType(aggResultType, aggDesc.ArgTypes, 0, argTypes);
         finishLambda = ctx.Builder(pos)
             .Lambda()
             .Param("state")
@@ -6660,8 +6797,7 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
     }
 }
 
-void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, const TVector<ui32>& argTypes) {
-    YQL_ENSURE(procArgTypes.size() >= argTypes.size());
+void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, ui32 procVariadicType, const TVector<ui32>& argTypes) {
     if (returnType == NPg::AnyArrayOid) {
         TMaybe<ui32> inputElementType;
         TMaybe<ui32> inputArrayType;
@@ -6670,7 +6806,8 @@ void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, const
                 continue;
             }
 
-            if (procArgTypes[i] == NPg::AnyNonArrayOid) {
+            auto targetType = i >= procArgTypes.size() ? procVariadicType : procArgTypes[i];
+            if (targetType == NPg::AnyNonArrayOid) {
                 if (!inputElementType) {
                    inputElementType = argTypes[i];
                 } else {
@@ -6680,7 +6817,7 @@ void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, const
                 }
             }
 
-            if (procArgTypes[i] == NPg::AnyArrayOid) {
+            if (targetType == NPg::AnyArrayOid) {
                 if (!inputArrayType) {
                    inputArrayType = argTypes[i];
                 } else {
@@ -6695,6 +6832,18 @@ void AdjustReturnType(ui32& returnType, const TVector<ui32>& procArgTypes, const
             returnType = NPg::LookupType(*inputElementType).ArrayTypeId;
         } else if (inputArrayType) {
             returnType = *inputArrayType;
+        }
+    } else if (returnType == NPg::AnyElementOid) {
+        for (ui32 i = 0; i < argTypes.size(); ++i) {
+            if (!argTypes[i]) {
+                continue;
+            }
+
+            const auto& typeDesc = NPg::LookupType(argTypes[i]);
+            if (typeDesc.ArrayTypeId == typeDesc.TypeId) {
+                returnType = typeDesc.ElementTypeId;
+                return;
+            }
         }
     }
 }
@@ -6776,7 +6925,7 @@ void CheckExpectedTypeAndColumnOrder(const TExprNode& node, TExprContext& ctx, T
             auto status = typesCtx.SetColumnOrder(node, oldColumnOrder, ctx);
             YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
         } else {
-            YQL_ENSURE(newColumnOrder == oldColumnOrder,
+            YQL_ENSURE(newColumnOrder && *newColumnOrder == oldColumnOrder,
                 "Rewrite error, column order should be: "
                 << FormatColumnOrder(oldColumnOrder) << ", but it is: "
                 << FormatColumnOrder(newColumnOrder) << " for node "

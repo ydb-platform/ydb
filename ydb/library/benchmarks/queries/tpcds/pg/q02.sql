@@ -12,13 +12,13 @@ with wscs as
         from {{catalog_sales}}) a),
  wswscs as
  (select d_week_seq,
-        sum(case when (d_day_name='Sunday') then sales_price else null::numeric end) sun_sales,
-        sum(case when (d_day_name='Monday') then sales_price else null::numeric end) mon_sales,
-        sum(case when (d_day_name='Tuesday') then sales_price else null::numeric end) tue_sales,
-        sum(case when (d_day_name='Wednesday') then sales_price else null::numeric end) wed_sales,
-        sum(case when (d_day_name='Thursday') then sales_price else null::numeric end) thu_sales,
-        sum(case when (d_day_name='Friday') then sales_price else null::numeric end) fri_sales,
-        sum(case when (d_day_name='Saturday') then sales_price else null::numeric end) sat_sales
+        sum(case when (d_day_name='Sunday') then sales_price else null end) sun_sales,
+        sum(case when (d_day_name='Monday') then sales_price else null end) mon_sales,
+        sum(case when (d_day_name='Tuesday') then sales_price else null end) tue_sales,
+        sum(case when (d_day_name='Wednesday') then sales_price else null end) wed_sales,
+        sum(case when (d_day_name='Thursday') then sales_price else null end) thu_sales,
+        sum(case when (d_day_name='Friday') then sales_price else null end) fri_sales,
+        sum(case when (d_day_name='Saturday') then sales_price else null end) sat_sales
  from wscs
      ,{{date_dim}}
  where d_date_sk = sold_date_sk
@@ -42,7 +42,7 @@ with wscs as
         ,sat_sales sat_sales1
   from wswscs,{{date_dim}}
   where date_dim.d_week_seq = wswscs.d_week_seq and
-        d_year = 1998) y,
+        d_year = 2001) y,
  (select wswscs.d_week_seq d_week_seq2
         ,sun_sales sun_sales2
         ,mon_sales mon_sales2
@@ -54,7 +54,7 @@ with wscs as
   from wswscs
       ,{{date_dim}}
   where date_dim.d_week_seq = wswscs.d_week_seq and
-        d_year = 1998+1) z
+        d_year = 2001+1) z
  where d_week_seq1=d_week_seq2-53
  order by d_week_seq1;
 

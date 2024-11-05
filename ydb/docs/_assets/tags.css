@@ -1,0 +1,89 @@
+.tags_list {
+  display: grid; 
+  grid-template-columns: auto 1fr; 
+  grid-auto-rows: auto; 
+  grid-auto-columns: auto;
+  grid-gap: 10px;
+}
+
+
+.multi-tags-container {
+  display:flex; 
+  flex-direction: row; 
+  justify-content: flex-start; 
+  flex-wrap: wrap; 
+  column-gap: 10px;
+}
+
+.tags-shape {
+    border-radius: 5px;
+    padding: 4px;
+  }
+  
+  .g-root_theme_light {
+    .tags-color-text {
+      color: white;
+    }
+  
+    .overview-tag {
+      background-color:#e8b4bf;
+    }
+  
+    .use_cases-tag {
+      background-color:#edc9a7;
+    }
+    .practice-tag {
+      background-color:#97b38e;
+    }
+  
+    .database_internals-tag {
+      background-color:#98989c;
+    }
+  
+    .releases-tag {
+      background-color:#b3cc73;
+    }
+  
+    .testing-tag {
+      background-color:#83adda;
+    }
+
+    .general-tag {
+      background-color: #daab83;
+    }
+  
+  }
+  
+  .g-root_theme_dark  {
+    .tags-color-text {
+      color: black;
+    }
+
+    .overview-tag {
+      background-color:#e8b4bf;
+    }
+  
+    .use_cases-tag {
+      background-color:#edc9a7;
+    }
+    .practice-tag {
+      background-color:#97b38e;
+    }
+  
+    .database_internals-tag {
+      background-color:#98989c;
+    }
+  
+    .releases-tag {
+      background-color:#b3cc73;
+    }
+  
+    .testing-tag {
+      background-color:#83adda;
+    }
+
+    .general-tag {
+      background-color: #daab83;
+    }
+    
+  }

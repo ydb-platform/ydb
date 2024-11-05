@@ -13,6 +13,10 @@
 
 #include <util/memory/pool.h>
 
+namespace NYql::NNodes {
+    class TExprBase;
+}
+
 namespace NKikimr {
 
 void ConvertMiniKQLTypeToYdbType(const NKikimrMiniKQL::TType& input, Ydb::Type& output);
@@ -48,10 +52,16 @@ TString ConvertShortYdbPermissionNameToFullYdbPermissionName(const TString& name
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::Entry* to, bool processAcl);
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::Scheme::Entry* to, bool processAcl);
 
-bool CellFromProtoVal(NScheme::TTypeInfo type, i32 typmod, const Ydb::Value* vp,
+bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Value* vp,
                                 TCell& c, TString& err, TMemoryPool& valueDataPool);
 
 void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeInfo, const TCell& cell);
 
+bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
+    const TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest>& in,
+    TString& error);
+
+void FillOwner(NKikimrScheme::TEvModifySchemeTransaction& out,
+    const TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest>& in);
 
 } // namespace NKikimr

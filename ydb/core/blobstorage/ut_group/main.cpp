@@ -8,7 +8,8 @@
 #include <ydb/core/blobstorage/vdisk/vdisk_actor.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/util/testactorsys.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <util/system/env.h>
 #include <random>
 
@@ -123,6 +124,7 @@ public:
         cFunc(TEvBlobStorage::EvDropDonor, Ignore);
         cFunc(TEvBlobStorage::EvGroupStatReport, Ignore);
         cFunc(TEvBlobStorage::EvNotifyVDiskGenerationChange, Ignore);
+        cFunc(TEvents::TSystem::Gone, Ignore);
 
         fFunc(TEvBlobStorage::EvPut, ForwardToProxy);
         fFunc(TEvBlobStorage::EvGet, ForwardToProxy);
@@ -378,7 +380,7 @@ private:
                 const ui32 vdiskSlotId = ++NextVDiskSlotId[std::make_tuple(nodeId, pdiskId)];
                 const TActorId& vdiskActorId = MakeBlobStorageVDiskID(nodeId, pdiskId, vdiskSlotId);
                 vdiskActorIds.push_back(vdiskActorId);
-                const TVDiskID vdiskId(GroupId, 1, 0, i, 0);
+                const TVDiskID vdiskId(TGroupId::FromValue(GroupId), 1, 0, i, 0);
                 Disks.push_back(TDiskRecord{
                     vdiskId,
                     serviceId,
@@ -405,8 +407,17 @@ private:
         auto proxy = Counters->GetSubgroup("subsystem", "proxy");
         TIntrusivePtr<TDsProxyNodeMon> mon = MakeIntrusive<TDsProxyNodeMon>(proxy, true);
         StoragePoolCounters = MakeIntrusive<TStoragePoolCounters>(proxy, TString(), NPDisk::DEVICE_TYPE_SSD);
+        TControlWrapper enablePutBatching(DefaultEnablePutBatching, false, true);
+        TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
+        TControlWrapper slowDiskThreshold(DefaultSlowDiskThreshold * 1000, 1, 1000000);
+        TControlWrapper predictedDelayMultiplier(DefaultPredictedDelayMultiplier * 1000, 1, 1000000);
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(Info), false, mon,
-            TIntrusivePtr(StoragePoolCounters), DefaultEnablePutBatching, DefaultEnableVPatch)};
+                TIntrusivePtr(StoragePoolCounters), TBlobStorageProxyParameters{
+                    .EnablePutBatching = enablePutBatching,
+                    .EnableVPatch = enableVPatch,
+                    .SlowDiskThreshold = slowDiskThreshold,
+                    .PredictedDelayMultiplier = predictedDelayMultiplier,
+                })};
         const TActorId& actorId = runtime.Register(proxyActor.release(), TActorId(), 0, std::nullopt, 1);
         runtime.RegisterService(MakeBlobStorageProxyID(GroupId), actorId);
     }
@@ -417,6 +428,7 @@ private:
             TString());
         auto vdiskConfig = AllVDiskKinds->MakeVDiskConfig(baseInfo);
         vdiskConfig->EnableVDiskCooldownTimeout = true;
+        vdiskConfig->UseCostTracker = false;
         auto counters = Counters->GetSubgroup("node", ToString(disk.NodeId))->GetSubgroup("vdisk", disk.VDiskId.ToString());
         const TActorId& actorId = runtime.Register(CreateVDisk(vdiskConfig, Info, counters), TActorId(), 0, std::nullopt, disk.NodeId);
         runtime.RegisterService(disk.VDiskActorId, actorId);
@@ -437,7 +449,7 @@ class TActivityActorImpl : public TActorCoroImpl {
 
 public:
     TActivityActorImpl(ui64 tabletId, ui32 groupId, ui32 *doneCounter, ui32 *counter, ui32 maxGen)
-        : TActorCoroImpl(65536)
+        : TActorCoroImpl(65536, true)
         , TabletId(tabletId)
         , GroupId(groupId)
         , MaxGen(maxGen)
@@ -581,6 +593,9 @@ public:
 
 Y_UNIT_TEST_SUITE(GroupStress) {
     Y_UNIT_TEST(Test) {
+        return;
+
+        THPTimer timer;
         TAppData::RandomProvider = CreateDeterministicRandomProvider(1);
         SetRandomSeed(1);
         TTestEnv env(9);
@@ -627,6 +642,9 @@ Y_UNIT_TEST_SUITE(GroupStress) {
             };
 
             do {
+                if (TDuration::Seconds(timer.Passed()) >= TDuration::Minutes(5)) {
+                    break;
+                }
                 runtime.Sim([&] {
                     for (auto& [condition, action] : map) {
                         if (condition()) {

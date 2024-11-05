@@ -22,14 +22,14 @@ void TClientCommandRootBase::Config(TConfig& config) {
     opts.AddLongOption('t', "time", "Show request execution time").NoArgument().SetFlag(&TimeRequests);
     opts.AddLongOption('o', "progress", "Show progress of long requests").NoArgument().SetFlag(&ProgressRequests);
     opts.AddLongOption("ca-file",
-        "Path to a file containing PEM encoded root certificates for tls connections.\n"
+        "Path to a file containing PEM encoded root certificates for TLS connections.\n"
         "If this parameter is empty, the default roots will be used.")
         .RequiredArgument("PATH").StoreResult(&CaCertsFile);
     opts.AddLongOption("client-cert-file",
-        "Path to a file containing PEM encoded client certificate for tls connections")
+        "Path to a file containing PEM encoded client certificate for TLS connections")
         .RequiredArgument("PATH").StoreResult(&ClientCertFile);
     opts.AddLongOption("client-cert-key-file",
-        "Path to a file containing PEM encoded client certificate private key for tls connections")
+        "Path to a file containing PEM encoded client certificate private key for TLS connections")
         .RequiredArgument("PATH").StoreResult(&ClientCertPrivateKeyFile);
 
     opts.SetCustomUsage(config.ArgV[0]);

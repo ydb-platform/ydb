@@ -89,9 +89,9 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         configParser.SetupGlobalOpts(opts);
         NMsgBusProxy::TMsgBusClientConfig mbusConfig;
         mbusConfig.ConfigureLastGetopt(opts, "mb-");
-        opts.AddLongOption("ca-file", "Path to a file containing PEM encoded root certificates for tls connections.\n").RequiredArgument("PATH");
-        opts.AddLongOption("client-cert-file", "Path to a file containing PEM encoded client certificate for tls connections.\n").RequiredArgument("PATH");
-        opts.AddLongOption("client-cert-key-file", "Path to a file containing PEM encoded client certificate private key for tls connections.\n").RequiredArgument("PATH");
+        opts.AddLongOption("ca-file", "Path to a file containing PEM encoded root certificates for TLS connections.\n").RequiredArgument("PATH");
+        opts.AddLongOption("client-cert-file", "Path to a file containing PEM encoded client certificate for TLS connections.\n").RequiredArgument("PATH");
+        opts.AddLongOption("client-cert-key-file", "Path to a file containing PEM encoded client certificate private key for TLS connections.\n").RequiredArgument("PATH");
         NDriverClient::HideOptions(opts);
         opts.AddLongOption('s', "server", "Server address to connect (default $KIKIMR_SERVER)").RequiredArgument("ADDR[:NUM]");
         opts.AddLongOption('k', "token", "Security token").RequiredArgument("TOKEN");

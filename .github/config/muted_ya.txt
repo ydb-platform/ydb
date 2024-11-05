@@ -11,18 +11,14 @@ ydb/core/kqp/provider/ut KikimrIcGateway.TestLoadBasicSecretValueFromExternalDat
 ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.*
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
-ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
-ydb/core/kqp/ut/olap KqpOlapAggregations.Aggregation_SumL_GroupL_OrderL
-ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesActualization
-ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesInBS
-ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesInLocalMetadata
-ydb/core/tx/columnshard/ut_rw Normalizers.CleanEmptyPortionsNormalizer
 ydb/core/kqp/ut/pg KqpPg.CreateIndex
+ydb/core/kqp/ut/tx KqpLocksTricky.TestNoLocksIssueInteractiveTx+withSink
+ydb/core/kqp/ut/tx KqpLocksTricky.TestNoLocksIssue+withSink
+ydb/core/kqp/ut/tx KqpSnapshotRead.ReadOnlyTxWithIndexCommitsOnConcurrentWrite+withSink
+ydb/core/kqp/ut/tx KqpSinkTx.InvalidateOnError
 ydb/core/kqp/ut/query KqpLimits.QueryReplySize
 ydb/core/kqp/ut/query KqpQuery.QueryTimeout
-ydb/core/kqp/ut/query KqpLimits.ComputeActorMemoryAllocationFailureQueryService
-ydb/core/kqp/ut/query KqpLimits.QueryExecTimeoutCancel
-ydb/core/kqp/ut/query KqpStats.SysViewClientLost
+ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpReplace+HasSecondaryIndex
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
@@ -34,7 +30,6 @@ ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryPgTableSelect
 ydb/core/kqp/ut/service KqpQueryService.QueryOnClosedSession
 ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpUpdate
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
-<<<<<<< HEAD
 ydb/core/kqp/ut/service [38/50]*
 ydb/core/kqp/ut/service KqpQueryService.TableSink_OltpReplace+HasSecondaryIndex
 ydb/core/kqp/ut/spilling KqpScanSpilling.HandleErrorsCorrectly
@@ -54,20 +49,8 @@ ydb/core/persqueue/ut/ut_with_sdk [7/10] chunk chunk
 ydb/core/persqueue/ut/ut_with_sdk [8/10] chunk chunk
 ydb/core/tx/coordinator/ut Coordinator.RestoreTenantConfiguration
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanDebezium
-=======
-ydb/core/kqp/ut/service [*/*] chunk chunk
-ydb/core/kqp/ut/service [*/*]+chunk+chunk
-ydb/services/ydb/ut YdbLogStore.AlterLogTable
-ydb/core/mind/hive/ut THiveTest.DrainWithHiveRestart
-ydb/core/persqueue/ut [*/*] chunk chunk
-ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
->>>>>>> e2ee1b2b1a (Clean max scalar (#10826))
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
-ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst*
 ydb/core/tx/tx_proxy/ut_storage_tenant TStorageTenantTest.RemoveStoragePoolBeforeDroppingTablet
 ydb/core/util/ut TCircularOperationQueueTest.ShouldShuffle
@@ -135,6 +118,5 @@ ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-
 ydb/tests/tools/pq_read/test test_timeout.py.TestTimeout.test_timeout
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
-db/core/kqp/ut/olap KqpOlapIndexes.IndexesInBS
-db/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
+ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
 ydb/tests/functional/rename [test_rename.py */10] chunk chunk

@@ -9,6 +9,7 @@ SRCS(
     column_features.cpp
     schema_diff.cpp
     objects_cache.cpp
+    schema_version.cpp
 )
 
 PEERDIR(

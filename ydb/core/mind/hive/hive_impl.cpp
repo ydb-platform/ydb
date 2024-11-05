@@ -1705,6 +1705,14 @@ void THive::UpdateCounterPingQueueSize() {
     }
 }
 
+void THive::UpdateCounterTabletsStarting(i64 tabletsStartingDiff) {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_STARTING];
+        auto newValue = counter.Get() + tabletsStartingDiff;
+        counter.Set(newValue);
+    }
+}
+
 void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo) {
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);

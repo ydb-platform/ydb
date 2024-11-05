@@ -264,7 +264,7 @@ public:
     void FillStats(::NKikimrTableStats::TTableStats& output) const;
 };
 
-class TCounterGuard: TNonCopyable {
+class TCounterGuard: TMoveOnly {
 private:
     std::shared_ptr<TAtomicCounter> Counter;
 public:

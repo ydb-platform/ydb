@@ -78,15 +78,17 @@ private:
     private:
         using TBase = IDataTasksProcessor::ITask;
         YDB_READONLY_DEF(std::vector<TPortionDataAccessor>, Accessors);
-
+        NColumnShard::TCounterGuard WaitingCountersGuard;
     public:
         TString GetTaskClassIdentifier() const override {
             return "TApplyResult";
         }
 
-        TApplyResult(const std::vector<TPortionDataAccessor>& accessors)
+        TApplyResult(const std::vector<TPortionDataAccessor>& accessors, NColumnShard::TCounterGuard&& waitingCountersGuard)
             : TBase(NActors::TActorId())
-            , Accessors(accessors) {
+            , Accessors(accessors)
+            , WaitingCountersGuard(std::move(waitingCountersGuard))
+        {
         }
 
         virtual TConclusionStatus DoExecuteImpl() override {
@@ -121,7 +123,8 @@ private:
             } else {
                 AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
                 NActors::TActivationContext::AsActorContext().Send(
-                    OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplyResult>(result.GetPortions())));
+                    OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
+                                 std::make_shared<TApplyResult>(result.GetPortions(), std::move(WaitingCountersGuard))));
             }
         }
 

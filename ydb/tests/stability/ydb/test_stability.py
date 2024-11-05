@@ -32,6 +32,7 @@ def get_slice_directory():
 def get_ssh_username():
     return yatest.common.get_param("kikimr.ci.ssh_username")
 
+
 def get_slice_name():
     return yatest.common.get_param("kikimr.ci.cluster_name", None)
 

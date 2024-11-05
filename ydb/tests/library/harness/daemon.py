@@ -10,7 +10,6 @@ from yatest.common import process
 import six
 
 from ydb.tests.library.common.wait_for import wait_for
-from . import param_constants
 
 
 logger = logging.getLogger(__name__)

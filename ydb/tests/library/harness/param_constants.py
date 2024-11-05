@@ -10,6 +10,7 @@ def _get_param(name, default):
     except (AttributeError, yatest.common.NoRuntimeFormed):
         return default
 
+
 deploy_cluster = _get_param("kikimr.ci.deploy_cluster", "false") == "true"
 
 kikimr_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr'

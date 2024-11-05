@@ -626,4 +626,28 @@ void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
     }
 }
 
-}   // namespace NKikimr::NOlap
+void TColumnEngineForLogs::ChangeSchemaVersionsToLastCompatible(NOlap::TDbWrapper& db) {
+    const THashMap<ui64, ui64> versionMap = VersionedIndex.GetCompatibleSchemaVersions();
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization_start");
+    if (versionMap.empty()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization_start_no_compatible_versions_found");
+        return;
+    }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization_start_found_compatible_versions");
+    for (auto& [_, table]: GranulesStorage->GetTables()) {
+        for (auto& [_, portion]: table->GetPortions()) {
+            auto schemaVersionOpt = portion->GetSchemaVersionOptional();
+            if (schemaVersionOpt.has_value()) {
+                // TO DO call VersionAddRef and VersionRemoveRef
+                auto iter = versionMap.find(*schemaVersionOpt);
+                if (iter != versionMap.end()) {
+                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization")("from", *schemaVersionOpt)("to", iter->second);
+                    portion->SetSchemaVersion(iter->second);
+                    db.WritePortion(*portion);
+                }
+            }
+        }
+    }
+}
+
+} // namespace NKikimr::NOlap

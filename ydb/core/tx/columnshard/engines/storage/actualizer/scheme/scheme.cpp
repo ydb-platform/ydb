@@ -70,16 +70,21 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
                 }
             }
             auto info = BuildActualizationInfo(*portion);
-            AFL_VERIFY(info);
-            auto portionScheme = portion->GetSchema(VersionedIndex);
-            TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
-            features.SetTargetTierName(portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
-
-            if (!tasksContext.AddPortion(portion, std::move(features), {})) {
-                break;
+//            AFL_VERIFY(info);
+            if (info) {
+                auto portionScheme = portion->GetSchema(VersionedIndex);
+                TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
+                features.SetTargetTierName(portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
+                if (!tasksContext.AddPortion(portion, std::move(features), {})) {
+                    break;
+                } else {
+                    portionsToRemove.emplace(portion->GetPortionId());
+                }
             } else {
+                AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "skipped_portion")("portion_id", portionId);
                 portionsToRemove.emplace(portion->GetPortionId());
             }
+
         }
     }
     for (auto&& i : portionsToRemove) {

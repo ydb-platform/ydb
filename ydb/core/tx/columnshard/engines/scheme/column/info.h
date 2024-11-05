@@ -63,6 +63,8 @@ public:
         AFL_VERIFY(Loader);
         return Loader;
     }
+
+    auto operator<=>(const TSimpleColumnInfo&) const = default;
 };
 
 }   // namespace NKikimr::NOlap

@@ -310,6 +310,7 @@ public:
 
     virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0;
     virtual const TColumnEngineStats& GetTotalStats() = 0;
+    virtual void ChangeSchemaVersionsToLastCompatible(NOlap::TDbWrapper& db) = 0;
     virtual ui64 MemoryUsage() const {
         return 0;
     }

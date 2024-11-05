@@ -244,6 +244,7 @@ public:
             AFL_VERIFY(!FetchingCount.Val());
             FetchStage = 2;
             Subscriber->OnResult(RequestId, std::move(AccessorsByPathId));
+            Subscriber = nullptr;
         }
     }
 

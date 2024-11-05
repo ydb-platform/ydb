@@ -728,7 +728,7 @@ void ValidateDynamicValue(const TUnversionedValue& value, bool isKey)
         case EValueType::Double:
             if (isKey && std::isnan(value.Data.Double)) {
                 THROW_ERROR_EXCEPTION(
-                    NTableClient::EErrorCode::KeyCannotBeNan,
+                    NTableClient::EErrorCode::KeyCannotBeNaN,
                     "Key of type \"double\" cannot be NaN");
             }
             break;

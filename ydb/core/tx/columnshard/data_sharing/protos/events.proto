@@ -3,6 +3,7 @@ import "ydb/core/tx/columnshard/data_sharing/protos/links.proto";
 import "ydb/core/tx/columnshard/data_sharing/protos/data.proto";
 import "ydb/core/tx/columnshard/data_sharing/protos/sessions.proto";
 import "ydb/core/tx/columnshard/data_sharing/protos/initiator.proto";
+import "ydb/core/protos/tx_columnshard.proto";
 
 package NKikimrColumnShardDataSharingProto;
 
@@ -23,6 +24,7 @@ message TEvSendDataFromSource {
     optional uint64 PackIdx = 2;
     repeated TPathIdData PathIdData = 3;
     optional uint64 SourceTabletId = 4;
+    repeated NKikimrTxColumnShard.TSchemaPresetVersionInfo SchemeHistory = 5;
 }
 
 message TEvAckDataToSource {

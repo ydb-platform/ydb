@@ -321,9 +321,6 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
 
         void Execute() {
             TLocalHelper(Kikimr).SetShardingMethod(ShardingType).CreateTestOlapTable("olapTable", "olapStore", 24, 4);
-
-            Tests::NCommon::TLoggerInit(Kikimr).SetComponents({ NKikimrServices::TX_COLUMNSHARD, NKikimrServices::TX_COLUMNSHARD_SCAN }, "CS").SetPriority(NActors::NLog::PRI_DEBUG).Initialize();
-
             {
                 WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
                 WriteTestData(Kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
@@ -403,7 +400,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
     }
 
     Y_UNIT_TEST(TableReshardingModuloN) {
-        TShardingTypeTest().SetShardingType("HASH_FUNCTION_CONSISTENCY_64").Execute();
+        TShardingTypeTest().SetShardingType("HASH_FUNCTION_MODULO_N").Execute();
     }
 
     class TAsyncReshardingTest: public TReshardingTest {
@@ -435,11 +432,36 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             TReshardingTest::CheckCount(NumRows);
         }
 
+        void AddManyColumns() {
+            auto alterQuery = TStringBuilder() << "ALTER TABLESTORE `/Root/olapStore` ";
+            for (int i = 0; i < 10000; i++) {
+                alterQuery << " ADD COLUMN col_" << i << " Int8";
+                if (i < 10000 - 1) {
+                    alterQuery << ", ";
+                }
+            }
+
+            auto session = TableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        void RestartAllShards() {
+            for (i64 id : CSController->GetShardActualIds()) {
+                Kikimr.GetTestServer().GetRuntime()->Send(MakePipePerNodeCacheID(false), NActors::TActorId(), new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), id, false));
+            }
+        }
+
         void ChangeSchema() {
-            auto alterQuery =
-                "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=level, "
-                "`SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, "
-                "`COMPRESSION.TYPE`=`zstd`);";
+            const char* alterQuery;
+            if (HasNewCol) {
+                alterQuery = "ALTER TABLESTORE `/Root/olapStore` DROP COLUMN new_col";
+            } else {
+                alterQuery = "ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_col Int8";
+            }
+            HasNewCol = !HasNewCol;
+
             auto session = TableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
 
@@ -454,6 +476,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         ui64 LastPathId = 1000000;
         ui64 LastTs = 300000000;
         ui64 NumRows = 0;
+        ui64 HasNewCol = false;
     };
 
     Y_UNIT_TEST(UpsertWhileSplitTest) {
@@ -497,6 +520,44 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
 
         tester.StartResharding("SPLIT");
         tester.WaitResharding();
+
+        tester.RestartAllShards();
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleSchemaVersions) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        for (int i = 0; i < 3; i++) {
+            tester.AddBatch(1);
+            tester.ChangeSchema();
+        }
+
+        tester.StartResharding("SPLIT");
+        tester.WaitResharding();
+
+        tester.RestartAllShards();
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(HugeSchemeHistory) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddManyColumns();
+
+        for (int i = 0; i < 100; i++) {
+            tester.AddBatch(1);
+            tester.ChangeSchema();
+        }
+
+        tester.StartResharding("SPLIT");
+        tester.WaitResharding();
+
+        tester.RestartAllShards();
 
         tester.CheckCount();
     }

@@ -635,7 +635,8 @@ void TColumnEngineForLogs::ChangeSchemaVersionsToLastCompatible(NOlap::TDbWrappe
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization_start_found_compatible_versions");
     for (auto& [_, table]: GranulesStorage->GetTables()) {
-        for (auto& [_, portion]: table->GetPortions()) {
+        table->ChangeSchemeToCompatible(versionMap, db);
+/*        for (auto& [_, portion]: table->GetPortions()) {
             auto schemaVersionOpt = portion->GetSchemaVersionOptional();
             if (schemaVersionOpt.has_value()) {
                 // TO DO call VersionAddRef and VersionRemoveRef
@@ -646,7 +647,7 @@ void TColumnEngineForLogs::ChangeSchemaVersionsToLastCompatible(NOlap::TDbWrappe
                     db.WritePortion(*portion);
                 }
             }
-        }
+        }*/
     }
 }
 

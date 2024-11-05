@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/counters/counters.h>
 
@@ -32,6 +33,8 @@ public:
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TAddExternalContext& context);
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion);
+
+    void ChangeSchemeToCompatible(const THashMap<ui64, ui64>& versionMap, const TExternalTasksContext& externalContext, NOlap::TDbWrapper& db);
 };
 
 }

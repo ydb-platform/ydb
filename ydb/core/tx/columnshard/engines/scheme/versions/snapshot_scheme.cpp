@@ -89,6 +89,15 @@ bool TSnapshotSchema::IsCompatibleWithNextVersion(const TSnapshotSchema& nextSch
     if (indexes.size() != nextIndexes.size()) {
         return false;
     }
+    for (auto& [key, meta]: indexes) {
+        THashMap<ui32, NIndexes::TIndexMetaContainer>::const_iterator it = nextIndexes.find(key);
+        if (it == nextIndexes.end()) {
+            return false;
+        }
+        if (*meta.GetObjectPtr() != *it->second.GetObjectPtr()) {
+            return false;
+        }
+    }
 
     return true;
 }

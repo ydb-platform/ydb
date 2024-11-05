@@ -93,8 +93,9 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
                 continue;
             }
 
-            if (!columns.contains(column)) {
+            if (!columnsMeta.contains(column)) {
                 YQL_CLOG(DEBUG, ProviderKikimr) << "Table: " + table + " doesn't contain " + column + " to request for column statistics";
+                continue;
             }
 
             NKikimr::NStat::TRequest req;

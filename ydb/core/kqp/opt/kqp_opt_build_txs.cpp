@@ -558,7 +558,7 @@ public:
         }
 
         if (!query.Effects().Empty()) {
-            auto collectedEffects = CollectEffects(query.Effects(), ctx);
+            auto collectedEffects = CollectEffects(query.Effects(), ctx, *KqpCtx);
 
             for (auto& effects : collectedEffects) {
                 auto tx = BuildTx(effects.Ptr(), ctx, /* isPrecompute */ false);
@@ -583,11 +583,12 @@ public:
     }
 
 private:
-    TVector<TExprList> CollectEffects(const TExprList& list, TExprContext& ctx) {
+    TVector<TExprList> CollectEffects(const TExprList& list, TExprContext& ctx, TKqpOptimizeContext& kqpCtx) {
         struct TEffectsInfo {
             enum class EType {
                 KQP_EFFECT,
                 KQP_SINK,
+                KQP_BATCH_SINK,
                 EXTERNAL_SINK,
             };
 
@@ -615,23 +616,38 @@ private:
                     effectsInfos.back().Type = TEffectsInfo::EType::EXTERNAL_SINK;
                     effectsInfos.back().Exprs.push_back(expr.Ptr());
                 } else {
-                    // Two table sinks can't be executed in one physical transaction if they write into one table.
-                    const TStringBuf tablePathId = sinkSettings.Cast().Table().PathId().Value();
+                    // Two table sinks can't be executed in one physical transaction if they write into same table and have same priority.
 
-                    auto it = std::find_if(
-                        std::begin(effectsInfos),
-                        std::end(effectsInfos),
-                        [&tablePathId](const auto& effectsInfo) {
-                            return effectsInfo.Type == TEffectsInfo::EType::KQP_SINK
-                                && !effectsInfo.TablesPathIds.contains(tablePathId);
-                        });
-                    if (it == std::end(effectsInfos)) {
-                        effectsInfos.emplace_back();
-                        it = std::prev(std::end(effectsInfos));
-                        it->Type = TEffectsInfo::EType::KQP_SINK;
+                    const auto& tableDescription = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path());
+                    if (tableDescription.Metadata->Kind == EKikimrTableKind::Olap) {
+                        const TStringBuf tablePathId = sinkSettings.Cast().Table().PathId().Value();
+
+                        auto it = std::find_if(
+                            std::begin(effectsInfos),
+                            std::end(effectsInfos),
+                            [&tablePathId](const auto& effectsInfo) {
+                                return effectsInfo.Type == TEffectsInfo::EType::KQP_SINK
+                                    && !effectsInfo.TablesPathIds.contains(tablePathId);
+                            });
+                        if (it == std::end(effectsInfos)) {
+                            effectsInfos.emplace_back();
+                            it = std::prev(std::end(effectsInfos));
+                            it->Type = TEffectsInfo::EType::KQP_SINK;
+                        }
+                        it->TablesPathIds.insert(tablePathId);
+                        it->Exprs.push_back(expr.Ptr());
+                    } else {
+                        auto it = std::find_if(
+                            std::begin(effectsInfos),
+                            std::end(effectsInfos),
+                            [](const auto& effectsInfo) { return effectsInfo.Type == TEffectsInfo::EType::KQP_BATCH_SINK; });
+                        if (it == std::end(effectsInfos)) {
+                            effectsInfos.emplace_back();
+                            it = std::prev(std::end(effectsInfos));
+                            it->Type = TEffectsInfo::EType::KQP_BATCH_SINK;
+                        }
+                        it->Exprs.push_back(expr.Ptr());
                     }
-                    it->TablesPathIds.insert(tablePathId);
-                    it->Exprs.push_back(expr.Ptr());
                 }
             } else {
                 // Table effects are executed all in one physical transaction.

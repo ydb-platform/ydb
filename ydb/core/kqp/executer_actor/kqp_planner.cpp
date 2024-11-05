@@ -53,6 +53,23 @@ void BuildInitialTaskResources(const TKqpTasksGraph& graph, ui64 taskId, TTaskRe
     ret.HeavyProgram = opts.GetHasMapJoin();
 }
 
+bool NeedToRunLocally(const TTask& task) {
+    for (const auto& output : task.Outputs) {
+        if (output.Type == TTaskOutputType::Sink && output.SinkType == KqpTableSinkName) {
+            YQL_ENSURE(output.SinkSettings);
+            const google::protobuf::Any& settingsAny = *output.SinkSettings;
+            YQL_ENSURE(settingsAny.Is<NKikimrKqp::TKqpTableSinkSettings>());
+            NKikimrKqp::TKqpTableSinkSettings settings;
+            YQL_ENSURE(settingsAny.UnpackTo(&settings));
+            if (ActorIdFromProto(settings.GetBufferActorId())) {
+                // We need to run compute actor locally if it uses buffer actor.
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool LimitCPU(TIntrusivePtr<TUserRequestContext> ctx) {
     return ctx->PoolId && ctx->PoolConfig.has_value() && ctx->PoolConfig->TotalCpuLimitPercentPerNode > 0;
 }
@@ -417,7 +434,12 @@ std::unique_ptr<IEventHandle> TKqpPlanner::AssignTasksToNodes() {
         for(ui64 taskId: group.TaskIds) {
             auto [it, success] = alreadyAssigned.emplace(taskId, group.NodeId);
             if (success) {
-                TasksPerNode[group.NodeId].push_back(taskId);
+                if (NeedToRunLocally(TasksGraph.GetTask(taskId))) {
+                    const ui64 selfNodeId = ExecuterId.NodeId();
+                    TasksPerNode[selfNodeId].push_back(taskId);
+                } else {
+                    TasksPerNode[group.NodeId].push_back(taskId);
+                }
             }
         }
     }
@@ -463,7 +485,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .WithSpilling = WithSpilling,
         .StatsMode = GetDqStatsMode(StatsMode),
         .Deadline = Deadline,
-        .ShareMailbox = (computeTasksSize <= 1),
+        .ShareMailbox = (computeTasksSize <= 1) || NeedToRunLocally(task),
         .RlPath = Nothing(),
     });
 

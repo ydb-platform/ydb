@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
@@ -121,12 +122,6 @@ private:
     friend class TKqpTransactionContext;
 };
 
-struct TTableInfo {
-    bool IsOlap = false;
-    THashSet<TStringBuf> Pathes;
-};
-
-
 class TShardIdToTableInfo {
 public:
     const TTableInfo& Get(ui64 shardId) const {
@@ -204,6 +199,8 @@ public:
     void Finish() final {
         YQL_ENSURE(DeferredEffects.Empty());
         YQL_ENSURE(!Locks.HasLocks());
+        YQL_ENSURE(!TxManager);
+        YQL_ENSURE(!BufferActorId);
 
         FinishTime = TInstant::Now();
 
@@ -349,6 +346,9 @@ public:
 
     bool NeedUncommittedChangesFlush = false;
     THashSet<NKikimr::TTableId> ModifiedTablesSinceLastFlush;
+
+    TActorId BufferActorId;
+    IKqpTransactionManagerPtr TxManager = nullptr;
 
     TShardIdToTableInfoPtr ShardIdToTableInfo = std::make_shared<TShardIdToTableInfo>();
 };

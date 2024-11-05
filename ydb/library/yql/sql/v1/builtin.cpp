@@ -3004,7 +3004,7 @@ struct TBuiltinFuncData {
             {"callableresulttype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableResultType", 1, 1) },
             {"callableargumenttype", BuildSimpleBuiltinFactoryCallback<TYqlCallableArgumentType>() },
             {"variantunderlyingtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VariantUnderlyingType", 1, 1) },
-            {"variantitem", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VariantItem", 1, 1) },
+            {"variantitem", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("SqlVariantItem", 1, 1) },
             {"fromysonsimpletype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FromYsonSimpleType", 2, 2) },
             {"currentutcdate", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "CurrentUtcDate", 0, -1) },
             {"currentutcdatetime", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "CurrentUtcDatetime", 0, -1) },
@@ -3684,6 +3684,10 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             if (mustUseNamed && *mustUseNamed) {
                 *mustUseNamed = false;
                 auto &positional = *args[0]->GetTupleNode();
+                if (positional.GetTupleSize() != (withDefault ? 2 : 1)) {
+                    return new TInvalidBuiltin(pos, TStringBuilder() << name 
+                        << " requires exactly " << (withDefault ? 2 : 1) << " positional arguments when named args are used");
+                }
                 auto &named = *args[1]->GetStructNode();
                 variant = positional.GetTupleElement(0);
                 auto &namedExprs = named.GetExprs();
@@ -3719,7 +3723,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             if (dflt.Defined()) {
                 resultArgs.emplace_back(std::move(dflt->Get()));
             }
-            return new TCallNodeImpl(pos, "Visit", 1, -1, resultArgs);
+            return new TCallNodeImpl(pos, "SqlVisit", 1, -1, resultArgs);
         } else if (normalizedName == "sqlexternalfunction") {
             return new TCallNodeImpl(pos, "SqlExternalFunction", args);
         } else {

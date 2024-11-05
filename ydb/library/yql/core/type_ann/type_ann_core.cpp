@@ -8517,8 +8517,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus VariantItemWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
+    IGraphTransformer::TStatus SqlVariantItemWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -8528,25 +8527,35 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        bool isOptional = false;
-        const TVariantExprType* variantType;
         if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
-            isOptional = true;
-            auto itemType = input->Head().GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType();
-            if (!EnsureVariantType(input->Head().Pos(), *itemType, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            variantType = itemType->Cast<TVariantExprType>();
+            output = ctx.Expr.Builder(input->Pos())
+                .Callable("Map")
+                    .Add(0, input->HeadPtr())
+                    .Lambda(1)
+                        .Param("var")
+                        .Callable("VariantItem")
+                            .Arg(0, "var")
+                        .Seal()
+                    .Seal()
+                .Seal().Build();
+        } else {
+            output = ctx.Expr.RenameNode(*input, "VariantItem");
         }
-        else {
-            if (!EnsureVariantType(input->Head(), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
+        return IGraphTransformer::TStatus::Repeat;
+    }
 
-            variantType = input->Head().GetTypeAnn()->Cast<TVariantExprType>();
+    IGraphTransformer::TStatus VariantItemWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
         }
 
+        const TVariantExprType* variantType;
+        if (!EnsureVariantType(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        variantType = input->Head().GetTypeAnn()->Cast<TVariantExprType>();
+        
         if (variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
             auto tupleType = variantType->GetUnderlyingType()->Cast<TTupleExprType>();
             auto firstType = tupleType->GetItems()[0];
@@ -8573,14 +8582,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             input->SetTypeAnn(firstType);
         }
 
-        if (isOptional) {
-            input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(input->GetTypeAnn()));
-        }
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus VisitWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
+    IGraphTransformer::TStatus SqlVisitWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -8588,6 +8593,37 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         if (IsNull(input->Head())) {
             output = input->HeadPtr();
             return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+            auto appendOtherArgs = [&] (auto &builder) -> auto {
+                for (size_t pos = 1; pos < input->ChildrenSize(); pos++) {
+                    builder.Add(pos, input->ChildPtr(pos));
+                }
+                return builder;
+            };
+
+            output = appendOtherArgs(ctx.Expr.Builder(input->Pos())
+                .Callable("Map")
+                    .Add(0, input->HeadPtr())
+                    .Lambda(1)
+                        .Param("var")
+                        .Callable("Visit")
+                            .Arg(0, "var"))
+                        .Seal()
+                    .Seal()
+                .Seal().Build();
+        } else {
+            output = ctx.Expr.RenameNode(*input, "Visit");
+        }
+
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    IGraphTransformer::TStatus VisitWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
         }
 
         if (!EnsureVariantType(input->Head(), ctx.Expr)) {
@@ -12419,7 +12455,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["FlattenMembersType"] = &TypeArgWrapper<ETypeArgument::FlattenMembers>;
         Functions["VariantUnderlyingType"] = &TypeArgWrapper<ETypeArgument::VariantUnderlying>;
         Functions["Guess"] = &GuessWrapper;
+        Functions["SqlVariantItem"] = &SqlVariantItemWrapper;
         Functions["VariantItem"] = &VariantItemWrapper;
+        Functions["SqlVisit"] = &SqlVisitWrapper;
         Functions["Visit"] = &VisitWrapper;
         Functions["Way"] = &WayWrapper;
         Functions["SqlAccess"] = &SqlAccessWrapper;

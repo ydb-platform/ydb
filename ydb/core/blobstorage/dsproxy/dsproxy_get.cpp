@@ -378,10 +378,10 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvGet, requestSize, duration.SecondsFloat() * 1000.0, tabletId,
                 evResult->GroupId, channel, NKikimrBlobStorage::EGetHandleClass_Name(handleClass),
                 success);
-        A_LOG_LOG_S(true, success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false));
+        A_LOG_LOG_S(true, success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false) << " GroupId# " << Info->GroupID);
 
-        if (TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) {
-            if (AllowToReport(GetImpl.GetHandleClass())) {
+        if (AllowToReport(handleClass)) {
+            if (TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) {
                 STLOG(PRI_WARN, BS_PROXY_GET, BPG71, "Long TEvGet request detected",            \
                         (LongRequestThreshold, LongRequestThreshold),                           \
                         (GroupId, Info->GroupID),                                               \
@@ -391,6 +391,12 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
                         (RestartCounter, RestartCounter),                                       \
                         (History, GetImpl.PrintHistory()));
             }
+
+            STLOG(GetImpl.WasNotOkResponses() ? NLog::PRI_NOTICE : NLog::PRI_DEBUG, BS_PROXY_GET, BPG72, \
+                    "Query history",                                                                     \
+                    (GroupId, Info->GroupID),                                                            \
+                    (HandleClass, NKikimrBlobStorage::EGetHandleClass_Name(handleClass)),                \
+                    (History, GetImpl.PrintHistory()));
         }
         return SendResponseAndDie(std::unique_ptr<TEvBlobStorage::TEvGetResult>(evResult.Release()));
     }

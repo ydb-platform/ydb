@@ -4034,10 +4034,10 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v1
-            SELECT Fk, Key FROM `/Root/SecondaryKeys` WHERE Fk = 1 ORDER BY Key DESC LIMIT 1;
+            SELECT Fk, Key FROM `/Root/SecondaryKeys` ORDER BY Fk DESC LIMIT 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()), querySettings).GetValueSync();
         AssertSuccessResult(result);
-        AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 0);
+        AssertTableReads(result, "/Root/SecondaryKeys/Index/indexImplTable", 1);
     }
 
     Y_UNIT_TEST(AutoChooseIndexOrderByLambda) {

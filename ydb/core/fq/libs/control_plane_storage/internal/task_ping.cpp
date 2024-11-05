@@ -180,7 +180,16 @@ TPingTaskParams ConstructHardPingTask(
                 policy = it->second;
             }
 
-            if (retryLimiter.UpdateOnRetry(Now(), policy)) {
+            auto now = TInstant::Now();
+            auto executionDeadline = now;
+
+            auto submittedAt = NProtoInterop::CastFromProto(query.meta().submitted_at());
+            auto executionTtl = NProtoInterop::CastFromProto(internal.execution_ttl());
+            if (submittedAt && executionTtl) {
+                executionDeadline = submittedAt + executionTtl;
+            }
+
+            if (retryLimiter.UpdateOnRetry(Now(), policy) && now < executionDeadline) {
                 queryStatus.Clear();
                 // failing query is throttled for backoff period
                 backoff = policy.BackoffPeriod * (retryLimiter.RetryRate + 1);

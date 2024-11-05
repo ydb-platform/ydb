@@ -861,9 +861,9 @@ private:
         as->RegisterLocalService(NSQS::MakeSqsFolderServiceID(), actorId);
 
         NActors::TActorSystemSetup::TLocalServices services {};
-        auto authFactory = new NKikimr::NSQS::TMultiAuthFactory();
-        authFactory->Initialize(services, *AppData(as), AppData(as)->SqsConfig);
-        AppData(as)->SqsAuthFactory = authFactory;
+        MultiAuthFactory = std::make_unique<NKikimr::NSQS::TMultiAuthFactory>();
+        MultiAuthFactory->Initialize(services, *AppData(as), AppData(as)->SqsConfig);
+        AppData(as)->SqsAuthFactory = MultiAuthFactory.get();
 
         for (ui32 i = 0; i < ActorRuntime->GetNodeCount(); i++) {
             auto nodeId = ActorRuntime->GetNodeId(i);
@@ -904,6 +904,7 @@ public:
     std::unique_ptr<grpc::Server> AccessServiceServer;
     std::unique_ptr<grpc::Server> IamTokenServer;
     std::unique_ptr<grpc::Server> DatabaseServiceServer;
+    std::unique_ptr<NKikimr::NSQS::TMultiAuthFactory> MultiAuthFactory;
     TAutoPtr<TMon> Monitoring;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters = {};
     THolder<NYdbGrpc::TGRpcServer> GRpcServer;

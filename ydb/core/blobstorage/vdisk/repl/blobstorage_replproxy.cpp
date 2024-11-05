@@ -129,6 +129,7 @@ namespace NKikimr {
             ui64 NextReceiveCookie;
             TResultQueue ResultQueue;
             std::shared_ptr<TMessageRelevanceTracker> Tracker = std::make_shared<TMessageRelevanceTracker>();
+            bool Terminated = false;
 
             TQueue<std::unique_ptr<TEvBlobStorage::TEvVGet>> SchedulerRequestQ;
             THashMap<ui64, TReplMemTokenId> RequestTokens;
@@ -227,9 +228,7 @@ namespace NKikimr {
                     PrefetchDataSize = 0;
                     RequestFromVDiskProxyPending = false;
                     if (Finished) {
-                        Send(MakeBlobStorageReplBrokerID(), new TEvPruneQueue);
-                        RequestTokens.clear();
-                        return PassAway(); // TODO(alexvru): check correctness of invocations
+                        return PassAway();
                     }
                 }
                 // send request(s) if prefetch queue is not full
@@ -297,6 +296,9 @@ namespace NKikimr {
                 if (msg->Record.GetCookie() == NextReceiveCookie) {
                     ui64 cookie = NextReceiveCookie;
                     ProcessResult(msg);
+                    if (Terminated) {
+                        return;
+                    }
                     ReleaseMemToken(cookie);
                     while (!ResultQueue.empty()) {
                         const TQueueItem& top = ResultQueue.top();
@@ -305,6 +307,9 @@ namespace NKikimr {
                         }
                         ui64 cookie = NextReceiveCookie;
                         ProcessResult(top.get());
+                        if (Terminated) {
+                            return;
+                        }
                         ReleaseMemToken(cookie);
                         ResultQueue.pop();
                     }
@@ -314,6 +319,7 @@ namespace NKikimr {
             }
 
             void ReleaseMemToken(ui64 cookie) {
+                Y_ABORT_UNLESS(!Terminated);
                 if (RequestTokens) {
                     auto it = RequestTokens.find(cookie);
                     Y_ABORT_UNLESS(it != RequestTokens.end());
@@ -428,6 +434,13 @@ namespace NKikimr {
                 }
             }
 
+            void PassAway() override {
+                Y_ABORT_UNLESS(!Terminated);
+                Terminated = true;
+                Send(MakeBlobStorageReplBrokerID(), new TEvPruneQueue);
+                TActorBootstrapped::PassAway();
+            }
+
             STRICT_STFUNC(StateFunc,
                 hFunc(TEvReplProxyNext, Handle)
                 hFunc(TEvReplMemToken, Handle)
@@ -446,8 +459,7 @@ namespace NKikimr {
                     TTrackableVector<TVDiskProxy::TScheduledBlob>&& ids,
                     const TVDiskID& vdiskId,
                     const TActorId& serviceId)
-                : TActorBootstrapped<TVDiskProxyActor>()
-                , ReplCtx(std::move(replCtx))
+                : ReplCtx(std::move(replCtx))
                 , GType(ReplCtx->VCtx->Top->GType)
                 , Ids(std::move(ids))
                 , VDiskId(vdiskId)

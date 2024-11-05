@@ -343,7 +343,7 @@ void TAsyncExpiringCache<TKey, TValue>::ForceRefresh(const TKey& key, const T& v
 }
 
 template <class TKey, class TValue>
-void TAsyncExpiringCache<TKey, TValue>::PingEntry(const TKey& key)
+void TAsyncExpiringCache<TKey, TValue>::Ping(const TKey& key)
 {
     auto now = NProfiling::GetCpuInstant();
     auto guard = ReaderGuard(SpinLock_);
@@ -359,7 +359,6 @@ void TAsyncExpiringCache<TKey, TValue>::PingEntry(const TKey& key)
         if (!Config()->BatchUpdate) {
             ScheduleEntryRefresh(entry, key, Config_->RefreshTime);
         }
-
     }
 }
 

@@ -10,19 +10,17 @@ std::vector<std::pair<ui64, ui64>> TTxSchemaVersionsCleanup::GetPrevNextSchemas(
     THashSet<ui64> checkedSchemas;
     const NOlap::TVersionedIndex& versionedIndex = Self->TablesManager.MutablePrimaryIndex().GetVersionedIndex();
     const std::map<ui64, NOlap::ISnapshotSchema::TPtr>& snapshotByVersion = versionedIndex.GetSnapshotByVersion();
-    auto begin = snapshotByVersion.cbegin();
-    auto end = snapshotByVersion.cend();
     for (const ui64 schemaVersion: VersionsToRemove) {
         if (checkedSchemas.find(schemaVersion) != checkedSchemas.end()) {
             continue;
         }
         auto iter = snapshotByVersion.find(schemaVersion);
-        AFL_VERIFY(iter != end);
+        AFL_VERIFY(iter != snapshotByVersion.cend());
         auto prevIter = iter;
         ui64 prevVersion = 0;
-        while (prevIter != begin) {
+        while (prevIter != snapshotByVersion.cbegin()) {
             prevIter--;
-            if (VersionsToRemove.find(prevIter->first) == VersionsToRemove.end()) {
+            if (!VersionsToRemove.contains(prevIter->first)) {
                 prevVersion = prevIter->first;
                 break;
             }
@@ -31,7 +29,7 @@ std::vector<std::pair<ui64, ui64>> TTxSchemaVersionsCleanup::GetPrevNextSchemas(
         auto nextIter = iter;
         nextIter++;
         ui64 nextVersion = 0;
-        while (nextIter != end) {
+        while (nextIter != snapshotByVersion.cend()) {
             if (VersionsToRemove.find(nextIter->first) == VersionsToRemove.end()) {
                 nextVersion = nextIter->first;
                 break;
@@ -57,9 +55,8 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
             table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Delete();
         }
     }
-    // Now we need to update schema diffs in the next versions, since base for those diffs are just erased
 
-    auto getSchemaPresetInfo = [&](const ui64 schemaVersion, NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
+    auto getSchemaPresetInfoAndKeyIter = [&](const ui64 schemaVersion, NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
         auto iter = Self->VersionCounters->GetVersionToKey().find(schemaVersion);
         AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
         const NOlap::TVersionCounters::TSchemaKey& pkey = *iter->second.cbegin();
@@ -95,18 +92,14 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
             }
         } else {
             if (prevNext.second != 0) {
-                // Find previous schema
                 NKikimrTxColumnShard::TSchemaPresetVersionInfo pinfo;
-                getSchemaPresetInfo(prevNext.first, pinfo);
+                getSchemaPresetInfoAndKeyIter(prevNext.first, pinfo);
 
-                // Find next schema
                 NKikimrTxColumnShard::TSchemaPresetVersionInfo ninfo;
-                auto nextIter = getSchemaPresetInfo(prevNext.second, ninfo);
+                auto nextIter = getSchemaPresetInfoAndKeyIter(prevNext.second, ninfo);
 
-                // Calculate schema diff
                 auto schemaDiff = NOlap::TSchemaDiffView::MakeSchemasDiff(pinfo.schema(), ninfo.schema());
 
-                // Update diffs
                 for (const NOlap::TVersionCounters::TSchemaKey& key: nextIter->second) {
                     updateDiff(key, [&](NKikimrTxColumnShard::TSchemaPresetVersionInfo& info){
                         *info.MutableDiff() = schemaDiff;

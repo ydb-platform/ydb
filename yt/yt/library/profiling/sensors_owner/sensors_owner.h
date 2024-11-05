@@ -78,7 +78,6 @@ public:
 
     //! ~ .Counter(str).Increment(delta)
     void Increment(const std::string& name, i64 delta) const;
-    void Inc(const std::string& name, i64 delta) const;
 
     //! Gets owned gauge with given metric suffix.
     const TGauge& GetGauge(const std::string& name) const;

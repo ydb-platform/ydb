@@ -609,6 +609,9 @@ void TPersQueue::ApplyNewConfig(const NKikimrPQ::TPQTabletConfig& newConfig,
         ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(cacheSize));
     }
 
+    PQ_LOG_D("ApplyNewConfig: TopicName=" << TopicName << ", TopicPath=" << TopicPath);
+    SetupTransactionCounters(ctx);
+
     InitializeMeteringSink(ctx);
 }
 
@@ -1006,6 +1009,8 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     }
 
     EndInitTransactions();
+    PQ_LOG_D("ReadConfig: TopicName=" << TopicName << ", TopicPath=" << TopicPath);
+    SetupTransactionCounters(ctx);
     EndReadConfig(ctx);
 }
 
@@ -1238,7 +1243,7 @@ TPartitionInfo& TPersQueue::GetPartitionInfo(const TPartitionId& partitionId)
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorContext& ctx)
 {
-    PQ_LOG_D("Handle TEvPQ::TEvPartitionCounters" <<
+    PQ_LOG_T("Handle TEvPQ::TEvPartitionCounters" <<
              " PartitionId " << ev->Get()->Partition);
 
     const auto& partitionId = ev->Get()->Partition;
@@ -1775,7 +1780,7 @@ void TPersQueue::ProcessStatusRequests(const TActorContext &ctx) {
 
 void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx)
 {
-    PQ_LOG_D("Handle TEvPersQueue::TEvStatus");
+    PQ_LOG_T("Handle TEvPersQueue::TEvStatus");
 
     ReadBalancerActorId = ev->Sender;
 
@@ -2827,7 +2832,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
 
 void TPersQueue::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&)
 {
-    PQ_LOG_D("Handle TEvTabletPipe::TEvServerConnected");
+    PQ_LOG_T("Handle TEvTabletPipe::TEvServerConnected");
 
     auto it = PipesInfo.insert({ev->Get()->ClientId, {}}).first;
     it->second.ServerActors++;
@@ -2840,7 +2845,7 @@ void TPersQueue::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActo
 
 void TPersQueue::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx)
 {
-    PQ_LOG_D("Handle TEvTabletPipe::TEvServerDisconnected");
+    PQ_LOG_T("Handle TEvTabletPipe::TEvServerDisconnected");
 
     //inform partition if needed;
     auto it = PipesInfo.find(ev->Get()->ClientId);
@@ -2957,6 +2962,163 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
 
     State.SetupTabletCounters(counters->GetFirstTabletCounters().Release()); //FirstTabletCounters is of good type and contains all counters
     State.Clear();
+}
+
+void TPersQueue::SetupTransactionCounters(const TActorContext& ctx)
+{
+    if (!TxExecutionTime.empty() || !TopicConverter) {
+        return;
+    }
+
+    NMonitoring::TDynamicCounterPtr counters = AppData(ctx)->Counters;
+    TVector<NPersQueue::TPQLabelsInfo> labels;
+
+    TVector<std::pair<TString, TString>> subgroups;
+    subgroups.emplace_back("topic", TopicConverter->GetClientsideName());
+
+    SetupTransactionExecutionTimeCounter(counters, labels, subgroups);
+    SetupTransactionStartedCounter(counters, labels, subgroups);
+    SetupTransactionCompletedCounter(counters, labels, subgroups);
+    SetupTransactionResponseTime(counters, labels, subgroups);
+}
+
+void TPersQueue::SetupTransactionExecutionTimeCounter(NMonitoring::TDynamicCounterPtr counters,
+                                                      const TVector<NPersQueue::TPQLabelsInfo>& labels,
+                                                      const TVector<std::pair<TString, TString>>& subgroupsSrc)
+{
+    TVector<std::pair<ui64, TString>> intervals;
+    intervals.emplace_back(1, "1ms");
+    intervals.emplace_back(2, "2ms");
+    intervals.emplace_back(5, "5ms");
+    intervals.emplace_back(10, "10ms");
+    intervals.emplace_back(20, "20ms");
+    intervals.emplace_back(50, "50ms");
+    intervals.emplace_back(100, "100ms");
+    intervals.emplace_back(250, "250ms");
+    intervals.emplace_back(500, "500ms");
+    intervals.emplace_back(1000, "1000ms");
+
+    const TVector<NKikimrPQ::TTransaction::EState> states {
+        NKikimrPQ::TTransaction::UNKNOWN,
+        NKikimrPQ::TTransaction::PREPARING,
+        NKikimrPQ::TTransaction::PREPARED,
+        NKikimrPQ::TTransaction::PLANNING,
+        NKikimrPQ::TTransaction::PLANNED,
+        NKikimrPQ::TTransaction::CALCULATING,
+        NKikimrPQ::TTransaction::CALCULATED,
+        NKikimrPQ::TTransaction::WAIT_RS,
+        NKikimrPQ::TTransaction::EXECUTING,
+        NKikimrPQ::TTransaction::EXECUTED,
+        NKikimrPQ::TTransaction::WAIT_RS_ACKS,
+        NKikimrPQ::TTransaction::DELETING,
+    };
+
+    auto subgroups = subgroupsSrc;
+    subgroups.emplace_back("name", "topic.transaction.execution_time");
+
+    for (auto state : states) {
+        // cluster
+        //     service = data-stream | data-stream-serverless
+        //         name = topic.transaction.execution_time
+        //             state = ...
+        //                 bin = *
+        subgroups.emplace_back("state", NKikimrPQ::TTransaction_EState_Name(state));
+        TxExecutionTime[state] =
+            MakeHolder<NKikimr::NPQ::TPercentileCounter>(NPersQueue::GetCountersForTopic(counters, IsServerless),
+                                                         labels,
+                                                         subgroups,
+                                                         "bin",
+                                                         intervals,
+                                                         true);
+        subgroups.pop_back();
+    }
+}
+
+void TPersQueue::SetupTransactionStartedCounter(NMonitoring::TDynamicCounterPtr counters,
+                                                const TVector<NPersQueue::TPQLabelsInfo>& labels,
+                                                const TVector<std::pair<TString, TString>>& subgroups)
+{
+    // cluster
+    //     service = data-stream | data-stream-serverless
+    //         name = topic.transaction.started
+    TxStarted = MakeHolder<NKikimr::NPQ::TMultiCounter>(NPersQueue::GetCountersForTopic(counters, IsServerless),
+                                                        labels,
+                                                        subgroups,
+                                                        TVector<TString>(1, "topic.transaction.started"),
+                                                        true,
+                                                        "name");
+}
+
+void TPersQueue::SetupTransactionCompletedCounter(NMonitoring::TDynamicCounterPtr counters,
+                                                  const TVector<NPersQueue::TPQLabelsInfo>& labels,
+                                                  const TVector<std::pair<TString, TString>>& subgroups)
+{
+    // cluster
+    //     service = data-stream | data-stream-serverless
+    //         name = topic.transaction.completed
+    TxCompleted = MakeHolder<NKikimr::NPQ::TMultiCounter>(NPersQueue::GetCountersForTopic(counters, IsServerless),
+                                                          labels,
+                                                          subgroups,
+                                                          TVector<TString>(1, "topic.transaction.completed"),
+                                                          true,
+                                                          "name");
+}
+
+void TPersQueue::SetupTransactionResponseTime(NMonitoring::TDynamicCounterPtr counters,
+                                              const TVector<NPersQueue::TPQLabelsInfo>& labels,
+                                              const TVector<std::pair<TString, TString>>& subgroupsSrc)
+{
+    TVector<std::pair<ui64, TString>> intervals;
+    intervals.emplace_back(1, "1ms");
+    intervals.emplace_back(2, "2ms");
+    intervals.emplace_back(5, "5ms");
+    intervals.emplace_back(10, "10ms");
+    intervals.emplace_back(20, "20ms");
+    intervals.emplace_back(50, "50ms");
+    intervals.emplace_back(100, "100ms");
+    intervals.emplace_back(250, "250ms");
+    intervals.emplace_back(500, "500ms");
+    intervals.emplace_back(1000, "1000ms");
+
+    auto subgroups = subgroupsSrc;
+    subgroups.emplace_back("name", "topic.transaction.response_time");
+
+    // cluster
+    //     service = data-stream | data-stream-serverless
+    //         name = topic.transaction.response_time
+    //             bin = *
+    TxResponseTime =
+        MakeHolder<NKikimr::NPQ::TPercentileCounter>(NPersQueue::GetCountersForTopic(counters, IsServerless),
+                                                     labels,
+                                                     subgroups,
+                                                     "bin",
+                                                     intervals,
+                                                     true);
+}
+
+void TPersQueue::IncTxStarted()
+{
+    if (!TxStarted) {
+        return;
+    }
+    TxStarted->Inc();
+}
+
+void TPersQueue::IncTxCompleted()
+{
+    if (!TxCompleted) {
+        return;
+    }
+    TxCompleted->Inc();
+}
+
+void TPersQueue::AccountTxResponseTime(const TDistributedTransaction& tx)
+{
+    if (!TxResponseTime) {
+        return;
+    }
+    auto now = TAppData::TimeProvider->Now();
+    TxResponseTime->IncFor((now - *tx.BeginTime).MilliSeconds());
 }
 
 void TPersQueue::CreatedHook(const TActorContext& ctx)
@@ -3545,10 +3707,21 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
         EvProposeTransactionQueue.pop_front();
 
         const NKikimrPQ::TEvProposeTransaction& event = front->GetRecord();
+        if (!Txs.contains(event.GetTxId())) {
+            if (TxStarted) {
+                TxStarted->Inc();
+            }
+            PQ_LOG_D("start TxId " << event.GetTxId());
+        }
         TDistributedTransaction& tx = Txs[event.GetTxId()];
+        if (!tx.BeginTime.Defined()) {
+            tx.BeginTime = TAppData::TimeProvider->Now();
+        }
 
         switch (tx.State) {
         case NKikimrPQ::TTransaction::UNKNOWN:
+            tx.ChangeStateTime = TAppData::TimeProvider->Now();
+
             tx.OnProposeTransaction(event, GetAllowedStep(),
                                     TabletID());
 
@@ -4026,6 +4199,25 @@ TDistributedTransaction* TPersQueue::GetTransaction(const TActorContext& ctx,
     return &p->second;
 }
 
+void TPersQueue::ChangeTxState(TDistributedTransaction& tx,
+                               TDistributedTransaction::EState newState)
+{
+    auto now = TAppData::TimeProvider->Now();
+
+    if (TxExecutionTime.contains(tx.State)) {
+        Y_ABORT_UNLESS(now >= *tx.ChangeStateTime,
+                       "PQ %" PRIu64 ", TxId %" PRIu64,
+                       TabletID(), tx.TxId);
+        TxExecutionTime[tx.State]->IncFor((now - *tx.ChangeStateTime).MilliSeconds());
+    }
+
+    tx.State = newState;
+    tx.ChangeStateTime = now;
+
+    PQ_LOG_D("TxId " << tx.TxId <<
+             ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+}
+
 bool TPersQueue::TryChangeTxState(TDistributedTransaction& tx,
                                   TDistributedTransaction::EState newState)
 {
@@ -4046,9 +4238,7 @@ bool TPersQueue::TryChangeTxState(TDistributedTransaction& tx,
                        TxsOrder[oldState].front());
     }
 
-    tx.State = newState;
-    PQ_LOG_D("TxId " << tx.TxId <<
-             ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+    ChangeTxState(tx, newState);
 
     if (oldState != NKikimrPQ::TTransaction::PLANNING) {
         TxsOrder[oldState].pop_front();
@@ -4134,11 +4324,12 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
              ", State " << NKikimrPQ::TTransaction_EState_Name(tx.State));
 
     if (!CanExecute(tx)) {
-        Y_ABORT_UNLESS(!tx.Pending,
-                       "PQ %" PRIu64 ", TxId %" PRIu64,
-                       TabletID(), tx.TxId);
+        PQ_LOG_D("Can't execute TxId " << tx.TxId << " Pending " << tx.Pending);
+//        Y_ABORT_UNLESS(!tx.Pending,
+//                       "PQ %" PRIu64 ", TxId %" PRIu64,
+//                       TabletID(), tx.TxId);
         tx.Pending = true;
-        PQ_LOG_D("TxId " << tx.TxId << " wait");
+        PQ_LOG_D("Wait for TxId " << tx.TxId);
         return;
     }
 
@@ -4151,9 +4342,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
         WriteTx(tx, NKikimrPQ::TTransaction::PREPARED);
         ScheduleProposeTransactionResult(tx);
 
-        tx.State = NKikimrPQ::TTransaction::PREPARING;
-        PQ_LOG_D("TxId " << tx.TxId <<
-                 ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+        ChangeTxState(tx, NKikimrPQ::TTransaction::PREPARING);
 
         break;
 
@@ -4166,9 +4355,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
         // scheduled events will be sent to EndWriteTxs
 
-        tx.State = NKikimrPQ::TTransaction::PREPARED;
-        PQ_LOG_D("TxId " << tx.TxId <<
-                 ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+        ChangeTxState(tx, NKikimrPQ::TTransaction::PREPARED);
 
         break;
 
@@ -4179,9 +4366,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
         WriteTx(tx, NKikimrPQ::TTransaction::PLANNED);
 
-        tx.State = NKikimrPQ::TTransaction::PLANNING;
-        PQ_LOG_D("TxId " << tx.TxId <<
-                 ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+        ChangeTxState(tx, NKikimrPQ::TTransaction::PLANNING);
 
         break;
 
@@ -4299,6 +4484,9 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
         if (tx.PartitionRepliesCount == tx.PartitionRepliesExpected) {
             SendEvProposeTransactionResult(ctx, tx);
+            IncTxCompleted();
+            AccountTxResponseTime(tx);
+            PQ_LOG_D("complete TxId " << tx.TxId);
 
             switch (tx.Kind) {
             case NKikimrPQ::TTransaction::KIND_DATA:
@@ -4401,9 +4589,7 @@ void TPersQueue::DeleteTx(TDistributedTransaction& tx)
 
     DeleteTxs.insert(tx.TxId);
 
-    tx.State = NKikimrPQ::TTransaction::DELETING;
-    PQ_LOG_D("TxId " << tx.TxId <<
-             ", NewState " << NKikimrPQ::TTransaction_EState_Name(tx.State));
+    ChangeTxState(tx, NKikimrPQ::TTransaction::DELETING);
 
     tx.WriteInProgress = true;
 }

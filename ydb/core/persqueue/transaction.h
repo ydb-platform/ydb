@@ -50,6 +50,8 @@ struct TDistributedTransaction {
     THashMap<ui64, bool> PredicateRecipients;
     TVector<NKikimrPQ::TPartitionOperation> Operations;
     TMaybe<TWriteId> WriteId;
+    TMaybe<TInstant> ChangeStateTime;
+    TMaybe<TInstant> BeginTime;
 
     EDecision SelfDecision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;
     EDecision ParticipantsDecision = NKikimrTx::TReadSetData::DECISION_UNKNOWN;

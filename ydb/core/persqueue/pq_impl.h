@@ -292,6 +292,7 @@ private:
     // PLANNED -> CALCULATING -> CALCULATED -> WAIT_RS -> EXECUTING -> EXECUTED
     THashMap<TDistributedTransaction::EState, TDeque<ui64>> TxsOrder;
 
+    void ChangeTxState(TDistributedTransaction& tx, TDistributedTransaction::EState newState);
     bool TryChangeTxState(TDistributedTransaction& tx, TDistributedTransaction::EState newState);
     bool CanExecute(const TDistributedTransaction& tx);
 
@@ -546,6 +547,29 @@ private:
     void DeleteWriteId(const TMaybe<TWriteId>& writeId);
 
     void UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const;
+
+    void SetupTransactionCounters(const TActorContext& ctx);
+    void SetupTransactionExecutionTimeCounter(NMonitoring::TDynamicCounterPtr counters,
+                                              const TVector<NPersQueue::TPQLabelsInfo>& labels,
+                                              const TVector<std::pair<TString, TString>>& subgroups);
+    void SetupTransactionStartedCounter(NMonitoring::TDynamicCounterPtr counters,
+                                        const TVector<NPersQueue::TPQLabelsInfo>& labels,
+                                        const TVector<std::pair<TString, TString>>& subgroups);
+    void SetupTransactionCompletedCounter(NMonitoring::TDynamicCounterPtr counters,
+                                          const TVector<NPersQueue::TPQLabelsInfo>& labels,
+                                          const TVector<std::pair<TString, TString>>& subgroups);
+    void SetupTransactionResponseTime(NMonitoring::TDynamicCounterPtr counters,
+                                      const TVector<NPersQueue::TPQLabelsInfo>& labels,
+                                      const TVector<std::pair<TString, TString>>& subgroups);
+
+    void IncTxStarted();
+    void IncTxCompleted();
+    void AccountTxResponseTime(const TDistributedTransaction& tx);
+
+    THashMap<NKikimrPQ::TTransaction::EState, THolder<TPercentileCounter>> TxExecutionTime;
+    THolder<TPercentileCounter> TxResponseTime;
+    THolder<NKikimr::NPQ::TMultiCounter> TxStarted;
+    THolder<NKikimr::NPQ::TMultiCounter> TxCompleted;
 };
 
 

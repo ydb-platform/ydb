@@ -447,6 +447,23 @@ TEST(TPhoenixTest, InVersion5)
     EXPECT_EQ(s1, s3);
 }
 
+TEST(TPhoenixTest, InVersionSave)
+{
+    using namespace NInVersions;
+
+    S s;
+    s.A = 123;
+    s.B = 0;
+    s.C = 777;
+
+    auto expected = MakeBuffer([] (auto& context) {
+        Save<int>(context, 123);
+    });
+
+    auto serialized = Serialize(s);
+    EXPECT_EQ(expected, serialized);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NAfterLoad {

@@ -550,6 +550,11 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
 
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):
+    kikimr_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr'
+    kikimr_configure_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr_configure'
+    kikimr_configuration_deploy_path = '/Berkanavt/kikimr/cfg'
+    kikimr_cluster_yaml_deploy_path = '/Berkanavt/kikimr/cfg/cluster.yaml'
+
     def __init__(
             self,
             kikimr_path,
@@ -582,8 +587,8 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
         self._can_update = None
         self.current_version_idx = 0
         self.versions = [
-            param_constants.kikimr_binary_deploy_path + "_last",
-            param_constants.kikimr_binary_deploy_path + "_next",
+            self.kikimr_binary_deploy_path + "_last",
+            self.kikimr_binary_deploy_path + "_next",
         ]
 
         self.local_drivers_path = [
@@ -594,7 +599,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
     @property
     def can_update(self):
         if self._can_update is None:
-            choices = self.ssh_command('ls %s*' % param_constants.kikimr_binary_deploy_path, raise_on_error=True)
+            choices = self.ssh_command('ls %s*' % self.kikimr_binary_deploy_path, raise_on_error=True)
             choices = choices.split()
             choices = [path.decode("utf-8", errors="replace") for path in choices]
             self.logger.error("Current available choices are: %s" % choices)
@@ -690,13 +695,19 @@ mon={mon}""".format(
         return "/Berkanavt/{}/logs".format(folder)
 
     def update_binary_links(self):
-        self.ssh_command("sudo rm -rf %s" % param_constants.kikimr_binary_deploy_path)
+        self.ssh_command("sudo rm -rf %s" % self.kikimr_binary_deploy_path)
         self.ssh_command(
             "sudo cp -l %s %s" % (
                 self.versions[self.current_version_idx],
-                param_constants.kikimr_binary_deploy_path,
+                self.kikimr_binary_deploy_path,
             )
         )
+
+    def __generate_configs_cmd(self, configs_type="", deploy_path=None):
+        deploy_path = self.kikimr_configuration_deploy_path if deploy_path is None else deploy_path
+        return "sudo {} cfg {} {} {} --enable-cores {}".format(
+            self.kikimr_configure_binary_deploy_path,
+            self.kikimr_cluster_yaml_deploy_path, self.kikimr_binary_deploy_path, deploy_path, configs_type)
 
     def switch_version(self):
         if not self.can_update:
@@ -708,7 +719,7 @@ mon={mon}""".format(
 
     def prepare_artifacts(self, cluster_yml):
         self.copy_file_or_dir(
-            param_constants.kikimr_configure_binary_path(), param_constants.kikimr_configure_binary_deploy_path)
+            param_constants.kikimr_configure_binary_path(), self.kikimr_configure_binary_deploy_path)
 
         for version, local_driver in zip(self.versions, self.local_drivers_path):
             self.ssh_command("sudo rm -rf %s" % version)
@@ -718,11 +729,11 @@ mon={mon}""".format(
                 self.ssh_command("sudo /sbin/setcap 'CAP_SYS_RAWIO,CAP_SYS_NICE=ep' %s" % version)
 
         self.update_binary_links()
-        self.ssh_command("sudo mkdir -p %s" % param_constants.kikimr_configuration_deploy_path)
-        self.copy_file_or_dir(cluster_yml, param_constants.kikimr_cluster_yaml_deploy_path)
-        self.ssh_command(param_constants.generate_configs_cmd())
+        self.ssh_command("sudo mkdir -p %s" % self.kikimr_configuration_deploy_path)
+        self.copy_file_or_dir(cluster_yml, self.kikimr_cluster_yaml_deploy_path)
+        self.ssh_command(self.__generate_configs_cmd())
         self.ssh_command(
-            param_constants.generate_configs_cmd(
+            self.__generate_configs_cmd(
                 "--dynamic"
             )
         )

@@ -10,7 +10,6 @@ logging.getLogger().setLevel(logging.DEBUG)
 logging.getLogger().addHandler(logging.StreamHandler(sys.stderr))
 
 from ydb.tests.library.common.composite_assert import CompositeAssert # noqa
-from ydb.tests.library.harness import param_constants # noqa
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster # noqa
 from ydb.tests.library.matchers.collection import is_empty # noqa
 from ydb.tests.library.wardens.factories import safety_warden_factory, liveness_warden_factory # noqa

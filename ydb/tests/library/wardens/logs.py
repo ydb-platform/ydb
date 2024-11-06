@@ -8,8 +8,6 @@ from ydb.tests.library.nemesis.safety_warden import GrepLogFileForMarkers, GrepD
 # noinspection PyUnresolvedReferences
 from ydb.tests.library.nemesis.safety_warden import GrepGzippedLogFilesForMarkersSafetyWarden
 
-from ydb.tests.library.harness import param_constants
-
 
 def kikimr_start_logs_safety_warden_factory(
         list_of_host_names, ssh_username, deploy_path

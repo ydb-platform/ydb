@@ -659,6 +659,13 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     record.MutableScopeId()->SetX1(data.ScopeId.first);
                     record.MutableScopeId()->SetX2(data.ScopeId.second);
                     record.SetBytesWritten(data.BytesWrittenToSocket);
+                    if (data.SessionClosed) {
+                        record.SetSessionState(NKikimrWhiteboard::TNodeStateInfo::CLOSED);
+                    } else if (data.SessionPendingConnection) {
+                        record.SetSessionState(NKikimrWhiteboard::TNodeStateInfo::PENDING_CONNECTION);
+                    } else if (data.SessionConnected) {
+                        record.SetSessionState(NKikimrWhiteboard::TNodeStateInfo::CONNECTED);
+                    }
                     data.ActorSystem->Send(whiteboardId, update.release());
                     if (data.ReportClockSkew) {
                         data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(

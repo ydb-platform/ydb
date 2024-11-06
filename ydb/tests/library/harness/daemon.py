@@ -10,7 +10,6 @@ from yatest.common import process
 import six
 
 from ydb.tests.library.common.wait_for import wait_for
-from . import param_constants
 
 
 logger = logging.getLogger(__name__)
@@ -207,9 +206,9 @@ class Daemon(object):
 @six.add_metaclass(abc.ABCMeta)
 class ExternalNodeDaemon(object):
     """External daemon, executed as process in separate host, managed via ssh"""
-    def __init__(self, host):
+    def __init__(self, host, ssh_username):
         self._host = host
-        self._ssh_username = param_constants.ssh_username
+        self._ssh_username = ssh_username
         self._ssh_options = [
             "-o",
             "UserKnownHostsFile=/dev/null",

@@ -11,7 +11,6 @@ def _get_param(name, default):
         return default
 
 
-ssh_username = _get_param("kikimr.ci.ssh_username", os.getenv('NEMESIS_USER', 'robot-nemesis'))
 deploy_cluster = _get_param("kikimr.ci.deploy_cluster", "false") == "true"
 
 kikimr_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr'

@@ -13,19 +13,21 @@ TTpcDSGeneratorHouseholdDemographics::TTpcDSGeneratorHouseholdDemographics(const
 {}
 
 void TTpcDSGeneratorHouseholdDemographics::GenerateRows(TContexts& ctxs, TGuard<TAdaptiveLock>&& g) {
+    TTpcdsCsvItemWriter<W_HOUSEHOLD_DEMOGRAPHICS_TBL> writer(ctxs.front().GetCsv().Out, ctxs.front().GetCount());
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, hd_demo_sk, HD_DEMO_SK);
+    CSV_WRITER_REGISTER_FIELD_KEY(writer, "hd_income_band_sk", hd_income_band_id, HD_INCOME_BAND_ID);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, hd_buy_potential, HD_BUY_POTENTIAL);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, hd_dep_count, HD_DEP_COUNT);
+    CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, hd_vehicle_count, HD_VEHICLE_COUNT);
+
     TVector<W_HOUSEHOLD_DEMOGRAPHICS_TBL> hhDemoList(ctxs.front().GetCount());
     for (ui64 i = 0; i < ctxs.front().GetCount(); ++i) {
         mk_w_household_demographics(&hhDemoList[i], ctxs.front().GetStart() + i);
+        writer.RegisterRow();
         tpcds_row_stop(TableNum);
     }
     g.Release();
 
-    TCsvItemWriter<W_HOUSEHOLD_DEMOGRAPHICS_TBL> writer(ctxs.front().GetCsv().Out);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_KEY(writer, hd_demo_sk);
-    CSV_WRITER_REGISTER_FIELD_KEY(writer, "hd_income_band_sk", hd_income_band_id);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD_STRING(writer, hd_buy_potential);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, hd_dep_count);
-    CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, hd_vehicle_count);
     writer.Write(hhDemoList);
 };
 

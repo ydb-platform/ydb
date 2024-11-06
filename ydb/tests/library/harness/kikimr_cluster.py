@@ -31,14 +31,14 @@ def kikimr_cluster_factory(configurator=None, config_path=None):
 
 
 class ExternalKiKiMRCluster(KiKiMRClusterInterface):
-    def __init__(self, config_path, binary_path=None, output_path=None):
+    def __init__(self, config_path, binary_path=None, ssh_username=None):
         self.__config_path = config_path
         with open(config_path, 'r') as r:
             self.__yaml_config = yaml.safe_load(r.read())
         self.__hosts = [host['name'] for host in self.__yaml_config.get('hosts')]
         self._slots = None
         self.__binary_path = binary_path if binary_path is not None else param_constants.kikimr_driver_path()
-        self.__output_path = output_path
+        self.__ssh_username = ssh_username
         self.__slot_count = 0
 
         for domain in self.__yaml_config['domains']:
@@ -182,6 +182,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
             node_id: KikimrExternalNode(
                 node_id=node_id,
                 host=host,
+                ssh_username=self.__ssh_username,
                 port=DEFAULT_GRPC_PORT,
                 mon_port=DEFAULT_MON_PORT,
                 ic_port=DEFAULT_INTERCONNECT_PORT,
@@ -209,6 +210,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
                     self._slots[slot_idx] = KikimrExternalNode(
                         node_id=node_id,
                         host=node.host,
+                        ssh_username=self.__ssh_username,
                         port=grpc_port,
                         mon_port=mon_port,
                         ic_port=ic_port,

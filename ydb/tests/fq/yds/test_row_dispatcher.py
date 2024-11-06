@@ -82,6 +82,19 @@ def wait_row_dispatcher_sensor_value(kikimr, sensor, expected_count, exact_match
 
 class TestPqRowDispatcher(TestYdsBase):
 
+    def run_and_check(self, kikimr, client, sql, input, output, expected_predicate):
+        query_id = start_yds_query(kikimr, client, sql)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
+
+        self.write_stream(input)
+        assert self.read_stream(len(output), topic_path=self.output_topic) == output
+
+        stop_yds_query(client, query_id)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
+
+        issues = str(client.describe_query(query_id).result.query.transient_issue)
+        assert expected_predicate in issues, "Incorrect Issues: " + issues
+
     @yq_v1
     def test_read_raw_format_with_row_dispatcher(self, kikimr, client):
         client.create_yds_connection(
@@ -253,7 +266,6 @@ class TestPqRowDispatcher(TestYdsBase):
         issues = str(client.describe_query(query_id).result.query.transient_issue)
         assert "Row dispatcher will use the predicate:" in issues, "Incorrect Issues: " + issues
 
-    @yq_v1
     def test_nested_types_without_predicate(self, kikimr, client):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
@@ -284,7 +296,7 @@ class TestPqRowDispatcher(TestYdsBase):
         stop_yds_query(client, query_id)
 
     @yq_v1
-    def test_filter(self, kikimr, client):
+    def test_filters(self, kikimr, client):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
@@ -293,34 +305,23 @@ class TestPqRowDispatcher(TestYdsBase):
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String NOT NULL, event String NOT NULL))
-                WHERE time > 101 and
-                      data = "hello2" and
-                      event IS NOT DISTINCT FROM "event2" and
-                      event IS DISTINCT FROM "event1";'''
-
-        query_id = start_yds_query(kikimr, client, sql)
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
-
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String NOT NULL, event String NOT NULL)) WHERE '''
         data = [
             '{"time": 101, "data": "hello1", "event": "event1"}',
-            '{"time": 102, "data": "hello2", "event": "event2"}',
-        ]
-
-        self.write_stream(data)
+            '{"time": 102, "data": "hello2", "event": "event2"}']
+        filter = "time > 101;"
         expected = ['102']
-        assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
-
-        wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
-
-        stop_yds_query(client, query_id)
-        # Assert that all read rules were removed after query stops
-        read_rules = list_read_rules(self.input_topic)
-        assert len(read_rules) == 0, read_rules
-        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 0)
-
-        issues = str(client.describe_query(query_id).result.query.transient_issue)
-        assert "Row dispatcher will use the predicate: WHERE (`time` > 101" in issues, "Incorrect Issues: " + issues
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `time` > 101')
+        filter = 'data = "hello2"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `data` = \\"hello2\\"')
+        filter = ' event IS NOT DISTINCT FROM "event2"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS NOT DISTINCT FROM \\"event2\\"')
+        filter = ' event IS DISTINCT FROM "event1"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS DISTINCT FROM \\"event1\\"')
+        filter = 'event IN ("event2")'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IN (\\"event2\\")')
+        filter = 'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IN (\\"1\\"')
 
     @yq_v1
     def test_filter_missing_fields(self, kikimr, client):

@@ -569,8 +569,6 @@ void TColumnEngineForLogs::ChangeSchemaVersionsToLastCompatible(NOlap::TDbWrappe
     }
 }
 
-} // namespace NKikimr::NOlap
-
 bool TColumnEngineForLogs::TestingLoad(IDbWrapper& db) {
     {
         TMemoryProfileGuard g("TTxInit/LoadShardingInfo");

@@ -477,7 +477,7 @@ protected:
         }
     }
 
-    static void SelectiveCopy(::google::protobuf::Message& protoTo, const ::google::protobuf::Message& protoFrom, const ::google::protobuf::RepeatedField<arc_i32>& fields) {
+    static void SelectiveCopy(::google::protobuf::Message& protoTo, const ::google::protobuf::Message& protoFrom, const ::google::protobuf::RepeatedField<int>& fields) {
         using namespace ::google::protobuf;
         const Descriptor& descriptor = *protoTo.GetDescriptor();
         const Reflection& reflectionTo = *protoTo.GetReflection();
@@ -490,24 +490,6 @@ protected:
         }
     }
 
-    template<typename TMessage>
-    static ::google::protobuf::RepeatedField<arc_i32> GetDefaultFields(const TMessage& message) {
-        using namespace ::google::protobuf;
-        const Descriptor& descriptor = *message.GetDescriptor();
-        ::google::protobuf::RepeatedField<arc_i32> defaultFields;
-        int fieldCount = descriptor.field_count();
-        for (int index = 0; index < fieldCount; ++index) {
-            const FieldDescriptor* field = descriptor.field(index);
-            const auto& options(field->options());
-            if (options.HasExtension(NKikimrWhiteboard::DefaultField)) {
-                if (options.GetExtension(NKikimrWhiteboard::DefaultField)) {
-                    defaultFields.Add(field->number());
-                }
-            }
-        }
-        return defaultFields;
-    }
-
     template<typename TMessage, typename TRequest>
     static void Copy(TMessage& to, const TMessage& from, const TRequest& request) {
         if (request.FieldsRequiredSize() > 0) {
@@ -517,8 +499,7 @@ protected:
                 SelectiveCopy(to, from, request.GetFieldsRequired());
             }
         } else {
-            static auto defaultFields = GetDefaultFields(to);
-            SelectiveCopy(to, from, defaultFields);
+            SelectiveCopy(to, from, GetDefaultWhiteboardFields<TMessage>());
         }
     }
 
@@ -1120,6 +1101,30 @@ protected:
         ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateClockSkew());
     }
 };
+
+template<typename TMessage>
+::google::protobuf::RepeatedField<int> InitDefaultWhiteboardFields() {
+    using namespace ::google::protobuf;
+    const Descriptor& descriptor = *TMessage::GetDescriptor();
+    ::google::protobuf::RepeatedField<int> defaultFields;
+    int fieldCount = descriptor.field_count();
+    for (int index = 0; index < fieldCount; ++index) {
+        const FieldDescriptor* field = descriptor.field(index);
+        const auto& options(field->options());
+        if (options.HasExtension(NKikimrWhiteboard::DefaultField)) {
+            if (options.GetExtension(NKikimrWhiteboard::DefaultField)) {
+                defaultFields.Add(field->number());
+            }
+        }
+    }
+    return defaultFields;
+}
+
+template<typename TMessage>
+::google::protobuf::RepeatedField<int> GetDefaultWhiteboardFields() {
+    static ::google::protobuf::RepeatedField<int> defaultFields = InitDefaultWhiteboardFields<TMessage>();
+    return defaultFields;
+}
 
 IActor* CreateNodeWhiteboardService() {
     return new TNodeWhiteboardService();

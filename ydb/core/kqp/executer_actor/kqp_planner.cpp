@@ -187,8 +187,8 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     request.SetTxId(TxId);
     if (LockTxId) {
         request.SetLockTxId(*LockTxId);
+        request.SetLockNodeId(LockNodeId);
     }
-    request.SetLockNodeId(LockNodeId);
     ActorIdToProto(ExecuterId, request.MutableExecuterActorId());
 
     if (Deadline) {

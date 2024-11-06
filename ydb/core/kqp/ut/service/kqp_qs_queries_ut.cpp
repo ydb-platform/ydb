@@ -3127,7 +3127,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
-        
+
         {
             auto result = client.ExecuteQuery(R"(
                 SELECT COUNT(*) FROM `/Root/DataShard` WHERE Col3 = 1;
@@ -4561,6 +4561,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CheckDirEntry(kikimr, entriesToCheck);
         }
     }
+
     Y_UNIT_TEST(CreateOrDropTopicOverTable) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
@@ -4630,6 +4631,65 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             UNIT_ASSERT_VALUES_EQUAL(alterResult.GetStatus(), EStatus::SUCCESS);
         }
+    }
+
+    Y_UNIT_TEST(AlterCdcTopic) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr{serverSettings};
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto tcSession = tableClient.CreateSession().GetValueSync().GetSession();
+            UNIT_ASSERT(tcSession.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TmpTable` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync().IsSuccess());
+
+            UNIT_ASSERT(tcSession.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/TmpTable` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON'
+                    );
+            )").GetValueSync().IsSuccess());
+            tcSession.Close();
+        }
+
+        auto pq = NYdb::NTopic::TTopicClient(kikimr.GetDriver(),
+                                            NYdb::NTopic::TTopicClientSettings().Database("/Root").AuthToken("root@builtin"));
+
+        auto client = kikimr.GetQueryClient(NYdb::NQuery::TClientSettings{}.AuthToken("root@builtin"));
+        auto session = client.GetSession().GetValueSync().GetSession();
+        {
+
+            const auto query = Q_(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/TmpTable/feed` ADD CONSUMER consumer21;
+            )");
+
+            RunQuery(query, session);
+            auto desc = pq.DescribeTopic("/Root/TmpTable/feed").ExtractValueSync();
+            const auto& consumers = desc.GetTopicDescription().GetConsumers();
+            UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(consumers[0].GetConsumerName(), "consumer21");
+
+        }
+        {
+            const auto query = Q_(R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/TmpTable/feed` SET (min_active_partitions = 10);
+            )");
+            RunQuery(query, session, false);
+            auto desc = pq.DescribeTopic("/Root/TmpTable/feed").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetPartitioningSettings().GetMinActivePartitions(), 1);
+        }
+
     }
 
     Y_UNIT_TEST(TableSink_OlapRWQueries) {
@@ -4738,7 +4798,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto it = client.StreamExecuteQuery(R"sql(
                 SELECT r.Col3
                 FROM `/Root/DataShard` AS r
-                JOIN `/Root/ColumnShard` AS c 
+                JOIN `/Root/ColumnShard` AS c
                 ON r.Col1 = c.Col1;
             )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());

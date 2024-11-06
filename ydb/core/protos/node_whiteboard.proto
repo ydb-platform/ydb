@@ -90,6 +90,11 @@ message TNodeClockSkew {
 }
 
 message TNodeStateInfo {
+    enum ESessionState {
+        CLOSED = 0;
+        PENDING_CONNECTION = 1;
+        CONNECTED = 2;
+    }
     optional string PeerName = 1 [(DefaultField) = true];
     optional bool Connected = 2 [(DefaultField) = true];
     optional uint32 NodeId = 3; // filled during merge
@@ -105,6 +110,7 @@ message TNodeStateInfo {
     optional uint32 Count = 13; // filled during group count
     optional uint64 BytesWritten = 14; // bytes written to the socket
     optional uint64 WriteThroughput = 15; // bytes written per second
+    optional ESessionState SessionState = 16;
 }
 
 message TEvNodeStateRequest {

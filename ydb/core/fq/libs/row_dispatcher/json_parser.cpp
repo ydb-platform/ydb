@@ -139,6 +139,10 @@ private:
     }
 
     static TParser GetJsonValueParser(NYql::NUdf::EDataSlot dataSlot, bool optional) {
+        if (dataSlot == NYql::NUdf::EDataSlot::Json) {
+            return GetJsonValueExtracter();
+        }
+
         const auto& typeInfo = NYql::NUdf::GetDataTypeInfo(dataSlot);
         return [dataSlot, optional, &typeInfo](simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
             switch (jsonValue.type()) {
@@ -199,16 +203,7 @@ private:
 
                 case simdjson::builtin::ondemand::json_type::array:
                 case simdjson::builtin::ondemand::json_type::object: {
-                    const auto rawJson = jsonValue.raw_json().value();
-                    if (Y_UNLIKELY(dataSlot != NYql::NUdf::EDataSlot::Json)) {
-                        throw yexception() << "found unexpected nested value (raw: '" << TruncateString(rawJson) << "'), expected data type " <<typeInfo.Name << ", please use Json type for nested values";
-                    }
-                    if (Y_UNLIKELY(!NYql::NDom::IsValidJson(rawJson))) {
-                        throw yexception() << "found bad json value: '" << TruncateString(rawJson) << "'";
-                    }
-                    resultValue = NKikimr::NMiniKQL::MakeString(rawJson);
-                    LockObject(resultValue);
-                    break;
+                    throw yexception() << "found unexpected nested value (raw: '" << TruncateString(jsonValue.raw_json().value()) << "'), expected data type " <<typeInfo.Name << ", please use Json type for nested values";
                 }
 
                 case simdjson::builtin::ondemand::json_type::boolean: {
@@ -227,6 +222,17 @@ private:
                     break;
                 }
             }
+        };
+    }
+
+    static TParser GetJsonValueExtracter() {
+        return [](simdjson::fallback::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
+            const auto rawJson = jsonValue.raw_json().value();
+            if (Y_UNLIKELY(!NYql::NDom::IsValidJson(rawJson))) {
+                throw yexception() << "found bad json value: '" << TruncateString(rawJson) << "'";
+            }
+            resultValue = NKikimr::NMiniKQL::MakeString(rawJson);
+            LockObject(resultValue);
         };
     }
 

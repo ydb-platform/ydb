@@ -1,0 +1,11 @@
+RECURSE(
+    credentials
+    file_storage
+    issue
+    pg_ext
+    pg_settings
+    sql_types
+    url_lister
+    url_preprocessing
+    user_data
+)

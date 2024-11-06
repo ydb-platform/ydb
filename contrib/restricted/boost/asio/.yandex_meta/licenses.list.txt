@@ -52,5 +52,10 @@
 //                         (klemens dot morgenstern at gmx dot net)
 
 
+====================COPYRIGHT====================
+// Copyright (c) 2022 Klemens D. Morgenstern
+//                    (klemens dot morgenstern at gmx dot net)
+
+
 ====================Public-Domain====================
 // Derived from a public domain implementation written by Daniel Casimiro.

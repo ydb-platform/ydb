@@ -183,7 +183,10 @@ private:
     TSessionPtr GetOrCreateSession(const TSendOptions& options)
     {
         auto& bucket = Buckets_[options.MultiplexingBand];
-        auto index = options.MultiplexingParallelism <= 1 ? 0 : bucket.CurrentSessionIndex++ % options.MultiplexingParallelism;
+        auto parallelism = TTcpDispatcher::Get()->GetMultiplexingParallelism(
+            options.MultiplexingBand,
+            options.MultiplexingParallelism);
+        auto index = parallelism <= 1 ? 0 : bucket.CurrentSessionIndex++ % parallelism;
 
         // Fast path.
         {
@@ -209,7 +212,7 @@ private:
                     << TerminationError_.Load();
             }
 
-            bucket.Sessions.reserve(options.MultiplexingParallelism);
+            bucket.Sessions.reserve(parallelism);
             while (bucket.Sessions.size() <= index) {
                 auto session = New<TSession>(
                     options.MultiplexingBand,
@@ -980,13 +983,12 @@ private:
                 return;
             }
 
-            NCompression::ECodec codec;
-            int intCodec = header.codec();
-            if (!TryEnumCast(intCodec, &codec)) {
+            auto codecId = TryCheckedEnumCast<NCompression::ECodec>(header.codec());
+            if (!codecId) {
                 responseHandler->HandleError(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Streaming payload codec %v is not supported",
-                    intCodec));
+                    header.codec()));
                 return;
             }
 
@@ -997,13 +999,13 @@ private:
                 MakeFormattableView(attachments, [] (auto* builder, const auto& attachment) {
                     builder->AppendFormat("%v", GetStreamingAttachmentSize(attachment));
                 }),
-                codec,
+                *codecId,
                 !attachments.back());
 
             TStreamingPayload payload{
-                codec,
+                *codecId,
                 sequenceNumber,
-                std::move(attachments)
+                std::move(attachments),
             };
             responseHandler->HandleStreamingPayload(payload);
         }

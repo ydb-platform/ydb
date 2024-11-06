@@ -1877,8 +1877,8 @@ private:
     template <class TTo, class TFrom>
     TTo CheckedCastField(TFrom value, TStringBuf toTypeName, const TProtobufField* field)
     {
-        TTo result;
-        if (!TryIntegralCast<TTo>(value, &result)) {
+        auto result = TryCheckedIntegralCast<TTo>(value);
+        if (!result) {
             THROW_ERROR_EXCEPTION("Value %v of field %v cannot fit into %Qv",
                 value,
                 YPathStack_.GetHumanReadablePath(),
@@ -1886,7 +1886,7 @@ private:
                 << TErrorAttribute("ypath", YPathStack_.GetPath())
                 << TErrorAttribute("proto_field", field->GetFullName());
         }
-        return result;
+        return *result;
     }
 
     void TryWriteCustomlyConvertibleType()

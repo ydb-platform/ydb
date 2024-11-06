@@ -383,7 +383,6 @@ public:
         REGISTER    (TGetFlowViewCommand,                  "get_flow_view",                   Null,       Structured, false, false, ApiVersion4);
 
         REGISTER    (TStartShuffleCommand,                 "start_shuffle",                   Null,       Structured, true,  false, ApiVersion4);
-        REGISTER    (TFinishShuffleCommand,                "finish_shuffle",                  Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TReadShuffleDataCommand,              "read_shuffle_data",               Null,       Tabular,    false,  true, ApiVersion4);
         REGISTER    (TWriteShuffleDataCommand,             "write_shuffle_data",              Tabular,    Structured, false,  true, ApiVersion4);
 

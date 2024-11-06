@@ -65,7 +65,7 @@ To learn how to manage roles and users, see [{#T}](../security/access-management
 
 Examples of supported LDAP implementations include [OpenLDAP](https://openldap.org/) and [Active Directory](https://azure.microsoft.com/en-us/products/active-directory/).
 
-## Authentication
+### Authentication
 
 Authentication using the LDAP protocol is similar to the static credentials authentication process (using a login and password). The difference is that the LDAP directory acts as the authentication component. The LDAP directory is used solely to verify the login/password pair.
 

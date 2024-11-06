@@ -37,8 +37,9 @@ void TGranuleActualizationIndex::RefreshScheme(const TAddExternalContext& contex
 }
 
 void TGranuleActualizationIndex::ChangeSchemeToCompatible(const THashMap<ui64, ui64>& versionMap, const TExternalTasksContext& externalContext, NOlap::TDbWrapper& db) {
-    AFL_VERIFY(SchemeActualizer);
-    SchemeActualizer->ChangeSchemeToCompatible(versionMap, externalContext, db);
+    if(SchemeActualizer) {
+        SchemeActualizer->ChangeSchemeToCompatible(versionMap, externalContext, db);
+    }
 }
 
 TGranuleActualizationIndex::TGranuleActualizationIndex(const ui64 pathId, const TVersionedIndex& versionedIndex)

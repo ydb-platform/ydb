@@ -111,7 +111,7 @@
           "disableTextWrap": false,
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "sum(vdisks_DiskTimeAvailable{storagePool=\"$storagePool\"})",
+          "expr": "sum(vdisks_DiskTimeAvailable{storagePool=\"$storagePool\", group=~\"$storageGroup\"})",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
@@ -119,7 +119,7 @@
           "interval": "",
           "legendFormat": "DiskTimeAvailable",
           "range": true,
-          "refId": "Available",
+          "refId": "DiskTimeAvailable",
           "useBackend": false
         },
         {
@@ -128,23 +128,12 @@
             "uid": "ce1xrujy8ag3ke"
           },
           "editorMode": "code",
-          "expr": "(sum(rate(vdisks_UserDiskCost{storagePool=\"$storagePool\"}[$__rate_interval]))) + (sum(rate(vdisks_InternalDiskCost{storagePool=\"$storagePool\"}[$__rate_interval]))) + (sum(rate(vdisks_CompactionDiskCost{storagePool=\"$storagePool\"}[$__rate_interval]))) + (sum(rate(vdisks_DefragDiskCost{storagePool=\"$storagePool\"}[$__rate_interval]))) + (sum(rate(vdisks_ScrubDiskCost{storagePool=\"$storagePool\"}[$__rate_interval])))",
+          "expr": "(sum(rate(vdisks_UserDiskCost{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval]))) + (sum(rate(vdisks_InternalDiskCost{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval]))) + (sum(rate(vdisks_CompactionDiskCost{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval]))) + (sum(rate(vdisks_DefragDiskCost{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval]))) + (sum(rate(vdisks_ScrubDiskCost{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval])))",
           "hide": false,
           "instant": false,
           "legendFormat": "Total Cost",
           "range": true,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "ce1xrujy8ag3ke"
-          },
-          "expr": "",
-          "hide": false,
-          "instant": false,
-          "range": true,
-          "refId": "B"
+          "refId": "TotalCost"
         }
       ],
       "title": "DiskTimeAvailable and total Cost relation",
@@ -240,7 +229,7 @@
           "disableTextWrap": false,
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "sum(rate(vdisks_UserDiskCost{storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum(rate(vdisks_UserDiskCost{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
@@ -248,7 +237,7 @@
           "interval": "",
           "legendFormat": "UserDiskCost",
           "range": true,
-          "refId": "B",
+          "refId": "UserDiskCost",
           "useBackend": false
         },
         {
@@ -259,7 +248,7 @@
           "disableTextWrap": false,
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "sum(rate(vdisks_InternalDiskCost{storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum(rate(vdisks_InternalDiskCost{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
@@ -267,7 +256,7 @@
           "interval": "",
           "legendFormat": "InternalDiskCost",
           "range": true,
-          "refId": "A",
+          "refId": "InternalDiskCost",
           "useBackend": false
         },
         {
@@ -278,7 +267,7 @@
           "disableTextWrap": false,
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "sum(rate(vdisks_CompactionDiskCost{storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum(rate(vdisks_CompactionDiskCost{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
@@ -286,7 +275,7 @@
           "interval": "",
           "legendFormat": "CompactionDiskCost",
           "range": true,
-          "refId": "C",
+          "refId": "CompactionDiskCost",
           "useBackend": false
         },
         {
@@ -297,7 +286,7 @@
           "disableTextWrap": false,
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "sum(rate(vdisks_DefragDiskCost{storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum(rate(vdisks_DefragDiskCost{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
@@ -305,7 +294,7 @@
           "interval": "",
           "legendFormat": "DefragDiskCost",
           "range": true,
-          "refId": "D",
+          "refId": "DefragDiskCost",
           "useBackend": false
         },
         {
@@ -316,7 +305,7 @@
           "disableTextWrap": false,
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "sum(rate(vdisks_ScrubDiskCost{storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum(rate(vdisks_ScrubDiskCost{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "hide": false,
           "includeNullMetadata": true,
@@ -324,7 +313,7 @@
           "interval": "",
           "legendFormat": "ScrubDiskCost",
           "range": true,
-          "refId": "E",
+          "refId": "ScrubDiskCost",
           "useBackend": false
         }
       ],
@@ -416,12 +405,12 @@
         {
           "disableTextWrap": false,
           "editorMode": "builder",
-          "expr": "sum(rate(vdisks_BurstDetector_redMs{storagePool=\"$storagePool\"}[$__rate_interval]))",
+          "expr": "sum(rate(vdisks_BurstDetector_redMs{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "legendFormat": "BurstTime",
           "range": true,
-          "refId": "A",
+          "refId": "BurstDetector",
           "useBackend": false
         }
       ],
@@ -436,8 +425,8 @@
     "list": [
       {
         "current": {
-          "text": "static",
-          "value": "static"
+          "text": "dynamic_storage_pool:1",
+          "value": "dynamic_storage_pool:1"
         },
         "definition": "label_values(storagePool)",
         "description": "storagePool",
@@ -452,6 +441,26 @@
         "refresh": 1,
         "regex": "",
         "type": "query"
+      },
+      {
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "definition": "label_values({storagePool=\"$storagePool\"},group)",
+        "description": "",
+        "includeAll": true,
+        "label": "storageGroup",
+        "name": "storageGroup",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values({storagePool=\"$storagePool\"},group)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "type": "query"
       }
     ]
   },
@@ -461,8 +470,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Distributed Storage performance metrics by storagePool",
+  "title": "Distributed Storage performance metrics",
   "uid": "ce1xsce90d24ge",
-  "version": 24,
+  "version": 40,
   "weekStart": ""
 }

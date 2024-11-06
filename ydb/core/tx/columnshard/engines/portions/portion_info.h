@@ -103,6 +103,10 @@ public:
     TPortionInfo(TPortionInfo&&) = default;
     TPortionInfo& operator=(TPortionInfo&&) = default;
 
+    ui32 PredictMetadataMemorySize(const ui32 columnsCount) const {
+        return (GetRecordsCount() / 10000 + 1) * sizeof(TColumnRecord) * columnsCount;
+    }
+
     void SaveMetaToDatabase(IDbWrapper& db) const;
 
     TPortionInfo MakeCopy() const {

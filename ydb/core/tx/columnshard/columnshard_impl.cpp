@@ -1,52 +1,54 @@
-#include "columnshard_impl.h"
 #include "blob.h"
+#include "columnshard_impl.h"
 #include "columnshard_schema.h"
-#include "common/tablet_id.h"
-#include "blobs_reader/task.h"
-#include "blobs_reader/events.h"
+
 #include "blobs_action/bs/storage.h"
+#include "blobs_reader/events.h"
+#include "blobs_reader/task.h"
+#include "common/tablet_id.h"
 #include "resource_subscriber/task.h"
 
 #ifndef KIKIMR_DISABLE_S3_OPS
 #include "blobs_action/tier/storage.h"
 #endif
 
-#include "blobs_reader/actor.h"
+#include "bg_tasks/adapter/adapter.h"
+#include "bg_tasks/events/events.h"
+#include "bg_tasks/manager/manager.h"
 #include "blobs_action/storages_manager/manager.h"
+#include "blobs_action/transaction/tx_gc_indexed.h"
+#include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_remove_blobs.h"
 #include "blobs_action/transaction/tx_gc_insert_table.h"
 #include "blobs_action/transaction/tx_gc_indexed.h"
 #include "bg_tasks/events/events.h"
 
+#include "data_accessor/manager.h"
 #include "data_sharing/destination/session/destination.h"
 #include "data_sharing/source/session/source.h"
-#include "data_sharing/common/transactions/tx_extension.h"
-
-#include "engines/changes/indexation.h"
-#include "engines/changes/general_compaction.h"
 #include "engines/changes/cleanup_portions.h"
 #include "engines/changes/cleanup_tables.h"
+#include "engines/changes/general_compaction.h"
+#include "engines/changes/indexation.h"
 #include "engines/changes/ttl.h"
-
+#include "hooks/abstract/abstract.h"
 #include "resource_subscriber/counters.h"
 #include "transactions/operators/ev_write/sync.h"
 
-#include "bg_tasks/adapter/adapter.h"
-#include "bg_tasks/manager/manager.h"
-#include "hooks/abstract/abstract.h"
-
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
-#include <ydb/core/tx/tiering/external_data.h>
-#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
-#include <ydb/services/metadata/service.h>
-#include <ydb/core/tx/tiering/manager.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
 #include <ydb/core/tx/priorities/usage/events.h>
 #include <ydb/core/tx/priorities/usage/service.h>
-#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/tx/tiering/external_data.h>
+#include <ydb/core/tx/tiering/manager.h>
+
+#include <ydb/services/metadata/service.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -54,8 +56,7 @@ namespace NKikimr::NColumnShard {
 // But in unittests we want to test both scenarios
 bool gAllowLogBatchingDefaultValue = true;
 
-namespace
-{
+namespace {
 
 NTabletPipe::TClientConfig GetPipeClientConfig() {
     NTabletPipe::TClientConfig config;
@@ -66,7 +67,7 @@ NTabletPipe::TClientConfig GetPipeClientConfig() {
     return config;
 }
 
-}
+} // namespace
 
 TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     : TActor(&TThis::StateInit)
@@ -80,7 +81,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PeriodicWakeupActivationPeriod(NYDBTest::TControllers::GetColumnShardController()->GetPeriodicWakeupActivationPeriod())
     , StatsReportInterval(NYDBTest::TControllers::GetColumnShardController()->GetStatsReportInterval())
     , InFlightReadsTracker(StoragesManager, Counters.GetRequestsTracingCounters())
-    , TablesManager(StoragesManager, info->TabletID)
+    , TablesManager(StoragesManager, std::make_shared<NOlap::NDataAccessorControl::TLocalManager>(), info->TabletID)
     , Subscribers(std::make_shared<NSubscriber::TManager>(*this))
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , InsertTable(std::make_unique<NOlap::TInsertTable>())
@@ -89,8 +90,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
-    , SysLocks(this)
-{
+    , SysLocks(this) {
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -135,8 +135,7 @@ bool TColumnShard::WaitPlanStep(ui64 step) {
     }
     if (MediatorTimeCastRegistered) {
         if (MediatorTimeCastWaitingSteps.empty() ||
-            step < *MediatorTimeCastWaitingSteps.begin())
-        {
+            step < *MediatorTimeCastWaitingSteps.begin()) {
             MediatorTimeCastWaitingSteps.insert(step);
             SendWaitPlanStep(step);
             LOG_S_DEBUG("Waiting for PlanStep# " << step << " from mediator time cast");
@@ -307,7 +306,7 @@ void TColumnShard::UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExec
 }
 
 void TColumnShard::ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& seqNoProto,
-                                      NTabletFlatExecutor::TTransactionContext& txc) {
+    NTabletFlatExecutor::TTransactionContext& txc) {
     auto seqNo = SeqNoFromProto(seqNoProto);
     if (LastSchemaSeqNo <= seqNo) {
         UpdateSchemaSeqNo(++seqNo, txc);
@@ -315,7 +314,7 @@ void TColumnShard::ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& 
 }
 
 void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const NOlap::TSnapshot& version,
-                               NTabletFlatExecutor::TTransactionContext& txc) {
+    NTabletFlatExecutor::TTransactionContext& txc) {
     switch (body.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kInitShard: {
             RunInit(body.GetInitShard(), version, txc);
@@ -347,7 +346,7 @@ void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, 
 }
 
 void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const NOlap::TSnapshot& version,
-                           NTabletFlatExecutor::TTransactionContext& txc) {
+    NTabletFlatExecutor::TTransactionContext& txc) {
     Y_UNUSED(version);
 
     NIceDb::TNiceDb db(txc.DB);
@@ -368,7 +367,7 @@ void TColumnShard::RunInit(const NKikimrTxColumnShard::TInitShard& proto, const 
 }
 
 void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tableProto, const NOlap::TSnapshot& version,
-                                  NTabletFlatExecutor::TTransactionContext& txc) {
+    NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
     const ui64 pathId = tableProto.GetPathId();
@@ -378,8 +377,8 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
     }
 
     LOG_S_DEBUG("EnsureTable for pathId: " << pathId
-        << " ttl settings: " << tableProto.GetTtlSettings()
-        << " at tablet " << TabletID());
+                                           << " ttl settings: " << tableProto.GetTtlSettings()
+                                           << " at tablet " << TabletID());
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
     tableVerProto.SetPathId(pathId);
@@ -432,16 +431,16 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 }
 
 void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterProto, const NOlap::TSnapshot& version,
-                                 NTabletFlatExecutor::TTransactionContext& txc) {
+    NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
     const ui64 pathId = alterProto.GetPathId();
     Y_ABORT_UNLESS(TablesManager.HasTable(pathId), "AlterTable on a dropped or non-existent table");
 
     LOG_S_DEBUG("AlterTable for pathId: " << pathId
-        << " schema: " << alterProto.GetSchema()
-        << " ttl settings: " << alterProto.GetTtlSettings()
-        << " at tablet " << TabletID());
+                                          << " schema: " << alterProto.GetSchema()
+                                          << " ttl settings: " << alterProto.GetTtlSettings()
+                                          << " at tablet " << TabletID());
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
     std::optional<NKikimrSchemeOp::TColumnTableSchema> schema;
@@ -466,7 +465,7 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
 }
 
 void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProto, const NOlap::TSnapshot& version,
-                                NTabletFlatExecutor::TTransactionContext& txc) {
+    NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
     const ui64 pathId = dropProto.GetPathId();
@@ -480,7 +479,7 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
 }
 
 void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto, const NOlap::TSnapshot& version,
-                                 NTabletFlatExecutor::TTransactionContext& txc) {
+    NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
     if (proto.HasStorePathId()) {
@@ -514,7 +513,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("problem", "Background activities cannot be started: no index at tablet");
         return;
     }
-//  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
+    //  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
     SharingSessionsManager->Start(*this);
 
     SetupIndexation();
@@ -534,6 +533,7 @@ private:
     const TActorId ParentActorId;
     TString ClassId;
     NOlap::TSnapshot LastCompletedTx;
+
 protected:
     virtual TConclusionStatus DoExecute(const std::shared_ptr<NConveyor::ITask>& /*taskPtr*/) override {
         NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent_id", ParentActorId));
@@ -547,6 +547,7 @@ protected:
         TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));
         return TConclusionStatus::Success();
     }
+
 public:
     virtual TString GetTaskClassIdentifier() const override {
         return ClassId;
@@ -557,8 +558,7 @@ public:
         , Counters(counters)
         , TabletId(tabletId)
         , ParentActorId(parentActorId)
-        , LastCompletedTx(lastCompletedTx)
-    {
+        , LastCompletedTx(lastCompletedTx) {
         Y_ABORT_UNLESS(TxEvent);
         Y_ABORT_UNLESS(TxEvent->IndexChanges);
         ClassId = "Changes::ConstructBlobs::" + TxEvent->IndexChanges->TypeString();
@@ -573,6 +573,7 @@ private:
     std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
     TIndexationCounters Counters;
     NOlap::TSnapshot LastCompletedTx;
+
 protected:
     virtual void DoOnDataReady(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard) override {
         TxEvent->IndexChanges->Blobs = ExtractBlobsData();
@@ -587,14 +588,13 @@ protected:
     }
     virtual bool DoOnError(const TString& storageId, const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("storage_id", storageId)("blob_id", range)("status", status.GetErrorMessage())("status_code", status.GetStatus());
-        AFL_VERIFY(status.GetStatus() != NKikimrProto::EReplyStatus::NODATA)("blob_id", range)("status", status.GetStatus())
-            ("error", status.GetErrorMessage())("type", TxEvent->IndexChanges->TypeString())("task_id", TxEvent->IndexChanges->GetTaskIdentifier())
-            ("debug", TxEvent->IndexChanges->DebugString());
+        AFL_VERIFY(status.GetStatus() != NKikimrProto::EReplyStatus::NODATA)("blob_id", range)("status", status.GetStatus())("error", status.GetErrorMessage())("type", TxEvent->IndexChanges->TypeString())("task_id", TxEvent->IndexChanges->GetTaskIdentifier())("debug", TxEvent->IndexChanges->DebugString());
         TxEvent->SetPutStatus(NKikimrProto::ERROR);
         Counters.ReadErrors->Add(1);
         TActorContext::AsActorContext().Send(ParentActorId, std::move(TxEvent));
         return false;
     }
+
 public:
     TChangesReadTask(std::unique_ptr<TEvPrivate::TEvWriteIndex>&& event, const TActorId parentActorId, const ui64 tabletId, const TIndexationCounters& counters, NOlap::TSnapshot lastCompletedTx)
         : TBase(event->IndexChanges->GetReadingActions(), event->IndexChanges->TypeString(), event->IndexChanges->GetTaskIdentifier())
@@ -602,15 +602,65 @@ public:
         , TabletId(tabletId)
         , TxEvent(std::move(event))
         , Counters(counters)
-        , LastCompletedTx(lastCompletedTx)
-    {
+        , LastCompletedTx(lastCompletedTx) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "start_changes")("type", TxEvent->IndexChanges->TypeString())("task_id", TxEvent->IndexChanges->GetTaskIdentifier());
+    }
+};
+
+class TDataAccessorsSubscriber: public NOlap::IDataAccessorRequestsSubscriber {
+protected:
+    const NActors::TActorId ShardActorId;
+    std::shared_ptr<NOlap::TColumnEngineChanges> Changes;
+    std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
+
+    virtual void DoOnRequestsFinishedImpl() = 0;
+
+    virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result) override final {
+        Changes->SetFetchedDataAccessors(std::move(result), NOlap::TDataAccessorsInitializationContext(VersionedIndex));
+        DoOnRequestsFinishedImpl();
+    }
+
+public:
+    TDataAccessorsSubscriber(const NActors::TActorId& shardActorId, const std::shared_ptr<NOlap::TColumnEngineChanges>& changes,
+        const std::shared_ptr<NOlap::TVersionedIndex>& versionedIndex)
+        : ShardActorId(shardActorId)
+        , Changes(changes)
+        , VersionedIndex(versionedIndex) {
+    }
+};
+
+class TDataAccessorsSubscriberWithRead: public TDataAccessorsSubscriber {
+private:
+    using TBase = TDataAccessorsSubscriber;
+
+protected:
+    const bool CacheDataAfterWrite = false;
+    const ui64 ShardTabletId;
+    TIndexationCounters Counters;
+    NOlap::TSnapshot SnapshotModification;
+    const NActors::TActorId ResourceSubscribeActor;
+    const NOlap::NResourceBroker::NSubscribe::TTaskContext TaskSubscriptionContext;
+
+public:
+    TDataAccessorsSubscriberWithRead(const NActors::TActorId& resourceSubscribeActor, const std::shared_ptr<NOlap::TColumnEngineChanges>& changes,
+        const std::shared_ptr<NOlap::TVersionedIndex>& versionedIndex, const bool cacheAfterWrite, const NActors::TActorId& shardActorId,
+        const ui64 shardTabletId, const TIndexationCounters& counters, const NOlap::TSnapshot& snapshotModification,
+        const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskSubscriptionContext)
+        : TBase(shardActorId, changes, versionedIndex)
+        , CacheDataAfterWrite(cacheAfterWrite)
+        , ShardTabletId(shardTabletId)
+        , Counters(counters)
+        , SnapshotModification(snapshotModification)
+        , ResourceSubscribeActor(resourceSubscribeActor)
+        , TaskSubscriptionContext(taskSubscriptionContext)
+    {
     }
 };
 
 class TInsertChangesReadTask: public TChangesReadTask, public TMonitoringObjectsCounter<TInsertChangesReadTask> {
 private:
     using TBase = TChangesReadTask;
+
 public:
     using TBase::TBase;
 };
@@ -618,6 +668,7 @@ public:
 class TCompactChangesReadTask: public TChangesReadTask, public TMonitoringObjectsCounter<TCompactChangesReadTask> {
 private:
     using TBase = TChangesReadTask;
+
 public:
     using TBase::TBase;
 };
@@ -625,6 +676,7 @@ public:
 class TTTLChangesReadTask: public TChangesReadTask, public TMonitoringObjectsCounter<TTTLChangesReadTask> {
 private:
     using TBase = TChangesReadTask;
+
 public:
     using TBase::TBase;
 };
@@ -650,13 +702,12 @@ void TColumnShard::StartIndexTask(std::vector<const NOlap::TCommittedData*>&& da
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(actualIndexInfo, indexChanges, Settings.CacheDataAfterIndexing);
 
     const TString externalTaskId = indexChanges->GetTaskIdentifier();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "indexation")("bytes", bytesToIndex)("blobs_count", dataToIndex.size())("max_limit", (i64)Limits.MaxInsertBytes)
-        ("has_more", bytesToIndex >= Limits.MaxInsertBytes)("external_task_id", externalTaskId);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "indexation")("bytes", bytesToIndex)("blobs_count", dataToIndex.size())("max_limit", (i64)Limits.MaxInsertBytes)("has_more", bytesToIndex >= Limits.MaxInsertBytes)("external_task_id", externalTaskId);
 
     NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
         ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
-                                std::make_shared<TInsertChangesReadTask>(std::move(ev), SelfId(), TabletID(), Counters.GetIndexationCounters(), GetLastCompletedTx()),
-                                0, indexChanges->CalcMemoryForUsage(), externalTaskId, InsertTaskSubscription));
+                                    std::make_shared<TInsertChangesReadTask>(std::move(ev), SelfId(), TabletID(), Counters.GetIndexationCounters(), GetLastCompletedTx()),
+                                    0, indexChanges->CalcMemoryForUsage(), externalTaskId, InsertTaskSubscription));
 }
 
 void TColumnShard::SetupIndexation() {
@@ -666,9 +717,7 @@ void TColumnShard::SetupIndexation() {
     }
     BackgroundController.CheckDeadlinesIndexation();
     if (BackgroundController.GetIndexingActiveCount()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "in_progress")
-            ("count", BackgroundController.GetIndexingActiveCount())("insert_overload_size", InsertTable->GetCountersCommitted().Bytes)
-            ("indexing_debug", BackgroundController.DebugStringIndexation());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "in_progress")("count", BackgroundController.GetIndexingActiveCount())("insert_overload_size", InsertTable->GetCountersCommitted().Bytes)("indexing_debug", BackgroundController.DebugStringIndexation());
         return;
     }
 
@@ -680,8 +729,7 @@ void TColumnShard::SetupIndexation() {
     const TDuration durationLimit = NYDBTest::TControllers::GetColumnShardController()->GetGuaranteeIndexationInterval();
     if (!force && InsertTable->GetCountersCommitted().Bytes < bytesLimit &&
         TMonotonic::Now() < BackgroundController.GetLastIndexationInstant() + durationLimit) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "not_enough_data_and_too_frequency")
-            ("insert_size", InsertTable->GetCountersCommitted().Bytes);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_indexation")("reason", "not_enough_data_and_too_frequency")("insert_size", InsertTable->GetCountersCommitted().Bytes);
         return;
     }
 
@@ -722,11 +770,10 @@ private:
 
 public:
     TCompactionAllocated(const NActors::TActorId& tabletActorId)
-        : TabletActorId(tabletActorId)
-    {
-
+        : TabletActorId(tabletActorId) {
     }
 };
+
 }   // namespace
 
 void TColumnShard::SetupCompaction(const std::set<ui64>& pathIds) {
@@ -751,6 +798,26 @@ void TColumnShard::SetupCompaction(const std::set<ui64>& pathIds) {
     }
 }
 
+class TCompactionDataAccessorsSubscriber: public TDataAccessorsSubscriberWithRead {
+private:
+    using TBase = TDataAccessorsSubscriberWithRead;
+
+protected:
+    virtual void DoOnRequestsFinishedImpl() override {
+        const TString externalTaskId = Changes->GetTaskIdentifier();
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "compaction")("external_task_id", externalTaskId);
+
+        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(VersionedIndex, Changes, CacheDataAfterWrite);
+        auto readSubscriber = std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
+            std::make_shared<TCompactChangesReadTask>(std::move(ev), ShardActorId, ShardTabletId, Counters, SnapshotModification), 0,
+            Changes->CalcMemoryForUsage(), externalTaskId, TaskSubscriptionContext);
+        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor, readSubscriber);
+    }
+
+public:
+    using TBase::TBase;
+};
+
 void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
     Counters.GetCSCounters().OnSetupCompaction();
     BackgroundController.ResetWaitingPriority();
@@ -763,21 +830,50 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
 
     auto compaction = dynamic_pointer_cast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>(indexChanges);
     compaction->SetQueueGuard(guard);
-    indexChanges->Start(*this);
+    compaction->Start(*this);
 
     auto actualIndexInfo = std::make_shared<NOlap::TVersionedIndex>(TablesManager.GetPrimaryIndex()->GetVersionedIndex());
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(actualIndexInfo, indexChanges, Settings.CacheDataAfterCompaction);
-    const TString externalTaskId = indexChanges->GetTaskIdentifier();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "compaction")("external_task_id", externalTaskId);
-
-    NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
-        ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
-                                    std::make_shared<TCompactChangesReadTask>(
-                                        std::move(ev), SelfId(), TabletID(), Counters.GetCompactionCounters(), GetLastCompletedTx()),
-                                    0, indexChanges->CalcMemoryForUsage(), externalTaskId, CompactTaskSubscription));
-
-    LOG_S_DEBUG("ActiveCompactions: " << BackgroundController.GetCompactionsCount() << " at tablet " << TabletID());
+    auto request = compaction->ExtractDataAccessorsRequest();
+    request->RegisterSubscriber(std::make_shared<TCompactionDataAccessorsSubscriber>(ResourceSubscribeActor, indexChanges, actualIndexInfo,
+        Settings.CacheDataAfterCompaction, SelfId(), TabletID(), Counters.GetCompactionCounters(), GetLastCompletedTx(),
+        CompactTaskSubscription));
+    TablesManager.GetPrimaryIndex()->FetchDataAccessors(request);
 }
+
+class TWriteEvictPortionsDataAccessorsSubscriber: public TDataAccessorsSubscriberWithRead {
+private:
+    using TBase = TDataAccessorsSubscriberWithRead;
+
+protected:
+    virtual void DoOnRequestsFinishedImpl() override {
+        ACFL_DEBUG("background", "ttl")("need_writes", true);
+        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(VersionedIndex, Changes, false);
+        auto readSubscriber = std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
+            std::make_shared<TTTLChangesReadTask>(std::move(ev), ShardActorId, ShardTabletId, Counters, SnapshotModification), 0,
+            Changes->CalcMemoryForUsage(), Changes->GetTaskIdentifier(), TaskSubscriptionContext);
+
+        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor, readSubscriber);
+    }
+
+public:
+    using TBase::TBase;
+};
+
+class TNoWriteEvictPortionsDataAccessorsSubscriber: public TDataAccessorsSubscriber {
+private:
+    using TBase = TDataAccessorsSubscriber;
+
+protected:
+    virtual void DoOnRequestsFinishedImpl() override {
+        ACFL_DEBUG("background", "ttl")("need_writes", false);
+        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(VersionedIndex, Changes, false);
+        ev->SetPutStatus(NKikimrProto::OK);
+        NActors::TActivationContext::Send(ShardActorId, std::move(ev));
+    }
+
+public:
+    using TBase::TBase;
+};
 
 bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
     if (!AppDataVerified().ColumnShardConfig.GetTTLEnabled() || !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::TTL)) {
@@ -800,23 +896,35 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
 
     auto actualIndexInfo = std::make_shared<NOlap::TVersionedIndex>(TablesManager.GetPrimaryIndex()->GetVersionedIndex());
     for (auto&& i : indexChanges) {
-        const TString externalTaskId = i->GetTaskIdentifier();
-        const bool needWrites = i->NeedConstruction();
-        ACFL_DEBUG("background", "ttl")("need_writes", needWrites);
         i->Start(*this);
-        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(actualIndexInfo, i, false);
-        if (needWrites) {
-            NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
-                ResourceSubscribeActor, std::make_shared<NOlap::NBlobOperations::NRead::ITask::TReadSubscriber>(
-                    std::make_shared<TTTLChangesReadTask>(std::move(ev), SelfId(), TabletID(), Counters.GetCompactionCounters(), GetLastCompletedTx()),
-                    0, i->CalcMemoryForUsage(), externalTaskId, TTLTaskSubscription));
+        auto request = i->ExtractDataAccessorsRequest();
+        if (i->NeedConstruction()) {
+            request->RegisterSubscriber(std::make_shared<TWriteEvictPortionsDataAccessorsSubscriber>(ResourceSubscribeActor, i,
+                actualIndexInfo, Settings.CacheDataAfterCompaction, SelfId(), TabletID(), Counters.GetEvictionCounters(), GetLastCompletedTx(),
+                TTLTaskSubscription));
         } else {
-            ev->SetPutStatus(NKikimrProto::OK);
-            ActorContext().Send(SelfId(), std::move(ev));
+            request->RegisterSubscriber(std::make_shared<TNoWriteEvictPortionsDataAccessorsSubscriber>(SelfId(), i, actualIndexInfo));
         }
+        TablesManager.GetPrimaryIndex()->FetchDataAccessors(request);
     }
     return true;
 }
+
+class TCleanupPortionsDataAccessorsSubscriber: public TDataAccessorsSubscriber {
+private:
+    using TBase = TDataAccessorsSubscriber;
+
+protected:
+    virtual void DoOnRequestsFinishedImpl() override {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("background", "cleanup")("changes_info", Changes->DebugString());
+        auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(VersionedIndex, Changes, false);
+        ev->SetPutStatus(NKikimrProto::OK);   // No new blobs to write
+        NActors::TActivationContext::Send(ShardActorId, std::move(ev));
+    }
+
+public:
+    using TBase::TBase;
+};
 
 void TColumnShard::SetupCleanupPortions() {
     Counters.GetCSCounters().OnSetupCleanup();
@@ -835,15 +943,12 @@ void TColumnShard::SetupCleanupPortions() {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
     }
-
-    ACFL_DEBUG("background", "cleanup")("changes_info", changes->DebugString());
-    auto actualIndexInfo = std::make_shared<NOlap::TVersionedIndex>(TablesManager.GetPrimaryIndex()->GetVersionedIndex());
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(actualIndexInfo, changes, false);
-    ev->SetPutStatus(NKikimrProto::OK); // No new blobs to write
-
     changes->Start(*this);
 
-    Send(SelfId(), ev.release());
+    auto request = changes->ExtractDataAccessorsRequest();
+    auto actualIndexInfo = std::make_shared<NOlap::TVersionedIndex>(TablesManager.GetPrimaryIndex()->GetVersionedIndex());
+    request->RegisterSubscriber(std::make_shared<TCleanupPortionsDataAccessorsSubscriber>(SelfId(), changes, actualIndexInfo));
+    TablesManager.GetPrimaryIndex()->FetchDataAccessors(request);
 }
 
 void TColumnShard::SetupCleanupTables() {
@@ -1003,7 +1108,6 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvConfirmFromInitiator:
     if (currentSession->IsConfirmed()) {
         currentSession->GetInitiatorController().ConfirmSuccess(ev->Get()->Record.GetSessionId());
     } else {
-
         auto txConclusion = SharingSessionsManager->ConfirmDestSession(this, currentSession);
         Execute(txConclusion.release(), ctx);
     }
@@ -1032,17 +1136,26 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvSendDataFromSource::T
         return;
     }
 
+    // in current implementation the next loop will crash if schemas will be sent in the same package with the data, so adding this verify to ensure consistent behaviour
+    AFL_VERIFY(ev->Get()->Record.GetPathIdData().empty() || ev->Get()->Record.GetSchemeHistory().empty())("reason", "can not send schemas and data in the same package");
+
     THashMap<ui64, NOlap::NDataSharing::NEvents::TPathIdData> dataByPathId;
     TBlobGroupSelector dsGroupSelector(Info());
     for (auto&& i : ev->Get()->Record.GetPathIdData()) {
-        auto schema = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetVersionedIndex().GetLastSchema();
-        AFL_VERIFY(schema);
-        auto data = NOlap::NDataSharing::NEvents::TPathIdData::BuildFromProto(i, schema->GetIndexInfo(), dsGroupSelector);
+        auto data = NOlap::NDataSharing::NEvents::TPathIdData::BuildFromProto(i, TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetVersionedIndex(), dsGroupSelector);
         AFL_VERIFY(data.IsSuccess())("error", data.GetErrorMessage());
         AFL_VERIFY(dataByPathId.emplace(i.GetPathId(), data.DetachResult()).second);
     }
 
-    auto txConclusion = currentSession->ReceiveData(this, dataByPathId, ev->Get()->Record.GetPackIdx(), (NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), currentSession);
+    const auto& schemeHistoryProto = ev->Get()->Record.GetSchemeHistory();
+
+    std::vector<NOlap::TSchemaPresetVersionInfo> schemas;
+
+    for (auto&& i : schemeHistoryProto) {
+        schemas.emplace_back(i);
+    }
+
+    auto txConclusion = currentSession->ReceiveData(this, std::move(dataByPathId), std::move(schemas), ev->Get()->Record.GetPackIdx(), (NOlap::TTabletId)ev->Get()->Record.GetSourceTabletId(), currentSession);
     if (!txConclusion) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_received_data");
     } else {
@@ -1101,6 +1214,76 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::T
         Execute(txConclusion->release(), ctx);
     }
 };
+
+class TTxAskPortionChunks: public TTransactionBase<TColumnShard> {
+private:
+    using TBase = TTransactionBase<TColumnShard>;
+    std::shared_ptr<NOlap::TDataAccessorsRequest> Request;
+    THashMap<ui64, std::vector<NOlap::TPortionInfo::TConstPtr>> PortionsByPath;
+    THashMap<ui64, std::vector<NOlap::TPortionDataAccessor>> Accessors;
+    NOlap::TDataAccessorsResult Result;
+
+public:
+    TTxAskPortionChunks(TColumnShard* self, const std::shared_ptr<NOlap::TDataAccessorsRequest>& request)
+        : TBase(self)
+        , Request(request) {
+        for (auto&& i : Request->GetPathIds()) {
+            PortionsByPath.emplace(i, Request->StartFetching(i));
+        }
+    }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
+        NIceDb::TNiceDb db(txc.DB);
+        TBlobGroupSelector selector(Self->Info());
+        for (auto&& i : PortionsByPath) {
+            while (i.second.size()) {
+                auto p = i.second.back();
+                auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV1>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
+                NOlap::TPortionInfoConstructor constructor(*p, false, true, true);
+                {
+                    if (!rowset.IsReady()) {
+                        return false;
+                    }
+                    while (!rowset.EndOfSet()) {
+                        NOlap::TColumnChunkLoadContextV1 chunkLoadContext(rowset);
+                        constructor.LoadRecord(chunkLoadContext);
+                        if (!rowset.Next()) {
+                            return false;
+                        }
+                    }
+                }
+                {
+                    auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
+                    if (!rowset.IsReady()) {
+                        return false;
+                    }
+                    while (!rowset.EndOfSet()) {
+                        NOlap::TIndexChunkLoadContext chunkLoadContext(rowset, &selector);
+                        constructor.LoadIndex(chunkLoadContext);
+                        if (!rowset.Next()) {
+                            return false;
+                        }
+                    }
+                }
+                Accessors[i.first].emplace_back(constructor.Build(true));
+                i.second.pop_back();
+            }
+        }
+        return true;
+    }
+    void Complete(const TActorContext& /*ctx*/) override {
+        for (auto&& i : Accessors) {
+            Request->AddData(i.first, std::move(i.second));
+        }
+    }
+    TTxType GetTxType() const override {
+        return TXTYPE_WRITE_INDEX;
+    }
+};
+
+void TColumnShard::Handle(NOlap::NDataAccessorControl::TEvAskDataAccessors::TPtr& ev, const TActorContext& /*ctx*/) {
+    Execute(new TTxAskPortionChunks(this, ev->Get()->GetRequest()));
+}
 
 void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvAckFinishFromInitiator::TPtr& ev, const TActorContext& ctx) {
     AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("process", "BlobsSharing")("event", "TEvAckFinishFromInitiator");
@@ -1227,4 +1410,4 @@ TDuration TColumnShard::GetMaxReadStaleness() {
     return NYDBTest::TControllers::GetColumnShardController()->GetReadTimeoutClean();
 }
 
-}
+} // namespace NKikimr::NColumnShard

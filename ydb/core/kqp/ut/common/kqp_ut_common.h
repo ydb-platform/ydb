@@ -145,6 +145,8 @@ public:
     TKikimrRunner(const NFake::TStorage& storage);
 
     ~TKikimrRunner() {
+        Server->GetRuntime()->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+
         RunCall([&] { Driver->Stop(true); return false; });
         if (ThreadPoolStarted_) {
             ThreadPool.Stop();
@@ -156,6 +158,7 @@ public:
         Client.Reset();
     }
 
+    NYdb::TDriver* GetDriverMut() { return Driver.Get(); }
     const TString& GetEndpoint() const { return Endpoint; }
     const NYdb::TDriver& GetDriver() const { return *Driver; }
     NYdb::NScheme::TSchemeClient GetSchemeClient() const { return NYdb::NScheme::TSchemeClient(*Driver); }

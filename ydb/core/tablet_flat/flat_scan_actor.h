@@ -314,7 +314,7 @@ namespace NOps {
         }
 
         bool MayProgress() noexcept {
-            return Cache->MayProgress() && ColdPartLoaders.empty();
+            return !IsPaused() && Cache->MayProgress() && ColdPartLoaders.empty();
         }
 
         void Touch(EScan scan) noexcept override
@@ -336,7 +336,9 @@ namespace NOps {
                     return Terminate(EAbort::None);
 
                 case EScan::Sleep:
-                    Y_ABORT("Scan actor got an unexpected EScan::Sleep");
+                    Pause();
+
+                    return Spent->Alter(/* resources not available */ false);
             }
 
             Y_ABORT("Scan actor got an unexpected EScan value");
@@ -521,7 +523,7 @@ namespace NOps {
 
             ContinueInFly = false;
 
-            if (!IsPaused() && MayProgress()) {
+            if (MayProgress()) {
                 React();
             }
         }

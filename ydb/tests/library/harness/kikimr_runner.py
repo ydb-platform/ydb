@@ -580,8 +580,8 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
         self._can_update = None
         self.current_version_idx = 0
         self.versions = [
-            param_constants.kikimr_binary_deploy_path + "_next",
             param_constants.kikimr_binary_deploy_path + "_last",
+            param_constants.kikimr_binary_deploy_path + "_next",
         ]
 
         self.local_drivers_path = [
@@ -633,7 +633,7 @@ mon={mon}""".format(
             return self.ssh_command("sudo service kikimr stop")
         return self.ssh_command(
             [
-                "sudo", "systemctl", "start", "kikimr-multi@{}".format(self.__slot_id),
+                "sudo", "systemctl", "stop", "kikimr-multi@{}".format(self.__slot_id),
             ]
         )
 

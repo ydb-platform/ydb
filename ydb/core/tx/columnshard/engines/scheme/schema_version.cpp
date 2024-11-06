@@ -1,5 +1,4 @@
-#include "tier_info.h"
+#include "schema_version.h"
 
 namespace NKikimr::NOlap {
-
 }

@@ -21,7 +21,7 @@ PEERDIR(
 )
 
 SRCS(
-    ut_http_request.cpp
+    ut_aggregate_statistics.cpp
 )
 
 END()

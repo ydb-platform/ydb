@@ -682,13 +682,16 @@ private:
             auto query_response = std::make_unique<TEvStatistics::TEvLoadStatisticsQueryResponse>();
 
             if (response.status() == Ydb::StatusIds::SUCCESS) {
-                query_response->Success = true;
-
                 NYdb::TResultSetParser parser(response.result_set());
-                Y_ABORT_UNLESS(parser.RowsCount() < 2);
+                const auto rowsCount = parser.RowsCount();
+                Y_ABORT_UNLESS(rowsCount < 2);
 
-                SA_LOG_D("[TStatService::ReadRowsResponse] QueryId[ "
-                    << queryId << " ], RowsCount[ " << parser.RowsCount() << " ]");
+                if (rowsCount == 0) {
+                    SA_LOG_E("[TStatService::ReadRowsResponse] QueryId[ "
+                        << queryId << " ], RowsCount[ 0 ]");
+                }
+
+                query_response->Success = rowsCount > 0;
 
                 while(parser.TryNextRow()) {
                     auto& col = parser.ColumnParser("data");
@@ -1156,13 +1159,11 @@ private:
         auto& response = request.StatResponses[requestIndex];
         Y_ABORT_UNLESS(request.StatType == EStatType::COUNT_MIN_SKETCH);
 
-        if (ev->Get()->Success) {
-            response.Success = true;
-            auto& data = ev->Get()->Data;
+        const auto msg = ev->Get();
 
-            if (data) {
-                response.CountMinSketch.CountMin.reset(TCountMinSketch::FromString(data->data(), data->size()));
-            }
+        if (msg->Success && msg->Data) {
+            response.Success = true;
+            response.CountMinSketch.CountMin.reset(TCountMinSketch::FromString(msg->Data->data(), msg->Data->size()));
         } else {
             response.Success = false;
         }

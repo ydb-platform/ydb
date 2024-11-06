@@ -27,10 +27,6 @@ def generate_configs_cmd(configs_type="", deploy_path=None):
         kikimr_cluster_yaml_deploy_path, kikimr_binary_deploy_path, deploy_path, configs_type)
 
 
-def next_version_kikimr_driver_path():
-    return _get_param("kikimr.ci.kikimr_driver_next", None)
-
-
 def kikimr_driver_path():
     built_binary = _get_param("kikimr.ci.kikimr_driver", None)
     if os.getenv("YDB_DRIVER_BINARY"):

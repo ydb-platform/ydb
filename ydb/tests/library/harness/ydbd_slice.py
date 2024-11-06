@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 class YdbdSlice(KiKiMRClusterInterface):
     def __init__(self, config_path, binary_path=None):
-        kikimr_bin = binary_path
+        self.__kikimr_path = binary_path
         with open(config_path) as f:
             self.__yaml_config = yaml.safe_load(f.read())
         self.__hosts = [host['name'] for host in self.__yaml_config.get('hosts')]
@@ -32,7 +32,7 @@ class YdbdSlice(KiKiMRClusterInterface):
         configurator = ydbd_slice.cluster_description.Configurator(
             self.cluster_details,
             out_dir="/tmp",
-            kikimr_bin=kikimr_bin,
+            kikimr_bin=self.__kikimr_path,
             kikimr_compressed_bin=None,
             walle_provider=walle_provider
         )
@@ -107,6 +107,8 @@ class YdbdSlice(KiKiMRClusterInterface):
         # TODO: use from config?
         return {
             node_id: KikimrExternalNode(
+                kikimr_path=self.__kikimr_path,
+                kikimr_next_path=None,
                 node_id=node_id,
                 host=host,
                 ssh_username=self.__ssh_user,

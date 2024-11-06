@@ -1315,6 +1315,8 @@ public:
             TKqpBufferWriterSettings settings {
                 .SessionActorId = SelfId(),
                 .TxManager = txCtx->TxManager,
+                .TraceId = request.TraceId.GetTraceId(),
+                .Counters = Counters,
             };
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);

@@ -1155,6 +1155,9 @@ message TTransaction {
     optional NActorsProto.TActorId SourceActor = 14;
 
     optional TWriteId WriteId = 15;
+
+    optional uint64 BeginTime = 17;
+    optional uint64 ChangeStateTime = 18;
 };
 
 message TTabletTxInfo {

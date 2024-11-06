@@ -60,6 +60,13 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     }
 
     PartitionsData = std::move(tx.GetPartitions());
+
+    if (tx.HasBeginTime()) {
+        BeginTime = TInstant::MicroSeconds(tx.GetBeginTime());
+    }
+    if (tx.HasChangeStateTime()) {
+        ChangeStateTime = TInstant::MicroSeconds(tx.GetChangeStateTime());
+    }
 }
 
 TString TDistributedTransaction::LogPrefix() const

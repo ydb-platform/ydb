@@ -29,6 +29,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/changes
     ydb/core/tx/columnshard/engines/portions
     ydb/core/tx/columnshard/engines/protos
+    ydb/core/tx/columnshard/engines/loading
     ydb/core/tx/program
     ydb/core/tx/columnshard/common
 

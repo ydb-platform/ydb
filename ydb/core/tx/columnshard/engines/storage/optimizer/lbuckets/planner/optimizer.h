@@ -894,11 +894,7 @@ public:
             ("count", portions.size())("info", Others.DebugString())("event", "start_optimization")("stop_point", stopPoint ? stopPoint->DebugString() : "")
             ("main_portion", MainPortion ? MainPortion->GetPortionId() : 0);
         TSaverContext saverContext(storagesManager);
-        std::vector<TPortionDataAccessor> accessors;
-        for (auto&& i : portions) {
-            accessors.emplace_back(i);
-        }
-        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, accessors, saverContext);
+        auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         if (MainPortion) {
             NArrow::NMerger::TSortableBatchPosition pos(MainPortion->IndexKeyStart().ToBatch(primaryKeysSchema), 0, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, false);

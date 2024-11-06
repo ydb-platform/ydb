@@ -18,7 +18,7 @@ private:
 public:
     TPortionInfoStat(const TPortionInfo::TConstPtr& portionInfo)
         : PortionInfo(portionInfo)
-        , MinRawBytes(TPortionDataAccessor(PortionInfo).GetMinMemoryForReadColumns({}))
+        , MinRawBytes(PortionInfo->GetTotalBlobBytes())
         , BlobBytes(PortionInfo->GetTotalBlobBytes())
     {
 

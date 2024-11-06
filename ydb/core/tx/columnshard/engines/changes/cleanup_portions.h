@@ -6,9 +6,13 @@ namespace NKikimr::NOlap {
 class TCleanupPortionsColumnEngineChanges: public TColumnEngineChanges {
 private:
     using TBase = TColumnEngineChanges;
-    THashMap<TString, THashSet<NOlap::TEvictedBlob>> BlobsToForget;
     THashMap<TString, std::vector<std::shared_ptr<TPortionInfo>>> StoragePortions;
+    std::vector<TPortionInfo::TConstPtr> PortionsToDrop;
+
 protected:
+    virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& /*context*/) override {
+    }
+
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
     virtual void DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) override;
 
@@ -37,7 +41,14 @@ public:
 
     }
 
-    std::vector<TPortionDataAccessor> PortionsToDrop;
+    const std::vector<TPortionInfo::TConstPtr>& GetPortionsToDrop() const {
+        return PortionsToDrop;
+    }
+
+    void AddPortionToDrop(const TPortionInfo::TConstPtr& portion) {
+        PortionsToDrop.emplace_back(portion);
+        PortionsToAccess->AddPortion(portion);
+    }
 
     virtual ui32 GetWritePortionsCount() const override {
         return 0;

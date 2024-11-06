@@ -181,7 +181,7 @@ TPingTaskParams ConstructHardPingTask(
             }
 
             auto now = TInstant::Now();
-            auto executionDeadline = now;
+            auto executionDeadline = TInstant::Max();
 
             auto submittedAt = NProtoInterop::CastFromProto(query.meta().submitted_at());
             auto executionTtl = NProtoInterop::CastFromProto(internal.execution_ttl());

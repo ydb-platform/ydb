@@ -166,6 +166,37 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     RegisterSchemaVersion(snapshot, std::move(*indexInfoOptional));
 }
 
+void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) {
+    AFL_VERIFY(!VersionedIndex.IsEmpty());
+
+    ui64 version = schema.GetVersion();
+
+    ISnapshotSchema::TPtr prevSchema = VersionedIndex.GetLastSchemaBeforeOrEqualSnapshotOptional(version);
+
+    if (prevSchema && version == prevSchema->GetVersion()) {
+        // skip already registered version
+        return;
+    }
+
+    ISnapshotSchema::TPtr secondLast =
+        VersionedIndex.GetLastSchemaBeforeOrEqualSnapshotOptional(VersionedIndex.GetLastSchema()->GetVersion() - 1);
+
+    AFL_VERIFY(!secondLast || secondLast->GetVersion() <= version)("reason", "incorrect schema registration order");
+
+    std::optional<NOlap::TIndexInfo> indexInfoOptional;
+    if (schema.GetDiff()) {
+        AFL_VERIFY(prevSchema)("reason", "no base schema to apply diff for");
+
+        indexInfoOptional =
+            NOlap::TIndexInfo::BuildFromProto(*schema.GetDiff(), prevSchema->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
+    } else {
+        indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
+    }
+
+    AFL_VERIFY(indexInfoOptional);
+    VersionedIndex.AddIndex(snapshot, std::move(*indexInfoOptional));
+}
+
 std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) {
     auto result = std::make_shared<TTxCompositeReader>("column_engines");
     result->AddChildren(std::make_shared<NEngineLoading::TEngineCountersReader>("counters", this, dsGroupSelector));

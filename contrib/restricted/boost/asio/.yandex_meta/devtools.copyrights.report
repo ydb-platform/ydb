@@ -81,6 +81,8 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/asio.hpp [5:5]
+        include/boost/asio/any_completion_executor.hpp [5:5]
+        include/boost/asio/any_completion_handler.hpp [5:5]
         include/boost/asio/any_io_executor.hpp [5:5]
         include/boost/asio/append.hpp [5:5]
         include/boost/asio/as_tuple.hpp [5:5]
@@ -130,6 +132,7 @@ BELONGS ya.make
         include/boost/asio/compose.hpp [5:5]
         include/boost/asio/connect.hpp [5:5]
         include/boost/asio/connect_pipe.hpp [5:5]
+        include/boost/asio/consign.hpp [5:5]
         include/boost/asio/coroutine.hpp [5:5]
         include/boost/asio/deadline_timer.hpp [5:5]
         include/boost/asio/defer.hpp [5:5]
@@ -151,6 +154,7 @@ BELONGS ya.make
         include/boost/asio/detail/chrono.hpp [5:5]
         include/boost/asio/detail/chrono_time_traits.hpp [5:5]
         include/boost/asio/detail/completion_handler.hpp [5:5]
+        include/boost/asio/detail/composed_work.hpp [5:5]
         include/boost/asio/detail/concurrency_hint.hpp [5:5]
         include/boost/asio/detail/conditionally_enabled_event.hpp [5:5]
         include/boost/asio/detail/conditionally_enabled_mutex.hpp [5:5]
@@ -470,6 +474,7 @@ BELONGS ya.make
         include/boost/asio/experimental/channel.hpp [5:5]
         include/boost/asio/experimental/channel_error.hpp [5:5]
         include/boost/asio/experimental/channel_traits.hpp [5:5]
+        include/boost/asio/experimental/co_composed.hpp [5:5]
         include/boost/asio/experimental/concurrent_channel.hpp [5:5]
         include/boost/asio/experimental/deferred.hpp [5:5]
         include/boost/asio/experimental/detail/channel_handler.hpp [5:5]
@@ -484,6 +489,7 @@ BELONGS ya.make
         include/boost/asio/experimental/detail/impl/channel_service.hpp [5:5]
         include/boost/asio/experimental/impl/as_single.hpp [5:5]
         include/boost/asio/experimental/impl/channel_error.ipp [5:5]
+        include/boost/asio/experimental/impl/co_composed.hpp [5:5]
         include/boost/asio/experimental/impl/parallel_group.hpp [5:5]
         include/boost/asio/experimental/parallel_group.hpp [5:5]
         include/boost/asio/experimental/prepend.hpp [5:5]
@@ -499,6 +505,7 @@ BELONGS ya.make
         include/boost/asio/handler_continuation_hook.hpp [5:5]
         include/boost/asio/handler_invoke_hook.hpp [5:5]
         include/boost/asio/high_resolution_timer.hpp [5:5]
+        include/boost/asio/impl/any_completion_executor.ipp [5:5]
         include/boost/asio/impl/any_io_executor.ipp [5:5]
         include/boost/asio/impl/append.hpp [5:5]
         include/boost/asio/impl/as_tuple.hpp [5:5]
@@ -507,10 +514,10 @@ BELONGS ya.make
         include/boost/asio/impl/buffered_write_stream.hpp [5:5]
         include/boost/asio/impl/cancellation_signal.ipp [5:5]
         include/boost/asio/impl/co_spawn.hpp [5:5]
-        include/boost/asio/impl/compose.hpp [5:5]
         include/boost/asio/impl/connect.hpp [5:5]
         include/boost/asio/impl/connect_pipe.hpp [5:5]
         include/boost/asio/impl/connect_pipe.ipp [5:7]
+        include/boost/asio/impl/consign.hpp [5:5]
         include/boost/asio/impl/defer.hpp [5:5]
         include/boost/asio/impl/deferred.hpp [5:5]
         include/boost/asio/impl/detached.hpp [5:5]
@@ -787,6 +794,18 @@ BELONGS ya.make
         include/boost/asio/ssl/impl/context.hpp [5:6]
         include/boost/asio/ssl/impl/context.ipp [5:6]
 
+KEEP     COPYRIGHT_SERVICE_LABEL ac8aa760fecd6ff857e31432dcb50229
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2022 Klemens D. Morgenstern
+        //                    (klemens dot morgenstern at gmx dot net)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/asio/experimental/use_promise.hpp [5:6]
+
 KEEP     COPYRIGHT_SERVICE_LABEL b54a4b9bb1b7b86932babc13c91439ba
 BELONGS ya.make
     License text:
@@ -800,12 +819,13 @@ BELONGS ya.make
         include/boost/asio/experimental/co_spawn.hpp [5:6]
         include/boost/asio/experimental/coro.hpp [5:6]
         include/boost/asio/experimental/coro_traits.hpp [5:6]
-        include/boost/asio/experimental/detail/completion_handler_erasure.hpp [5:6]
+        include/boost/asio/experimental/detail/coro_completion_handler.hpp [5:6]
         include/boost/asio/experimental/detail/coro_promise_allocator.hpp [5:6]
         include/boost/asio/experimental/detail/partial_promise.hpp [5:6]
         include/boost/asio/experimental/impl/coro.hpp [5:6]
         include/boost/asio/experimental/impl/promise.hpp [5:6]
         include/boost/asio/experimental/impl/use_coro.hpp [5:6]
+        include/boost/asio/experimental/impl/use_promise.hpp [5:6]
         include/boost/asio/experimental/promise.hpp [5:6]
         include/boost/asio/experimental/use_coro.hpp [5:6]
 

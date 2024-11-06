@@ -29,6 +29,10 @@ def get_slice_directory():
     return os.getenv('YDB_CLUSTER_YAML_PATH')
 
 
+def get_ssh_username():
+    return yatest.common.get_param("kikimr.ci.ssh_username")
+
+
 def get_slice_name():
     return yatest.common.get_param("kikimr.ci.cluster_name", None)
 
@@ -48,7 +52,7 @@ class TestSetupForStability(object):
         assert cls.slice_name is not None
 
         logger.info('setup_class started for slice = {}'.format(cls.slice_name))
-        cls.kikimr_cluster = ExternalKiKiMRCluster(config_path=get_slice_directory())
+        cls.kikimr_cluster = ExternalKiKiMRCluster(config_path=get_slice_directory(), ssh_username=get_ssh_username())
         cls._stop_nemesis()
         cls.kikimr_cluster.start()
 
@@ -165,7 +169,7 @@ class TestCheckLivenessAndSafety(object):
         slice_name = get_slice_name()
         logger.info('slice = {}'.format(slice_name))
         assert slice_name is not None
-        kikimr_cluster = ExternalKiKiMRCluster(config_path=get_slice_directory())
+        kikimr_cluster = ExternalKiKiMRCluster(config_path=get_slice_directory(), ssh_username=get_ssh_username())
         composite_assert = CompositeAssert()
         composite_assert.assert_that(
             safety_warden_factory(kikimr_cluster).list_of_safety_violations(),

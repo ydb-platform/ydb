@@ -22,12 +22,12 @@ class YdbdSlice(KiKiMRClusterInterface):
         with open(config_path) as f:
             self.__yaml_config = yaml.safe_load(f.read())
         self.__hosts = [host['name'] for host in self.__yaml_config.get('hosts')]
-        ssh_user = "yc-user"
+        self.__ssh_user = "yc-user"
         walle_provider = walle.NopHostsInformationProvider()
         components = {'kikimr': ['bin', 'cfg'], 'dynamic_slots': ['all']}
         self.cluster_details = ydbd_slice.safe_load_cluster_details(config_path, walle_provider=walle_provider)
         self.hosts_names = self.cluster_details.hosts_names
-        nodes = ydbd_slice.nodes.Nodes(self.hosts_names, dry_run=False, ssh_user=ssh_user)
+        nodes = ydbd_slice.nodes.Nodes(self.hosts_names, dry_run=False, ssh_user=self.__ssh_user)
 
         configurator = ydbd_slice.cluster_description.Configurator(
             self.cluster_details,
@@ -109,6 +109,7 @@ class YdbdSlice(KiKiMRClusterInterface):
             node_id: KikimrExternalNode(
                 node_id=node_id,
                 host=host,
+                ssh_username=self.__ssh_user,
                 port=DEFAULT_GRPC_PORT,
                 mon_port=DEFAULT_MON_PORT,
                 ic_port=DEFAULT_INTERCONNECT_PORT,

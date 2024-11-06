@@ -196,13 +196,13 @@ class TestCheckLivenessAndSafety(object):
         )
         composite_assert = CompositeAssert()
         composite_assert.assert_that(
-            safety_warden_factory(kikimr_cluster).list_of_safety_violations(),
+            safety_warden_factory(kikimr_cluster, get_ssh_username()).list_of_safety_violations(),
             is_empty(),
             "No safety violations by Safety Warden"
         )
 
         composite_assert.assert_that(
-            liveness_warden_factory(kikimr_cluster).list_of_liveness_violations,
+            liveness_warden_factory(kikimr_cluster, get_ssh_username()).list_of_liveness_violations,
             is_empty(),
             "No liveness violations by liveness warden",
         )

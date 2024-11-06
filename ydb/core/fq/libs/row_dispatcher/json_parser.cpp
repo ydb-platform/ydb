@@ -245,8 +245,13 @@ private:
     }
 
     static void LockObject(NYql::NUdf::TUnboxedValue& value) {
+        // All UnboxedValue's with type Boxed or String should be locked
+        // because after parsing they will be used under another MKQL allocator in purecalc filters
+
         const i32 numberRefs = value.LockRef();
-        Y_ENSURE(numberRefs == -1 || numberRefs == 1);
+
+        // -1 - value is embbeded oe empty, otherwise value should have exactly one ref
+        Y_ENSURE(numberRefs == -1 || numberRefs == 1);  
     }
 
     static TString TruncateString(std::string_view rawString, size_t maxSize = 1_KB) {

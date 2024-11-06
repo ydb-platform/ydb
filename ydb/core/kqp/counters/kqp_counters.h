@@ -412,11 +412,24 @@ public:
     // Sink write counters
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsShardResolve;
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ForwardActorsCount;
+
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorImmediateWrites;
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorImmediateWritesRetries;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorPrepareWrites;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorFlushes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorImmediateCommits;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorDistributedCommits;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorRollbacks;
+
     NMonitoring::THistogramPtr WriteActorWritesSizeHistogram;
     NMonitoring::THistogramPtr WriteActorWritesOperationsHistogram;
     NMonitoring::THistogramPtr WriteActorWritesLatencyHistogram;
+
+    NMonitoring::THistogramPtr ForwardActorWritesSizeHistogram;
+    NMonitoring::THistogramPtr ForwardActorWritesLatencyHistogram;
 
     // Scheduler signals
     ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerThrottled;

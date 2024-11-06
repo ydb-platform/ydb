@@ -817,14 +817,29 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     /* sink writes */
     WriteActorsShardResolve = KqpGroup->GetCounter("SinkWrites/WriteActorShardResolve", true);
     WriteActorsCount = KqpGroup->GetCounter("SinkWrites/WriteActorsCount", false);
+    BufferActorsCount = KqpGroup->GetCounter("SinkWrites/BufferActorsCount", false);
+    ForwardActorsCount = KqpGroup->GetCounter("SinkWrites/ForwardActorsCount", false);
+
     WriteActorImmediateWrites = KqpGroup->GetCounter("SinkWrites/WriteActorImmediateWrites", true);
     WriteActorImmediateWritesRetries = KqpGroup->GetCounter("SinkWrites/WriteActorImmediateWritesRetries", true);
+    WriteActorPrepareWrites = KqpGroup->GetCounter("SinkWrites/WriteActorPrepareWrites", true);
+
+    BufferActorFlushes = KqpGroup->GetCounter("SinkWrites/BufferActorFlushes", true);
+    BufferActorImmediateCommits = KqpGroup->GetCounter("SinkWrites/BufferActorImmediateCommits", true);
+    BufferActorDistributedCommits = KqpGroup->GetCounter("SinkWrites/BufferActorDistributedCommits", true);
+    BufferActorRollbacks = KqpGroup->GetCounter("SinkWrites/BufferActorRollbacks", true);
+
     WriteActorWritesSizeHistogram =
         KqpGroup->GetHistogram("SinkWrites/WriteActorWritesSize", NMonitoring::ExponentialHistogram(28, 2, 1));
     WriteActorWritesOperationsHistogram =
         KqpGroup->GetHistogram("SinkWrites/WriteActorWritesOperations", NMonitoring::ExponentialHistogram(20, 2, 1));
     WriteActorWritesLatencyHistogram =
         KqpGroup->GetHistogram("SinkWrites/WriteActorWritesLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    
+    ForwardActorWritesSizeHistogram =
+        KqpGroup->GetHistogram("SinkWrites/ForwardActorWritesSize", NMonitoring::ExponentialHistogram(28, 2, 1));
+    ForwardActorWritesLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/ForwardActorWritesLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     /* sequencers */
 

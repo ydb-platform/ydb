@@ -46,6 +46,7 @@ namespace NYdb {
 
         private:
             TParsedTokenList Tokenize(const TString& queryUtf8);
+            ILexer::TPtr& SuitableLexer(const TString& queryUtf8);
             YQLHighlight::Color ColorOf(const TParsedToken& token, size_t index);
             bool IsKeyword(const TParsedToken& token) const;
             bool IsOperation(const TParsedToken& token) const;
@@ -62,7 +63,9 @@ namespace NYdb {
             std::regex BuiltinFunctionRegex;
             std::regex TypeRegex;
 
-            ILexer::TPtr Lexer;
+            ILexer::TPtr CppLexer;
+            ILexer::TPtr ANSILexer;
+
             TParsedTokenList Tokens;
         };
 

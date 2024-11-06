@@ -251,4 +251,65 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
             "FROM test\n",
             "kkkkkk o  kkkk vvvv ");
     }
+
+    Y_UNIT_TEST(ANSI) {
+        YQLHighlight highlight(Coloring);
+
+        Check(
+            highlight,
+            "--!ansi_lexer\n"
+            "SELECT * FROM T; /* this is a comment /* this is a nested comment */ */",
+            "cccccccccccccc"
+            "kkkkkk o kkkk vo cccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+        Check(
+            highlight,
+            "--!ansi_lexer\n"
+            "SELECT 1 as \"column with \"\" double quote\";",
+            "cccccccccccccc"
+            "kkkkkk n kk ssssssssssssssssssssssssssssso");
+        Check(
+            highlight,
+            "--!ansi_lexer\n"
+            "SELECT 'string with '' quote';",
+            "cccccccccccccc"
+            "kkkkkk sssssssssssssssssssssso");
+
+        Check(
+            highlight,
+            " \t\n --!ansi_lexer \n"
+            "/* /* */ */",
+            "    ccccccccccccccc"
+            "ccccccccccc");
+
+        Check(
+            highlight,
+            (
+                "\n"
+                "\t --!ansi_lexer \n"
+                "-- Some comment\n"
+                "pragma SimpleColumns;\n"
+                "select 1, '''' as empty;"),
+            (
+                " "
+                "  ccccccccccccccc"
+                "cccccccccccccccc"
+                "kkkkkk vvvvvvvvvvvvvo "
+                "kkkkkk no ssss kk kkkkko"));
+        Check(
+            highlight,
+            (
+                "$str = '\n"
+                "--!ansi_lexer\n"
+                "--!syntax_v1\n"
+                "';\n"
+                "\n"
+                "select 1, $str, \"\" as empty;"),
+            (
+                "ovvv o ss"
+                "ssssssssssssss"
+                "sssssssssssss"
+                "so "
+                " "
+                "kkkkkk no ovvvo ss kk kkkkko"));
+    }
 }

@@ -566,7 +566,7 @@ protected:
         ui64 currentChangeTime = ctx.Now().MilliSeconds();
         ui64 previousBytesWritten = nodeStateInfo.GetBytesWritten();
         ui64 currentBytesWritten = ev->Get()->Record.GetBytesWritten();
-        if (previousChangeTime && previousBytesWritten < currentBytesWritten) {
+        if (previousChangeTime && previousBytesWritten < currentBytesWritten && previousChangeTime < currentChangeTime) {
             nodeStateInfo.SetWriteThroughput((currentBytesWritten - previousBytesWritten) * 1000 / (currentChangeTime - previousChangeTime));
         } else {
             nodeStateInfo.ClearWriteThroughput();

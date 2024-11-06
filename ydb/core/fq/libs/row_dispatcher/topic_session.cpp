@@ -161,6 +161,7 @@ private:
     TParserSchema ParserSchema;
     THashMap<TString, ui64> FieldsIndexes;
     NYql::IPqGateway::TPtr PqGateway;
+    TMaybe<TString> ConsumerName;
 
 public:
     explicit TTopicSession(
@@ -218,6 +219,7 @@ private:
     TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> RebuildJson(const TClientsInfo& info, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues);
     void UpdateParserSchema(const TParserInputType& inputType);
     void UpdateFieldsIds(TClientsInfo& clientInfo);
+    bool CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
 
 private:
 
@@ -662,14 +664,12 @@ bool HasJsonColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) {
 }
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
-    auto it = Clients.find(ev->Sender);
-    if (it != Clients.end()) {
-        FatalError("Internal error: sender " + ev->Sender.ToString(), nullptr, false);
-        return;
-    }
-
     LOG_ROW_DISPATCHER_INFO("New client: read actor id " << ev->Sender.ToString() << ", predicate: " 
         << ev->Get()->Record.GetSource().GetPredicate() << ", offset: " << ev->Get()->Record.GetOffset());
+
+    if (!CheckNewClient(ev)) {
+        return;
+    }
 
     auto columns = GetVector(ev->Get()->Record.GetSource().GetColumns());
     auto types = GetVector(ev->Get()->Record.GetSource().GetColumnTypes());
@@ -718,6 +718,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     } catch (...) {
         FatalError("Adding new client failed, " + CurrentExceptionMessage(), nullptr, true);
     }
+    ConsumerName = ev->Get()->Record.GetSource().GetConsumerName();
     UpdateParser();
     SendStatistic();
     if (!ReadSession) { 
@@ -892,6 +893,23 @@ void TTopicSession::SendStatistic() {
 void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
     Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
     SendStatistic();
+}
+
+bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
+    auto it = Clients.find(ev->Sender);
+    if (it != Clients.end()) {
+        LOG_ROW_DISPATCHER_ERROR("Such a client already exists");
+        SendSessionError(ev->Sender, "Internal error: such a client already exists");
+        return false;
+    }
+    if (!Config.GetWithoutConsumer()
+        && ConsumerName 
+        && ConsumerName != ev->Get()->Record.GetSource().GetConsumerName()) {
+        LOG_ROW_DISPATCHER_INFO("Different consumer, expected " <<  ConsumerName << ", actual " << ev->Get()->Record.GetSource().GetConsumerName() << ", send error");
+        SendSessionError(ev->Sender, TStringBuilder() << "Use the same consumer in all queries via RD (current consumer " << ConsumerName << ")");
+        return false;
+    }
+    return true;
 }
 
 } // namespace

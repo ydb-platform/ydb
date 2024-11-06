@@ -37,6 +37,10 @@ private:
     void FullValidation() const;
 
 public:
+    TPortionDataAccessor SwitchPortionInfo(TPortionInfo&& newPortion) const {
+        return TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(newPortion)));
+    }
+
     template <class TAggregator, class TChunkInfo>
     static void AggregateIndexChunksData(
         const TAggregator& aggr, const std::vector<TChunkInfo>& chunks, const std::set<ui32>* columnIds, const bool validation) {

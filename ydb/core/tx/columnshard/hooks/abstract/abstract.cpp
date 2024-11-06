@@ -23,4 +23,9 @@ ui64 ICSController::GetGuaranteeIndexationStartBytesLimit() const {
     const ui64 defaultValue = NColumnShard::TSettings::GuaranteeIndexationStartBytesLimit;
     return DoGetGuaranteeIndexationStartBytesLimit(defaultValue);
 }
+
+bool ICSController::CheckPortionForEvict(const std::shared_ptr<NOlap::TPortionInfo>& portion) const {
+    return portion->HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized) && !portion->HasInsertWriteId();
+}
+
 }

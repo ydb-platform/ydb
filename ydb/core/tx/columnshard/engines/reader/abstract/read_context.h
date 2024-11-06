@@ -4,6 +4,7 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
+#include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 
@@ -42,6 +43,7 @@ public:
 class TReadContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
+    YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
     const NColumnShard::TConcreteScanCounters Counters;
     TReadMetadataBase::TConstPtr ReadMetadata;
     NResourceBroker::NSubscribe::TTaskContext ResourcesTaskContext;
@@ -99,10 +101,13 @@ public:
         return ResourcesTaskContext;
     }
 
-    TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager, const NColumnShard::TConcreteScanCounters& counters,
-        const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId,
-        const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId)
+    TReadContext(const std::shared_ptr<IStoragesManager>& storagesManager,
+        const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+        const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId,
+        const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy,
+        const ui64 scanId)
         : StoragesManager(storagesManager)
+        , DataAccessorsManager(dataAccessorsManager)
         , Counters(counters)
         , ReadMetadata(readMetadata)
         , ResourcesTaskContext("CS::SCAN_READ", counters.ResourcesSubscriberCounters)

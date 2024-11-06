@@ -143,7 +143,8 @@ void TWriteOperation::AbortOnComplete(TColumnShard& owner) const {
     Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
     if (WritePortions) {
         for (auto&& i : InsertWriteIds) {
-            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).AbortPortionOnComplete(i);
+            owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).AbortPortionOnComplete(
+                i, owner.MutableIndexAs<NOlap::TColumnEngineForLogs>());
         }
     }
 }

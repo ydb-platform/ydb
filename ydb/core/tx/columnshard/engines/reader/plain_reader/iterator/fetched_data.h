@@ -23,9 +23,33 @@ protected:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
     YDB_READONLY(bool, UseFilter, false);
 
+    std::optional<TPortionDataAccessor> PortionAccessor;
+    bool DataAdded = false;
+
 public:
     TFetchedData(const bool useFilter)
         : UseFilter(useFilter) {
+    }
+
+    void SetUseFilter(const bool value) {
+        if (UseFilter == value) {
+            return;
+        }
+        AFL_VERIFY(!DataAdded);
+    }
+
+    bool HasPortionAccessor() const {
+        return !!PortionAccessor;
+    }
+
+    void SetPortionAccessor(TPortionDataAccessor&& accessor) {
+        AFL_VERIFY(!PortionAccessor);
+        PortionAccessor = std::move(accessor);
+    }
+
+    const TPortionDataAccessor& GetPortionAccessor() const {
+        AFL_VERIFY(!!PortionAccessor);
+        return *PortionAccessor;
     }
 
     ui32 GetFilteredCount(const ui32 recordsCount, const ui32 defLimit) const {
@@ -76,6 +100,7 @@ public:
     }
 
     void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter) {
+        DataAdded = true;
         if (!filter) {
             return;
         }
@@ -120,6 +145,7 @@ public:
     }
 
     void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& table) {
+        DataAdded = true;
         AFL_VERIFY(table);
         if (UseFilter) {
             AddBatch(table->BuildTableVerified());
@@ -134,6 +160,7 @@ public:
     }
 
     void AddBatch(const std::shared_ptr<arrow::Table>& table) {
+        DataAdded = true;
         auto tableLocal = table;
         if (Filter && UseFilter) {
             AFL_VERIFY(Filter->Apply(tableLocal));

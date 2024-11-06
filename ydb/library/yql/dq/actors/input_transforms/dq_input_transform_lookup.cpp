@@ -298,7 +298,7 @@ private: //IDqComputeActorAsyncInput
         auto component = taskCounters->GetSubgroup("component", "Lookup");
         LruHits = component->GetCounter("Hits");
         LruMiss = component->GetCounter("Miss");
-        LruSize = component->GetCounter("LruSize");
+        LruSize = component->GetCounter("Size");
         CpuTimeUs = component->GetCounter("CpuUs");
         Batches = component->GetCounter("Batches");
     }

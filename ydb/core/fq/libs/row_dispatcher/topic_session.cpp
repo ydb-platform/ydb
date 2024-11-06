@@ -609,10 +609,14 @@ void TTopicSession::SendData(TClientsInfo& info) {
         LOG_ROW_DISPATCHER_TRACE("Buffer empty");
     }
 
+    if (!info.NextMessageOffset) {
+        LOG_ROW_DISPATCHER_ERROR("Try SendData() without  {NextMessageOffset, " << info.ReadActorId 
+            << " unread " << info.UnreadBytes << " DataArrivedSent " << info.DataArrivedSent);
+    }
+
     do {
         auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
         event->Record.SetPartitionId(PartitionId);
-        Y_ENSURE(info.NextMessageOffset);
         event->ReadActorId = info.ReadActorId;
 
         ui64 batchSize = 0;
@@ -633,12 +637,12 @@ void TTopicSession::SendData(TClientsInfo& info) {
             }
         }
         if (info.Buffer.empty()) {
-            event->Record.SetNextMessageOffset(*info.NextMessageOffset);
+            event->Record.SetNextMessageOffset(info.NextMessageOffset.GetOrElse(0));
         }
         LOG_ROW_DISPATCHER_TRACE("SendData to " << info.ReadActorId << ", batch size " << event->Record.MessagesSize());
         Send(RowDispatcherActorId, event.release());
     } while(!info.Buffer.empty());
-    info.LastSendedNextMessageOffset = *info.NextMessageOffset;
+    info.LastSendedNextMessageOffset = info.NextMessageOffset.GetOrElse(0);
 }
 
 void TTopicSession::UpdateFieldsIds(TClientsInfo& info) {

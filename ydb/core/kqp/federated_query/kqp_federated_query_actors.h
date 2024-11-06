@@ -12,9 +12,9 @@
 
 namespace NKikimr::NKqp {
 
-IActor* CreateDescribeSecretsActor(const std::optional<NACLib::TUserToken>& userToken, const std::vector<NMetadata::NSecret::TSecretId>& secretIdsOrNames, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise);
+IActor* CreateDescribeSecretsActor(const std::optional<NACLib::TUserToken>& userToken, const std::vector<NMetadata::NSecret::TSecretIdOrValue>& secretIdsOrNames, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise);
 
-void RegisterDescribeSecretsActor(const TActorId& replyActorId, const std::optional<NACLib::TUserToken>& userToken, const std::vector<NMetadata::NSecret::TSecretId>& secretIds, TActorSystem* actorSystem);
+void RegisterDescribeSecretsActor(const TActorId& replyActorId, const std::optional<NACLib::TUserToken>& userToken, const std::vector<NMetadata::NSecret::TSecretIdOrValue>& secretIdsOrNames, TActorSystem* actorSystem);
 
 NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDataSourceSecrets(const NKikimrSchemeOp::TAuth& authDescription, const std::optional<NACLib::TUserToken>& userToken, TActorSystem* actorSystem);
 

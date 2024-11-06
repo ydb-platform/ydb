@@ -101,9 +101,9 @@ IActor* CreateDescribeSecretsActor(const std::optional<NACLib::TUserToken>& user
 }
 
 void RegisterDescribeSecretsActor(const NActors::TActorId& replyActorId, const std::optional<NACLib::TUserToken>& userToken,
-    const std::vector<NMetadata::NSecret::TSecretId>& secretIds, NActors::TActorSystem* actorSystem) {
+    const std::vector<NMetadata::NSecret::TSecretIdOrValue>& secretIdsOrNames, NActors::TActorSystem* actorSystem) {
     auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-    actorSystem->Register(CreateDescribeSecretsActor(userToken, secretIds, promise));
+    actorSystem->Register(CreateDescribeSecretsActor(userToken, secretIdsOrNames, promise));
 
     promise.GetFuture().Subscribe([actorSystem, replyActorId](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& result){
         actorSystem->Send(replyActorId, new TEvDescribeSecretsResponse(result.GetValue()));

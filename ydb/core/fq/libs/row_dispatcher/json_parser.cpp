@@ -140,7 +140,7 @@ private:
 
     static TParser GetJsonValueParser(NYql::NUdf::EDataSlot dataSlot, bool optional) {
         if (dataSlot == NYql::NUdf::EDataSlot::Json) {
-            return GetJsonValueExtracter();
+            return GetJsonValueExtractor();
         }
 
         const auto& typeInfo = NYql::NUdf::GetDataTypeInfo(dataSlot);
@@ -225,7 +225,7 @@ private:
         };
     }
 
-    static TParser GetJsonValueExtracter() {
+    static TParser GetJsonValueExtractor() {
         return [](simdjson::fallback::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
             const auto rawJson = jsonValue.raw_json().value();
             if (Y_UNLIKELY(!NYql::NDom::IsValidJson(rawJson))) {

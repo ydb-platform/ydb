@@ -128,11 +128,6 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
                     }
                 }
             }
-
-            if (!settings.ExpireAfter) {
-                error = "TTL must contain expiration duration";
-                return false;
-            }
         } else if (name == "columnUnit") {
             YQL_ENSURE(field.Value().Maybe<TCoAtom>());
             auto value = field.Value().Cast<TCoAtom>().StringValue();

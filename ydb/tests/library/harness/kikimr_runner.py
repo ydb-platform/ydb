@@ -632,7 +632,7 @@ mon={mon}""".format(
             return self.ssh_command("sudo service kikimr stop")
         return self.ssh_command(
             [
-                "sudo", "systemctl", "start", "kikimr-multi@{}".format(self.__slot_id),
+                "sudo", "systemctl", "stop", "kikimr-multi@{}".format(self.__slot_id),
             ]
         )
 

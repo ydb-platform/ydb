@@ -653,6 +653,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                     SetKeepFlagsOnInitialAllocation(ctx);
                 }
             };
+
             SendToBSProxy(ctx, GroupId, ev.release(), Self.QueryDispatcher.ObtainCookie(std::move(callback)));
         }
 
@@ -770,7 +771,6 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                     TABLED() { str << #NAME; } \
                     TABLED() { str << NAME; } \
                 } \
-                str << Endl; \
             }
 #define DUMP_PARAM(NAME) DUMP_PARAM_IMPL(NAME, false)
 #define DUMP_PARAM_FINAL(NAME) DUMP_PARAM_IMPL(NAME, true)
@@ -1180,6 +1180,7 @@ public:
         }
 
         std::unordered_map<TString, ui64> tabletIds;
+        ui32 maxBlobSize = 0U;
         for (const auto& profile : cmd.GetTablets()) {
             if (!profile.TabletsSize()) {
                 ythrow TLoadActorException() << "TPerTabletProfile.Tablets must have at least one item";
@@ -1220,7 +1221,7 @@ public:
                 .MaxTotalBytes = profile.GetMaxTotalBytesWritten(),
             };
 
-            BlobData = FastGenDataForLZ4<TSharedData>(writeSettings.SizeGen->GetMax());
+            maxBlobSize = std::max(maxBlobSize, writeSettings.SizeGen->GetMax());
 
             bool enableReads = profile.ReadIntervalsSize() || profile.HasReadHardRateDispatcher();
             NKikimrBlobStorage::EGetHandleClass getHandleClass = NKikimrBlobStorage::EGetHandleClass::FastRead;
@@ -1311,6 +1312,7 @@ public:
                 WorkersInInitialState++;
             }
         }
+        BlobData = FastGenDataForLZ4<TSharedData>(maxBlobSize);
     }
 
     void StartWorkers(const TActorContext& ctx) {
@@ -1506,6 +1508,8 @@ public:
     }
 
     TSharedData GenerateBuffer(const TLogoBlobID& id) const {
+        if (id.BlobSize() > BlobData.size())
+            return FastGenDataForLZ4<TSharedData>(id.BlobSize());
         Y_ABORT_UNLESS(id.BlobSize() <= BlobData.size());
         TSharedData data(BlobData);
         data.TrimBack(id.BlobSize());

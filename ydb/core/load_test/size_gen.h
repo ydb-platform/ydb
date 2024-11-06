@@ -33,7 +33,8 @@ namespace NKikimr {
         {}
 
         ui32 GetMax() const {
-            Y_ABORT_UNLESS(!Items.empty());
+            if (Items.empty())
+                return 0U;
             auto it = Items.cbegin();
             auto max = it->second.Max;
             while (Items.cend() != ++it)

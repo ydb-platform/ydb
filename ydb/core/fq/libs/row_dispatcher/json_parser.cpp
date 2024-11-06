@@ -250,7 +250,7 @@ private:
 
         const i32 numberRefs = value.LockRef();
 
-        // -1 - value is embbeded oe empty, otherwise value should have exactly one ref
+        // -1 - value is embbeded or empty, otherwise value should have exactly one ref
         Y_ENSURE(numberRefs == -1 || numberRefs == 1);  
     }
 

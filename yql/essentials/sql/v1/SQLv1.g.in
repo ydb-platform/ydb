@@ -791,9 +791,12 @@ table_setting_value:
     | STRING_VALUE
     | integer
     | split_boundaries
-    | expr ON an_id (AS (SECONDS | MILLISECONDS | MICROSECONDS | NANOSECONDS))?
+    | (expr | ttl_tier_list) ON an_id (AS (SECONDS | MILLISECONDS | MICROSECONDS | NANOSECONDS))?
     | bool_value
 ;
+
+ttl_tier_entry: id_expr LPAREN STRING_VALUE RPAREN (TO an_id | DELETE);
+ttl_tier_list: LPAREN ttl_tier_entry (COMMA ttl_tier_entry)* RPAREN;
 
 family_entry: FAMILY an_id family_settings;
 family_settings: LPAREN (family_settings_entry (COMMA family_settings_entry)*)? RPAREN;

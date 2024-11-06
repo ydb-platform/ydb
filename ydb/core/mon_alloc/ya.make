@@ -1,5 +1,11 @@
 LIBRARY()
 
+IF (PROFILE_MEMORY_ALLOCATIONS)
+    CFLAGS(
+        -DPROFILE_MEMORY_ALLOCATIONS
+    )
+ENDIF()
+
 SRCS(
     memory_info.cpp
     monitor.cpp

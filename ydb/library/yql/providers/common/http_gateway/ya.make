@@ -1,5 +1,11 @@
 LIBRARY()
 
+IF (PROFILE_MEMORY_ALLOCATIONS)
+    CFLAGS(
+        -DPROFILE_MEMORY_ALLOCATIONS
+    )
+ENDIF()
+
 SRCS(
     yql_aws_signature.cpp
     yql_http_default_retry_policy.cpp

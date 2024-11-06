@@ -12,6 +12,7 @@ PEERDIR(
 )
 
 IF (PROFILE_MEMORY_ALLOCATIONS)
+    CFLAGS(-DPROFILE_MEMORY_ALLOCATIONS)
     PEERDIR(
         library/cpp/malloc/api
         library/cpp/lfalloc/dbg_info

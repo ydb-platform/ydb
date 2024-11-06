@@ -8,16 +8,16 @@ namespace NKikimr::NColumnShard {
 class TTablesManager;
 }
 
-namespace NKikimr::NOlap::NRestoreV1Chunks {
+namespace NKikimr::NOlap::NSyncMinSnapshotFromChunks {
 
 class TNormalizer: public TNormalizationController::INormalizerComponent {
 public:
     static TString GetClassNameStatic() {
-        return ::ToString(ENormalizerSequentialId::RestoreV1Chunks_V2);
+        return ::ToString(ENormalizerSequentialId::SyncMinSnapshotFromChunks);
     }
 
     virtual std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
-        return ENormalizerSequentialId::RestoreV1Chunks_V2;
+        return ENormalizerSequentialId::SyncMinSnapshotFromChunks;
     }
 
     virtual TString GetClassName() const override {

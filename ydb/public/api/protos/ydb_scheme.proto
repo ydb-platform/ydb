@@ -104,6 +104,9 @@ message DescribePathResponse {
 
 message DescribePathResult {
     Entry self = 1;
+
+    oneof type_specific_description {
+    }
 }
 
 message PermissionsAction {

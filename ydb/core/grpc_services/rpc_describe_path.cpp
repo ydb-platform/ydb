@@ -125,6 +125,12 @@ private:
                     for (const auto& child : pathDescription.GetChildren()) {
                         ConvertDirectoryEntry(child, result.add_children(), false);
                     }
+                } else {
+                    // fill type-specific description
+                    switch (pathDescription.GetSelf().GetPathType()) {
+                        default:
+                            break;
+                    }
                 }
                 return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
             }

@@ -5,6 +5,7 @@
 namespace Ydb {
     class VirtualTimestamp;
     namespace Scheme {
+        class DescribePathResult;
         class Entry;
         class ModifyPermissionsRequest;
         class Permissions;
@@ -12,6 +13,9 @@ namespace Ydb {
 }
 
 namespace NYdb {
+
+class TProtoAccessor;
+
 namespace NScheme {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -176,12 +180,19 @@ private:
 class TDescribePathResult : public TStatus {
 public:
     TDescribePathResult(TStatus&& status, const TSchemeEntry& entry);
+    TDescribePathResult(TStatus&& status, Ydb::Scheme::DescribePathResult&& proto);
+    ~TDescribePathResult();
+
     const TSchemeEntry& GetEntry() const;
 
     void Out(IOutputStream& out) const;
 
 private:
+    friend class NYdb::TProtoAccessor;
+
     TSchemeEntry Entry_;
+    // holds type-specific info
+    std::shared_ptr<Ydb::Scheme::DescribePathResult> Proto_;
 };
 
 class TListDirectoryResult : public TDescribePathResult {

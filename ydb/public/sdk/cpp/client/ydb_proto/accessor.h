@@ -7,6 +7,7 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_query_stats.pb.h>
+#include <ydb/public/api/protos/ydb_scheme.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
@@ -18,6 +19,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_import/import.h>
 #include <ydb/public/sdk/cpp/client/ydb_monitoring/monitoring.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
@@ -51,6 +53,7 @@ public:
     static const Ydb::Coordination::DescribeNodeResult& GetProto(const NYdb::NCoordination::TNodeDescription &describeNodeResult);
     static const Ydb::Replication::DescribeReplicationResult& GetProto(const NYdb::NReplication::TDescribeReplicationResult& desc);
     static const Ydb::View::DescribeViewResult& GetProto(const NYdb::NView::TDescribeViewResult& desc);
+    static const Ydb::Scheme::DescribePathResult& GetProto(const NYdb::NScheme::TDescribePathResult& description);
 
     static NTable::TQueryStats FromProto(const Ydb::TableStats::QueryStats& queryStats);
     static NTable::TTableDescription FromProto(const Ydb::Table::CreateTableRequest& request);

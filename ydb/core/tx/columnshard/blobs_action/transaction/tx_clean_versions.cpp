@@ -56,21 +56,15 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
         }
     }
 
-    auto getSchemaPresetInfoAndKeyIter = [&](const ui64 schemaVersion, NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
-        auto iter = Self->VersionCounters->GetVersionToKey().find(schemaVersion);
-        AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
-        const NOlap::TVersionCounters::TSchemaKey& pkey = *iter->second.cbegin();
+    auto getSchemaPresetInfo = [&](const NOlap::TVersionCounters::TSchemaKey& pkey, NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
         auto rowset = table.Key(pkey.GetId(), pkey.GetPlanStep(), pkey.GetTxId()).Select();
         AFL_VERIFY(rowset.IsReady() && !rowset.EndOfSet());
         Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
-        return iter;
     };
 
     auto updateDiff = [&](const auto& key, auto&& modifier) {
-        auto rowset = table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Select();
-        AFL_VERIFY(rowset.IsReady() && !rowset.EndOfSet());
         NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
-        Y_ABORT_UNLESS(info.ParseFromString(rowset.template GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+        getSchemaPresetInfo(key, info);
         modifier(info);
         TString serialized;
         Y_ABORT_UNLESS(info.SerializeToString(&serialized));
@@ -93,10 +87,14 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
         } else {
             if (prevNext.second != 0) {
                 NKikimrTxColumnShard::TSchemaPresetVersionInfo pinfo;
-                getSchemaPresetInfoAndKeyIter(prevNext.first, pinfo);
+                auto prevIter = Self->VersionCounters->GetVersionToKey().find(prevNext.first);
+                AFL_VERIFY(prevIter != Self->VersionCounters->GetVersionToKey().end());
+                getSchemaPresetInfo(*prevIter->second.cbegin(), pinfo);
 
                 NKikimrTxColumnShard::TSchemaPresetVersionInfo ninfo;
-                auto nextIter = getSchemaPresetInfoAndKeyIter(prevNext.second, ninfo);
+                auto nextIter = Self->VersionCounters->GetVersionToKey().find(prevNext.second);
+                AFL_VERIFY(nextIter != Self->VersionCounters->GetVersionToKey().end());
+                getSchemaPresetInfo(*nextIter->second.cbegin(), ninfo);
 
                 auto schemaDiff = NOlap::TSchemaDiffView::MakeSchemasDiff(pinfo.schema(), ninfo.schema());
 

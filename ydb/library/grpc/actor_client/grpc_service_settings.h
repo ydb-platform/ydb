@@ -1,7 +1,6 @@
 #pragma once
 #include <util/generic/string.h>
 #include <util/system/types.h>
-#include <unordered_map>
 
 namespace NGrpcActorClient {
 
@@ -13,7 +12,6 @@ struct TGrpcClientSettings {
     ui32 GrpcKeepAlivePingInterval = 5000;
     bool EnableSsl = false;
     ui64 RequestTimeoutMs = 10000; // 10 seconds
-    std::unordered_map<TString, TString> Headers;
 };
 
 } // namespace NGrpcActorClient

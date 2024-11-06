@@ -1493,21 +1493,20 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
-    Y_UNIT_TEST_TRIPLET(KeysOnlyLog, PqRunner, YdsRunner, TopicRunner) {
+    Y_UNIT_TEST_TRIPLET(KeysOnlyLongInteger, PqRunner, YdsRunner, TopicRunner) {
         TRunner::Read(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatLongInteger), {R"(
-        UPSERT INTO `/Root/Table` (key, value) VALUES
-        (1, 10),
-        (2, 20),
-        (3, 30);
-    )", R"(
-       DELETE FROM `/Root/Table` WHERE key = 1;
-    )"}, {
-        R"({"update":{},"key":["1"]})",
-        R"({"update":{},"key":["2"]})",
-        R"({"update":{},"key":["3"]})",
-        R"({"erase":{},"key":["1"]})",
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, {
+            R"({"update":{},"key":["1"]})",
+            R"({"update":{},"key":["2"]})",
+            R"({"update":{},"key":["3"]})",
+            R"({"erase":{},"key":["1"]})",
         });
-    "})
     }
 
     Y_UNIT_TEST_TRIPLET(UuidExchange, PqRunner, YdsRunner, TopicRunner) {

@@ -11,10 +11,10 @@ class TExternalDataSourceManager: public NMetadata::NModifications::IOperationsM
     NThreading::TFuture<TYqlConclusionStatus> DropExternalDataSource(const NYql::TDropObjectSettings& settings,
                                                                      TInternalModificationContext& context) const;
 
-    void PrepareCreateExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings,
+    TYqlConclusionStatus PrepareCreateExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings,
                                          TInternalModificationContext& context) const;
 
-    void PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings,
+    TYqlConclusionStatus PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings,
                                        TInternalModificationContext& context) const;
 
 protected:

@@ -22,7 +22,7 @@ TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& 
     return fValue ? *fValue : TString{};
 }
 
-bool ParseSecretId(const TString& in, NMetadata::NSecret::TSecretId& out, const std::optional<TString>& defaultOwner) {
+bool DeserializeSecretId(const TString& in, NMetadata::NSecret::TSecretId& out, const std::optional<TString>& defaultOwner) {
     auto secretIdOrName = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(in);
     if (!secretIdOrName) {
         return false;
@@ -84,21 +84,20 @@ TConclusionStatus FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDat
         auto& aws = *externaDataSourceDesc.MutableAuth()->MutableAws();
         {
             NMetadata::NSecret::TSecretId secretId;
-            if (!ParseSecretId(GetOrEmpty(settings, "aws_access_key_id_secret_name"), secretId, userId)) {
-                return TConclusionStatus::Fail("Cannot parse secret: aws_access_key_id_secret_name");
+            if (!DeserializeSecretId(GetOrEmpty(settings, "aws_access_key_id_secret_name"), secretId, userId)) {
+                return TConclusionStatus::Fail("Cannot parse secret at aws_access_key_id_secret_name");
             }
             aws.SetAwsAccessKeyIdSecretName(secretId.GetSecretId());
             aws.SetAwsAccessKeyIdSecretOwner(secretId.GetOwnerUserId());
         }
         {
             NMetadata::NSecret::TSecretId secretId;
-            if (!ParseSecretId(GetOrEmpty(settings, "aws_access_key_id_secret_name"), secretId, userId)) {
-                return TConclusionStatus::Fail("Cannot parse secret: aws_access_key_id_secret_name");
+            if (!DeserializeSecretId(GetOrEmpty(settings, "aws_secret_access_key_secret_name"), secretId, userId)) {
+                return TConclusionStatus::Fail("Cannot parse secret at aws_secret_access_key_secret_name");
             }
             aws.SetAwsSecretAccessKeySecretName(secretId.GetSecretId());
             aws.SetAwsSecretAccessKeySecretOwner(secretId.GetOwnerUserId());
         }
-        aws.SetAwsSecretAccessKeySecretName(GetOrEmpty(settings, "aws_secret_access_key_secret_name"));
         aws.SetAwsRegion(GetOrEmpty(settings, "aws_region"));
     } else if (authMethod == "TOKEN") {
         auto& token = *externaDataSourceDesc.MutableAuth()->MutableToken();
@@ -231,7 +230,9 @@ NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> TExternalD
     using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
     NKikimrSchemeOp::TModifyScheme schemeTx;
-    FillCreateExternalDataSourceCommand(schemeTx, settings, context);
+    if (auto status = FillCreateExternalDataSourceCommand(schemeTx, settings, context); status.IsFail()) {
+        return NThreading::MakeFuture(TExternalDataSourceManager::TYqlConclusionStatus::Fail(status.GetErrorMessage()));
+    }
 
     auto validationFuture = ValidateCreateExternalDatasource(schemeTx.GetCreateExternalDataSource(), context);
 
@@ -281,10 +282,14 @@ TExternalDataSourceManager::TYqlConclusionStatus TExternalDataSourceManager::DoP
             case EActivityType::Alter:
                 return TYqlConclusionStatus::Fail("Alter operation for EXTERNAL_DATA_SOURCE objects is not implemented");
             case EActivityType::Create:
-                PrepareCreateExternalDataSource(schemeOperation, settings, context);
+                if (auto status = PrepareCreateExternalDataSource(schemeOperation, settings, context); status.IsFail()) {
+                    return status;
+                }
                 break;
             case EActivityType::Drop:
-                PrepareDropExternalDataSource(schemeOperation, settings, context);
+                if (auto status = PrepareDropExternalDataSource(schemeOperation, settings, context); status.IsFail()) {
+                    return status;
+                }
                 break;
         }
         return TYqlConclusionStatus::Success();
@@ -293,14 +298,18 @@ TExternalDataSourceManager::TYqlConclusionStatus TExternalDataSourceManager::DoP
     }
 }
 
-void TExternalDataSourceManager::PrepareCreateExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings,
+TExternalDataSourceManager::TYqlConclusionStatus TExternalDataSourceManager::PrepareCreateExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TCreateObjectSettings& settings,
                                                                                                              TInternalModificationContext& context) const {
-    FillCreateExternalDataSourceCommand(*schemeOperation.MutableCreateExternalDataSource(), settings, context);
+    if (auto status = FillCreateExternalDataSourceCommand(*schemeOperation.MutableCreateExternalDataSource(), settings, context); status.IsFail()) {
+        return TYqlConclusionStatus::Fail(status.GetErrorMessage());
+    }
+    return TExternalDataSourceManager::TYqlConclusionStatus::Success();
 }
 
-void TExternalDataSourceManager::PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings,
+TExternalDataSourceManager::TYqlConclusionStatus TExternalDataSourceManager::PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings,
                                                                                                            TInternalModificationContext& context) const {
     FillDropExternalDataSourceCommand(*schemeOperation.MutableDropExternalDataSource(), settings, context);
+    return TYqlConclusionStatus::Success();
 }
 
 NThreading::TFuture<NMetadata::NModifications::IOperationsManager::TYqlConclusionStatus> TExternalDataSourceManager::ExecutePrepared(const NKqpProto::TKqpSchemeOperation& schemeOperation,

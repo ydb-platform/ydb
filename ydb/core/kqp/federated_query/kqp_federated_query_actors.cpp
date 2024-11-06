@@ -16,50 +16,55 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
         auto snapshot = ev->Get()->GetSnapshotAs<NMetadata::NSecret::TSnapshot>();
 
+        AFL_CRIT(NKikimrServices::TX_TIERING)("aboba", snapshot->SerializeToString()); // TODO: remove
+
         std::vector<TString> secretValues;
         secretValues.reserve(SecretIdsOrNames.size());
         for (const auto& secretIdOrName: SecretIdsOrNames) {
-            if (const auto& secretId = secretIdOrName.GetSecretId()) {
-                TString secretValue;
-                bool isFound = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(*secretId), secretValue);
-                if (isFound) {
-                    secretValues.push_back(secretValue);
-                    continue;
-                }
-            } else {
-                const auto& secretName = secretIdOrName.GetValue();
-                AFL_VERIFY(secretName);
+            auto secretId = GetSecretId(secretIdOrName, *snapshot);
 
-                auto secretIds = snapshot->GetSecretIds(UserToken, *secretName);
-                if (secretIds.size() > 1) {
-                    CompleteAndPassAway(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("several secrets with name '" + *secretName + "' were found") }));
-                    return;
-                }
-
-                TString secretValue;
-                bool isFound = !secretIds.empty() && snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretIds[0]), secretValue);
-                if (isFound) {
-                    secretValues.push_back(secretValue);
-                    continue;
-                }
+            if (!secretId.IsSuccess()) {
+                CompleteAndPassAway(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue(secretId.GetErrorMessage()) }));
+                return;
             }
 
-            if (!AskSent) {
-                AskSent = true;
-                Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(GetSecretsSnapshotParser()));
-            } else {
-                CompleteAndPassAway(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret with name '" + secretIdOrName.SerializeToString() + "' not found") }));
+            auto secretRef = NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretId.GetResult());
+            TString secretValue;
+            if (!snapshot->GetSecretValue(secretRef, secretValue)) {
+                CompleteAndPassAway(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("No such secret: " + secretId->SerializeToString()) }));
+                return;
             }
-            return;
+
+            if (!snapshot->CheckSecretAccess(secretRef, UserToken)) {
+                CompleteAndPassAway(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::UNAUTHORIZED, { NYql::TIssue("No access to secret: " + secretId->SerializeToString()) }));
+                return;
+            }
+
+            secretValues.emplace_back(secretValue);
         }
 
         CompleteAndPassAway(TEvDescribeSecretsResponse::TDescription(secretValues));
     }
 
+    TConclusion<NMetadata::NSecret::TSecretId> GetSecretId(const NMetadata::NSecret::TSecretIdOrValue& secretIdOrName, const NMetadata::NSecret::TSnapshot& secrets) {
+        if (const auto& secretId = secretIdOrName.GetSecretId()) {
+            return *secretId;
+        } else {
+            const auto& secretName = secretIdOrName.GetValue();
+            AFL_VERIFY(secretName);
+
+            auto secretIds = secrets.GetSecretIds(UserToken, *secretName);
+            if (secretIds.size() > 1) {
+                return TConclusionStatus::Fail("several secrets with name '" + *secretName + "' were found");
+            }
+
+            return secretIds[0];
+        }
+    }
+
     void CompleteAndPassAway(const TEvDescribeSecretsResponse::TDescription& response) {
         Promise.SetValue(response);
 
-        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
         PassAway();
     }
 
@@ -82,7 +87,7 @@ public:
             return;
         }
 
-        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
+        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(GetSecretsSnapshotParser()));
         Become(&TDescribeSecretsActor::StateFunc);
     }
 
@@ -90,7 +95,6 @@ private:
     std::optional<NACLib::TUserToken> UserToken;
     const std::vector<NMetadata::NSecret::TSecretIdOrValue> SecretIdsOrNames;
     NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Promise;
-    bool AskSent = false;
 };
 
 std::vector<NMetadata::NSecret::TSecretIdOrValue> MakeSecretIdsOrNames(const std::vector<TString> secretNames) {

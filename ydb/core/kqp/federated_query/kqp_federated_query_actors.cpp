@@ -56,6 +56,10 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
                 return TConclusionStatus::Fail("several secrets with name '" + *secretName + "' were found");
             }
 
+            if (secretIds.empty()) {
+                return TConclusionStatus::Fail("secret with name '" + *secretName + "' not found");
+            }
+
             return secretIds[0];
         }
     }

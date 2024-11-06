@@ -2274,7 +2274,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         appConfig.MutableFeatureFlags()->SetEnableExternalSourceSchemaInference(true);
         auto kikimr = NTestUtils::MakeKikimrRunner(appConfig);
 
-        auto tc = kikimr->GetTableClient();
+        auto tc = kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin"));
         auto session = tc.CreateSession().GetValueSync().GetSession();
         const TString query = fmt::format(R"(
             GRANT ALL ON `/Root` TO `test@builtin`;

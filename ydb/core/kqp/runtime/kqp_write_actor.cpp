@@ -391,7 +391,7 @@ public:
         entry.ShowPrivatePath = true;
         request->ResultSet.emplace_back(entry);
 
-        TableWriteActorStateSpan =  NWilson::TSpan(TWilsonKqp::TableWriteActorTableNavigate, TableWriteActorSpan.GetTraceId(),
+        TableWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::TableWriteActorTableNavigate, TableWriteActorSpan.GetTraceId(),
             "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, {}), 0, 0, TableWriteActorStateSpan.GetTraceId());
@@ -819,12 +819,17 @@ public:
         YQL_ENSURE(isPrepare || isImmediateCommit || serializationResult.TotalDataSize > 0);
 
         if (metadata->SendAttempts == 0) {
-            Counters->WriteActorImmediateWrites->Inc();
+            if (!isPrepare) {
+                Counters->WriteActorImmediateWrites->Inc();
+            } else {
+                Counters->WriteActorPrepareWrites->Inc();
+            }
             Counters->WriteActorWritesSizeHistogram->Collect(serializationResult.TotalDataSize);
             Counters->WriteActorWritesOperationsHistogram->Collect(metadata->OperationsCount);
 
             SendTime[shardId] = TInstant::Now();
         } else {
+            YQL_ENSURE(!isPrepare);
             Counters->WriteActorImmediateWritesRetries->Inc();
         }
 
@@ -1265,10 +1270,13 @@ public:
         , Alloc(std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__))
         , TypeEnv(*Alloc)
         , Counters(settings.Counters)
-        , BufferWriteActor(TWilsonKqp::DirectWriteActor, NWilson::TTraceId(settings.TraceId), "TKqpBufferWriteActor")
+        , BufferWriteActor(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "TKqpBufferWriteActor", NWilson::EFlags::AUTO_END)
+        , BufferWriteActorState(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
+            "BufferWriteActorState::Writing", NWilson::EFlags::AUTO_END)
     {
         State = EState::WRITING;
         Alloc->Release();
+        Counters->BufferActorsCount->Inc();
     }
 
     void Bootstrap() {
@@ -1440,6 +1448,10 @@ public:
     }
 
     void Flush() {
+        Counters->BufferActorFlushes->Inc();
+        BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
+            "BufferWriteActorState::Flushing", NWilson::EFlags::AUTO_END);
+
         CA_LOG_D("Start flush");
         YQL_ENSURE(State == EState::WRITING);
         State = EState::FLUSHING;
@@ -1450,6 +1462,9 @@ public:
     }
 
     void Prepare(const ui64 txId) {
+        BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
+            "BufferWriteActorState::Preparing", NWilson::EFlags::AUTO_END);
+
         CA_LOG_D("Start prepare for distributed commit");
         YQL_ENSURE(State == EState::WRITING);
         State = EState::PREPARING;
@@ -1466,6 +1481,10 @@ public:
     }
 
     void ImmediateCommit() {
+        Counters->BufferActorImmediateCommits->Inc();
+        BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
+            "BufferWriteActorState::Committing", NWilson::EFlags::AUTO_END);
+
         CA_LOG_D("Start immediate commit");
         YQL_ENSURE(State == EState::WRITING);
         State = EState::COMMITTING;
@@ -1480,6 +1499,10 @@ public:
     }
 
     void DistributedCommit() {
+        Counters->BufferActorDistributedCommits->Inc();
+        BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
+            "BufferWriteActorState::Committing", NWilson::EFlags::AUTO_END);
+
         CA_LOG_D("Start distributed commit with TxId=" << *TxId);
         YQL_ENSURE(State == EState::PREPARING);
         State = EState::COMMITTING;
@@ -1493,6 +1516,10 @@ public:
     }
 
     void Rollback() {
+        Counters->BufferActorRollbacks->Inc();
+        BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
+            "BufferWriteActorState::RollingBack", NWilson::EFlags::AUTO_END);
+
         CA_LOG_D("Start rollback");
         State = EState::ROLLINGBACK;
         SendToExternalShards(true);
@@ -1938,6 +1965,8 @@ public:
     }
 
     void OnFlushed() {
+        BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
+            "BufferWriteActorState::Writing", NWilson::EFlags::AUTO_END);
         CA_LOG_D("Flushed");
         State = EState::WRITING;
         Send(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
@@ -1950,6 +1979,7 @@ public:
     }
 
     void ReplyErrorAndDie(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
+        BufferWriteActorState.EndError(message);
         BufferWriteActor.EndError(message);
         CA_LOG_E(message << ". statusCode=" << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << ". subIssues=" << subIssues.ToString() << ". sessionActorId=" << SessionActorId << ". isRollback=" << (State == EState::ROLLINGBACK));
      
@@ -2004,6 +2034,7 @@ private:
 
     TIntrusivePtr<TKqpCounters> Counters;
     NWilson::TSpan BufferWriteActor;
+    NWilson::TSpan BufferWriteActorState;
 };
 
 class TKqpForwardWriteActor : public TActorBootstrapped<TKqpForwardWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput {
@@ -2031,6 +2062,7 @@ public:
         , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "TKqpForwardWriteActor")
     {
         EgressStats.Level = args.StatsLevel;
+        Counters->ForwardActorsCount->Inc();
     }
 
     void Bootstrap() {
@@ -2059,6 +2091,9 @@ private:
         EgressStats.Chunks++;
         EgressStats.Splits++;
         EgressStats.Resume();
+
+        Counters->ForwardActorWritesSizeHistogram->Collect(DataSize);
+        Counters->ForwardActorWritesLatencyHistogram->Collect((TInstant::Now() - SendTime).MilliSeconds());
 
         WriteToken = result->Get()->Token;
         DataSize = 0;
@@ -2106,6 +2141,8 @@ private:
                 .Priority = Settings.GetPriority(),
             };
         }
+
+        SendTime = TInstant::Now();
 
         CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
         AFL_ENSURE(Send(BufferActorId, ev.release()));
@@ -2191,6 +2228,8 @@ private:
 
     const ui64 TxId;
     const TTableId TableId;
+
+    TInstant SendTime;
 
     TWriteToken WriteToken;
     NWilson::TSpan ForwardWriteActorSpan;

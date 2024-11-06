@@ -6,7 +6,6 @@ TEST_SRCS(
     test_yandex_cloud_queue_counters.py
 )
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(SQS_CLIENT_BINARY="ydb/core/ymq/client/bin/sqs")
 
 IF (SANITIZER_TYPE == "thread")

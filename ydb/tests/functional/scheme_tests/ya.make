@@ -1,5 +1,4 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TEST_SRCS(
     tablet_scheme_tests.py
 )

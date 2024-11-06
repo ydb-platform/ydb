@@ -4,7 +4,6 @@ TEST_SRCS(
     test_ttl.py
 )
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TIMEOUT(600)
 SIZE(MEDIUM)
 

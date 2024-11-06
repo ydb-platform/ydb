@@ -1,6 +1,5 @@
 PY3TEST()
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 PY_SRCS (
     conftest.py
     common.py

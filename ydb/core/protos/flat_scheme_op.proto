@@ -2072,6 +2072,8 @@ message TAws {
     optional string AwsAccessKeyIdSecretName = 1;
     optional string AwsSecretAccessKeySecretName = 2;
     optional string AwsRegion = 3;
+    optional string AwsAccessKeyIdSecretOwner = 4;
+    optional string AwsSecretAccessKeySecretOwner = 5;
 }
 
 message TBasic {

@@ -1,13 +1,15 @@
 
 #include "manager.h"
 
-#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
-#include <ydb/core/base/path.h>
-#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+
+#include <ydb/services/metadata/secret/secret.h>
 
 #include <util/string/type.h>
 
@@ -18,6 +20,24 @@ namespace {
 TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& key) {
     auto fValue = container.GetFeaturesExtractor().Extract(key);
     return fValue ? *fValue : TString{};
+}
+
+bool ParseSecretId(const TString& in, NMetadata::NSecret::TSecretId& out, const std::optional<TString>& defaultOwner) {
+    auto secretIdOrName = NMetadata::NSecret::TSecretIdOrValue::DeserializeFromString(in);
+    if (!secretIdOrName) {
+        return false;
+    }
+    if (const auto parsedSecretId = secretIdOrName->GetSecretId()) {
+        out = *parsedSecretId;
+    } else {
+        auto secretName = secretIdOrName->GetValue();
+        AFL_VERIFY(secretName);
+        if (!defaultOwner) {
+            return false;
+        }
+        out = NMetadata::NSecret::TSecretId(*defaultOwner, *secretName);
+    }
+    return true;
 }
 
 void CheckFeatureFlag(TExternalDataSourceManager::TInternalModificationContext& context) {
@@ -31,15 +51,18 @@ void CheckFeatureFlag(TExternalDataSourceManager::TInternalModificationContext& 
     }
 }
 
-void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescription& externaDataSourceDesc,
-                                      const TString& name,
-                                      const NYql::TCreateObjectSettings& settings) {
+TConclusionStatus FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescription& externaDataSourceDesc, const TString& name,
+    const NYql::TCreateObjectSettings& settings, const TExternalDataSourceManager::TInternalModificationContext& context) {
     externaDataSourceDesc.SetName(name);
     externaDataSourceDesc.SetSourceType(GetOrEmpty(settings, "source_type"));
     externaDataSourceDesc.SetLocation(GetOrEmpty(settings, "location"));
     externaDataSourceDesc.SetInstallation(GetOrEmpty(settings, "installation"));
     externaDataSourceDesc.SetReplaceIfExists(settings.GetReplaceIfExists());
 
+    std::optional<TString> userId;
+    if (context.GetExternalData().GetUserToken()) {
+        context.GetExternalData().GetUserToken()->GetUserSID();
+    }
     TString authMethod = GetOrEmpty(settings, "auth_method");
     if (authMethod == "NONE") {
         externaDataSourceDesc.MutableAuth()->MutableNone();
@@ -59,7 +82,22 @@ void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescri
         mdbBasic.SetPasswordSecretName(GetOrEmpty(settings, "password_secret_name"));
     } else if (authMethod == "AWS") {
         auto& aws = *externaDataSourceDesc.MutableAuth()->MutableAws();
-        aws.SetAwsAccessKeyIdSecretName(GetOrEmpty(settings, "aws_access_key_id_secret_name"));
+        {
+            NMetadata::NSecret::TSecretId secretId;
+            if (!ParseSecretId(GetOrEmpty(settings, "aws_access_key_id_secret_name"), secretId, userId)) {
+                return TConclusionStatus::Fail("Cannot parse secret: aws_access_key_id_secret_name");
+            }
+            aws.SetAwsAccessKeyIdSecretName(secretId.GetSecretId());
+            aws.SetAwsAccessKeyIdSecretOwner(secretId.GetOwnerUserId());
+        }
+        {
+            NMetadata::NSecret::TSecretId secretId;
+            if (!ParseSecretId(GetOrEmpty(settings, "aws_access_key_id_secret_name"), secretId, userId)) {
+                return TConclusionStatus::Fail("Cannot parse secret: aws_access_key_id_secret_name");
+            }
+            aws.SetAwsSecretAccessKeySecretName(secretId.GetSecretId());
+            aws.SetAwsSecretAccessKeySecretOwner(secretId.GetOwnerUserId());
+        }
         aws.SetAwsSecretAccessKeySecretName(GetOrEmpty(settings, "aws_secret_access_key_secret_name"));
         aws.SetAwsRegion(GetOrEmpty(settings, "aws_region"));
     } else if (authMethod == "TOKEN") {
@@ -88,10 +126,12 @@ void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescri
     if (!settings.GetFeaturesExtractor().IsFinished()) {
         ythrow yexception() << "Unknown property: " << settings.GetFeaturesExtractor().GetRemainedParamsString();
     }
+
+    return TConclusionStatus::Success();
 }
 
-void FillCreateExternalDataSourceCommand(NKikimrSchemeOp::TModifyScheme& modifyScheme, const NYql::TCreateObjectSettings& settings,
-                                         TExternalDataSourceManager::TInternalModificationContext& context) {
+TConclusionStatus FillCreateExternalDataSourceCommand(NKikimrSchemeOp::TModifyScheme& modifyScheme, const NYql::TCreateObjectSettings& settings,
+    TExternalDataSourceManager::TInternalModificationContext& context) {
     CheckFeatureFlag(context);
 
     std::pair<TString, TString> pathPair;
@@ -107,7 +147,11 @@ void FillCreateExternalDataSourceCommand(NKikimrSchemeOp::TModifyScheme& modifyS
     modifyScheme.SetFailedOnAlreadyExists(!settings.GetExistingOk());
 
     NKikimrSchemeOp::TExternalDataSourceDescription& dataSourceDesc = *modifyScheme.MutableCreateExternalDataSource();
-    FillCreateExternalDataSourceDesc(dataSourceDesc, pathPair.second, settings);
+    if (auto status = FillCreateExternalDataSourceDesc(dataSourceDesc, pathPair.second, settings, context); status.IsFail()) {
+        return status;
+    }
+
+    return TConclusionStatus::Success();
 }
 
 void FillDropExternalDataSourceCommand(NKikimrSchemeOp::TModifyScheme& modifyScheme, const NYql::TDropObjectSettings& settings,
@@ -149,7 +193,7 @@ NThreading::TFuture<TExternalDataSourceManager::TYqlConclusionStatus> ValidateCr
     const auto& authDescription = externaDataSourceDesc.GetAuth();
     const auto& externalData = context.GetExternalData();
     const auto& userToken = externalData.GetUserToken();
-    auto describeFuture = DescribeExternalDataSourceSecrets(authDescription, userToken ? userToken->GetUserSID() : "", externalData.GetActorSystem());
+    auto describeFuture = DescribeExternalDataSourceSecrets(authDescription, userToken, externalData.GetActorSystem());
 
     return describeFuture.Apply([](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& f) mutable {
         if (const auto& value = f.GetValue(); value.Status != Ydb::StatusIds::SUCCESS) {

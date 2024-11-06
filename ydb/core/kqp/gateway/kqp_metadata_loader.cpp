@@ -480,7 +480,7 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
 
 NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> LoadExternalDataSourceSecretValues(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorSystem* actorSystem) {
     const auto& authDescription = entry.ExternalDataSourceInfo->Description.GetAuth();
-    return DescribeExternalDataSourceSecrets(authDescription, userToken ? userToken->GetUserSID() : "", actorSystem);
+    return DescribeExternalDataSourceSecrets(authDescription, userToken ? std::optional<NACLib::TUserToken>(*userToken) : std::nullopt, actorSystem);
 }
 
 } // anonymous namespace

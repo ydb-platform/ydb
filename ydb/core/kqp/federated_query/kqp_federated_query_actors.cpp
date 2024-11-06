@@ -17,32 +17,38 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
         auto snapshot = ev->Get()->GetSnapshotAs<NMetadata::NSecret::TSnapshot>();
 
         std::vector<TString> secretValues;
-        secretValues.reserve(SecretIds.size());
-        for (const auto& secretId: SecretIds) {
-            TString secretValue;
-            bool isFound = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretId), secretValue);
-            if (isFound) {
-                secretValues.push_back(secretValue);
-                continue;
-            }
+        secretValues.reserve(SecretIdsOrNames.size());
+        for (const auto& secretIdOrName: SecretIdsOrNames) {
+            if (const auto& secretId = secretIdOrName.GetSecretId()) {
+                TString secretValue;
+                bool isFound = snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(*secretId), secretValue);
+                if (isFound) {
+                    secretValues.push_back(secretValue);
+                    continue;
+                }
+            } else {
+                const auto& secretName = secretIdOrName.GetValue();
+                AFL_VERIFY(secretName);
 
-            auto secretIds = snapshot->GetSecretIds(UserToken, secretId.GetSecretId());
-            if (secretIds.size() > 1) {
-                CompleteAndPassAway(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("several secrets with name '" + secretId.GetSecretId() + "' were found") }));
-                return;
-            }
+                auto secretIds = snapshot->GetSecretIds(UserToken, *secretName);
+                if (secretIds.size() > 1) {
+                    CompleteAndPassAway(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("several secrets with name '" + *secretName + "' were found") }));
+                    return;
+                }
 
-            isFound = !secretIds.empty() && snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretIds[0]), secretValue);
-            if (isFound) {
-                secretValues.push_back(secretValue);
-                continue;
+                TString secretValue;
+                bool isFound = !secretIds.empty() && snapshot->GetSecretValue(NMetadata::NSecret::TSecretIdOrValue::BuildAsId(secretIds[0]), secretValue);
+                if (isFound) {
+                    secretValues.push_back(secretValue);
+                    continue;
+                }
             }
 
             if (!AskSent) {
                 AskSent = true;
                 Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(GetSecretsSnapshotParser()));
             } else {
-                CompleteAndPassAway(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret with name '" + secretId.GetSecretId() + "' not found") }));
+                CompleteAndPassAway(TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret with name '" + secretIdOrName.SerializeToString() + "' not found") }));
             }
             return;
         }
@@ -62,11 +68,12 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
     }
 
 public:
-    TDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise)
-        : UserToken(NACLib::TUserToken{ownerUserId, TVector<NACLib::TSID>{}})
-        , SecretIds(CreateSecretIds(ownerUserId, secretIds))
-        , Promise(promise)
-    {}
+    TDescribeSecretsActor(const std::optional<NACLib::TUserToken>& userToken, const std::vector<NMetadata::NSecret::TSecretIdOrValue>& secretIds,
+        NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise)
+        : UserToken(userToken)
+        , SecretIdsOrNames(secretIds)
+        , Promise(promise) {
+    }
 
     void Bootstrap() {
         if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
@@ -80,42 +87,36 @@ public:
     }
 
 private:
-    static std::vector<NMetadata::NSecret::TSecretId> CreateSecretIds(const TString& ownerUserId, const std::vector<TString>& secretIds) {
-        std::vector<NMetadata::NSecret::TSecretId> result;
-        for (const TString& secretId : secretIds) {
-            result.emplace_back(ownerUserId, secretId);
-        }
-        return result;
-    }
-
-private:
     std::optional<NACLib::TUserToken> UserToken;
-    const std::vector<NMetadata::NSecret::TSecretId> SecretIds;
+    const std::vector<NMetadata::NSecret::TSecretIdOrValue> SecretIdsOrNames;
     NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Promise;
     bool AskSent = false;
 };
 
 }  // anonymous namespace
 
-IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise) {
-    return new TDescribeSecretsActor(ownerUserId, secretIds, promise);
+IActor* CreateDescribeSecretsActor(const std::optional<NACLib::TUserToken>& userToken,
+    const std::vector<NMetadata::NSecret::TSecretIdOrValue>& secretIdsOrNames, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise) {
+    return new TDescribeSecretsActor(userToken, secretIdsOrNames, promise);
 }
 
-void RegisterDescribeSecretsActor(const NActors::TActorId& replyActorId, const TString& ownerUserId, const std::vector<TString>& secretIds, NActors::TActorSystem* actorSystem) {
+void RegisterDescribeSecretsActor(const NActors::TActorId& replyActorId, const std::optional<NACLib::TUserToken>& userToken,
+    const std::vector<NMetadata::NSecret::TSecretId>& secretIds, NActors::TActorSystem* actorSystem) {
     auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-    actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, secretIds, promise));
+    actorSystem->Register(CreateDescribeSecretsActor(userToken, secretIds, promise));
 
     promise.GetFuture().Subscribe([actorSystem, replyActorId](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& result){
         actorSystem->Send(replyActorId, new TEvDescribeSecretsResponse(result.GetValue()));
     });
 }
 
-NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDataSourceSecrets(const NKikimrSchemeOp::TAuth& authDescription, const TString& ownerUserId, TActorSystem* actorSystem) {
+NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDataSourceSecrets(
+    const NKikimrSchemeOp::TAuth& authDescription, const std::optional<NACLib::TUserToken>& userToken, TActorSystem* actorSystem) {
     switch (authDescription.identity_case()) {
         case NKikimrSchemeOp::TAuth::kServiceAccount: {
             const TString& saSecretId = authDescription.GetServiceAccount().GetSecretName();
             auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {saSecretId}, promise));
+            actorSystem->Register(CreateDescribeSecretsActor(userToken, { NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(saSecretId) }, promise));
             return promise.GetFuture();
         }
 
@@ -125,7 +126,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
         case NKikimrSchemeOp::TAuth::kBasic: {
             const TString& passwordSecretId = authDescription.GetBasic().GetPasswordSecretName();
             auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {passwordSecretId}, promise));
+            actorSystem->Register(CreateDescribeSecretsActor(userToken, {  NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(passwordSecretId) }, promise));
             return promise.GetFuture();
         }
 
@@ -133,22 +134,33 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
             const TString& saSecretId = authDescription.GetMdbBasic().GetServiceAccountSecretName();
             const TString& passwordSecreId = authDescription.GetMdbBasic().GetPasswordSecretName();
             auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {saSecretId, passwordSecreId}, promise));
+            actorSystem->Register(CreateDescribeSecretsActor(userToken,
+                { NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(saSecretId),
+                    NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(passwordSecreId) },
+                promise));
             return promise.GetFuture();
         }
 
         case NKikimrSchemeOp::TAuth::kAws: {
-            const TString& awsAccessKeyIdSecretId = authDescription.GetAws().GetAwsAccessKeyIdSecretName();
-            const TString& awsAccessKeyKeySecretId = authDescription.GetAws().GetAwsSecretAccessKeySecretName();
+            const NMetadata::NSecret::TSecretIdOrValue awsAccessKeyIdSecretId =
+                authDescription.GetAws().HasAwsAccessKeyIdSecretOwner()
+                    ? NMetadata::NSecret::TSecretIdOrValue::BuildAsId(NMetadata::NSecret::TSecretId(
+                          authDescription.GetAws().GetAwsAccessKeyIdSecretOwner(), authDescription.GetAws().GetAwsAccessKeyIdSecretName()))
+                    : NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(authDescription.GetAws().GetAwsAccessKeyIdSecretOwner());
+            const NMetadata::NSecret::TSecretIdOrValue awsAccessKeyKeySecretId =
+                authDescription.GetAws().HasAwsSecretAccessKeySecretOwner()
+                    ? NMetadata::NSecret::TSecretIdOrValue::BuildAsId(NMetadata::NSecret::TSecretId(
+                          authDescription.GetAws().GetAwsSecretAccessKeySecretOwner(), authDescription.GetAws().GetAwsSecretAccessKeySecretName()))
+                    : NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(authDescription.GetAws().GetAwsSecretAccessKeySecretName());
             auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {awsAccessKeyIdSecretId, awsAccessKeyKeySecretId}, promise));
+            actorSystem->Register(CreateDescribeSecretsActor(userToken, { awsAccessKeyIdSecretId, awsAccessKeyKeySecretId }, promise));
             return promise.GetFuture();
         }
 
         case NKikimrSchemeOp::TAuth::kToken: {
             const TString& tokenSecretId = authDescription.GetToken().GetTokenSecretName();
             auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(ownerUserId, {tokenSecretId}, promise));
+            actorSystem->Register(CreateDescribeSecretsActor(userToken, { NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(tokenSecretId) }, promise));
             return promise.GetFuture();
         }
 

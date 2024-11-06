@@ -63,7 +63,7 @@ protected:
     virtual void DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) override;
 public:
     void Refresh(const TAddExternalContext& externalContext);
-    void ChangeSchemeToCompatible(const THashMap<ui64, ui64>& versionMap, const TExternalTasksContext& externalContext, NOlap::TDbWrapper& db);
+    void ChangeSchemeToCompatible(const THashMap<ui64, ui64>& versionMap, THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions, NOlap::TDbWrapper& db);
 
     TSchemeActualizer(const ui64 pathId, const TVersionedIndex& versionedIndex)
         : PathId(pathId)

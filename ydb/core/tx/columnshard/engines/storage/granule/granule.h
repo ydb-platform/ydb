@@ -224,8 +224,7 @@ public:
     }
 
     void ChangeSchemeToCompatible(const THashMap<ui64, ui64>& versionMap, NOlap::TDbWrapper& db) {
-        NActualizer::TExternalTasksContext extTasks(Portions);
-        ActualizationIndex->ChangeSchemeToCompatible(versionMap, extTasks, db);
+        ActualizationIndex->ChangeSchemeToCompatible(versionMap, Portions, db);
     }
 
     void ReturnToIndexes(const THashSet<ui64>& portionIds) {

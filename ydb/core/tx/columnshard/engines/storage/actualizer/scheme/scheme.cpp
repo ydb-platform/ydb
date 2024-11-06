@@ -23,10 +23,8 @@ std::optional<NKikimr::NOlap::NActualizer::TSchemeActualizer::TFullActualization
 
 void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext& addContext) {
     if (!TargetSchema) {
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "actualizer_add")("portion_id", info.GetPortionId())("result", "skipped")("schema_version", info.GetSchemaVersionOptional());
         return;
     }
-    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "actualizer_add")("portion_id", info.GetPortionId())("result", "passed")("schema_version", info.GetSchemaVersionOptional())("target_version", TargetSchema->GetVersion());
     if (!addContext.GetPortionExclusiveGuarantee()) {
         if (PortionsInfo.contains(info.GetPortionId())) {
             return;
@@ -44,7 +42,6 @@ void TSchemeActualizer::DoAddPortion(const TPortionInfo& info, const TAddExterna
 }
 
 void TSchemeActualizer::DoRemovePortion(const ui64 portionId) {
-    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "actualizer_remove")("portion_id", portionId);
     auto it = PortionsInfo.find(portionId);
     if (it == PortionsInfo.end()) {
         return;
@@ -77,6 +74,7 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
             auto portionScheme = portion->GetSchema(VersionedIndex);
             TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
             features.SetTargetTierName(portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
+
             if (!tasksContext.AddPortion(portion, std::move(features), {})) {
                 break;
             } else {
@@ -107,7 +105,6 @@ void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {
     if (!TargetSchema) {
         AFL_VERIFY(PortionsInfo.empty());
     } else {
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "actualizer_target")("target_schema", TargetSchema->GetVersion());
         NYDBTest::TControllers::GetColumnShardController()->AddPortionForActualizer(-1 * PortionsInfo.size());
         PortionsInfo.clear();
         PortionsToActualizeScheme.clear();
@@ -117,16 +114,17 @@ void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {
     }
 }
 
-void TSchemeActualizer::ChangeSchemeToCompatible(const THashMap<ui64, ui64>& versionMap, const TExternalTasksContext& externalContext, NOlap::TDbWrapper& db) {
+void TSchemeActualizer::ChangeSchemeToCompatible(const THashMap<ui64, ui64>& versionMap, THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions, NOlap::TDbWrapper& db) {
     std::vector<ui64> toRemove;
-    for (auto& [portionId, _]: PortionsInfo) {
-        auto portion = externalContext.GetPortionVerified(portionId);
-        auto portionSchema = portion->GetSchema(VersionedIndex);
-        THashMap<ui64, ui64>::const_iterator it = versionMap.find(portionSchema->GetVersion());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization")("portion_count", portions.size());
+    for (auto& [portionId, portion]: portions) {
+        THashMap<ui64, ui64>::const_iterator it = versionMap.find(portion->GetSchemaVersionVerified());
         if (it != versionMap.end()) {
             if (TargetSchema && (it->second >= TargetSchema->GetVersion())) {
                 toRemove.push_back(portionId);
             }
+            //TO DO call VersionAddRef and VersionRemoveRef
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization")("portion_id", portionId)("from", portion->GetSchemaVersionOptional())("to", it->second);
             portion->SetSchemaVersion(it->second);
             db.WritePortion(*portion);
         }

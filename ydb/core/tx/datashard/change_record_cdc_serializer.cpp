@@ -571,15 +571,15 @@ protected:
     void SerializeToJson(NJson::TJsonValue& json, const TChangeRecord& record) override {
         TYdbJsonSerializer::SerializeToJson(json, record);
         for (auto &keyValue: json.GetMap()) {
-            if (keyValue.second.IsInt64()) {
-                keyValue.second = NJson::TJsonValue(std::to_string(kv.second.GetInt64()));
+            if (keyValue.second.IsInteger()) {
+                keyValue.second = NJson::TJsonValue(std::to_string(keyValue.second.GetInteger()));
             }
         }
     }
 
 public:
-    using TJsonSerializer::TJsonSerializer;
-};
+    using TYdbJsonSerializer::TYdbJsonSerializer;
+}; // TLongIntegerJsonSerializer
 
 TChangeRecordSerializerOpts TChangeRecordSerializerOpts::DebugOpts() {
     TChangeRecordSerializerOpts opts;

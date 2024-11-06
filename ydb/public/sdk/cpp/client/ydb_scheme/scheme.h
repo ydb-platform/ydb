@@ -177,6 +177,8 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TViewDescription;
+
 class TDescribePathResult : public TStatus {
 public:
     TDescribePathResult(TStatus&& status, const TSchemeEntry& entry);
@@ -184,6 +186,9 @@ public:
     ~TDescribePathResult();
 
     const TSchemeEntry& GetEntry() const;
+
+    bool HasViewDescription() const;
+    TViewDescription GetViewDescription() const;
 
     void Out(IOutputStream& out) const;
 

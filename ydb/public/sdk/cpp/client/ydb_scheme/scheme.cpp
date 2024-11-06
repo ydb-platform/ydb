@@ -1,4 +1,5 @@
 #include "scheme.h"
+#include "descriptions/view.h"
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
@@ -304,6 +305,15 @@ TDescribePathResult::~TDescribePathResult() {}
 const TSchemeEntry& TDescribePathResult::GetEntry() const {
     CheckStatusOk("TDescribePathResult::GetEntry");
     return Entry_;
+}
+
+bool TDescribePathResult::HasViewDescription() const {
+    return Proto_->has_view_description();
+}
+
+TViewDescription TDescribePathResult::GetViewDescription() const {
+    CheckStatusOk("TDescribePathResult::GetViewDescription");
+    return TViewDescription(Proto_->view_description());
 }
 
 void TDescribePathResult::Out(IOutputStream& out) const {

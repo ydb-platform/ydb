@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     out.cpp
     scheme.cpp
+    descriptions/view.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(scheme.h)

@@ -102,10 +102,15 @@ message DescribePathResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message ViewDescription {
+    string query_text = 1;
+}
+
 message DescribePathResult {
     Entry self = 1;
 
     oneof type_specific_description {
+        ViewDescription view_description = 2;
     }
 }
 

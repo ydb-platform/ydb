@@ -140,6 +140,8 @@ expr_struct_list: expr COLON expr (COMMA expr COLON expr)*;
 
 struct_literal: STRUCT_OPEN expr_struct_list? COMMA? STRUCT_CLOSE;
 
+ttl_tier_literal: TIER LPAREN unary_subexpr (TO an_id | DELETE) RPAREN;
+
 atom_expr:
     literal_value
   | bind_parameter
@@ -153,6 +155,7 @@ atom_expr:
   | list_literal
   | dict_literal
   | struct_literal
+  //| ttl_tier_literal
 ;
 
 in_atom_expr:
@@ -791,12 +794,11 @@ table_setting_value:
     | STRING_VALUE
     | integer
     | split_boundaries
-    | (expr | ttl_tier_list) ON an_id (AS (SECONDS | MILLISECONDS | MICROSECONDS | NANOSECONDS))?
-    | bool_value
+    | ttl_tier_list ON an_id (AS (SECONDS | MILLISECONDS | MICROSECONDS | NANOSECONDS))?
 ;
 
-ttl_tier_entry: id_expr LPAREN STRING_VALUE RPAREN (TO an_id | DELETE);
-ttl_tier_list: LPAREN ttl_tier_entry (COMMA ttl_tier_entry)* RPAREN;
+ttl_tier_entry: unary_subexpr (TO an_id | DELETE);
+ttl_tier_list: ttl_tier_entry (COMMA ttl_tier_entry)*;
 
 family_entry: FAMILY an_id family_settings;
 family_settings: LPAREN (family_settings_entry (COMMA family_settings_entry)*)? RPAREN;
@@ -1440,6 +1442,7 @@ keyword_as_compat:
   | TEMP
   | TEMPORARY
   | THEN
+//  | TIER
   | TIES
   | TO
   | TOPIC
@@ -1658,6 +1661,7 @@ keyword_compat: (
   | TEMP
   | TEMPORARY
   | THEN
+  | TIER
   | TIES
   | TO
   | TOPIC
@@ -2030,6 +2034,7 @@ TAGGED: T A G G E D;
 TEMP: T E M P;
 TEMPORARY: T E M P O R A R Y;
 THEN: T H E N;
+TIER: T I E R;
 TIES: T I E S;
 TO: T O;
 TOPIC: T O P I C;

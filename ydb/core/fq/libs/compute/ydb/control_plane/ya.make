@@ -12,23 +12,20 @@ SRCS(
 
 PEERDIR(
     library/cpp/json
+    ydb/library/actors/core
+    ydb/library/actors/protos
+    ydb/library/grpc/actor_client
     ydb/core/fq/libs/compute/ydb/synchronization_service
     ydb/core/fq/libs/control_plane_storage/proto
     ydb/core/fq/libs/quota_manager/proto
     ydb/core/protos
-    ydb/library/actors/core
-    ydb/library/actors/protos
     ydb/library/db_pool/protos
-    ydb/library/grpc/actor_client
     ydb/library/yql/public/issue
     ydb/library/yql/utils
     ydb/library/yql/utils/actors
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/lib/operation_id/protos
-    ydb/public/sdk/cpp/client/resources
-    ydb/public/sdk/cpp/client/ydb_operation
-    ydb/public/sdk/cpp/client/ydb_query
 )
 
 YQL_LAST_ABI_VERSION()

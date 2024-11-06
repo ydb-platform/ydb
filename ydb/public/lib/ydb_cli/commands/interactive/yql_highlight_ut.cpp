@@ -153,10 +153,63 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         Check(highlight, "SELECT \\\"\xF0\x9F\x98\x8A\\\" FROM test", "kkkkkk uuuuu uuuu uuuu");
     }
 
+    Y_UNIT_TEST(MultilineString) {
+        YQLHighlight highlight(Coloring);
+
+        Check(highlight, "@@", "oo");
+        Check(highlight, "@@@", "ooo");
+        Check(highlight, "@@@@", "ssss");
+        Check(highlight, "@@@@@", "sssss");
+        Check(highlight, "@@test@@@", "sssssssss");
+
+        Check(
+            highlight,
+            ("$txt = @@some\n"
+             "multiline\n"
+             "text@@;"),
+            ("ovvv o sssssss"
+             "ssssssssss"
+             "sssssso"));
+        Check(
+            highlight,
+            ("$txt = @@some\n"
+             "multiline with double at: @@@@\n"
+             "text@@;"),
+            ("ovvv o sssssss"
+             "sssssssssssssssssssssssssssssss"
+             "sssssso"));
+    }
+
+    Y_UNIT_TEST(TypedString) {
+        YQLHighlight highlight(Coloring);
+        Check(
+            highlight,
+            "SELECT \"foo\"u, '[1;2]'y, @@{\"a\":null}@@j;",
+            "kkkkkk sssssso sssssssso ssssssssssssssso");
+    }
+
     Y_UNIT_TEST(Number) {
         YQLHighlight highlight(Coloring);
+
         Check(highlight, "1234", "nnnn");
         Check(highlight, "-123", "onnn");
+
+        Check(
+            highlight,
+            ("SELECT "
+             "123l AS `Int64`, "
+             "0b01u AS `Uint32`, "
+             "0xfful AS `Uint64`, "
+             "0o7ut AS `Uint8`, "
+             "456s AS `Int16`, "
+             "1.2345f AS `Float`;"),
+            ("kkkkkk "
+             "nnnn kk qqqqqqqo "
+             "nnnnn kk qqqqqqqqo "
+             "nnnnnn kk qqqqqqqqo "
+             "nnnnn kk qqqqqqqo "
+             "nnnn kk qqqqqqqo "
+             "nnnnnnn kk qqqqqqqo"));
     }
 
     Y_UNIT_TEST(SQL) {

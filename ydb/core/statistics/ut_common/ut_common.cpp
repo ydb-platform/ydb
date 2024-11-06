@@ -441,7 +441,8 @@ void ValidateCountMinDatashardAbsense(TTestActorRuntime& runtime, TPathId pathId
     UNIT_ASSERT(evResult->Get()->StatResponses.size() == 1);
 
     auto rsp = evResult->Get()->StatResponses[0];
-    UNIT_ASSERT(!rsp.Success);
+    UNIT_ASSERT(rsp.Success);
+    UNIT_ASSERT(rsp.CountMinSketch.CountMin == nullptr);
 }
 
 TAnalyzedTable::TAnalyzedTable(const TPathId& pathId)

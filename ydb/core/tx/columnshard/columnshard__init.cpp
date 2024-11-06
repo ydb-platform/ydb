@@ -78,8 +78,8 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     LOG_S_DEBUG("TTxInit.Execute at tablet " << Self->TabletID());
 
     try {
-        SetDefaults();
         if (!StartReader) {
+            SetDefaults();
             StartReader = BuildReader();
         }
         if (!StartReader->Execute(txc, ctx)) {

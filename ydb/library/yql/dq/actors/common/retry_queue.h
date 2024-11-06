@@ -81,7 +81,7 @@ public:
 
     TRetryEventsQueue() {}
 
-    void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0, bool keepAlive = false);
+    void Init(const TTxId& txId, const NActors::TActorId& senderId, const NActors::TActorId& selfId, ui64 eventQueueId = 0, bool keepAlive = false, bool useConnect = true);
 
     template <TProtobufEventWithTransportMeta T>
     void Send(T* ev, ui64 cookie = 0) {
@@ -144,7 +144,7 @@ public:
         return !Events.empty();
     }
 
-    void OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe = true, bool alreadyConnected = false);
+    void OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe = true, bool connected = false);
     void HandleNodeConnected(ui32 nodeId);
     void HandleNodeDisconnected(ui32 nodeId);
     bool HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);
@@ -225,6 +225,7 @@ private:
     TTxId TxId;
     bool KeepAlive = false;
     TInstant LastReceivedDataTime = TInstant::Now();
+    bool UseConnect = true;
 };
 
 } // namespace NYql::NDq

@@ -12,16 +12,18 @@ void TRetryEventsQueue::Init(
     const NActors::TActorId& senderId,
     const NActors::TActorId& selfId,
     ui64 eventQueueId,
-    bool keepAlive) {
+    bool keepAlive,
+    bool useConnect) {
     TxId = txId;
     SenderId = senderId;
     SelfId = selfId;
     Y_ASSERT(SelfId.NodeId() == SenderId.NodeId());
     EventQueueId = eventQueueId;
     KeepAlive = keepAlive;
+    UseConnect = useConnect;
 }
 
-void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe, bool alreadyConnected) {
+void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe, bool connected) {
     if (unsubscribe) {
         Unsubscribe();
     }
@@ -31,7 +33,7 @@ void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, b
     Events.clear();
     MyConfirmedSeqNo = 0;
     ReceivedEventsSeqNos.clear();
-    Connected = alreadyConnected;
+    Connected = connected;
     RetryState = Nothing();
 }
 
@@ -135,7 +137,7 @@ void TRetryEventsQueue::SendRetryable(const IRetryableEvent::TPtr& ev) {
 }
 
 void TRetryEventsQueue::ScheduleRetry() {
-    if (RetryScheduled) {
+    if (!UseConnect || RetryScheduled) {
         return;
     } 
     RetryScheduled = true;

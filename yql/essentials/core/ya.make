@@ -1,4 +1,5 @@
 RECURSE(
+    cbo
     credentials
     file_storage
     issue

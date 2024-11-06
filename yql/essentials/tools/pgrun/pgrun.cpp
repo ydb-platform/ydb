@@ -13,7 +13,7 @@
 #include <contrib/ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 #include <contrib/ydb/library/yql/providers/pg/provider/yql_pg_provider.h>
 #include <yql/essentials/public/issue/yql_issue.h>
-#include <contrib/ydb/library/yql/parser/pg_wrapper/interface/utils.h>
+#include <yql/essentials/parser/pg_wrapper/interface/utils.h>
 #include <contrib/ydb/library/yql/providers/yt/lib/schema/schema.h>
 #include <contrib/ydb/library/yql/core/services/mounts/yql_mounts.h>
 

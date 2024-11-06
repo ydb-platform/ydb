@@ -6,7 +6,7 @@
 
 #include <contrib/ydb/library/yql/sql/sql.h>
 #include <contrib/ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <contrib/ydb/library/yql/parser/pg_wrapper/interface/parser.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <contrib/ydb/library/yql/sql/v1/format/sql_format.h>

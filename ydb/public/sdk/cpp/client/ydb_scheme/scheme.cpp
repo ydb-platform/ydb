@@ -300,8 +300,6 @@ TDescribePathResult::TDescribePathResult(TStatus&& status, Ydb::Scheme::Describe
 {
 }
 
-TDescribePathResult::~TDescribePathResult() {}
-
 const TSchemeEntry& TDescribePathResult::GetEntry() const {
     CheckStatusOk("TDescribePathResult::GetEntry");
     return Entry_;

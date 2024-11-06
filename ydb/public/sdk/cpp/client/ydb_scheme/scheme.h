@@ -183,7 +183,6 @@ class TDescribePathResult : public TStatus {
 public:
     TDescribePathResult(TStatus&& status, const TSchemeEntry& entry);
     TDescribePathResult(TStatus&& status, Ydb::Scheme::DescribePathResult&& proto);
-    ~TDescribePathResult();
 
     const TSchemeEntry& GetEntry() const;
 

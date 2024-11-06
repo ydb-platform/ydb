@@ -17,6 +17,7 @@ SRCS(
     rpc_alter_table.cpp
     rpc_backup.cpp
     rpc_begin_transaction.cpp
+    rpc_bsconfig.cpp
     rpc_calls.cpp
     rpc_cancel_operation.cpp
     rpc_cms.cpp
@@ -134,6 +135,7 @@ PEERDIR(
     ydb/library/dynumber
     ydb/library/mkql_proto
     ydb/library/persqueue/topic_parser
+    ydb/library/yaml_config
     ydb/library/yql/parser/pg_wrapper/interface
     ydb/library/yql/public/types
     ydb/library/yql/public/issue

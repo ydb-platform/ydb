@@ -338,6 +338,10 @@ namespace TEvDataShard {
         EvReshuffleKMeansRequest,
         EvReshuffleKMeansResponse,
 
+        // Sent by the scan actor when EvRead uses a scan
+        EvReadScanStarted,
+        EvReadScanFinished,
+
         EvEnd
     };
 
@@ -924,6 +928,9 @@ namespace TEvDataShard {
                                NKikimrTxDataShard::TEvRead,
                                TEvDataShard::EvRead>;
 
+        static constexpr ui32 HINT_BATCH = NKikimrTxDataShard::TEvRead::HINT_BATCH;
+        static constexpr ui32 HINT_LOW_PRIORITY = NKikimrTxDataShard::TEvRead::HINT_LOW_PRIORITY;
+
         TEvRead() = default;
 
         TString ToString() const override;
@@ -1042,12 +1049,10 @@ namespace TEvDataShard {
     };
 
     struct TEvReadContinue : public TEventLocal<TEvReadContinue, TEvDataShard::EvReadContinue> {
-        TActorId Reader;
-        ui64 ReadId;
+        const ui64 LocalReadId;
 
-        TEvReadContinue(TActorId reader, ui64 readId)
-            : Reader(reader)
-            , ReadId(readId)
+        explicit TEvReadContinue(ui64 localReadId)
+            : LocalReadId(localReadId)
         {}
     };
 
@@ -1061,6 +1066,24 @@ namespace TEvDataShard {
                                            NKikimrTxDataShard::TEvReadCancel,
                                            TEvDataShard::EvReadCancel> {
         TEvReadCancel() = default;
+    };
+
+    struct TEvReadScanStarted : public TEventLocal<TEvReadScanStarted, EvReadScanStarted> {
+        const ui64 LocalReadId;
+
+        // Event sender is the scan actor
+        explicit TEvReadScanStarted(ui64 localReadId)
+            : LocalReadId(localReadId)
+        {}
+    };
+
+    struct TEvReadScanFinished : public TEventLocal<TEvReadScanFinished, EvReadScanFinished> {
+        const ui64 LocalReadId;
+
+        // Event sender is the scan actor
+        explicit TEvReadScanFinished(ui64 localReadId)
+            : LocalReadId(localReadId)
+        {}
     };
 
     struct TEvReadColumnsRequest : public TEventPB<TEvReadColumnsRequest,

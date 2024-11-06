@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         auto descr = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", txId);
         UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
 
-        const TString meteringData = R"({"usage":{"start":2,"quantity":330,"finish":2,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-404-3486-404-3486","cloud_id":"CLOUD_ID_VAL","source_wt":2,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})""\n";
+        const TString meteringData = R"({"usage":{"start":2,"quantity":330,"finish":2,"unit":"request_unit","type":"delta"},"tags":{},"id":"106-72075186233409549-2-0-0-0-0-200-404-1290-2686","cloud_id":"CLOUD_ID_VAL","source_wt":2,"source_id":"sless-docapi-ydb-ss","resource_id":"DATABASE_ID_VAL","schema":"ydb.serverless.requests.v1","folder_id":"FOLDER_ID_VAL","version":"1.0.0"})""\n";
 
         UNIT_ASSERT_NO_DIFF(meteringMessages, meteringData);
 

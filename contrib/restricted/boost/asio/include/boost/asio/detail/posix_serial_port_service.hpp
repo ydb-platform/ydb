@@ -2,7 +2,7 @@
 // detail/posix_serial_port_service.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 // Copyright (c) 2008 Rep Invariant Systems, Inc. (info@repinvariant.com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -153,6 +153,7 @@ public:
   {
     int result = ::tcsendbreak(descriptor_service_.native_handle(impl), 0);
     descriptor_ops::get_last_error(ec, result < 0);
+    BOOST_ASIO_ERROR_LOCATION(ec);
     return ec;
   }
 

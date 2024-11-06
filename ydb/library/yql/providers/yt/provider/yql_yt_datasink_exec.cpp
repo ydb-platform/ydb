@@ -227,7 +227,7 @@ private:
         }
 
         bool hasNonDeterministicFunctions = false;
-        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {
+        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx, false); status.Level != TStatus::Ok) {
             return SyncStatus(status);
         }
 
@@ -652,7 +652,7 @@ private:
         }
 
         bool hasNonDeterministicFunctions = false;
-        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx); status.Level != TStatus::Ok) {
+        if (const auto status = PeepHoleOptimizeBeforeExec(optimizedNode, optimizedNode, State_, hasNonDeterministicFunctions, ctx, false); status.Level != TStatus::Ok) {
             return SyncStatus(status);
         }
 

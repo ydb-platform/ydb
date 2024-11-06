@@ -266,6 +266,14 @@ public:
                 Diff = info.GetDiff();
             }
         }
+
+        ui64 GetVersion() const {
+            if (Schema) {
+                return Schema->GetVersion();
+            }
+            AFL_VERIFY(Diff);
+            return Diff->GetVersion();
+        }
     };
 
     static ui64 GetMetadataLimit();
@@ -298,6 +306,8 @@ public:
     virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) = 0;
+    virtual void RegisterOldSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) = 0;
+
     virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0;
     virtual const TColumnEngineStats& GetTotalStats() = 0;
     virtual ui64 MemoryUsage() const {

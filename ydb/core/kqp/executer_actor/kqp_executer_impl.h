@@ -130,8 +130,11 @@ public:
         TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        ui32 statementResultIndex, ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase", bool streamResult = false)
+        ui32 statementResultIndex, ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
+        bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr)
         : Request(std::move(request))
+        , BufferActorId(bufferActorId)
+        , TxManager(txManager)
         , Database(database)
         , UserToken(userToken)
         , Counters(counters)
@@ -505,6 +508,12 @@ protected:
             for (auto& tx : Request.Transactions) {
                 LOG_D("Executing physical tx, type: " << (ui32) tx.Body->GetType() << ", stages: " << tx.Body->StagesSize());
             }
+        }
+
+        if (BufferActorId && Request.LocksOp == ELocksOp::Rollback) {
+            YQL_ENSURE(Request.Transactions.empty());
+            static_cast<TDerived*>(this)->Finalize();
+            return;
         }
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterSpan.GetTraceId(), "WaitForTableResolve", NWilson::EFlags::AUTO_END);
@@ -940,6 +949,9 @@ protected:
                 settings.SetLockTxId(*lockTxId);
                 settings.SetLockNodeId(SelfId().NodeId());
             }
+            if (!settings.GetInconsistentTx() && !settings.GetIsOlap()) {
+                ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
+            }
             output.SinkSettings.ConstructInPlace();
             output.SinkSettings->PackFrom(settings);
         } else {
@@ -1052,8 +1064,7 @@ protected:
         std::sort(std::begin(shardsRanges), std::end(shardsRanges), [&](const TShardRangesWithShardId& lhs, const TShardRangesWithShardId& rhs) {
                 // Special case for infinity
                 if (lhs.Ranges->GetRightBorder().first->GetCells().empty() || rhs.Ranges->GetRightBorder().first->GetCells().empty()) {
-                    YQL_ENSURE(!lhs.Ranges->GetRightBorder().first->GetCells().empty() || !rhs.Ranges->GetRightBorder().first->GetCells().empty());
-                    return rhs.Ranges->GetRightBorder().first->GetCells().empty();
+                    return !lhs.Ranges->GetRightBorder().first->GetCells().empty();
                 }
                 return CompareTypedCellVectors(
                     lhs.Ranges->GetRightBorder().first->GetCells().data(),
@@ -1996,6 +2007,8 @@ protected:
 
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
+    TActorId BufferActorId;
+    IKqpTransactionManagerPtr TxManager;
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpRequestCounters::TPtr Counters;
@@ -2065,7 +2078,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo);
+    const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

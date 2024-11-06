@@ -2,7 +2,7 @@
 // this_coro.hpp
 // ~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -74,7 +74,7 @@ __declspec(selectany) cancellation_state_t cancellation_state;
 /// of the current coroutine.
 /**
  * Let <tt>P</tt> be the cancellation slot associated with the current
- * coroutine's `co_spawn` completion handler. Assigns a new
+ * coroutine's @ref co_spawn completion handler. Assigns a new
  * boost::asio::cancellation_state object <tt>S</tt>, constructed as
  * <tt>S(P)</tt>, into the current coroutine's cancellation state object.
  *
@@ -96,7 +96,7 @@ reset_cancellation_state();
 /// of the current coroutine.
 /**
  * Let <tt>P</tt> be the cancellation slot associated with the current
- * coroutine's `co_spawn` completion handler. Assigns a new
+ * coroutine's @ref co_spawn completion handler. Assigns a new
  * boost::asio::cancellation_state object <tt>S</tt>, constructed as <tt>S(P,
  * std::forward<Filter>(filter))</tt>, into the current coroutine's
  * cancellation state object.
@@ -121,7 +121,7 @@ reset_cancellation_state(BOOST_ASIO_MOVE_ARG(Filter) filter);
 /// of the current coroutine.
 /**
  * Let <tt>P</tt> be the cancellation slot associated with the current
- * coroutine's `co_spawn` completion handler. Assigns a new
+ * coroutine's @ref co_spawn completion handler. Assigns a new
  * boost::asio::cancellation_state object <tt>S</tt>, constructed as <tt>S(P,
  * std::forward<InFilter>(in_filter),
  * std::forward<OutFilter>(out_filter))</tt>, into the current coroutine's

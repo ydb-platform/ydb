@@ -7,9 +7,9 @@ from ydb.core.protos.cms_pb2 import EAvailabilityMode
 
 from ydb.tests.library.common.types import Erasure
 import ydb.tests.library.common.cms as cms
-from ydb.tests.library.harness.kikimr_http_client import SwaggerClient
+from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
@@ -29,7 +29,7 @@ class AbstractLocalClusterTest(object):
                                              nodes=nodes_count,
                                              additional_log_configs={'CMS': LogLevels.DEBUG}
                                              )
-        cls.cluster = kikimr_cluster_factory(configurator=configurator)
+        cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
         # CMS will not let disable state storage
         # nodes for first 2 minutes

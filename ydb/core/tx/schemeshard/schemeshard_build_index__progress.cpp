@@ -215,8 +215,8 @@ private:
         TAutoPtr<TEvIndexBuilder::TEvUploadSampleKResponse> response = new TEvIndexBuilder::TEvUploadSampleKResponse;
 
         response->Record.SetId(BuildIndexId);
-        response->Record.SetRowsDelta(Rows->size());
-        response->Record.SetBytesDelta(RowsBytes);
+        response->Record.SetUploadRows(Rows->size());
+        response->Record.SetUploadBytes(RowsBytes);
 
         UploadStatusToMessage(response->Record);
 
@@ -698,15 +698,14 @@ private:
         std::array<NScheme::TTypeInfo, 1> typeInfos{NScheme::NTypeIds::Uint32};
         auto range = ParentRange(buildInfo);
         for (const auto& [idx, status] : buildInfo.Shards) {
+            if (buildInfo.KMeans.Parent != 0
+                && Intersect(typeInfos, range.ToTableRange(), status.Range.ToTableRange()).IsEmptyRange(typeInfos)) {
+                continue;
+            }
             switch (status.Status) {
                 case NKikimrIndexBuilder::EBuildStatus::INVALID:
-                    if (buildInfo.KMeans.Parent != 0) {
-                        if (!Intersect(typeInfos, range.ToTableRange(), status.Range.ToTableRange()).IsEmptyRange(typeInfos)) {
-                            buildInfo.ToUploadShards.emplace_back(idx);
-                        }
-                        break;
-                    }
-                    [[fallthrough]];
+                    buildInfo.ToUploadShards.emplace_back(idx);
+                    break;
                 case NKikimrIndexBuilder::EBuildStatus::ACCEPTED:
                 case NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS:
                 case NKikimrIndexBuilder::EBuildStatus::ABORTED:
@@ -767,6 +766,7 @@ private:
             Self->PersistBuildIndexUploadReset(db, BuildId, idx, status);
         }
         buildInfo.DoneShards.clear();
+        Self->PersistBuildIndexProcessed(db, buildInfo);
         // TODO(mbkkt) persist buildInfo.KMeans changes
         if (!buildInfo.Sample.Rows.empty()) {
             if (!buildInfo.Sample.Sent) {
@@ -921,6 +921,7 @@ public:
                 Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
                 Self->PersistBuildIndexApplyTxDone(db, buildInfo);
                 Self->PersistBuildIndexUploadReset(db, buildInfo);
+                Self->PersistBuildIndexProcessed(db, buildInfo);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
                 Progress(BuildId);
@@ -1287,11 +1288,9 @@ public:
                 buildInfo.Sample.MakeWeakTop(buildInfo.KMeans.K);
             }
 
-            if (record.HasRowsDelta() || record.HasBytesDelta()) {
-                TBillingStats delta(record.GetRowsDelta(), record.GetBytesDelta());
-                shardStatus.Processed += delta;
-                buildInfo.Processed += delta;
-            }
+            TBillingStats stats{0, 0, record.GetReadRows(), record.GetReadBytes()};
+            shardStatus.Processed += stats;
+            buildInfo.Processed += stats;
 
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetIssues(), issues);
@@ -1412,7 +1411,9 @@ public:
                 return true;
             }
 
-            // TODO(mbkkt) add billing
+            TBillingStats stats{record.GetUploadRows(), record.GetUploadBytes(), record.GetReadRows(), record.GetReadBytes()};
+            shardStatus.Processed += stats;
+            buildInfo.Processed += stats;
 
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetIssues(), issues);
@@ -1510,15 +1511,17 @@ public:
         switch (const auto state = buildInfo.State; state) {
         case TIndexBuildInfo::EState::Filling:
         {
-            if (record.HasRowsDelta() || record.HasBytesDelta()) {
-                TBillingStats delta(record.GetRowsDelta(), record.GetBytesDelta());
-                buildInfo.Processed += delta;
-            }
+            NIceDb::TNiceDb db(txc.DB);
+
+            TBillingStats stats{record.GetUploadRows(), record.GetUploadBytes(), 0, 0};
+            buildInfo.Processed += stats;
+            // As long as we don't try to upload sample in parallel with requests to shards,
+            // it's okay to persist Processed not incrementally
+            Self->PersistBuildIndexProcessed(db, buildInfo);
 
             NYql::TIssues issues;
             NYql::IssuesFromMessage(record.GetIssues(), issues);
 
-            NIceDb::TNiceDb db(txc.DB);
             auto status = record.GetUploadStatus();
             if (status == Ydb::StatusIds::SUCCESS) {
                 ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Filling);
@@ -1639,11 +1642,10 @@ public:
                 shardStatus.LastKeyAck = record.GetLastKeyAck();
             }
 
-            if (record.HasRowsDelta() || record.HasBytesDelta()) {
-                TBillingStats delta(record.GetRowsDelta(), record.GetBytesDelta());
-                shardStatus.Processed += delta;
-                buildInfo.Processed += delta;
-            }
+            // TODO(mbkkt) we should account uploads and reads separately
+            TBillingStats stats{record.GetRowsDelta(), record.GetBytesDelta(), record.GetRowsDelta(), record.GetBytesDelta()};
+            shardStatus.Processed += stats;
+            buildInfo.Processed += stats;
 
             shardStatus.Status = record.GetStatus();
             shardStatus.UploadStatus = record.GetUploadStatus();

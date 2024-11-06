@@ -173,4 +173,27 @@ Y_UNIT_TEST_SUITE(GroupWriteTest) {
         UNIT_ASSERT(totalWritten.back() >= 20000000U);
         UNIT_ASSERT(totalWritten.back() <= 40000000U);
     }
+
+    Y_UNIT_TEST(WriteHardRateDispatcher) {
+        TTetsEnv env;
+
+        const TString conf(R"(DurationSeconds: 10
+            Tablets: {
+                Tablets: { TabletId: 5 Channel: 0 GroupId: )" + ToString(env.GroupInfo->GroupID) + R"( Generation: 1 }
+                WriteSizes: { Weight: 1.0 Min: 1000000 Max: 4000000 }
+                WriteHardRateDispatcher: {
+                    RequestsPerSecondAtStart: 1
+                    RequestsPerSecondOnFinish: 1000
+                }
+                MaxInFlightWriteRequests: 5
+                FlushIntervals: { Weight: 1.0 Uniform: { MinUs: 1000000 MaxUs: 1000000 } }
+                PutHandleClass: TabletLog
+            })"
+        );
+
+        const auto html = env.RunSingleLoadTest(conf);
+        UNIT_ASSERT(GetOutputValue(html, "OkPutResults").front() >= 4990U);
+        UNIT_ASSERT(GetOutputValue(html, "OkPutResults").front() <= 5010U);
+        UNIT_ASSERT(GetOutputValue(html, "BadPutResults").front() == 0U);
+    }
 }

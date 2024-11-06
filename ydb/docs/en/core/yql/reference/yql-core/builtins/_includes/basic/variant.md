@@ -36,7 +36,7 @@ SELECT
 
 ## Visit, VisitOrDefault {#visit}
 
-Processes possible values of a variant over structure or tuple using provided handler functions for each field/element of the variant.
+Processes the possible values of a variant over a structure or tuple using the provided handler functions for each field/element of the variant.
 
 ### Signature
 
@@ -44,19 +44,17 @@ Processes possible values of a variant over structure or tuple using provided ha
 Visit(Variant<key1: K1, key2: K2, ...>, K1->R AS key1, K2->R AS key2, ...)->R
 Visit(Variant<K1, K2, ...>, K1->R, K2->R, ...)->R
 
-VisitOrDefault(Variant<K1, K2, ...>, [K1->R, [K2->R, ...]], R)->R
-VisitOrDefault(Variant<key1: K1, key2: K2, ...>, [K1->R AS key1, [K2->R AS key2, ...]], R)->R
+VisitOrDefault(Variant<K1, K2, ...>{Flags:AutoMap}, [K1->R, [K2->R, ...]], R)->R
+VisitOrDefault(Variant<key1: K1, key2: K2, ...>{Flags:AutoMap}, [K1->R AS key1, [K2->R AS key2, ...]], R)->R
 ```
 
-### Arguments:
+### Arguments
 
-* For a variant over structure: takes this variant as the positional argument, and named arguments (handlers) for each of variant fields.
-* For a variant over tuple: takes this variant and handlers for each variant elements as positional arguments.
-* `VisitOrDefault` takes additional positional argument -- the default value, and allows to omit some of the handlers.
+* For a variant over structure: accepts the variant as the positional argument and named arguments (handlers) corresponding to each field of the variant.
+* For a variant over tuple: accepts the variant and handlers for each element of the variant as positional arguments.
+* `VisitOrDefault` includes an additional positional argument for the default value, enabling the omission of certain handlers.
 
-Also implements auto-map behavior for the first argument.
-
-### Пример
+### Example
 
 ```yql
 $vartype = Variant<num: Int32, flag: Bool, str: String>;
@@ -76,17 +74,16 @@ SELECT
 
 ## VariantItem {#variantitem}
 
-Returns the value of a homogeneous variant (such that contains fields/elements of one type).
+Returns the value of a homogeneous variant (i.e., a variant containing fields/elements of the same type).
 
-### Сигнатура
+### Signature
 
 ```yql
-VariantItem(Variant<key1: K, key2: K, ...>)->K
-VariantItem(Variant<K, K, ...>)->K
+VariantItem(Variant<key1: K, key2: K, ...>{Flags:AutoMap})->K
+VariantItem(Variant<K, K, ...>{Flags:AutoMap})->K
 ```
-Also implements auto-map behavior for the argument.
 
-### Пример
+### Example
 
 ```yql
 $vartype1 = Variant<num1: Int32, num2: Int32, num3: Int32>;

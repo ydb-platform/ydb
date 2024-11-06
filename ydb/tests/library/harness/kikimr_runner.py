@@ -730,7 +730,7 @@ mon={mon}""".format(
 
         self.update_binary_links()
         self.ssh_command("sudo mkdir -p %s" % self.kikimr_configuration_deploy_path)
-        self.copy_file_or_dir(cluster_yml, param_constants.kikimr_cluster_yaml_deploy_path)
+        self.copy_file_or_dir(cluster_yml, self.kikimr_cluster_yaml_deploy_path)
         self.ssh_command(self.__generate_configs_cmd())
         self.ssh_command(
             self.__generate_configs_cmd(

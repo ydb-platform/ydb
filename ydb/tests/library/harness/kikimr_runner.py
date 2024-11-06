@@ -10,7 +10,6 @@ from google.protobuf import text_format
 
 import yatest
 
-from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.library.common.wait_for import wait_for
 from . import daemon
 from . import param_constants
@@ -25,31 +24,12 @@ from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_
 logger = logging.getLogger(__name__)
 
 
-def get_unique_path_for_current_test(output_path, sub_folder):
-    # TODO: remove yatest dependency from harness
-    try:
-        test_name = yatest.common.context.test_name
-    except AttributeError:
-        test_name = ""
-    test_name = test_name.replace(':', '_')
-
-    return os.path.join(output_path, test_name, sub_folder)
-
-
 def ensure_path_exists(path):
     # NOTE: can't switch to os.makedirs(path, exist_ok=True) as some tests
     # are still running under python2 (exist_ok was added in py3.2)
     if not os.path.isdir(path):
         os.makedirs(path)
     return path
-
-
-def join(a, b):
-    if a is None:
-        a = ''
-    if b is None:
-        b = ''
-    return os.path.join(a, b)
 
 
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
@@ -60,7 +40,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         super(kikimr_node_interface.NodeInterface, self).__init__()
         self.node_id = node_id
         self.data_center = data_center
-        self.__cwd = None
         self.__config_path = config_path
         self.__cluster_name = cluster_name
         self.__configurator = configurator
@@ -81,9 +60,23 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.__role = role
         self.__node_broker_port = node_broker_port
 
+        self.__working_dir = ensure_path_exists(
+            os.path.join(
+                self.__configurator.working_dir,
+                self.__cluster_name,
+                "{}_{}".format(
+                    self.__role,
+                    self.node_id
+                )
+            )
+        )
+
         if configurator.use_log_files:
-            self.__log_file = tempfile.NamedTemporaryFile(dir=self.cwd, prefix="logfile_", suffix=".log", delete=False)
-            kwargs = {}
+            self.__log_file = tempfile.NamedTemporaryFile(dir=self.__working_dir, prefix="logfile_", suffix=".log", delete=False)
+            kwargs = {
+                "stdout_file": os.path.join(self.__working_dir, "stdout"),
+                "stderr_file": os.path.join(self.__working_dir, "stderr")
+                }
         else:
             self.__log_file = None
             kwargs = {
@@ -91,23 +84,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "stderr_file": "/dev/stderr"
                 }
 
-        daemon.Daemon.__init__(self, self.command, cwd=self.cwd, timeout=180, stderr_on_error_lines=240, **kwargs)
+        daemon.Daemon.__init__(self, self.command, cwd=self.__working_dir, timeout=180, stderr_on_error_lines=240, **kwargs)
 
     @property
     def cwd(self):
-        if self.__cwd is None:
-            self.__cwd = ensure_path_exists(
-                get_unique_path_for_current_test(
-                    self.__configurator.output_path,
-                    join(
-                        self.__cluster_name, "{}_{}".format(
-                            self.__role,
-                            self.node_id
-                        )
-                    )
-                )
-            )
-        return self.__cwd
+        return self.__working_dir
 
     @property
     def binary_path(self):
@@ -172,7 +153,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         command.extend(
             [
-                "--yaml-config=%s" % join(self.__config_path, "config.yaml"),
+                "--yaml-config=%s" % os.path.join(self.__config_path, "config.yaml"),
                 "--grpc-port=%s" % self.grpc_port,
                 "--mon-port=%d" % self.mon_port,
                 "--ic-port=%d" % self.ic_port,
@@ -233,7 +214,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
 
 class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
-    def __init__(self, configurator=None, cluster_name=''):
+    def __init__(self, configurator=None, cluster_name='cluster'):
         super(KiKiMR, self).__init__()
 
         self.__tmpdir = tempfile.mkdtemp(prefix="kikimr_" + cluster_name + "_")
@@ -244,11 +225,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._nodes = {}
         self._slots = {}
         self.__server = 'localhost'
-        self.__client = None
-        self.__kv_client = None
-        self.__scheme_client = None
         self.__storage_pool_id_allocator = itertools.count(1)
-        self.__config_path = None
+        self.__config_path = ensure_path_exists(
+            os.path.join(self.__configurator.working_dir, self.__cluster_name, "kikimr_configs")
+        )
         self._slot_index_allocator = itertools.count(1)
         self._node_index_allocator = itertools.count(1)
         self.default_channel_bindings = None
@@ -314,9 +294,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             return
 
         self.__initialy_prepared = True
-        self.__client = None
-        self.__kv_client = None
-        self.__scheme_client = None
         self.__instantiate_udfs_dir()
         self.__write_configs()
         for _ in self.__configurator.all_node_ids():
@@ -464,15 +441,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
     @property
     def config_path(self):
-        if self.__config_path is None:
-            self.__config_path = ensure_path_exists(
-                get_unique_path_for_current_test(
-                    self.__configurator.output_path,
-                    join(
-                        self.__cluster_name, "kikimr_configs"
-                    )
-                )
-            )
         return self.__config_path
 
     def __write_configs(self):
@@ -521,7 +489,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._bs_config_invoke(request)
 
     def _bs_config_invoke(self, request):
-        timeout = plain_or_under_sanitizer(120, 240)
+        timeout = 240
         sleep = 5
         retries, success = timeout / sleep, False
         while retries > 0 and not success:
@@ -574,7 +542,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         def predicate():
             return blobstorage_controller_has_started_on_some_node(monitors)
 
-        timeout_seconds = plain_or_under_sanitizer(120, 240)
+        timeout_seconds = 240
         bs_controller_started = wait_for(
             predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=1.0, multiply=1.3
         )
@@ -583,7 +551,16 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):
     def __init__(
-            self, node_id, host, port, mon_port, ic_port, mbus_port, configurator=None, slot_id=None):
+            self,
+            node_id,
+            host,
+            port,
+            mon_port,
+            ic_port,
+            mbus_port,
+            configurator=None,
+            slot_id=None,
+            ):
         super(KikimrExternalNode, self).__init__(host)
         self.__node_id = node_id
         self.__host = host
@@ -602,8 +579,13 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
         self._can_update = None
         self.current_version_idx = 0
         self.versions = [
-            param_constants.kikimr_last_version_deploy_path,
-            param_constants.kikimr_next_version_deploy_path,
+            param_constants.kikimr_binary_deploy_path + "_next",
+            param_constants.kikimr_binary_deploy_path + "_last",
+        ]
+
+        self.local_drivers_path = [
+            param_constants.kikimr_driver_path(),
+            param_constants.next_version_kikimr_driver_path(),
         ]
 
     @property
@@ -724,9 +706,8 @@ mon={mon}""".format(
     def prepare_artifacts(self, cluster_yml):
         self.copy_file_or_dir(
             param_constants.kikimr_configure_binary_path(), param_constants.kikimr_configure_binary_deploy_path)
-        local_drivers_path = (param_constants.kikimr_driver_path(), param_constants.next_version_kikimr_driver_path())
 
-        for version, local_driver in zip(self.versions, local_drivers_path):
+        for version, local_driver in zip(self.versions, self.local_drivers_path):
             self.ssh_command("sudo rm -rf %s" % version)
             if local_driver is not None:
                 self.copy_file_or_dir(

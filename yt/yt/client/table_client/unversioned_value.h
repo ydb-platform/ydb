@@ -100,6 +100,7 @@ struct TBitwiseUnversionedValueHash
 struct TBitwiseUnversionedValueEqual
 {
     bool operator()(const TUnversionedValue& lhs, const TUnversionedValue& rhs) const;
+    static void FormatDiff(TStringBuilderBase* builder, const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

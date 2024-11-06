@@ -31,6 +31,7 @@ public:
     static constexpr const char* SPEC_COL_TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID;
     static constexpr const char* SPEC_COL_WRITE_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_WRITE_ID;
     static constexpr const char* SPEC_COL_DELETE_FLAG = NOlap::NPortion::TSpecialColumns::SPEC_COL_DELETE_FLAG;
+    static constexpr ui32 SpecialColumnsCount = 4;
 
     static const inline std::shared_ptr<arrow::Field> PlanStepField = arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64());
     static const inline std::shared_ptr<arrow::Field> TxIdField = arrow::field(SPEC_COL_TX_ID, arrow::uint64());

@@ -1519,12 +1519,12 @@ public:
             return ReadNext();
         }
 
-        auto rowIndices = batch->GetColumnByName("$row_index");
-        YQL_ENSURE(rowIndices);
-
         auto& decoder = *Specs_.Inputs[TableIndex_];
         auto& inputFields = decoder.FieldsVec;
         YQL_ENSURE(inputFields.size() == ColumnConverters_.size());
+
+        auto rowIndices = batch->GetColumnByName("$row_index");
+        YQL_ENSURE(rowIndices || decoder.Dynamic);
 
         arrow::compute::ExecContext execContext(Pool_);
         std::vector<arrow::Datum> convertedBatch;
@@ -1539,13 +1539,17 @@ public:
                     convertedColumn = ARROW_RESULT(arrow::MakeArrayFromScalar(tableNameScalar, batch->num_rows(), Pool_));
 
                 } else if (decoder.FillSysColumnRecord == inputFields[i].StructIndex || decoder.FillSysColumnNum == inputFields[i].StructIndex) {
-                    auto addFirst = ARROW_RESULT(arrow::compute::Cast(rowIndices, arrow::uint64(), arrow::compute::CastOptions::Safe(), &execContext));
-                    auto addSecond = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(1));
-                    convertedColumn = ARROW_RESULT(arrow::compute::Add(addFirst, addSecond, arrow::compute::ArithmeticOptions(), &execContext));
+                    if (rowIndices) {
+                        auto addFirst = ARROW_RESULT(arrow::compute::Cast(rowIndices, arrow::uint64(), arrow::compute::CastOptions::Safe(), &execContext));
+                        auto addSecond = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(1));
+                        convertedColumn = ARROW_RESULT(arrow::compute::Add(addFirst, addSecond, arrow::compute::ArithmeticOptions(), &execContext));
 
-                    if (decoder.FillSysColumnNum == inputFields[i].StructIndex) {
-                        auto addThird = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Specs_.TableOffsets.at(TableIndex_)));
-                        convertedColumn = ARROW_RESULT(arrow::compute::Add(convertedColumn, addThird, arrow::compute::ArithmeticOptions(), &execContext));
+                        if (decoder.FillSysColumnNum == inputFields[i].StructIndex) {
+                            auto addThird = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Specs_.TableOffsets.at(TableIndex_)));
+                            convertedColumn = ARROW_RESULT(arrow::compute::Add(convertedColumn, addThird, arrow::compute::ArithmeticOptions(), &execContext));
+                        }
+                    } else {
+                        convertedColumn = ARROW_RESULT(arrow::MakeArrayFromScalar(arrow::UInt64Scalar(0), batch->num_rows(), Pool_));
                     }
                 } else if (decoder.FillSysColumnIndex == inputFields[i].StructIndex) {
                     convertedColumn = ARROW_RESULT(arrow::MakeArrayFromScalar(arrow::UInt32Scalar(TableIndex_), batch->num_rows()));
@@ -1561,13 +1565,13 @@ public:
         }
 
         // index of the first row in the block
-        ui64 blockRowIndex = std::dynamic_pointer_cast<arrow::Int64Scalar>(ARROW_RESULT(rowIndices->GetScalar(0)))->value;
+        ui64 blockRowIndex = rowIndices ? std::dynamic_pointer_cast<arrow::Int64Scalar>(ARROW_RESULT(rowIndices->GetScalar(0)))->value : 0;
 
         NUdf::TArgsDechunker dechunker(std::move(convertedBatch));
         std::vector<arrow::Datum> chunk;
         ui64 chunkLen = 0;
         while (dechunker.Next(chunk, chunkLen)) {
-            Chunks_.emplace_back(blockRowIndex, chunkLen, std::move(chunk));
+            Chunks_.emplace_back(rowIndices ? blockRowIndex : 0, chunkLen, std::move(chunk));
             blockRowIndex += chunkLen;
         }
 

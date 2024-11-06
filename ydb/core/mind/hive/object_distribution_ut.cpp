@@ -4,6 +4,7 @@
 
 #include <util/datetime/cputimer.h>
 #include <util/stream/null.h>
+#include <util/system/compiler.h>
 
 #include <map>
 #include <random>
@@ -286,7 +287,7 @@ Y_UNIT_TEST_SUITE(ObjectDistribution) {
 
         double passed = timer.Get().SecondsFloat();
         Cerr << "Took " << passed << " seconds" << Endl;
-#ifndef SANITIZER_TYPE
+#ifndef _san_enabled_
 #ifdef NDEBUG
         UNIT_ASSERT_GE(NUM_NODES / passed, 1000);
 #endif

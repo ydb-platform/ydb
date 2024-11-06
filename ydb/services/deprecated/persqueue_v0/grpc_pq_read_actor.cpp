@@ -843,7 +843,7 @@ void TReadSessionActor::SetupBytesReadByUserAgentCounter() {
         ->GetSubgroup("host", "")
         ->GetSubgroup("protocol", "pqv0")
         ->GetSubgroup("consumer", ClientPath)
-        ->GetSubgroup("user_agent", V1::CleanupCounterValueString(UserAgent))
+        ->GetSubgroup("user_agent", V1::DropUserAgentSuffix(V1::CleanupCounterValueString(UserAgent)))
         ->GetExpiringNamedCounter("sensor", "BytesReadByUserAgent", true);
 }
 
@@ -897,6 +897,8 @@ void TReadSessionActor::SetupTopicCounters(const TTopicConverterPtr& topic)
     topicCounters.Errors                 = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"PartitionsErrors"}, true);
     topicCounters.Commits                = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"Commits"}, true);
     topicCounters.WaitsForData           = NKikimr::NPQ::TMultiCounter(subGroup, aggr, cons, {"WaitsForData"}, true);
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 void TReadSessionActor::SetupTopicCounters(const TTopicConverterPtr& topic, const TString& cloudId,
@@ -915,6 +917,8 @@ void TReadSessionActor::SetupTopicCounters(const TTopicConverterPtr& topic, cons
     topicCounters.PartitionsInfly        = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.count"}, false, "name");
     topicCounters.Errors                 = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.errors"}, true, "name");
     topicCounters.Commits                = NKikimr::NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.commits"}, true, "name");
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {

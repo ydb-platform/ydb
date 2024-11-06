@@ -35,7 +35,7 @@ $v1 = (
           date_dim.d_year, date_dim.d_moy);
 
 $v2 = (
- select v1.s_store_name s_store_name
+ select v1.i_category i_category, v1.i_brand i_brand, v1.s_store_name s_store_name, v1.s_company_name s_company_name
         ,v1.d_year d_year, v1.d_moy d_moy
         ,v1.avg_monthly_sales avg_monthly_sales
         ,v1.sum_sales sum_sales, v1_lag.sum_sales psum, v1_lead.sum_sales nsum
@@ -58,7 +58,7 @@ select *
  where  d_year = 1999 and
         avg_monthly_sales > 0 and
         case when avg_monthly_sales > 0 then abs(sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > cast("0.1" as decimal(7,2))
- order by sum_sales - avg_monthly_sales, sum_sales
+ order by sum_sales - avg_monthly_sales, s_store_name
  limit 100;
 
 -- end query 1 in stream 0 using template query47.tpl

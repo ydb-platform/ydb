@@ -21,7 +21,7 @@ interconnect_config:
 
 ### gRPC
 
-[ОсновнойAPI {{ ydb-short-name }}](../../reference/ydb-sdk/overview-grpc-api.md) основан на [gRPC](https://grpc.io/). Он используется для внешнего взаимодействия с клиентскими приложениями, которые работают напрямую с {{ ydb-short-name }} через [SDK](../../reference/ydb-sdk/index.md) или [CLI](../../reference/ydb-cli/index.md).
+[Основной API {{ ydb-short-name }}](../../reference/ydb-sdk/overview-grpc-api.md) основан на [gRPC](https://grpc.io/). Он используется для внешнего взаимодействия с клиентскими приложениями, которые работают напрямую с {{ ydb-short-name }} через [SDK](../../reference/ydb-sdk/index.md) или [CLI](../../reference/ydb-cli/index.md).
 
 Пример включения TLS для gRPC API:
 
@@ -123,6 +123,10 @@ tracing_config:
       service_name: ydb
 ```
 
+{% if feature_async_replication %}
+
 ## Асинхронная репликация
 
 [Асинхронная репликация](../../concepts/async-replication.md) синхронизирует данные между двумя базами данных {{ ydb-short-name }}, одна из которых выступает в роли клиента для другой. Использование TLS при такой коммуникации контролируется параметром `CONNECTION_STRING` в запросах [CREATE ASYNC REPLICATION](../../yql/reference/syntax/create-async-replication.md). Для TLS-соединений используйте протокол `grpcs://`. Изменения в серверной конфигурации не требуются.
+
+{% endif %}

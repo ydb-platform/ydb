@@ -105,6 +105,7 @@ def post_install(self):
 
     with self.yamakes["runtime_avx512"] as m:
         # Do not sanitize to workaround the ICE in clang-16
+        # See DEVTOOLSSUPPORT-49258 for details.
         m.NO_SANITIZE = True
 
     with self.yamakes["."] as hyperscan:

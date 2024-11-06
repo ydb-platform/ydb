@@ -28,7 +28,7 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
     if (type) {
         return result;
     }
-    auto resourcePrefix = Params.GetWorkloadName() + "/";
+    auto resourcePrefix = "resfs/file/" + Params.GetWorkloadName() + "/";
     SubstGlobal(resourcePrefix, "-", "");
     resourcePrefix.to_lower();
     TVector<TString> queries;
@@ -56,7 +56,7 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
         }
     } else {
         NResource::TResources qresources;
-        const auto prefix = resourcePrefix + ToString(Params.GetSyntax()) + "/q";
+        const auto prefix = resourcePrefix + "queries/" + ToString(Params.GetSyntax()) + "/q";
         NResource::FindMatch(prefix, &qresources);
         for (const auto& r: qresources) {
             ui32 num;
@@ -96,6 +96,7 @@ void TTpcBaseWorkloadGenerator::PatchQuery(TString& query) const {
 }
 
 void TTpcBaseWorkloadGenerator::FilterHeader(IOutputStream& result, TStringBuf header, const TString& query) const {
+    const TString scaleFactor = "$scale_factor = " + ToString(Params.GetScale()) + ";";
     for(TStringBuf line; header.ReadLine(line);) {
         const auto pos = line.find('=');
         if (pos == line.npos) {
@@ -103,7 +104,7 @@ void TTpcBaseWorkloadGenerator::FilterHeader(IOutputStream& result, TStringBuf h
         }
         const auto name = StripString(line.SubString(0, pos));
         if (name == "$scale_factor") {
-            line = "$scale_factor = " + ToString(Params.GetScale()) + ";"; 
+            line = scaleFactor; 
         } 
         for(auto posInQ = query.find(name); posInQ != query.npos; posInQ = query.find(name, posInQ)) {
             posInQ += name.length();
@@ -163,6 +164,8 @@ void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComm
             .DefaultValue(Scale).StoreResult(&Scale);
         opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9) because YDB supports only this type.")
             .StoreResult(&FloatMode).DefaultValue(FloatMode);
+        opts.AddLongOption('c', "check-canonical", "Use deterministic queries and check results with canonical ones.")
+            .NoArgument().StoreTrue(&CheckCanonical);
         break;
     case TWorkloadParams::ECommandType::Init:
         opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9) because YDB supports only this type.")

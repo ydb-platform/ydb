@@ -35,6 +35,7 @@ struct TEvPrivate {
         EvCanMoveTablets,
         EvUpdateDataCenterFollowers,
         EvGenerateTestData,
+        EvRefreshScaleRecommendation,
         EvEnd
     };
 
@@ -130,6 +131,8 @@ struct TEvPrivate {
     };
 
     struct TEvGenerateTestData : TEventLocal<TEvGenerateTestData, EvGenerateTestData> {};
+  
+    struct TEvRefreshScaleRecommendation : TEventLocal<TEvRefreshScaleRecommendation, EvRefreshScaleRecommendation> {};
 };
 
 } // NHive

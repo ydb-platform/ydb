@@ -149,8 +149,7 @@ class TDsvFormatConfig
     : public TDsvFormatConfigBase
 {
 public:
-
-    TString TableIndexColumn;
+    std::string TableIndexColumn;
     bool SkipUnsupportedTypes = false;
 
     REGISTER_YSON_STRUCT(TDsvFormatConfig);
@@ -169,8 +168,8 @@ class TYamredDsvFormatConfig
 public:
     char YamrKeysSeparator;
 
-    std::vector<TString> KeyColumnNames;
-    std::vector<TString> SubkeyColumnNames;
+    std::vector<std::string> KeyColumnNames;
+    std::vector<std::string> SubkeyColumnNames;
 
     bool SkipUnsupportedTypesInValue = false;
 
@@ -193,14 +192,14 @@ class TSchemafulDsvFormatConfig
     : public TTableFormatConfigBase
 {
 public:
-    std::optional<std::vector<TString>> Columns;
+    std::optional<std::vector<std::string>> Columns;
 
     EMissingSchemafulDsvValueMode MissingValueMode;
     TString MissingValueSentinel;
 
     std::optional<bool> EnableColumnNamesHeader;
 
-    const std::vector<TString>& GetColumnsOrThrow() const;
+    const std::vector<std::string>& GetColumnsOrThrow() const;
 
     REGISTER_YSON_STRUCT(TSchemafulDsvFormatConfig);
 
@@ -382,7 +381,7 @@ public:
     int FieldWeightLimit;
     int StringWeightLimit;
     int MaxAllColumnNamesCount;
-    std::optional<std::vector<TString>> ColumnNames;
+    std::optional<std::vector<std::string>> ColumnNames;
     EWebJsonValueFormat ValueFormat;
 
     // Intentionally do not reveal following options to user.

@@ -4,6 +4,9 @@ import optparse
 import os
 import re
 
+# Explicitly enable local imports
+# Don't forget to add imported scripts to inputs of the calling command!
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import build_java_with_error_prone2 as java_error_prone
 import setup_java_tmpdir as java_tmpdir
 

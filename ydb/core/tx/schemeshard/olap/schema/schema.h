@@ -10,7 +10,6 @@ namespace NKikimr::NSchemeShard {
 
     class TOlapSchema {
     private:
-        YDB_READONLY_OPT(NKikimrSchemeOp::EColumnTableEngine, Engine);
         YDB_READONLY_DEF(TOlapColumnsDescription, Columns);
         YDB_READONLY_DEF(TOlapIndexesDescription, Indexes);
         YDB_READONLY_DEF(TOlapOptionsDescription, Options);

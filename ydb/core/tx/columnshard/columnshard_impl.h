@@ -177,6 +177,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NOlap::NDataSharing::TTxDataAckToSource;
     friend class NOlap::NDataSharing::TTxFinishAckToSource;
     friend class NOlap::NDataSharing::TTxFinishAckFromInitiator;
+    friend class NOlap::NDataSharing::TSourceSession;
 
     friend class NOlap::TStoragesManager;
 

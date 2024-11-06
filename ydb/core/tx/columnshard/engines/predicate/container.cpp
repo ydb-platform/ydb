@@ -1,5 +1,5 @@
 #include "container.h"
-#include <ydb/core/tx/columnshard/engines/index_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NOlap {

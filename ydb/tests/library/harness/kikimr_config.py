@@ -89,13 +89,9 @@ def _load_default_yaml(default_tablet_node_ids, ydb_domain_name, static_erasure,
     return yaml_dict
 
 
-def _read_file(filename):
-    with open(filename, "r") as f:
-        return f.read()
-
-
 def _load_yaml_config(filename):
-    return yaml.safe_load(_read_file(filename))
+    with open(filename, "r") as f:
+        return yaml.safe_load(f)
 
 
 def _use_in_memory_pdisks_var(pdisk_store_path, use_in_memory_pdisks):
@@ -116,7 +112,6 @@ class KikimrConfigGenerator(object):
             nodes=None,
             additional_log_configs=None,
             port_allocator=None,
-            load_udfs=False,
             udfs_path=None,
             output_path=None,
             enable_pq=True,
@@ -207,7 +202,6 @@ class KikimrConfigGenerator(object):
         self.static_erasure = erasure
         self.domain_name = domain_name
         self.__number_of_pdisks_per_node = 1 + len(dynamic_pdisks)
-        self.__load_udfs = load_udfs
         self.__udfs_path = udfs_path
         self._dcs = [1]
         if erasure == Erasure.MIRROR_3_DC:
@@ -226,7 +220,11 @@ class KikimrConfigGenerator(object):
 
         self.__dynamic_pdisks = dynamic_pdisks
 
-        self.__output_path = output_path or yatest.common.output_path()
+        self.__working_dir = output_path or yatest.common.test_output_path()
+
+        if not os.path.isdir(self.__working_dir):
+            os.makedirs(self.__working_dir)
+
         self.node_kind = node_kind
         self.yq_tenant = yq_tenant
         self.dc_mapping = dc_mapping
@@ -286,8 +284,10 @@ class KikimrConfigGenerator(object):
         # NOTE(shmel1k@): change to 'true' after migration to YDS scheme
         self.yaml_config['sqs_config']['enable_sqs'] = enable_sqs
         self.yaml_config['pqcluster_discovery_config']['enabled'] = enable_pqcd
-        self.yaml_config["net_classifier_config"]["net_data_file_path"] = os.path.join(self.__output_path,
-                                                                                       'netData.tsv')
+        self.yaml_config["net_classifier_config"]["net_data_file_path"] = os.path.join(
+            self.__working_dir,
+            'netData.tsv',
+        )
         with open(self.yaml_config["net_classifier_config"]["net_data_file_path"], "w") as net_data_file:
             net_data_file.write("")
 
@@ -472,37 +472,13 @@ class KikimrConfigGenerator(object):
         return self.naming_config.NameserviceConfig
 
     def __set_enable_metering(self):
-        def ensure_path_exists(path):
-            if not os.path.isdir(path):
-                os.makedirs(path)
-            return path
-
-        def get_cwd_for_test(output_path):
-            test_name = yatest.common.context.test_name or ""
-            test_name = test_name.replace(':', '_')
-            return os.path.join(output_path, test_name)
-
-        cwd = get_cwd_for_test(self.__output_path)
-        ensure_path_exists(cwd)
-        metering_file_path = os.path.join(cwd, 'metering.txt')
+        metering_file_path = os.path.join(self.__working_dir, 'metering.txt')
         with open(metering_file_path, "w") as metering_file:
             metering_file.write('')
         self.yaml_config['metering_config'] = {'metering_file_path': metering_file_path}
 
     def __set_enable_audit_log(self):
-        def ensure_path_exists(path):
-            if not os.path.isdir(path):
-                os.makedirs(path)
-            return path
-
-        def get_cwd_for_test(output_path):
-            test_name = yatest.common.context.test_name or ""
-            test_name = test_name.replace(':', '_')
-            return os.path.join(output_path, test_name)
-
-        cwd = get_cwd_for_test(self.__output_path)
-        ensure_path_exists(cwd)
-        audit_file_path = os.path.join(cwd, 'audit.txt')
+        audit_file_path = os.path.join(self.__working_dir, 'audit.txt')
         with open(audit_file_path, "w") as audit_file:
             audit_file.write('')
         self.yaml_config['audit_config'] = dict(
@@ -524,8 +500,8 @@ class KikimrConfigGenerator(object):
         return self.yaml_config['sqs_config']['enable_sqs']
 
     @property
-    def output_path(self):
-        return self.__output_path
+    def working_dir(self):
+        return self.__working_dir
 
     def get_binary_path(self, node_id):
         binary_paths = self.__binary_paths
@@ -563,9 +539,9 @@ class KikimrConfigGenerator(object):
         self.yaml_config['grpc_config']['ext_endpoints'].append(cur_grpc_config)
 
     def get_yql_udfs_to_load(self):
-        if not self.__load_udfs:
+        if self.__udfs_path is None:
             return []
-        udfs_path = self.__udfs_path or yatest.common.build_path("yql/udfs")
+        udfs_path = self.__udfs_path
         result = []
         for dirpath, dnames, fnames in os.walk(udfs_path):
             is_loaded = False

@@ -7,12 +7,8 @@ LIBRARY()
 SRCS(
     column_engine_logs.cpp
     column_engine.cpp
-    column_features.cpp
     db_wrapper.cpp
-    index_info.cpp
     filter.cpp
-    portion_info.cpp
-    tier_info.cpp
     defs.cpp
 )
 

@@ -5082,6 +5082,24 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
+        {
+            auto query2 = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER OBJECT `)" << tableName << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
+                NAME=max_value1, TYPE=MAX, FEATURES=`{\"column_name\": \"Value1\"}`))";
+            result = session.ExecuteSchemeQuery(query2).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query2 = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER OBJECT `)" << tableName << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
+                NAME=max_value2, TYPE=MAX, FEATURES=`{\"column_name\": \"Value2\"}`))";
+            result = session.ExecuteSchemeQuery(query2).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
         auto query2 = TStringBuilder() << R"(
             --!syntax_v1
             ALTER TABLE `)" << tableName << R"(` SET(TTL = Interval("P1D") ON Key);)";
@@ -7581,6 +7599,86 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         checkDisabled(ydb->ExecuteQuery(upsertSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
     }
+
+    Y_UNIT_TEST(CreateBackupCollectionDisabledByDefault) {
+        TKikimrRunner kikimr;
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `my_collection`
+                    (TABLE `table`)
+                WITH(
+                    STORAGE = 'cluster'
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Backup collections are disabled. Please contact your system administrator to enable it");
+        }
+    }
+
+    Y_UNIT_TEST(CreateBackupCollection) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableBackupService(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings()
+            .SetAppConfig(config)
+            .SetEnableBackupService(true));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // negative
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `/Root/my_collection`
+                    (TABLE `/Root/table`)
+                WITH(
+                    STORAGE = 'cluster',
+                    INCREMENTAL_BACKUP_ENABLED = 'true'
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Backup collections must be placed in");
+        }
+
+        // positive
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `my_collection`
+                    (TABLE `/Root/table`)
+                WITH(
+                    STORAGE = 'cluster',
+                    INCREMENTAL_BACKUP_ENABLED = 'true'
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE BACKUP COLLECTION `/Root/.backups/collections/my_collection2`
+                    (TABLE `/Root/table`)
+                WITH(
+                    STORAGE = 'cluster',
+                    INCREMENTAL_BACKUP_ENABLED = 'true'
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapScheme) {
@@ -7654,7 +7752,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         };
 
         TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "id_second"}).SetSharding({"id"}).SetSchema(schema).SetTTL("created_at", "Interval(\"PT1H\")");
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"created_at", "id_second"}).SetSharding({"created_at"}).SetSchema(schema).SetTTL("created_at", "Interval(\"PT1H\")");
         testHelper.CreateTable(testTable);
 
         {
@@ -7716,7 +7814,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         };
 
         TTestHelper::TColumnTable testTable;
-        testTable.SetName(tableName).SetPrimaryKey({"id", "id_second"}).SetSharding({"id"}).SetSchema(schema).SetTTL("created_at", "Interval(\"PT1H\")");
+        testTable.SetName(tableName).SetPrimaryKey({"created_at", "id_second"}).SetSharding({"created_at"}).SetSchema(schema).SetTTL("created_at", "Interval(\"PT1H\")");
         testHelper.CreateTable(testTable);
         testHelper.CreateTier("tier1");
 
@@ -7754,6 +7852,16 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "id_second"}).SetSharding({"id"}).SetSchema(schema);
         testHelper.CreateTable(testTable);
+
+        {
+            auto alterQuery = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
+                NAME=max_value1, TYPE=MAX, FEATURES=`{\"column_name\": \"created_at\"}`))";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+
+        }
 
         {
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`SET (TTL = Interval(\"PT1H\") ON created_at);";
@@ -8412,6 +8520,14 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
         testHelper.CreateTable(testTable);
+        {
+            auto alterQuery = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER OBJECT `)" << testTable.GetName() << R"(` (TYPE TABLE) SET (ACTION=UPSERT_INDEX,
+                NAME=max_pk_int, TYPE=MAX, FEATURES=`{\"column_name\": \"created_at\"}`))";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
 
         {
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`SET (TTL = Interval(\"PT1H\") ON created_at);";

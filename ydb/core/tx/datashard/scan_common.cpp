@@ -29,4 +29,15 @@ TColumnsTypes GetAllTypes(const TUserTable& tableInfo) {
     return result;
 }
 
+ui64 CountBytes(TArrayRef<const TCell> key, const NTable::TRowState& row) {
+    ui64 bytes = 0;
+    for (auto& cell : key) {
+        bytes += cell.Size();
+    }
+    for (auto& cell : *row) {
+        bytes += cell.Size();
+    }
+    return bytes;
+}
+
 }

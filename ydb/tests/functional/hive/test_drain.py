@@ -4,8 +4,8 @@ import logging
 import yatest
 from ydb.tests.library.common.delayed import wait_tablets_are_active
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.harness.kikimr_http_client import SwaggerClient
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness import param_constants
@@ -20,7 +20,7 @@ TimeoutSeconds = 300
 class TestHive(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             KikimrConfigGenerator(
                 Erasure.BLOCK_4_2,
                 additional_log_configs={

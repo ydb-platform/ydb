@@ -426,8 +426,8 @@ void TSchemeShard::Clear() {
 
     PartitionMetricsMap.clear();
 
-    if (CompactionQueue) {
-        CompactionQueue->Clear();
+    if (BackgroundCompactionQueue) {
+        BackgroundCompactionQueue->Clear();
         UpdateBackgroundCompactionQueueMetrics();
     }
 
@@ -3922,7 +3922,7 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
 
     // sanity check: by this time compaction queue and metrics must be updated already
     for (const auto& p: tableInfo->GetPartitions()) {
-        ShardRemoved(p.ShardIdx);
+        OnShardRemoved(p.ShardIdx);
     }
 
     Tables.erase(pathId);
@@ -4363,7 +4363,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
         GetPipeClientConfig(),
         new TPipeClientFactory(this)))
     , PipeTracker(*PipeClientCache)
-    , CompactionStarter(this)
+    , BackgroundCompactionStarter(this)
     , BorrowedCompactionStarter(this)
     , BackgroundCleaningStarter(this)
     , ShardDeleter(info->TabletID)
@@ -4452,8 +4452,8 @@ void TSchemeShard::Die(const TActorContext &ctx) {
 
     PipeClientCache->Detach(ctx);
 
-    if (CompactionQueue)
-        CompactionQueue->Shutdown(ctx);
+    if (BackgroundCompactionQueue)
+        BackgroundCompactionQueue->Shutdown(ctx);
 
     if (BorrowedCompactionQueue) {
         BorrowedCompactionQueue->Shutdown(ctx);
@@ -6928,12 +6928,18 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
         for (const auto& p: oldPartitioning) {
             if (!newPartitioningSet.contains(p.ShardIdx)) {
                 // note that queues might not contain the shard
-                ShardRemoved(p.ShardIdx);
+                OnShardRemoved(p.ShardIdx);
             }
         }
     }
 
     tableInfo->SetPartitioning(std::move(newPartitioning));
+}
+
+void TSchemeShard::OnShardRemoved(const TShardIdx& shardIdx) {
+    RemoveBackgroundCompaction(shardIdx);
+    RemoveBorrowedCompaction(shardIdx);
+    RemoveShardMetrics(shardIdx);
 }
 
 void TSchemeShard::FillAsyncIndexInfo(const TPathId& tableId, NKikimrTxDataShard::TFlatSchemeTransaction& tx) {
@@ -7153,7 +7159,7 @@ void TSchemeShard::ConfigureBackgroundCompactionQueue(
     queueConfig.RowCountThreshold = config.GetRowCountThreshold();
     queueConfig.CompactSinglePartedShards = config.GetCompactSinglePartedShards();
 
-    TCompactionQueue::TConfig compactionConfig;
+    TBackgroundCompactionQueue::TConfig compactionConfig;
 
     // schemeshard specific
     compactionConfig.IsCircular = true;
@@ -7166,20 +7172,20 @@ void TSchemeShard::ConfigureBackgroundCompactionQueue(
     compactionConfig.MaxRate = config.GetMaxRate();
     compactionConfig.MinOperationRepeatDelay = TDuration::Seconds(config.GetMinCompactionRepeatDelaySeconds());
 
-    if (CompactionQueue) {
-        CompactionQueue->UpdateConfig(compactionConfig, queueConfig);
+    if (BackgroundCompactionQueue) {
+        BackgroundCompactionQueue->UpdateConfig(compactionConfig, queueConfig);
     } else {
-        CompactionQueue = new TCompactionQueue(
+        BackgroundCompactionQueue = new TBackgroundCompactionQueue(
             compactionConfig,
             queueConfig,
-            CompactionStarter);
-        ctx.RegisterWithSameMailbox(CompactionQueue);
+            BackgroundCompactionStarter);
+        ctx.RegisterWithSameMailbox(BackgroundCompactionQueue);
     }
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "BackgroundCompactionQueue configured: Timeout# " << compactionConfig.Timeout
                  << ", compact single parted# " << (queueConfig.CompactSinglePartedShards ? "yes" : "no")
-                 << ", Rate# " << CompactionQueue->GetRate()
+                 << ", Rate# " << BackgroundCompactionQueue->GetRate()
                  << ", WakeupInterval# " << compactionConfig.WakeupInterval
                  << ", RoundInterval# " << compactionConfig.RoundInterval
                  << ", InflightLimit# " << compactionConfig.InflightLimit
@@ -7251,15 +7257,15 @@ void TSchemeShard::StartStopCompactionQueues() {
     // note, that we don't need to check current state of compaction queue
     if (IsServerlessDomain(TPath::Init(RootPathId(), this))) {
         if (EnableBackgroundCompactionServerless) {
-            CompactionQueue->Start();
+            BackgroundCompactionQueue->Start();
         } else {
-            CompactionQueue->Stop();
+            BackgroundCompactionQueue->Stop();
         }
     } else {
         if (EnableBackgroundCompaction) {
-            CompactionQueue->Start();
+            BackgroundCompactionQueue->Start();
         } else {
-            CompactionQueue->Stop();
+            BackgroundCompactionQueue->Stop();
         }
     }
 
@@ -7389,9 +7395,6 @@ void TSchemeShard::Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr&, const TActorC
 }
 
 void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
-    if (!EnableStatistics) {
-        return;
-    }
     ResolveSA();
     ctx.Schedule(TDuration::Seconds(30), new TEvPrivate::TEvSendBaseStatsToSA());
 }
@@ -7448,6 +7451,10 @@ void TSchemeShard::ConnectToSA() {
 }
 
 TDuration TSchemeShard::SendBaseStatsToSA() {
+    if (!EnableStatistics) {
+        return TDuration::Seconds(30);
+    }
+
     if (!SAPipeClientId) {
         ResolveSA();
         if (!StatisticsAggregatorId) {

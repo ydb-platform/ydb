@@ -12,7 +12,7 @@ from hamcrest import assert_that, equal_to, greater_than, not_none
 from ydb.core.protos import config_pb2
 from ydb.tests.library.common.msgbus_types import MessageBusStatus
 from ydb.tests.library.common.protobuf_ss import AlterTableRequest
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness.ydb_fixtures import ydb_database_ctx
@@ -38,7 +38,7 @@ def get_db_counters(mon_port, service):
 class BaseDbCounters(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             KikimrConfigGenerator(
                 additional_log_configs={
                     'SYSTEM_VIEWS': LogLevels.DEBUG

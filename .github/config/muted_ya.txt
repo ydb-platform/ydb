@@ -1,5 +1,6 @@
 ydb/core/blobstorage/dsproxy/ut TBlobStorageProxySequenceTest.TestBlock42PutWithChangingSlowDisk
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
+ydb/core/blobstorage/pdisk/ut TPDiskTest.TestMultipleLogSpliceNonceJump
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
@@ -18,17 +19,17 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.Select
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertEvWrite
+ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertViaLegacyScripting-Streaming
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1_clean_with_restarts
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.ChangeSchemaAndSplit
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingConsistency64
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingModuloN
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.UpsertWhileSplitTest
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
-ydb/core/kqp/ut/query KqpLimits.ComputeActorMemoryAllocationFailureQueryService
+ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpLimits.QueryExecTimeoutCancel
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
@@ -39,14 +40,13 @@ ydb/core/kqp/ut/scheme [*/*]+chunk+chunk
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [*/*] chunk chunk
 ydb/core/kqp/ut/service [*/*]+chunk+chunk
+ydb/core/kqp/ut/sysview KqpSystemView.PartitionStatsFollower
 ydb/core/mind/hive/ut THiveTest.DrainWithHiveRestart
 ydb/core/persqueue/ut [*/*] chunk chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
-ydb/core/tx/columnshard/ut_rw Normalizers.CleanEmptyPortionsNormalizer
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
-ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitBySizeTest.Merge1KShards
 ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst-false
@@ -58,6 +58,7 @@ ydb/library/actors/http/ut sole+chunk+chunk
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[constant-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[count_rows-dqrun]
 ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[primitives-dqrun]
 ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[primitives-kqprun]
 ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[constant-dqrun]
@@ -69,6 +70,7 @@ ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_
 ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[pushdown0-dqrun]
 ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[pushdown0-kqprun]
 ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_positive[PRIMITIVES-dqrun]
+ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_asterisk-dqrun]
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[pushdown-kqprun]
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch_ch-dqrun]
 ydb/library/yql/tests/sql/hybrid_file/part1 test.py.test[in-in_noansi_join--Debug]
@@ -78,14 +80,12 @@ ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ReadSessionCorrectClose
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*] chunk chunk
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*]+chunk+chunk
 ydb/services/datastreams/ut DataStreams.TestGetRecordsStreamWithSingleShard
+ydb/services/datastreams/ut DataStreams.TestPutRecordsCornerCases
 ydb/services/datastreams/ut DataStreams.TestReservedConsumersMetering
 ydb/services/datastreams/ut DataStreams.TestReservedStorageMetering
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleConcatUnexistedKey
-ydb/services/keyvalue/ut KeyValueGRPCService.SimpleExecuteTransaction
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleExecuteTransactionWithWrongGeneration
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleGetStorageChannelStatus
-ydb/services/keyvalue/ut KeyValueGRPCService.SimpleWriteReadOverrun
-ydb/services/keyvalue/ut KeyValueGRPCService.SimpleWriteReadWithoutLockGeneration1
 ydb/services/keyvalue/ut sole chunk chunk
 ydb/services/keyvalue/ut sole+chunk+chunk
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectReadCleanCache
@@ -95,6 +95,7 @@ ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync1
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync10
 ydb/services/ydb/sdk_sessions_ut [*/*] chunk chunk
 ydb/services/ydb/table_split_ut [*/*] chunk chunk
+ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/fq/control_plane_storage [*/*] chunk chunk
 ydb/tests/fq/control_plane_storage [*/*]+chunk+chunk
 ydb/tests/fq/generic/analytics test_join.py.TestJoinAnalytics.test_simple[v1-2-fq_client0-mvp_external_ydb_endpoint0]
@@ -110,8 +111,6 @@ ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[
 ydb/tests/fq/mem_alloc sole chunk chunk
 ydb/tests/fq/mem_alloc sole+chunk+chunk
 ydb/tests/fq/mem_alloc test_alloc_default.py.TestAlloc.test_hard_limit[kikimr0]
-ydb/tests/fq/mem_alloc test_alloc_default.py.TestAlloc.test_mkql_not_increased[kikimr0]
-ydb/tests/fq/mem_alloc test_alloc_default.py.TestAlloc.test_node_limit[kikimr0]
 ydb/tests/fq/mem_alloc test_result_limits.py.TestResultLimits.test_quotas[kikimr0]
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
 ydb/tests/fq/multi_plane [test_dispatch.py] chunk chunk
@@ -121,6 +120,7 @@ ydb/tests/fq/multi_plane [test_retry.py]+chunk+chunk
 ydb/tests/fq/multi_plane [test_retry_high_rate.py] chunk chunk
 ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping
 ydb/tests/fq/multi_plane test_retry.py.TestRetry.test_low_rate[kikimr0]
+ydb/tests/fq/s3 [test_format_setting.py] chunk chunk
 ydb/tests/fq/yds [*/*] chunk chunk
 ydb/tests/fq/yds [*/*]+chunk+chunk
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
@@ -136,14 +136,12 @@ ydb/tests/fq/yds test_recovery.py.TestRecovery.test_program_state_recovery
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_program_state_recovery_error_if_no_states
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_3_sessions
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filter
-ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filter_missing_fields
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_read_raw_format_with_row_dispatcher
+ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_scheme_error
-ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_simple_optional
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_start_new_query
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start_with_filter
-ydb/tests/fq/yds test_row_dispatcher.py.flake8
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_pq_watermarks[v1-mvp_external_ydb_endpoint0]
@@ -154,12 +152,10 @@ ydb/tests/fq/yt/kqp_yt_file/part18 test.py.test[pg-join_brackets2-default.txt]
 ydb/tests/functional/audit test_auditlog.py.test_cloud_ids_are_logged[attrs0]
 ydb/tests/functional/audit test_auditlog.py.test_cloud_ids_are_logged[attrs1]
 ydb/tests/functional/audit test_auditlog.py.test_dml_requests_arent_logged_when_sid_is_expected
-ydb/tests/functional/audit test_auditlog.py.test_dml_requests_logged_when_sid_is_unexpected
 ydb/tests/functional/audit test_auditlog.py.test_single_dml_query_logged[delete]
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk
-ydb/tests/functional/restarts test_restarts.py.TestRestartMultipleMirror34.test_tablets_are_successfully_started_after_few_killed_nodes
 ydb/tests/functional/restarts test_restarts.py.TestRestartSingleBlock42.test_restart_single_node_is_ok
 ydb/tests/functional/serializable test.py.test_local
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]

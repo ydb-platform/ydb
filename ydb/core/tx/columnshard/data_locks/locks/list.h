@@ -27,9 +27,25 @@ protected:
         return Portions.empty();
     }
 public:
-    TListPortionsLock(const TString& lockName, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const bool readOnly = false)
+    TListPortionsLock(const TString& lockName, const std::vector<TPortionDataAccessor>& portions, const bool readOnly = false)
         : TBase(lockName, readOnly)
     {
+        for (auto&& p : portions) {
+            Portions.emplace(p.GetPortionInfo().GetAddress());
+            Granules.emplace(p.GetPortionInfo().GetPathId());
+        }
+    }
+
+    TListPortionsLock(const TString& lockName, const std::vector<std::shared_ptr<TPortionInfo>>& portions, const bool readOnly = false)
+        : TBase(lockName, readOnly) {
+        for (auto&& p : portions) {
+            Portions.emplace(p->GetAddress());
+            Granules.emplace(p->GetPathId());
+        }
+    }
+
+    TListPortionsLock(const TString& lockName, const std::vector<TPortionInfo::TConstPtr>& portions, const bool readOnly = false)
+        : TBase(lockName, readOnly) {
         for (auto&& p : portions) {
             Portions.emplace(p->GetAddress());
             Granules.emplace(p->GetPathId());

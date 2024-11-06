@@ -239,8 +239,8 @@ private:
         return KeyWidth + StateWidth;
     }
 public:
-    TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal)
-        : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), States(hash, equal, CountRowsOnPage) {
+    TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal, bool allowOutOfMemory = false)
+        : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), AllowOutOfMemory(allowOutOfMemory), States(hash, equal, CountRowsOnPage) {
         CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
@@ -275,9 +275,26 @@ public:
         }
         Throat = States.GetKey(itInsert) + KeyWidth;
         if (isNew) {
-            States.CheckGrow();
+            GrowStates();
         }
         return isNew;
+    }
+
+    void GrowStates() {
+        try {
+            States.CheckGrow();
+        } catch (TMemoryLimitExceededException) {
+            YQL_LOG(INFO) << "State failed to grow";
+            if (IsOutOfMemory || !AllowOutOfMemory) {
+                throw;
+            } else {
+                IsOutOfMemory = true;
+            }
+        }
+    }
+
+    bool CheckIsOutOfMemory() const {
+        return IsOutOfMemory;
     }
 
     template<bool SkipYields>
@@ -331,6 +348,8 @@ public:
 private:
     std::optional<TStorageIterator> ExtractIt;
     const ui32 KeyWidth, StateWidth;
+    const bool AllowOutOfMemory;
+    bool IsOutOfMemory = false;
     ui64 CurrentPosition = 0;
     TRow* CurrentPage = nullptr;
     TStorage Storage;
@@ -386,7 +405,7 @@ public:
         const THashFunc& hash, const TEqualsFunc& equal, bool allowSpilling, TComputationContext& ctx
     )
         : TBase(memInfo)
-        , InMemoryProcessingState(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal)
+        , InMemoryProcessingState(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal, allowSpilling && ctx.SpillerFactory)
         , UsedInputItemType(usedInputItemType)
         , KeyAndStateType(keyAndStateType)
         , KeyWidth(keyWidth)
@@ -451,6 +470,9 @@ public:
     ETasteResult TasteIt() {
         if (GetMode() == EOperatingMode::InMemory) {
             bool isNew = InMemoryProcessingState.TasteIt();
+            if (InMemoryProcessingState.CheckIsOutOfMemory()) {
+                StateWantsToSpill = true;
+            }
             Throat = InMemoryProcessingState.Throat;
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
@@ -649,7 +671,11 @@ private:
     }
 
     bool CheckMemoryAndSwitchToSpilling() {
-        if (AllowSpilling && Ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
+        if (!(AllowSpilling && Ctx.SpillerFactory)) {
+            return false;
+        }
+        if (StateWantsToSpill || IsSwitchToSpillingModeCondition()) {
+            StateWantsToSpill = false;
             LogMemoryUsage();
 
             SwitchMode(EOperatingMode::SplittingState);
@@ -840,6 +866,7 @@ public:
     NUdf::TUnboxedValuePod* Throat = nullptr;
 
 private:
+    bool StateWantsToSpill = false;
     bool IsEverythingExtracted = false;
 
     TState InMemoryProcessingState;

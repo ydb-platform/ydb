@@ -2,8 +2,7 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-void TLevelPortions::DoModifyPortions(
-    const std::vector<std::shared_ptr<TPortionInfo>>& add, const std::vector<std::shared_ptr<TPortionInfo>>& remove) {
+void TLevelPortions::DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) {
     for (auto&& i : remove) {
         auto it = Portions.find(i);
         AFL_VERIFY(it != Portions.end());

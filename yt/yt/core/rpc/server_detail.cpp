@@ -23,6 +23,7 @@ using namespace NRpc::NProto;
 using namespace NTracing;
 
 using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -206,7 +207,7 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
     // COMPAT(danilalexeev): legacy RPC codecs.
     if (IsResponseBodySerializedWithCompression()) {
         if (RequestHeader_->has_response_codec()) {
-            header.set_codec(static_cast<int>(ResponseCodec_));
+            header.set_codec(ToProto(ResponseCodec_));
         } else {
             ResponseBody_ = PushEnvelope(ResponseBody_, ResponseCodec_);
             ResponseAttachments_ = DecompressAttachments(ResponseAttachments_, ResponseCodec_);
@@ -372,6 +373,9 @@ std::optional<TDuration> TServiceContextBase::GetExecutionDuration() const
 {
     return std::nullopt;
 }
+
+void TServiceContextBase::RecordThrottling(TDuration /*throttleDuration*/)
+{ }
 
 TTraceContextPtr TServiceContextBase::GetTraceContext() const
 {
@@ -578,6 +582,11 @@ std::optional<TDuration> TServiceContextWrapper::GetWaitDuration() const
 std::optional<TDuration> TServiceContextWrapper::GetExecutionDuration() const
 {
     return UnderlyingContext_->GetExecutionDuration();
+}
+
+void TServiceContextWrapper::RecordThrottling(TDuration throttleDuration)
+{
+    return UnderlyingContext_->RecordThrottling(throttleDuration);
 }
 
 TTraceContextPtr TServiceContextWrapper::GetTraceContext() const

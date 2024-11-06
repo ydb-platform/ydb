@@ -3582,7 +3582,10 @@ void TDataShard::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActor
 }
 
 void TDataShard::AckRSToDeletedTablet(ui64 tabletId, TPersistentTablet& state, const TActorContext& ctx) {
-    for (ui64 seqno : state.OutReadSets) {
+    auto seqnos = std::move(state.OutReadSets);
+    state.OutReadSets.clear();
+
+    for (ui64 seqno : seqnos) {
         LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Pipe reset to dead tablet %" PRIu64 " caused ack of readset %" PRIu64
             " at tablet %" PRIu64, tabletId, seqno, TabletID());
 
@@ -3595,7 +3598,6 @@ void TDataShard::AckRSToDeletedTablet(ui64 tabletId, TPersistentTablet& state, c
             PlanQueue.Progress(ctx);
         }
     }
-    state.OutReadSets.clear();
 
     if (OutReadSets.HasExpectations(tabletId)) {
         AbortExpectationsFromDeletedTablet(tabletId, OutReadSets.RemoveExpectations(tabletId));
@@ -3612,12 +3614,10 @@ void TDataShard::AbortExpectationsFromDeletedTablet(ui64 tabletId, THashMap<ui64
 }
 
 void TDataShard::RestartPipeRS(ui64 tabletId, TPersistentTablet& state, const TActorContext& ctx) {
-    for (auto seqno : state.OutReadSets) {
-        if (seqno == Max<ui64>()) {
-            OutReadSets.ResendExpectations(tabletId, ctx);
-            continue;
-        }
+    auto seqnos = std::move(state.OutReadSets);
+    state.OutReadSets.clear();
 
+    for (auto seqno : seqnos) {
         LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Pipe reset to tablet %" PRIu64 " caused resend of readset %" PRIu64
             " at tablet %" PRIu64, tabletId, seqno, TabletID());
 
@@ -4393,7 +4393,7 @@ void TDataShard::ScanComplete(NTable::EAbort,
 
         noTxScan->OnFinished(this);
         prod.Destroy();
-    } else {
+    } else if (cookie != 0 && cookie != Max<ui64>()) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "FullScan complete at " << TabletID());
 

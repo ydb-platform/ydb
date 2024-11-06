@@ -73,7 +73,7 @@ private:
 };
 
 class TColumnParser {
-    using TParser = std::function<void(simdjson::fallback::ondemand::value, NYql::NUdf::TUnboxedValue&)>;
+    using TParser = std::function<void(simdjson::builtin::ondemand::value, NYql::NUdf::TUnboxedValue&)>;
 
 public:
     const std::string Name;
@@ -97,7 +97,7 @@ public:
         }
     }
 
-    void ParseJsonValue(simdjson::fallback::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
+    void ParseJsonValue(simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
         Parser(jsonValue, resultValue);
         NumberValues++;
     }
@@ -130,7 +130,7 @@ private:
     }
 
     static TParser AddOptional(TParser parser) {
-        return [parser](simdjson::fallback::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
+        return [parser](simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
             parser(std::move(jsonValue), resultValue);
             if (resultValue) {
                 resultValue = resultValue.MakeOptional();
@@ -140,9 +140,9 @@ private:
 
     static TParser GetJsonValueParser(NYql::NUdf::EDataSlot dataSlot, bool optional) {
         const auto& typeInfo = NYql::NUdf::GetDataTypeInfo(dataSlot);
-        return [dataSlot, optional, &typeInfo](simdjson::fallback::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
+        return [dataSlot, optional, &typeInfo](simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
             switch (jsonValue.type()) {
-                case simdjson::fallback::ondemand::json_type::number: {
+                case simdjson::builtin::ondemand::json_type::number: {
                     try {
                         switch (dataSlot) {
                             case NYql::NUdf::EDataSlot::Int8:
@@ -155,7 +155,7 @@ private:
                                 resultValue = ParseJsonNumber<i32>(jsonValue.get_int64().value());
                                 break;
                             case NYql::NUdf::EDataSlot::Int64:
-                                resultValue = NYql::NUdf::TUnboxedValuePod(jsonValue.get_int64().value());
+                                resultValue = ParseJsonNumber<i64>(jsonValue.get_int64().value());
                                 break;
 
                             case NYql::NUdf::EDataSlot::Uint8:
@@ -168,7 +168,7 @@ private:
                                 resultValue = ParseJsonNumber<ui32>(jsonValue.get_uint64().value());
                                 break;
                             case NYql::NUdf::EDataSlot::Uint64:
-                                resultValue = NYql::NUdf::TUnboxedValuePod(jsonValue.get_uint64().value());
+                                resultValue = ParseJsonNumber<ui64>(jsonValue.get_uint64().value());
                                 break;
 
                             case NYql::NUdf::EDataSlot::Double:
@@ -187,7 +187,7 @@ private:
                     break;
                 }
 
-                case simdjson::fallback::ondemand::json_type::string: {
+                case simdjson::builtin::ondemand::json_type::string: {
                     const auto rawString = jsonValue.get_string().value();
                     resultValue = NKikimr::NMiniKQL::ValueFromString(dataSlot, rawString);
                     if (Y_UNLIKELY(!resultValue)) {
@@ -197,8 +197,8 @@ private:
                     break;
                 }
 
-                case simdjson::fallback::ondemand::json_type::array:
-                case simdjson::fallback::ondemand::json_type::object: {
+                case simdjson::builtin::ondemand::json_type::array:
+                case simdjson::builtin::ondemand::json_type::object: {
                     const auto rawJson = jsonValue.raw_json().value();
                     if (Y_UNLIKELY(dataSlot != NYql::NUdf::EDataSlot::Json)) {
                         throw yexception() << "found unexpected nested value (raw: '" << TruncateString(rawJson) << "'), expected data type " <<typeInfo.Name << ", please use Json type for nested values";
@@ -211,7 +211,7 @@ private:
                     break;
                 }
 
-                case simdjson::fallback::ondemand::json_type::boolean: {
+                case simdjson::builtin::ondemand::json_type::boolean: {
                     if (Y_UNLIKELY(dataSlot != NYql::NUdf::EDataSlot::Bool)) {
                         throw yexception() << "found unexpected bool value, expected data type " << typeInfo.Name;
                     }
@@ -219,7 +219,7 @@ private:
                     break;
                 }
 
-                case simdjson::fallback::ondemand::json_type::null: {
+                case simdjson::builtin::ondemand::json_type::null: {
                     if (Y_UNLIKELY(!optional)) {
                         throw yexception() << "found unexpected null value, expected non optional data type " << typeInfo.Name;
                     }
@@ -264,7 +264,7 @@ class TJsonParser::TImpl {
 public:
     TImpl(const TVector<TString>& columns, const TVector<TString>& types, ui64 batchSize, TDuration batchCreationTimeout)
         : Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false)
-        , TypeEnv(Alloc)
+        , TypeEnv(std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc))
         , BatchSize(batchSize)
         , BatchCreationTimeout(batchCreationTimeout)
         , ParsedValues(columns.size())
@@ -273,7 +273,7 @@ public:
 
         with_lock (Alloc) {
             auto functonRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {});
-            NKikimr::NMiniKQL::TProgramBuilder programBuilder(TypeEnv, *functonRegistry);
+            NKikimr::NMiniKQL::TProgramBuilder programBuilder(*TypeEnv, *functonRegistry);
 
             Columns.reserve(columns.size());
             for (size_t i = 0; i < columns.size(); i++) {
@@ -328,9 +328,13 @@ public:
         with_lock (Alloc) {
             ClearColumns(Buffer.NumberValues);
 
+            const ui64 firstOffset = Buffer.Offsets.front();
             size_t rowId = 0;
             simdjson::ondemand::document_stream documents = Parser.iterate_many(values, size, simdjson::ondemand::DEFAULT_BATCH_SIZE);
             for (auto document : documents) {
+                if (Y_UNLIKELY(rowId >= Buffer.NumberValues)) {
+                    throw yexception() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << firstOffset << " but got " << rowId + 1;
+                }
                 for (auto item : document.get_object()) {
                     const auto it = ColumnsIndex.find(item.escaped_key().value());
                     if (it == ColumnsIndex.end()) {
@@ -348,7 +352,6 @@ public:
                 rowId++;
             }
 
-            const ui64 firstOffset = Buffer.Offsets.front();
             if (rowId != Buffer.NumberValues) {
                 throw yexception() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << firstOffset << " but got " << rowId;
             }
@@ -370,8 +373,12 @@ public:
     }
 
     ~TImpl() {
-        Alloc.Acquire();
-        ClearColumns(0);
+        with_lock (Alloc) {
+            ClearColumns(0);
+            ParsedValues.clear();
+            Columns.clear();
+            TypeEnv.reset();
+        }
     }
 
 private:
@@ -392,7 +399,7 @@ private:
 
 private:
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
-    NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
+    std::unique_ptr<NKikimr::NMiniKQL::TTypeEnvironment> TypeEnv;
 
     const ui64 BatchSize;
     const TDuration BatchCreationTimeout;
@@ -402,7 +409,7 @@ private:
     TJsonParserBuffer Buffer;
     simdjson::ondemand::parser Parser;
 
-    TVector<std::vector<NYql::NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NYql::NUdf::TUnboxedValue>>> ParsedValues;
+    TVector<NKikimr::NMiniKQL::TUnboxedValueVector> ParsedValues;
 };
 
 TJsonParser::TJsonParser(const TVector<TString>& columns, const TVector<TString>& types, ui64 batchSize, TDuration batchCreationTimeout)

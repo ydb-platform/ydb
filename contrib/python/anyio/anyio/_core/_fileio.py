@@ -217,6 +217,18 @@ class Path:
     It implements the Python 3.10 version of :class:`pathlib.Path` interface, except for
     the deprecated :meth:`~pathlib.Path.link_to` method.
 
+    Some methods may be unavailable or have limited functionality, based on the Python
+    version:
+
+    * :meth:`~pathlib.Path.from_uri` (available on Python 3.13 or later)
+    * :meth:`~pathlib.Path.full_match` (available on Python 3.13 or later)
+    * :meth:`~pathlib.Path.is_junction` (available on Python 3.12 or later)
+    * :meth:`~pathlib.Path.match` (the ``case_sensitive`` paramater is only available on
+      Python 3.13 or later)
+    * :meth:`~pathlib.Path.relative_to` (the ``walk_up`` parameter is only available on
+      Python 3.12 or later)
+    * :meth:`~pathlib.Path.walk` (available on Python 3.12 or later)
+
     Any methods that do disk I/O need to be awaited on. These methods are:
 
     * :meth:`~pathlib.Path.absolute`
@@ -232,7 +244,10 @@ class Path:
     * :meth:`~pathlib.Path.is_dir`
     * :meth:`~pathlib.Path.is_fifo`
     * :meth:`~pathlib.Path.is_file`
+    * :meth:`~pathlib.Path.is_junction`
     * :meth:`~pathlib.Path.is_mount`
+    * :meth:`~pathlib.Path.is_socket`
+    * :meth:`~pathlib.Path.is_symlink`
     * :meth:`~pathlib.Path.lchmod`
     * :meth:`~pathlib.Path.lstat`
     * :meth:`~pathlib.Path.mkdir`
@@ -243,11 +258,14 @@ class Path:
     * :meth:`~pathlib.Path.readlink`
     * :meth:`~pathlib.Path.rename`
     * :meth:`~pathlib.Path.replace`
+    * :meth:`~pathlib.Path.resolve`
     * :meth:`~pathlib.Path.rmdir`
     * :meth:`~pathlib.Path.samefile`
     * :meth:`~pathlib.Path.stat`
+    * :meth:`~pathlib.Path.symlink_to`
     * :meth:`~pathlib.Path.touch`
     * :meth:`~pathlib.Path.unlink`
+    * :meth:`~pathlib.Path.walk`
     * :meth:`~pathlib.Path.write_bytes`
     * :meth:`~pathlib.Path.write_text`
 
@@ -385,9 +403,6 @@ class Path:
         except ValueError:
             return False
 
-    async def is_junction(self) -> bool:
-        return await to_thread.run_sync(self._path.is_junction)
-
     async def chmod(self, mode: int, *, follow_symlinks: bool = True) -> None:
         func = partial(os.chmod, follow_symlinks=follow_symlinks)
         return await to_thread.run_sync(func, self._path, mode)
@@ -446,6 +461,11 @@ class Path:
 
     async def is_file(self) -> bool:
         return await to_thread.run_sync(self._path.is_file, abandon_on_cancel=True)
+
+    if sys.version_info >= (3, 12):
+
+        async def is_junction(self) -> bool:
+            return await to_thread.run_sync(self._path.is_junction)
 
     async def is_mount(self) -> bool:
         return await to_thread.run_sync(

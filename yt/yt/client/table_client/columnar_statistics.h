@@ -21,7 +21,7 @@ struct TLightweightColumnarStatistics
 struct TNamedColumnarStatistics
 {
     //! Per-column total data weight for chunks whose meta contains columnar statistics.
-    THashMap<TString, i64> ColumnDataWeights;
+    THashMap<std::string, i64> ColumnDataWeights;
     //! Total weight of all write and delete timestamps.
     std::optional<i64> TimestampTotalWeight;
     //! Total data weight of legacy chunks whose meta misses columnar statistics.
@@ -97,7 +97,7 @@ struct TColumnarStatistics
 
     TLightweightColumnarStatistics MakeLightweightStatistics() const;
 
-    TNamedColumnarStatistics MakeNamedStatistics(const std::vector<TString>& names) const;
+    TNamedColumnarStatistics MakeNamedStatistics(const std::vector<std::string>& names) const;
 
     //! Checks if there are minimum, maximum, and non-null value statistics.
     bool HasValueStatistics() const;

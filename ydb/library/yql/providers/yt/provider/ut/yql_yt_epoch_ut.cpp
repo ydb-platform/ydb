@@ -45,7 +45,6 @@ Y_UNIT_TEST_SUITE(TYqlEpoch) {
         typeAnnotationContext->RandomProvider = CreateDeterministicRandomProvider(1);
         auto ytState = MakeIntrusive<TYtState>(typeAnnotationContext.Get());
         ytState->Gateway = ytGateway;
-        ytState->Configuration->Dispatch(NCommon::ALL_CLUSTERS, "_EnableWriteReorder", "true", NCommon::TSettingDispatcher::EStage::CONFIG, NCommon::TSettingDispatcher::GetDefaultErrorCallback());
 
         InitializeYtGateway(ytGateway, ytState);
         typeAnnotationContext->AddDataSink(YtProviderName, CreateYtDataSink(ytState));

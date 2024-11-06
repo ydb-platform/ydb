@@ -49,14 +49,14 @@ const TString AlignmentString(ArrowAlignment, 0);
 
 flatbuffers::Offset<flatbuffers::String> SerializeString(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
-    const TString& str)
+    const std::string& str)
 {
     return flatbufBuilder->CreateString(str.data(), str.length());
 }
 
 std::tuple<org::apache::arrow::flatbuf::Type, flatbuffers::Offset<void>> SerializeColumnType(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,
-    TColumnSchema schema)
+    const TColumnSchema& schema)
 {
     auto simpleType = CastToV1Type(schema.LogicalType()).first;
     switch (simpleType) {

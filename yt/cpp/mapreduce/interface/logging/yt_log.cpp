@@ -26,10 +26,6 @@ public:
         ::TSourceLocation sourceLocation,
         TStringBuf anchorMessage) override
     {
-        if (anchor->Registered.exchange(true)) {
-            return;
-        }
-
         auto guard = Guard(Mutex_);
         anchor->SourceLocation = sourceLocation;
         anchor->AnchorMessage = anchorMessage;

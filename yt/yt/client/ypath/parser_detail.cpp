@@ -171,7 +171,7 @@ void ParseColumns(NYson::TTokenizer& tokenizer, IAttributeDictionary* attributes
         return;
     }
 
-    std::vector<TString> columns;
+    std::vector<std::string> columns;
 
     tokenizer.ParseNext();
     while (tokenizer.GetCurrentType() != EndColumnSelectorToken) {

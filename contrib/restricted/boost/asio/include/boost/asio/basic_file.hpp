@@ -2,7 +2,7 @@
 // basic_file.hpp
 // ~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -335,7 +335,7 @@ public:
   typename constraint<
     is_convertible<Executor1, Executor>::value,
     basic_file&
-  >::type operator=(basic_file<Executor1> && other)
+  >::type operator=(basic_file<Executor1>&& other)
   {
     basic_file tmp(std::move(other));
     impl_ = std::move(tmp.impl_);

@@ -3724,7 +3724,8 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
                     } else {
                         UNIT_FAIL("Neither topic nor consumer were provided");
                     }
-                    UNIT_ASSERT_VALUES_EQUAL(labels["user_agent"].GetString(), NGRpcProxy::V1::CleanupCounterValueString(userAgent));
+                    UNIT_ASSERT_VALUES_EQUAL(labels["user_agent"].GetString(), "test-client/v0.1");
+                    UNIT_ASSERT_VALUES_EQUAL(labels["user_agent"].GetString(), NGRpcProxy::V1::DropUserAgentSuffix(NGRpcProxy::V1::CleanupCounterValueString(userAgent)));
                 }
             };
 
@@ -3759,7 +3760,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
 
             auto driver = server.AnnoyingClient->GetDriver();
 
-            static constexpr auto userAgent = "test-client/v0.1 ' ?*'\"`| ";
+            static constexpr auto userAgent = "test-client/v0.1 ' ?*'\"`| (some build info (codename); os 1.0)";
 
             auto writer = CreateWriter(
                 *driver,
@@ -3913,8 +3914,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
                               "", "Dc1", consumerName, consumerPath
                               );
 
-                checkUserAgentCounters(server.CleverServer->GetRuntime()->GetMonPort(),
-                                       "BytesReadByUserAgent", "pqv1", userAgent, "", consumerPath);
+                checkUserAgentCounters(monPort, "BytesReadByUserAgent", "pqv1", userAgent, "", consumerPath);
             }
         };
 

@@ -201,5 +201,6 @@ enum ETxTypes {
     TXTYPE_GC_START = 34                                    [(TxTypeOpts) = {Name: "TxGarbageCollectionStart"}];
     TXTYPE_APPLY_NORMALIZER = 35                            [(TxTypeOpts) = {Name: "TxApplyNormalizer"}];
     TXTYPE_START_INTERNAL_SCAN = 36                         [(TxTypeOpts) = {Name: "TxStartInternalScan"}];
-    TXTYPE_CLEANUP_SCHEMA_VERSIONS = 37                     [(TxTypeOpts) = {Name: "TxSchemaVersionsCleanup"}];
+    TXTYPE_DATA_SHARING_START_SOURCE_CURSOR = 37            [(TxTypeOpts) = {Name: "TxDataSharingStartSourceCursor"}];
+    TXTYPE_CLEANUP_SCHEMA_VERSIONS = 38                     [(TxTypeOpts) = {Name: "TxSchemaVersionsCleanup"}];
 }

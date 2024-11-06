@@ -77,7 +77,7 @@ using NTransactionClient::AsyncLastCommittedTimestamp;
 using NTransactionClient::AllCommittedTimestamp;
 using NTransactionClient::NotPreparedTimestamp;
 
-using TKeyColumns = std::vector<TString>;
+using TKeyColumns = std::vector<std::string>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -119,20 +119,20 @@ constexpr int MaxColumnId = 32 * 1024;
 constexpr int MaxSchemaTotalTypeComplexity = MaxColumnId;
 constexpr int MaxSchemaDepth = 32;
 
+extern const std::string PrimaryLockName;
 
-extern const TString PrimaryLockName;
-
-extern const TString SystemColumnNamePrefix;
-extern const TString TableIndexColumnName;
-extern const TString RowIndexColumnName;
-extern const TString RangeIndexColumnName;
-extern const TString TabletIndexColumnName;
-extern const TString TimestampColumnName;
-extern const TString TtlColumnName;
-extern const TString TimestampColumnPrefix;
-extern const TString CumulativeDataWeightColumnName;
-extern const TString EmptyValueColumnName;
-extern const TString SequenceNumberColumnName;
+extern const std::string SystemColumnNamePrefix;
+extern const std::string NonexistentColumnName;
+extern const std::string TableIndexColumnName;
+extern const std::string RowIndexColumnName;
+extern const std::string RangeIndexColumnName;
+extern const std::string TabletIndexColumnName;
+extern const std::string TimestampColumnName;
+extern const std::string TtlColumnName;
+extern const std::string TimestampColumnPrefix;
+extern const std::string CumulativeDataWeightColumnName;
+extern const std::string EmptyValueColumnName;
+extern const std::string SequenceNumberColumnName;
 
 constexpr int TypicalHunkColumnCount = 8;
 
@@ -308,7 +308,7 @@ class TKeyComparer;
 struct TColumnRenameDescriptor;
 using TColumnRenameDescriptors = std::vector<TColumnRenameDescriptor>;
 
-YT_DEFINE_STRONG_TYPEDEF(TColumnStableName, TString);
+YT_DEFINE_STRONG_TYPEDEF(TColumnStableName, std::string);
 
 class TColumnSchema;
 

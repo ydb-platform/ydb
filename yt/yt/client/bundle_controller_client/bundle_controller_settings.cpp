@@ -111,6 +111,10 @@ void TBundleResourceQuota::Register(TRegistrar registrar)
     registrar.Parameter("memory", &TThis::Memory)
         .GreaterThanOrEqual(0)
         .Default(0);
+
+    registrar.Parameter("network", &TThis::Network)
+        .GreaterThanOrEqual(0)
+        .Default(0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

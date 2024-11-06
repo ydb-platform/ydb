@@ -448,7 +448,7 @@ private:
         Cursor_.Next();
     }
 
-    TString GetDescription(const TFieldId& fieldId) const
+    std::string GetDescription(const TFieldId& fieldId) const
     {
         return fieldId.GetDescriptor(RootDescriptor_).GetDescription();
     }
@@ -509,7 +509,7 @@ private:
         {
             std::vector<int> path;
             const auto* current = this;
-            while (current->Parent_ != nullptr) {
+            while (current->Parent_) {
                 path.push_back(current->SiblingIndex_);
                 current = current->Parent_;
             }

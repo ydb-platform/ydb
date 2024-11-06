@@ -2,7 +2,7 @@
 // bind_executor.hpp
 // ~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -487,7 +487,7 @@ private:
 
 /// Associate an object of type @c T with an executor of type @c Executor.
 template <typename Executor, typename T>
-inline executor_binder<typename decay<T>::type, Executor>
+BOOST_ASIO_NODISCARD inline executor_binder<typename decay<T>::type, Executor>
 bind_executor(const Executor& ex, BOOST_ASIO_MOVE_ARG(T) t,
     typename constraint<
       is_executor<Executor>::value || execution::is_executor<Executor>::value
@@ -499,7 +499,7 @@ bind_executor(const Executor& ex, BOOST_ASIO_MOVE_ARG(T) t,
 
 /// Associate an object of type @c T with an execution context's executor.
 template <typename ExecutionContext, typename T>
-inline executor_binder<typename decay<T>::type,
+BOOST_ASIO_NODISCARD inline executor_binder<typename decay<T>::type,
   typename ExecutionContext::executor_type>
 bind_executor(ExecutionContext& ctx, BOOST_ASIO_MOVE_ARG(T) t,
     typename constraint<is_convertible<
@@ -676,9 +676,10 @@ public:
 
   template <typename Initiation, typename RawCompletionToken, typename... Args>
   static BOOST_ASIO_INITFN_DEDUCED_RESULT_TYPE(T, Signature,
-    (async_result<T, Signature>::initiate(
+    (async_initiate<T, Signature>(
         declval<init_wrapper<typename decay<Initiation>::type> >(),
-        declval<T>(), declval<BOOST_ASIO_MOVE_ARG(Args)>()...)))
+        declval<RawCompletionToken>().get(),
+        declval<BOOST_ASIO_MOVE_ARG(Args)>()...)))
   initiate(
       BOOST_ASIO_MOVE_ARG(Initiation) initiation,
       BOOST_ASIO_MOVE_ARG(RawCompletionToken) token,
@@ -694,9 +695,9 @@ public:
 
   template <typename Initiation, typename RawCompletionToken>
   static BOOST_ASIO_INITFN_DEDUCED_RESULT_TYPE(T, Signature,
-    (async_result<T, Signature>::initiate(
+    (async_initiate<T, Signature>(
         declval<init_wrapper<typename decay<Initiation>::type> >(),
-        declval<T>())))
+        declval<RawCompletionToken>().get())))
   initiate(
       BOOST_ASIO_MOVE_ARG(Initiation) initiation,
       BOOST_ASIO_MOVE_ARG(RawCompletionToken) token)
@@ -711,9 +712,10 @@ public:
   template <typename Initiation, typename RawCompletionToken, \
       BOOST_ASIO_VARIADIC_TPARAMS(n)> \
   static BOOST_ASIO_INITFN_DEDUCED_RESULT_TYPE(T, Signature, \
-    (async_result<T, Signature>::initiate( \
+    (async_initiate<T, Signature>( \
         declval<init_wrapper<typename decay<Initiation>::type> >(), \
-        declval<T>(), BOOST_ASIO_VARIADIC_MOVE_DECLVAL(n)))) \
+        declval<RawCompletionToken>().get(), \
+        BOOST_ASIO_VARIADIC_MOVE_DECLVAL(n)))) \
   initiate( \
       BOOST_ASIO_MOVE_ARG(Initiation) initiation, \
       BOOST_ASIO_MOVE_ARG(RawCompletionToken) token, \

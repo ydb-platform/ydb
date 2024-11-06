@@ -167,10 +167,10 @@ int TNameTable::DoRegisterNameOrThrow(TStringBuf name)
     return DoRegisterName(name);
 }
 
-std::vector<TString> TNameTable::GetNames() const
+std::vector<std::string> TNameTable::GetNames() const
 {
     auto guard = Guard(SpinLock_);
-    std::vector<TString> result(IdToName_.begin(), IdToName_.end());
+    std::vector<std::string> result(IdToName_.begin(), IdToName_.end());
     return result;
 }
 
@@ -255,7 +255,7 @@ std::optional<int> TNameTableWriter::FindId(TStringBuf name) const
 
     auto optionalId = NameTable_->FindId(name);
     if (optionalId) {
-        Names_.push_back(TString(name));
+        Names_.push_back(std::string(name));
         YT_VERIFY(NameToId_.emplace(Names_.back(), *optionalId).second);
     }
     return optionalId;
@@ -278,7 +278,7 @@ int TNameTableWriter::GetIdOrRegisterName(TStringBuf name)
     }
 
     auto id = NameTable_->GetIdOrRegisterName(name);
-    Names_.push_back(TString(name));
+    Names_.push_back(std::string(name));
     YT_VERIFY(NameToId_.emplace(Names_.back(), id).second);
     return id;
 }
@@ -296,7 +296,7 @@ void FromProto(TNameTablePtr* nameTable, const NProto::TNameTableExt& protoNameT
 {
     using NYT::FromProto;
 
-    *nameTable = TNameTable::FromKeyColumns(FromProto<std::vector<TString>>(protoNameTable.names()));
+    *nameTable = TNameTable::FromKeyColumns(FromProto<std::vector<std::string>>(protoNameTable.names()));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

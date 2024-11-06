@@ -2186,6 +2186,24 @@ bool TBitwiseUnversionedValueRangeEqual::operator()(TUnversionedValueRange lhs, 
     return true;
 }
 
+void TBitwiseUnversionedValueRangeEqual::FormatDiff(TStringBuilderBase* builder, TUnversionedValueRange lhs, TUnversionedValueRange rhs)
+{
+    if (lhs.size() != rhs.size()) {
+        builder->AppendFormat("Value count mismatch: %v vs %v\n",
+            lhs.size(),
+            rhs.size());
+        return;
+    }
+    for (size_t index = 0; index < lhs.size(); ++index) {
+        if (!TBitwiseUnversionedValueEqual()(lhs[index], rhs[index])) {
+            builder->AppendFormat("Value mismatch at index %v\n",
+                index);
+            TBitwiseUnversionedValueEqual::FormatDiff(builder, lhs[index], rhs[index]);
+            break;
+        }
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 size_t TBitwiseUnversionedRowHash::operator()(TUnversionedRow row) const
@@ -2196,6 +2214,11 @@ size_t TBitwiseUnversionedRowHash::operator()(TUnversionedRow row) const
 bool TBitwiseUnversionedRowEqual::operator()(TUnversionedRow lhs, TUnversionedRow rhs) const
 {
     return TBitwiseUnversionedValueRangeEqual()(lhs.Elements(), rhs.Elements());
+}
+
+void TBitwiseUnversionedRowEqual::FormatDiff(TStringBuilderBase* builder, TUnversionedRow lhs, TUnversionedRow rhs)
+{
+    TBitwiseUnversionedValueRangeEqual::FormatDiff(builder, lhs.Elements(), rhs.Elements());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -29,9 +29,9 @@ TExprNode::TPtr OptimizeReadWithSettings(const TExprNode::TPtr& node, bool allow
     const TYtState::TPtr& state, TExprContext& ctx);
 
 IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-    const TYtState::TPtr& state, TExprContext& ctx);
+    const TYtState::TPtr& state, TExprContext& ctx, bool estimateTableContentWeight);
 
 IGraphTransformer::TStatus PeepHoleOptimizeBeforeExec(TExprNode::TPtr input, TExprNode::TPtr& output,
-    const TYtState::TPtr& state, bool& hasNonDeterministicFunctions, TExprContext& ctx);
+    const TYtState::TPtr& state, bool& hasNonDeterministicFunctions, TExprContext& ctx, bool estimateTableContentWeight);
 
 } //NYql

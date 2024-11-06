@@ -4,7 +4,7 @@ import logging
 
 from ydb.tests.oss.ydb_sdk_import import ydb
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.common.types import Erasure
@@ -28,7 +28,7 @@ class TestOn3DC(object):
                 'SCHEME_BOARD_REPLICA': LogLevels.DEBUG,
             }
         )
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             config_generator
         )
         cls.cluster.start()

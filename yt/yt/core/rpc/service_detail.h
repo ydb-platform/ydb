@@ -12,6 +12,7 @@
 
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/moody_camel_concurrent_queue.h>
+#include <yt/yt/core/concurrency/throughput_throttler.h>
 
 #include <yt/yt/core/logging/log.h>
 
@@ -464,8 +465,16 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+extern const NConcurrency::TThroughputThrottlerConfigPtr InfiniteRequestThrottlerConfig;
+
 TRequestQueuePtr CreateRequestQueue(
-    const std::string& name,
+    std::string name,
+    std::any tag,
+    NConcurrency::IReconfigurableThroughputThrottlerPtr weightThrottler,
+    NConcurrency::IReconfigurableThroughputThrottlerPtr bytesThrottler);
+
+TRequestQueuePtr CreateRequestQueue(
+    std::string name,
     const NProfiling::TProfiler& profiler = {});
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -657,12 +666,11 @@ protected:
         TMethodDescriptor SetHandleMethodError(bool value) const;
     };
 
-    class TErrorCodeCounters
+    struct TErrorCodeCounter
     {
-    public:
-        explicit TErrorCodeCounters(NProfiling::TProfiler profiler);
+        explicit TErrorCodeCounter(NProfiling::TProfiler profiler);
 
-        NProfiling::TCounter* GetCounter(TErrorCode code);
+        void Increment(TErrorCode code);
 
     private:
         const NProfiling::TProfiler Profiler_;
@@ -718,7 +726,7 @@ protected:
         NProfiling::TCounter ResponseMessageAttachmentSizeCounter;
 
         //! Counts the number of errors, per error code.
-        TErrorCodeCounters ErrorCodeCounters;
+        TErrorCodeCounter ErrorCodeCounter;
     };
 
     using TMethodPerformanceCountersPtr = TIntrusivePtr<TMethodPerformanceCounters>;
@@ -764,24 +772,13 @@ protected:
         using TNonowningPerformanceCountersKey = std::tuple<TStringBuf, TRequestQueue*>;
         using TOwningPerformanceCountersKey = std::tuple<TString, TRequestQueue*>;
         using TPerformanceCountersKeyHash = THash<TNonowningPerformanceCountersKey>;
-
-        struct TPerformanceCountersKeyEquals
-        {
-            bool operator()(
-                const TNonowningPerformanceCountersKey& lhs,
-                const TNonowningPerformanceCountersKey& rhs) const;
-            bool operator()(
-                const TOwningPerformanceCountersKey& lhs,
-                const TNonowningPerformanceCountersKey& rhs) const;
-        };
-
+        struct TPerformanceCountersKeyEquals;
         using TPerformanceCountersMap = NConcurrency::TSyncMap<
             TOwningPerformanceCountersKey,
             TMethodPerformanceCountersPtr,
             TPerformanceCountersKeyHash,
             TPerformanceCountersKeyEquals
         >;
-
         TPerformanceCountersMap PerformanceCountersMap;
         TMethodPerformanceCountersPtr BasePerformanceCounters;
         TMethodPerformanceCountersPtr RootPerformanceCounters;
@@ -801,9 +798,16 @@ protected:
         : public TRefCounted
     {
     public:
-        explicit TPerformanceCounters(const NProfiling::TProfiler& profiler);
+        explicit TPerformanceCounters(const NProfiling::TProfiler& profiler)
+            : Profiler_(profiler.WithHot().WithSparse())
+        { }
 
-        NProfiling::TCounter* GetRequestsPerUserAgentCounter(TStringBuf userAgent);
+        void IncrementRequestsPerUserAgent(TStringBuf userAgent)
+        {
+            RequestsPerUserAgent_.FindOrInsert(userAgent, [&] {
+                return Profiler_.WithRequiredTag("user_agent", TString(userAgent)).Counter("/user_agent");
+            }).first->Increment();
+        }
 
     private:
         const NProfiling::TProfiler Profiler_;
@@ -851,10 +855,10 @@ protected:
 
     //! Returns a (non-owning!) pointer to TRuntimeMethodInfo for a given method's name
     //! or |nullptr| if no such method is registered.
-    TRuntimeMethodInfo* FindMethodInfo(const std::string& method);
+    TRuntimeMethodInfo* FindMethodInfo(const TString& method);
 
     //! Similar to #FindMethodInfo but throws if no method is found.
-    TRuntimeMethodInfo* GetMethodInfoOrThrow(const std::string& method);
+    TRuntimeMethodInfo* GetMethodInfoOrThrow(const TString& method);
 
     //! Returns the default invoker passed during construction.
     const IInvokerPtr& GetDefaultInvoker() const;
@@ -996,7 +1000,6 @@ private:
 
     struct TAcceptedRequest
     {
-        TInstant ArriveInstant;
         TRequestId RequestId;
         NYT::NBus::IBusPtr ReplyBus;
         TRuntimeMethodInfo* RuntimeInfo;
@@ -1004,7 +1007,6 @@ private:
         std::unique_ptr<NRpc::NProto::TRequestHeader> Header;
         TSharedRefArray Message;
         TRequestQueue* RequestQueue;
-        TMethodPerformanceCounters* MethodPerformanceCounters;
         std::optional<TError> ThrottledError;
         TMemoryUsageTrackerGuard MemoryGuard;
         IMemoryUsageTrackerPtr MemoryUsageTracker;
@@ -1029,6 +1031,9 @@ private:
     TRequestQueue* GetRequestQueue(
         TRuntimeMethodInfo* runtimeInfo,
         const NRpc::NProto::TRequestHeader& requestHeader);
+    void RegisterRequestQueue(
+        TRuntimeMethodInfo* runtimeInfo,
+        TRequestQueue* requestQueue);
     void ConfigureRequestQueue(
         TRuntimeMethodInfo* runtimeInfo,
         TRequestQueue* requestQueue,
@@ -1075,7 +1080,6 @@ private:
     static TString GetDiscoverRequestPayload(const TCtxDiscoverPtr& context);
 
     void OnServiceLivenessCheck();
-
 };
 
 DEFINE_REFCOUNTED_TYPE(TServiceBase)
@@ -1087,8 +1091,10 @@ class TRequestQueue
 {
 public:
     TRequestQueue(
-        const std::string& name,
-        const NProfiling::TProfiler& profiler);
+        std::string name,
+        std::any tag,
+        NConcurrency::IReconfigurableThroughputThrottlerPtr bytesThrottler,
+        NConcurrency::IReconfigurableThroughputThrottlerPtr weightThrottler);
 
     bool Register(TServiceBase* service, TServiceBase::TRuntimeMethodInfo* runtimeInfo);
     void Configure(const TMethodConfigPtr& config);
@@ -1108,9 +1114,11 @@ public:
     void ConfigureBytesThrottler(const NConcurrency::TThroughputThrottlerConfigPtr& config);
 
     const std::string& GetName() const;
+    const std::any& GetTag() const;
 
 private:
     const std::string Name_;
+    const std::any Tag_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, RegisterLock_);
     std::atomic<bool> Registered_ = false;

@@ -10,43 +10,57 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TInvokerWrapper::TInvokerWrapper(IInvokerPtr underlyingInvoker)
+template <bool VirtualizeBase>
+TInvokerWrapper<VirtualizeBase>::TInvokerWrapper(IInvokerPtr underlyingInvoker)
     : UnderlyingInvoker_(std::move(underlyingInvoker))
 {
     YT_VERIFY(UnderlyingInvoker_);
 }
 
-void TInvokerWrapper::Invoke(TClosure callback)
+template <bool VirtualizeBase>
+void TInvokerWrapper<VirtualizeBase>::Invoke(TClosure callback)
 {
     return UnderlyingInvoker_->Invoke(std::move(callback));
 }
 
-void TInvokerWrapper::Invoke(TMutableRange<TClosure> callbacks)
+template <bool VirtualizeBase>
+void TInvokerWrapper<VirtualizeBase>::Invoke(TMutableRange<TClosure> callbacks)
 {
     return UnderlyingInvoker_->Invoke(callbacks);
 }
 
-NThreading::TThreadId TInvokerWrapper::GetThreadId() const
+template <bool VirtualizeBase>
+NThreading::TThreadId TInvokerWrapper<VirtualizeBase>::GetThreadId() const
 {
     return UnderlyingInvoker_->GetThreadId();
 }
 
-bool TInvokerWrapper::CheckAffinity(const IInvokerPtr& invoker) const
+template <bool VirtualizeBase>
+bool TInvokerWrapper<VirtualizeBase>::CheckAffinity(const IInvokerPtr& invoker) const
 {
     return
         invoker.Get() == this ||
         UnderlyingInvoker_->CheckAffinity(invoker);
 }
 
-bool TInvokerWrapper::IsSerialized() const
+template <bool VirtualizeBase>
+bool TInvokerWrapper<VirtualizeBase>::IsSerialized() const
 {
     return UnderlyingInvoker_->IsSerialized();
 }
 
-void TInvokerWrapper::RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver)
+template <bool VirtualizeBase>
+void TInvokerWrapper<VirtualizeBase>::RegisterWaitTimeObserver(IInvoker::TWaitTimeObserver waitTimeObserver)
 {
     return UnderlyingInvoker_->RegisterWaitTimeObserver(waitTimeObserver);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+template class TInvokerWrapper<true>;
+template class TInvokerWrapper<false>;
+// template struct NDetail::TMaybeVirtualInvokerBase<true>; // Primary template.
+template struct NDetail::TMaybeVirtualInvokerBase<false>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

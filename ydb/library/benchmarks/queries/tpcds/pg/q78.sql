@@ -46,7 +46,7 @@ coalesce(ws_sp,0)+coalesce(cs_sp,0) other_chan_sales_price
 from ss
 left join ws on (ws_sold_year=ss_sold_year and ws_item_sk=ss_item_sk and ws_customer_sk=ss_customer_sk)
 left join cs on (cs_sold_year=ss_sold_year and cs_item_sk=ss_item_sk and cs_customer_sk=ss_customer_sk)
-where (coalesce(ws_qty,0::int8)>0::int8 or coalesce(cs_qty, 0::int8)>0::int8) and ss_sold_year=2001
+where (coalesce(ws_qty,0::int8)>0::int8 or coalesce(cs_qty, 0::int8)>0::int8) and ss_sold_year=2000
 order by
   ss_sold_year nulls first, ss_item_sk nulls first, ss_customer_sk nulls first,
   ss_qty desc nulls last, ss_wc desc nulls last, ss_sp desc nulls last,

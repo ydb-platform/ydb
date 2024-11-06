@@ -203,6 +203,8 @@ void TBlockFetcherConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("use_uncompressed_block_cache", &TThis::UseUncompressedBlockCache)
         .Default(true);
+    registrar.Parameter("group_out_of_order_blocks", &TThis::GroupOutOfOrderBlocks)
+        .Default(false);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->GroupSize > config->WindowSize) {

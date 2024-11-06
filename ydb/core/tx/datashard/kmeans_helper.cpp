@@ -56,7 +56,7 @@ void AddRowBuild2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> 
 }
 
 void AddRowBuild2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
-                       ui32 dataPos)
+                         ui32 dataPos)
 {
     std::array<TCell, 1> cells;
     cells[0] = TCell::Make(parent);

@@ -9,6 +9,7 @@ namespace NOIDC {
 struct TOpenIdConnectSettings {
     static const inline TString YDB_OIDC_COOKIE = "ydb_oidc_cookie";
     static const inline TString SESSION_COOKIE = "session_cookie";
+    static const inline TString IMPERSONATED_COOKIE = "impersonated_cookie";
 
     static const inline TString DEFAULT_CLIENT_ID = "yc.oauth.ydb-viewer";
     static const inline TString DEFAULT_AUTH_URL_PATH = "/oauth/authorize";

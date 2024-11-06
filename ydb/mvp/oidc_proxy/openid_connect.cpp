@@ -111,6 +111,10 @@ TString CreateNameSessionCookie(TStringBuf key) {
     return "__Host_" + TOpenIdConnectSettings::SESSION_COOKIE + "_" + HexEncode(key);
 }
 
+TString CreateNameImpersonatedCookie(TStringBuf key) {
+    return "__Host_" + TOpenIdConnectSettings::IMPERSONATED_COOKIE + "_" + HexEncode(key);
+}
+
 const TString& GetAuthCallbackUrl() {
     static const TString callbackUrl = "/auth/callback";
     return callbackUrl;

@@ -9,7 +9,7 @@
 namespace NMVP {
 namespace NOIDC {
 
-THandlerSessionCreate::THandlerSessionCreate(const NActors::TActorId& sender,
+THandlerImpersonateStart::THandlerImpersonateStart(const NActors::TActorId& sender,
                                              const NHttp::THttpIncomingRequestPtr& request,
                                              const NActors::TActorId& httpProxyId,
                                              const TOpenIdConnectSettings& settings)
@@ -19,46 +19,48 @@ THandlerSessionCreate::THandlerSessionCreate(const NActors::TActorId& sender,
     , Settings(settings)
 {}
 
-void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
+void THandlerImpersonateStart::Bootstrap(const NActors::TActorContext& ctx) {
     NHttp::TUrlParameters urlParameters(Request->URL);
-    TString code = urlParameters["code"];
-    TString state = urlParameters["state"];
-
-    TCheckStateResult checkStateResult = CheckState(state, Settings.ClientSecret);
+    TString serviceAccountId = urlParameters["service_accound_id"];
 
     NHttp::THeaders headers(Request->Headers);
-    NHttp::TCookies cookies(headers.Get("cookie"));
-    TRestoreOidcContextResult restoreContextResult = RestoreOidcContext(cookies, Settings.ClientSecret);
-    Context = restoreContextResult.Context;
+    LOG_DEBUG_S(ctx, EService::MVP, "Start impersonation process");
+    NHttp::TCookies cookies(headers.Get("Cookie"));
+    TString sessionToken = DecodeToken(cookies, CreateNameSessionCookie(Settings.ClientId));
 
-    if (checkStateResult.IsSuccess()) {
-        if (restoreContextResult.IsSuccess()) {
-            if (code.empty()) {
-                LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Restore oidc session failed: receive empty 'code' parameter");
-                RetryRequestToProtectedResourceAndDie(ctx);
-            } else {
-                RequestSessionToken(code, ctx);
-            }
-        } else {
-            const auto& restoreSessionStatus = restoreContextResult.Status;
-            LOG_DEBUG_S(ctx, NMVP::EService::MVP, restoreSessionStatus.ErrorMessage);
-            if (restoreSessionStatus.IsErrorRetryable) {
-                RetryRequestToProtectedResourceAndDie(ctx);
-            } else {
-                SendUnknownErrorResponseAndDie(ctx);
-            }
-        }
+    if (sessionToken && serviceAccountId) {
+        RequestImpersonatedToken(sessionToken, serviceAccountId, ctx);
     } else {
-        LOG_DEBUG_S(ctx, NMVP::EService::MVP, checkStateResult.ErrorMessage);
-        if (restoreContextResult.IsSuccess() || restoreContextResult.Status.IsErrorRetryable) {
-            RetryRequestToProtectedResourceAndDie(ctx);
-        } else {
-            SendUnknownErrorResponseAndDie(ctx);
-        }
+        NHttp::THeadersBuilder responseHeaders;
+        responseHeaders.Set("Content-Type", "text/plain");
+        httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error);
     }
 }
 
-void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
+void THandlerImpersonateStart::RequestImpersonatedToken(const TString sessionToken, const TString serviceAccountId, const NActors::TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, EService::MVP, "Request impersonated token");
+    NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetExchangeEndpointURL());
+    httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
+
+    TMvpTokenator* tokenator = MVPAppData()->Tokenator;
+    TString token = "";
+    if (tokenator) {
+        token = tokenator->GetToken(Settings.SessionServiceTokenName);
+    }
+    httpRequest->Set("Authorization", token); // Bearer included
+    TStringBuilder body;
+    body << "grant_type=urn:ietf:params:oauth:grant-type:token-exchange"
+            << "&requested_token_type=urn:ietf:params:oauth:token-type:access_token"
+            << "&subject_token_type=urn:ietf:params:oauth:token-type:session_token"
+            << "&subject_token=" << sessionToken;
+    httpRequest->Set<&NHttp::THttpRequest::Body>(body);
+
+    ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
+
+    Become(&THandlerSessionServiceCheckNebius::StateExchange);
+}
+
+void THandlerImpersonateStart::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
     NHttp::THttpOutgoingResponsePtr httpResponse;
     if (event->Get()->Error.empty() && event->Get()->Response) {
         NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
@@ -96,7 +98,7 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
     Die(ctx);
 }
 
-TString THandlerSessionCreate::ChangeSameSiteFieldInSessionCookie(const TString& cookie) {
+TString THandlerImpersonateStart::ChangeSameSiteFieldInSessionCookie(const TString& cookie) {
     const static TStringBuf SameSiteParameter {"SameSite=Lax"};
     size_t n = cookie.find(SameSiteParameter);
     if (n == TString::npos) {
@@ -109,19 +111,19 @@ TString THandlerSessionCreate::ChangeSameSiteFieldInSessionCookie(const TString&
     return cookieBuilder;
 }
 
-void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx) {
+void THandlerImpersonateStart::RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx) {
     NHttp::THeadersBuilder responseHeaders;
     RetryRequestToProtectedResourceAndDie(&responseHeaders, ctx);
 }
 
-void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx) {
+void THandlerImpersonateStart::RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx) {
     SetCORS(Request, responseHeaders);
     responseHeaders->Set("Location", Context.GetRequestedAddress());
     ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("302", "Found", *responseHeaders)));
     Die(ctx);
 }
 
-void THandlerSessionCreate::SendUnknownErrorResponseAndDie(const NActors::TActorContext& ctx) {
+void THandlerImpersonateStart::SendUnknownErrorResponseAndDie(const NActors::TActorContext& ctx) {
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Content-Type", "text/html");
     SetCORS(Request, &responseHeaders);

@@ -15,6 +15,18 @@ void InitOIDC(NActors::TActorSystem& actorSystem,
                      );
 
     actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+                         "/impersonate/start",
+                         actorSystem.Register(new THandlerImpersonateStart(httpProxyId, settings))
+                         )
+                     );
+
+    actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+                         "/impersonate/stop",
+                         actorSystem.Register(new THandlerImpersonateStop(httpProxyId, settings))
+                         )
+                     );
+
+    actorSystem.Send(httpProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                         "/",
                         actorSystem.Register(new TProtectedPageHandler(httpProxyId, settings))
                         )

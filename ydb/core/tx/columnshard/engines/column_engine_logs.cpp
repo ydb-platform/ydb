@@ -566,24 +566,12 @@ void TColumnEngineForLogs::ChangeSchemaVersionsToLastCompatible(NOlap::TDbWrappe
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization_start_found_compatible_versions");
     for (auto& [_, table]: GranulesStorage->GetTables()) {
         table->ChangeSchemeToCompatible(versionMap, db);
-/*        for (auto& [_, portion]: table->GetPortions()) {
-            auto schemaVersionOpt = portion->GetSchemaVersionOptional();
-            if (schemaVersionOpt.has_value()) {
-                // TO DO call VersionAddRef and VersionRemoveRef
-                auto iter = versionMap.find(*schemaVersionOpt);
-                if (iter != versionMap.end()) {
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization")("from", *schemaVersionOpt)("to", iter->second);
-                    portion->SetSchemaVersion(iter->second);
-                    db.WritePortion(*portion);
-                }
-            }
-        }*/
     }
 }
 
 } // namespace NKikimr::NOlap
 
-ool TColumnEngineForLogs::TestingLoad(IDbWrapper& db) {
+bool TColumnEngineForLogs::TestingLoad(IDbWrapper& db) {
     {
         TMemoryProfileGuard g("TTxInit/LoadShardingInfo");
         if (!VersionedIndex.LoadShardingInfo(db)) {

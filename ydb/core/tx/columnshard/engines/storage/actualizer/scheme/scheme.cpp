@@ -57,6 +57,7 @@ void TSchemeActualizer::DoRemovePortion(const ui64 portionId) {
 }
 
 void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization_extract_tasks");
     THashSet<ui64> portionsToRemove;
     for (auto&& [address, portions] : PortionsToActualizeScheme) {
         if (!tasksContext.IsRWAddressAvailable(address)) {
@@ -115,22 +116,18 @@ void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {
 }
 
 void TSchemeActualizer::ChangeSchemeToCompatible(const THashMap<ui64, ui64>& versionMap, THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions, NOlap::TDbWrapper& db) {
-    std::vector<ui64> toRemove;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization")("portion_count", portions.size());
     for (auto& [portionId, portion]: portions) {
         THashMap<ui64, ui64>::const_iterator it = versionMap.find(portion->GetSchemaVersionVerified());
         if (it != versionMap.end()) {
             if (TargetSchema && (it->second >= TargetSchema->GetVersion())) {
-                toRemove.push_back(portionId);
+                RemovePortion(portionId);
             }
             //TO DO call VersionAddRef and VersionRemoveRef
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization")("portion_id", portionId)("from", portion->GetSchemaVersionOptional())("to", it->second);
             portion->SetSchemaVersion(it->second);
             db.WritePortion(*portion);
         }
-    }
-    for (const ui64 portionId: toRemove) {
-        RemovePortion(portionId);
     }
 }
 

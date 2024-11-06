@@ -46,8 +46,8 @@ private:
     NYPath::TRichYPath Path;
     NYTree::INodePtr TableReader;
 
-    std::optional<TString> PartIndexColumnName;
-    std::optional<TString> DataColumnName;
+    std::optional<std::string> PartIndexColumnName;
+    std::optional<std::string> DataColumnName;
 
     i64 StartPartIndex;
     i64 Offset;
@@ -375,7 +375,7 @@ public:
 private:
     NYTree::INodePtr TableWriter;
     NYPath::TRichYPath Path;
-    std::optional<std::vector<TString>> ColumnNames;
+    std::optional<std::vector<std::string>> ColumnNames;
     bool Versioned;
     NTableClient::TRetentionConfigPtr RetentionConfig;
 
@@ -451,7 +451,7 @@ public:
 private:
     NYTree::INodePtr TableWriter;
     NYPath::TRichYPath Path;
-    std::vector<TString> Locks;
+    std::vector<std::string> Locks;
     NTableClient::ELockType LockType;
 
     void DoExecute(ICommandContextPtr context) override;

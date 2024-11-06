@@ -1013,7 +1013,8 @@ void TProtobufFormatDescriptionBase<TType>::InitFromProtobufSchema(
                     field->GetType());
             }
             const auto& enumerationConfig = field->AsMap();
-            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(TimestampColumnName, enumerationConfig));
+            // TODO(babenko): migrate to std::string
+            EnumerationDescriptionMap_.emplace(name, CreateEnumerationMap(TString(TimestampColumnName), enumerationConfig));
         }
     }
 

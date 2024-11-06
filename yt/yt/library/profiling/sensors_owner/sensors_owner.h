@@ -77,6 +77,7 @@ public:
     const TCounter& GetCounter(const std::string& name) const;
 
     //! ~ .Counter(str).Increment(delta)
+    void Increment(const std::string& name, i64 delta) const;
     void Inc(const std::string& name, i64 delta) const;
 
     //! Gets owned gauge with given metric suffix.

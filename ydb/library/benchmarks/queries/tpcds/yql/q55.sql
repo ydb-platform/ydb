@@ -8,7 +8,7 @@ select  item.i_brand_id brand_id, item.i_brand brand,
  cross join {{item}} as item
  where d_date_sk = ss_sold_date_sk
  	and ss_item_sk = i_item_sk
- 	and i_manager_id=13
+ 	and i_manager_id=28
  	and d_moy=11
  	and d_year=1999
  group by item.i_brand, item.i_brand_id

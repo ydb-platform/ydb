@@ -139,12 +139,7 @@ public:
             auto row = Build<TCoArgument>(ctx, read->Pos())
                 .Name("row")
                 .Done();
-            auto emptyPredicate = Build<TCoLambda>(ctx, read->Pos())
-                .Args({row})
-                .Body<TCoBool>()
-                    .Literal().Build("true")
-                    .Build()
-                .Done().Ptr();
+            TString emptyPredicate;
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TDqPqTopicSource>()
@@ -155,7 +150,7 @@ public:
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
-                    .FilterPredicate(emptyPredicate)
+                    .FilterPredicate().Value(emptyPredicate).Build()
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
@@ -226,6 +221,8 @@ public:
                         srcDesc.SetEndpoint(TString(Value(setting)));
                     } else if (name == SharedReading) {
                         sharedReading = FromString<bool>(Value(setting));
+                    } else if (name == ReconnectPeriod) {
+                        srcDesc.SetReconnectPeriod(TString(Value(setting)));
                     } else if (name == Format) {
                         format = TString(Value(setting));
                     } else if (name == UseSslSetting) {
@@ -262,13 +259,8 @@ public:
                 }
 
                 NYql::NConnector::NApi::TPredicate predicateProto;
-                if (auto predicate = topicSource.FilterPredicate(); !NYql::IsEmptyFilterPredicate(predicate)) {
-                    TStringBuilder err;
-                    if (!NYql::SerializeFilterPredicate(predicate, &predicateProto, err)) {
-                        ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
-                        predicateProto.Clear();
-                    }
-                }
+                auto serializedProto = topicSource.FilterPredicate().Ref().Content();
+                YQL_ENSURE (predicateProto.ParseFromString(serializedProto));
 
                 sharedReading = sharedReading && (format == "json_each_row" || format == "raw");
                 TString predicateSql = NYql::FormatWhere(predicateProto);
@@ -348,6 +340,7 @@ public:
 
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
         Add(props, SharedReading, ToString(clusterConfiguration->SharedReading), pos, ctx);
+        Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
 
         

@@ -181,7 +181,7 @@ public:
     TLogManagerConfigPtr ApplyDynamic(const TLogManagerDynamicConfigPtr& dynamicConfig) const;
 
     static TLogManagerConfigPtr CreateStderrLogger(ELogLevel logLevel);
-    static TLogManagerConfigPtr CreateLogFile(const TString& path);
+    static TLogManagerConfigPtr CreateLogFile(const TString& path, ELogLevel logLevel = ELogLevel::Trace);
     static TLogManagerConfigPtr CreateDefault();
     static TLogManagerConfigPtr CreateQuiet();
     static TLogManagerConfigPtr CreateSilent();

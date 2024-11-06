@@ -846,7 +846,8 @@ public:
             return TStatus::Error;
         }
 
-        if (!ValidateSettings(tableContent.Settings().Ref(), EYtSettingType::MemUsage | EYtSettingType::ItemsCount | EYtSettingType::RowFactor | EYtSettingType::Split, ctx)) {
+        const EYtSettingTypes allowed = EYtSettingType::MemUsage | EYtSettingType::ItemsCount | EYtSettingType::RowFactor | EYtSettingType::Split | EYtSettingType::Small;
+        if (!ValidateSettings(tableContent.Settings().Ref(), allowed, ctx)) {
             return TStatus::Error;
         }
 

@@ -3,7 +3,7 @@ import os
 
 import yatest
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 
@@ -11,7 +11,7 @@ from ydb.tests.library.common.types import Erasure
 class TestYdbKvWorkload(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC))
+        cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC))
         cls.cluster.start()
 
     @classmethod

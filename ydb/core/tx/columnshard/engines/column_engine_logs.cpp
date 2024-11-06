@@ -152,6 +152,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     std::optional<NOlap::TIndexInfo> indexInfoOptional;
     if (schema.GetDiff()) {
         AFL_VERIFY(!VersionedIndex.IsEmpty());
+
         indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(
             *schema.GetDiff(), VersionedIndex.GetLastSchema()->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
     } else {
@@ -159,6 +160,36 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     }
     AFL_VERIFY(indexInfoOptional);
     RegisterSchemaVersion(snapshot, std::move(*indexInfoOptional));
+}
+
+void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) {
+    AFL_VERIFY(!VersionedIndex.IsEmpty());
+
+    ui64 version = schema.GetVersion();
+
+    ISnapshotSchema::TPtr prevSchema = VersionedIndex.GetLastSchemaBeforeOrEqualSnapshotOptional(version);
+
+    if (prevSchema && version == prevSchema->GetVersion()) {
+        // skip already registered version
+        return;
+    }
+
+    ISnapshotSchema::TPtr secondLast = VersionedIndex.GetLastSchemaBeforeOrEqualSnapshotOptional(VersionedIndex.GetLastSchema()->GetVersion() - 1);
+
+    AFL_VERIFY(!secondLast || secondLast->GetVersion() <= version)("reason", "incorrect schema registration order");
+
+    std::optional<NOlap::TIndexInfo> indexInfoOptional;
+    if (schema.GetDiff()) {
+        AFL_VERIFY(prevSchema)("reason", "no base schema to apply diff for");
+
+        indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(
+            *schema.GetDiff(), prevSchema->GetIndexInfo(), StoragesManager, SchemaObjectsCache);
+    } else {
+        indexInfoOptional = NOlap::TIndexInfo::BuildFromProto(schema.GetSchemaVerified(), StoragesManager, SchemaObjectsCache);
+    }
+
+    AFL_VERIFY(indexInfoOptional);
+    VersionedIndex.AddIndex(snapshot, std::move(*indexInfoOptional));
 }
 
 bool TColumnEngineForLogs::Load(IDbWrapper& db) {
@@ -204,7 +235,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         TMemoryProfileGuard g("TTxInit/LoadColumns/Portions");
         if (!db.LoadPortions([&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
                 const TIndexInfo& indexInfo = portion.GetSchema(VersionedIndex)->GetIndexInfo();
-                AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo));
+                AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
                 AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
             })) {
             timer.AddLoadingFail();
@@ -216,7 +247,7 @@ bool TColumnEngineForLogs::LoadColumns(IDbWrapper& db) {
         NColumnShard::TLoadTimeSignals::TLoadTimer timer = SignalCounters.ColumnsLoadingTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTxInit/LoadColumns/Records");
         TPortionInfo::TSchemaCursor schema(VersionedIndex);
-        if (!db.LoadColumns([&](const TColumnChunkLoadContext& loadContext) {
+        if (!db.LoadColumns([&](const TColumnChunkLoadContextV1& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(loadContext.GetPathId(), loadContext.GetPortionId());
                 constructor->LoadRecord(loadContext);
             })) {

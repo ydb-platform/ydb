@@ -881,7 +881,7 @@ public:
 
     DELEGATE_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
         const TShuffleHandlePtr& shuffleHandle,
-        const TString& partitionColumn,
+        const std::string& partitionColumn,
         const NTableClient::TTableWriterConfigPtr& config),
         (shuffleHandle, partitionColumn, config))
 

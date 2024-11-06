@@ -23,12 +23,12 @@ cross join {{store}} as store
 where ss_item_sk = i_item_sk and
       ss_sold_date_sk = d_date_sk and
       ss_store_sk = s_store_sk and
-      d_year in (2000) and
-        ((i_category in ('Home','Music','Books') and
-          i_class in ('glassware','classical','fiction')
+      d_year in (1999) and
+        ((i_category in ('Books','Electronics','Sports') and
+          i_class in ('computers','stereo','football')
          )
-      or (i_category in ('Jewelry','Sports','Women') and
-          i_class in ('semi-precious','baseball','dresses')
+      or (i_category in ('Men','Jewelry','Women') and
+          i_class in ('shirts','birdal','dresses')
         ))
 group by item.i_category, item.i_class, item.i_brand,
          store.s_store_name, store.s_company_name, date_dim.d_moy) tmp1

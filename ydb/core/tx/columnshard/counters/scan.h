@@ -264,7 +264,7 @@ public:
     void FillStats(::NKikimrTableStats::TTableStats& output) const;
 };
 
-class TCounterGuard: TNonCopyable {
+class TCounterGuard: TMoveOnly {
 private:
     std::shared_ptr<TAtomicCounter> Counter;
 public:
@@ -290,12 +290,17 @@ public:
 class TConcreteScanCounters: public TScanCounters {
 private:
     using TBase = TScanCounters;
+    std::shared_ptr<TAtomicCounter> FetchAccessorsCount;
     std::shared_ptr<TAtomicCounter> MergeTasksCount;
     std::shared_ptr<TAtomicCounter> AssembleTasksCount;
     std::shared_ptr<TAtomicCounter> ReadTasksCount;
     std::shared_ptr<TAtomicCounter> ResourcesAllocationTasksCount;
 public:
     TScanAggregations Aggregations;
+
+    TCounterGuard GetFetcherAcessorsGuard() const {
+        return TCounterGuard(FetchAccessorsCount);
+    }
 
     TCounterGuard GetMergeTasksGuard() const {
         return TCounterGuard(MergeTasksCount);
@@ -314,7 +319,8 @@ public:
     }
 
     bool InWaiting() const {
-        return MergeTasksCount->Val() || AssembleTasksCount->Val() || ReadTasksCount->Val() || ResourcesAllocationTasksCount->Val();
+        return MergeTasksCount->Val() || AssembleTasksCount->Val() || ReadTasksCount->Val() || ResourcesAllocationTasksCount->Val() ||
+               FetchAccessorsCount->Val();
     }
 
     void OnBlobsWaitDuration(const TDuration d, const TDuration fullScanDuration) const {
@@ -324,6 +330,7 @@ public:
 
     TConcreteScanCounters(const TScanCounters& counters)
         : TBase(counters)
+        , FetchAccessorsCount(std::make_shared<TAtomicCounter>())
         , MergeTasksCount(std::make_shared<TAtomicCounter>())
         , AssembleTasksCount(std::make_shared<TAtomicCounter>())
         , ReadTasksCount(std::make_shared<TAtomicCounter>())

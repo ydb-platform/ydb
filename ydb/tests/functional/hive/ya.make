@@ -1,5 +1,4 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TEST_SRCS(
     hive_matchers.py
     test_create_tablets.py

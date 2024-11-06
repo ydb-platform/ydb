@@ -4,8 +4,6 @@ FORK_TEST_FILES()
 TIMEOUT(600)
 SIZE(MEDIUM)
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
-
 TEST_SRCS(
     test_session_pool.py
     test_crud.py

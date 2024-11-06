@@ -6,7 +6,6 @@ TIMEOUT(600)
 SIZE(MEDIUM)
 
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 TEST_SRCS(
     conftest.py

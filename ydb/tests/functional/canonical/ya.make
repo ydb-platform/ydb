@@ -9,7 +9,6 @@ TEST_SRCS(
 TIMEOUT(600)
 SIZE(MEDIUM)
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 DEPENDS(
     ydb/apps/ydbd
 )

@@ -1,7 +1,5 @@
 PY3TEST()
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
-
 PEERDIR(
     ydb/public/api/protos
     ydb/public/sdk/python

@@ -1,5 +1,4 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(SQS_CLIENT_BINARY="ydb/core/ymq/client/bin/sqs")
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 

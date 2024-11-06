@@ -33,7 +33,7 @@ def kikimr_driver_path():
         return yatest.common.binary_path(os.getenv("YDB_DRIVER_BINARY"))
 
     if built_binary is None:
-        return yatest.common.binary_path("kikimr/driver/kikimr")
+        return yatest.common.binary_path("ydb/apps/ydbd/ydbd")
     return built_binary
 
 

@@ -1,7 +1,6 @@
 SUBSCRIBER(g:kikimr)
 
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 TEST_SRCS(
     test_disk.py

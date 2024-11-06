@@ -1,6 +1,5 @@
 IF (NOT SANITIZER_TYPE AND NOT WITH_VALGRIND)
     PY3TEST()
-    ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
     ENV(USE_IN_MEMORY_PDISKS=true)
     TEST_SRCS(
         test_base.py

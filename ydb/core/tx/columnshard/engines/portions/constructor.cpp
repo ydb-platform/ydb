@@ -125,6 +125,8 @@ ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& 
 
 void TPortionInfoConstructor::LoadRecord(const TColumnChunkLoadContextV1& loadContext) {
     AFL_VERIFY(loadContext.GetBlobRange().GetBlobIdxVerified() < MetaConstructor.BlobIds.size());
+    AFL_VERIFY(loadContext.GetBlobRange().CheckBlob(MetaConstructor.BlobIds[loadContext.GetBlobRange().GetBlobIdxVerified()]))(
+        "blobs", JoinSeq(",", MetaConstructor.BlobIds))("range", loadContext.GetBlobRange().ToString());
     TColumnRecord rec(loadContext);
     Records.push_back(std::move(rec));
 }

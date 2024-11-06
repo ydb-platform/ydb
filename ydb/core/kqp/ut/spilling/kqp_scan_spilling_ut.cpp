@@ -196,7 +196,6 @@ Y_UNIT_TEST(SelfJoinQueryService) {
     ])", FormatResultSetYson(result.GetResultSet(0)));
 
     TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
-    Cerr << counters.SpillingWriteBlobs->Val() << " " << counters.SpillingReadBlobs->Val() << "\n";
     UNIT_ASSERT(counters.SpillingWriteBlobs->Val() > 0);
     UNIT_ASSERT(counters.SpillingReadBlobs->Val() > 0);
 }

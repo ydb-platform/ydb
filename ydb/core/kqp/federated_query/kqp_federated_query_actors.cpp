@@ -93,11 +93,23 @@ private:
     bool AskSent = false;
 };
 
+std::vector<NMetadata::NSecret::TSecretIdOrValue> MakeSecretIdsOrNames(const std::vector<TString> secretNames) {
+    std::vector<NMetadata::NSecret::TSecretIdOrValue> secretIdsOrNames;
+    for (const TString& name : secretNames) {
+        secretIdsOrNames.emplace_back(NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(name));
+    }
+    return secretIdsOrNames;
+}
+
 }  // anonymous namespace
 
 IActor* CreateDescribeSecretsActor(const std::optional<NACLib::TUserToken>& userToken,
     const std::vector<NMetadata::NSecret::TSecretIdOrValue>& secretIdsOrNames, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise) {
     return new TDescribeSecretsActor(userToken, secretIdsOrNames, promise);
+}
+
+IActor* CreateDescribeSecretsActor(const std::optional<NACLib::TUserToken>& userToken, const std::vector<TString>& secretNames, NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise) {
+    return CreateDescribeSecretsActor(userToken, MakeSecretIdsOrNames(secretNames), promise);
 }
 
 void RegisterDescribeSecretsActor(const NActors::TActorId& replyActorId, const std::optional<NACLib::TUserToken>& userToken,
@@ -110,13 +122,17 @@ void RegisterDescribeSecretsActor(const NActors::TActorId& replyActorId, const s
     });
 }
 
+void RegisterDescribeSecretsActor(const TActorId& replyActorId, const std::optional<NACLib::TUserToken>& userToken, const std::vector<TString>& secretNames, NActors::TActorSystem* actorSystem) {
+    RegisterDescribeSecretsActor(replyActorId, userToken, MakeSecretIdsOrNames(secretNames), actorSystem);
+}
+
 NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDataSourceSecrets(
     const NKikimrSchemeOp::TAuth& authDescription, const std::optional<NACLib::TUserToken>& userToken, TActorSystem* actorSystem) {
     switch (authDescription.identity_case()) {
         case NKikimrSchemeOp::TAuth::kServiceAccount: {
             const TString& saSecretId = authDescription.GetServiceAccount().GetSecretName();
             auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(userToken, { NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(saSecretId) }, promise));
+            actorSystem->Register(CreateDescribeSecretsActor(userToken, { saSecretId }, promise));
             return promise.GetFuture();
         }
 
@@ -126,7 +142,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
         case NKikimrSchemeOp::TAuth::kBasic: {
             const TString& passwordSecretId = authDescription.GetBasic().GetPasswordSecretName();
             auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(userToken, {  NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(passwordSecretId) }, promise));
+            actorSystem->Register(CreateDescribeSecretsActor(userToken, { passwordSecretId }, promise));
             return promise.GetFuture();
         }
 
@@ -134,10 +150,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
             const TString& saSecretId = authDescription.GetMdbBasic().GetServiceAccountSecretName();
             const TString& passwordSecreId = authDescription.GetMdbBasic().GetPasswordSecretName();
             auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(userToken,
-                { NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(saSecretId),
-                    NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(passwordSecreId) },
-                promise));
+            actorSystem->Register(CreateDescribeSecretsActor(userToken, { saSecretId, passwordSecreId }, promise));
             return promise.GetFuture();
         }
 
@@ -160,7 +173,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
         case NKikimrSchemeOp::TAuth::kToken: {
             const TString& tokenSecretId = authDescription.GetToken().GetTokenSecretName();
             auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-            actorSystem->Register(CreateDescribeSecretsActor(userToken, { NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(tokenSecretId) }, promise));
+            actorSystem->Register(CreateDescribeSecretsActor(userToken, { tokenSecretId }, promise));
             return promise.GetFuture();
         }
 

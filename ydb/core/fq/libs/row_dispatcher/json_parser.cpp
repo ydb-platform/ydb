@@ -226,7 +226,7 @@ private:
     }
 
     static TParser GetJsonValueExtractor() {
-        return [](simdjson::fallback::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
+        return [](simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
             const auto rawJson = jsonValue.raw_json().value();
             if (Y_UNLIKELY(!NYql::NDom::IsValidJson(rawJson))) {
                 throw yexception() << "found bad json value: '" << TruncateString(rawJson) << "'";

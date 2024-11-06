@@ -20,6 +20,9 @@ private:
     TEvPrivate::TEvWriteBlobsResult::TPtr PutBlobResult;
     const ui32 TabletTxNo;
 
+    bool CommitOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId);
+    bool InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId);
+
     class TReplyInfo {
     private:
         std::unique_ptr<NActors::IEventBase> Event;
@@ -42,8 +45,6 @@ private:
     std::vector<TReplyInfo> Results;
     std::vector<std::shared_ptr<TTxController::ITransactionOperator>> ResultOperators;
 
-
-    bool InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId);
 
     TStringBuilder TxPrefix() const {
         return TStringBuilder() << "TxWrite[" << ToString(TabletTxNo) << "] ";

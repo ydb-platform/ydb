@@ -89,6 +89,8 @@ class TGeneralCompactColumnEngineChanges;
 
 namespace NKikimr::NColumnShard {
 
+class TEvWriteCommitPrimaryTransactionOperator;
+class TEvWriteCommitSecondaryTransactionOperator;
 class TTxFinishAsyncTransaction;
 class TTxInsertTableCleanup;
 class TTxRemoveSharedBlobs;
@@ -138,6 +140,8 @@ class TColumnShard
     : public TActor<TColumnShard>
     , public NTabletFlatExecutor::TTabletExecutedFlat
 {
+    friend class TEvWriteCommitSecondaryTransactionOperator;
+    friend class TEvWriteCommitPrimaryTransactionOperator;
     friend class TTxInsertTableCleanup;
     friend class TTxInit;
     friend class TTxInitSchema;
@@ -539,6 +543,10 @@ private:
 
 public:
     ui64 TabletTxCounter = 0;
+
+    const TTablesManager& GetTablesManager() const {
+        return TablesManager;
+    }
 
     bool HasLongTxWrites(const TInsertWriteId insertWriteId) const {
         return LongTxWrites.contains(insertWriteId);

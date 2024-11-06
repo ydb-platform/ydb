@@ -590,9 +590,6 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 .UseSecureConnection(NYdbSslTestData::CaCrt)
                 .SetEndpoint(location));
 
-        auto& tableSettings = server.GetServer().GetSettings().AppConfig->GetTableServiceConfig();
-        bool useSchemeCacheMeta = tableSettings.GetUseSchemeCacheMetadata();
-
         {
             auto session = CreateSession(connection, "root@builtin");
             {
@@ -648,8 +645,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                 )__",TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
 
                 UNIT_ASSERT_EQUAL(status.IsTransportError(), false);
-                UNIT_ASSERT_EQUAL(status.GetStatus(),
-                    useSchemeCacheMeta ? EStatus::SCHEME_ERROR : EStatus::UNAUTHORIZED);
+                UNIT_ASSERT_EQUAL(status.GetStatus(), EStatus::SCHEME_ERROR);
             }
         }
     }

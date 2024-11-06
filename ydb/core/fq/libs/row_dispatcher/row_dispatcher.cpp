@@ -151,7 +151,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             , Proto(proto)
             , TopicSessionId(topicSessionId)
             , QueryId(proto.GetQueryId()) {
-                EventsQueue.Init("txId", selfId, selfId, eventQueueId, /* KeepAlive */ true, /* UseConnect */ true);
+                EventsQueue.Init("txId", selfId, selfId, eventQueueId, /* KeepAlive */ true, /* UseConnect */ false);
                 EventsQueue.OnNewRecipientId(readActorId, true, alreadyConnected);
             }
 

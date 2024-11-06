@@ -69,4 +69,4 @@ A secondary index can be:
 
 ## Using secondary indexes {#use}
 
-To get detailed information on the secondary indexes usage in applications refer to [this article](../../dev/secondary-indexes.md) in the Development section of the documentation.
+For detailed information on using secondary indexes in applications, refer to the [relevant article](../../dev/secondary-indexes.md) in the documentation section for developers.

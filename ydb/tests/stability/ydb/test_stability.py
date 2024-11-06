@@ -45,6 +45,10 @@ def kikimr_driver_path():
     return yatest.common.get_param("kikimr.ci.kikimr_driver", None)
 
 
+def is_deploy_cluster():
+    return yatest.common.get_param("kikimr.ci.deploy_cluster", "false") == "true"
+
+
 class TestSetupForStability(object):
     stress_binaries_deploy_path = '/Berkanavt/nemesis/bin/'
     artifacts = (
@@ -65,11 +69,12 @@ class TestSetupForStability(object):
             kikimr_path=kikimr_driver_path(),
             kikimr_next_path=next_version_kikimr_driver_path(),
             ssh_username=get_ssh_username(),
+            deploy_cluster=is_deploy_cluster(),
         )
         cls._stop_nemesis()
         cls.kikimr_cluster.start()
 
-        if param_constants.deploy_cluster:
+        if is_deploy_cluster():
             # cleanup nemesis logs
             for node in cls.kikimr_cluster.nodes.values():
                 node.ssh_command('sudo rm -rf /Berkanavt/nemesis/logs/*', raise_on_error=False)
@@ -187,6 +192,7 @@ class TestCheckLivenessAndSafety(object):
             kikimr_path=kikimr_driver_path(),
             kikimr_next_path=next_version_kikimr_driver_path(),
             ssh_username=get_ssh_username(),
+            deploy_cluster=is_deploy_cluster(),
         )
         composite_assert = CompositeAssert()
         composite_assert.assert_that(

@@ -3,16 +3,6 @@ import os
 import yatest
 
 
-def _get_param(name, default):
-    # TODO: remove yatest dependency from harness
-    try:
-        return yatest.common.get_param(name, default)
-    except (AttributeError, yatest.common.NoRuntimeFormed):
-        return default
-
-
-deploy_cluster = _get_param("kikimr.ci.deploy_cluster", "false") == "true"
-
 kikimr_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr'
 kikimr_configure_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr_configure'
 kikimr_configuration_deploy_path = '/Berkanavt/kikimr/cfg'
@@ -28,13 +18,10 @@ def generate_configs_cmd(configs_type="", deploy_path=None):
 
 
 def kikimr_driver_path():
-    built_binary = _get_param("kikimr.ci.kikimr_driver", None)
     if os.getenv("YDB_DRIVER_BINARY"):
         return yatest.common.binary_path(os.getenv("YDB_DRIVER_BINARY"))
 
-    if built_binary is None:
-        return yatest.common.binary_path("kikimr/driver/kikimr")
-    return built_binary
+    return yatest.common.binary_path("kikimr/driver/kikimr")
 
 
 def kikimr_configure_binary_path():

@@ -1,5 +1,7 @@
 #pragma once
 
+
+
 #if defined(_MSC_VER) && defined(__clang__)
     #define _compiler_clang_cl_
 #elif defined(_MSC_VER)

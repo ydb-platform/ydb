@@ -138,6 +138,9 @@ public:
     inline ui32 Size() const { return Data_->Size(); }
     inline char* Data() const { return Data_->Data(); }
 
+    inline ui32 size() const { return Data_->Size(); }
+    inline char* data() const { return Data_->Data(); }
+
     inline void Ref() {
         if (Data_ != nullptr) {
             Data_->Ref();

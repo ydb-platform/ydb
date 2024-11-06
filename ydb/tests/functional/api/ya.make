@@ -4,8 +4,6 @@ FORK_TEST_FILES()
 TIMEOUT(600)
 SIZE(MEDIUM)
 
-
-
 TEST_SRCS(
     test_session_pool.py
     test_crud.py

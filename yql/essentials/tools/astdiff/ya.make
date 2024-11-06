@@ -7,7 +7,7 @@ SRCS(
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
-    contrib/ydb/library/yql/ast
+    yql/essentials/ast
     yql/essentials/utils/backtrace
 
     contrib/libs/dtl

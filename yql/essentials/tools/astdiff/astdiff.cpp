@@ -1,7 +1,7 @@
 
 #include <yql/essentials/utils/backtrace/backtrace.h>
 
-#include <contrib/ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <library/cpp/svnversion/svnversion.h>
 

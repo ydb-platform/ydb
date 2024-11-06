@@ -1,6 +1,6 @@
-#include <contrib/ydb/library/yql/ast/yql_ast.h>
-#include <contrib/ydb/library/yql/ast/yql_ast_annotation.h>
-#include <contrib/ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_ast.h>
+#include <yql/essentials/ast/yql_ast_annotation.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <yql/essentials/parser/lexer_common/hints.h>
 

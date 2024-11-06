@@ -59,25 +59,27 @@ To enable username/password authentication, use `true` in the `enforce_user_toke
 
 To learn how to manage roles and users, see [{#T}](../security/access-management.md).
 
-## Interaction with the LDAP directory {#ldap-auth-provider}
+## LDAP directory integration {#ldap-auth-provider}
 
-The {{ ydb-short-name }} has integrated interaction with an [LDAP directory](https://en.wikipedia.org/wiki/LDAP). The LDAP directory is an external service in relation to {{ ydb-short-name }} and is used for the authentication and authorization of database users. Before using this method of authentication and authorization, you must have a deployed LDAP service and configured network access between it and the {{ ydb-short-name }} servers.
+{{ ydb-short-name }} supports authentication and authorization via an [LDAP directory](https://en.wikipedia.org/wiki/LDAP). To use this feature, an LDAP directory service must be deployed and accessible from the {{ ydb-short-name }} servers.
 
-Examples of supported LDAP directory implementations: [OpenLdap](https://openldap.org/), [Active Directory](https://azure.microsoft.com/en-us/products/active-directory/).
+Examples of supported LDAP implementations include [OpenLDAP](https://openldap.org/) and [Active Directory](https://azure.microsoft.com/en-us/products/active-directory/).
 
 ## Authentication
 
-Authentication using the LDAP protocol is similar to the static credentials authentication process (using login and password). The difference lies in the fact that the LDAP directory acts as the authentication component. The LDAP directory is used only to verify the login/password pair.
+Authentication using the LDAP protocol is similar to the static credentials authentication process (using a login and password). The difference is that the LDAP directory acts as the authentication component. The LDAP directory is used solely to verify the login/password pair.
 
 {% note info %}
 
-Since the LDAP directory is an external independent service, {{ ydb-short-name }} cannot manage user accounts in the directory. For successful authentication, a user must already be created in the LDAP directory. Using the commands `CREATE USER`, `CREATE GROUP`, `ALTER USER`, `ALTER GROUP`, `DROP USER`, `DROP GROUP` will not affect the list of users and groups in the directory. Information about managing accounts should be sought in the documentation of the LDAP directory being used.
+Since the LDAP directory is an external, independent service, {{ ydb-short-name }} cannot manage user accounts within it. For successful authentication, the user must already exist in the LDAP directory. The commands `CREATE USER`, `CREATE GROUP`, `ALTER USER`, `ALTER GROUP`, `DROP USER`, and `DROP GROUP` do not affect the list of users and groups in the LDAP directory. Information on managing accounts should be found in the documentation for the specific LDAP directory implementation in use.
 
 {% endnote %}
 
-Currently, {{ ydb-short-name }} supports only one method of LDAP authentication, known as the search+bind method, which consists of several steps. After receiving the username and password of the user to be authenticated, a *bind* operation is performed using credentials of a special service account predefined in the [ldap_authentication](../reference/configuration/index.md#ldap-auth-config) section. The credentials of this service account are specified through the **bind_dn** and **bind_password** configuration parameters. After the service user is successfully authenticated, a search is conducted in the LDAP directory for the user attempting to authenticate in the system. The *search* operation is performed across the entire subtree, the root of which is specified by the **base_dn** configuration parameter. The search within the subtree is carried out according to the filter defined in the **search_filter** configuration parameter. Once the user entry is found, {{ ydb-short-name }} performs another *bind* operation on behalf of this found user, using the previously provided password. The success of the user authentication is determined by the result of this second *bind* operation.
+Currently, {{ ydb-short-name }} supports only one method of LDAP authentication, known as the `search+bind` method, which involves several steps. Upon receiving the username and password of the user being authenticated, a *bind* operation is performed using the credentials of a special service account specified in the [ldap_authentication](../reference/configuration/index.md#ldap-auth-config) section. These credentials are defined by the **bind_dn** and **bind_password** configuration parameters. After the service account is successfully authenticated, a search is conducted in the LDAP directory for the user attempting to authenticate in the system. The *search* operation is performed across the entire subtree rooted at the location specified by the **base_dn** configuration parameter and uses the filter defined in the **search_filter** configuration parameter.
 
-After successful user authentication, a token is generated. This token is then used instead of the username and password. Using the token speeds up the authentication process and enhances security.
+Once the user entry is found, {{ ydb-short-name }} performs another *bind* operation using the found user's entry and the password provided earlier. The success of this second *bind* operation determines whether the user authentication is successful.
+
+After successful authentication, a token is generated. This token is then used in place of the username and password, speeding up the authentication process and enhancing security.
 
 {% note info %}
 
@@ -87,19 +89,19 @@ When using LDAP authentication, no user passwords are stored in {{ ydb-short-nam
 
 ### Token verification
 
-After a user is authenticated in the system, a token is generated, which is verified before executing the requested operation. During the token verification process, it is determined on whose behalf the action is being requested in the system and which groups the user belongs to. For users from the LDAP directory, the token does not contain information about groups. Therefore, after the token is verified, an additional query is made to the LDAP server to obtain the list of groups the user belongs to.
+After a user is authenticated in the system, a token is generated and verified before executing the requested operation. During the token verification process, the system determines on whose behalf the action is being requested and identifies the groups the user belongs to. For users from the LDAP directory, the token does not include information about group memberships. Therefore, after the token is verified, an additional query is made to the LDAP server to retrieve the list of groups the user is a member of.
 
-Groups, like users themselves, are entities that perform operations on database schema objects. To manage access to different database resources, access rights can be assigned to these entities. Based on the list of assigned rights, entities will be authorized to perform various operations.
+Groups, like users, are entities that can have assigned access rights to perform operations on database schema objects and other resources. These assigned rights determine which operations a user is authorized to perform.
 
-The process of retrieving a user's group list from an LDAP directory is similar to the actions performed during authentication. First, a *bind* operation is executed for the service user, whose credentials are specified in the **bind_dn** and **bind_password** parameters of the [ldap_authentication](../reference/configuration/index.md#ldap-auth-config) section in the configuration file. After successful authentication, a search is conducted for the user's entry for whom the token was previously generated. This search is also carried out according to the **search_filter** parameter. If the user still exists, the result of the *search* operation will be a list of attribute values specified in the **requested_group_attribute** parameter. If this parameter is empty, the attribute for reverse group membership will be *memberOf*. The *memberOf* attribute stores the distinguished names (DNs) of the groups to which the user belongs.
+The process of retrieving a user's group list from an LDAP directory is similar to the steps taken during authentication. First, a *bind* operation is performed using the service user credentials specified by the **bind_dn** and **bind_password** parameters in the [ldap_authentication](../reference/configuration/index.md#ldap-auth-config) section of the configuration file. After successful authentication, a search is conducted for the user entry associated with the previously generated token. This search uses the **search_filter** parameter. If the user still exists, the result of the *search* operation will be a list of attribute values specified by the **requested_group_attribute** parameter. If this parameter is not set, the *memberOf* attribute is used as the default for reverse group membership. The *memberOf* attribute contains the distinguished names (DNs) of the groups to which the user belongs.
 
 #### Group search
 
-By default, {{ ydb-short-name }} searches only for those groups in which the user is directly a member. By enabling the flag **extended_settings.enable_nested_groups_search** in the [ldap_authentication](../reference/configuration/index.md#ldap-auth-config) section, {{ ydb-short-name }} will attempt to retrieve groups at all levels of nesting, not just those the user directly belongs to. If {{ ydb-short-name }} is configured to work with Active Directory, the Active Directory-specific matching rule [LDAP_MATCHING_RULE_IN_CHAIN](https://learn.microsoft.com/en-us/windows/win32/adsi/search-filter-syntax?redirectedfrom=MSDN) will be used to find all nested groups. This rule allows all nested groups to be retrieved with a single query. For LDAP servers based on OpenLDAP, the group search will be performed with a recursive traversal of the graph, which generally requires multiple queries. For both Active Directory and OpenLDAP, the group search will be performed only for the subtree rooted at the configuration parameter **base_dn**.
+By default, {{ ydb-short-name }} only searches for groups in which the user is a direct member. However, by enabling the **extended_settings.enable_nested_groups_search** flag in the [ldap_authentication](../reference/configuration/index.md#ldap-auth-config) section, {{ ydb-short-name }} will attempt to retrieve groups at all levels of nesting, not just those the user directly belongs to. If {{ ydb-short-name }} is configured to work with Active Directory, the Active Directory-specific matching rule [LDAP_MATCHING_RULE_IN_CHAIN](https://learn.microsoft.com/en-us/windows/win32/adsi/search-filter-syntax?redirectedfrom=MSDN) will be used to find all nested groups. This rule allows for the retrieval of all nested groups with a single query. For LDAP servers based on OpenLDAP, group searches will be conducted using recursive graph traversal, which generally requires multiple queries. In both Active Directory and OpenLDAP configurations, the group search is performed only within the subtree specified by the **base_dn** parameter.
 
 {% note info %}
 
-In the current implementation, the group names that {{ ydb-short-name }} operates with match the values recorded in the *memberOf* attribute. These names can be lengthy and difficult to read.
+In the current implementation, the group names that {{ ydb-short-name }} uses match the values stored in the *memberOf* attribute. These names can be long and difficult to read.
 
 Example:
 
@@ -111,21 +113,21 @@ cn=Developers,ou=Groups,dc=mycompany,dc=net@ldap
 
 {% note info %}
 
-In the configuration file section that describes authentication information, you can set the refresh rate for the user and group information. This is controlled by the **refresh_time** parameter. For more detailed information about configuration files, refer to the [cluster configuration](../reference/configuration/index.md#auth-config) section.
+In the configuration file section that specifies authentication information, the refresh rate for user and group information can be set using the **refresh_time** parameter. For more detailed information about configuration files, refer to the [cluster configuration](../reference/configuration/index.md#auth-config) section.
 
 {% endnote %}
 
 {% note warning %}
 
-It should be noted that currently, {{ ydb-short-name }} does not have the capability to track groups renaming made on the LDAP server side. As a result, a group with a new name will not possess the same rights as the group with the previous name.
+It should be noted that currently, {{ ydb-short-name }} does not have the capability to track group renaming on the LDAP server side. Consequently, a group with a new name will not retain the rights assigned to the group under its previous name.
 
 {% endnote %}
 
 ### LDAP users and groups in {{ ydb-short-name }}
 
-Since {{ ydb-short-name }} allows for various methods of user authentication (login and password authentication, using an IAM provider, LDAP directory), it is often useful to distinguish where exactly the user authenticated when handling user and group names. For all types of authentication except for login and password authentication, user and group names are appended with a suffix in the format <username>@<domain>.
+Since {{ ydb-short-name }} supports various methods of user authentication (login and password authentication, IAM provider usage, LDAP directory), it is often helpful to identify the specific source of authentication when handling user and group names. For all authentication types except login and password, a suffix in the format `<username>@<domain>` is appended to user and group names.
 
-For LDAP users, the *domain* is specified in the [configuration parameter](../reference/configuration/index.md#ldap-auth-config) **ldap_authentication_domain**. By default, it is set to `ldap` so all usernames authenticated through the LDAP directory, as well as the group names they belong to in {{ ydb-short-name }}, will have the following format:
+For LDAP users, the `<domain>` is determined by the **ldap_authentication_domain** configuration parameter in the [configuration section](../reference/configuration/index.md#ldap-auth-config). By default, this parameter is set to `ldap`, so all usernames authenticated through the LDAP directory, as well as their corresponding group names in {{ ydb-short-name }}, will follow this format:
 
 - `user1@ldap`
 - `group1@ldap`
@@ -133,7 +135,7 @@ For LDAP users, the *domain* is specified in the [configuration parameter](../re
 
 {% note warning %}
 
-To distinguish that the entered login should be a username from the LDAP directory rather than for login and password authentication, you need to add the LDAP authentication domain suffix to it. The suffix is specified through the **ldap_authentication_domain** configuration parameter.
+To indicate that the entered login should be recognized as a username from the LDAP directory, rather than for login and password authentication, you need to append the LDAP authentication domain suffix. This suffix is specified through the **ldap_authentication_domain** configuration parameter.
 
 Below are examples of authenticating the user `user1` using the [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md):
 
@@ -144,17 +146,17 @@ Below are examples of authenticating the user `user1` using the [{{ ydb-short-na
 
 ### TLS connection {#ldap-tls}
 
-Depending on the specified configuration parameters, {{ ydb-short-name }} can establish either an encrypted or unencrypted connection. An encrypted connection with the LDAP server is established using the TLS protocol. This method is recommended for production clusters. There are two ways to enable a TLS connection:
+Depending on the specified configuration parameters, {{ ydb-short-name }} can establish either an encrypted or unencrypted connection. An encrypted connection with the LDAP server is established using the TLS protocol, which is recommended for production clusters. There are two ways to enable a TLS connection:
 
-* Automatically. The [`ldaps`](#ldaps) connection scheme is used.
-* Using the LDAP protocol extension [`StartTls`](#starttls).
+* Automatically via the [`ldaps`](#ldaps) connection scheme.
+* Using the [`StartTls`](#starttls) LDAP protocol extension*.
 
-When using an unencrypted connection, all data transmitted in requests to the LDAP server will be sent in plain text, including passwords. This connection method is easier to start using and is more suitable for experimentation or testing.
+When using an unencrypted connection, all data transmitted in requests to the LDAP server, including passwords, will be sent in plain text. This method is easier to set up and is more suited for experimentation or testing purposes.
 
 #### LDAPS {#ldaps}
 
-In order to {{ ydb-short-name }} automatically establish an encrypted connection with the LDAP server, the **scheme** value in the [configuration parameter](../reference/configuration/index.md#ldap-auth-config) should be set to `ldaps`. The TLS handshake will be initiated on the port specified in the configuration. If no port is specified, the default port 636 will be used for the `ldaps` scheme. The LDAP server must be configured to accept TLS connections on the specified ports.
+To have {{ ydb-short-name }} automatically establish an encrypted connection with the LDAP server, the **scheme** value in the [configuration parameter](../reference/configuration/index.md#ldap-auth-config) should be set to `ldaps`. The TLS handshake will be initiated on the port specified in the configuration. If no port is specified, the default port 636 will be used for the `ldaps` scheme. The LDAP server must be configured to accept TLS connections on the specified ports.
 
 #### LDAP protocol extension `StartTls` {#starttls}
 
-`StartTls` is an LDAP protocol extension used for encrypting messages via the TLS protocol. It allows some messages to be transmitted in encrypted form and others in plain text within a single connection to the LDAP server. The message with this extension is sent from {{ ydb-short-name }} to the LDAP server to initiate a TLS connection. In the case of {{ ydb-short-name }}, enabling and disabling a TLS connection within a single session is not supported. Therefore, when using the `StartTls` extension, after establishing an encrypted connection, {{ ydb-short-name }} will send all subsequent messages to the LDAP server in encrypted form. One of the advantages of using this extension instead of the `ldaps` scheme (with the appropriate LDAP server configuration) is the ability to establish a TLS connection on an unencrypted port. The extension is enabled in the [`use_tls` section](../reference/configuration/index.md#ldap-auth-config) of the configuration file.
+`StartTls` is an LDAP protocol extension that enables message encryption using the TLS protocol. It allows a combination of encrypted and plain-text message transmission within a single connection to the LDAP server. {{ ydb-short-name }} sends a `StartTls` request to the LDAP server to initiate a TLS connection. In {{ ydb-short-name }}, enabling or disabling TLS within an active session is not supported. Therefore, once an encrypted connection is established using `StartTls`, all subsequent messages sent to the LDAP server will be encrypted. One advantage of using this extension, provided the LDAP server is appropriately configured, is the capability to initiate a TLS connection over an unencrypted port. The extension can be enabled in the [`use_tls` section](../reference/configuration/index.md#ldap-auth-config) of the configuration file.

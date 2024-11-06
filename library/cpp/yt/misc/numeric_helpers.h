@@ -19,6 +19,9 @@ T RoundUp(const T& numerator, const T& denominator);
 template <class T>
 T RoundDown(const T& numerator, const T& denominator);
 
+template <class T>
+int GetSign(const T& value);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

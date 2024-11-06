@@ -6,7 +6,10 @@
 
 #include <cstdlib>
 #include <cinttypes>
+#include <cmath>
 #include <algorithm>
+
+#include <util/system/compiler.h>
 
 namespace NYT {
 
@@ -37,6 +40,18 @@ template <class T>
 T RoundDown(const T& numerator, const T& denominator)
 {
     return (numerator / denominator) * denominator;
+}
+
+template <class T>
+Y_FORCE_INLINE int GetSign(const T& value)
+{
+    if (value < 0) {
+        return -1;
+    } else if (value > 0) {
+        return +1;
+    } else {
+        return 0;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

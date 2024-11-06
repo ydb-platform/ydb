@@ -817,7 +817,8 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
                        std::forward_as_tuple(partitionId),
                        std::forward_as_tuple(actorId,
                                              GetPartitionKeyRange(config, partition),
-                                             *Counters));
+                                             *Counters,
+                                             ctx.Now()));
     ++OriginalPartitionsCount;
 }
 
@@ -855,7 +856,8 @@ void TPersQueue::AddSupportivePartition(const TPartitionId& partitionId)
     Partitions.emplace(partitionId,
                        TPartitionInfo(TActorId(),
                                       {},
-                                      *Counters));
+                                      *Counters,
+                                      TAppData::TimeProvider->Now()));
     NewSupportivePartitions.insert(partitionId);
 }
 
@@ -2977,14 +2979,13 @@ void TPersQueue::SetupTransactionCounters(const TActorContext& ctx)
     subgroups.emplace_back("topic", TopicConverter->GetClientsideName());
 
     SetupTransactionExecutionTimeCounter(counters, labels, subgroups);
+    SetupTransactionWriteInfoCounter(counters, labels, subgroups);
     SetupTransactionStartedCounter(counters, labels, subgroups);
     SetupTransactionCompletedCounter(counters, labels, subgroups);
     SetupTransactionResponseTime(counters, labels, subgroups);
 }
 
-void TPersQueue::SetupTransactionExecutionTimeCounter(NMonitoring::TDynamicCounterPtr counters,
-                                                      const TVector<NPersQueue::TPQLabelsInfo>& labels,
-                                                      const TVector<std::pair<TString, TString>>& subgroupsSrc)
+TVector<std::pair<ui64, TString>> GetTransactionCounterIntervals()
 {
     TVector<std::pair<ui64, TString>> intervals;
     intervals.emplace_back(1, "1ms");
@@ -2993,10 +2994,19 @@ void TPersQueue::SetupTransactionExecutionTimeCounter(NMonitoring::TDynamicCount
     intervals.emplace_back(10, "10ms");
     intervals.emplace_back(20, "20ms");
     intervals.emplace_back(50, "50ms");
-    intervals.emplace_back(100, "100ms");
-    intervals.emplace_back(250, "250ms");
-    intervals.emplace_back(500, "500ms");
+    for (unsigned k = 80; k <= 600; k += 30) {
+        intervals.emplace_back(k, TStringBuilder() << k << "ms");
+    }
     intervals.emplace_back(1000, "1000ms");
+
+    return intervals;
+}
+
+void TPersQueue::SetupTransactionExecutionTimeCounter(NMonitoring::TDynamicCounterPtr counters,
+                                                      const TVector<NPersQueue::TPQLabelsInfo>& labels,
+                                                      const TVector<std::pair<TString, TString>>& subgroupsSrc)
+{
+    auto intervals = GetTransactionCounterIntervals();
 
     const TVector<NKikimrPQ::TTransaction::EState> states {
         NKikimrPQ::TTransaction::UNKNOWN,
@@ -3034,6 +3044,28 @@ void TPersQueue::SetupTransactionExecutionTimeCounter(NMonitoring::TDynamicCount
     }
 }
 
+void TPersQueue::SetupTransactionWriteInfoCounter(NMonitoring::TDynamicCounterPtr counters,
+                                                  const TVector<NPersQueue::TPQLabelsInfo>& labels,
+                                                  const TVector<std::pair<TString, TString>>& subgroupsSrc)
+{
+    auto intervals = GetTransactionCounterIntervals();
+
+    auto subgroups = subgroupsSrc;
+    subgroups.emplace_back("name", "topic.transaction.start_time");
+
+    // cluster
+    //     service = data-stream | data-stream-serverless
+    //         name = topic.transaction.start_time
+    //             bin = *
+    TxWriteInfoCreateTime =
+        MakeHolder<NKikimr::NPQ::TPercentileCounter>(NPersQueue::GetCountersForTopic(counters, IsServerless),
+                                                     labels,
+                                                     subgroups,
+                                                     "bin",
+                                                     intervals,
+                                                     true);
+}
+
 void TPersQueue::SetupTransactionStartedCounter(NMonitoring::TDynamicCounterPtr counters,
                                                 const TVector<NPersQueue::TPQLabelsInfo>& labels,
                                                 const TVector<std::pair<TString, TString>>& subgroups)
@@ -3068,17 +3100,7 @@ void TPersQueue::SetupTransactionResponseTime(NMonitoring::TDynamicCounterPtr co
                                               const TVector<NPersQueue::TPQLabelsInfo>& labels,
                                               const TVector<std::pair<TString, TString>>& subgroupsSrc)
 {
-    TVector<std::pair<ui64, TString>> intervals;
-    intervals.emplace_back(1, "1ms");
-    intervals.emplace_back(2, "2ms");
-    intervals.emplace_back(5, "5ms");
-    intervals.emplace_back(10, "10ms");
-    intervals.emplace_back(20, "20ms");
-    intervals.emplace_back(50, "50ms");
-    intervals.emplace_back(100, "100ms");
-    intervals.emplace_back(250, "250ms");
-    intervals.emplace_back(500, "500ms");
-    intervals.emplace_back(1000, "1000ms");
+    auto intervals = GetTransactionCounterIntervals();
 
     auto subgroups = subgroupsSrc;
     subgroups.emplace_back("name", "topic.transaction.response_time");
@@ -3110,6 +3132,16 @@ void TPersQueue::IncTxCompleted()
         return;
     }
     TxCompleted->Inc();
+}
+
+void TPersQueue::AccountTxWriteInfoCreateTime()
+{
+    for (const auto& partitionId : PendingSupportivePartitions) {
+        Y_ABORT_UNLESS(Partitions.contains(partitionId));
+
+        const TPartitionInfo& partition = Partitions.at(partitionId);
+        TxWriteInfoCreateTime->IncFor((TAppData::TimeProvider->Now() - partition.CreateTime).MilliSeconds());
+    }
 }
 
 void TPersQueue::AccountTxResponseTime(const TDistributedTransaction& tx)
@@ -3614,7 +3646,7 @@ void TPersQueue::UnsubscribeWriteId(const TWriteId& writeId,
 
 void TPersQueue::CreateSupportivePartitionActors(const TActorContext& ctx)
 {
-    for (auto& partitionId : PendingSupportivePartitions) {
+    for (const auto& partitionId : PendingSupportivePartitions) {
         CreateSupportivePartitionActor(partitionId, ctx);
     }
 
@@ -3684,6 +3716,7 @@ void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
 
     SendReplies(ctx);
     CheckChangedTxStates(ctx);
+    AccountTxWriteInfoCreateTime();
     CreateSupportivePartitionActors(ctx);
 
     WriteTxsInProgress = false;

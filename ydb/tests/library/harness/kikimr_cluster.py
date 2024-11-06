@@ -8,7 +8,6 @@ from concurrent import futures
 
 import ydb
 
-from . import param_constants
 from .kikimr_runner import KiKiMR, KikimrExternalNode
 from .kikimr_cluster_interface import KiKiMRClusterInterface
 import yaml
@@ -37,6 +36,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
             kikimr_path,
             kikimr_next_path=None,
             ssh_username=None,
+            deploy_cluster=False,
             ):
         self.__config_path = config_path
         with open(config_path, 'r') as r:
@@ -46,6 +46,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         self.__kikimr_path = kikimr_path
         self.__kikimr_next_path = kikimr_next_path
         self.__ssh_username = ssh_username
+        self.__deploy_cluster = deploy_cluster
         self.__slot_count = 0
 
         for domain in self.__yaml_config['domains']:
@@ -164,7 +165,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
             )
         )
 
-        if param_constants.deploy_cluster:
+        if self.__deploy_cluster:
             for inst_set in [self.nodes, self.slots]:
                 self._run_on(
                     inst_set,

@@ -1683,7 +1683,7 @@ protected:
     }
 
     void GetSecretsSnapshot() {
-        RegisterDescribeSecretsActor(this->SelfId(), UserToken ? UserToken->GetUserSID() : "", SecretNames, this->ActorContext().ActorSystem());
+        RegisterDescribeSecretsActor(this->SelfId(), UserToken ? std::optional<NACLib::TUserToken>(*UserToken) : std::nullopt, SecretNames, this->ActorContext().ActorSystem());
     }
 
     void GetResourcesSnapshot() {

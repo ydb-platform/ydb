@@ -605,7 +605,7 @@ For a configuration located in 3 availability zones, specify 3 rings. For a conf
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 
-### Configuring LDAP authentication
+### Configuring LDAP authentication {#ldap-auth-config}
 
 One of the user authentication methods in {{ ydb-short-name }} is with an LDAP directory. More details about this type of authentication can be found in the section on [interacting with the LDAP directory](../../concepts/auth.md#ldap-auth-provider). To configure LDAP authentication, the `ldap_authentication` section must be defined.
 

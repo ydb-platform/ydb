@@ -16,8 +16,6 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
         auto snapshot = ev->Get()->GetSnapshotAs<NMetadata::NSecret::TSnapshot>();
 
-        AFL_CRIT(NKikimrServices::TX_TIERING)("aboba", snapshot->SerializeToString()); // TODO: remove
-
         std::vector<TString> secretValues;
         secretValues.reserve(SecretIdsOrNames.size());
         for (const auto& secretIdOrName: SecretIdsOrNames) {

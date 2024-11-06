@@ -552,6 +552,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):
     def __init__(
             self,
+            kikimr_path,
+            kikimr_next_path,
             node_id,
             host,
             ssh_username,
@@ -585,8 +587,8 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
         ]
 
         self.local_drivers_path = [
-            param_constants.kikimr_driver_path(),
-            param_constants.next_version_kikimr_driver_path(),
+            kikimr_path,
+            kikimr_next_path,
         ]
 
     @property

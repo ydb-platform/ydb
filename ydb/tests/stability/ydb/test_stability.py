@@ -37,6 +37,14 @@ def get_slice_name():
     return yatest.common.get_param("kikimr.ci.cluster_name", None)
 
 
+def next_version_kikimr_driver_path():
+    return yatest.common.get_param("kikimr.ci.kikimr_driver_next", None)
+
+
+def kikimr_driver_path():
+    return yatest.common.get_param("kikimr.ci.kikimr_driver", None)
+
+
 class TestSetupForStability(object):
     stress_binaries_deploy_path = '/Berkanavt/nemesis/bin/'
     artifacts = (
@@ -52,7 +60,12 @@ class TestSetupForStability(object):
         assert cls.slice_name is not None
 
         logger.info('setup_class started for slice = {}'.format(cls.slice_name))
-        cls.kikimr_cluster = ExternalKiKiMRCluster(config_path=get_slice_directory(), ssh_username=get_ssh_username())
+        cls.kikimr_cluster = ExternalKiKiMRCluster(
+            config_path=get_slice_directory(),
+            kikimr_path=kikimr_driver_path(),
+            kikimr_next_path=next_version_kikimr_driver_path(),
+            ssh_username=get_ssh_username(),
+        )
         cls._stop_nemesis()
         cls.kikimr_cluster.start()
 
@@ -169,7 +182,12 @@ class TestCheckLivenessAndSafety(object):
         slice_name = get_slice_name()
         logger.info('slice = {}'.format(slice_name))
         assert slice_name is not None
-        kikimr_cluster = ExternalKiKiMRCluster(config_path=get_slice_directory(), ssh_username=get_ssh_username())
+        kikimr_cluster = ExternalKiKiMRCluster(
+            config_path=get_slice_directory(),
+            kikimr_path=kikimr_driver_path(),
+            kikimr_next_path=next_version_kikimr_driver_path(),
+            ssh_username=get_ssh_username(),
+        )
         composite_assert = CompositeAssert()
         composite_assert.assert_that(
             safety_warden_factory(kikimr_cluster).list_of_safety_violations(),

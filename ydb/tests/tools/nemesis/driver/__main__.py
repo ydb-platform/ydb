@@ -130,7 +130,7 @@ def nemesis_logic(arguments):
     nemesis = catalog.nemesis_factory(
         ExternalKiKiMRCluster(
             arguments.ydb_cluster_template,
-            binary_path=arguments.ydb_binary_path,
+            kikimr_path=arguments.ydb_binary_path,
             ssh_username=os.getenv('NEMESIS_USER', 'robot-nemesis'),
         ),
         enable_nemesis_list_filter_by_hostname=arguments.enable_nemesis_list_filter_by_hostname,

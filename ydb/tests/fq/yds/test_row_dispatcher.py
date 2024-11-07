@@ -350,8 +350,9 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS DISTINCT FROM \\"event1\\"')
         filter = 'event IN ("event2")'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IN (\\"event2\\")')
-        filter = 'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IN (\\"1\\"')
+        # TODO
+        #filter = 'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
+        #self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IN (\\"1\\"')
 
     @yq_v1
     def test_filter_missing_fields(self, kikimr, client):

@@ -2,7 +2,7 @@
 // detail/config.hpp
 // ~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -135,6 +135,7 @@
 # define BOOST_ASIO_MOVE_CAST(type) static_cast<type&&>
 # define BOOST_ASIO_MOVE_CAST2(type1, type2) static_cast<type1, type2&&>
 # define BOOST_ASIO_MOVE_OR_LVALUE(type) static_cast<type&&>
+# define BOOST_ASIO_MOVE_OR_LVALUE_ARG(type) type&&
 # define BOOST_ASIO_MOVE_OR_LVALUE_TYPE(type) type
 #endif // defined(BOOST_ASIO_HAS_MOVE) && !defined(BOOST_ASIO_MOVE_CAST)
 
@@ -163,6 +164,7 @@
 # define BOOST_ASIO_MOVE_CAST(type) static_cast<const type&>
 # define BOOST_ASIO_MOVE_CAST2(type1, type2) static_cast<const type1, type2&>
 # define BOOST_ASIO_MOVE_OR_LVALUE(type)
+# define BOOST_ASIO_MOVE_OR_LVALUE_ARG(type) type&
 # define BOOST_ASIO_MOVE_OR_LVALUE_TYPE(type) type&
 #endif // !defined(BOOST_ASIO_MOVE_CAST)
 
@@ -644,6 +646,19 @@
 # define BOOST_ASIO_ALIGNOF(T) 1
 # define BOOST_ASIO_DEFAULT_ALIGN 1
 #endif // defined(BOOST_ASIO_HAS_ALIGNOF)
+
+// Support for user-defined literals.
+#if !defined(BOOST_ASIO_HAS_USER_DEFINED_LITERALS)
+# if !defined(BOOST_ASIO_DISABLE_USER_DEFINED_LITERALS)
+#  if (__cplusplus >= 201103)
+#   define BOOST_ASIO_HAS_USER_DEFINED_LITERALS 1
+#  elif defined(BOOST_ASIO_MSVC)
+#   if (_MSC_VER >= 1900 && _MSVC_LANG >= 201103)
+#    define BOOST_ASIO_HAS_USER_DEFINED_LITERALS 1
+#   endif // (_MSC_VER >= 1900 && _MSVC_LANG >= 201103)
+#  endif // defined(BOOST_ASIO_MSVC)
+# endif // !defined(BOOST_ASIO_DISABLE_USER_DEFINED_LITERALS)
+#endif // !defined(BOOST_ASIO_HAS_USER_DEFINED_LITERALS)
 
 // Standard library support for aligned allocation.
 #if !defined(BOOST_ASIO_HAS_STD_ALIGNED_ALLOC)
@@ -1430,6 +1445,30 @@
 # endif // !defined(BOOST_ASIO_DISABLE_STD_ANY)
 #endif // !defined(BOOST_ASIO_HAS_STD_ANY)
 
+// Standard library support for std::variant.
+#if !defined(BOOST_ASIO_HAS_STD_VARIANT)
+# if !defined(BOOST_ASIO_DISABLE_STD_VARIANT)
+#  if defined(__clang__)
+#   if (__cplusplus >= 201703)
+#    if __has_include(<variant>)
+#     define BOOST_ASIO_HAS_STD_VARIANT 1
+#    endif // __has_include(<variant>)
+#   endif // (__cplusplus >= 201703)
+#  elif defined(__GNUC__)
+#   if (__GNUC__ >= 7)
+#    if (__cplusplus >= 201703)
+#     define BOOST_ASIO_HAS_STD_VARIANT 1
+#    endif // (__cplusplus >= 201703)
+#   endif // (__GNUC__ >= 7)
+#  endif // defined(__GNUC__)
+#  if defined(BOOST_ASIO_MSVC)
+#   if (_MSC_VER >= 1910) && (_MSVC_LANG >= 201703)
+#    define BOOST_ASIO_HAS_STD_VARIANT 1
+#   endif // (_MSC_VER >= 1910) && (_MSVC_LANG >= 201703)
+#  endif // defined(BOOST_ASIO_MSVC)
+# endif // !defined(BOOST_ASIO_DISABLE_STD_VARIANT)
+#endif // !defined(BOOST_ASIO_HAS_STD_VARIANT)
+
 // Standard library support for std::source_location.
 #if !defined(BOOST_ASIO_HAS_STD_SOURCE_LOCATION)
 # if !defined(BOOST_ASIO_DISABLE_STD_SOURCE_LOCATION)
@@ -2077,6 +2116,22 @@
 #if !defined(BOOST_ASIO_UNUSED_VARIABLE)
 # define BOOST_ASIO_UNUSED_VARIABLE
 #endif // !defined(BOOST_ASIO_UNUSED_VARIABLE)
+
+// Helper macro to tell the optimiser what may be assumed to be true.
+#if defined(BOOST_ASIO_MSVC)
+# define BOOST_ASIO_ASSUME(expr) __assume(expr)
+#elif defined(__clang__)
+# if __has_builtin(__builtin_assume)
+#  define BOOST_ASIO_ASSUME(expr) __builtin_assume(expr)
+# endif // __has_builtin(__builtin_assume)
+#elif defined(__GNUC__)
+# if ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 5)) || (__GNUC__ > 4)
+#  define BOOST_ASIO_ASSUME(expr) if (expr) {} else { __builtin_unreachable(); }
+# endif // ((__GNUC__ == 4) && (__GNUC_MINOR__ >= 5)) || (__GNUC__ > 4)
+#endif // defined(__GNUC__)
+#if !defined(BOOST_ASIO_ASSUME)
+# define BOOST_ASIO_ASSUME(expr) (void)0
+#endif // !defined(BOOST_ASIO_ASSUME)
 
 // Support the co_await keyword on compilers known to allow it.
 #if !defined(BOOST_ASIO_HAS_CO_AWAIT)

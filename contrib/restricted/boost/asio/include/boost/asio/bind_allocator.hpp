@@ -2,7 +2,7 @@
 // bind_allocator.hpp
 // ~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -690,16 +690,17 @@ template <template <typename, typename> class Associator,
 struct associator<Associator,
     allocator_binder<T, Allocator>,
     DefaultCandidate>
+  : Associator<T, DefaultCandidate>
 {
-  typedef typename Associator<T, DefaultCandidate>::type type;
-
-  static type get(const allocator_binder<T, Allocator>& b) BOOST_ASIO_NOEXCEPT
+  static typename Associator<T, DefaultCandidate>::type
+  get(const allocator_binder<T, Allocator>& b) BOOST_ASIO_NOEXCEPT
   {
     return Associator<T, DefaultCandidate>::get(b.get());
   }
 
-  static BOOST_ASIO_AUTO_RETURN_TYPE_PREFIX(type) get(
-      const allocator_binder<T, Allocator>& b,
+  static BOOST_ASIO_AUTO_RETURN_TYPE_PREFIX2(
+      typename Associator<T, DefaultCandidate>::type)
+  get(const allocator_binder<T, Allocator>& b,
       const DefaultCandidate& c) BOOST_ASIO_NOEXCEPT
     BOOST_ASIO_AUTO_RETURN_TYPE_SUFFIX((
       Associator<T, DefaultCandidate>::get(b.get(), c)))

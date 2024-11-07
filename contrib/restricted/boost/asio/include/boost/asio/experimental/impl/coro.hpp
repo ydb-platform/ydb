@@ -2,7 +2,7 @@
 // experimental/impl/coro.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2021-2022 Klemens D. Morgenstern
+// Copyright (c) 2021-2023 Klemens D. Morgenstern
 //                         (klemens dot morgenstern at gmx dot net)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -583,7 +583,7 @@ struct coro_promise final :
       typename coro_traits<Yield, Return, Executor>::input_type,
       typename coro_traits<Yield, Return, Executor>::return_type>
 {
-  using coro_type = coro<Yield, Return, Executor>;
+  using coro_type = coro<Yield, Return, Executor, Allocator>;
 
   auto handle()
   {
@@ -865,14 +865,17 @@ struct coro_promise final :
     return result{cancel, throw_if_cancelled.value};
   }
 
-  template <typename Yield_, typename Return_, typename Executor_>
-  auto await_transform(coro<Yield_, Return_, Executor_>& kr) -> decltype(auto)
+  template <typename Yield_, typename Return_,
+      typename Executor_, typename Allocator_>
+  auto await_transform(coro<Yield_, Return_, Executor_, Allocator_>& kr)
+    -> decltype(auto)
   {
     return kr;
   }
 
-  template <typename Yield_, typename Return_, typename Executor_>
-  auto await_transform(coro<Yield_, Return_, Executor_>&& kr)
+  template <typename Yield_, typename Return_,
+      typename Executor_, typename Allocator_>
+  auto await_transform(coro<Yield_, Return_, Executor_, Allocator_>&& kr)
   {
     return std::move(kr);
   }

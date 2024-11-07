@@ -612,6 +612,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
     if (!info.NextMessageOffset) {
         LOG_ROW_DISPATCHER_ERROR("Try SendData() without NextMessageOffset, " << info.ReadActorId 
             << " unread " << info.UnreadBytes << " DataArrivedSent " << info.DataArrivedSent);
+        return;
     }
 
     do {
@@ -637,12 +638,12 @@ void TTopicSession::SendData(TClientsInfo& info) {
             }
         }
         if (info.Buffer.empty()) {
-            event->Record.SetNextMessageOffset(info.NextMessageOffset.GetOrElse(0));
+            event->Record.SetNextMessageOffset(*info.NextMessageOffset);
         }
         LOG_ROW_DISPATCHER_TRACE("SendData to " << info.ReadActorId << ", batch size " << event->Record.MessagesSize());
         Send(RowDispatcherActorId, event.release());
     } while(!info.Buffer.empty());
-    info.LastSendedNextMessageOffset = info.NextMessageOffset.GetOrElse(0);
+    info.LastSendedNextMessageOffset = *info.NextMessageOffset;
 }
 
 void TTopicSession::UpdateFieldsIds(TClientsInfo& info) {

@@ -1,4 +1,5 @@
 #include <ydb/library/actors/http/http.h>
+#include <ydb/library/security/util.h>
 #include "openid_connect.h"
 #include "oidc_session_create_nebius.h"
 #include <library/cpp/string_utils/base64/base64.h>

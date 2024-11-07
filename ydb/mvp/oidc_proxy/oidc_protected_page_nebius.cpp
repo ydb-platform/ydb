@@ -1,6 +1,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/library/actors/http/http.h>
+#include <ydb/library/security/util.h>
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/mvp_log.h>
@@ -28,7 +29,7 @@ void THandlerSessionServiceCheckNebius::StartOidcProcess(const NActors::TActorCo
     if (!sessionCookieValue.Empty()) {
         LOG_DEBUG_S(ctx, EService::MVP, "Using session cookie (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
     }
-    
+
 
     TString sessionToken;
     try {

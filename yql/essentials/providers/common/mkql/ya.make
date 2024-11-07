@@ -1,8 +1,6 @@
 LIBRARY()
 
 SRCS(
-    parser.cpp
-    parser.h
     yql_provider_mkql.cpp
     yql_provider_mkql.h
     yql_type_mkql.cpp
@@ -19,7 +17,6 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/core/expr_nodes
     yql/essentials/providers/common/schema/expr
-    contrib/ydb/library/yql/providers/dq/expr_nodes
     yql/essentials/parser/pg_catalog
 )
 

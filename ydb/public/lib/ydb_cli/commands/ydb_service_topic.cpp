@@ -756,9 +756,16 @@ namespace {
                            });
 
         // TODO(shmel1k@): improve help.
-        config.Opts->AddLongOption('c', "consumer", "Consumer name.")
-            .Required()
+        config.Opts->AddLongOption('c', "consumer", "Consumer name. Exclusive with --no-consumer")
+            .Optional()
             .StoreResult(&Consumer_);
+        config.Opts->AddLongOption("no-consumer", "Read without consumer. You need to explicitly specify partitions to read through --partition-ids. Exclusive with --consumer (-c)")
+            .Optional()
+            .DefaultValue(true)
+            .StoreResult(&ReadWithoutConsumer_);
+
+        config.Opts->MutuallyExclusive("consumer", "no-consumer");
+
         config.Opts->AddLongOption('f', "file", "File to write data to. In not specified, data is written to the standard output.")
             .Optional()
             .StoreResult(&File_);
@@ -838,7 +845,11 @@ namespace {
     NTopic::TReadSessionSettings TCommandTopicRead::PrepareReadSessionSettings() {
         NTopic::TReadSessionSettings settings;
         settings.AutoPartitioningSupport(true);
-        settings.ConsumerName(Consumer_);
+        if (ReadWithoutConsumer_) {
+            settings.WithoutConsumer();
+        } else {
+            settings.ConsumerName(Consumer_);
+        }
         // settings.ReadAll(); // TODO(shmel1k@): change to read only original?
         if (Timestamp_.Defined()) {
             settings.ReadFromTimestamp(TInstant::Seconds(*(Timestamp_.Get())));

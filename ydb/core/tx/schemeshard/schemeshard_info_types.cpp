@@ -471,7 +471,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 if (!featureFlags.EnableParameterizedDecimal && decimalType != NScheme::TDecimalType::Default()){
                     errStr = Sprintf("Type '%s' specified for column '%s', but support for parametrized decimal is disabled (EnableParameterizedDecimal feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
-                }   
+                }
                 break;
             }
             case NScheme::NTypeIds::Pg:
@@ -479,7 +479,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     errStr = Sprintf("Type '%s' specified for column '%s', but support for pg types is disabled (EnableTablePgTypes feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
                 }
-                break;                             
+                break;
             default:
                 break;
             }
@@ -2333,96 +2333,37 @@ bool TTopicInfo::FillKeySchema(const TString& tabletConfig) {
     return FillKeySchema(proto, unused);
 }
 
-TBillingStats::TBillingStats(ui64 rows, ui64 bytes)
-    : Rows(rows)
-    , Bytes(bytes)
+TBillingStats::TBillingStats(ui64 readRows, ui64 readBytes, ui64 uploadRows, ui64 uploadBytes)
+    : UploadRows{uploadRows}
+    , UploadBytes{uploadBytes}
+    , ReadRows{readRows}
+    , ReadBytes{readBytes}
 {
-}
-
-TBillingStats::TBillingStats(const TBillingStats &other)
-    : Rows(other.Rows)
-    , Bytes(other.Bytes)
-{
-}
-
-TBillingStats &TBillingStats::operator =(const TBillingStats &other) {
-    if (this == &other) {
-        return *this;
-    }
-
-    Rows = other.Rows;
-    Bytes = other.Bytes;
-    return *this;
 }
 
 TBillingStats TBillingStats::operator -(const TBillingStats &other) const {
-    Y_ABORT_UNLESS(Rows >= other.Rows);
-    Y_ABORT_UNLESS(Bytes >= other.Bytes);
+    Y_ABORT_UNLESS(UploadRows >= other.UploadRows);
+    Y_ABORT_UNLESS(UploadBytes >= other.UploadBytes);
+    Y_ABORT_UNLESS(ReadRows >= other.ReadRows);
+    Y_ABORT_UNLESS(ReadBytes >= other.ReadBytes);
 
-    return TBillingStats(Rows - other.Rows, Bytes - other.Bytes);
-}
-
-TBillingStats &TBillingStats::operator -=(const TBillingStats &other) {
-    if (this == &other) {
-        Rows = 0;
-        Bytes = 0;
-        return *this;
-    }
-
-    Y_ABORT_UNLESS(Rows >= other.Rows);
-    Y_ABORT_UNLESS(Bytes >= other.Bytes);
-
-    Rows -= other.Rows;
-    Bytes -= other.Bytes;
-    return *this;
+    return {UploadRows - other.UploadRows, UploadBytes - other.UploadBytes,
+            ReadRows - other.ReadRows, ReadBytes - other.ReadBytes};
 }
 
 TBillingStats TBillingStats::operator +(const TBillingStats &other) const {
-    return TBillingStats(Rows + other.Rows, Bytes + other.Bytes);
-}
-
-TBillingStats &TBillingStats::operator +=(const TBillingStats &other) {
-    if (this == &other) {
-        Rows += Rows;
-        Bytes += Bytes;
-        return *this;
-    }
-
-    Rows += other.Rows;
-    Bytes += other.Bytes;
-    return *this;
-}
-
-bool TBillingStats::operator < (const TBillingStats &other) const {
-    return Rows < other.Rows && Bytes < other.Bytes;
-}
-
-bool TBillingStats::operator <= (const TBillingStats &other) const {
-    return Rows <= other.Rows && Bytes <= other.Bytes;
-}
-
-bool TBillingStats::operator ==(const TBillingStats &other) const {
-    return Rows == other.Rows && Bytes == other.Bytes;
+    return {UploadRows + other.UploadRows, UploadBytes + other.UploadBytes,
+            ReadRows + other.ReadRows, ReadBytes + other.ReadBytes};
 }
 
 TString TBillingStats::ToString() const {
     return TStringBuilder()
             << "{"
-            << " rows: " << GetRows()
-            << " bytes: " << GetBytes()
+            << " upload rows: " << UploadRows
+            << ", upload bytes: " << UploadBytes
+            << ", read rows: " << ReadRows
+            << ", read bytes: " << ReadBytes
             << " }";
-}
-
-ui64 TBillingStats::GetRows() const {
-    return Rows;
-}
-
-ui64 TBillingStats::GetBytes() const {
-    return Bytes;
-}
-
-NKikimr::NSchemeShard::TBillingStats::operator bool() const {
-    return Rows || Bytes;
 }
 
 TSequenceInfo::TSequenceInfo(

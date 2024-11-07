@@ -156,6 +156,14 @@ TTpchWorkloadDataInitializerGenerator::TBulkDataGenerator::TDataPortions TTpchWo
     return result;
 }
 
+#define CSV_WRITER_REGISTER_FIELD(writer, column_name, record_field) \
+    writer.RegisterField(column_name, [](const decltype(writer)::TItem& item, IOutputStream& out) { \
+        out << item.record_field; \
+    });
+
+#define CSV_WRITER_REGISTER_SIMPLE_FIELD(writer, column_name) \
+    CSV_WRITER_REGISTER_FIELD(writer, #column_name, column_name);
+
 #define CSV_WRITER_REGISTER_FIELD_DATE(writer, column_name, record_field) \
     writer.RegisterField(column_name, [](const decltype(writer)::TItem& item, IOutputStream& out) { \
         out << item.record_field; \

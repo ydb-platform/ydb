@@ -288,6 +288,15 @@ public:
         return Indexes.contains(indexId);
     }
 
+    bool HasIndexes(const std::set<ui32>& indexIds) const {
+        for (auto&& i : indexIds) {
+            if (!Indexes.contains(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     std::optional<ui32> GetColumnIndexOptional(const ui32 id) const;
     ui32 GetColumnIndexVerified(const ui32 id) const {
         auto result = GetColumnIndexOptional(id);

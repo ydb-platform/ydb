@@ -236,6 +236,7 @@ class TDataShard
 
     class TTxReadViaPipeline;
     class TReadOperation;
+    class TReadScan;
 
     class TTxHandleSafeKqpScan;
     class TTxHandleSafeBuildIndexScan;
@@ -1276,6 +1277,8 @@ class TDataShard
     void Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvReadScanStarted::TPtr& ev);
+    void Handle(TEvDataShard::TEvReadScanFinished::TPtr& ev);
     void Handle(TEvDataShard::TEvReadColumnsRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev);
     void Handle(TEvDataShard::TEvListOperationsRequest::TPtr& ev);
@@ -2074,6 +2077,7 @@ public:
     void CheckChangesQueueNoOverflow(ui64 cookie = 0);
 
     void DeleteReadIterator(TReadIteratorsMap::iterator it);
+    void DeleteReadIterator(TReadIteratorsLocalMap::iterator it);
     void CancelReadIterators(Ydb::StatusIds::StatusCode code, const TString& issue, const TActorContext& ctx);
     void ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, const TActorContext &ctx);
     void UnsubscribeReadIteratorSessions(const TActorContext& ctx);
@@ -2948,6 +2952,7 @@ private:
     TReplicatedTableState* EnsureReplicatedTable(const TPathId& pathId);
 
     TReadIteratorsMap ReadIterators;
+    TReadIteratorsLocalMap ReadIteratorsByLocalReadId;
     THashMap<TActorId, TReadIteratorSession> ReadIteratorSessions;
 
     NTable::ITransactionObserverPtr BreakWriteConflictsTxObserver;
@@ -3100,6 +3105,8 @@ protected:
             HFunc(TEvDataShard::TEvReadContinue, Handle);
             HFunc(TEvDataShard::TEvReadAck, Handle);
             HFunc(TEvDataShard::TEvReadCancel, Handle);
+            hFunc(TEvDataShard::TEvReadScanStarted, Handle);
+            hFunc(TEvDataShard::TEvReadScanFinished, Handle);
             HFunc(TEvDataShard::TEvReadColumnsRequest, Handle);
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);
             hFunc(TEvDataShard::TEvGetInfoRequest, Handle);
@@ -3181,6 +3188,8 @@ protected:
             HFuncTraced(TEvDataShard::TEvReadContinue, Handle);
             HFuncTraced(TEvDataShard::TEvReadAck, Handle);
             HFuncTraced(TEvDataShard::TEvReadCancel, Handle);
+            hFuncTraced(TEvDataShard::TEvReadScanStarted, Handle);
+            hFuncTraced(TEvDataShard::TEvReadScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

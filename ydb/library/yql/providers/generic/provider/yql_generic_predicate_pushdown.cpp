@@ -21,6 +21,7 @@ namespace NYql {
     TString FormatIsNull(const TPredicate_TIsNull& isNull);
     TString FormatIsNotNull(const TPredicate_TIsNotNull& isNotNull);
     TString FormatPredicate(const TPredicate& predicate, bool topLevel);
+    TString FormatIn(const TPredicate_TIn& in);
 
     namespace {
 
@@ -141,6 +142,32 @@ namespace NYql {
             return SerializeExpression(exists.Optional(), expressionProto, arg, err);
         }
 
+        bool SerializeSqlIn(const TCoSqlIn& sqlIn, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err) {
+            auto* dstProto = proto->mutable_in();
+            const TExprBase& expr = sqlIn.Collection();
+            const TExprBase& lookup = sqlIn.Lookup();
+
+            auto* expressionProto = dstProto->mutable_value();
+            SerializeExpression(lookup, expressionProto, arg, err);
+
+            TExprNode::TPtr collection;
+            if (expr.Ref().IsList()) {
+                collection = expr.Ptr();
+            } else if (auto maybeAsList = expr.Maybe<TCoAsList>()) {
+                collection = maybeAsList.Cast().Ptr();
+            } else {
+                err << "unknown operation: " << expr.Ref().Content();
+                return false;
+            }
+
+            for (auto& child : collection->Children()) {
+                if (!SerializeExpression(TExprBase(child), dstProto->add_set(), arg, err)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         bool SerializeAnd(const TCoAnd& andExpr, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err) {
             auto* dstProto = proto->mutable_conjunction();
             for (const auto& child : andExpr.Ptr()->Children()) {
@@ -195,6 +222,9 @@ namespace NYql {
             }
             if (auto exists = predicate.Maybe<TCoExists>()) {
                 return SerializeExists(exists.Cast(), proto, arg, err);
+            }
+            if (auto sqlIn = predicate.Maybe<TCoSqlIn>()) {
+                return SerializeSqlIn(sqlIn.Cast(), proto, arg, err);
             }
 
             err << "unknown predicate: " << predicate.Raw()->Content();
@@ -401,6 +431,18 @@ namespace NYql {
         return left + operation + right;
     }
 
+    TString FormatIn(const TPredicate_TIn& in) {
+        auto value = FormatExpression(in.value());
+        TString list;
+        for (const auto& expr : in.set()) {
+            if (!list.empty()) {
+                list += ",";
+            }
+            list += FormatExpression(expr);
+        }
+        return value + " IN (" + list + ")";
+    }
+
     TString FormatPredicate(const TPredicate& predicate, bool topLevel ) {
         switch (predicate.payload_case()) {
             case TPredicate::PAYLOAD_NOT_SET:
@@ -419,6 +461,8 @@ namespace NYql {
                 return FormatComparison(predicate.comparison());
             case TPredicate::kBoolExpression:
                 return FormatExpression(predicate.bool_expression().value());
+            case TPredicate::kIn:
+                return FormatIn(predicate.in());
             default:
                 throw yexception() << "UnimplementedPredicateType, payload_case " << static_cast<ui64>(predicate.payload_case());
         }

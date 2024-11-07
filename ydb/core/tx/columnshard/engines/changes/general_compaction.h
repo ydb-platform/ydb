@@ -36,7 +36,7 @@ protected:
         auto predictor = BuildMemoryPredictor();
         ui64 result = 0;
         for (auto& p : SwitchedPortions) {
-            result = predictor->AddPortion(p.GetPortionInfoPtr());
+            result = predictor->AddPortion(p);
         }
         return result;
     }
@@ -49,21 +49,7 @@ public:
 
     class TMemoryPredictorChunkedPolicy: public IMemoryPredictor {
     private:
-        ui64 SumMemoryDelta = 0;
         ui64 SumMemoryFix = 0;
-        ui32 PortionsCount = 0;
-        class TColumnInfo {
-        public:
-            const ui32 ColumnId;
-            ui64 MemoryUsage = 0;
-            TColumnInfo(const ui32 columnId)
-                : ColumnId(columnId)
-            {
-
-            }
-        };
-        std::list<TColumnInfo> MaxMemoryByColumnChunk;
-
     public:
         virtual ui64 AddPortion(const TPortionInfo::TConstPtr& portionInfo) override;
     };

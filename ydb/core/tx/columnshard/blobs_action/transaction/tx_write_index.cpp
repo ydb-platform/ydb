@@ -16,12 +16,13 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
 
     ACFL_DEBUG("event", "TTxWriteIndex::Execute")("change_type", changes->TypeString())("details", changes->DebugString());
     if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
-        NOlap::TSnapshot snapshot(Self->LastPlannedStep, Self->LastPlannedTxId);
-        Y_ABORT_UNLESS(Ev->Get()->IndexInfo->GetLastSchema()->GetSnapshot() <= snapshot);
+        AFL_VERIFY(Ev->Get()->IndexInfo->GetLastSchema()->GetSnapshot() <= Self->GetLastTxSnapshot())
+        ("schema_last", Ev->Get()->IndexInfo->GetLastSchema()->GetSnapshot().DebugString())(
+            "planned_last", Self->GetLastTxSnapshot().DebugString());
 
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
-        AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnExecute(dbWrap, changes, snapshot));
+        AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnExecute(dbWrap, changes, Self->GetLastTxSnapshot()));
         LOG_S_DEBUG(TxPrefix() << "(" << changes->TypeString() << ") apply" << TxSuffix());
         NOlap::TWriteIndexContext context(&txc.DB, dbWrap, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>(), CurrentSnapshot);
         changes->WriteIndexOnExecute(Self, context);

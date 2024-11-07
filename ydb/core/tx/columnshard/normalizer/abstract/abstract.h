@@ -61,7 +61,10 @@ enum class ENormalizerSequentialId: ui32 {
     GCCountersNormalizer,
     RestorePortionFromChunks,
     SyncPortionFromChunks,
-    RestoreV1Chunks,
+    DeprecatedRestoreV1Chunks,
+    SyncMinSnapshotFromChunks,
+    DeprecatedRestoreV1Chunks_V1,
+    RestoreV1Chunks_V2,
 
     MAX
 };

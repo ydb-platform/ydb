@@ -572,8 +572,7 @@ private:
             ResultSets[data.GetQueryResultIndex()].emplace_back() = std::move(*data.MutableResultSet());
         }
 
-        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         if (TotalRows >= LimitRows) {
             ack->Record.SetEnough(true);
         }

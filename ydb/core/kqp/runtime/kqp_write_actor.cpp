@@ -668,7 +668,7 @@ public:
             preparedInfo.Coordinator = domainCoordinators.Select(*TxId);
         }
 
-        OnMessageAcknowledged(ev->Get()->Record.GetOrigin());
+        OnMessageReceived(ev->Get()->Record.GetOrigin());
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
         if (result) {
@@ -711,7 +711,7 @@ public:
             return;
         }
 
-        OnMessageAcknowledged(ev->Get()->Record.GetOrigin());
+        OnMessageReceived(ev->Get()->Record.GetOrigin());
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
         if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
@@ -721,7 +721,7 @@ public:
         }
     }
 
-    void OnMessageAcknowledged(const ui64 shardId) {
+    void OnMessageReceived(const ui64 shardId) {
         if (auto it = SendTime.find(shardId); it != std::end(SendTime)) {
             Counters->WriteActorWritesLatencyHistogram->Collect((TInstant::Now() - it->second).MilliSeconds());
             SendTime.erase(it);
@@ -1551,6 +1551,7 @@ public:
                 FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
             }
 
+            SendTime[shardId] = TInstant::Now();
             CA_LOG_D("Send EvWrite (external) to ShardID=" << shardId << ", isPrepare=" << !isRollback << ", isImmediateCommit=" << isRollback << ", TxId=" << evWrite->Record.GetTxId()
             << ", LockTxId=" << evWrite->Record.GetLockTxId() << ", LockNodeId=" << evWrite->Record.GetLockNodeId()
             << ", Locks= " << [&]() {
@@ -1887,11 +1888,23 @@ public:
         }
     }
 
+    void OnMessageReceived(const ui64 shardId) {
+        if (auto it = SendTime.find(shardId); it != std::end(SendTime)) {
+            Counters->WriteActorWritesLatencyHistogram->Collect((TInstant::Now() - it->second).MilliSeconds());
+            SendTime.erase(it);
+        }
+    }
+
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         if (State != EState::PREPARING) {
             CA_LOG_D("Ignored write prepared event.");
             return;
         }
+        OnMessageReceived(ev->Get()->Record.GetOrigin());
+        CA_LOG_D("Got prepared result TxId=" << ev->Get()->Record.GetTxId()
+            << ", TabletId=" << ev->Get()->Record.GetOrigin()
+            << ", Cookie=" << ev->Cookie);
+
         const auto& record = ev->Get()->Record;
         IKqpTransactionManager::TPrepareResult preparedInfo;
         preparedInfo.ShardId = record.GetOrigin();
@@ -1913,6 +1926,7 @@ public:
             CA_LOG_D("Ignored write completed event.");
             return;
         }
+        OnMessageReceived(ev->Get()->Record.GetOrigin());
         CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
             << ", Cookie=" << ev->Cookie
@@ -2035,6 +2049,7 @@ private:
 
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
+    THashMap<ui64, TInstant> SendTime;
 
     NWilson::TSpan BufferWriteActor;
     NWilson::TSpan BufferWriteActorState;

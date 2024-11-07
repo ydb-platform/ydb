@@ -7,9 +7,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
 ydb/core/blobstorage/ut_mirror3of4 Mirror3of4.ReplicationSmall
 ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
-ydb/core/client/ut TClientTest.PromoteFollower
-ydb/core/client/ut TClientTest.ReadFromFollower
-ydb/core/client/ut TFlatTest.AutoSplitMergeQueue
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
 ydb/core/cms/ut_sentinel_unstable sole chunk chunk
 ydb/core/cms/ut_sentinel_unstable sole+chunk+chunk
@@ -26,9 +23,12 @@ ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1_clean_with_restart
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingConsistency64
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingModuloN
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.UpsertWhileSplitTest
+ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesActualization
+ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesInBS
+ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesInLocalMetadata
+ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesModificationError
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
-ydb/core/kqp/ut/olap KqpOlapIndexes.Indexes*
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpLimits.QueryExecTimeoutCancel
@@ -80,13 +80,10 @@ ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/with_offset_ranges_mode_ut [*/
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ReadSessionCorrectClose
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*] chunk chunk
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*]+chunk+chunk
-ydb/services/datastreams/ut DataStreams.TestGetRecordsStreamWithSingleShard
 ydb/services/datastreams/ut DataStreams.TestPutRecordsCornerCases
 ydb/services/datastreams/ut DataStreams.TestReservedConsumersMetering
 ydb/services/datastreams/ut DataStreams.TestReservedStorageMetering
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleConcatUnexistedKey
-ydb/services/keyvalue/ut KeyValueGRPCService.SimpleExecuteTransactionWithWrongGeneration
-ydb/services/keyvalue/ut KeyValueGRPCService.SimpleGetStorageChannelStatus
 ydb/services/keyvalue/ut sole chunk chunk
 ydb/services/keyvalue/ut sole+chunk+chunk
 ydb/services/persqueue_v1/ut TPersQueueTest.DirectReadCleanCache
@@ -119,7 +116,6 @@ ydb/tests/fq/multi_plane [test_dispatch.py]+chunk+chunk
 ydb/tests/fq/multi_plane [test_retry.py] chunk chunk
 ydb/tests/fq/multi_plane [test_retry.py]+chunk+chunk
 ydb/tests/fq/multi_plane [test_retry_high_rate.py] chunk chunk
-ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping
 ydb/tests/fq/multi_plane test_retry.py.TestRetry.test_low_rate[kikimr0]
 ydb/tests/fq/s3 [test_format_setting.py] chunk chunk
 ydb/tests/fq/yds [*/*] chunk chunk
@@ -131,12 +127,7 @@ ydb/tests/fq/yds test_kill_pq_bill.py.TestKillPqBill.test_do_not_bill_pq[v1-mvp_
 ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_hop_alloc[v1]
 ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
 ydb/tests/fq/yds test_pq_read_write.py.TestPqReadWrite.test_pq_read_write[v1-with_checkpoints-mvp_external_ydb_endpoint0]
-ydb/tests/fq/yds test_pq_read_write.py.TestPqReadWrite.test_pq_read_write[v1-without_checkpoints-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
-ydb/tests/fq/yds test_recovery.py.TestRecovery.test_program_state_recovery
-ydb/tests/fq/yds test_recovery.py.TestRecovery.test_program_state_recovery_error_if_no_states
-ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_3_sessions
-ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_filter
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_read_raw_format_with_row_dispatcher
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_scheme_error
@@ -144,16 +135,10 @@ ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_start_new_query
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start_with_filter
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
-ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[v1-mvp_external_ydb_endpoint0]
-ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_pq_watermarks[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
 ydb/tests/fq/yds test_yq_streaming.py.TestYqStreaming.test_match_recognize_sink[v1]
-ydb/tests/fq/yds test_yq_streaming.py.TestYqStreaming.test_state_load_mode[v1]
 ydb/tests/fq/yt/kqp_yt_file/part18 test.py.test[pg-join_brackets2-default.txt]
-ydb/tests/functional/audit test_auditlog.py.test_cloud_ids_are_logged[attrs0]
-ydb/tests/functional/audit test_auditlog.py.test_cloud_ids_are_logged[attrs1]
 ydb/tests/functional/audit test_auditlog.py.test_dml_requests_arent_logged_when_sid_is_expected
-ydb/tests/functional/audit test_auditlog.py.test_single_dml_query_logged[delete]
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk
@@ -172,7 +157,6 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_abov
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_above[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--true]
-ydb/tests/functional/ydb_cli test_ydb_impex.py.TestImpex.test_big_dataset[tsv-additional_args2-column]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayValueBackend]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBinaryByteSliceToInt]

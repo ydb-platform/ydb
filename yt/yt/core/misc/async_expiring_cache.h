@@ -152,6 +152,8 @@ private:
         const TEntryPtr& Entry,
         const TKey& key);
 
+    void Erase(THashMap<TKey, TEntryPtr>::iterator it);
+
     void UpdateAll();
 
     void ScheduleEntryRefresh(

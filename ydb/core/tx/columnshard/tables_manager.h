@@ -4,6 +4,7 @@
 #include "columnshard_ttl.h"
 
 #include "blobs_action/abstract/storages_manager.h"
+#include "data_accessor/manager.h"
 #include "engines/column_engine.h"
 
 #include <ydb/core/base/row_version.h>
@@ -153,12 +154,14 @@ private:
     TTtl Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
+    std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
     std::shared_ptr<NOlap::TVersionCounters> VersionCounters;
     ui64 TabletId = 0;
 
 public:
-    TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager, const ui64 tabletId, const std::shared_ptr<NOlap::TVersionCounters>& versionCounters);
+    TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
+        const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager, const ui64 tabletId, const std::shared_ptr<NOlap::TVersionCounters>& versionCounters);
 
     const std::unique_ptr<TTableLoadTimeCounters>& GetLoadTimeCounters() const {
         return LoadTimeCounters;
@@ -241,7 +244,6 @@ public:
     }
 
     bool InitFromDB(NIceDb::TNiceDb& db);
-    bool LoadIndex(NOlap::TDbWrapper& db);
 
     const TTableInfo& GetTable(const ui64 pathId) const;
     ui64 GetMemoryUsage() const;

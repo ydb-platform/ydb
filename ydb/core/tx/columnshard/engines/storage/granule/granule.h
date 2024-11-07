@@ -8,6 +8,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/data_accessor/controller.h>
+#include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/index/index.h>
@@ -16,9 +18,14 @@
 
 namespace NKikimr::NOlap {
 
+namespace NLoading {
+class TPortionsLoadContext;
+}
+
 class TGranulesStorage;
 class TGranulesStat;
 class TColumnChunkLoadContext;
+class TVersionedIndex;
 
 class TDataClassSummary: public NColumnShard::TBaseGranuleDataClassSummary {
 private:
@@ -122,6 +129,7 @@ private:
 
     mutable bool AllowInsertionFlag = false;
     const ui64 PathId;
+    std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
     std::shared_ptr<TGranulesStat> Stats;
@@ -153,8 +161,20 @@ private:
         }
         return it->second;
     }
+    bool DataAccessorConstructed = false;
+    bool LoadingFinished = false;
 
 public:
+    std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
+    void FinishLoading(const std::shared_ptr<NLoading::TPortionsLoadContext>& context);
+    bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
+
+    std::unique_ptr<IGranuleDataAccessor> BuildDataAccessor() {
+        AFL_VERIFY(!DataAccessorConstructed);
+        DataAccessorConstructed = true;
+        return std::make_unique<TMemDataAccessor>(PathId);
+    }
+
     void RefreshTiering(const std::optional<TTiering>& tiering) {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
         ActualizationIndex->RefreshTiering(tiering, context);
@@ -162,12 +182,17 @@ public:
 
     template <class TModifier>
     void ModifyPortionOnExecute(
-        IDbWrapper& wrapper, const TPortionInfo::TConstPtr& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
-        const auto innerPortion = GetInnerPortion(portion).DetachResult();
-        AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
+        IDbWrapper& wrapper, const TPortionDataAccessor& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
+        const auto innerPortion = GetInnerPortion(portion.GetPortionInfoPtr()).DetachResult();
+        AFL_VERIFY((ui64)innerPortion.get() == (ui64)&portion.GetPortionInfo());
         auto copy = innerPortion->MakeCopy();
         modifier(copy);
-        TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(copy))).SaveToDatabase(wrapper, firstPKColumnId, false);
+        if (!HasAppData() || AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
+            auto accessorCopy = portion.SwitchPortionInfo(std::move(copy));
+            accessorCopy.SaveToDatabase(wrapper, firstPKColumnId, false);
+        } else {
+            copy.SaveMetaToDatabase(wrapper);
+        }
     }
 
     template <class TModifier>
@@ -183,6 +208,7 @@ public:
         AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
         TDbWrapper wrapper(txc.DB, nullptr);
         portion.SaveToDatabase(wrapper, 0, false);
+        DataAccessorsManager->AddPortion(portion);
     }
 
     void InsertPortionOnComplete(const std::shared_ptr<TPortionInfo>& portion) {
@@ -195,7 +221,7 @@ public:
         AFL_VERIFY(it != InsertedPortions.end());
         it->second->SetCommitSnapshot(snapshot);
         TDbWrapper wrapper(txc.DB, nullptr);
-        TPortionDataAccessor(it->second).SaveToDatabase(wrapper, 0, true);
+        it->second->SaveMetaToDatabase(wrapper);
     }
 
     void CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine);
@@ -203,12 +229,14 @@ public:
     void AbortPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId) const {
         auto it = InsertedPortions.find(insertWriteId);
         AFL_VERIFY(it != InsertedPortions.end());
+        it->second->SetCommitSnapshot(TSnapshot(1, 1));
+        it->second->SetRemoveSnapshot(TSnapshot(1, 2));
         TDbWrapper wrapper(txc.DB, nullptr);
-        TPortionDataAccessor(it->second).RemoveFromDatabase(wrapper);
+        it->second->SaveMetaToDatabase(wrapper);
     }
 
-    void AbortPortionOnComplete(const TInsertWriteId insertWriteId) {
-        AFL_VERIFY(InsertedPortions.erase(insertWriteId));
+    void AbortPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
+        CommitPortionOnComplete(insertWriteId, engine);
     }
 
     void CommitImmediateOnExecute(

@@ -318,6 +318,8 @@ namespace NActors {
         LastHandshakeDone = TActivationContext::Now();
 
         GenerateTraffic();
+
+        SendUpdateToWhiteboard(true, false);
     }
 
     void TInterconnectSessionTCP::Handle(TEvUpdateFromInputSession::TPtr& ev) {
@@ -533,6 +535,7 @@ namespace NActors {
             XdcSocket.Reset();
         }
         UpdateState(EState::Idle);
+        SendUpdateToWhiteboard(true, false);
     }
 
     void TInterconnectSessionTCP::ReestablishConnectionExecute() {
@@ -996,7 +999,7 @@ namespace NActors {
         return sumBusy * 1000000 / sumPeriod;
     }
 
-    void TInterconnectSessionTCP::SendUpdateToWhiteboard(bool connected) {
+    void TInterconnectSessionTCP::SendUpdateToWhiteboard(bool connected, bool reschedule) {
         using EFlag = TWhiteboardSessionStatus::EFlag;
         const ui32 utilization = Socket ? CalculateQueueUtilization() : 0;
 
@@ -1034,6 +1037,9 @@ namespace NActors {
                 .PeerNodeId = Proxy->PeerNodeId,
                 .PeerName = Proxy->Metrics->GetHumanFriendlyPeerHostName(),
                 .Connected = connected,
+                .SessionClosed = !connected,
+                .SessionPendingConnection = connected && !Socket,
+                .SessionConnected = connected && Socket,
                 .ConnectStatus = flagState,
                 .ClockSkewUs = ReceiveContext->ClockSkew_us,
                 .ReportClockSkew = reportClockSkew,
@@ -1045,7 +1051,7 @@ namespace NActors {
             });
         }
 
-        if (connected) {
+        if (connected && reschedule) {
             Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
         }
     }

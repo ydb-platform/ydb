@@ -33,16 +33,17 @@ namespace {
 
 std::shared_ptr<NDataLocks::TManager> EmptyDataLocksManager = std::make_shared<NDataLocks::TManager>();
 
-class TTestDbWrapper : public IDbWrapper {
+class TTestDbWrapper: public IDbWrapper {
 private:
     std::map<TPortionAddress, std::map<TChunkAddress, TColumnChunkLoadContextV1>> LoadContexts;
+
 public:
     virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
         return &Default<TFakeGroupSelector>();
     }
 
     struct TIndex {
-        THashMap<ui64, THashMap<ui64, TPortionInfoConstructor>> Columns; // pathId -> portions
+        THashMap<ui64, THashMap<ui64, TPortionInfoConstructor>> Columns;   // pathId -> portions
         THashMap<ui32, ui64> Counters;
     };
 
@@ -75,8 +76,7 @@ public:
         Aborted.erase(data.GetInsertWriteId());
     }
 
-    bool Load(TInsertTableAccessor& accessor,
-              const TInstant&) override {
+    bool Load(TInsertTableAccessor& accessor, const TInstant&) override {
         for (auto&& i : Inserted) {
             accessor.AddInserted(std::move(i.second), true);
         }
@@ -84,7 +84,7 @@ public:
             accessor.AddAborted(std::move(i.second), true);
         }
         for (auto&& i : Committed) {
-            for (auto&& c: i.second) {
+            for (auto&& c : i.second) {
                 auto copy = c;
                 accessor.AddCommitted(std::move(copy), true);
             }
@@ -103,9 +103,12 @@ public:
     virtual void ErasePortion(const NOlap::TPortionInfo& portion) override {
         AFL_VERIFY(Portions.erase(portion.GetPortionId()));
     }
-    virtual bool LoadPortions(const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override {
+    virtual bool LoadPortions(const std::optional<ui64> pathId,
+        const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override {
         for (auto&& i : Portions) {
-            callback(NOlap::TPortionInfoConstructor(i.second, false, false, false), i.second.GetMeta().SerializeToProto());
+            if (!pathId || *pathId == i.second.GetPathId()) {
+                callback(NOlap::TPortionInfoConstructor(i.second, false, false, false), i.second.GetMeta().SerializeToProto());
+            }
         }
         return true;
     }
@@ -117,8 +120,7 @@ public:
         }
 
         auto& data = Indices[0].Columns[portion.GetPathId()];
-        NOlap::TColumnChunkLoadContextV1 loadContext(
-            portion.GetPathId(), portion.GetPortionId(), row.GetAddress(), row.BlobRange, rowProto);
+        NOlap::TColumnChunkLoadContextV1 loadContext(portion.GetPathId(), portion.GetPortionId(), row.GetAddress(), row.BlobRange, rowProto);
         auto itInsertInfo = LoadContexts[portion.GetAddress()].emplace(row.GetAddress(), loadContext);
         if (!itInsertInfo.second) {
             itInsertInfo.first->second = loadContext;
@@ -166,9 +168,12 @@ public:
         portionLocal.MutableRecords().swap(filtered);
     }
 
-    bool LoadColumns(const std::function<void(const TColumnChunkLoadContextV1&)>& callback) override {
+    bool LoadColumns(const std::optional<ui64> reqPathId, const std::function<void(const TColumnChunkLoadContextV1&)>& callback) override {
         auto& columns = Indices[0].Columns;
         for (auto& [pathId, portions] : columns) {
+            if (pathId && *reqPathId != pathId) {
+                continue;
+            }
             for (auto& [portionId, portionLocal] : portions) {
                 auto copy = NOlap::TPortionInfoConstructor::TTestCopier::Copy(portionLocal);
                 copy.MutableRecords().clear();
@@ -184,9 +189,14 @@ public:
         return true;
     }
 
-    virtual void WriteIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {}
-    virtual void EraseIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {}
-    virtual bool LoadIndexes(const std::function<void(const ui64 /*pathId*/, const ui64 /*portionId*/, const TIndexChunkLoadContext&)>& /*callback*/) override { return true; }
+    virtual void WriteIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {
+    }
+    virtual void EraseIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {
+    }
+    virtual bool LoadIndexes(const std::optional<ui64> /*reqPathId*/,
+        const std::function<void(const ui64 /*pathId*/, const ui64 /*portionId*/, const TIndexChunkLoadContext&)>& /*callback*/) override {
+        return true;
+    }
 
     void WriteCounter(ui32 counterId, ui64 value) override {
         auto& counters = Indices[0].Counters;
@@ -211,20 +221,16 @@ private:
 
 static const std::vector<NArrow::NTest::TTestColumn> testColumns = {
     // PK
-    NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
-    NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ),
-    NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
-    NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ),
+    NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
+    NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)), NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)),
+    NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)),
     //
-    NArrow::NTest::TTestColumn("message", TTypeInfo(NTypeIds::Utf8) )
+    NArrow::NTest::TTestColumn("message", TTypeInfo(NTypeIds::Utf8))
 };
 
-static const std::vector<NArrow::NTest::TTestColumn> testKey = {
-    NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) ),
-    NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ),
-    NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
-    NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) )
-};
+static const std::vector<NArrow::NTest::TTestColumn> testKey = { NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
+    NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)), NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)),
+    NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)) };
 
 template <typename TKeyDataType>
 class TBuilder {
@@ -241,8 +247,7 @@ public:
     };
 
     TBuilder()
-        : Schema(NArrow::MakeArrowSchema(testColumns))
-    {
+        : Schema(NArrow::MakeArrowSchema(testColumns)) {
         auto status = arrow::RecordBatchBuilder::Make(Schema, arrow::default_memory_pool(), &BatchBuilder);
         Y_ABORT_UNLESS(status.ok());
     }
@@ -283,7 +288,7 @@ TString MakeTestBlob(i64 start = 0, i64 end = 100, ui32 step = 1) {
     for (i64 ts = start; ts < end; ts += step) {
         TString str = ToString(ts);
         TString sortedStr = Sprintf("%05ld", (long)ts);
-        builder.AddRow({ts, sortedStr, str, str, str});
+        builder.AddRow({ ts, sortedStr, str, str, str });
     }
     auto batch = builder.Finish();
     return NArrow::SerializeBatchNoCompression(batch);
@@ -327,7 +332,7 @@ bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, st
     for (auto&& i : changes->AppendedPortions) {
         blobsCount += i.GetBlobs().size();
     }
-    UNIT_ASSERT_VALUES_EQUAL(blobsCount, 1); // add 2 columns: planStep, txId
+    UNIT_ASSERT_VALUES_EQUAL(blobsCount, 1);   // add 2 columns: planStep, txId
 
     AddIdsToBlobs(changes->AppendedPortions, blobs, step);
 
@@ -347,13 +352,38 @@ struct TExpected {
     ui32 NewGranules;
 };
 
+class TTestCompactionAccessorsSubscriber: public NOlap::IDataAccessorRequestsSubscriber {
+private:
+    std::shared_ptr<TColumnEngineChanges> Changes;
+    const std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
+
+    virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
+        const TDataAccessorsInitializationContext context(VersionedIndex);
+        Changes->SetFetchedDataAccessors(std::move(result), context);
+    }
+
+public:
+    TTestCompactionAccessorsSubscriber(
+        const std::shared_ptr<TColumnEngineChanges>& changes, const std::shared_ptr<NOlap::TVersionedIndex>& versionedIndex)
+        : Changes(changes)
+        , VersionedIndex(versionedIndex) {
+    }
+};
+
 bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, NBlobOperations::NRead::TCompositeReadBlobs&& blobs, ui32& step,
-             const TExpected& /*expected*/, THashMap<TBlobRange, TString>* blobsPool = nullptr) {
-    std::shared_ptr<TCompactColumnEngineChanges> changes = dynamic_pointer_cast<TCompactColumnEngineChanges>(engine.StartCompaction(EmptyDataLocksManager));
+    const TExpected& /*expected*/, THashMap<TBlobRange, TString>* blobsPool = nullptr) {
+    std::shared_ptr<TCompactColumnEngineChanges> changes =
+        dynamic_pointer_cast<TCompactColumnEngineChanges>(engine.StartCompaction(EmptyDataLocksManager));
     UNIT_ASSERT(changes);
     //    UNIT_ASSERT_VALUES_EQUAL(changes->SwitchedPortions.size(), expected.SrcPortions);
-    changes->Blobs = std::move(blobs);
     changes->StartEmergency();
+    {
+        auto request = changes->ExtractDataAccessorsRequest();
+        request->RegisterSubscriber(
+            std::make_shared<TTestCompactionAccessorsSubscriber>(changes, std::make_shared<NOlap::TVersionedIndex>(engine.GetVersionedIndex())));
+        engine.FetchDataAccessors(changes->ExtractDataAccessorsRequest());
+    }
+    changes->Blobs = std::move(blobs);
     NOlap::TConstructionContext context(engine.GetVersionedIndex(), NColumnShard::TIndexationCounters("Compaction"), NOlap::TSnapshot(step, 1));
     Y_ABORT_UNLESS(changes->ConstructBlobs(context).Ok());
 
@@ -370,7 +400,10 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
     if (blobsPool) {
         for (auto&& i : changes->AppendedPortions) {
             for (auto&& r : i.GetPortionResult().GetRecords()) {
-                Y_ABORT_UNLESS(blobsPool->emplace(i.GetPortionResult().GetPortionInfo().RestoreBlobRange(r.BlobRange), i.GetBlobByRangeVerified(r.ColumnId, r.Chunk)).second);
+                Y_ABORT_UNLESS(blobsPool
+                                   ->emplace(i.GetPortionResult().GetPortionInfo().RestoreBlobRange(r.BlobRange),
+                                       i.GetBlobByRangeVerified(r.ColumnId, r.Chunk))
+                                   .second);
             }
         }
     }
@@ -385,8 +418,7 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
     if (!expectedToDrop && !changes) {
         return true;
     }
-    UNIT_ASSERT_VALUES_EQUAL(changes->PortionsToDrop.size(), expectedToDrop);
-
+    UNIT_ASSERT_VALUES_EQUAL(changes->GetPortionsToDrop().size(), expectedToDrop);
 
     changes->StartEmergency();
     const bool result = engine.ApplyChangesOnTxCreate(changes, snap) && engine.ApplyChangesOnExecute(db, changes, snap);
@@ -398,15 +430,19 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
     return result;
 }
 
-bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db,
-         const THashMap<ui64, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
+bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<ui64, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> vChanges = engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024);
     AFL_VERIFY(vChanges.size() == 1)("count", vChanges.size());
     auto changes = vChanges.front();
     UNIT_ASSERT_VALUES_EQUAL(changes->GetPortionsToRemove().size(), expectedToDrop);
 
-
     changes->StartEmergency();
+    {
+        auto request = changes->ExtractDataAccessorsRequest();
+        request->RegisterSubscriber(
+            std::make_shared<TTestCompactionAccessorsSubscriber>(changes, std::make_shared<NOlap::TVersionedIndex>(engine.GetVersionedIndex())));
+        engine.FetchDataAccessors(changes->ExtractDataAccessorsRequest());
+    }
     const bool result = engine.ApplyChangesOnTxCreate(changes, TSnapshot(1, 1)) && engine.ApplyChangesOnExecute(db, changes, TSnapshot(1, 1));
     NOlap::TWriteIndexContext contextExecute(nullptr, db, engine, TSnapshot(1, 1));
     changes->WriteIndexOnExecute(nullptr, contextExecute);
@@ -433,7 +469,7 @@ std::shared_ptr<TPredicate> MakeStrPredicate(const std::string& key, NArrow::EOp
     return std::make_shared<TPredicate>(op, arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), 1, { *res }));
 }
 
-} // namespace
+}   // namespace
 
 std::shared_ptr<NKikimr::NOlap::IStoragesManager> InitializeStorageManager() {
     return NKikimr::NOlap::TTestStoragesManager::GetInstance();
@@ -442,13 +478,12 @@ std::shared_ptr<NKikimr::NOlap::IStoragesManager> InitializeStorageManager() {
 std::shared_ptr<NKikimr::NOlap::IStoragesManager> CommonStoragesManager = InitializeStorageManager();
 
 Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
-    void WriteLoadRead(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
-                       const std::vector<NArrow::NTest::TTestColumn>& key) {
+    void WriteLoadRead(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const std::vector<NArrow::NTest::TTestColumn>& key) {
         TTestBasicRuntime runtime;
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
-        std::vector<ui64> paths = {1, 2};
+        std::vector<ui64> paths = { 1, 2 };
 
         TString testBlob = MakeTestBlob();
 
@@ -460,16 +495,17 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // load
         TSnapshot indexSnapshot(1, 1);
         std::shared_ptr<NOlap::TVersionCounters> versionCounters = std::make_shared<NOlap::TVersionCounters>();
-        TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), versionCounters);
+        TColumnEngineForLogs engine(
+            0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), versionCounters);
         for (auto&& i : paths) {
             engine.RegisterTable(i);
         }
-        engine.Load(db);
+        engine.TestingLoad(db);
 
-        std::vector<TCommittedData> dataToIndex = {
-            TCommittedData(TUserData::Build(paths[0], blobRanges[0], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(1, 2), 0, (TInsertWriteId)2),
-            TCommittedData(TUserData::Build(paths[0], blobRanges[1], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(2, 1), 0, (TInsertWriteId)1)
-        };
+        std::vector<TCommittedData> dataToIndex = { TCommittedData(
+            TUserData::Build(paths[0], blobRanges[0], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(1, 2), 0, (TInsertWriteId)2),
+                TCommittedData(
+                    TUserData::Build(paths[0], blobRanges[1], TLocalHelper::GetMetaProto(), 0, {}), TSnapshot(2, 1), 0, (TInsertWriteId)1) };
 
         // write
 
@@ -494,28 +530,28 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             columnIds.insert(indexInfo.GetColumnIdVerified(c.GetName()));
         }
 
-        { // select from snap before insert
+        {   // select from snap before insert
             ui64 planStep = 1;
             ui64 txId = 0;
             auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 0);
         }
 
-        { // select from snap between insert (greater txId)
+        {   // select from snap between insert (greater txId)
             ui64 planStep = 1;
             ui64 txId = 2;
             auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 0);
         }
 
-        { // select from snap after insert (greater planStep)
+        {   // select from snap after insert (greater planStep)
             ui64 planStep = 2;
             ui64 txId = 1;
             auto selectInfo = engine.Select(paths[0], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 1);
         }
 
-        { // select another pathId
+        {   // select another pathId
             ui64 planStep = 2;
             ui64 txId = 1;
             auto selectInfo = engine.Select(paths[1], TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
@@ -528,18 +564,14 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
     }
 
     Y_UNIT_TEST(IndexWriteLoadReadStrPK) {
-        std::vector<NArrow::NTest::TTestColumn> key = {
-            NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ),
-            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
-            NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ),
-            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) )
-        };
+        std::vector<NArrow::NTest::TTestColumn> key = { NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)), NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)) };
 
         WriteLoadRead(testColumns, key);
     }
 
-    void ReadWithPredicates(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
-                            const std::vector<NArrow::NTest::TTestColumn>& key) {
+    void ReadWithPredicates(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, const std::vector<NArrow::NTest::TTestColumn>& key) {
         TTestBasicRuntime runtime;
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
@@ -549,9 +581,10 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         TSnapshot indexSnapshot(1, 1);
         std::shared_ptr<NOlap::TVersionCounters> versionCounters = std::make_shared<NOlap::TVersionCounters>();
-        TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), versionCounters);
+        TColumnEngineForLogs engine(
+            0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), versionCounters);
         engine.RegisterTable(pathId);
-        engine.Load(db);
+        engine.TestingLoad(db);
 
         // insert
         ui64 planStep = 1;
@@ -578,8 +611,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // compact
         planStep = 2;
 
-//        bool ok = Compact(engine, db, TSnapshot(planStep, 1), std::move(blobs), step, {20, 4, 4});
-//        UNIT_ASSERT(ok);
+        //        bool ok = Compact(engine, db, TSnapshot(planStep, 1), std::move(blobs), step, {20, 4, 4});
+        //        UNIT_ASSERT(ok);
 
         // read
 
@@ -590,7 +623,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
         THashSet<ui32> oneColumnId = { indexInfo.GetColumnIdVerified(key[0].GetName()) };
 
-        { // full scan
+        {   // full scan
             ui64 txId = 1;
             auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
@@ -612,7 +645,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         {
             ui64 txId = 1;
-            std::shared_ptr<TPredicate> lt10k = MakePredicate(8999, NArrow::EOperation::Less); // TODO: better border checks
+            std::shared_ptr<TPredicate> lt10k = MakePredicate(8999, NArrow::EOperation::Less);   // TODO: better border checks
             if (key[0].GetType() == TTypeInfo(NTypeIds::Utf8)) {
                 lt10k = MakeStrPredicate("08999", NArrow::EOperation::Less);
             }
@@ -628,12 +661,9 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
     }
 
     Y_UNIT_TEST(IndexReadWithPredicatesStrPK) {
-        std::vector<NArrow::NTest::TTestColumn> key = {
-            NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8) ),
-            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8) ),
-            NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8) ),
-            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp) )
-        };
+        std::vector<NArrow::NTest::TTestColumn> key = { NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)), NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)) };
 
         ReadWithPredicates(testColumns, key);
     }
@@ -642,7 +672,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TTestBasicRuntime runtime;
         TTestDbWrapper db;
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-        TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);;
+        TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);
+        ;
 
         ui64 pathId = 1;
         ui32 step = 1000;
@@ -652,9 +683,10 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         TSnapshot indexSnapshot(1, 1);
         std::shared_ptr<NOlap::TVersionCounters> versionCounters = std::make_shared<NOlap::TVersionCounters>();
-        TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), versionCounters);
+        TColumnEngineForLogs engine(
+            0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), versionCounters);
         engine.RegisterTable(pathId);
-        engine.Load(db);
+        engine.TestingLoad(db);
 
         ui64 numRows = 1000;
         ui64 rowPos = 0;
@@ -676,16 +708,17 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             UNIT_ASSERT(ok);
         }
 
-        { // check it's overloaded after reload
-            TColumnEngineForLogs tmpEngine(0, CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo), versionCounters);
+        {   // check it's overloaded after reload
+            TColumnEngineForLogs tmpEngine(
+                0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo), versionCounters);
             tmpEngine.RegisterTable(pathId);
-            tmpEngine.Load(db);
+            tmpEngine.TestingLoad(db);
         }
 
         // compact
         planStep = 2;
 
-        bool ok = Compact(engine, db, TSnapshot(planStep, 1), std::move(blobsAll), step, {23, 5, 5});
+        bool ok = Compact(engine, db, TSnapshot(planStep, 1), std::move(blobsAll), step, { 23, 5, 5 });
         UNIT_ASSERT(ok);
 
         // success write after compaction
@@ -707,10 +740,11 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             UNIT_ASSERT(ok);
         }
 
-        { // check it's not overloaded after reload
-            TColumnEngineForLogs tmpEngine(0, CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo), versionCounters);
+        {   // check it's not overloaded after reload
+            TColumnEngineForLogs tmpEngine(
+                0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, TSnapshot::Zero(), TIndexInfo(tableInfo), versionCounters);
             tmpEngine.RegisterTable(pathId);
-            tmpEngine.Load(db);
+            tmpEngine.TestingLoad(db);
         }
     }
 
@@ -729,16 +763,17 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TSnapshot indexSnapshot(1, 1);
         std::shared_ptr<NOlap::TVersionCounters> versionCounters = std::make_shared<NOlap::TVersionCounters>();
         {
-            TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), versionCounters);
+            TColumnEngineForLogs engine(
+                0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), versionCounters);
             engine.RegisterTable(pathId);
-            engine.Load(db);
+            engine.TestingLoad(db);
 
             const ui64 numRows = 1000;
             const ui64 txCount = 20;
             const ui64 tsIncrement = 1;
             const auto blobTsRange = numRows * tsIncrement;
-            const auto gap = TDuration::Hours(1); //much longer than blobTsRange*txCount
-            auto blobStartTs = (TInstant::Now() -  gap).MicroSeconds();
+            const auto gap = TDuration::Hours(1);   //much longer than blobTsRange*txCount
+            auto blobStartTs = (TInstant::Now() - gap).MicroSeconds();
             for (ui64 txId = 1; txId <= txCount; ++txId) {
                 TString testBlob = MakeTestBlob(blobStartTs, blobStartTs + blobTsRange, tsIncrement);
                 auto blobRange = MakeBlobRange(++step, testBlob.size());
@@ -755,9 +790,9 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
                 bool ok = Insert(engine, db, ss, std::move(dataToIndex), blobs, step);
                 UNIT_ASSERT(ok);
                 blobStartTs += blobTsRange;
-                if (txId == txCount / 2) { 
-                    //Make a gap. 
-                    //NB After this gap, some rows may be in the future at the point of setting TTL 
+                if (txId == txCount / 2) {
+                    //Make a gap.
+                    //NB After this gap, some rows may be in the future at the point of setting TTL
                     blobStartTs += gap.MicroSeconds();
                 }
             }
@@ -768,13 +803,13 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             //        bool ok = Compact(engine, db, TSnapshot(planStep, 1), std::move(blobs), step, {20, 4, 4});
             //        UNIT_ASSERT(ok);
 
-                    // read
+            // read
             planStep = 3;
 
             const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
-            THashSet<ui32> oneColumnId = {indexInfo.GetColumnIdVerified(testColumns[0].GetName())};
+            THashSet<ui32> oneColumnId = { indexInfo.GetColumnIdVerified(testColumns[0].GetName()) };
 
-            { // full scan
+            {   // full scan
                 ui64 txId = 1;
                 auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
@@ -783,7 +818,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // Cleanup
             Cleanup(engine, db, TSnapshot(planStep, 1), 0);
 
-            { // full scan
+            {   // full scan
                 ui64 txId = 1;
                 auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 20);
@@ -795,11 +830,11 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             NOlap::TTiering tiering;
             AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(gap, "timestamp")));
             pathTtls.emplace(pathId, std::move(tiering));
-            Ttl(engine, db, pathTtls, txCount / 2 );
+            Ttl(engine, db, pathTtls, txCount / 2);
 
             // read + load + read
 
-            { // full scan
+            {   // full scan
                 ui64 txId = 1;
                 auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
@@ -807,14 +842,15 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         }
         {
             // load
-            TColumnEngineForLogs engine(0, CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), versionCounters);
+            TColumnEngineForLogs engine(
+                0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo), versionCounters);
             engine.RegisterTable(pathId);
-            engine.Load(db);
+            engine.TestingLoad(db);
 
             const TIndexInfo& indexInfo = engine.GetVersionedIndex().GetLastSchema()->GetIndexInfo();
             THashSet<ui32> oneColumnId = { indexInfo.GetColumnIdVerified(testColumns[0].GetName()) };
 
-            { // full scan
+            {   // full scan
                 ui64 txId = 1;
                 auto selectInfo = engine.Select(pathId, TSnapshot(planStep, txId), NOlap::TPKRangesFilter(false), false);
                 UNIT_ASSERT_VALUES_EQUAL(selectInfo->PortionsOrderedPK.size(), 10);
@@ -823,4 +859,4 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
     }
 }
 
-}
+}   // namespace NKikimr

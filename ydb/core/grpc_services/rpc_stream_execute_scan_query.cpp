@@ -191,7 +191,6 @@ private:
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
-            HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, Handle);
             default: {
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, TStringBuilder()
                     << "Unexpected event received in TStreamExecuteScanQueryRPC::StateWork: " << ev->GetTypeRewrite());
@@ -297,16 +296,12 @@ private:
 
             if (reportStats) {
                 if (kqpResponse.HasQueryStats()) {
-                    for (const auto& execStats: ExecutionProfiles_) {
-                        record.MutableResponse()->MutableQueryStats()->AddExecutions()->Swap(execStats.get());
-                    }
 
                     record.MutableResponse()->SetQueryPlan(reportPlan
                         ? SerializeAnalyzePlan(kqpResponse.GetQueryStats())
                         : "");
 
                     FillQueryStats(*response.mutable_result()->mutable_query_stats(), kqpResponse);
-                    ExecutionProfiles_.clear();
                 } else if (reportPlan) {
                     response.mutable_result()->mutable_query_stats()->set_query_plan(kqpResponse.GetQueryPlan());
                 }
@@ -365,18 +360,6 @@ private:
         resp->Record.SetFreeSpace(freeSpaceBytes);
 
         ctx.Send(ev->Sender, resp.Release());
-    }
-
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev, const TActorContext&) {
-        auto req = Request_->GetProtoRequest();
-        if (!NeedReportStats(*req)) {
-            return;
-        }
-
-        // every TKqpExecuter sends its own profile
-        auto profile = std::make_unique<NYql::NDqProto::TDqExecutionStats>();
-        profile->Swap(ev->Get()->Record.MutableProfile());
-        ExecutionProfiles_.emplace_back(std::move(profile));
     }
 
 private:
@@ -478,7 +461,6 @@ private:
 
     TSchedulerCookieHolder TimeoutTimerCookieHolder_;
 
-    TVector<std::unique_ptr<NYql::NDqProto::TDqExecutionStats>> ExecutionProfiles_;
     TActorId ExecuterActorId_;
 };
 

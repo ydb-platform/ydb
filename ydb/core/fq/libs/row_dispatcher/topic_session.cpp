@@ -33,6 +33,7 @@ struct TTopicSessionMetrics {
         InFlyAsyncInputData = SubGroup->GetCounter("InFlyAsyncInputData");
         RowsRead = SubGroup->GetCounter("RowsRead", true);
         InFlySubscribe = SubGroup->GetCounter("InFlySubscribe");
+        ReconnectRate = SubGroup->GetCounter("ReconnectRate", true);
     }
 
     ~TTopicSessionMetrics() {
@@ -43,6 +44,7 @@ struct TTopicSessionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
     ::NMonitoring::TDynamicCounters::TCounterPtr RowsRead;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
 };
 
 struct TEvPrivate {
@@ -56,6 +58,7 @@ struct TEvPrivate {
         EvDataFiltered,
         EvSendStatistic,
         EvStartParsing,
+        EvReconnectSession,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
@@ -66,6 +69,7 @@ struct TEvPrivate {
     struct TEvSendStatistic : public NActors::TEventLocal<TEvSendStatistic, EvSendStatistic> {};
     struct TEvStatus : public NActors::TEventLocal<TEvStatus, EvStatus> {};
     struct TEvStartParsing : public NActors::TEventLocal<TEvStartParsing, EvStartParsing> {};
+    struct TEvReconnectSession : public NActors::TEventLocal<TEvReconnectSession, EvReconnectSession> {};
 
     struct TEvDataFiltered : public NActors::TEventLocal<TEvDataFiltered, EvDataFiltered> {
         explicit TEvDataFiltered(ui64 offset)
@@ -136,6 +140,8 @@ private:
         TParserInputType InputType;
     };
 
+    bool InflightReconnect = false;
+    TDuration ReconnectPeriod;
     const TString TopicPath;
     const TString Endpoint;
     const TString Database;
@@ -161,6 +167,7 @@ private:
     TParserSchema ParserSchema;
     THashMap<TString, ui64> FieldsIndexes;
     NYql::IPqGateway::TPtr PqGateway;
+    TMaybe<TString> ConsumerName;
 
 public:
     explicit TTopicSession(
@@ -204,6 +211,7 @@ private:
 
     void Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&);
     void Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&);
+    void Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&);
     void Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr&);
     void Handle(NFq::TEvPrivate::TEvStatus::TPtr&);
     void Handle(NFq::TEvPrivate::TEvDataFiltered::TPtr&);
@@ -218,6 +226,7 @@ private:
     TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> RebuildJson(const TClientsInfo& info, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues);
     void UpdateParserSchema(const TParserInputType& inputType);
     void UpdateFieldsIds(TClientsInfo& clientInfo);
+    bool CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
 
 private:
 
@@ -373,6 +382,17 @@ void TTopicSession::CreateTopicSession() {
         ReadSession = GetTopicClient(sourceParams).CreateReadSession(GetReadSessionSettings(sourceParams));
         SubscribeOnNextEvent();
     }
+
+    if (!InflightReconnect) {
+        // Use any sourceParams.
+        const NYql::NPq::NProto::TDqPqTopicSource& sourceParams = Clients.begin()->second.Settings.GetSource();
+        Y_UNUSED(TDuration::TryParse(sourceParams.GetReconnectPeriod(), ReconnectPeriod));
+        if (ReconnectPeriod != TDuration::Zero()) {
+            Metrics.ReconnectRate->Inc();
+            Schedule(ReconnectPeriod, new NFq::TEvPrivate::TEvReconnectSession());
+        }
+        InflightReconnect = true;
+    }
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
@@ -428,6 +448,17 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvStatus::TPtr&) {
         LOG_ROW_DISPATCHER_TRACE("Send status to " << info.ReadActorId << ", offset " << *info.NextMessageOffset);
         Send(RowDispatcherActorId, event.release());
     }
+}
+
+void TTopicSession::Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&) {
+    Metrics.ReconnectRate->Inc();
+    TInstant minTime = GetMinStartingMessageTimestamp();
+    LOG_ROW_DISPATCHER_DEBUG("Reconnect topic session, Path " << TopicPath
+        << ", StartingMessageTimestamp " << minTime
+        << ", BufferSize " << BufferSize << ", WithoutConsumer " << Config.GetWithoutConsumer());
+    StopReadSession();
+    CreateTopicSession();
+    Schedule(ReconnectPeriod, new NFq::TEvPrivate::TEvReconnectSession());
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvDataFiltered::TPtr& ev) {
@@ -607,10 +638,15 @@ void TTopicSession::SendData(TClientsInfo& info) {
         LOG_ROW_DISPATCHER_TRACE("Buffer empty");
     }
 
+    if (!info.NextMessageOffset) {
+        LOG_ROW_DISPATCHER_ERROR("Try SendData() without NextMessageOffset, " << info.ReadActorId 
+            << " unread " << info.UnreadBytes << " DataArrivedSent " << info.DataArrivedSent);
+        return;
+    }
+
     do {
         auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
         event->Record.SetPartitionId(PartitionId);
-        Y_ENSURE(info.NextMessageOffset);
         event->ReadActorId = info.ReadActorId;
 
         ui64 batchSize = 0;
@@ -662,14 +698,12 @@ bool HasJsonColumns(const NYql::NPq::NProto::TDqPqTopicSource& sourceParams) {
 }
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
-    auto it = Clients.find(ev->Sender);
-    if (it != Clients.end()) {
-        FatalError("Internal error: sender " + ev->Sender.ToString(), nullptr, false);
-        return;
-    }
-
     LOG_ROW_DISPATCHER_INFO("New client: read actor id " << ev->Sender.ToString() << ", predicate: " 
         << ev->Get()->Record.GetSource().GetPredicate() << ", offset: " << ev->Get()->Record.GetOffset());
+
+    if (!CheckNewClient(ev)) {
+        return;
+    }
 
     auto columns = GetVector(ev->Get()->Record.GetSource().GetColumns());
     auto types = GetVector(ev->Get()->Record.GetSource().GetColumnTypes());
@@ -718,6 +752,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     } catch (...) {
         FatalError("Adding new client failed, " + CurrentExceptionMessage(), nullptr, true);
     }
+    ConsumerName = ev->Get()->Record.GetSource().GetConsumerName();
     UpdateParser();
     SendStatistic();
     if (!ReadSession) { 
@@ -892,6 +927,23 @@ void TTopicSession::SendStatistic() {
 void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
     Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
     SendStatistic();
+}
+
+bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
+    auto it = Clients.find(ev->Sender);
+    if (it != Clients.end()) {
+        LOG_ROW_DISPATCHER_ERROR("Such a client already exists");
+        SendSessionError(ev->Sender, "Internal error: such a client already exists");
+        return false;
+    }
+    if (!Config.GetWithoutConsumer()
+        && ConsumerName 
+        && ConsumerName != ev->Get()->Record.GetSource().GetConsumerName()) {
+        LOG_ROW_DISPATCHER_INFO("Different consumer, expected " <<  ConsumerName << ", actual " << ev->Get()->Record.GetSource().GetConsumerName() << ", send error");
+        SendSessionError(ev->Sender, TStringBuilder() << "Use the same consumer in all queries via RD (current consumer " << ConsumerName << ")");
+        return false;
+    }
+    return true;
 }
 
 } // namespace

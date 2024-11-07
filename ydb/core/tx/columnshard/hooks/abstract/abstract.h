@@ -146,6 +146,8 @@ public:
         const std::set<NOlap::TSnapshot>& /*snapshotsToSave*/, const std::set<NOlap::TSnapshot>& /*snapshotsToRemove*/) {
     }
 
+    virtual bool CheckPortionForEvict(const std::shared_ptr<NOlap::TPortionInfo>& portion) const;
+
     TDuration GetPingCheckPeriod() const {
         const TDuration defaultValue = 0.6 * GetReadTimeoutClean();
         return DoGetPingCheckPeriod(defaultValue);

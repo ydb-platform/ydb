@@ -17,6 +17,7 @@
 #include <ydb/core/tx/columnshard/common/schema_versions.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/data_accessor/manager.h>
 
 namespace NKikimr::NArrow {
 struct TSortDescription;
@@ -34,6 +35,10 @@ class TCleanupTablesColumnEngineChanges;
 namespace NDataSharing {
 class TDestinationSession;
 }
+namespace NEngineLoading {
+class TEngineShardingInfoReader;
+class TEngineCountersReader;
+}
 
 struct TReadMetadata;
 
@@ -50,6 +55,8 @@ class TColumnEngineForLogs: public IColumnEngine {
     friend class TCleanupPortionsColumnEngineChanges;
     friend class TCleanupTablesColumnEngineChanges;
     friend class NDataSharing::TDestinationSession;
+    friend class NEngineLoading::TEngineShardingInfoReader;
+    friend class NEngineLoading::TEngineCountersReader;
 
 private:
     bool ActualizationStarted = false;
@@ -86,10 +93,10 @@ public:
         ADD,
     };
 
-    TColumnEngineForLogs(ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot,
-        const TSchemaInitializationData& schema, const std::shared_ptr<TVersionCounters>& versionCounters);
-    TColumnEngineForLogs(
-        ui64 tabletId, const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema, const std::shared_ptr<TVersionCounters>& versionCounters);
+    TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+        const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const TSchemaInitializationData& schema, const std::shared_ptr<TVersionCounters>& versionCounters);
+    TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+        const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema, const std::shared_ptr<TVersionCounters>& versionCounters);
 
     virtual void OnTieringModified(
         const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) override;
@@ -109,9 +116,16 @@ public:
     }
 
     virtual void DoRegisterTable(const ui64 pathId) override;
+    void DoFetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const override {
+        GranulesStorage->FetchDataAccessors(request);
+    }
+
+    bool TestingLoadColumns(IDbWrapper& db);
+    bool LoadCounters(IDbWrapper& db);
 
 public:
-    bool Load(IDbWrapper& db) override;
+    virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) override;
+    bool FinishLoading();
 
     virtual bool IsOverloadedByMetadata(const ui64 limit) const override {
         return limit < TGranulesStat::GetSumMetadataMemoryPortionsSize();
@@ -195,6 +209,8 @@ public:
         VersionedIndex.AddShardingInfo(shardingInfo);
     }
 
+    bool TestingLoad(IDbWrapper& db);
+
     template <class TModifier>
     void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
         auto exPortion = portion->MakeCopy();
@@ -223,10 +239,6 @@ private:
     bool Loaded = false;
 
 private:
-    bool LoadColumns(IDbWrapper& db);
-    bool LoadShardingInfo(IDbWrapper& db);
-    bool LoadCounters(IDbWrapper& db);
-
     bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);
     void UpdatePortionStats(
         const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT, const TPortionInfo* exPortionInfo = nullptr);

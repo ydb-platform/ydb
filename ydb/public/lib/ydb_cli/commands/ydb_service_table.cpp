@@ -365,6 +365,8 @@ void TCommandExecuteQuery::Config(TConfig& config) {
     config.Opts->AddLongOption('q', "query", "Text of query to execute").RequiredArgument("[String]").StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to file with query text to execute")
         .RequiredArgument("PATH").StoreResult(&QueryFile);
+    config.Opts->AddLongOption("collect-diagnostics", "Collects diagnostics and saves it to file")
+        .StoreTrue(&CollectFullDiagnostics);
 
     AddOutputFormats(config, {
         EDataFormat::Pretty,
@@ -432,6 +434,9 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
     NTable::TExecDataQuerySettings settings;
     settings.KeepInQueryCache(true);
     settings.CollectQueryStats(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
+    if (CollectFullDiagnostics) {
+        settings.CollectFullDiagnostics(true);
+    }
 
     NTable::TTxSettings txSettings;
     if (TxMode) {
@@ -516,6 +521,11 @@ void TCommandExecuteQuery::PrintDataQueryResponse(NTable::TDataQueryResult& resu
     {
         Cout << Endl << "Flame graph is available for full or profile stats only" << Endl;
     }
+    if (CollectFullDiagnostics)
+    {
+        TFileOutput file(TStringBuilder() << "diagnostics_" << TGUID::Create().AsGuidString() << ".txt");
+        file << result.GetDiagnostics();
+    }
 }
 
 int TCommandExecuteQuery::ExecuteSchemeQuery(TConfig& config) {
@@ -558,6 +568,9 @@ namespace {
             if (timeout.has_value()) {
                 settings.ClientTimeout(*timeout);
             }
+            if (CollectFullDiagnostics) {
+                settings.CollectFullDiagnostics(true);
+            }
             return settings;
         } else if constexpr (std::is_same_v<TClient, NQuery::TQueryClient>) {
             const auto defaultStatsMode = basicStats
@@ -567,6 +580,9 @@ namespace {
             settings.StatsMode(ParseQueryStatsModeOrThrow(collectStatsMode, defaultStatsMode));
             if (timeout.has_value()) {
                 settings.ClientTimeout(*timeout);
+            }
+            if (CollectFullDiagnostics) {
+                settings.CollectFullDiagnostics(true);
             }
             return settings;
         }
@@ -753,6 +769,8 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
                     fullStats = queryStats.GetPlan();
                 }
             }
+
+            if ()
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
@@ -765,6 +783,12 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
 
         TQueryPlanPrinter queryPlanPrinter(OutputFormat, /* analyzeMode */ true);
         queryPlanPrinter.Print(TString{*fullStats});
+    }
+
+    if (CollectFullDiagnostics)
+    {
+        TFileOutput file(TStringBuilder() << "diagnostics_" << TGUID::Create().AsGuidString() << ".txt");
+        file << result.GetDiagnostics();
     }
 
     PrintFlameGraph(fullStats);

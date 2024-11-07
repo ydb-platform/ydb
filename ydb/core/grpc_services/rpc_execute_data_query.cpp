@@ -145,7 +145,10 @@ public:
             &req->parameters(),
             req->collect_stats(),
             req->has_query_cache_policy() ? &req->query_cache_policy() : nullptr,
-            req->has_operation_params() ? &req->operation_params() : nullptr);
+            req->has_operation_params() ? &req->operation_params() : nullptr,
+            NKqp::NPrivateEvents::TQueryRequestSettings(),
+            "",
+            req->Getcollect_full_diagnostics());
 
         ReportCostInfo_ = req->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
 
@@ -203,6 +206,7 @@ public:
                         queryMeta.mutable_parameters_types()->insert({queryParameter.GetName(), parameterType});
                     }
                 }
+                queryResult->set_query_full_diagnostics(kqpResponse.GetQueryDiagnostics());
             } catch (const std::exception& ex) {
                 NYql::TIssues issues;
                 issues.AddIssue(NYql::ExceptionToIssue(ex));

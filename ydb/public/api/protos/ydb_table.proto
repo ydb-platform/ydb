@@ -926,6 +926,7 @@ message ExecuteDataQueryRequest {
     QueryCachePolicy query_cache_policy = 5;
     Ydb.Operations.OperationParams operation_params = 6;
     QueryStatsCollection.Mode collect_stats = 7;
+    bool collect_full_diagnostics = 8;
 }
 
 message ExecuteDataQueryResponse {
@@ -968,6 +969,8 @@ message ExecuteQueryResult {
     QueryMeta query_meta = 3;
     // Query execution statistics
     Ydb.TableStats.QueryStats query_stats = 4;
+    // Full query diagnostics
+    string query_full_diagnostics = 5;
 }
 
 // Explain data query

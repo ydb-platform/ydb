@@ -188,7 +188,8 @@ private:
                                                                txControl.Tx_,
                                                                Nothing(),
                                                                false,
-                                                               Nothing()));
+                                                               Nothing(),
+                                                               {}));
             }
 
             return ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache);
@@ -213,6 +214,7 @@ private:
         }
 
         request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
+        request.set_collect_full_diagnostics(settings.CollectFullDiagnostics_);
 
         SetQuery(query, request.mutable_query());
         CollectQuerySize(query, QuerySizeHistogram);
@@ -240,6 +242,7 @@ private:
                 TMaybe<TTransaction> tx;
                 TMaybe<TDataQuery> dataQuery;
                 TMaybe<TQueryStats> queryStats;
+                TString diagnostics;
 
                 auto queryText = GetQueryText(query);
                 if (any) {
@@ -264,6 +267,8 @@ private:
                     if (result.has_query_stats()) {
                         queryStats = TQueryStats(result.query_stats());
                     }
+
+                    diagnostics = result.query_full_diagnostics();
                 }
 
                 if (keepInCache && dataQuery && queryText) {
@@ -271,7 +276,7 @@ private:
                 }
 
                 TDataQueryResult dataQueryResult(TStatus(std::move(status)),
-                    std::move(res), tx, dataQuery, fromCache, queryStats);
+                    std::move(res), tx, dataQuery, fromCache, queryStats, std::move(diagnostics));
 
                 delete sessionPtr;
                 tx.Clear();

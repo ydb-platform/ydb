@@ -267,6 +267,8 @@ private:
             .SetSupportStreamTrailingResult(true)
             .SetOutputChunkMaxSize(req->response_part_limit_bytes());
 
+        assert(req->Getcollect_full_diagnostics());
+
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(
             QueryAction,
             queryType,
@@ -281,7 +283,8 @@ private:
             cachePolicy,
             nullptr, // operationParams
             settings,
-            req->pool_id());
+            req->pool_id(),
+            req->Getcollect_full_diagnostics());
 
         ev->SetProgressStatsPeriod(TDuration::MilliSeconds(req->stats_period_ms()));
 
@@ -422,6 +425,8 @@ private:
                 hasTrailingMessage = true;
                 response.mutable_tx_meta()->set_id(kqpResponse.GetTxMeta().id());
             }
+            assert(!kqpResponse.GetQueryDiagnostics().empty());
+            response.set_query_full_diagnostics(kqpResponse.GetQueryDiagnostics());
         }
 
         if (hasTrailingMessage) {

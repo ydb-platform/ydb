@@ -734,4 +734,9 @@ TResultSetParser TExecuteQueryResult::GetResultSetParser(size_t resultIndex) con
     return TResultSetParser(GetResultSet(resultIndex));
 }
 
+const TString& TExecuteQueryResult::GetDiagnostics() const {
+    CheckStatusOk("TExecuteQueryResult::GetDiagnostics");
+    return Diagnostics_;
+}
+
 } // namespace NYdb::NQuery

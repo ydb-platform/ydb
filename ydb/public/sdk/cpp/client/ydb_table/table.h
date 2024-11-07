@@ -1726,6 +1726,8 @@ struct TExecDataQuerySettings : public TOperationRequestSettings<TExecDataQueryS
     FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, KeepInQueryCache);
 
     FLUENT_SETTING_OPTIONAL_DEPRECATED(ECollectQueryStatsMode, CollectQueryStats);
+
+    FLUENT_SETTING_DEFAULT_DEPRECATED(bool, CollectFullDiagnostics, false);
 };
 
 struct TExecSchemeQuerySettings : public TOperationRequestSettings<TExecSchemeQuerySettings> {};
@@ -2028,7 +2030,7 @@ private:
 class TDataQueryResult : public TStatus {
 public:
     TDataQueryResult(TStatus&& status, TVector<TResultSet>&& resultSets, const TMaybe<TTransaction>& transaction,
-        const TMaybe<TDataQuery>& dataQuery, bool fromCache, const TMaybe<TQueryStats>& queryStats);
+        const TMaybe<TDataQuery>& dataQuery, bool fromCache, const TMaybe<TQueryStats>& queryStats, TString&& diagnostics);
 
     const TVector<TResultSet>& GetResultSets() const;
     TVector<TResultSet> ExtractResultSets() &&;
@@ -2045,12 +2047,15 @@ public:
 
     const TString GetQueryPlan() const;
 
+    const TString& GetDiagnostics() const;
+
 private:
     TMaybe<TTransaction> Transaction_;
     TVector<TResultSet> ResultSets_;
     TMaybe<TDataQuery> DataQuery_;
     bool FromCache_;
     TMaybe<TQueryStats> QueryStats_;
+    TString Diagnostics_;
 };
 
 class TReadTableSnapshot {

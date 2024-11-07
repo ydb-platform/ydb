@@ -650,6 +650,55 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST(ExecuteCollectFullDiagnostics) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            TExecuteQuerySettings settings;
+            settings.CollectFullDiagnostics(true);
+
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.GetDiagnostics().empty(), "Query result diagnostics is empty");
+
+            TStringStream in;
+            in << result.GetDiagnostics();
+            NJson::TJsonValue value;
+            ReadJsonTree(&in, &value);
+
+            UNIT_ASSERT_C(value.IsMap(), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("query_id"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("version"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("query_text"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("query_parameter_types"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("table_metadata"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value["table_metadata"].IsArray(), "Incorrect Diagnostics: table_metadata type should be an array");
+            UNIT_ASSERT_C(value.Has("created_at"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("query_syntax"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("query_database"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("query_cluster"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("query_plan"), "Incorrect Diagnostics");
+            UNIT_ASSERT_C(value.Has("query_type"), "Incorrect Diagnostics");
+        }
+
+        {
+            TExecuteQuerySettings settings;
+            settings.CollectFullDiagnostics(true);
+
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key, Value2 FROM TwoShard WHERE Value2 > 0;
+            )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString().c_str());
+
+            UNIT_ASSERT_C(result.GetDiagnostics().empty(), "Query result diagnostics should be empty, but it's not");
+        }
+    }
+
     void CheckQueryResult(TExecuteQueryResult result) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);

@@ -19,7 +19,8 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
     const ::Ydb::Operations::OperationParams* operationParams,
     const TQueryRequestSettings& querySettings,
-    const TString& poolId)
+    const TString& poolId,
+    bool collectFullDiagnostics)
     : RequestCtx(ctx)
     , RequestActorId(requestActorId)
     , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))
@@ -35,6 +36,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     , QueryCachePolicy(queryCachePolicy)
     , HasOperationParams(operationParams)
     , QuerySettings(querySettings)
+    , CollectFullDiagnostics(collectFullDiagnostics)
 {
     if (HasOperationParams) {
         OperationTimeout = GetDuration(operationParams->operation_timeout());
@@ -106,6 +108,8 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
         }
         Record.MutableRequest()->SetIsInternalCall(RequestCtx->IsInternalCall());
         Record.MutableRequest()->SetOutputChunkMaxSize(QuerySettings.OutputChunkMaxSize);
+
+        Record.MutableRequest()->SetCollectDiagnostics(CollectFullDiagnostics);
 
         RequestCtx.reset();
     }

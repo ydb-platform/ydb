@@ -123,12 +123,16 @@ namespace NYql {
             return SerializeExpression(compare.Left(), proto->mutable_left_value(), arg, err) && SerializeExpression(compare.Right(), proto->mutable_right_value(), arg, err);
         }
 
+        bool SerializeSqlIn(const TCoSqlIn& sqlIn, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err);
+
 #undef EXPR_NODE_TO_COMPARE_TYPE
 
         bool SerializeCoalesce(const TCoCoalesce& coalesce, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err) {
             auto predicate = coalesce.Predicate();
             if (auto compare = predicate.Maybe<TCoCompare>()) {
                 return SerializeCompare(compare.Cast(), proto, arg, err);
+            } else if (auto sqlIn = predicate.Maybe<TCoSqlIn>()) {
+                return SerializeSqlIn(sqlIn.Cast(), proto, arg, err);
             }
 
             err << "unknown coalesce predicate: " << predicate.Raw()->Content();

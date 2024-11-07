@@ -28,12 +28,12 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
         return false;
     };
 
-    static const auto& fillCommonFields = []<class TModeSettings>(TTtlSettingsEnabled out, const TModeSettings& in) {
-        out.SetColumnName(in.date_type_column().column_name());
-        if (in.date_type_column().has_expire_after_seconds()) {
-            out.SetExpireAfterSeconds(in.date_type_column().expire_after_seconds());
+    static const auto& fillCommonFields = []<class TModeSettings>(TTtlSettingsEnabled& out, const TModeSettings& in) {
+        out.SetColumnName(in.column_name());
+        if (in.has_expire_after_seconds()) {
+            out.SetExpireAfterSeconds(in.expire_after_seconds());
         }
-        for (const auto& in_tier : in.date_type_column().storage_tiers()) {
+        for (const auto& in_tier : in.storage_tiers()) {
             auto* out_tier = out.AddTiers();
             out_tier->SetEvictAfterSeconds(in_tier.evict_after_seconds());
             out_tier->SetStorageName(in_tier.storage_name());

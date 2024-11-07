@@ -540,7 +540,6 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
-            
             // TODO: Add new status for splits in datashard. This is tmp solution.
             if (getIssues().ToOneLineString().Contains("in a pre/offline state assuming this is due to a finished split (wrong shard state)")) {
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
@@ -561,13 +560,12 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
-            
-        RuntimeError(
-            TStringBuilder() << "Disk space exhausted for table `"
-                << TablePath << "`. "
-                << getIssues().ToOneLineString(),
-            NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
-            getIssues());
+            RuntimeError(
+                TStringBuilder() << "Disk space exhausted for table `"
+                    << TablePath << "`. "
+                    << getIssues().ToOneLineString(),
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                getIssues());
             return;
         }        
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
@@ -847,7 +845,7 @@ public:
             << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode));
         Send(
             PipeCacheId,
-            new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
+            new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
             IEventHandle::FlagTrackDelivery,
             metadata->Cookie,
             TableWriteActorSpan.GetTraceId());
@@ -1270,6 +1268,7 @@ public:
         , Alloc(std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__))
         , TypeEnv(*Alloc)
         , Counters(settings.Counters)
+        , TxProxyMon(settings.TxProxyMon)
         , BufferWriteActor(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "TKqpBufferWriteActor", NWilson::EFlags::AUTO_END)
         , BufferWriteActorState(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
             "BufferWriteActorState::Writing", NWilson::EFlags::AUTO_END)
@@ -1565,10 +1564,11 @@ public:
             << ", OperationsCount=" << 0 << ", IsFinal=" << 1
             << ", Attempts=" << 0);
 
+            // TODO: Track latecy
             Send(
                 NKikimr::MakePipePerNodeCacheID(false),
-                new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
-                0,
+                new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
+                IEventHandle::FlagTrackDelivery,
                 0);
         }
     }
@@ -1672,26 +1672,30 @@ public:
 
         switch (res->GetStatus()) {
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted:
-                // TODO: metrics
+                TxProxyMon->ClientTxStatusAccepted->Inc();
                 break;
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusProcessed:
+                TxProxyMon->ClientTxStatusProcessed->Inc();
                 break;
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusConfirmed:
+                TxProxyMon->ClientTxStatusConfirmed->Inc();
                 break;
 
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
+                TxProxyMon->ClientTxStatusPlanned->Inc();
                 break;
 
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclined:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting:
-                // TODO: CancelProposal???
+                TxProxyMon->ClientTxStatusCoordinatorDeclined->Inc();
                 ReplyErrorAndDie(TStringBuilder() << "Failed to plan transaction, status: " << res->GetStatus(), NYql::NDqProto::StatusIds::UNAVAILABLE, {});
                 break;
 
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusUnknown:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAborted:
+                TxProxyMon->ClientTxStatusCoordinatorDeclined->Inc();
                 ReplyErrorAndDie(TStringBuilder() << "Unexpected TEvProposeTransactionStatus status: " << res->GetStatus(), NYql::NDqProto::StatusIds::INTERNAL_ERROR, {});
                 break;
         }
@@ -1797,7 +1801,6 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
-            
             ReplyErrorAndDie(
                 TStringBuilder() << "Internal error for table. "
                     << getIssues().ToOneLineString(),
@@ -1810,11 +1813,10 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
-            
             ReplyErrorAndDie(
                 TStringBuilder() << "Disk space exhausted for table. "
                     << getIssues().ToOneLineString(),
-                NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
                 getIssues());
                 return;
         }        
@@ -1824,7 +1826,6 @@ public:
                 << " Sink=" << this->SelfId() << "."
                 << " Ignored this error."
                 << getIssues().ToOneLineString());
-            // TODO: support waiting
             ReplyErrorAndDie(
                 TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is overloaded."
                     << getIssues().ToOneLineString(),
@@ -2033,6 +2034,8 @@ private:
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 
     TIntrusivePtr<TKqpCounters> Counters;
+    TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
+
     NWilson::TSpan BufferWriteActor;
     NWilson::TSpan BufferWriteActorState;
 };

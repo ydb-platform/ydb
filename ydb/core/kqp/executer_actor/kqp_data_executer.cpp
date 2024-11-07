@@ -221,9 +221,6 @@ public:
             return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
         }
 
-        ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
-        Counters->TxProxyMon->ReportStatusOK->Inc();
-
         auto addLocks = [this](const ui64 taskId, const auto& data) {
             if (data.GetData().template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
                 NKikimrTxDataShard::TEvKqpInputActorResultInfo info;
@@ -337,6 +334,9 @@ public:
     }
 
     void MakeResponseAndPassAway() {
+        ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
+        Counters->TxProxyMon->ReportStatusOK->Inc();
+
         ResponseEv->Snapshot = GetSnapshot();
 
         if (!Locks.empty() || (TxManager && TxManager->HasLocks())) {
@@ -1940,10 +1940,6 @@ private:
         }
 
         return false;
-    }
-
-    bool HasOlapSink(const NKqpProto::TKqpPhyStage& stage, const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyTable>& tables) {
-        return NKqp::HasOlapTableWriteInStage(stage, tables);
     }
 
     void Execute() {

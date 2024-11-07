@@ -392,10 +392,12 @@ Y_UNIT_TEST_SUITE(Mvp) {
         std::unique_ptr<grpc::Server> sessionServer(builder.BuildAndStart());
 
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
+        TString sessionCookieName = CreateNameSessionCookie(settings.ClientId);
+        TString sessionCookieValue = Base64Encode("session_cookie");
         EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
                                 "Host: oidcproxy.net\r\n"
                                 "Cookie: yc_session=allowed_session_cookie;"
-                                + CreateSecureCookie(settings.ClientId, "session_cookie") + "\r\n\r\n");
+                                + CreateSecureCookie(sessionCookieName, sessionCookieValue) + "\r\n\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         TAutoPtr<IEventHandle> handle;
 

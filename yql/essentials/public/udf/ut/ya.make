@@ -12,7 +12,7 @@ YQL_LAST_ABI_VERSION()
 PEERDIR(
     yql/essentials/utils
     yql/essentials/public/udf/service/exception_policy
-    contrib/ydb/library/yql/sql/pg_dummy
+    yql/essentials/sql/pg_dummy
 )
 
 END()

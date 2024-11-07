@@ -1,4 +1,4 @@
-#include <contrib/ydb/library/yql/parser/pg_wrapper/pg_compat.h>
+#include <yql/essentials/parser/pg_wrapper/pg_compat.h>
 
 #include "mkql_type_ops.h"
 #include "mkql_alloc.h"
@@ -9,8 +9,8 @@
 #include <util/stream/str.h>
 
 extern "C" {
-#include <contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/datatype/timestamp.h>
-#include <contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include/utils/datetime.h>
+#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/datatype/timestamp.h>
+#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/utils/datetime.h>
 }
 
 using namespace NYql;

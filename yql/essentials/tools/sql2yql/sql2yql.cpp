@@ -4,12 +4,12 @@
 
 #include <yql/essentials/parser/lexer_common/hints.h>
 
-#include <contrib/ydb/library/yql/sql/sql.h>
-#include <contrib/ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 
 #include <library/cpp/getopt/last_getopt.h>
-#include <contrib/ydb/library/yql/sql/v1/format/sql_format.h>
+#include <yql/essentials/sql/v1/format/sql_format.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/file.h>

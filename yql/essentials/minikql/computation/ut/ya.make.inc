@@ -28,7 +28,7 @@ SRCS(
 PEERDIR(
     contrib/libs/apache/arrow
     library/cpp/threading/local_executor
-    contrib/ydb/library/yql/parser/pg_wrapper
+    yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/exception_policy
     contrib/ydb/library/yql/dq/proto
 )

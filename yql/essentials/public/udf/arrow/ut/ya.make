@@ -6,9 +6,9 @@ SRCS(
 
 PEERDIR(
     yql/essentials/public/udf/arrow
-    contrib/ydb/library/yql/core/ut_common
+    yql/essentials/core/ut_common
     yql/essentials/public/udf/service/exception_policy
-    contrib/ydb/library/yql/sql/pg_dummy
+    yql/essentials/sql/pg_dummy
     yql/essentials/minikql
     yql/essentials/minikql/invoke_builtins/llvm14
 )

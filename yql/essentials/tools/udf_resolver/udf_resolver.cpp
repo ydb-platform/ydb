@@ -1,8 +1,8 @@
 #include "discover.h"
 
-#include <contrib/ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <contrib/ydb/library/yql/providers/common/proto/udf_resolver.pb.h>
-#include <contrib/ydb/library/yql/core/yql_type_annotation.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/providers/common/proto/udf_resolver.pb.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
 #include <yql/essentials/utils/sys/become_user.h>
 #include <yql/essentials/utils/sys/linux_version.h>

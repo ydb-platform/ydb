@@ -1,0 +1,16 @@
+RECURSE(
+    activation
+    arrow_resolve
+    codec
+    comp_nodes
+    config
+    gateway
+    metrics
+    mkql
+    proto/python
+    provider
+    schema
+    structured_token
+    transform
+    udf_resolve
+)

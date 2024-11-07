@@ -30,13 +30,13 @@ SRCS(
 )
 
 ADDINCL(
-    contrib/ydb/library/yql/parser/pg_wrapper/postgresql/src/include
+    yql/essentials/parser/pg_wrapper/postgresql/src/include
 )
 
 PEERDIR(
     contrib/libs/apache/arrow
     yql/essentials/minikql/invoke_builtins/llvm14
-    contrib/ydb/library/yql/parser/pg_wrapper
+    yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/exception_policy
 )
 

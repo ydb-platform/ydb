@@ -5,7 +5,7 @@
 #include <contrib/ydb/library/yql/providers/yt/lib/schema/schema.h>
 #include <contrib/ydb/library/yql/providers/yt/common/yql_names.h>
 
-#include <contrib/ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>

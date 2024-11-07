@@ -1,6 +1,6 @@
 #pragma once
 
-#include <contrib/ydb/library/yql/providers/common/proto/udf_resolver.pb.h>
+#include <yql/essentials/providers/common/proto/udf_resolver.pb.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
 #include <util/generic/hash.h>

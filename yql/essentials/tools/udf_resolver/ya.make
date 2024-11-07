@@ -19,12 +19,12 @@ PEERDIR(
     library/cpp/protobuf/util
     yql/essentials/minikql
     yql/essentials/public/udf/service/terminate_policy
-    contrib/ydb/library/yql/core
-    contrib/ydb/library/yql/providers/common/proto
-    contrib/ydb/library/yql/providers/common/schema/mkql
+    yql/essentials/core
+    yql/essentials/providers/common/proto
+    yql/essentials/providers/common/schema/mkql
     yql/essentials/utils/backtrace
     yql/essentials/utils/sys
-    contrib/ydb/library/yql/sql/pg_dummy
+    yql/essentials/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

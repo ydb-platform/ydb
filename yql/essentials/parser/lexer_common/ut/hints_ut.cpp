@@ -1,5 +1,5 @@
 #include <yql/essentials/parser/lexer_common/hints.h>
-#include <contrib/ydb/library/yql/sql/v1/lexer/lexer.h>
+#include <yql/essentials/sql/v1/lexer/lexer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

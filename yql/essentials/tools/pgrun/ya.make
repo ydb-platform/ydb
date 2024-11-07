@@ -13,32 +13,32 @@ PEERDIR(
     contrib/libs/fmt
     library/cpp/yson
     library/cpp/yson/node
-    contrib/ydb/library/yql/sql/pg
-    contrib/ydb/library/yql/core/facade
+    yql/essentials/sql/pg
+    yql/essentials/core/facade
     yql/essentials/core/file_storage
     yql/essentials/core/file_storage/proto
     yql/essentials/core/file_storage/http_download
-    contrib/ydb/library/yql/core/services/mounts
+    yql/essentials/core/services/mounts
     yql/essentials/minikql/comp_nodes/llvm14
     yql/essentials/protos
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/utils/backtrace
-    contrib/ydb/library/yql/core
-    contrib/ydb/library/yql/sql/v1/format
-    contrib/ydb/library/yql/providers/common/codec
-    contrib/ydb/library/yql/providers/common/comp_nodes
-    contrib/ydb/library/yql/providers/common/proto
-    contrib/ydb/library/yql/providers/common/provider
-    contrib/ydb/library/yql/providers/common/udf_resolve
+    yql/essentials/core
+    yql/essentials/sql/v1/format
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/comp_nodes
+    yql/essentials/providers/common/proto
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/udf_resolve
     contrib/ydb/library/yql/providers/dq/provider
     contrib/ydb/library/yql/providers/yt/common
     contrib/ydb/library/yql/providers/yt/lib/schema
     contrib/ydb/library/yql/providers/yt/gateway/file
     contrib/ydb/library/yql/providers/yt/comp_nodes/llvm14
     contrib/ydb/library/yql/providers/yt/codec/codegen
-    contrib/ydb/library/yql/providers/pg/provider
-    contrib/ydb/library/yql/core/url_preprocessing
-    contrib/ydb/library/yql/parser/pg_wrapper
+    yql/essentials/providers/pg/provider
+    yql/essentials/core/url_preprocessing
+    yql/essentials/parser/pg_wrapper
 )
 
 YQL_LAST_ABI_VERSION()

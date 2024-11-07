@@ -3,8 +3,8 @@
 
 #include <yql/essentials/minikql/protobuf_udf/ut/protobuf_ut.pb.h>
 
-#include <contrib/ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <contrib/ydb/library/yql/providers/common/codec/yql_codec_buf.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/codec/yql_codec_buf.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>

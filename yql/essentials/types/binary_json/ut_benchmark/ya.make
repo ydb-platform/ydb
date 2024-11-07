@@ -22,7 +22,7 @@ PEERDIR(
     yql/essentials/minikql/invoke_builtins/llvm14
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/core/issue/protos
-    contrib/ydb/library/yql/sql/pg_dummy
+    yql/essentials/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

@@ -12,10 +12,10 @@ PEERDIR(
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/minikql
     yql/essentials/public/udf
-    contrib/ydb/library/yql/providers/common/schema/mkql
-    contrib/ydb/library/yql/providers/common/codec
-    contrib/ydb/library/yql/sql
-    contrib/ydb/library/yql/sql/pg_dummy
+    yql/essentials/providers/common/schema/mkql
+    yql/essentials/providers/common/codec
+    yql/essentials/sql
+    yql/essentials/sql/pg_dummy
     contrib/libs/protobuf
 
     #alice/wonderlogs/protos

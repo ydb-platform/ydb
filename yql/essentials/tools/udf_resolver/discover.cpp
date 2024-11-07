@@ -6,8 +6,8 @@
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_utils.h>
 
-#include <contrib/ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <contrib/ydb/library/yql/providers/common/proto/udf_resolver.pb.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/providers/common/proto/udf_resolver.pb.h>
 
 #include <library/cpp/protobuf/util/pb_io.h>
 

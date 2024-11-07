@@ -5,11 +5,11 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/testing/unittest
     yql/essentials/parser/lexer_common
-    contrib/ydb/library/yql/parser/pg_wrapper
+    yql/essentials/parser/pg_wrapper
     yql/essentials/public/udf/service/stub
-    contrib/ydb/library/yql/sql
-    contrib/ydb/library/yql/sql/pg
-    contrib/ydb/library/yql/sql/v1/format
+    yql/essentials/sql
+    yql/essentials/sql/pg
+    yql/essentials/sql/v1/format
 )
 
 ADDINCL(

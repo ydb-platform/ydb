@@ -5,7 +5,10 @@ RECURSE(
     core
     minikql
     parser
+    protos
+    providers
     public
+    sql
     tools
     types
     udfs

@@ -1,0 +1,31 @@
+package NYql.NProto;
+
+
+message TLabel {
+    optional string Name = 1;
+    optional string Value = 2;
+}
+
+message TBucket {
+    optional double UpperBound = 1;
+    optional int64 Value = 2;
+}
+
+message TCounter {
+    optional TLabel Label = 1;
+    optional int64 Value = 2;
+    optional bool Derivative = 3;
+    repeated TBucket Bucket = 4;
+}
+
+message TCounterGroup {
+    optional TLabel Label = 1;
+    repeated TCounter Counters = 2;
+    repeated TCounterGroup Groups = 3;
+}
+
+message TMetricsRegistrySnapshot {
+    optional TCounterGroup RootGroup = 1;
+    optional bool DontIncrement = 2;
+    optional bool MergeToRoot = 3;
+}

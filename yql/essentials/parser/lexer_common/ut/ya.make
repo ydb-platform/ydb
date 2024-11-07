@@ -1,7 +1,7 @@
 UNITTEST_FOR(yql/essentials/parser/lexer_common)
 
 PEERDIR(
-    contrib/ydb/library/yql/sql/v1/lexer
+    yql/essentials/sql/v1/lexer
 )
 
 

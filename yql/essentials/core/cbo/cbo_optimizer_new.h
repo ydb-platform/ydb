@@ -2,8 +2,8 @@
 
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
-#include <contrib/ydb/library/yql/core/yql_statistics.h>
-#include <contrib/ydb/library/yql/core/yql_cost_function.h>
+#include <yql/essentials/core/yql_statistics.h>
+#include <yql/essentials/core/yql_cost_function.h>
 
 #include <unordered_map>
 #include <memory>

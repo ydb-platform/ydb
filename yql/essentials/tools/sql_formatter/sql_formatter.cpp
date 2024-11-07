@@ -1,4 +1,4 @@
-#include <contrib/ydb/library/yql/sql/v1/format/sql_format.h>
+#include <yql/essentials/sql/v1/format/sql_format.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <google/protobuf/arena.h>

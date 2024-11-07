@@ -22,7 +22,7 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/arrow
     yql/essentials/public/udf/service/exception_policy
-    contrib/ydb/library/yql/sql/pg_dummy
+    yql/essentials/sql/pg_dummy
 )
 
 CFLAGS(

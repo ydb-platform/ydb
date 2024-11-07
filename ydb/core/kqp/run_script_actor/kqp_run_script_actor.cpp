@@ -291,11 +291,30 @@ private:
         PassAway();
     }
 
-    void SaveResult(size_t resultSetId) {
+    bool ShouldSaveResult(size_t resultSetId) const {
         if (SaveResultInflight) {
-            return;
+            return false;
         }
 
+        const TResultSetInfo& resultInfo = ResultSetInfos[resultSetId];
+        if (!resultInfo.PendingResult.rows_size()) {
+            return false;
+        }
+        if (resultInfo.Truncated || !IsExecuting()) {
+            return true;
+        }
+        return resultInfo.PendingResult.rows_size() >= MIN_SAVE_RESULT_BATCH_ROWS || resultInfo.ByteCount - resultInfo.AccumulatedSize >= MIN_SAVE_RESULT_BATCH_SIZE;
+    }
+
+    size_t GetBytesToSave(size_t resultSetId) const {
+        const TResultSetInfo& resultInfo = ResultSetInfos[resultSetId];
+        if (!resultInfo.PendingResult.rows_size()) {
+            return 0;
+        }
+        return resultInfo.ByteCount - resultInfo.AccumulatedSize;
+    }
+
+    void SaveResult(size_t resultSetId) {
         if (!ExpireAt && ResultsTtl > TDuration::Zero()) {
             ExpireAt = TInstant::Now() + ResultsTtl;
         }
@@ -339,6 +358,7 @@ private:
             ResultSetInfos.resize(resultSetIndex + 1);
         }
 
+        bool savedResult = false;
         auto& resultSetInfo = ResultSetInfos[resultSetIndex];
         if (IsExecuting() && !resultSetInfo.Truncated) {
             auto& rowCount = resultSetInfo.RowCount;
@@ -391,6 +411,7 @@ private:
             }
 
             if (ShouldSaveResult(resultSetIndex)) {
+                savedResult = true;
                 SaveResult(resultSetIndex);
             }
         }
@@ -404,6 +425,10 @@ private:
         channel.AckedFreeSpaceBytes = freeSpaceBytes;
         channel.ChannelId = channelId;
         channel.SendAck(SelfId());
+
+        if (!savedResult && SaveResultInflight == 0) {
+            CheckInflight();
+        }
     }
 
     void SaveResultMeta() {
@@ -536,17 +561,12 @@ private:
                 Status = ev->Get()->Status;
                 Issues.AddIssues(ev->Get()->Issues);
             } else {
-                for (size_t resultSetId = 0; resultSetId < ResultSetInfos.size(); ++resultSetId) {
-                    if (ShouldSaveResult(resultSetId)) {
-                        SaveResult(resultSetId);
-                        break;
-                    }
-                }
+                SaveResult();
             }
         }
 
         const i64 freeSpaceBytes = GetFreeSpaceBytes();
-        if (freeSpaceBytes > 0) {
+        if (freeSpaceBytes > 0 && IsExecuting()) {
             for (auto& [channelId, channel] : StreamChannels) {
                 if (channel.ResumeIfStopped(SelfId(), freeSpaceBytes)) {
                     LOG_D("Resume execution, "
@@ -578,21 +598,39 @@ private:
     }
 
     void CheckInflight() {
-        if (Status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED || (Status == Ydb::StatusIds::SUCCESS && RunState == ERunState::Finishing && (SaveResultMetaInflight || SaveResultInflight))) {
-            // waiting for script completion
+        if (SaveResultMetaInflight || SaveResultInflight) {
             return;
         }
 
-        if (PendingResultSetsSize) {
-            // Complete results saving
-            SaveResult();
-            return;
-        }
-
-        if (!LeaseUpdateQueryRunning) {
-            RunScriptExecutionFinisher();
+        const int freeSpaceBytes = GetFreeSpaceBytes();
+        if (freeSpaceBytes < 0 && IsExecuting()) {
+            // try to free the space
+            size_t maxBytesToSave = 0;
+            size_t maxResultSet = 0;
+            for (size_t resultSetId = 0; resultSetId < ResultSetInfos.size(); ++resultSetId) {
+                if (size_t bytesToSave = GetBytesToSave(resultSetId); bytesToSave > maxBytesToSave) {
+                    maxBytesToSave = bytesToSave;
+                    maxResultSet = resultSetId;
+                }
+            }
+            SaveResult(maxResultSet);
         } else {
-            FinishAfterLeaseUpdate = true;
+            if (Status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED || IsExecuting()) {
+                // waiting for script completion
+                return;
+            }
+
+            if (PendingResultSetsSize) {
+                // Complete results saving
+                SaveResult();
+                return;
+            }
+
+            if (!LeaseUpdateQueryRunning) {
+                RunScriptExecutionFinisher();
+            } else {
+                FinishAfterLeaseUpdate = true;
+            }
         }
     }
 
@@ -620,17 +658,6 @@ private:
             && RunState != ERunState::Finishing
             && RunState != ERunState::Cancelled
             && RunState != ERunState::Cancelling;
-    }
-
-    bool ShouldSaveResult(size_t resultSetId) const {
-        const TResultSetInfo& resultInfo = ResultSetInfos[resultSetId];
-        if (!resultInfo.PendingResult.rows_size()) {
-            return false;
-        }
-        if (resultInfo.Truncated || !IsExecuting()) {
-            return true;
-        }
-        return resultInfo.PendingResult.rows_size() >= MIN_SAVE_RESULT_BATCH_ROWS || resultInfo.ByteCount - resultInfo.AccumulatedSize >= MIN_SAVE_RESULT_BATCH_SIZE;
     }
 
     i64 GetFreeSpaceBytes() const {

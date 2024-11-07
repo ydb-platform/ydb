@@ -11,7 +11,6 @@
 #include "flat_util_misc.h"
 #include "util_fmt_abort.h"
 
-#include <ydb/core/tablet_flat/flat_stat_table.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr {

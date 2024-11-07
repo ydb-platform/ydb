@@ -1963,6 +1963,10 @@ namespace {
         return true;
     }
 
+    bool StoreTierInterval(
+        const TRule_unary_subexpr& from, std::vector<TTtlSettings::TTierSettings>& to, TContext& ctx, TTranslation& txc) {
+        const TString intervalFunction = Id(from.GetRule_id_expr1(), txc);
+
     bool StoreTierSettings(
         const TRule_ttl_tier_entry& from, std::vector<TTtlSettings::TTierSettings>& to, TContext& ctx, TTranslation& txc) {
         const TString intervalFunction = Id(from.GetRule_id_expr1(), txc);
@@ -1998,12 +2002,15 @@ namespace {
         switch (from.Alt_case()) {
         case TRule_table_setting_value::kAltTableSettingValue5: {
             auto columnName = IdEx(from.GetAlt_table_setting_value5().GetRule_an_id3(), txc);
-            auto tiersBlock = from.GetAlt_table_setting_value5().GetBlock1();
+            auto tiersLiteral = from.GetAlt_table_setting_value5().GetRule_ttl_tier_list1();
 
             std::vector<TTtlSettings::TTierSettings> tiers;
-            switch (tiersBlock.Alt_case()) {
+            if (tiersLiteral.HasBlock2()) {
+                tiers.emp
+            }
+            switch (tiersLiteral.Alt_case()) {
             case TRule_table_setting_value_TAlt5_TBlock1::kAlt1: {
-                auto exprNode = expr.Build(tiersBlock.GetAlt1().GetRule_expr1());
+                auto exprNode = expr.Build(tiersLiteral.GetAlt1().GetRule_expr1());
                 if (!exprNode) {
                     return false;
                 }

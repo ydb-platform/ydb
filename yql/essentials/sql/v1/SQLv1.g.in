@@ -797,8 +797,11 @@ table_setting_value:
     | ttl_tier_list ON an_id (AS (SECONDS | MILLISECONDS | MICROSECONDS | NANOSECONDS))?
 ;
 
-ttl_tier_entry: unary_subexpr (TO an_id | DELETE);
-ttl_tier_list: ttl_tier_entry (COMMA ttl_tier_entry)*;
+ttl_tier_list: unary_subexpr (ttl_tier_action (COMMA unary_subexpr ttl_tier_action)*)?;
+ttl_tier_action:
+      TO an_id
+    | DELETE
+;
 
 family_entry: FAMILY an_id family_settings;
 family_settings: LPAREN (family_settings_entry (COMMA family_settings_entry)*)? RPAREN;

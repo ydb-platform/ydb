@@ -175,4 +175,5 @@ message TFeatureFlags {
     optional bool EnableFollowerStats = 150 [default = true];
     optional bool EnableTopicAutopartitioningForReplication = 151 [default = false];
     optional bool EnableDriveSerialsDiscovery = 152 [default = false];
+    optional bool EnableSeparateDiskSpaceQuotas = 153 [default = false];
 }

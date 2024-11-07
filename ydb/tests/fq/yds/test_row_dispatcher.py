@@ -296,7 +296,7 @@ class TestPqRowDispatcher(TestYdsBase):
         stop_yds_query(client, query_id)
 
     @yq_v1
-    def test_filters(self, kikimr, client):
+    def test_filters_non_optional_field(self, kikimr, client):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
@@ -316,6 +316,36 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `data` = \\"hello2\\"')
         filter = ' event IS NOT DISTINCT FROM "event2"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS NOT DISTINCT FROM \\"event2\\"')
+        filter = ' event IS DISTINCT FROM "event1"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS DISTINCT FROM \\"event1\\"')
+        filter = ' event IS DISTINCT FROM "event1"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS DISTINCT FROM \\"event1\\"')
+        filter = 'event IN ("event2")'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IN (\\"event2\\")')
+        filter = 'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IN (\\"1\\"')
+
+    @yq_v1
+    def test_filters_optional_field(self, kikimr, client):
+        client.create_yds_connection(
+            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
+        )
+        self.init_topics("test_filter")
+
+        sql = Rf'''
+            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
+            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String, event String)) WHERE '''
+        data = [
+            '{"time": 101, "data": "hello1", "event": "event1"}',
+            '{"time": 102, "data": "hello2", "event": "event2"}']
+        expected = ['102']
+        filter = 'data = "hello2"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `data` = \\"hello2\\"')
+        filter = ' event IS NOT DISTINCT FROM "event2"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS NOT DISTINCT FROM \\"event2\\"')
+        filter = ' event IS DISTINCT FROM "event1"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS DISTINCT FROM \\"event1\\"')
         filter = ' event IS DISTINCT FROM "event1"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS DISTINCT FROM \\"event1\\"')
         filter = 'event IN ("event2")'

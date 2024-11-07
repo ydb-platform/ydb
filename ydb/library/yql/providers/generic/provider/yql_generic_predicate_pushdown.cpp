@@ -168,6 +168,17 @@ namespace NYql {
             return true;
         }
 
+        bool SerializeIsNotDistinctFrom(const TExprBase& predicate, TPredicate* predicateProto, const TCoArgument& arg, TStringBuilder& err, bool invert) {
+            if (predicate.Ref().ChildrenSize() != 2 ) {
+                err << "unknown predicate, children size " << predicate.Ref().ChildrenSize();
+                return false;
+            }
+            TPredicate::TComparison* proto = predicateProto->mutable_comparison();
+            proto->set_operation(!invert ? TPredicate::TComparison::IND : TPredicate::TComparison::ID);
+            return SerializeExpression(TExprBase(predicate.Ref().Child(0)), proto->mutable_left_value(), arg, err)
+                && SerializeExpression(TExprBase(predicate.Ref().Child(1)), proto->mutable_right_value(), arg, err);
+        }
+
         bool SerializeAnd(const TCoAnd& andExpr, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err) {
             auto* dstProto = proto->mutable_conjunction();
             for (const auto& child : andExpr.Ptr()->Children()) {
@@ -204,27 +215,24 @@ namespace NYql {
         bool SerializePredicate(const TExprBase& predicate, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err) {
             if (auto compare = predicate.Maybe<TCoCompare>()) {
                 return SerializeCompare(compare.Cast(), proto, arg, err);
-            }
-            if (auto coalesce = predicate.Maybe<TCoCoalesce>()) {
+            } else if (auto coalesce = predicate.Maybe<TCoCoalesce>()) {
                 return SerializeCoalesce(coalesce.Cast(), proto, arg, err);
-            }
-            if (auto andExpr = predicate.Maybe<TCoAnd>()) {
+            } else if (auto andExpr = predicate.Maybe<TCoAnd>()) {
                 return SerializeAnd(andExpr.Cast(), proto, arg, err);
-            }
-            if (auto orExpr = predicate.Maybe<TCoOr>()) {
+            } else if (auto orExpr = predicate.Maybe<TCoOr>()) {
                 return SerializeOr(orExpr.Cast(), proto, arg, err);
-            }
-            if (auto notExpr = predicate.Maybe<TCoNot>()) {
+            } else if (auto notExpr = predicate.Maybe<TCoNot>()) {
                 return SerializeNot(notExpr.Cast(), proto, arg, err);
-            }
-            if (auto member = predicate.Maybe<TCoMember>()) {
+            } else if (auto member = predicate.Maybe<TCoMember>()) {
                 return SerializeMember(member.Cast(), proto, arg, err);
-            }
-            if (auto exists = predicate.Maybe<TCoExists>()) {
+            } else if (auto exists = predicate.Maybe<TCoExists>()) {
                 return SerializeExists(exists.Cast(), proto, arg, err);
-            }
-            if (auto sqlIn = predicate.Maybe<TCoSqlIn>()) {
+            } else if (auto sqlIn = predicate.Maybe<TCoSqlIn>()) {
                 return SerializeSqlIn(sqlIn.Cast(), proto, arg, err);
+            } else if (predicate.Ref().IsCallable("IsNotDistinctFrom")) {
+                return SerializeIsNotDistinctFrom(predicate, proto, arg, err, false);
+            } else if (predicate.Ref().IsCallable("IsDistinctFrom")) {
+                return SerializeIsNotDistinctFrom(predicate, proto, arg, err, true);
             }
 
             err << "unknown predicate: " << predicate.Raw()->Content();

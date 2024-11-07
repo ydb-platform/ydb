@@ -124,7 +124,7 @@ public:
     }
 
     std::shared_ptr<TGranuleMeta> RegisterTable(
-        const ui64 pathId, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex) {
+        const ui64 pathId, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex, const std::shared_ptr<TVersionCounters>& versionCounters) {
         auto infoEmplace = Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, *this, counters, versionedIndex, versionCounters));
         AFL_VERIFY(infoEmplace.second);
         DataAccessorsManager->RegisterController(infoEmplace.first->second->BuildDataAccessor());

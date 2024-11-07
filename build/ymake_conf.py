@@ -1640,6 +1640,7 @@ class Linker(object):
     BFD = 'bfd'
     LLD = 'lld'
     GOLD = 'gold'
+    MOLD = 'mold'
 
     def __init__(self, tc, build):
         """
@@ -1651,6 +1652,9 @@ class Linker(object):
         self.type = self._get_default_linker_type()
 
     def _get_default_linker_type(self):
+        if (self.build.host.is_linux or self.build.host.is_macos) and is_positive('USE_MOLD_LINKER'):
+            return Linker.MOLD
+
         if not self.tc.is_from_arcadia or is_positive('EXPORT_CMAKE'):
             # External (e.g. system) toolchain: disable linker selection logic
             return None

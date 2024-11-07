@@ -5,7 +5,8 @@ allowCustomResources: true
 resources:
   style:
     - _assets/tags.css   
-
+search:
+  provider: local
 docs-viewer:
   project-name: ydb
   # no-index: true # Remove this after the public release

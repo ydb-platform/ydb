@@ -9,22 +9,24 @@ commit;
 
 select
     DateTime::StartOfYear(`tztimestamp`),
-
     DateTime::StartOfQuarter(`tztimestamp`),
-
     DateTime::StartOfMonth(`tztimestamp`),
-
     DateTime::StartOfWeek(`tztimestamp`),
-
     DateTime::StartOfDay(`tztimestamp`),
 
     DateTime::StartOf(`tztimestamp`, Interval("PT13H")),
-
     DateTime::StartOf(`tztimestamp`, Interval("PT4H")),
     DateTime::StartOf(`tztimestamp`, Interval("PT15M")),
     DateTime::StartOf(`tztimestamp`, Interval("PT20S")),
     DateTime::StartOf(`tztimestamp`, Interval("PT7S")),
-    DateTime::TimeOfDay(`tztimestamp`),
 
+    DateTime::TimeOfDay(`tztimestamp`)
+from @t;
+
+select
+    DateTime::EndOfYear(`tztimestamp`),
+    DateTime::EndOfQuarter(`tztimestamp`),
     DateTime::EndOfMonth(`tztimestamp`),
+    DateTime::EndOfWeek(`tztimestamp`),
+    DateTime::EndOfDay(`tztimestamp`)
 from @t;

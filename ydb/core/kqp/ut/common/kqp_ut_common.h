@@ -167,9 +167,9 @@ public:
 
     NYdb::TDriverConfig GetDriverConfig() const { return DriverConfig; }
 
-    NYdb::NTable::TTableClient GetTableClient(
-        NYdb::NTable::TClientSettings settings = NYdb::NTable::TClientSettings()) const {
-        return NYdb::NTable::TTableClient(*Driver, settings);
+    NYdb::NTable::TTableClient GetTableClient() const {
+        return NYdb::NTable::TTableClient(*Driver, NYdb::NTable::TClientSettings()
+            .UseQueryCache(false));
     }
 
     NYdb::NQuery::TQueryClient GetQueryClient(

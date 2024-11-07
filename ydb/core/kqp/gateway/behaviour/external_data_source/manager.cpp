@@ -61,7 +61,7 @@ TConclusionStatus FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDat
 
     std::optional<TString> userId;
     if (context.GetExternalData().GetUserToken()) {
-        context.GetExternalData().GetUserToken()->GetUserSID();
+        userId = context.GetExternalData().GetUserToken()->GetUserSID();
     }
     TString authMethod = GetOrEmpty(settings, "auth_method");
     if (authMethod == "NONE") {
@@ -84,16 +84,18 @@ TConclusionStatus FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDat
         auto& aws = *externaDataSourceDesc.MutableAuth()->MutableAws();
         {
             NMetadata::NSecret::TSecretId secretId;
-            if (!DeserializeSecretId(GetOrEmpty(settings, "aws_access_key_id_secret_name"), secretId, userId)) {
-                return TConclusionStatus::Fail("Cannot parse secret at aws_access_key_id_secret_name");
+            const TString secretDescription = GetOrEmpty(settings, "aws_access_key_id_secret_name");
+            if (!DeserializeSecretId(secretDescription, secretId, userId)) {
+                return TConclusionStatus::Fail("Cannot parse secret at aws_access_key_id_secret_name: " + secretDescription);
             }
             aws.SetAwsAccessKeyIdSecretName(secretId.GetSecretId());
             aws.SetAwsAccessKeyIdSecretOwner(secretId.GetOwnerUserId());
         }
         {
             NMetadata::NSecret::TSecretId secretId;
-            if (!DeserializeSecretId(GetOrEmpty(settings, "aws_secret_access_key_secret_name"), secretId, userId)) {
-                return TConclusionStatus::Fail("Cannot parse secret at aws_secret_access_key_secret_name");
+            const TString secretDescription = GetOrEmpty(settings, "aws_secret_access_key_secret_name");
+            if (!DeserializeSecretId(secretDescription, secretId, userId)) {
+                return TConclusionStatus::Fail("Cannot parse secret at aws_secret_access_key_secret_name: " + secretDescription);
             }
             aws.SetAwsSecretAccessKeySecretName(secretId.GetSecretId());
             aws.SetAwsSecretAccessKeySecretOwner(secretId.GetOwnerUserId());

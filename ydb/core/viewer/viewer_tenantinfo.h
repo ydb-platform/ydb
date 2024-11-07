@@ -227,6 +227,13 @@ public:
                     NavigateKeySetResult[path] = MakeRequestSchemeCacheNavigate(path);
                 }
             }
+            if (getTenantStatusResult.has_serverless_resources()) {
+                tenant.SetType(NKikimrViewer::Serverless);
+                TString sharedPath = getTenantStatusResult.serverless_resources().shared_database_path();
+                if (NavigateKeySetResult.count(sharedPath) == 0) {
+                    NavigateKeySetResult[sharedPath] = MakeRequestSchemeCacheNavigate(sharedPath);
+                }
+            }
             for (const Ydb::Cms::StorageUnits& unit : getTenantStatusResult.allocated_resources().storage_units()) {
                 NKikimrViewer::TTenantResource& resource = *tenant.MutableResources()->AddAllocated();
                 resource.SetType("storage");
@@ -388,11 +395,7 @@ public:
                 }
                 NKikimrViewer::TTenant& tenant = TenantBySubDomainKey[domainInfo->DomainKey];
                 if (domainInfo->ResourcesDomainKey != domainInfo->DomainKey) {
-                    NKikimrViewer::TTenant& sharedTenant = TenantBySubDomainKey[domainInfo->ResourcesDomainKey];
-                    if (sharedTenant.GetType() != NKikimrViewer::Shared) {
-                        sharedTenant.SetType(NKikimrViewer::Shared);
-                        RequestSchemeCacheNavigate(domainInfo->ResourcesDomainKey);
-                    }
+
                     tenant.SetType(NKikimrViewer::Serverless);
                     tenant.SetResourceId(GetDomainId(domainInfo->ResourcesDomainKey));
                 }
@@ -439,8 +442,10 @@ public:
             Subscribers.insert(activeNode);
             std::optional<TActorId> cache = MakeDatabaseMetadataCacheId(activeNode);
             if (MetadataCacheRequested.insert(ev->Get()->Path).second) {
-                SelfCheckResults[activeNode] = MakeRequest<NHealthCheck::TEvSelfCheckResultProto>(*cache, new NHealthCheck::TEvSelfCheckRequestProto,
-                    IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
+                if (SelfCheckResults.count(activeNode) == 0) {
+                    SelfCheckResults[activeNode] = MakeRequest<NHealthCheck::TEvSelfCheckResultProto>(*cache, new NHealthCheck::TEvSelfCheckRequestProto,
+                        IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
+                }
             }
         }
         RequestDone();

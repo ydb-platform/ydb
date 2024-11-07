@@ -1,7 +1,5 @@
 #include "mkql_buffer.h"
 
-#include <yql/essentials/utils/rope/rope_over_buffer.h>
-
 namespace NKikimr {
 
 namespace NMiniKQL {
@@ -46,10 +44,11 @@ void TPagedBuffer::AppendPage() {
     Tail_ = page->Data();
 }
 
-TRope TPagedBuffer::AsRope(const TConstPtr& buffer) {
-    TRope result;
+using NYql::TChunkedBuffer;
+TChunkedBuffer TPagedBuffer::AsChunkedBuffer(const TConstPtr& buffer) {
+    TChunkedBuffer result;
     buffer->ForEachPage([&](const char* data, size_t size) {
-        result.Insert(result.End(), NYql::MakeReadOnlyRope(buffer, data, size));
+        result.Append(TStringBuf(data, size), buffer);
     });
 
     return result;

@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <contrib/ydb/library/actors/util/rope.h>
+#include <yql/essentials/utils/chunked_buffer.h>
 
 #include <util/generic/noncopyable.h>
 #include <util/stream/output.h>
@@ -214,7 +214,7 @@ class TPagedBuffer : private TNonCopyable {
         }
     }
 
-    static TRope AsRope(const TConstPtr& buf);
+    static NYql::TChunkedBuffer AsChunkedBuffer(const TConstPtr& buf);
 private:
     void AppendPage();
 

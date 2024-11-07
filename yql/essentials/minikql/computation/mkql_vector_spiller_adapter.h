@@ -4,7 +4,6 @@
 
 #include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/minikql/computation/mkql_spiller.h>
-#include <contrib/ydb/library/actors/util/rope.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 
 namespace NKikimr::NMiniKQL {
@@ -63,7 +62,7 @@ public:
         SaveNextPartOfVector();
     }
 
-    ///Should be used to update async operatrions statuses. 
+    ///Should be used to update async operatrions statuses.
     ///For SpillingData state it will try to spill more content of inner buffer.
     ///ForRestoringData state it will try to load more content of requested vector.
     void Update() {
@@ -125,7 +124,7 @@ public:
     ///Is case if buffer is not ready async write operation will be started.
     void Finalize() {
         MKQL_ENSURE(CurrentVector.empty(), "Internal logic error");
-        if (Buffer.empty()) {
+        if (Buffer.Empty()) {
             State = EState::AcceptingDataRequests;
             return;
         }
@@ -135,12 +134,24 @@ public:
     }
 
 private:
-
-    void CopyRopeToTheEndOfVector(std::vector<T, Alloc>& vec, TRope& rope) {
-        for (auto it = rope.begin(); it != rope.end(); ++it) {
-            const T* data = reinterpret_cast<const T*>(it.ContiguousData());
-            vec.insert(vec.end(), data, data + it.ContiguousSize() / sizeof(T)); // size is always multiple of sizeof(T)
+    class TVectorStream : public IOutputStream {
+    public:
+        explicit TVectorStream(std::vector<T, Alloc>& vec)
+            : Dst_(vec)
+        {
         }
+    private:
+        virtual void DoWrite(const void* buf, size_t len) override {
+            MKQL_ENSURE(len % sizeof(T) == 0, "size should always by multiple of sizeof(T)");
+            const T* data = reinterpret_cast<const T*>(buf);
+            Dst_.insert(Dst_.end(), data, data + len / sizeof(T));
+        }
+        std::vector<T, Alloc>& Dst_;
+    };
+
+    void CopyRopeToTheEndOfVector(std::vector<T, Alloc>& vec, const NYql::TChunkedBuffer& rope, size_t toCopy = std::numeric_limits<size_t>::max()) {
+        TVectorStream out(vec);
+        rope.CopyTo(out, toCopy);
     }
 
     void LoadNextVector() {
@@ -148,10 +159,10 @@ private:
         MKQL_ENSURE(requestedVectorSize >= CurrentVector.size(), "Internal logic error");
         size_t sizeToLoad = (requestedVectorSize - CurrentVector.size()) * sizeof(T);
 
-        if (Buffer.size() >= sizeToLoad) {
+        if (Buffer.Size() >= sizeToLoad) {
             // if all the data for requested vector is ready
-            TRope remainingPartOfVector = Buffer.Extract(Buffer.Position(0), Buffer.Position(sizeToLoad));
-            CopyRopeToTheEndOfVector(CurrentVector, remainingPartOfVector);
+            CopyRopeToTheEndOfVector(CurrentVector, Buffer, sizeToLoad);
+            Buffer.Erase(sizeToLoad);
             State = EState::DataReady;
         } else {
             CopyRopeToTheEndOfVector(CurrentVector, Buffer);
@@ -165,13 +176,13 @@ private:
     }
 
     void AddDataToRope(const T* data, size_t count) {
-        TRope tmp = TRope::Uninitialized(count * sizeof(T));
-        TRopeUtils::Memcpy(tmp.begin(), reinterpret_cast<const char*>(data), count * sizeof(T));
-        Buffer.Insert(Buffer.End(), std::move(tmp));
+        auto owner = std::make_shared<std::vector<T>>(data, data + count);
+        TStringBuf buf(reinterpret_cast<const char *>(owner->data()), count * sizeof(T));
+        Buffer.Append(buf, owner);
     }
 
     void SaveNextPartOfVector() {
-        size_t maxFittingElemets = (SizeLimit - Buffer.size()) / sizeof(T);
+        size_t maxFittingElemets = (SizeLimit - Buffer.Size()) / sizeof(T);
         size_t remainingElementsInVector = CurrentVector.size() - NextVectorPositionToSave;
         size_t elementsToCopyFromVector = std::min(maxFittingElemets, remainingElementsInVector);
 
@@ -183,7 +194,7 @@ private:
             NextVectorPositionToSave = 0;
         }
 
-        if (SizeLimit - Buffer.size() < sizeof(T)) {
+        if (SizeLimit - Buffer.Size() < sizeof(T)) {
             SaveBuffer();
             return;
         }
@@ -193,20 +204,20 @@ private:
 
 private:
     EState State = EState::AcceptingData;
-     
+
     ISpiller::TPtr Spiller;
     const size_t SizeLimit;
-    TRope Buffer;
+    NYql::TChunkedBuffer Buffer;
 
     // Used to store vector while spilling and also used while restoring the data
     std::vector<T, Alloc> CurrentVector;
     size_t NextVectorPositionToSave = 0;
 
-    std::queue<ISpiller::TKey> StoredChunks; 
+    std::queue<ISpiller::TKey> StoredChunks;
     std::queue<size_t> StoredChunksElementsCount;
 
     std::optional<NThreading::TFuture<ISpiller::TKey>> WriteOperation = std::nullopt;
-    std::optional<NThreading::TFuture<std::optional<TRope>>> ReadOperation = std::nullopt;
+    std::optional<NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>> ReadOperation = std::nullopt;
 
     bool IsFinalizing = false;
 };

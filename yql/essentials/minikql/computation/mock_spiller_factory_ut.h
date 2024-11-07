@@ -5,8 +5,6 @@
 
 namespace NKikimr::NMiniKQL {
 
-using namespace NActors;
-
 class TMockSpillerFactory : public ISpillerFactory
 {
 public:

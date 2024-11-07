@@ -10,7 +10,7 @@
 #include <yql/essentials/public/udf/udf_value.h>
 
 #include <library/cpp/enumbitset/enumbitset.h>
-#include <contrib/ydb/library/actors/util/rope.h>
+#include <yql/essentials/utils/chunked_buffer.h>
 
 #include <util/stream/output.h>
 #include <util/generic/buffer.h>
@@ -83,7 +83,7 @@ public:
     TSelf& AddItem(const NUdf::TUnboxedValuePod& value);
     TSelf& AddWideItem(const NUdf::TUnboxedValuePod* values, ui32 count);
     size_t PackedSizeEstimate() const {
-        return IsBlock_ ? BlockBuffer_.size() : (Buffer_ ? (Buffer_->Size() + Buffer_->ReservedHeaderSize()) : 0);
+        return IsBlock_ ? BlockBuffer_.Size() : (Buffer_ ? (Buffer_->Size() + Buffer_->ReservedHeaderSize()) : 0);
     }
 
     bool IsEmpty() const {
@@ -91,20 +91,20 @@ public:
     }
 
     void Clear();
-    TRope Finish();
+    NYql::TChunkedBuffer Finish();
 
     // Pack()/Unpack() will pack/unpack single value of type T
-    TRope Pack(const NUdf::TUnboxedValuePod& value) const;
-    NUdf::TUnboxedValue Unpack(TRope&& buf, const THolderFactory& holderFactory) const;
-    void UnpackBatch(TRope&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const;
+    NYql::TChunkedBuffer Pack(const NUdf::TUnboxedValuePod& value) const;
+    NUdf::TUnboxedValue Unpack(NYql::TChunkedBuffer&& buf, const THolderFactory& holderFactory) const;
+    void UnpackBatch(NYql::TChunkedBuffer&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const;
 private:
     void BuildMeta(TPagedBuffer::TPtr& buffer, bool addItemCount) const;
     void StartPack();
 
     void InitBlocks();
     TSelf& AddWideItemBlocks(const NUdf::TUnboxedValuePod* values, ui32 count);
-    TRope FinishBlocks();
-    void UnpackBatchBlocks(TRope&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const;
+    NYql::TChunkedBuffer FinishBlocks();
+    void UnpackBatchBlocks(NYql::TChunkedBuffer&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const;
 
     const TType* const Type_;
     ui64 ItemCount_ = 0;
@@ -120,7 +120,7 @@ private:
     TVector<std::unique_ptr<IBlockSerializer>> BlockSerializers_;
     TVector<std::unique_ptr<IBlockReader>> BlockReaders_;
     TVector<std::shared_ptr<arrow::ArrayData>> ConvertedScalars_;
-    TRope BlockBuffer_;
+    NYql::TChunkedBuffer BlockBuffer_;
 
     TVector<std::unique_ptr<IBlockDeserializer>> BlockDeserializers_;
 };

@@ -5,9 +5,9 @@
 #include <yql/essentials/minikql/pack_num.h>
 #include <yql/essentials/public/decimal/yql_decimal_serialize.h>
 #include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/utils/chunked_buffer.h>
 
 #include <library/cpp/packedtypes/zigzag.h>
-#include <contrib/ydb/library/actors/util/rope.h>
 
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
@@ -69,14 +69,14 @@ void PackDecimal(NYql::NDecimal::TInt128 val, TBuf& buf) {
 
 class TChunkedInputBuffer : private TNonCopyable {
 public:
-    explicit TChunkedInputBuffer(TRope&& rope)
+    explicit TChunkedInputBuffer(NYql::TChunkedBuffer&& rope)
         : Rope_(std::move(rope))
     {
         Next();
     }
 
     explicit TChunkedInputBuffer(TStringBuf input)
-        : Rope_(TRope{})
+        : Rope_(NYql::TChunkedBuffer{})
         , Data_(input.data())
         , Len_(input.size())
     {
@@ -117,24 +117,24 @@ public:
         }
     }
 
-    inline TRope ReleaseRope() {
+    inline NYql::TChunkedBuffer ReleaseRope() {
         Y_DEBUG_ABORT_UNLESS(OriginalLen_ >= Len_);
-        Rope_.EraseFront(OriginalLen_ - Len_);
-        TRope result = std::move(Rope_);
+        Rope_.Erase(OriginalLen_ - Len_);
+        NYql::TChunkedBuffer result = std::move(Rope_);
 
         Data_ = nullptr;
         Len_ = OriginalLen_ = 0;
-        Rope_.clear();
+        Rope_.Clear();
 
         return result;
     }
 
     void Next() {
         Y_DEBUG_ABORT_UNLESS(Len_ == 0);
-        Rope_.EraseFront(OriginalLen_);
-        if (!Rope_.IsEmpty()) {
-            Len_ = OriginalLen_ = Rope_.begin().ContiguousSize();
-            Data_ = Rope_.begin().ContiguousData();
+        Rope_.Erase(OriginalLen_);
+        if (!Rope_.Empty()) {
+            Len_ = OriginalLen_ = Rope_.Front().Buf.size();
+            Data_ = Rope_.Front().Buf.data();
             Y_DEBUG_ABORT_UNLESS(Len_ > 0);
         } else {
             Len_ = OriginalLen_ = 0;
@@ -157,7 +157,7 @@ private:
         }
     }
 
-    TRope Rope_;
+    NYql::TChunkedBuffer Rope_;
     const char* Data_ = nullptr;
     size_t Len_ = 0;
     size_t OriginalLen_ = 0;

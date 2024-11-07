@@ -20,6 +20,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 using NYql::EnsureDynamicCast;
+using NYql::TChunkedBuffer;
 
 extern TStatKey Combine_FlushesCount;
 extern TStatKey Combine_MaxRowsCount;
@@ -340,7 +341,7 @@ private:
 class TSpillingSupportState : public TComputationValue<TSpillingSupportState> {
     typedef TComputationValue<TSpillingSupportState> TBase;
     typedef std::optional<NThreading::TFuture<ISpiller::TKey>> TAsyncWriteOperation;
-    typedef std::optional<NThreading::TFuture<std::optional<TRope>>> TAsyncReadOperation;
+    typedef std::optional<NThreading::TFuture<std::optional<TChunkedBuffer>>> TAsyncReadOperation;
 
     struct TSpilledBucket {
         std::unique_ptr<TWideUnboxedValuesSpillerAdapter> SpilledState; //state collected before switching to spilling mode
@@ -632,7 +633,7 @@ private:
                     if (!bucket.AsyncWriteOperation->HasValue()) return true;
                     bucket.SpilledState->AsyncWriteCompleted(bucket.AsyncWriteOperation->ExtractValue());
                     bucket.AsyncWriteOperation = std::nullopt;
-                }                
+                }
 
                 bucket.AsyncWriteOperation = bucket.SpilledState->FinishWriting();
                 if (bucket.AsyncWriteOperation) return true;

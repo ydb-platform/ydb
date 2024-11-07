@@ -24,7 +24,6 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/udf
     yql/essentials/utils
-    yql/essentials/utils/rope
     library/cpp/threading/future
 )
 
@@ -39,7 +38,7 @@ COPY(
     AUTO
     FROM ${ORIG_SRC_DIR}
     ${ORIG_SOURCES}
-    OUTPUT_INCLUDES 
+    OUTPUT_INCLUDES
         ${BINDIR}/yql/essentials/minikql/computation/mkql_llvm_base.h
         ${BINDIR}/yql/essentials/minikql/computation/mkql_computation_node_codegen.h
 )

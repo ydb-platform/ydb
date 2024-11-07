@@ -72,7 +72,6 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/tz
     yql/essentials/utils
-    yql/essentials/utils/rope
     yql/essentials/core/sql_types
 )
 

@@ -2,6 +2,8 @@ LIBRARY()
 
 SRCS(
     cast.h
+    chunked_buffer.cpp
+    chunked_buffer.h
     debug_info.cpp
     debug_info.h
     exceptions.cpp
@@ -59,7 +61,6 @@ IF (OPENSOURCE_PROJECT != "yt")
         fetch
         log
         network
-        rope
         signals
         sys
         test_http_server

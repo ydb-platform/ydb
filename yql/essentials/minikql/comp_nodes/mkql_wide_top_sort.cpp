@@ -81,8 +81,9 @@ struct TMyValueCompare {
     const std::vector<TRuntimeKeyInfo> Keys;
 };
 
+using NYql::TChunkedBuffer;
 using TAsyncWriteOperation = std::optional<NThreading::TFuture<ISpiller::TKey>>;
-using TAsyncReadOperation = std::optional<NThreading::TFuture<std::optional<TRope>>>;
+using TAsyncReadOperation = std::optional<NThreading::TFuture<std::optional<TChunkedBuffer>>>;
 using TStorage = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
 
 struct TSpilledData {

@@ -14,7 +14,7 @@ public:
         : NextKey(0)
     {}
 
-    NThreading::TFuture<TKey> Put(TRope&& blob) override {
+    NThreading::TFuture<TKey> Put(NYql::TChunkedBuffer&& blob) override {
         auto promise = NThreading::NewPromise<ISpiller::TKey>();
 
         auto key = NextKey;
@@ -24,8 +24,8 @@ public:
         return promise.GetFuture();;
     }
 
-    NThreading::TFuture<std::optional<TRope>> Get(TKey key) override {
-        auto promise = NThreading::NewPromise<std::optional<TRope>>();
+    NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Get(TKey key) override {
+        auto promise = NThreading::NewPromise<std::optional<NYql::TChunkedBuffer>>();
         if (auto it = Storage.find(key); it != Storage.end()) {
             promise.SetValue(it->second);
         } else {
@@ -35,8 +35,8 @@ public:
         return promise.GetFuture();
     }
 
-    NThreading::TFuture<std::optional<TRope>> Extract(TKey key) override {
-        auto promise = NThreading::NewPromise<std::optional<TRope>>();
+    NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Extract(TKey key) override {
+        auto promise = NThreading::NewPromise<std::optional<NYql::TChunkedBuffer>>();
         if (auto it = Storage.find(key); it != Storage.end()) {
             promise.SetValue(std::move(it->second));
             Storage.erase(it);
@@ -54,7 +54,7 @@ public:
     }
 private:
     ISpiller::TKey NextKey;
-    std::unordered_map<ISpiller::TKey, TRope> Storage;
+    std::unordered_map<ISpiller::TKey, NYql::TChunkedBuffer> Storage;
 };
 inline ISpiller::TPtr CreateMockSpiller() {
     return std::make_shared<TMockSpiller>();

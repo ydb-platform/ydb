@@ -50,7 +50,7 @@ public:
     bool Empty() const {
        return StoredChunks.empty() && !CurrentBatch;
     }
-    std::optional<NThreading::TFuture<std::optional<TRope>>> ExtractWideItem(const TArrayRef<NUdf::TUnboxedValue>& wideItem) {
+    std::optional<NThreading::TFuture<std::optional<NYql::TChunkedBuffer>>> ExtractWideItem(const TArrayRef<NUdf::TUnboxedValue>& wideItem) {
         MKQL_ENSURE(!Empty(), "Internal logic error");
         if (CurrentBatch) {
             auto row = CurrentBatch->Head();
@@ -69,7 +69,7 @@ public:
         }
     }
 
-    void AsyncReadCompleted(TRope&& rope,const THolderFactory& holderFactory ) {
+    void AsyncReadCompleted(NYql::TChunkedBuffer&& rope,const THolderFactory& holderFactory ) {
         //Implementation detail: deserialization is performed in a processing thread
         TUnboxedValueBatch batch(ItemType);
         Packer.UnpackBatch(std::move(rope), holderFactory, batch);

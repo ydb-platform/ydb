@@ -27,6 +27,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+using NYql::TChunkedBuffer;
+
 #ifdef WITH_VALGRIND
 constexpr static size_t PERFORMANCE_COUNT = 0x1000;
 #elif defined(NDEBUG)
@@ -314,8 +316,8 @@ protected:
         TestVariantTypeImpl(PgmBuilder.NewVariantType(tupleType));
     }
 
-    void ValidateEmbeddedLength(TRope buf, const TString& info) {
-        size_t size = buf.GetSize();
+    void ValidateEmbeddedLength(TChunkedBuffer buf, const TString& info) {
+        size_t size = buf.Size();
         TChunkedInputBuffer chunked(std::move(buf));
         return ValidateEmbeddedLength(chunked, size, info);
     }
@@ -352,13 +354,13 @@ protected:
         auto packedValue = packer.Pack(uValue);
         if constexpr (Transport) {
             if (expectedLength) {
-                UNIT_ASSERT_VALUES_EQUAL_C(packedValue.size(), *expectedLength, additionalMsg);
+                UNIT_ASSERT_VALUES_EQUAL_C(packedValue.Size(), *expectedLength, additionalMsg);
             }
             ValidateEmbeddedLength(packedValue, additionalMsg);
             return packer.Unpack(std::move(packedValue), HolderFactory);
         } else {
             if (expectedLength) {
-                UNIT_ASSERT_VALUES_EQUAL_C(packedValue.size(), *expectedLength, additionalMsg);
+                UNIT_ASSERT_VALUES_EQUAL_C(packedValue.Size(), *expectedLength, additionalMsg);
             }
             ValidateEmbeddedLength(packedValue, additionalMsg);
             return packer.Unpack(packedValue, HolderFactory);
@@ -591,7 +593,10 @@ protected:
 
             auto buffer = packer.Pack(value);
 
-            TString packed = buffer.ConvertToString();
+            TString packed;
+            TStringOutput sout(packed);
+            buffer.CopyTo(sout);
+            TStringBuf packedBuf(packed);
 
             if constexpr (Fast) {
                 UNIT_ASSERT_VALUES_EQUAL(packed.size(), 73);
@@ -600,14 +605,14 @@ protected:
             }
 
             for (size_t chunk = 1; chunk < packed.size(); ++chunk) {
-                TString first = packed.substr(0, chunk);
-                TString second = packed.substr(chunk);
+                TStringBuf first = packedBuf.substr(0, chunk);
+                TStringBuf second = packedBuf.substr(chunk);
 
-                TRope result(std::move(first));
-                result.Insert(result.End(), TRope(std::move(second)));
+                TChunkedBuffer result(first, {});
+                result.Append(second, {});
 
-                UNIT_ASSERT_VALUES_EQUAL(result.size(), packed.size());
-                UNIT_ASSERT(!result.IsContiguous());
+                UNIT_ASSERT_VALUES_EQUAL(result.Size(), packed.size());
+                UNIT_ASSERT(result.Size() != result.ContigousSize());
 
                 ValidateTupleValue(packer.Unpack(std::move(result), HolderFactory));
             }
@@ -632,7 +637,7 @@ protected:
 
             auto serialized = packer.Finish();
 
-            auto listObj = listPacker.Unpack(TRope(serialized), HolderFactory);
+            auto listObj = listPacker.Unpack(TChunkedBuffer(serialized), HolderFactory);
             UNIT_ASSERT_VALUES_EQUAL(listObj.GetListLength(), count);
             const auto iter = listObj.GetListIterator();
             for (NUdf::TUnboxedValue uVal; iter.Next(uVal);) {
@@ -666,7 +671,7 @@ protected:
             auto scalarOptStrType = PgmBuilder.NewBlockType(optStrType, TBlockType::EShape::Scalar);
             auto blockOptTupleOptUi32StrType = PgmBuilder.NewBlockType(optTupleOptUi32StrType, TBlockType::EShape::Many);
             auto scalarUi64Type = PgmBuilder.NewBlockType(ui64Type, TBlockType::EShape::Scalar);
-            
+
             auto tzDateType = PgmBuilder.NewDataType(NUdf::EDataSlot::TzDate);
             auto blockTzDateType = PgmBuilder.NewBlockType(tzDateType, TBlockType::EShape::Many);
 
@@ -703,7 +708,7 @@ protected:
                 TBlockItem b3items[] = { (i % 2) ? TBlockItem(i) : TBlockItem(), TBlockItem(a) };
                 TBlockItem b3 = (i % 7) ? TBlockItem(b3items) : TBlockItem();
                 builder3->Add(b3);
-                
+
                 TBlockItem tzDate {i};
                 tzDate.SetTimezoneId(i % 100);
                 builder4->Add(tzDate);
@@ -749,7 +754,7 @@ protected:
             } else {
                 packer.AddWideItem(columns.data(), columns.size());
             }
-            TRope packed = packer.Finish();
+            TChunkedBuffer packed = packer.Finish();
 
             TUnboxedValueBatch unpacked(rowType);
             packer.UnpackBatch(std::move(packed), HolderFactory, unpacked);

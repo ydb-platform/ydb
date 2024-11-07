@@ -4,22 +4,23 @@
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
-#include <yql/essentials/utils/rope/rope_over_buffer.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 namespace NKikimr::NMiniKQL {
 
 namespace {
 
-TRope MakeReadOnlyRopeAndUntrack(const std::shared_ptr<const arrow::Buffer>& owner, const char* data, size_t size) {
+using NYql::TChunkedBuffer;
+
+TChunkedBuffer MakeChunkedBufferAndUntrack(const std::shared_ptr<const arrow::Buffer>& owner, const char* data, size_t size) {
     MKQLArrowUntrack(owner->data());
-    return NYql::MakeReadOnlyRope(owner, data, size);
+    return TChunkedBuffer(TStringBuf{data, size}, owner);
 }
 
 class TOwnedArrowBuffer : public arrow::Buffer {
 public:
-    TOwnedArrowBuffer(TContiguousSpan span, const std::shared_ptr<const void>& owner)
-        : arrow::Buffer(reinterpret_cast<const uint8_t*>(span.Data()), span.Size())
+    TOwnedArrowBuffer(TStringBuf span, const std::shared_ptr<const void>& owner)
+        : arrow::Buffer(reinterpret_cast<const uint8_t*>(span.data()), span.size())
         , Owner_(owner)
     {
     }
@@ -86,7 +87,7 @@ void LoadNullsSizes(const IBlockDeserializer::TMetadataSource& metaSource, TMayb
     nullsSize = metaSource();
 }
 
-void StoreNulls(const arrow::ArrayData& data, TRope& dst) {
+void StoreNulls(const arrow::ArrayData& data, TChunkedBuffer& dst) {
     if (!NeedStoreBitmap(data)) {
         return;
     }
@@ -95,7 +96,7 @@ void StoreNulls(const arrow::ArrayData& data, TRope& dst) {
     YQL_ENSURE(desiredOffset <= (size_t)data.offset);
     YQL_ENSURE((data.offset - desiredOffset) % 8 == 0);
     const char* nulls = data.GetValues<char>(0, 0) + (data.offset - desiredOffset) / 8;
-    dst.Insert(dst.End(), MakeReadOnlyRopeAndUntrack(data.buffers[0], nulls, nullBytes));
+    dst.Append(MakeChunkedBufferAndUntrack(data.buffers[0], nulls, nullBytes));
 }
 
 void LoadBufferSize(const IBlockDeserializer::TMetadataSource& metaSource, TMaybe<ui64>& result) {
@@ -103,30 +104,41 @@ void LoadBufferSize(const IBlockDeserializer::TMetadataSource& metaSource, TMayb
     result = metaSource();
 }
 
-std::shared_ptr<arrow::Buffer> LoadBuffer(TRope& source, TMaybe<ui64> size) {
+std::shared_ptr<arrow::Buffer> LoadBuffer(TChunkedBuffer& source, TMaybe<ui64> size) {
     using namespace NYql::NUdf;
     YQL_ENSURE(size.Defined(), "Buffer size is not loaded");
     if (!*size) {
         return MakeEmptyBuffer();
     }
 
-    YQL_ENSURE(source.size() >= *size, "Premature end of data");
-    auto owner = std::make_shared<TRope>(source.Begin(), source.Begin() + *size);
-    source.EraseFront(*size);
-
-    owner->Compact();
-    auto span = owner->GetContiguousSpan();
-    if (HasArrrowAlignment(span.Data())) {
-        return std::make_shared<TOwnedArrowBuffer>(span, owner);
+    size_t toAppend = *size;
+    const TChunkedBuffer::TChunk& front = source.Front();
+    if (front.Buf.size() >= toAppend && HasArrrowAlignment(front.Buf.data())) {
+        TStringBuf data = source.Front().Buf;
+        data.Trunc(toAppend);
+        auto result = std::make_shared<TOwnedArrowBuffer>(data, source.Front().Owner);
+        source.Erase(toAppend);
+        return result;
     }
 
-    auto result = AllocateResizableBuffer(span.Size(), NYql::NUdf::GetYqlMemoryPool());
-    ARROW_OK(result->Resize((int64_t)span.Size()));
-    std::memcpy(result->mutable_data(), span.Data(), span.Size());
+    auto result = AllocateResizableBuffer(toAppend, NYql::NUdf::GetYqlMemoryPool());
+    ARROW_OK(result->Resize((int64_t)toAppend));
+    uint8_t* dst = result->mutable_data();
+    while (toAppend) {
+        const TChunkedBuffer::TChunk& front = source.Front();
+        TStringBuf buf = front.Buf;
+        YQL_ENSURE(!buf.empty(), "Premature end of buffer");
+        size_t chunk = std::min(toAppend, buf.size());
+        std::memcpy(dst, buf.data(), chunk);
+        dst += chunk;
+        toAppend -= chunk;
+        source.Erase(chunk);
+    }
+
     return result;
 }
 
-std::shared_ptr<arrow::Buffer> LoadNullsBitmap(TRope& source, TMaybe<ui64> nullCount, TMaybe<ui64> bitmapSize) {
+std::shared_ptr<arrow::Buffer> LoadNullsBitmap(TChunkedBuffer& source, TMaybe<ui64> nullCount, TMaybe<ui64> bitmapSize) {
     YQL_ENSURE(nullCount.Defined(), "Bitmap null count is not loaded");
     YQL_ENSURE(bitmapSize.Defined(), "Bitmap size is not loaded");
     if (*nullCount == 0) {
@@ -152,7 +164,7 @@ public:
         DoLoadMetadata(metaSource);
     }
 
-    virtual std::shared_ptr<arrow::ArrayData> LoadArray(TRope& src, ui64 blockLen, ui64 offset) final {
+    virtual std::shared_ptr<arrow::ArrayData> LoadArray(TChunkedBuffer& src, ui64 blockLen, ui64 offset) final {
         YQL_ENSURE(blockLen > 0, "Should be handled earlier");
         std::shared_ptr<arrow::Buffer> nulls;
         i64 nullsCount = 0;
@@ -193,7 +205,7 @@ protected:
     virtual void DoResetMetadata() = 0;
     virtual bool IsNullable() const = 0;
     virtual std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) const = 0;
-    virtual std::shared_ptr<arrow::ArrayData> DoLoadArray(TRope& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) = 0;
+    virtual std::shared_ptr<arrow::ArrayData> DoLoadArray(TChunkedBuffer& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) = 0;
 
     std::shared_ptr<arrow::DataType> ArrowType_;
     TMaybe<ui64> NullsCount_;
@@ -222,7 +234,7 @@ public:
         metaSink(dataBytes);
     }
 
-    void StoreArray(const arrow::ArrayData& data, TRope& dst) const final {
+    void StoreArray(const arrow::ArrayData& data, TChunkedBuffer& dst) const final {
         if constexpr (Nullable) {
             StoreNulls(data, dst);
             if (data.GetNullCount() == data.length) {
@@ -233,7 +245,7 @@ public:
         const ui64 desiredOffset = data.offset % 8;
         const char* buf = reinterpret_cast<const char*>(data.buffers[1]->data()) + (data.offset - desiredOffset) * ObjectSize;
         size_t dataBytes = ((size_t)data.length + desiredOffset) * ObjectSize;
-        dst.Insert(dst.End(), MakeReadOnlyRopeAndUntrack(data.buffers[1], buf, dataBytes));
+        dst.Append(MakeChunkedBufferAndUntrack(data.buffers[1], buf, dataBytes));
     }
 };
 
@@ -255,7 +267,7 @@ private:
         return arrow::ArrayData::Make(ArrowType_, blockLen, { nulls, data }, nullsCount, offset);
     }
 
-    std::shared_ptr<arrow::ArrayData> DoLoadArray(TRope& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
+    std::shared_ptr<arrow::ArrayData> DoLoadArray(TChunkedBuffer& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
         auto data = LoadBuffer(src, DataSize_);
         return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls, data}, nullsCount, offset);
     }
@@ -294,7 +306,7 @@ private:
         metaSink(data.buffers[2]->size());
     }
 
-    void StoreArray(const arrow::ArrayData& data, TRope& dst) const final {
+    void StoreArray(const arrow::ArrayData& data, TChunkedBuffer& dst) const final {
         if constexpr (Nullable) {
             StoreNulls(data, dst);
             if (data.GetNullCount() == data.length) {
@@ -305,11 +317,11 @@ private:
         const ui64 desiredOffset = data.offset % 8;
         const char* offsets = reinterpret_cast<const char*>(data.GetValues<TOffset>(1) - desiredOffset);
         size_t offsetsSize = ((size_t)data.length + 1 + desiredOffset) * sizeof(TOffset);
-        dst.Insert(dst.End(), MakeReadOnlyRopeAndUntrack(data.buffers[1], offsets, offsetsSize));
+        dst.Append(MakeChunkedBufferAndUntrack(data.buffers[1], offsets, offsetsSize));
 
         const char* mainData = reinterpret_cast<const char*>(data.buffers[2]->data());
         size_t mainSize = data.buffers[2]->size();
-        dst.Insert(dst.End(), MakeReadOnlyRopeAndUntrack(data.buffers[2], mainData, mainSize));
+        dst.Append(MakeChunkedBufferAndUntrack(data.buffers[2], mainData, mainSize));
     }
 };
 
@@ -330,7 +342,7 @@ private:
         return arrow::ArrayData::Make(ArrowType_, blockLen, { nulls, offsets, data }, nullsCount, offset);
     }
 
-    std::shared_ptr<arrow::ArrayData> DoLoadArray(TRope& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
+    std::shared_ptr<arrow::ArrayData> DoLoadArray(TChunkedBuffer& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
         auto offsets = LoadBuffer(src, OffsetsSize_);
         auto data = LoadBuffer(src, DataSize_);
         return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls, offsets, data }, nullsCount, offset);
@@ -371,7 +383,7 @@ private:
         }
     }
 
-    void StoreArray(const arrow::ArrayData& data, TRope& dst) const final {
+    void StoreArray(const arrow::ArrayData& data, TChunkedBuffer& dst) const final {
         StoreNulls(data, dst);
         if (data.GetNullCount() != data.length) {
             Inner_->StoreArray(*data.child_data[0], dst);
@@ -396,7 +408,7 @@ private:
         return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls}, { Inner_->MakeDefaultValue(blockLen, offset) }, nullsCount, offset);
     }
 
-    std::shared_ptr<arrow::ArrayData> DoLoadArray(TRope& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
+    std::shared_ptr<arrow::ArrayData> DoLoadArray(TChunkedBuffer& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
         return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls}, { Inner_->LoadArray(src, blockLen, offset) }, nullsCount, offset);
     }
 
@@ -441,7 +453,7 @@ class TTupleBlockSerializerBase : public IBlockSerializer {
         }
     }
 
-    void StoreArray(const arrow::ArrayData& data, TRope& dst) const final {
+    void StoreArray(const arrow::ArrayData& data, TChunkedBuffer& dst) const final {
         if constexpr (Nullable) {
             StoreNulls(data, dst);
         }
@@ -466,7 +478,7 @@ public:
         return result;
     }
 
-    void StoreChildrenMetadata(const std::vector<std::shared_ptr<arrow::ArrayData>>& child_data, 
+    void StoreChildrenMetadata(const std::vector<std::shared_ptr<arrow::ArrayData>>& child_data,
         const IBlockSerializer::TMetadataSink& metaSink) const {
 
         for (size_t i = 0; i < Children_.size(); ++i) {
@@ -474,7 +486,7 @@ public:
         }
     }
 
-    void StoreChildrenArrays(const std::vector<std::shared_ptr<arrow::ArrayData>>& child_data, TRope& dst) const {
+    void StoreChildrenArrays(const std::vector<std::shared_ptr<arrow::ArrayData>>& child_data, TChunkedBuffer& dst) const {
         for (size_t i = 0; i < Children_.size(); ++i) {
             Children_[i]->StoreArray(*child_data[i], dst);
         }
@@ -493,13 +505,13 @@ public:
         return DateSerialiser_.ArrayMetadataCount() + TzSerialiser_.ArrayMetadataCount();
     }
 
-    void StoreChildrenMetadata(const std::vector<std::shared_ptr<arrow::ArrayData>>& child_data, 
+    void StoreChildrenMetadata(const std::vector<std::shared_ptr<arrow::ArrayData>>& child_data,
         const IBlockSerializer::TMetadataSink& metaSink) const {
         DateSerialiser_.StoreMetadata(*child_data[0], metaSink);
         TzSerialiser_.StoreMetadata(*child_data[1], metaSink);
     }
 
-    void StoreChildrenArrays(const std::vector<std::shared_ptr<arrow::ArrayData>>& child_data, TRope& dst) const {
+    void StoreChildrenArrays(const std::vector<std::shared_ptr<arrow::ArrayData>>& child_data, TChunkedBuffer& dst) const {
         DateSerialiser_.StoreArray(*child_data[0], dst);
         TzSerialiser_.StoreArray(*child_data[1], dst);
     }
@@ -533,7 +545,7 @@ private:
         return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls}, std::move(childData), nullsCount, offset);
     }
 
-    std::shared_ptr<arrow::ArrayData> DoLoadArray(TRope& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
+    std::shared_ptr<arrow::ArrayData> DoLoadArray(TChunkedBuffer& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
         std::vector<std::shared_ptr<arrow::ArrayData>> childData;
         for (auto& child : Children_) {
             childData.emplace_back(child->LoadArray(src, blockLen, offset));
@@ -580,7 +592,7 @@ private:
         return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls}, std::move(childData), nullsCount, offset);
     }
 
-    std::shared_ptr<arrow::ArrayData> DoLoadArray(TRope& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
+    std::shared_ptr<arrow::ArrayData> DoLoadArray(TChunkedBuffer& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
         std::vector<std::shared_ptr<arrow::ArrayData>> childData;
         childData.emplace_back(DateDeserialiser_.LoadArray(src, blockLen, offset));
         childData.emplace_back(TzDeserialiser_.LoadArray(src, blockLen, offset));

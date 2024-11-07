@@ -11,12 +11,13 @@
 #include <yql/essentials/minikql/pack_num.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
-#include <yql/essentials/utils/rope/rope_over_buffer.h>
 #include <library/cpp/resource/resource.h>
 #include <yql/essentials/utils/fp_bits.h>
 
 #include <util/system/yassert.h>
 #include <util/system/sanitizers.h>
+
+using NYql::TChunkedBuffer;
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -353,7 +354,7 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
             auto ret = NUdf::TUnboxedValuePod(UnpackData<Fast, i64>(buf));
             ret.SetTimezoneId(UnpackData<Fast, ui16>(buf));
             return ret;
-        }        
+        }
         case NUdf::EDataSlot::Uuid: {
             return UnpackString(buf, 16);
         }
@@ -921,7 +922,7 @@ bool IsUi64Scalar(const TBlockType* blockType) {
     if (!blockType->GetItemType()->IsData()) {
         return false;
     }
-            
+
     return static_cast<const TDataType*>(blockType->GetItemType())->GetDataSlot() == NUdf::EDataSlot::Uint64;
 }
 
@@ -1113,25 +1114,25 @@ void TValuePackerTransport<Fast>::InitBlocks() {
 }
 
 template<bool Fast>
-NUdf::TUnboxedValue TValuePackerTransport<Fast>::Unpack(TRope&& buf, const THolderFactory& holderFactory) const {
+NUdf::TUnboxedValue TValuePackerTransport<Fast>::Unpack(TChunkedBuffer&& buf, const THolderFactory& holderFactory) const {
     MKQL_ENSURE(!IsBlock_, "Unpack() should not be used for blocks");
-    const size_t totalSize = buf.GetSize();
+    const size_t totalSize = buf.Size();
     TChunkedInputBuffer chunked(std::move(buf));
     return DoUnpack<Fast>(Type_, chunked, totalSize, holderFactory, State_);
 }
 
 template<bool Fast>
-void TValuePackerTransport<Fast>::UnpackBatch(TRope&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const {
+void TValuePackerTransport<Fast>::UnpackBatch(TChunkedBuffer&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const {
     if (IsBlock_) {
         return UnpackBatchBlocks(std::move(buf), holderFactory, result);
     }
-    const size_t totalSize = buf.GetSize();
+    const size_t totalSize = buf.Size();
     TChunkedInputBuffer chunked(std::move(buf));
     DoUnpackBatch<Fast>(Type_, chunked, totalSize, holderFactory, IncrementalState_, result);
 }
 
 template<bool Fast>
-TRope TValuePackerTransport<Fast>::Pack(const NUdf::TUnboxedValuePod& value) const {
+TChunkedBuffer TValuePackerTransport<Fast>::Pack(const NUdf::TUnboxedValuePod& value) const {
     MKQL_ENSURE(ItemCount_ == 0, "Can not mix Pack() and AddItem() calls");
     MKQL_ENSURE(!IsBlock_, "Pack() should not be used for blocks");
     TPagedBuffer::TPtr result = std::make_shared<TPagedBuffer>();
@@ -1143,7 +1144,7 @@ TRope TValuePackerTransport<Fast>::Pack(const NUdf::TUnboxedValuePod& value) con
         PackImpl<Fast, false>(Type_, *result, value, State_);
         BuildMeta(result, false);
     }
-    return TPagedBuffer::AsRope(result);
+    return TPagedBuffer::AsChunkedBuffer(result);
 }
 
 template<bool Fast>
@@ -1224,8 +1225,7 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
     PackData<false>(len, *metadataBuffer);
     if (!len) {
         // only block len should be serialized in this case
-        BlockBuffer_.Insert(BlockBuffer_.End(),
-            NYql::MakeReadOnlyRope(metadataBuffer, metadataBuffer->data(), metadataBuffer->size()));
+        BlockBuffer_.Append(TStringBuf(metadataBuffer->data(), metadataBuffer->size()), metadataBuffer);
         ++ItemCount_;
         return *this;
     }
@@ -1253,7 +1253,7 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
         } else {
             MKQL_ENSURE(datum.is_scalar(), "Expecting array or scalar");
             if (!ConvertedScalars_[i]) {
-                const TType* itemType = IsLegacyBlock_ ? static_cast<const TStructType*>(Type_)->GetMemberType(i) : 
+                const TType* itemType = IsLegacyBlock_ ? static_cast<const TStructType*>(Type_)->GetMemberType(i) :
                                                          static_cast<const TMultiType*>(Type_)->GetElementType(i);
                 datum = MakeArrayFromScalar(*datum.scalar(), 1, static_cast<const TBlockType*>(itemType)->GetItemType(), ArrowPool_);
                 MKQL_ENSURE(HasOffset(*datum.array(), 0), "Expected zero array offset after scalar is converted to array");
@@ -1280,8 +1280,7 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
 
     MKQL_ENSURE(savedMetadata == totalMetadataCount, "Serialization metadata error");
 
-    BlockBuffer_.Insert(BlockBuffer_.End(),
-        NYql::MakeReadOnlyRope(metadataBuffer, metadataBuffer->data(), metadataBuffer->size()));
+    BlockBuffer_.Append(TStringBuf(metadataBuffer->data(), metadataBuffer->size()), metadataBuffer);
     // save buffers
     for (size_t i = 0; i < width; ++i) {
         if (i != BlockLenIndex_) {
@@ -1293,8 +1292,8 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
 }
 
 template<bool Fast>
-void TValuePackerTransport<Fast>::UnpackBatchBlocks(TRope&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const {
-    while (!buf.empty()) {
+void TValuePackerTransport<Fast>::UnpackBatchBlocks(TChunkedBuffer&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const {
+    while (!buf.Empty()) {
         TChunkedInputBuffer chunked(std::move(buf));
 
         // unpack block length
@@ -1330,7 +1329,7 @@ void TValuePackerTransport<Fast>::UnpackBatchBlocks(TRope&& buf, const THolderFa
             }
         }
         MKQL_ENSURE(metaCount == 0, "Partial buffers read");
-        TRope ropeTail = chunked.ReleaseRope();
+        TChunkedBuffer ropeTail = chunked.ReleaseRope();
         // unpack buffers
 
         auto producer = [&](ui32 i) {
@@ -1341,7 +1340,7 @@ void TValuePackerTransport<Fast>::UnpackBatchBlocks(TRope&& buf, const THolderFa
                 auto array = BlockDeserializers_[i]->LoadArray(ropeTail, isScalar ? 1 : len, offsets[i]);
                 if (isScalar) {
                     TBlockItem item = BlockReaders_[i]->GetItem(*array, 0);
-                    const TType* itemType = IsLegacyBlock_ ? static_cast<const TStructType*>(Type_)->GetMemberType(i) : 
+                    const TType* itemType = IsLegacyBlock_ ? static_cast<const TStructType*>(Type_)->GetMemberType(i) :
                                                              static_cast<const TMultiType*>(Type_)->GetElementType(i);
                     return holderFactory.CreateArrowBlock(ConvertScalar(static_cast<const TBlockType*>(itemType)->GetItemType(), item, ArrowPool_));
                 }
@@ -1367,12 +1366,12 @@ void TValuePackerTransport<Fast>::UnpackBatchBlocks(TRope&& buf, const THolderFa
 template<bool Fast>
 void TValuePackerTransport<Fast>::Clear() {
     Buffer_.reset();
-    BlockBuffer_.clear();
+    BlockBuffer_.Clear();
     ItemCount_ = 0;
 }
 
 template<bool Fast>
-TRope TValuePackerTransport<Fast>::Finish() {
+TChunkedBuffer TValuePackerTransport<Fast>::Finish() {
     if (IsBlock_) {
         return FinishBlocks();
     }
@@ -1389,12 +1388,12 @@ TRope TValuePackerTransport<Fast>::Finish() {
     }
     TPagedBuffer::TPtr result = std::move(Buffer_);
     Clear();
-    return TPagedBuffer::AsRope(result);
+    return TPagedBuffer::AsChunkedBuffer(result);
 }
 
 template<bool Fast>
-TRope TValuePackerTransport<Fast>::FinishBlocks() {
-    TRope result = std::move(BlockBuffer_);
+TChunkedBuffer TValuePackerTransport<Fast>::FinishBlocks() {
+    TChunkedBuffer result = std::move(BlockBuffer_);
     Clear();
     return result;
 }

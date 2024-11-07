@@ -10,6 +10,7 @@
 #include <ydb/core/testlib/actor_helpers.h>
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/public/purecalc/common/interface.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -22,7 +23,8 @@ class TFixture : public NUnitTest::TBaseFixture {
 
 public:
     TFixture()
-        : Runtime(true)
+        : PureCalcProgramFactory(NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions()))
+        , Runtime(true)
         , Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false)
     {}
 
@@ -55,7 +57,8 @@ public:
             columns,
             types,
             whereFilter,
-            callback);
+            callback,
+            PureCalcProgramFactory);
     }
 
     const NKikimr::NMiniKQL::TUnboxedValueVector* MakeVector(size_t size, std::function<NYql::NUdf::TUnboxedValuePod(size_t)> valueCreator) {
@@ -90,7 +93,7 @@ public:
         });
     }
 
-    TActorSystemStub actorSystemStub;
+    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
     NActors::TTestActorRuntime Runtime;
     std::unique_ptr<NFq::TJsonFilter> Filter;
 

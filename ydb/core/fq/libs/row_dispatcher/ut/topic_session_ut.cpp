@@ -13,6 +13,7 @@
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/public/purecalc/common/interface.h>
 
 namespace {
 
@@ -24,10 +25,11 @@ const ui64 TimeoutBeforeStartSessionSec = 3;
 const ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
 
 class TFixture : public NUnitTest::TBaseFixture {
-
 public:
     TFixture()
-    : Runtime(true) {}
+        : PureCalcProgramFactory(NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions()))
+        , Runtime(true)
+    {}
 
     void SetUp(NUnitTest::TTestContext&) override {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
@@ -68,6 +70,7 @@ public:
             0,
             Driver,
             CredentialsProviderFactory,
+            PureCalcProgramFactory,
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(pqServices)
             ).release());
@@ -155,7 +158,7 @@ public:
         return eventHolder->Get()->Record.MessagesSize();
     }
 
-    TActorSystemStub actorSystemStub;
+    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
     NActors::TTestActorRuntime Runtime;
     NActors::TActorId TopicSession;
     NActors::TActorId RowDispatcherActorId;

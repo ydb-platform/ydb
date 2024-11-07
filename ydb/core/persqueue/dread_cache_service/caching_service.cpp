@@ -169,7 +169,9 @@ private:
         const auto& ctx = ActorContext();
         auto key = MakeSessionKey(ev->Get());
         const auto readId = ev->Get()->ReadKey.ReadId;
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: publish read: " << readId << " for session " << key.SessionId);
+        const auto& generation = ev->Get()->TabletGeneration;
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: publish read: "
+                    << readId << " for session " << key.SessionId << ", Generation: " << generation);
         auto iter = ServerSessions.find(key);
         if (iter.IsEnd()) {
             LOG_ERROR_S(
@@ -179,7 +181,6 @@ private:
             return;
         }
 
-        const auto& generation = ev->Get()->TabletGeneration;
         if (iter->second.Generation != generation)
             return;
 

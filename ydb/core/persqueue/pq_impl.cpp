@@ -180,7 +180,7 @@ private:
     {
         Y_ABORT_UNLESS(Response);
         const auto& record = ev->Get()->Record;
-
+        TStringBuilder log; log << "ReadProxy: " << SelfId().ToString() << " handle response\n";
         if (!record.HasPartitionResponse() || !record.GetPartitionResponse().HasCmdReadResult() ||
             record.GetStatus() != NMsgBusProxy::MSTATUS_OK || record.GetErrorCode() != NPersQueue::NErrorCode::OK ||
             record.GetPartitionResponse().GetCmdReadResult().ResultSize() == 0) {
@@ -2098,7 +2098,17 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TAc
             );
 
         }
-        ctx.Send(partActor, event.Release());
+        if (cmd.GetRestoreSession()) {
+            Y_ABORT_UNLESS(isDirectRead);
+            auto fakeResponse = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie);
+            auto& record = *fakeResponse->Response;
+            record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+            auto& partResponse = *record.MutablePartitionResponse();
+            partResponse.MutableCmdRestoreDirectReadResult();
+            Send(SelfId(), fakeResponse.Release());
+        } else {
+            ctx.Send(partActor, event.Release());
+        }
     }
 }
 
@@ -2473,7 +2483,7 @@ void TPersQueue::HandleReadRequest(
             auto pipeIter = PipesInfo.find(pipeClient);
             if (pipeIter.IsEnd()) {
                 ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
-                           TStringBuilder() << "Read prepare request from unknown(old?) pipe");
+                           TStringBuilder() << "Read prepare request from unknown(old?) pipe: " << pipeClient.ToString());
                 return;
             } else if (cmd.GetSessionId().empty()) {
                 ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION,
@@ -2485,7 +2495,6 @@ void TPersQueue::HandleReadRequest(
                 return;
             }
         }
-
         THolder<TEvPQ::TEvRead> event =
             MakeHolder<TEvPQ::TEvRead>(responseCookie, cmd.GetOffset(), cmd.GetLastOffset(),
                                        cmd.HasPartNo() ? cmd.GetPartNo() : 0,
@@ -2546,7 +2555,8 @@ void TPersQueue::HandlePublishReadRequest(
     publishDoneEvent->Response->SetStatus(NMsgBusProxy::MSTATUS_OK);
     publishDoneEvent->Response->SetErrorCode(NPersQueue::NErrorCode::OK);
 
-    publishDoneEvent->Response->MutablePartitionResponse()->MutableCmdPublishReadResult();
+    auto* publishRes = publishDoneEvent->Response->MutablePartitionResponse()->MutableCmdPublishReadResult();
+    publishRes->SetDirectReadId(key.ReadId);
     ctx.Send(SelfId(), publishDoneEvent.Release());
 
     LOG_DEBUG_S(
@@ -2909,6 +2919,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
             directKey.SessionId = pipeIter->second.SessionId;
             directKey.PartitionSessionId = pipeIter->second.PartitionSessionId;
         }
+        TStringBuilder log; log << "PQ - create read proxy" << Endl;
         TActorId rr = CreateReadProxy(ev->Sender, ctx.SelfID, GetGeneration(), directKey, request, ctx);
         ans = CreateResponseProxy(rr, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
     } else {
@@ -2984,7 +2995,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     }
 
     const TActorId& partActor = it->second.Actor;
-
     if (req.HasCmdGetMaxSeqNo()) {
         HandleGetMaxSeqNoRequest(responseCookie, partActor, req, ctx);
     } else if (req.HasCmdDeleteSession()) {

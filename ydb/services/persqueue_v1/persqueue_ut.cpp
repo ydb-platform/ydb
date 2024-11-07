@@ -1,5 +1,6 @@
 #include "actors/read_session_actor.h"
 #include "actors/helpers.h"
+#include <cmath>
 #include <ydb/services/persqueue_v1/ut/pq_data_writer.h>
 #include <ydb/services/persqueue_v1/ut/api_test_setup.h>
 #include <ydb/services/persqueue_v1/ut/rate_limiter_test_setup.h>
@@ -786,6 +787,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         std::unique_ptr<Service::Stub> Stub;
         THolder<grpc::ClientContext> ControlContext;
         THolder<grpc::ClientContext> DirectContext;
+        NPersQueue::TTestServer* Server;
+        TAtomicCounter ForgetReadsDone = 0;
 
     public:
         std::unique_ptr<grpc::ClientReaderWriter<Topic::StreamReadMessage_FromClient, Topic::StreamReadMessage_FromServer>> ControlStream;
@@ -794,12 +797,24 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         TDirectReadTestSetup(TPersQueueV1TestServer& server)
             : DirectContext(MakeHolder<grpc::ClientContext>())
+            , Server(server.Server.Get())
         {
             server.EnablePQLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PERSQUEUE });
             server.EnablePQLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
             server.EnablePQLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD }, NLog::EPriority::PRI_ERROR);
 
             Connect(server);
+            Server->GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (auto *p = ev->CastAsLocal<TEvPQ::TEvForgetDirectRead>()) {
+                    ForgetReadsDone.Inc();
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+        }
+        ~TDirectReadTestSetup() {
+            Server->GetRuntime()->SetObserverFunc([&](auto&) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
         }
 
         void Connect(TPersQueueV1TestServer& server) {
@@ -841,8 +856,13 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 ythrow yexception() << "write fail";
             }
         }
+        struct TAssignInfo {
+            ui64 AssignId;
+            ui64 Generation;
+            ui64 PartitionId;
+        };
 
-        std::pair<ui32, i64> GetNextAssign(const TString& topic) {
+        TAssignInfo GetNextAssign(const TString& topic, ui64 prevGeneration=0) {
             // Get StartPartitionSessionRequest, send StartPartitionSessionResponse.
 
             Cerr << "Get next assign id\n";
@@ -852,20 +872,39 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(ControlStream->Read(&resp));
 
             Cerr << "GOT SERVER MESSAGE - start session: " << resp.DebugString() << "\n";
+            TAssignInfo result;
+            if (!prevGeneration) {
+                UNIT_ASSERT(resp.server_message_case() == Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
+                UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), topic);
+                result.PartitionId = resp.start_partition_session_request().partition_session().partition_id();
+                result.Generation = resp.start_partition_session_request().partition_location().generation();
+                UNIT_ASSERT(result.Generation > 0);
+                result.AssignId = resp.start_partition_session_request().partition_session().partition_session_id();
 
-            UNIT_ASSERT(resp.server_message_case() == Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
-            UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), topic);
-            auto partitionId = resp.start_partition_session_request().partition_session().partition_id();
-            UNIT_ASSERT(resp.start_partition_session_request().partition_location().generation() > 0);
-            auto assignId = resp.start_partition_session_request().partition_session().partition_session_id();
-
-            Topic::StreamReadMessage::FromClient req;
-            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
-            if (!ControlStream->Write(req)) {
-                ythrow yexception() << "write fail";
+                Topic::StreamReadMessage::FromClient req;
+                req.mutable_start_partition_session_response()->set_partition_session_id(result.AssignId);
+                if (!ControlStream->Write(req)) {
+                    ythrow yexception() << "write fail";
+                }
+            } else {
+                UNIT_ASSERT(resp.server_message_case() == Topic::StreamReadMessage::FromServer::kUpdatePartitionSession);
+                result.Generation = resp.update_partition_session().partition_location().generation();
+                UNIT_ASSERT(result.Generation > prevGeneration);
+                result.AssignId = resp.update_partition_session().partition_session_id();
             }
+            return result;
+        }
 
-            return {partitionId, assignId};
+        void ExpectDestroyPartitionSession(ui64 assignId) {
+            Topic::StreamDirectReadMessage::FromServer resp;
+
+            //lock partition
+            UNIT_ASSERT(DirectStream->Read(&resp));
+            TStringBuilder log;
+            log  << "GOT SERVER MESSAGE (expect stop partition session): " << resp.ShortDebugString() << "\n";
+            Cerr << log;
+            UNIT_ASSERT(resp.server_message_case() == Topic::StreamDirectReadMessage::FromServer::kStopDirectReadPartitionSession);
+            UNIT_ASSERT_VALUES_EQUAL(resp.stop_direct_read_partition_session().partition_session_id(), assignId);
         }
 
         void DoWrite(NYdb::TDriver* driver, const TString& topic, ui64 size, ui32 count,
@@ -879,6 +918,18 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             }
             writer->Close();
         }
+
+        auto ReadDataNoAck(ui64 assignId, i64 directReadId) {
+            Cerr << "Wait for direct read" << Endl;
+            Ydb::Topic::StreamDirectReadMessage::FromServer resp;
+            UNIT_ASSERT(DirectStream->Read(&resp));
+            Cerr << "Got direct read response for read_id: " << resp.direct_read_response().direct_read_id() << Endl;
+            UNIT_ASSERT_C(resp.status() == Ydb::StatusIds::SUCCESS, resp.DebugString());
+            UNIT_ASSERT_EQUAL(resp.server_message_case(), Ydb::Topic::StreamDirectReadMessage::FromServer::kDirectReadResponse);
+            UNIT_ASSERT_VALUES_EQUAL(resp.direct_read_response().direct_read_id(), directReadId);
+            i64 id = resp.direct_read_response().partition_session_id();
+            UNIT_ASSERT_VALUES_EQUAL(id, assignId);
+        };
 
         void DoRead(ui64 assignId, ui64& nextReadId, ui32& currTotalMessages, ui32 messageLimit) {
             // Get DirectReadResponse messages, send DirectReadAck messages.
@@ -941,16 +992,16 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_EQUAL(resp.server_message_case(), Ydb::Topic::StreamDirectReadMessage::FromServer::kInitResponse);
         }
 
-        void SendReadSessionAssign(const ui64 assignId, const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
+        void SendReadSessionAssign(const ui64 assignId, i64 generation, const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
             // Send StartDirectReadPartitionSessionRequest, get StartDirectReadPartitionSessionResponse.
 
-            Cerr << "Send next assign to data session" << assignId << Endl;
+            Cerr << "Send next assign to data session " << assignId << Endl;
 
             Topic::StreamDirectReadMessage::FromClient req;
             auto x = req.mutable_start_direct_read_partition_session_request();
             x->set_partition_session_id(assignId);
             x->set_last_direct_read_id(0);
-            x->set_generation(1);
+            x->set_generation(generation);
             if (!DirectStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
@@ -967,7 +1018,28 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             UNIT_ASSERT_EQUAL(resp.server_message_case(), Ydb::Topic::StreamDirectReadMessage::FromServer::kStartDirectReadPartitionSessionResponse);
             UNIT_ASSERT_EQUAL(resp.start_direct_read_partition_session_response().partition_session_id(), static_cast<i64>(assignId));
-            UNIT_ASSERT_EQUAL(resp.start_direct_read_partition_session_response().generation(), 1);
+            UNIT_ASSERT_EQUAL(resp.start_direct_read_partition_session_response().generation(), generation);
+        }
+
+        void SendDirectReadAck(ui64 assignId, ui64 directReadId) {
+            auto currentForgetDone = ForgetReadsDone.Val();
+            Topic::StreamReadMessage::FromClient req;
+            auto& ack = *req.mutable_direct_read_ack();
+            ack.set_partition_session_id(assignId);
+            ack.set_direct_read_id(directReadId);
+            Cerr << "Send direct read ack for id" << directReadId << Endl;
+
+            if (!ControlStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            for (auto i = 0u; i < 10; i++) {
+                if (ForgetReadsDone.Val() == currentForgetDone) {
+                    Sleep(TDuration::Seconds(1));
+                    continue;
+                }
+                UNIT_ASSERT_EQUAL(ForgetReadsDone.Val(), currentForgetDone + 1);
+                return;
+            }
         }
     };
 
@@ -980,14 +1052,14 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(DirectReadPreCached) {
-TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
+        TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         SET_LOCALS;
         TDirectReadTestSetup setup{server};
         setup.DoWrite(pqClient->GetDriver(), "acc/topic1", 1_MB, 30);
 
         setup.InitControlSession("acc/topic1");
-        auto [partitionId, assignId] = setup.GetNextAssign("acc/topic1");
-        UNIT_ASSERT_VALUES_EQUAL(partitionId, 0);
+        auto assignResult = setup.GetNextAssign("acc/topic1");
+        UNIT_ASSERT_VALUES_EQUAL(assignResult.PartitionId, 0);
         setup.InitDirectSession("acc/topic1");
 
         // Without retrying the test is flaky as the cachedData might be empty.
@@ -999,11 +1071,11 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 1);
-        setup.SendReadSessionAssign(assignId);
+        setup.SendReadSessionAssign(assignResult.AssignId, assignResult.Generation);
 
         ui32 totalMsg = 0;
         ui64 nextReadId = 1;
-        setup.DoRead(assignId, nextReadId, totalMsg, 30);
+        setup.DoRead(assignResult.AssignId, nextReadId, totalMsg, 30);
 
         Sleep(TDuration::Seconds(1));
         cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
@@ -1018,10 +1090,11 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         TDirectReadTestSetup setup{server};
 
         setup.InitControlSession("acc/topic1");
-        auto [partitionId, assignId] = setup.GetNextAssign("acc/topic1");
-        UNIT_ASSERT_VALUES_EQUAL(partitionId, 0);
+        auto assignResult = setup.GetNextAssign("acc/topic1");
+        auto assignId = assignResult.AssignId;
+        UNIT_ASSERT_VALUES_EQUAL(assignResult.PartitionId, 0);
         setup.InitDirectSession("acc/topic1");
-        setup.SendReadSessionAssign(assignId);
+        setup.SendReadSessionAssign(assignId, assignResult.Generation);
 
         ui32 totalMsg = 0;
         ui64 nextReadId = 1;
@@ -1049,12 +1122,12 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         TDirectReadTestSetup setup{server};
         setup.InitControlSession("acc/topic1");
         auto sessionId = setup.SessionId;
-        auto assignId = setup.GetNextAssign("acc/topic1").second;
+        auto assignId = setup.GetNextAssign("acc/topic1").AssignId;
         setup.SessionId = "bad-session";
         Cerr << "First init bad session\n";
         setup.InitDirectSession("acc/topic1");
         // No control session:
-        setup.SendReadSessionAssign(assignId, Ydb::StatusIds::BAD_REQUEST);
+        setup.SendReadSessionAssign(assignId, 1, Ydb::StatusIds::BAD_REQUEST);
         setup.SessionId = sessionId;
         Cerr << "Init bad topic session\n";
         setup.InitDirectSession("acc/topic-bad", Ydb::StatusIds::SCHEME_ERROR);
@@ -1070,7 +1143,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         Cerr << "Init read session\n";
         setup.InitDirectSession("acc/topic1");
         // No control session:
-        setup.SendReadSessionAssign(assignId, Ydb::StatusIds::BAD_REQUEST);
+        setup.SendReadSessionAssign(assignId, 1, Ydb::StatusIds::BAD_REQUEST);
 
         auto cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 0);
@@ -1087,9 +1160,11 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         setup.DoWrite(pqClient->GetDriver(), "acc/topic1", 100_KB, 1, "src2", 1);
 
         setup.InitControlSession("acc/topic1");
-        auto [partitionId1, assignId1] = setup.GetNextAssign("acc/topic1");
-        auto [partitionId2, assignId2] = setup.GetNextAssign("acc/topic1");
-        UNIT_ASSERT(partitionId1 + partitionId2 == 1); // partitions 0 and 1;
+        auto assign1Res = setup.GetNextAssign("acc/topic1");
+        auto assign2Res = setup.GetNextAssign("acc/topic1");
+        auto assignId1 = assign1Res.AssignId;
+        auto assignId2 = assign2Res.AssignId;
+        UNIT_ASSERT(assign1Res.PartitionId + assign2Res.PartitionId == 1); // partitions 0 and 1;
         UNIT_ASSERT(assignId1 != assignId2);
 
         auto readData = [&](i64 assignId) {
@@ -1112,9 +1187,9 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         };
 
         setup.InitDirectSession("acc/topic1");
-        setup.SendReadSessionAssign(assignId1);
+        setup.SendReadSessionAssign(assignId1, assign1Res.Generation);
         readData(assignId1);
-        setup.SendReadSessionAssign(assignId2);
+        setup.SendReadSessionAssign(assignId2, assign2Res.Generation);
         readData(assignId2);
 
         // Read from both parts so that LastReadId goes forward;
@@ -1124,7 +1199,7 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         rSettings.ConsumerName("user").AppendTopics({"acc/topic1"});
         auto readSession = topicClient.CreateReadSession(rSettings);
 
-        auto assignId = 0;
+        auto assignId = 0u;
         {
             Topic::StreamReadMessage::FromServer resp;
 
@@ -1177,15 +1252,14 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         auto tabletId = pathDescr.GetPartitions(0).GetTabletId();
         Cerr << "PQ descr: " << pathDescr.DebugString() << Endl;
 
-
         TDirectReadTestSetup setup{server};
 
         setup.InitControlSession("acc/topic2");
         setup.InitDirectSession("acc/topic2");
-        auto pair = setup.GetNextAssign("acc/topic2");
-        UNIT_ASSERT_VALUES_EQUAL(pair.first, 0);
-        auto assignId = pair.second;
-        setup.SendReadSessionAssign(assignId);
+        auto assignRes = setup.GetNextAssign("acc/topic2");
+        UNIT_ASSERT_VALUES_EQUAL(assignRes.PartitionId, 0);
+        auto assignId = assignRes.AssignId;
+        setup.SendReadSessionAssign(assignId, assignRes.Generation);
         // auto cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
         // UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 1);
         setup.DoWrite(pqClient->GetDriver(), "acc/topic2", 10_MB, 1);
@@ -1205,6 +1279,137 @@ TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
         Cerr << "Check caching service data empty\n";
         cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 0);
+    }
+
+    Y_UNIT_TEST(DirectReadRestartTablet) {
+        TPersQueueV1TestServer server{{.NodeCount=1}};
+        SET_LOCALS;
+        TString topicPath{"/Root/PQ/rt3.dc1--acc--topic3"};
+        server.Server->AnnoyingClient->CreateTopicNoLegacy(topicPath, 1);
+        auto pathDescr = server.Server->AnnoyingClient->Ls(topicPath)->Record.GetPathDescription().GetPersQueueGroup();
+        auto tabletId = pathDescr.GetPartitions(0).GetTabletId();
+
+        TDirectReadTestSetup setup{server};
+
+        setup.InitControlSession("acc/topic3");
+        setup.InitDirectSession("acc/topic3");
+        auto assignRes = setup.GetNextAssign("acc/topic3");
+        UNIT_ASSERT_VALUES_EQUAL(assignRes.PartitionId, 0);
+        auto assignId = assignRes.AssignId;
+        setup.SendReadSessionAssign(assignId, assignRes.Generation);
+        setup.DoWrite(pqClient->GetDriver(), "acc/topic3", 10_MB, 1);
+        Ydb::Topic::StreamDirectReadMessage::FromServer resp;
+        Cerr << "Read data for id = 1\n";
+        setup.ReadDataNoAck(assignId, 1);
+
+        auto checkCachedData = [&](ui64 assignId, ui64 firstReadId, ui64 expectedCount, ui64 generation = 0, bool doFail = true) {
+
+#define CHECK_EQUAL(a, b)               \
+    if (doFail) {                       \
+        UNIT_ASSERT_VALUES_EQUAL(a, b); \
+    } else if (a != b) {                \
+        return false;                   \
+    }
+
+            Cerr << " checkCachedData for Gen: " << generation << Endl;
+            auto cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
+            CHECK_EQUAL(cachedData->Data.size(), 1);
+            CHECK_EQUAL(cachedData->Data[0].first.PartitionSessionId, assignId);
+            if (generation) {
+                CHECK_EQUAL(cachedData->Data[0].second.Generation, generation);
+            }
+            CHECK_EQUAL(cachedData->Data[0].second.Reads.size(), expectedCount);
+            if (expectedCount > 0 && firstReadId > 0) {
+                CHECK_EQUAL(cachedData->Data[0].second.Reads.begin()->first, firstReadId);
+            }
+            return true;
+#undef CHECK_EQUAL
+        };
+
+        checkCachedData(assignId, 1, 1);
+        setup.SendDirectReadAck(assignId, 1);
+        Cerr << "Check cached data after ack\n";
+        checkCachedData(assignId, 0, 0);
+
+        setup.DoWrite(pqClient->GetDriver(), "acc/topic3", 10_MB, 1);
+        setup.DoWrite(pqClient->GetDriver(), "acc/topic3", 10_MB, 1);
+        Cerr << "Read data for id = 2\n";
+        setup.ReadDataNoAck(assignId, 2);
+        setup.ReadDataNoAck(assignId, 3);
+
+        Cerr << "Kill the tablet\n";
+        server.Server->AnnoyingClient->KillTablet(*(server.Server->CleverServer), tabletId);
+        setup.SendDirectReadAck(assignId, 2);
+        setup.ExpectDestroyPartitionSession(assignId);
+        Cerr << "Get next assing\n";
+        auto nextAssignRes = setup.GetNextAssign("acc/topic3", assignRes.Generation);
+        setup.SendReadSessionAssign(assignId, nextAssignRes.Generation);
+
+        UNIT_ASSERT_VALUES_EQUAL(nextAssignRes.AssignId, assignRes.AssignId);
+        Cerr << "Check cached data after session update\n";
+
+        bool checked = false;
+        for (auto i = 0u; i < 50 && !checked; ++i) {
+            checked = checkCachedData(nextAssignRes.AssignId, 2, 2, nextAssignRes.Generation, false);
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        if (!checked)
+            checkCachedData(nextAssignRes.AssignId, 3, 1, nextAssignRes.Generation);
+
+        setup.DoWrite(pqClient->GetDriver(), "acc/topic3", 10_MB, 1);
+        setup.ReadDataNoAck(assignId, 3); // Got directReadId = 3 again because it was not acked in destroyed session.
+        checkCachedData(nextAssignRes.AssignId, 3, 2, nextAssignRes.Generation);
+        setup.SendDirectReadAck(assignId, 3);
+        checkCachedData(nextAssignRes.AssignId, 4, 1, nextAssignRes.Generation);
+    }
+    Y_UNIT_TEST(DirectReadNoRestartTablet) {
+        TPersQueueV1TestServer server{{.NodeCount=1}};
+        SET_LOCALS;
+        TString topicPath{"/Root/PQ/rt3.dc1--acc--topic3"};
+        server.Server->AnnoyingClient->CreateTopicNoLegacy(topicPath, 1);
+
+        TDirectReadTestSetup setup{server};
+
+        setup.InitControlSession("acc/topic3");
+        setup.InitDirectSession("acc/topic3");
+        auto assignRes = setup.GetNextAssign("acc/topic3");
+        UNIT_ASSERT_VALUES_EQUAL(assignRes.PartitionId, 0);
+        auto assignId = assignRes.AssignId;
+        setup.SendReadSessionAssign(assignId, assignRes.Generation);
+        setup.DoWrite(pqClient->GetDriver(), "acc/topic3", 10_MB, 1);
+        Ydb::Topic::StreamDirectReadMessage::FromServer resp;
+        Cerr << "Read data for id = 1\n";
+        setup.ReadDataNoAck(assignId, 1);
+
+        auto checkCachedData = [&](ui64 assignId, ui64 firstReadId, ui64 expectedCount, ui64 generation = 0) {
+            auto cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
+            UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cachedData->Data[0].first.PartitionSessionId, assignId);
+            if (generation) {
+                UNIT_ASSERT_VALUES_EQUAL(cachedData->Data[0].second.Generation, generation);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(cachedData->Data[0].second.Reads.size(), expectedCount);
+            if (expectedCount > 0 && firstReadId > 0) {
+                UNIT_ASSERT_VALUES_EQUAL(cachedData->Data[0].second.Reads.begin()->first, firstReadId);
+            }
+        };
+        checkCachedData(assignId, 1, 1);
+        setup.SendDirectReadAck(assignId, 1);
+        Cerr << "Check cached data after ack\n";
+        checkCachedData(assignId, 0, 0);
+
+        setup.DoWrite(pqClient->GetDriver(), "acc/topic3", 10_MB, 1);
+        setup.DoWrite(pqClient->GetDriver(), "acc/topic3", 10_MB, 1);
+        Cerr << "Read data for id = 2\n";
+        setup.ReadDataNoAck(assignId, 2);
+        setup.ReadDataNoAck(assignId, 3);
+
+
+        setup.DoWrite(pqClient->GetDriver(), "acc/topic3", 10_MB, 1);
+        setup.ReadDataNoAck(assignId, 4);
+        checkCachedData(assignId, 2, 3, assignRes.Generation);
+        setup.SendDirectReadAck(assignId, 2);
+        checkCachedData(assignId, 3, 2, assignRes.Generation);
     }
 
     Y_UNIT_TEST(StreamReadManyUpdateTokenAndRead) {

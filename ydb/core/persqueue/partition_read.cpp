@@ -381,7 +381,7 @@ TReadAnswer TReadInfo::FormAnswer(
 
     Y_ABORT_UNLESS(endOffset <= (ui64)Max<i64>(), "Max offset is too big: %" PRIu64, endOffset);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "FormAnswer " << Blobs.size());
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "FormAnswer for " << Blobs.size() << " blobs");
 
     if (!isActive && response->GetBlobs().empty()) {
         readResult->SetReadingFinished(true);

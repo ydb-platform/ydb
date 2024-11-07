@@ -14,10 +14,10 @@ SRCS(
 PEERDIR(
     library/cpp/json
     yql/essentials/types/binary_json
-    contrib/ydb/library/yql/minikql
-    contrib/ydb/library/yql/minikql/computation/llvm14
+    yql/essentials/minikql
+    yql/essentials/minikql/computation/llvm14
     yql/essentials/minikql/dom
-    contrib/ydb/library/yql/minikql/invoke_builtins/llvm14
+    yql/essentials/minikql/invoke_builtins/llvm14
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/core/issue/protos
     contrib/ydb/library/yql/sql/pg_dummy

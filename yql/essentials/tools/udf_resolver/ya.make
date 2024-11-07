@@ -17,7 +17,7 @@ ENDIF()
 PEERDIR(
     library/cpp/getopt
     library/cpp/protobuf/util
-    contrib/ydb/library/yql/minikql
+    yql/essentials/minikql
     yql/essentials/public/udf/service/terminate_policy
     contrib/ydb/library/yql/core
     contrib/ydb/library/yql/providers/common/proto

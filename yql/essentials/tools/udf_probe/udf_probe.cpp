@@ -1,4 +1,4 @@
-#include <contrib/ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 
 #include <util/generic/yexception.h>
 #include <util/generic/string.h>

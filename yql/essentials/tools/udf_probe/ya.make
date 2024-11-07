@@ -11,7 +11,7 @@ IF (OS_LINUX)
 ENDIF()
 
 PEERDIR(
-    contrib/ydb/library/yql/minikql
+    yql/essentials/minikql
     yql/essentials/public/udf/service/terminate_policy
     contrib/ydb/library/yql/sql/pg_dummy
 )

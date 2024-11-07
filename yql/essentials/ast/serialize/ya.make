@@ -7,7 +7,7 @@ SRCS(
 PEERDIR(
     yql/essentials/ast
     yql/essentials/core/issue
-    contrib/ydb/library/yql/minikql
+    yql/essentials/minikql
 )
 
 END()

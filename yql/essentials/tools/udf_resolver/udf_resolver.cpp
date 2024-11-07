@@ -7,11 +7,11 @@
 #include <yql/essentials/utils/sys/become_user.h>
 #include <yql/essentials/utils/sys/linux_version.h>
 
-#include <contrib/ydb/library/yql/minikql/mkql_function_registry.h>
-#include <contrib/ydb/library/yql/minikql/mkql_node.h>
-#include <contrib/ydb/library/yql/minikql/mkql_type_builder.h>
-#include <contrib/ydb/library/yql/minikql/mkql_program_builder.h>
-#include <contrib/ydb/library/yql/minikql/mkql_utils.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_utils.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 

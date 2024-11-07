@@ -1,0 +1,41 @@
+UNITTEST_FOR(yql/essentials/minikql/comp_nodes/packed_tuple)
+
+IF (SANITIZER_TYPE OR NOT OPENSOURCE)
+    REQUIREMENTS(ram:32)
+ENDIF()
+
+IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+    TIMEOUT(3600)
+    SIZE(LARGE)
+    TAG(ya:fat)
+ELSE()
+    TIMEOUT(600)
+    SIZE(MEDIUM)
+ENDIF()
+
+
+SRCS(
+    packed_tuple_ut.cpp
+)
+
+PEERDIR(
+    yql/essentials/public/udf
+    yql/essentials/public/udf/arrow
+    yql/essentials/public/udf/service/exception_policy
+    contrib/ydb/library/yql/sql/pg_dummy
+)
+
+CFLAGS(
+    -mprfchw
+)
+
+YQL_LAST_ABI_VERSION()
+
+IF (MKQL_RUNTIME_VERSION)
+    CFLAGS(
+        -DMKQL_RUNTIME_VERSION=$MKQL_RUNTIME_VERSION
+    )
+ENDIF()
+
+
+END()

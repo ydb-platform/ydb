@@ -1,6 +1,6 @@
 #include <yql/essentials/public/udf/udf_value.h>
-#include <contrib/ydb/library/yql/minikql/mkql_alloc.h>
-#include <contrib/ydb/library/yql/minikql/mkql_terminator.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_terminator.h>
 
 extern "C" void* UdfAllocate(ui64 size) {
     return ::NKikimr::NMiniKQL::MKQLAllocDeprecated(size, ::NKikimr::NMiniKQL::EMemorySubPool::Default);

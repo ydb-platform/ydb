@@ -1,5 +1,5 @@
 #include "yql_expr_serialize.h"
-#include <contrib/ydb/library/yql/minikql/pack_num.h>
+#include <yql/essentials/minikql/pack_num.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/deque.h>
 

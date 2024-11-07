@@ -2,9 +2,9 @@
 
 #include <yql/essentials/utils/backtrace/backtrace.h>
 
-#include <contrib/ydb/library/yql/minikql/mkql_node.h>
-#include <contrib/ydb/library/yql/minikql/mkql_type_builder.h>
-#include <contrib/ydb/library/yql/minikql/mkql_utils.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/mkql_utils.h>
 
 #include <contrib/ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <contrib/ydb/library/yql/providers/common/proto/udf_resolver.pb.h>

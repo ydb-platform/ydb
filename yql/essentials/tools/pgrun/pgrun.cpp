@@ -1,6 +1,6 @@
 #include <yql/essentials/utils/backtrace/backtrace.h>
-#include <contrib/ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <contrib/ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <contrib/ydb/library/yql/core/facade/yql_facade.h>
 #include <contrib/ydb/library/yql/core/yql_opt_utils.h>
 #include <contrib/ydb/library/yql/core/yql_expr_optimize.h>

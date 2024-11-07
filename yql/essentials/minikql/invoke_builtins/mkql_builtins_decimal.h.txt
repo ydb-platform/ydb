@@ -1,0 +1,298 @@
+#pragma once
+
+#include "mkql_builtins_impl.h"  // Y_IGNORE
+
+namespace NKikimr {
+namespace NMiniKQL {
+namespace NDecimal {
+#ifndef MKQL_DISABLE_CODEGEN
+
+ConstantInt* GenConstant(NYql::NDecimal::TInt128 value, LLVMContext &context);
+
+template<ui8 Precision, bool IncLow = false, bool DecHigh = false>
+inline std::pair<ConstantInt*,  ConstantInt*> GenBounds(LLVMContext &context) {
+    const auto& bounds = NYql::NDecimal::GetBounds<Precision, IncLow, DecHigh>();
+    return std::make_pair(GenConstant(bounds.first, context), GenConstant(bounds.second, context));
+}
+
+template<bool IncludeBounds = false>
+Value* GenInBounds(Value* val, ConstantInt* low, ConstantInt* high, BasicBlock* block);
+
+template<bool IncludeBounds = true>
+Value* GenOutOfBounds(Value* val, ConstantInt* low, ConstantInt* high, BasicBlock* block);
+
+Value* GenIsError(Value* val, LLVMContext &context, BasicBlock* block);
+Value* GenIsNormal(Value* val, LLVMContext &context, BasicBlock* block);
+Value* GenIsAbnormal(Value* val, LLVMContext &context, BasicBlock* block);
+Value* GenIsComparable(Value* val, LLVMContext &context, BasicBlock* block);
+Value* GenIsNonComparable(Value* val, LLVMContext &context, BasicBlock* block);
+
+template <bool And, Value* (*Checker)(Value*, LLVMContext&, BasicBlock*)>
+inline Value* CheckBoth(Value* left, Value* right, LLVMContext &context, BasicBlock* block) {
+        const auto l = Checker(left, context, block);
+        const auto r = Checker(right, context, block);
+        return And ? BinaryOperator::CreateAnd(l, r, "and", block) : BinaryOperator::CreateOr(l, r, "or", block);
+}
+#endif
+
+template <
+    class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterBinaryFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionImpl<TFunc, TArgs<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, false, false>, TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc, TArgs<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, true, false>, TBinaryWrap<true, false>>(registry, name);
+    RegisterFunctionImpl<TFunc, TArgs<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, false, true>, TBinaryWrap<false, true>>(registry, name);
+    RegisterFunctionImpl<TFunc, TArgs<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, true, true>, TBinaryWrap<true, true>>(registry, name);
+}
+
+template <
+    class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterAggregateFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionImpl<TFunc, TArgs<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, false>, TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc, TArgs<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, true>, TAggregateWrap>(registry, name);
+}
+
+template <
+    ui8 Precision,
+    template<ui8> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterBinaryFunctionForPrecision(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterBinaryFunction<TFunc<Precision>, TArgs>(registry, TString(name) += ToString(Precision));
+}
+
+template <
+    ui8 Precision,
+    template<ui8> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterAggregateFunctionForPrecision(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterAggregateFunction<TFunc<Precision>, TArgs>(registry, TString(name) += ToString(Precision));
+}
+
+template <
+    class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterUnaryFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionImpl<TFunc, TArgs<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, false>, TUnaryStub>(registry, name);
+    RegisterFunctionImpl<TFunc, TArgs<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, true>, TUnaryWrap>(registry, name);
+}
+
+template <
+    ui8 Precision,
+    template<ui8> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterUnaryFunctionForPrecision(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterUnaryFunction<TFunc<Precision>, TArgs>(registry, TString(name) += ToString(Precision));
+}
+
+template <
+    class TFunc,
+    template<typename, typename, bool> class TArgs,
+    typename TOutput
+>
+void RegisterCastFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterFunctionImpl<TFunc, TArgs<NUdf::TDataType<NUdf::TDecimal>, TOutput, false>, TUnaryStub>(registry, name);
+    RegisterFunctionImpl<TFunc, TArgs<NUdf::TDataType<NUdf::TDecimal>, TOutput, true>, TUnaryWrap>(registry, name);
+}
+
+template <
+    ui8 Precision,
+    template<ui8> class TFunc,
+    template<typename, typename, bool> class TArgs,
+    typename TOutput
+>
+void RegisterCastFunctionForPrecision(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterCastFunction<TFunc<Precision>, TArgs, TOutput>(registry, TString(name) += ToString(Precision));
+}
+
+template <
+    template<ui8> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterUnaryFunctionForAllPrecisions(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterUnaryFunctionForPrecision<1, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<2, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<3, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<4, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<5, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<6, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<7, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<8, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<9, TFunc, TArgs>(registry, name);
+
+    RegisterUnaryFunctionForPrecision<10, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<11, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<12, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<13, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<14, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<15, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<16, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<17, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<18, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<19, TFunc, TArgs>(registry, name);
+
+    RegisterUnaryFunctionForPrecision<20, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<21, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<22, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<23, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<24, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<25, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<26, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<27, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<28, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<29, TFunc, TArgs>(registry, name);
+
+    RegisterUnaryFunctionForPrecision<30, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<31, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<32, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<33, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<34, TFunc, TArgs>(registry, name);
+    RegisterUnaryFunctionForPrecision<35, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<ui8> class TFunc,
+    template<typename, typename, bool> class TArgs,
+    typename TOutput
+>
+void RegisterCastFunctionForAllPrecisions(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterCastFunctionForPrecision<0, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<1, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<2, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<3, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<4, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<5, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<6, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<7, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<8, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<9, TFunc, TArgs, TOutput>(registry, name);
+
+    RegisterCastFunctionForPrecision<10, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<11, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<12, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<13, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<14, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<15, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<16, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<17, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<18, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<19, TFunc, TArgs, TOutput>(registry, name);
+
+    RegisterCastFunctionForPrecision<20, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<21, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<22, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<23, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<24, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<25, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<26, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<27, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<28, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<29, TFunc, TArgs, TOutput>(registry, name);
+
+    RegisterCastFunctionForPrecision<30, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<31, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<32, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<33, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<34, TFunc, TArgs, TOutput>(registry, name);
+    RegisterCastFunctionForPrecision<35, TFunc, TArgs, TOutput>(registry, name);
+}
+
+template <
+    template<ui8> class TFunc,
+    template<typename, typename, typename, bool, bool> class TArgs
+>
+void RegisterBinaryFunctionForAllPrecisions(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterBinaryFunctionForPrecision<1, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<2, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<3, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<4, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<5, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<6, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<7, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<8, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<9, TFunc, TArgs>(registry, name);
+
+    RegisterBinaryFunctionForPrecision<10,TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<11, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<12, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<13, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<14, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<15, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<16, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<17, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<18, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<19, TFunc, TArgs>(registry, name);
+
+    RegisterBinaryFunctionForPrecision<20, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<21, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<22, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<23, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<24, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<25, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<26, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<27, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<28, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<29, TFunc, TArgs>(registry, name);
+
+    RegisterBinaryFunctionForPrecision<30, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<31, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<32, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<33, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<34, TFunc, TArgs>(registry, name);
+    RegisterBinaryFunctionForPrecision<35, TFunc, TArgs>(registry, name);
+}
+
+template <
+    template<ui8> class TFunc,
+    template<typename, typename, bool> class TArgs
+>
+void RegisterAggregateFunctionForAllPrecisions(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
+    RegisterAggregateFunctionForPrecision<1, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<2, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<3, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<4, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<5, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<6, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<7, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<8, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<9, TFunc, TArgs>(registry, name);
+
+    RegisterAggregateFunctionForPrecision<10, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<11, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<12, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<13, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<14, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<15, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<16, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<17, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<18, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<19, TFunc, TArgs>(registry, name);
+
+    RegisterAggregateFunctionForPrecision<20, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<21, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<22, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<23, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<24, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<25, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<26, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<27, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<28, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<29, TFunc, TArgs>(registry, name);
+
+    RegisterAggregateFunctionForPrecision<30, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<31, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<32, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<33, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<34, TFunc, TArgs>(registry, name);
+    RegisterAggregateFunctionForPrecision<35, TFunc, TArgs>(registry, name);
+}
+
+}
+}
+}

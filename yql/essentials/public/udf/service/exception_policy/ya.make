@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/ydb/library/yql/minikql
+    yql/essentials/minikql
     yql/essentials/public/udf
 )
 

@@ -3,6 +3,8 @@
 #include <util/generic/hash.h>
 #include "yql_expr_type_annotation.h"
 
+#include <yql/essentials/utils/log/log.h>
+
 namespace NYql {
 
 namespace {
@@ -534,6 +536,7 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
     if (ctx.Step.IsDone(TExprStep::ExpandApplyForLambdas))
         return IGraphTransformer::TStatus::Ok;
 
+    YQL_CLOG(DEBUG, Core) << "Start ExpandApply";
     TOptimizeExprSettings settings(nullptr);
     auto ret = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, bool& changed, TExprContext& ctx) -> TExprNode::TPtr {
         if (node->Content() == "WithOptionalArgs") {
@@ -855,6 +858,7 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
         ctx.Step.Done(TExprStep::ExpandApplyForLambdas);
     }
 
+    YQL_CLOG(DEBUG, Core) << "Finish ExpandApply";
     return ret;
 }
 

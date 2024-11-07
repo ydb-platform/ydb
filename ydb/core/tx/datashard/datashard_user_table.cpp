@@ -435,7 +435,7 @@ void TUserTable::DoApplyCreate(
         alter.SetFamilyBlobs(tid, familyId, family.GetOuterThreshold(), family.GetExternalThreshold());
         if (appliedRooms.insert(family.GetRoomId()).second) {
             // Call SetRoom once per room
-            alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel());
+            alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannels(), family.OuterChannel());
         }
     }
 
@@ -536,7 +536,7 @@ void TUserTable::ApplyAlter(
         if (appliedRooms.insert(family.GetRoomId()).second) {
             // Call SetRoom once per room
             for (ui32 tid : tids) {
-                alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannel(), family.OuterChannel());
+                alter.SetRoom(tid, family.GetRoomId(), family.MainChannel(), family.ExternalChannels(), family.OuterChannel());
             }
         }
     }

@@ -1032,7 +1032,7 @@ public:
     void Reply(Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
         if (!ExecutionEntryExists && status == Ydb::StatusIds::SUCCESS) {
             status = Ydb::StatusIds::NOT_FOUND;
-            issues.AddIssue("No such execution");   
+            issues.AddIssue("No such execution");
         }
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -1796,26 +1796,26 @@ public:
             .AddParam("$items");
 
         param
-                .BeginList();
+            .BeginList();
 
         auto row = FirstRow;
         for (const auto& rowValue : ResultSet.rows()) {
             auto rowValueSerialized = rowValue.SerializeAsString();
             SavedSize += rowValueSerialized.size();
             param
-                    .AddListItem()
-                    .BeginStruct()
-                        .AddMember("row_id")
-                            .Int64(row++)
-                        .AddMember("result_set")
-                            .String(std::move(rowValueSerialized))
-                        .AddMember("accumulated_size")
-                            .Int64(AccumulatedSize + SavedSize)
-                    .EndStruct();
+                .AddListItem()
+                .BeginStruct()
+                    .AddMember("row_id")
+                        .Int64(row++)
+                    .AddMember("result_set")
+                        .String(std::move(rowValueSerialized))
+                    .AddMember("accumulated_size")
+                        .Int64(AccumulatedSize + SavedSize)
+                .EndStruct();
         }
         param
-                .EndList()
-                .Build();
+            .EndList()
+            .Build();
 
         RunDataQuery(sql, &params);
     }

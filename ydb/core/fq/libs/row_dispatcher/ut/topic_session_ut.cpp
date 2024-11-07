@@ -160,6 +160,7 @@ public:
 
     NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
     NActors::TTestActorRuntime Runtime;
+    TActorSystemStub ActorSystemStub;
     NActors::TActorId TopicSession;
     NActors::TActorId RowDispatcherActorId;
     NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr")));

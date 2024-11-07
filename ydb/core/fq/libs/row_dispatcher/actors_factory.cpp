@@ -2,6 +2,8 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/topic_session.h>
 
+#include <ydb/library/yql/public/purecalc/common/interface.h>
+
 namespace NFq::NRowDispatcher {
 
 

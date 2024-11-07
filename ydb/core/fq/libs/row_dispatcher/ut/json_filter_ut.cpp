@@ -28,12 +28,19 @@ public:
         , Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false)
     {}
 
+    static void SegmentationFaultHandler(int) {
+        Cerr << "segmentation fault call stack:" << Endl;
+        FormatBackTrace(&Cerr);
+        abort();
+    }
+
     void SetUp(NUnitTest::TTestContext&) override {
+        NKikimr::EnableYDBBacktraceFormat();
+        signal(SIGSEGV, &SegmentationFaultHandler);
+
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
-
-        NKikimr::EnableYDBBacktraceFormat();
     }
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {
@@ -95,6 +102,7 @@ public:
 
     NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
     NActors::TTestActorRuntime Runtime;
+    TActorSystemStub ActorSystemStub;
     std::unique_ptr<NFq::TJsonFilter> Filter;
 
     NKikimr::NMiniKQL::TScopedAlloc Alloc;

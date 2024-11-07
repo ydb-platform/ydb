@@ -168,7 +168,7 @@ public:
         portionLocal.MutableRecords().swap(filtered);
     }
 
-    bool LoadColumns(const std::optional<ui64> reqPathId, const std::function<void(const TColumnChunkLoadContextV1&)>& callback) override {
+    bool LoadColumns(const std::optional<ui64> reqPathId, const std::function<void(TColumnChunkLoadContextV1&&)>& callback) override {
         auto& columns = Indices[0].Columns;
         for (auto& [pathId, portions] : columns) {
             if (pathId && *reqPathId != pathId) {
@@ -194,7 +194,7 @@ public:
     virtual void EraseIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {
     }
     virtual bool LoadIndexes(const std::optional<ui64> /*reqPathId*/,
-        const std::function<void(const ui64 /*pathId*/, const ui64 /*portionId*/, const TIndexChunkLoadContext&)>& /*callback*/) override {
+        const std::function<void(const ui64 /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&&)>& /*callback*/) override {
         return true;
     }
 

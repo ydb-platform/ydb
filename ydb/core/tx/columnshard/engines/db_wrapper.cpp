@@ -118,7 +118,7 @@ void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRe
     }
 }
 
-bool TDbWrapper::LoadColumns(const std::optional<ui64> pathId, const std::function<void(const TColumnChunkLoadContextV1&)>& callback) {
+bool TDbWrapper::LoadColumns(const std::optional<ui64> pathId, const std::function<void(TColumnChunkLoadContextV1&&)>& callback) {
     NIceDb::TNiceDb db(Database);
     using IndexColumnsV1 = NColumnShard::Schema::IndexColumnsV1;
     const auto pred = [&](auto& rowset) {
@@ -128,7 +128,7 @@ bool TDbWrapper::LoadColumns(const std::optional<ui64> pathId, const std::functi
 
         while (!rowset.EndOfSet()) {
             NOlap::TColumnChunkLoadContextV1 chunkLoadContext(rowset);
-            callback(chunkLoadContext);
+            callback(std::move(chunkLoadContext));
 
             if (!rowset.Next()) {
                 return false;
@@ -225,7 +225,7 @@ void TDbWrapper::EraseIndex(const TPortionInfo& portion, const TIndexChunk& row)
 }
 
 bool TDbWrapper::LoadIndexes(const std::optional<ui64> pathId,
-    const std::function<void(const ui64 pathId, const ui64 portionId, const TIndexChunkLoadContext&)>& callback) {
+    const std::function<void(const ui64 pathId, const ui64 portionId, TIndexChunkLoadContext&&)>& callback) {
     NIceDb::TNiceDb db(Database);
     using IndexIndexes = NColumnShard::Schema::IndexIndexes;
     const auto pred = [&](auto& rowset) {
@@ -235,7 +235,7 @@ bool TDbWrapper::LoadIndexes(const std::optional<ui64> pathId,
 
         while (!rowset.EndOfSet()) {
             NOlap::TIndexChunkLoadContext chunkLoadContext(rowset, DsGroupSelector);
-            callback(rowset.template GetValue<IndexIndexes::PathId>(), rowset.template GetValue<IndexIndexes::PortionId>(), chunkLoadContext);
+            callback(rowset.template GetValue<IndexIndexes::PathId>(), rowset.template GetValue<IndexIndexes::PortionId>(), std::move(chunkLoadContext));
 
             if (!rowset.Next()) {
                 return false;

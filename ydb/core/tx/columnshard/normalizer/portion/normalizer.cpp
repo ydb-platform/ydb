@@ -116,18 +116,18 @@ TConclusionStatus TPortionsNormalizerBase::InitColumns(
     }
 
     TPortionInfo::TSchemaCursor schema(tablesManager.GetPrimaryIndexSafe().GetVersionedIndex());
-    auto initPortion = [&](const TColumnChunkLoadContextV1& loadContext) {
+    auto initPortion = [&](TColumnChunkLoadContextV1&& loadContext) {
         if (!columnsFilter.empty() && !columnsFilter.contains(loadContext.GetAddress().GetColumnId())) {
             return;
         }
         auto it = portions.find(loadContext.GetPortionId());
         AFL_VERIFY(it != portions.end());
-        it->second.LoadRecord(loadContext);
+        it->second.LoadRecord(std::move(loadContext));
     };
 
     while (!rowset.EndOfSet()) {
         NOlap::TColumnChunkLoadContextV1 chunkLoadContext(rowset);
-        initPortion(chunkLoadContext);
+        initPortion(std::move(chunkLoadContext));
 
         if (!rowset.Next()) {
             return TConclusionStatus::Fail("Not ready");
@@ -148,7 +148,7 @@ TConclusionStatus TPortionsNormalizerBase::InitIndexes(NIceDb::TNiceDb& db, THas
 
         auto it = portions.find(rowset.GetValue<IndexIndexes::PortionId>());
         AFL_VERIFY(it != portions.end());
-        it->second.LoadIndex(chunkLoadContext);
+        it->second.LoadIndex(std::move(chunkLoadContext));
 
         if (!rowset.Next()) {
             return TConclusionStatus::Fail("Not ready");

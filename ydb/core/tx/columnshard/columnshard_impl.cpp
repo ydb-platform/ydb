@@ -1238,15 +1238,15 @@ public:
         for (auto&& i : PortionsByPath) {
             while (i.second.size()) {
                 auto p = i.second.back();
-                auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV1>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
-                NOlap::TPortionInfoConstructor constructor(*p, false, true, true);
+                std::vector<NOlap::TColumnChunkLoadContextV1> records;
+                std::vector<NOlap::TIndexChunkLoadContext> indexes;
                 {
+                    auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV1>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
                     if (!rowset.IsReady()) {
                         return false;
                     }
                     while (!rowset.EndOfSet()) {
-                        NOlap::TColumnChunkLoadContextV1 chunkLoadContext(rowset);
-                        constructor.LoadRecord(chunkLoadContext);
+                        records.emplace_back(NOlap::TColumnChunkLoadContextV1(rowset));
                         if (!rowset.Next()) {
                             return false;
                         }
@@ -1258,13 +1258,13 @@ public:
                         return false;
                     }
                     while (!rowset.EndOfSet()) {
-                        NOlap::TIndexChunkLoadContext chunkLoadContext(rowset, &selector);
-                        constructor.LoadIndex(chunkLoadContext);
+                        indexes.emplace_back(NOlap::TIndexChunkLoadContext(rowset, &selector));
                         if (!rowset.Next()) {
                             return false;
                         }
                     }
                 }
+                NOlap::TPortionInfoConstructor constructor = NOlap::TPortionInfoConstructor::BuildForLoading(p, std::move(records), std::move(indexes));
                 Accessors[i.first].emplace_back(constructor.Build(true));
                 i.second.pop_back();
             }

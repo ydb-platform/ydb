@@ -119,7 +119,7 @@ bool TPortionDataSource::DoStartFetchingIndexes(
     TBlobsAction action(GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
     {
         std::set<ui32> indexIds;
-        for (auto&& i : GetStageData().GetPortionAccessor().GetIndexes()) {
+        for (auto&& i : GetStageData().GetPortionAccessor().GetIndexesVerified()) {
             if (!indexes->GetIndexIdsSet().contains(i.GetIndexId())) {
                 continue;
             }

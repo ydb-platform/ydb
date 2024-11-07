@@ -113,7 +113,7 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
             context.EngineLogs.AddCleanupPortion(i);
         }
         for (auto& portionBuilder : AppendedPortions) {
-            context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult().MutablePortionInfoPtr());
+            context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult());
         }
     }
 }

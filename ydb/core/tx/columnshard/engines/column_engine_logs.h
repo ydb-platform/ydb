@@ -216,7 +216,7 @@ public:
         UpdatePortionStats(*portion, EStatsUpdateType::DEFAULT, &exPortion);
     }
 
-    void AppendPortion(const TPortionInfo::TPtr& portionInfo);
+    void AppendPortion(const TPortionDataAccessor& portionInfo, const bool addAsAccessor = true);
 
 private:
     TVersionedIndex VersionedIndex;

@@ -26,13 +26,14 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
 
     if (Tiering) {
         AFL_VERIFY(TieringColumnId);
-        auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId);
+//        auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId);
         std::shared_ptr<arrow::Scalar> max;
-        if (indexMeta) {
-            NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
-            const std::vector<TString> data = portion.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
-            max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
-        } else if (*TieringColumnId == portionSchema->GetIndexInfo().GetPKColumnIds().front()) {
+//        if (indexMeta) {
+//            NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
+//            const std::vector<TString> data = portion.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
+//            max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+//        } else 
+        if (*TieringColumnId == portionSchema->GetIndexInfo().GetPKColumnIds().front()) {
             NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
             max = NArrow::TStatusValidator::GetValid(portion.GetMeta().GetFirstLastPK().GetFirst().Column(0).GetScalar(0));
         } else {

@@ -27,9 +27,9 @@ bool TGranuleColumnsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& 
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     TPortionInfo::TSchemaCursor schema(*VersionedIndex);
     Context->MutableConstructors().ClearColumns();
-    return db.LoadColumns(Self->GetPathId(), [&](const TColumnChunkLoadContextV1& loadContext) {
+    return db.LoadColumns(Self->GetPathId(), [&](TColumnChunkLoadContextV1&& loadContext) {
         auto* constructor = Context->MutableConstructors().GetConstructorVerified(loadContext.GetPortionId());
-        constructor->LoadRecord(loadContext);
+        constructor->LoadRecord(std::move(loadContext));
     });
 }
 
@@ -41,9 +41,9 @@ bool TGranuleColumnsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext
 bool TGranuleIndexesReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     Context->MutableConstructors().ClearIndexes();
-    return db.LoadIndexes(Self->GetPathId(), [&](const ui64 /*pathId*/, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
+    return db.LoadIndexes(Self->GetPathId(), [&](const ui64 /*pathId*/, const ui64 portionId, TIndexChunkLoadContext&& loadContext) {
         auto* constructor = Context->MutableConstructors().GetConstructorVerified(portionId);
-        constructor->LoadIndex(loadContext);
+        constructor->LoadIndex(std::move(loadContext));
     });
 }
 

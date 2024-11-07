@@ -74,7 +74,9 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
                 }
                 AFL_VERIFY(indexMeta->GetColumnIds().size() == 1);
 
-                const std::vector<TString> data = portionInfo->GetIndexInplaceDataVerified(indexMeta->GetIndexId());
+                const std::vector<TString> data
+                //= portionInfo->GetIndexInplaceDataVerified(indexMeta->GetIndexId())
+                ;
 
                 for (const auto& sketchAsString : data) {
                     auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(sketchAsString.data(), sketchAsString.size()));

@@ -18,7 +18,7 @@ void TReadPortionInfoWithBlobs::RestoreChunk(const std::shared_ptr<IPortionDataC
 TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> TReadPortionInfoWithBlobs::RestoreBatch(
     const ISnapshotSchema& data, const ISnapshotSchema& resultSchema, const std::set<ui32>& seqColumns) const {
     THashMap<TChunkAddress, TString> blobs;
-    for (auto&& i : PortionInfo.GetRecords()) {
+    for (auto&& i : PortionInfo.GetRecordsVerified()) {
         blobs[i.GetAddress()] = GetBlobByAddressVerified(i.ColumnId, i.Chunk);
         Y_ABORT_UNLESS(blobs[i.GetAddress()].size() == i.BlobRange.Size);
     }
@@ -114,7 +114,7 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         }
     }
 
-    TPortionInfoConstructor constructor(source.PortionInfo.GetPortionInfo(), false, true, false);
+    TPortionInfoConstructor constructor = TPortionInfoConstructor::BuildForRewriteBlobs(source.PortionInfo.GetPortionInfo());
     constructor.SetMinSnapshotDeprecated(to->GetSnapshot());
     constructor.SetSchemaVersion(to->GetVersion());
     constructor.MutableMeta().ResetTierName(targetTier);

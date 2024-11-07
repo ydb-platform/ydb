@@ -99,7 +99,7 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
                     Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
                 }
             }
-            granule.InsertPortionOnComplete(portion.GetPortionInfo().MutablePortionInfoPtr());
+            granule.InsertPortionOnComplete(portion.GetPortionInfo(), index);
         }
         if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             AFL_VERIFY(CommitSnapshot);

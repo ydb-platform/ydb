@@ -11,16 +11,21 @@
 
 namespace NKikimr::NOlap {
 
-void TGranuleMeta::AppendPortion(const TPortionInfo::TPtr& info) {
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info->DebugString())("path_id", GetPathId());
-    auto it = Portions.find(info->GetPortionId());
-    AFL_VERIFY(info->GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info->DebugString())("path_id", GetPathId());
+void TGranuleMeta::AppendPortion(const TPortionDataAccessor& info, const bool addAsAccessor) {
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info.GetPortionInfo().DebugString())("path_id", GetPathId());
+    auto it = Portions.find(info.GetPortionInfo().GetPortionId());
+    AFL_VERIFY(info.GetPortionInfo().GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info.GetPortionInfo().DebugString())(
+        "path_id", GetPathId());
 
-    AFL_VERIFY(info->ValidSnapshotInfo())("event", "incorrect_portion_snapshots")("portion", info->DebugString());
+    AFL_VERIFY(info.GetPortionInfo().ValidSnapshotInfo())("event", "incorrect_portion_snapshots")(
+        "portion", info.GetPortionInfo().DebugString());
 
     AFL_VERIFY(it == Portions.end());
     OnBeforeChangePortion(nullptr);
-    it = Portions.emplace(info->GetPortionId(), info).first;
+    it = Portions.emplace(info.GetPortionInfo().GetPortionId(), info.MutablePortionInfoPtr()).first;
+    if (addAsAccessor) {
+        DataAccessorsManager->AddPortion(info);
+    }
     OnAfterChangePortion(it->second, nullptr);
 }
 
@@ -175,26 +180,6 @@ void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOpti
     OptimizerPlanner->ModifyPortions(portions, {});
 }
 
-void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
-    auto it = InsertedPortions.find(insertWriteId);
-    AFL_VERIFY(it != InsertedPortions.end());
-    (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(it->second);
-    InsertedPortions.erase(it);
-}
-
-void TGranuleMeta::CommitImmediateOnExecute(
-    NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const TPortionDataAccessor& portion) const {
-    AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
-    portion.MutablePortionInfo().SetCommitSnapshot(snapshot);
-    TDbWrapper wrapper(txc.DB, nullptr);
-    portion.SaveToDatabase(wrapper, 0, false);
-    DataAccessorsManager->AddPortion(portion);
-}
-
-void TGranuleMeta::CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine) {
-    (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(portion);
-}
-
 std::shared_ptr<NKikimr::ITxReader> TGranuleMeta::BuildLoader(
     const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex) {
     auto result = std::make_shared<TTxCompositeReader>("granule");
@@ -220,18 +205,18 @@ bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedI
 
     {
         TPortionInfo::TSchemaCursor schema(versionedIndex);
-        if (!db.LoadColumns(PathId, [&](const TColumnChunkLoadContextV1& loadContext) {
+        if (!db.LoadColumns(PathId, [&](TColumnChunkLoadContextV1&& loadContext) {
                 auto* constructor = constructors->MutableConstructors().GetConstructorVerified(loadContext.GetPortionId());
-                constructor->LoadRecord(loadContext);
+                constructor->LoadRecord(std::move(loadContext));
             })) {
             return false;
         }
     }
 
     {
-        if (!db.LoadIndexes(PathId, [&](const ui64 /*pathId*/, const ui64 portionId, const TIndexChunkLoadContext& loadContext) {
+        if (!db.LoadIndexes(PathId, [&](const ui64 /*pathId*/, const ui64 portionId, TIndexChunkLoadContext&& loadContext) {
                 auto* constructor = constructors->MutableConstructors().GetConstructorVerified(portionId);
-                constructor->LoadIndex(loadContext);
+                constructor->LoadIndex(std::move(loadContext));
             })) {
             return false;
         };
@@ -244,8 +229,57 @@ void TGranuleMeta::FinishLoading(const std::shared_ptr<NLoading::TPortionsLoadCo
     AFL_VERIFY(!LoadingFinished);
     LoadingFinished = true;
     for (auto&& [portionId, constructor] : context->MutableConstructors()) {
-        UpsertPortionOnLoad(constructor.Build(false).MutablePortionInfoPtr());
+        auto accessor = constructor.Build(false);
+        DataAccessorsManager->AddPortion(accessor);
+        UpsertPortionOnLoad(accessor.MutablePortionInfoPtr());
     }
+}
+
+void TGranuleMeta::InsertPortionOnComplete(const TPortionDataAccessor& portion, IColumnEngine& /*engine*/) {
+    AFL_VERIFY(InsertedPortions.emplace(portion.GetPortionInfo().GetInsertWriteIdVerified(), portion.MutablePortionInfoPtr()).second);
+    AFL_VERIFY(InsertedAccessors.emplace(portion.GetPortionInfo().GetInsertWriteIdVerified(), portion).second);
+    DataAccessorsManager->AddPortion(portion);
+}
+
+void TGranuleMeta::InsertPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion) const {
+    AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
+    TDbWrapper wrapper(txc.DB, nullptr);
+    portion.SaveToDatabase(wrapper, 0, false);
+}
+
+void TGranuleMeta::CommitPortionOnExecute(
+    NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot& snapshot) const {
+    auto it = InsertedPortions.find(insertWriteId);
+    AFL_VERIFY(it != InsertedPortions.end());
+    it->second->SetCommitSnapshot(snapshot);
+    TDbWrapper wrapper(txc.DB, nullptr);
+    it->second->SaveMetaToDatabase(wrapper);
+}
+
+void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
+    auto it = InsertedPortions.find(insertWriteId);
+    AFL_VERIFY(it != InsertedPortions.end());
+    InsertedPortions.erase(it);
+    {
+        auto it = InsertedAccessors.find(insertWriteId);
+        if (it != InsertedAccessors.end()) {
+            (static_cast<TColumnEngineForLogs*>(&engine))->AppendPortion(it->second, false);
+            InsertedAccessors.erase(it);
+        }
+    }
+}
+
+void TGranuleMeta::CommitImmediateOnExecute(
+    NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const TPortionDataAccessor& portion) const {
+    AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
+    portion.MutablePortionInfo().SetCommitSnapshot(snapshot);
+    TDbWrapper wrapper(txc.DB, nullptr);
+    portion.SaveToDatabase(wrapper, 0, false);
+}
+
+void TGranuleMeta::CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> /*portion*/, IColumnEngine& /*engine*/) {
+    AFL_VERIFY(false);
+    //    (static_cast<TColumnEngineForLogs&>(engine)).AppendPortion(portion);
 }
 
 }   // namespace NKikimr::NOlap

@@ -16,6 +16,8 @@ class TCompositeReadBlobs;
 class TPortionDataAccessor {
 private:
     TPortionInfo::TConstPtr PortionInfo;
+    std::optional<std::vector<TColumnRecord>> Records;
+    std::optional<std::vector<TIndexChunk>> Indexes;
 
     template <class TChunkInfo>
     static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
@@ -38,7 +40,7 @@ private:
 
 public:
     TPortionDataAccessor SwitchPortionInfo(TPortionInfo&& newPortion) const {
-        return TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(newPortion)));
+        return TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(newPortion)), GetRecordsVerified(), GetIndexesVerified());
     }
 
     template <class TAggregator, class TChunkInfo>
@@ -69,8 +71,19 @@ public:
         }
     }
 
-    explicit TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo)
-        : PortionInfo(portionInfo) {
+    explicit TPortionDataAccessor(
+        const TPortionInfo::TConstPtr& portionInfo, std::vector<TColumnRecord>&& records, std::vector<TIndexChunk>&& indexes)
+        : PortionInfo(portionInfo)
+        , Records(std::move(records))
+        , Indexes(std::move(indexes))
+    {
+    }
+
+    explicit TPortionDataAccessor(
+        const TPortionInfo::TConstPtr& portionInfo, const std::vector<TColumnRecord>& records, const std::vector<TIndexChunk>& indexes)
+        : PortionInfo(portionInfo)
+        , Records(records)
+        , Indexes(indexes) {
     }
 
     static TConclusion<TPortionDataAccessor> BuildFromProto(
@@ -78,7 +91,7 @@ public:
 
     std::set<ui32> GetColumnIds() const {
         std::set<ui32> result;
-        for (auto&& i : PortionInfo->Records) {
+        for (auto&& i : GetRecordsVerified()) {
             result.emplace(i.GetColumnId());
         }
         return result;
@@ -105,7 +118,7 @@ public:
 
     NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
         NArrow::NSplitter::TSerializationStats result;
-        for (auto&& i : PortionInfo->Records) {
+        for (auto&& i : GetRecordsVerified()) {
             if (schema.GetFieldByColumnIdOptional(i.ColumnId)) {
                 result.AddStat(i.GetSerializationStat(schema.GetFieldByColumnIdVerified(i.ColumnId)->name()));
             }
@@ -146,7 +159,7 @@ public:
 
     bool HasIndexes(const std::set<ui32>& ids) const {
         auto idsCopy = ids;
-        for (auto&& i : PortionInfo->Indexes) {
+        for (auto&& i : GetIndexesVerified()) {
             idsCopy.erase(i.GetIndexId());
             if (idsCopy.empty()) {
                 return true;
@@ -366,12 +379,18 @@ public:
         }
     };
 
-    const std::vector<TColumnRecord>& GetRecords() const {
-        return PortionInfo->Records;
+    const std::vector<TColumnRecord>& GetRecordsVerified() const {
+        AFL_VERIFY(Records);
+        return *Records;
     }
 
-    const std::vector<TIndexChunk>& GetIndexes() const {
-        return PortionInfo->Indexes;
+    const std::vector<TIndexChunk>& GetIndexesVerified() const {
+        AFL_VERIFY(Indexes);
+        return *Indexes;
+    }
+
+    bool HasIndexes() const {
+        return !!Indexes;
     }
 
     std::vector<TPage> BuildPages() const;

@@ -106,11 +106,7 @@ TPortionDataAccessor TPortionInfoConstructor::Build(const bool needChunksNormali
     }
     FullValidation();
 
-    result->Indexes = std::move(Indexes);
-    result->Indexes.shrink_to_fit();
-    result->Records = std::move(Records);
-    result->Records.shrink_to_fit();
-    return TPortionDataAccessor(result);
+    return TPortionDataAccessor(result, std::move(Records), std::move(Indexes));
 }
 
 ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& index) const {
@@ -123,7 +119,7 @@ ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& 
     return index.GetSchema(*MinSnapshotDeprecated);
 }
 
-void TPortionInfoConstructor::LoadRecord(const TColumnChunkLoadContextV1& loadContext) {
+void TPortionInfoConstructor::LoadRecord(TColumnChunkLoadContextV1&& loadContext) {
     AFL_VERIFY(loadContext.GetBlobRange().GetBlobIdxVerified() < MetaConstructor.BlobIds.size());
     AFL_VERIFY(loadContext.GetBlobRange().CheckBlob(MetaConstructor.BlobIds[loadContext.GetBlobRange().GetBlobIdxVerified()]))(
         "blobs", JoinSeq(",", MetaConstructor.BlobIds))("range", loadContext.GetBlobRange().ToString());
@@ -131,7 +127,7 @@ void TPortionInfoConstructor::LoadRecord(const TColumnChunkLoadContextV1& loadCo
     Records.push_back(std::move(rec));
 }
 
-void TPortionInfoConstructor::LoadIndex(const TIndexChunkLoadContext& loadContext) {
+void TPortionInfoConstructor::LoadIndex(TIndexChunkLoadContext&& loadContext) {
     if (loadContext.GetBlobRange()) {
         const TBlobRangeLink16::TLinkId linkBlobId = RegisterBlobId(loadContext.GetBlobRange()->GetBlobId());
         AddIndex(loadContext.BuildIndexChunk(linkBlobId));
@@ -150,6 +146,23 @@ void TPortionInfoConstructor::AddMetadata(const ISnapshotSchema& snapshotSchema,
     Y_ABORT_UNLESS(batch->num_rows() == GetRecordsCount());
     MetaConstructor.FillMetaInfo(NArrow::TFirstLastSpecialKeys(batch), IIndexInfo::CalcDeletions(batch, false),
         NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), snapshotSchema.GetIndexInfo());
+}
+
+TPortionInfoConstructor TPortionInfoConstructor::BuildForLoading(
+    const TPortionInfo::TConstPtr& portion, std::vector<TColumnChunkLoadContextV1>&& records, std::vector<TIndexChunkLoadContext>&& indexes) {
+    AFL_VERIFY(portion);
+    TPortionInfoConstructor result(*portion, true, true);
+    for (auto&& i : records) {
+        result.LoadRecord(std::move(i));
+    }
+    for (auto&& i : indexes) {
+        result.LoadIndex(std::move(i));
+    }
+    return result;
+}
+
+TPortionInfoConstructor TPortionInfoConstructor::BuildForRewriteBlobs(const TPortionInfo& portion) {
+    return TPortionInfoConstructor(portion, true, false);
 }
 
 }   // namespace NKikimr::NOlap

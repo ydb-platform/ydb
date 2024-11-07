@@ -87,9 +87,6 @@ private:
     TPortionMeta Meta;
     TRuntimeFeatures RuntimeFeatures = 0;
 
-    std::vector<TIndexChunk> Indexes;
-    std::vector<TColumnRecord> Records;
-
     void FullValidation() const {
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
@@ -122,10 +119,6 @@ public:
     }
 
     bool NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const;
-
-    ui64 GetChunksCount() const {
-        return Records.size() + Indexes.size();
-    }
 
     NSplitter::TEntityGroups GetEntityGroupsByStorageId(
         const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const;
@@ -178,6 +171,7 @@ public:
         SetRemoveSnapshot(TSnapshot(planStep, txId));
     }
 
+/*
     std::vector<TString> GetIndexInplaceDataVerified(const ui32 indexId) const {
         std::vector<TString> result;
         for (auto&& i : Indexes) {
@@ -187,6 +181,7 @@ public:
         }
         return result;
     }
+*/
 
     void InitRuntimeFeature(const ERuntimeFeature feature, const bool activity) {
         if (activity) {

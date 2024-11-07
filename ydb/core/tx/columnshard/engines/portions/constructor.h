@@ -36,9 +36,59 @@ private:
     TPortionInfoConstructor(const TPortionInfoConstructor&) = default;
     TPortionInfoConstructor& operator=(const TPortionInfoConstructor&) = default;
 
+    TPortionInfoConstructor(const TPortionInfo& portion, const bool withMetadata, const bool withMetadataBlobs)
+        : PathId(portion.GetPathId())
+        , PortionId(portion.GetPortionId())
+        , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
+        , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
+        , SchemaVersion(portion.GetSchemaVersionOptional())
+        , ShardingVersion(portion.GetShardingVersionOptional())
+        , CommitSnapshot(portion.GetCommitSnapshotOptional())
+        , InsertWriteId(portion.GetInsertWriteIdOptional()) {
+        if (withMetadata) {
+            MetaConstructor = TPortionMetaConstructor(portion.Meta, withMetadataBlobs);
+        } else {
+            AFL_VERIFY(!withMetadataBlobs);
+        }
+    }
+
+    TPortionInfoConstructor(TPortionInfo&& portion)
+        : PathId(portion.GetPathId())
+        , PortionId(portion.GetPortionId())
+        , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
+        , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
+        , SchemaVersion(portion.GetSchemaVersionOptional())
+        , ShardingVersion(portion.GetShardingVersionOptional()) {
+        MetaConstructor = TPortionMetaConstructor(std::move(portion.Meta), true);
+    }
+
+    TPortionInfoConstructor(TPortionDataAccessor&& accessor)
+        : TPortionInfoConstructor(accessor.GetPortionInfo(), true, true) {
+        Indexes = accessor.GetIndexesVerified();
+        Records = accessor.GetRecordsVerified();
+    }
+
+    TPortionInfoConstructor(const TPortionDataAccessor& accessor, const bool withBlobs, const bool withMetadata, const bool withMetadataBlobs)
+        : TPortionInfoConstructor(accessor.GetPortionInfo(), withMetadata, withMetadataBlobs) {
+        if (withBlobs) {
+            AFL_VERIFY(withMetadataBlobs && withMetadata);
+            Indexes = accessor.GetIndexesVerified();
+            Records = accessor.GetRecordsVerified();
+        }
+    }
+
 public:
     TPortionInfoConstructor(TPortionInfoConstructor&&) noexcept = default;
     TPortionInfoConstructor& operator=(TPortionInfoConstructor&&) noexcept = default;
+
+    bool HaveBlobsData() {
+        return MetaConstructor.GetBlobIdsCount() || Records.size() || Indexes.size();
+    }
+
+    static TPortionInfoConstructor BuildForLoading(const TPortionInfo::TConstPtr& portion, std::vector<TColumnChunkLoadContextV1>&& records,
+        std::vector<TIndexChunkLoadContext>&& indexes);
+
+    static TPortionInfoConstructor BuildForRewriteBlobs(const TPortionInfo& portion);
 
     void ClearRecords() {
         Records.clear();
@@ -84,37 +134,6 @@ public:
     TInsertWriteId GetInsertWriteIdVerified() const {
         AFL_VERIFY(InsertWriteId);
         return *InsertWriteId;
-    }
-
-    TPortionInfoConstructor(const TPortionInfo& portion, const bool withBlobs, const bool withMetadata, const bool withMetadataBlobs)
-        : PathId(portion.GetPathId())
-        , PortionId(portion.GetPortionId())
-        , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
-        , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
-        , SchemaVersion(portion.GetSchemaVersionOptional())
-        , ShardingVersion(portion.GetShardingVersionOptional())
-        , CommitSnapshot(portion.GetCommitSnapshotOptional())
-        , InsertWriteId(portion.GetInsertWriteIdOptional()) {
-        if (withMetadata) {
-            MetaConstructor = TPortionMetaConstructor(portion.Meta, withMetadataBlobs);
-        }
-        if (withBlobs) {
-            AFL_VERIFY(withMetadata);
-            Indexes = portion.Indexes;
-            Records = portion.Records;
-        }
-    }
-
-    TPortionInfoConstructor(TPortionInfo&& portion)
-        : PathId(portion.GetPathId())
-        , PortionId(portion.GetPortionId())
-        , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
-        , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
-        , SchemaVersion(portion.GetSchemaVersionOptional())
-        , ShardingVersion(portion.GetShardingVersionOptional()) {
-        MetaConstructor = TPortionMetaConstructor(portion.Meta, true);
-        Indexes = std::move(portion.Indexes);
-        Records = std::move(portion.Records);
     }
 
     TPortionAddress GetAddress() const {
@@ -245,7 +264,7 @@ public:
         SetRemoveSnapshot(TSnapshot(planStep, txId));
     }
 
-    void LoadRecord(const TColumnChunkLoadContextV1& loadContext);
+    void LoadRecord(TColumnChunkLoadContextV1&& loadContext);
 
     ui32 GetRecordsCount() const {
         AFL_VERIFY(Records.size());
@@ -339,7 +358,7 @@ public:
         }
     }
 
-    void LoadIndex(const TIndexChunkLoadContext& loadContext);
+    void LoadIndex(TIndexChunkLoadContext&& loadContext);
 
     const TColumnRecord& AppendOneChunkColumn(TColumnRecord&& record);
 

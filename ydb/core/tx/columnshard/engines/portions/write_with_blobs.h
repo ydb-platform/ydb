@@ -77,6 +77,7 @@ private:
 
     explicit TWritePortionInfoWithBlobsConstructor(TPortionInfoConstructor&& portionConstructor)
         : PortionConstructor(std::move(portionConstructor)) {
+        AFL_VERIFY(!PortionConstructor->HaveBlobsData());
     }
 
     TBlobInfo::TBuilder StartBlob(const std::shared_ptr<IBlobsStorageOperator>& bOperator) {

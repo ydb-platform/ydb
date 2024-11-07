@@ -447,13 +447,13 @@ bool TColumnEngineForLogs::ApplyChangesOnExecute(
     return true;
 }
 
-void TColumnEngineForLogs::AppendPortion(const TPortionInfo::TPtr& portionInfo) {
-    auto granule = GetGranulePtrVerified(portionInfo->GetPathId());
-    AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionId()));
-    UpdatePortionStats(*portionInfo, EStatsUpdateType::ADD);
-    granule->AppendPortion(portionInfo);
-    if (portionInfo->HasRemoveSnapshot()) {
-        AddCleanupPortion(portionInfo);
+void TColumnEngineForLogs::AppendPortion(const TPortionDataAccessor& portionInfo, const bool addAsAccessor) {
+    auto granule = GetGranulePtrVerified(portionInfo.GetPortionInfo().GetPathId());
+    AFL_VERIFY(!granule->GetPortionOptional(portionInfo.GetPortionInfo().GetPortionId()));
+    UpdatePortionStats(portionInfo.GetPortionInfo(), EStatsUpdateType::ADD);
+    granule->AppendPortion(portionInfo, addAsAccessor);
+    if (portionInfo.GetPortionInfo().HasRemoveSnapshot()) {
+        AddCleanupPortion(portionInfo.GetPortionInfoPtr());
     }
 }
 

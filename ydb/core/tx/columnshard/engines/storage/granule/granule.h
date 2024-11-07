@@ -118,6 +118,7 @@ private:
     TMonotonic ModificationLastTime = TMonotonic::Now();
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     THashMap<TInsertWriteId, std::shared_ptr<TPortionInfo>> InsertedPortions;
+    THashMap<TInsertWriteId, TPortionDataAccessor> InsertedAccessors;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
 
     void RebuildHardMetrics() const;
@@ -199,26 +200,11 @@ public:
         OnAfterChangePortion(innerPortion, nullptr);
     }
 
-    void InsertPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion) const {
-        AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
-        TDbWrapper wrapper(txc.DB, nullptr);
-        portion.SaveToDatabase(wrapper, 0, false);
-        DataAccessorsManager->AddPortion(portion);
-    }
-
-    void InsertPortionOnComplete(const std::shared_ptr<TPortionInfo>& portion) {
-        AFL_VERIFY(InsertedPortions.emplace(portion->GetInsertWriteIdVerified(), portion).second);
-    }
+    void InsertPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion) const;
+    void InsertPortionOnComplete(const TPortionDataAccessor& portion, IColumnEngine& engine);
 
     void CommitPortionOnExecute(
-        NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot& snapshot) const {
-        auto it = InsertedPortions.find(insertWriteId);
-        AFL_VERIFY(it != InsertedPortions.end());
-        it->second->SetCommitSnapshot(snapshot);
-        TDbWrapper wrapper(txc.DB, nullptr);
-        it->second->SaveMetaToDatabase(wrapper);
-    }
-
+        NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot& snapshot) const;
     void CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine);
 
     void AbortPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId) const {
@@ -236,7 +222,6 @@ public:
 
     void CommitImmediateOnExecute(
         NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const TPortionDataAccessor& portion) const;
-
     void CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine);
 
     std::vector<NStorageOptimizer::TTaskDescription> GetOptimizerTasksDescription() const {
@@ -326,7 +311,7 @@ public:
     void OnCompactionFailed(const TString& reason);
     void OnCompactionFinished();
 
-    void AppendPortion(const TPortionInfo::TPtr& info);
+    void AppendPortion(const TPortionDataAccessor& info, const bool addAsAccessor = true);
 
     TString DebugString() const {
         return TStringBuilder() << "(granule:" << GetPathId() << ";"

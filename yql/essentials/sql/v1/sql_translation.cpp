@@ -1963,37 +1963,32 @@ namespace {
         return true;
     }
 
-    bool StoreTierInterval(
-        const TRule_unary_subexpr& from, std::vector<TTtlSettings::TTierSettings>& to, TContext& ctx, TTranslation& txc) {
-        const TString intervalFunction = Id(from.GetRule_id_expr1(), txc);
+    bool FillTieringInterval(const TRule_expr& from, TNodePtr& tieringInterval, TSqlExpression& expr, TContext& ctx) {
+        auto exprNode = expr.Build(from);
+        if (!exprNode) {
+            return false;
+        }
 
-    bool StoreTierSettings(
-        const TRule_ttl_tier_entry& from, std::vector<TTtlSettings::TTierSettings>& to, TContext& ctx, TTranslation& txc) {
-        const TString intervalFunction = Id(from.GetRule_id_expr1(), txc);
-        if (intervalFunction != "Interval") {
+        if (exprNode->GetOpName() != "Interval") {
             ctx.Error() << "Literal of Interval type is expected for TTL";
             return false;
         }
 
-        const TString& evictionDelayString = ctx.Token(from.GetToken3());
-        const auto intervalArg = BuildLiteralSmartString(ctx, evictionDelayString);
-        auto intervalExpr = BuildBuiltinFunc(ctx, ctx.Pos(), "Interval", { intervalArg });
-        if (!intervalExpr) {
-            return false;
-        }
+        tieringInterval = exprNode;
+        return true;
+    }
 
-        std::optional<TIdentifier> storageName;
-        switch (from.GetBlock5().Alt_case()) {
-            case TRule_ttl_tier_entry_TBlock5::kAlt1:
-                storageName = IdEx(from.GetBlock5().GetAlt1().GetRule_an_id2(), txc);
+    bool FillTierAction(const TRule_ttl_tier_action& from, std::optional<TIdentifier>& storageName, TTranslation& txc) {
+        switch (from.GetAltCase()) {
+            case TRule_ttl_tier_action::kAltTtlTierAction1:
+                storageName = IdEx(from.GetAlt_ttl_tier_action1().GetRule_an_id2(), txc);
                 break;
-            case TRule_ttl_tier_entry_TBlock5::kAlt2:
+            case TRule_ttl_tier_action::kAltTtlTierAction2:
+                storageName.reset();
                 break;
-            case TRule_ttl_tier_entry_TBlock5::ALT_NOT_SET:
+            case TRule_ttl_tier_action::ALT_NOT_SET:
                 Y_ABORT("You should change implementation according to grammar changes");
         }
-
-        to.emplace_back(intervalExpr, storageName);
         return true;
     }
 
@@ -2004,36 +1999,32 @@ namespace {
             auto columnName = IdEx(from.GetAlt_table_setting_value5().GetRule_an_id3(), txc);
             auto tiersLiteral = from.GetAlt_table_setting_value5().GetRule_ttl_tier_list1();
 
-            std::vector<TTtlSettings::TTierSettings> tiers;
-            if (tiersLiteral.HasBlock2()) {
-                tiers.emp
+            TNodePtr firstInterval;
+            if (!FillTieringInterval(tiersLiteral.GetRule_expr1(), firstInterval, expr, ctx)) {
+                return false;
             }
-            switch (tiersLiteral.Alt_case()) {
-            case TRule_table_setting_value_TAlt5_TBlock1::kAlt1: {
-                auto exprNode = expr.Build(tiersLiteral.GetAlt1().GetRule_expr1());
-                if (!exprNode) {
-                    return false;
-                }
 
-                if (exprNode->GetOpName() != "Interval") {
-                    ctx.Error() << "Literal of Interval type is expected for TTL";
+            std::vector<TTtlSettings::TTierSettings> tiers;
+            if (!tiersLiteral.HasBlock2()) {
+                tiers.emplace_back(firstInterval);
+            } else {
+                std::optional<TIdentifier> firstStorageName;
+                if (!FillTierAction(tiersLiteral.GetBlock2().GetRule_ttl_tier_action1(), firstStorageName, txc)) {
                     return false;
                 }
+                tiers.emplace_back(firstInterval, firstStorageName);
 
-                tiers.emplace_back(exprNode);
-            } break;
-            case TRule_table_setting_value_TAlt5_TBlock1::kAlt2:
-                if (!StoreTierSettings(tiersBlock.GetAlt2().GetRule_ttl_tier_list1().GetRule_ttl_tier_entry2(), tiers, ctx, txc)) {
-                    return false;
-                }
-                for (const auto& tierBlock : tiersBlock.GetAlt2().GetRule_ttl_tier_list1().GetBlock3()) {
-                    if (!StoreTierSettings(tierBlock.GetRule_ttl_tier_entry2(), tiers, ctx, txc)) {
+                for (const auto& tierLiteral : tiersLiteral.GetBlock2().GetBlock2()) {
+                    TNodePtr intervalExpr;
+                    if (!FillTieringInterval(tierLiteral.GetRule_expr2(), intervalExpr, expr, ctx)) {
                         return false;
                     }
+                    std::optional<TIdentifier> storageName;
+                    if (!FillTierAction(tierLiteral.GetRule_ttl_tier_action3(), storageName, txc)) {
+                        return false;
+                    }
+                    tiers.emplace_back(intervalExpr, storageName);
                 }
-                break;
-            case TRule_table_setting_value_TAlt5_TBlock1::ALT_NOT_SET:
-                return false;
             }
 
             TMaybe<TTtlSettings::EUnit> columnUnit;

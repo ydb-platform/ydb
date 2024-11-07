@@ -2094,7 +2094,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql(
             R"( USE plato;
                 CREATE TABLE tableName (Key Uint32, CreatedAt Uint32, PRIMARY KEY (Key))
-                WITH (TTL = (Interval("P1D") TO Tier1, Interval("P2D") TO Tier2, Interval("P30D") DELETE) On CreatedAt AS SECONDS);)"
+                WITH (TTL = Interval("P1D") TO Tier1, Interval("P2D") TO Tier2, Interval("P30D") DELETE On CreatedAt AS SECONDS);)"
         );
         UNIT_ASSERT(res.Root);
 

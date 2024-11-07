@@ -138,6 +138,8 @@ TGranuleMeta::TGranuleMeta(
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(
         PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
     OptimizerPlanner = versionedIndex.GetLastSchema()->GetIndexInfo().GetCompactionPlannerConstructor()->BuildPlanner(context).DetachResult();
+    MetadataMemoryManager = std::make_shared<NDataAccessorControl::NLocalDB::TManager>();
+//    MetadataMemoryManager = versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataMemoryManagerConstructor()->Build().DetachResult();
     AFL_VERIFY(!!OptimizerPlanner);
     ActualizationIndex = std::make_unique<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 }
@@ -182,13 +184,7 @@ void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOpti
 
 std::shared_ptr<NKikimr::ITxReader> TGranuleMeta::BuildLoader(
     const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex) {
-    auto result = std::make_shared<TTxCompositeReader>("granule");
-    auto portionsLoadContext = std::make_shared<NLoading::TPortionsLoadContext>();
-    result->AddChildren(std::make_shared<NLoading::TGranulePortionsReader>("portions", &vIndex, this, dsGroupSelector, portionsLoadContext));
-    result->AddChildren(std::make_shared<NLoading::TGranuleColumnsReader>("columns", &vIndex, this, dsGroupSelector, portionsLoadContext));
-    result->AddChildren(std::make_shared<NLoading::TGranuleIndexesReader>("indexes", &vIndex, this, dsGroupSelector, portionsLoadContext));
-    result->AddChildren(std::make_shared<NLoading::TGranuleFinishLoading>("finish", &vIndex, this, dsGroupSelector, portionsLoadContext));
-    return result;
+    return MetadataMemoryManager->BuildGranuleLoader(vIndex, this, dsGroupSelector);
 }
 
 bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex) {

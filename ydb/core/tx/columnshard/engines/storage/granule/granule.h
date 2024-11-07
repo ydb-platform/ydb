@@ -132,6 +132,7 @@ private:
     std::shared_ptr<TGranulesStat> Stats;
     std::shared_ptr<IStoragesManager> StoragesManager;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> OptimizerPlanner;
+    std::shared_ptr<NDataAccessorControl::IMetadataMemoryManager> MetadataMemoryManager;
     std::unique_ptr<NActualizer::TGranuleActualizationIndex> ActualizationIndex;
     mutable TInstant NextActualizations = TInstant::Zero();
 
@@ -168,7 +169,7 @@ public:
     std::unique_ptr<IGranuleDataAccessor> BuildDataAccessor() {
         AFL_VERIFY(!DataAccessorConstructed);
         DataAccessorConstructed = true;
-        return std::make_unique<TMemDataAccessor>(PathId);
+        return MetadataMemoryManager->BuildCollector(PathId);
     }
 
     void RefreshTiering(const std::optional<TTiering>& tiering) {
@@ -321,7 +322,7 @@ public:
                                 << ")";
     }
 
-    void UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>&& portion);
+    void UpsertPortionOnLoad(TPortionDataAccessor&& accessor);
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;

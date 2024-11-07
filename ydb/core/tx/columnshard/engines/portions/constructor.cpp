@@ -9,6 +9,47 @@
 
 namespace NKikimr::NOlap {
 
+std::shared_ptr<TPortionInfo> TPortionInfoConstructor::BuildPortionPtr() {
+    AFL_VERIFY(!Constructed);
+    Constructed = true;
+    AFL_VERIFY(Records.empty());
+    AFL_VERIFY(Indexes.empty());
+
+    MetaConstructor.ColumnRawBytes = 0;
+    MetaConstructor.ColumnBlobBytes = 0;
+    MetaConstructor.IndexRawBytes = 0;
+    MetaConstructor.IndexBlobBytes = 0;
+
+    MetaConstructor.RecordsCount = GetRecordsCount();
+
+    std::shared_ptr<TPortionInfo> result(new TPortionInfo(MetaConstructor.Build()));
+    AFL_VERIFY(PathId);
+    result->PathId = PathId;
+    result->PortionId = GetPortionIdVerified();
+
+    AFL_VERIFY(MinSnapshotDeprecated);
+    AFL_VERIFY(MinSnapshotDeprecated->Valid());
+    result->MinSnapshotDeprecated = *MinSnapshotDeprecated;
+    if (RemoveSnapshot) {
+        AFL_VERIFY(RemoveSnapshot->Valid());
+        result->RemoveSnapshot = *RemoveSnapshot;
+    }
+    result->SchemaVersion = SchemaVersion;
+    result->ShardingVersion = ShardingVersion;
+    result->CommitSnapshot = CommitSnapshot;
+    result->InsertWriteId = InsertWriteId;
+    AFL_VERIFY(!CommitSnapshot || !!InsertWriteId);
+
+    if (result->GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
+        //        AFL_VERIFY(!!InsertWriteId);
+    } else {
+        AFL_VERIFY(!CommitSnapshot);
+        AFL_VERIFY(!InsertWriteId);
+    }
+
+    return result;
+}
+
 TPortionDataAccessor TPortionInfoConstructor::Build(const bool needChunksNormalization) {
     AFL_VERIFY(!Constructed);
     Constructed = true;

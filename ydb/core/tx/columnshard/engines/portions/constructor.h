@@ -375,6 +375,7 @@ public:
     }
 
     TPortionDataAccessor Build(const bool needChunksNormalization);
+    std::shared_ptr<TPortionInfo> BuildPortionPtr();
 };
 
 class TPortionConstructors {

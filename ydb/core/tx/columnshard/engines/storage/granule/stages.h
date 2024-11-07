@@ -21,6 +21,30 @@ public:
     }
 };
 
+class TGranuleOnlyPortionsReader: public ITxReader {
+private:
+    using TBase = ITxReader;
+
+    const std::shared_ptr<IBlobGroupSelector> DsGroupSelector;
+    TGranuleMeta* Self = nullptr;
+    const TVersionedIndex* VersionedIndex;
+
+    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
+    virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override;
+
+public:
+    TGranuleOnlyPortionsReader(const TString& name, const TVersionedIndex* versionedIndex, TGranuleMeta* self,
+        const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector)
+        : TBase(name)
+        , DsGroupSelector(dsGroupSelector)
+        , Self(self)
+        , VersionedIndex(versionedIndex) {
+        AFL_VERIFY(!!DsGroupSelector);
+        AFL_VERIFY(VersionedIndex);
+        AFL_VERIFY(Self);
+    }
+};
+
 class IGranuleTxReader: public ITxReader {
 private:
     using TBase = ITxReader;
@@ -39,6 +63,10 @@ public:
         , Self(self)
         , VersionedIndex(versionedIndex)
         , Context(context) {
+        AFL_VERIFY(!!DsGroupSelector);
+        AFL_VERIFY(VersionedIndex);
+        AFL_VERIFY(Self);
+        AFL_VERIFY(Context);
     }
 };
 

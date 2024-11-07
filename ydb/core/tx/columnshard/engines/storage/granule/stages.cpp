@@ -6,6 +6,26 @@
 
 namespace NKikimr::NOlap::NLoading {
 
+bool TGranuleOnlyPortionsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
+    TDbWrapper db(txc.DB, &*DsGroupSelector);
+    std::vector<TPortionInfo::TPtr> portions;
+    Context->MutableConstructors().ClearPortions();
+    return db.LoadPortions(Self->GetPathId(), [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+        const TIndexInfo& indexInfo = portion.GetSchema(*VersionedIndex)->GetIndexInfo();
+        AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
+        portions.emplace_back(portion.BuildPortionPtr());
+    });
+    for (auto&& i : portions) {
+        UpsertPortionOnLoad(i);
+    }
+    return true;
+}
+
+bool TGranuleOnlyPortionsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
+    NIceDb::TNiceDb db(txc.DB);
+    return db.Table<NColumnShard::Schema::IndexPortions>().Prefix(Self->GetPathId()).Select().IsReady();
+}
+
 bool TGranulePortionsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     const TVersionedIndex& index = *VersionedIndex;

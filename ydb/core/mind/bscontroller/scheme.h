@@ -101,7 +101,7 @@ struct Schema : NIceDb::Schema {
         struct GroupReservePart : Column<15, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; }; // parts per million
         struct MaxScrubbedDisksAtOnce : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = Max<ui32>(); }; // no limit
         struct PDiskSpaceColorBorder : Column<17, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
-        struct GroupLayoutSanitizer : Column<18, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        struct GroupLayoutSanitizer : Column<18, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
         struct NextVirtualGroupId : Column<19, Group::ID::ColumnType> { static constexpr Type Default = 0; };
         struct AllowMultipleRealmsOccupation : Column<20, NScheme::NTypeIds::Bool> { static constexpr Type Default = true; };
         struct CompatibilityInfo : Column<21, NScheme::NTypeIds::String> {};

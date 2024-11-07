@@ -99,7 +99,7 @@ private:
     NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Promise;
 };
 
-std::vector<NMetadata::NSecret::TSecretIdOrValue> MakeSecretIdsOrNames(const std::vector<TString> secretNames) {
+std::vector<NMetadata::NSecret::TSecretIdOrValue> MakeSecretIdsOrNames(const std::vector<TString>& secretNames) {
     std::vector<NMetadata::NSecret::TSecretIdOrValue> secretIdsOrNames;
     for (const TString& name : secretNames) {
         secretIdsOrNames.emplace_back(NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(name));
@@ -165,7 +165,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
                 authDescription.GetAws().HasAwsAccessKeyIdSecretOwner()
                     ? NMetadata::NSecret::TSecretIdOrValue::BuildAsId(NMetadata::NSecret::TSecretId(
                           authDescription.GetAws().GetAwsAccessKeyIdSecretOwner(), authDescription.GetAws().GetAwsAccessKeyIdSecretName()))
-                    : NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(authDescription.GetAws().GetAwsAccessKeyIdSecretOwner());
+                    : NMetadata::NSecret::TSecretIdOrValue::BuildAsValue(authDescription.GetAws().GetAwsAccessKeyIdSecretName());
             const NMetadata::NSecret::TSecretIdOrValue awsAccessKeyKeySecretId =
                 authDescription.GetAws().HasAwsSecretAccessKeySecretOwner()
                     ? NMetadata::NSecret::TSecretIdOrValue::BuildAsId(NMetadata::NSecret::TSecretId(

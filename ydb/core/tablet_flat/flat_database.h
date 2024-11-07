@@ -259,7 +259,7 @@ public:
 
     size_t GetCommitRedoBytes() const;
 
-    TCompactionStats GetCompactionStats(ui32 table, bool enableBTreeIndex) const;
+    TCompactionStats GetCompactionStats(ui32 table) const;
 
     /**
      * Adds a callback, which is called when database changes are committed

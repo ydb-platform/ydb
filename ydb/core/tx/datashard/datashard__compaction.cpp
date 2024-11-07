@@ -105,11 +105,11 @@ public:
             return true;
         }
 
-        auto stats = txc.DB.GetCompactionStats(localTid,
-            AppData(ctx)->FeatureFlags.GetEnableLocalDBBtreeIndex());
+        auto stats = txc.DB.GetCompactionStats(localTid);
         bool isEmpty = stats.PartCount == 0 && stats.MemDataSize == 0;
         bool isSingleParted = stats.PartCount == 1 && stats.MemDataSize == 0;
-        if (isEmpty || isSingleParted && !hasBorrowed && !stats.HasSchemaChanges && !record.GetCompactSinglePartedShards()) {
+        bool hasSchemaChanges = Self->Executor()->HasSchemaChanges(tableInfo.LocalTid);
+        if (isEmpty || isSingleParted && !hasBorrowed && !hasSchemaChanges && !record.GetCompactSinglePartedShards()) {
             // nothing to compact
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Background compaction of tablet# " << Self->TabletID()

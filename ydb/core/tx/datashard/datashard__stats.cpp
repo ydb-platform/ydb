@@ -494,14 +494,8 @@ public:
                 searchHeight = 0;
             }
 
-            TAutoPtr<TSubset> subsetForStats = txc.DB.Subset(localTableId, TEpoch::Max(), { }, { });
-            // Remove memtables from the subset as we only want to look at indexes for parts
-            subsetForStats->Frozen.clear();
-
-            auto schemeTableInfo = Self->Scheme().GetTableInfo(localTableId);
-            Y_ABORT_UNLESS(schemeTableInfo);
-            bool hasSchemaChanges = HasSchemaChanges(*subsetForStats, *schemeTableInfo, 
-                AppData(ctx)->FeatureFlags.GetEnableLocalDBBtreeIndex());
+            // Note: ignore shadow table for simplicity
+            bool hasSchemaChanges = Self->Executor()->HasSchemaChanges(localTableId);
 
             if (!ti.second->StatsNeedUpdate) {
                 auto& stats = ti.second->Stats;
@@ -545,6 +539,10 @@ public:
             if (shadowTableId) {
                 indexSize += txc.DB.GetTableIndexSize(shadowTableId);
             }
+
+            TAutoPtr<TSubset> subsetForStats = txc.DB.Subset(localTableId, TEpoch::Max(), { }, { });
+            // Remove memtables from the subset as we only want to look at indexes for parts
+            subsetForStats->Frozen.clear();
 
             if (shadowTableId) {
                 // HACK: we combine subsets of different tables

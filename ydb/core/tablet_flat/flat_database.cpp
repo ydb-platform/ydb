@@ -833,10 +833,9 @@ void TDatabase::RollUpRemoveRowVersions(ui32 table, const TRowVersion& lower, co
     }
 }
 
-TCompactionStats TDatabase::GetCompactionStats(ui32 table, bool enableBTreeIndex) const
+TCompactionStats TDatabase::GetCompactionStats(ui32 table) const
 {
-    return Require(table)->GetCompactionStats(
-        *DatabaseImpl->Scheme->GetTableInfo(table), enableBTreeIndex);
+    return Require(table)->GetCompactionStats();
 }
 
 // NOTE: This helper should be used only to dump local DB contents in GDB

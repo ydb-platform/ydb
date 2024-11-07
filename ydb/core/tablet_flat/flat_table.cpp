@@ -1397,18 +1397,14 @@ bool TTable::RemoveRowVersions(const TRowVersion& lower, const TRowVersion& uppe
     return RemovedRowVersions.Add(lower, upper);
 }
 
-TCompactionStats TTable::GetCompactionStats(const TScheme::TTableInfo &table, bool enableBTreeIndex) const
+TCompactionStats TTable::GetCompactionStats() const
 {
-    TCompactionStats stats;
-    stats.MemRowCount = GetMemRowCount();
-    stats.MemDataSize = GetMemSize();
-    stats.MemDataWaste = GetMemWaste();
-    stats.PartCount = Flatten.size() + ColdParts.size();
-
-    auto subset = Subset(TEpoch::Max());
-    stats.HasSchemaChanges = HasSchemaChanges(*subset, table, enableBTreeIndex);
-
-    return stats;
+    return {
+        .PartCount = Flatten.size() + ColdParts.size(),
+        .MemRowCount = GetMemRowCount(),
+        .MemDataSize = GetMemSize(),
+        .MemDataWaste = GetMemWaste(),
+    };
 }
 
 void TTable::SetTableObserver(TIntrusivePtr<ITableObserver> ptr) noexcept

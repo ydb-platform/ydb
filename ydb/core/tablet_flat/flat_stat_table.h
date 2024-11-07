@@ -2,7 +2,6 @@
 
 #include "flat_stat_part.h"
 #include "flat_table_subset.h"
-#include "flat_dbase_scheme.h"
 
 #include <util/generic/queue.h>
 #include <util/generic/hash_set.h>
@@ -196,6 +195,5 @@ using TBuildStatsYieldHandler = std::function<void()>;
 
 bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, IPages* env, TBuildStatsYieldHandler yieldHandler);
 void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners);
-bool HasSchemaChanges(const TSubset& subset, const TScheme::TTableInfo& tableInfo, bool enableBTreeIndex);
 
 }}

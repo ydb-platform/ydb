@@ -36,6 +36,12 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 
 {% if oss == true and backend_name == "YDB" %}
 
+{% cut "See table and column naming rules" %}
+
+{% include [table naming rules](../../../../concepts/datamodel/_includes/table-name-rules.md) %}
+
+{% endcut %}
+
 {% if feature_olap_tables %}
 
 {{ ydb-short-name }} supports two types of tables:

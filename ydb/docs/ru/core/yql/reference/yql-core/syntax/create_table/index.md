@@ -36,6 +36,12 @@
 
 {% if oss == true and backend_name == "YDB" %}
 
+{% cut "См. правила наименования таблиц и колонок" %}
+
+{% include [table naming rules](../../../../concepts/datamodel/_includes/table-name-rules.md) %}
+
+{% endcut %}
+
 {% if feature_olap_tables %}
 
 {{ ydb-short-name }} поддерживает два типа таблиц:
@@ -95,7 +101,7 @@ WITH (
   {% if feature_column_container_type == true %}
 
   Для неключевых колонок допускаются любые типы данных{% if feature_serial %} , кроме [серийных](../../types/serial.md) {% endif %}, для ключевых - только [примитивные](../../types/primitive.md){% if feature_serial %} и [серийные](../../types/serial.md){% endif %}. При указании сложных типов (например, `List<String>`) тип заключается в двойные кавычки.
-  
+
   {% else %}
 
   {% if feature_serial %}
@@ -103,7 +109,7 @@ WITH (
   Для ключевых колонок допускаются только [примитивные](../../types/primitive.md) и [серийные](../../types/serial.md) типы данных, для неключевых колонок допускаются только [примитивные](../../types/primitive.md).
 
   {% else %}
-  
+
   Для ключевых и неключевых колонок допускаются только [примитивные](../../types/primitive.md) типы данных.
 
   {% endif %}
@@ -183,7 +189,7 @@ WITH (
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
   );
   ```
-  
+
   Такой код создаст колоночную таблицу с 10-ю партициями. С полным списком опций партиционирования колоночных таблиц можно ознакомиться в разделе [{#T}](../../../../concepts/datamodel/table.md#olap-tables-partitioning) статьи [{#T}](../../../../concepts/datamodel/table.md).
 
 

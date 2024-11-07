@@ -4,29 +4,23 @@ Every table in {{ ydb-short-name }} has a name. In YQL statements, table names a
 
 Table names in {{ ydb-short-name }} must meet the following requirements:
 
-- Table name length must not exceed 255 characters.
-- Table names must not contain dots only.
-- Tables cannot be created in the system folder (`.sys`).
 - Table names can include the following characters:
     - uppercase latin characters
     - lowercase latin characters
     - digits
     - special characters: `!`, `"`, `#`, `$`, `%`, `&`, `'`, `(`, `)`, `*`, `+`, `,`, `-`, `.`, `:`, `;`, `<`, `=`, `>`, `?`, `@`, `[`, `\`, `]`, `^`, `_`, `` ` ``, `{`, `|`, `}`, `~`.
-
-        {% note info %}
-
-        To use special characters in table names, surround table names with backticks (`` ` ``).
-
-        {% endnote %}
+- Table name length must not exceed 255 characters.
+- Table names must not contain dots only.
+- Tables cannot be created in the system folder (`.sys`).
 
 ## Column naming rules
 
 Column names in {{ ydb-short-name }} must meet the following requirements:
 
-- Column names must not start with the system prefix `__ydb_`.
 - Column names can include the following characters:
     - uppercase latin characters
     - lowercase latin characters
     - digits
     - special characters: `-` and `_`.
+- Column names must not start with the system prefix `__ydb_`.
 

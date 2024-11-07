@@ -15,13 +15,6 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::BuildPortionPtr() {
     AFL_VERIFY(Records.empty());
     AFL_VERIFY(Indexes.empty());
 
-    MetaConstructor.ColumnRawBytes = 0;
-    MetaConstructor.ColumnBlobBytes = 0;
-    MetaConstructor.IndexRawBytes = 0;
-    MetaConstructor.IndexBlobBytes = 0;
-
-    MetaConstructor.RecordsCount = GetRecordsCount();
-
     std::shared_ptr<TPortionInfo> result(new TPortionInfo(MetaConstructor.Build()));
     AFL_VERIFY(PathId);
     result->PathId = PathId;
@@ -41,7 +34,7 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::BuildPortionPtr() {
     AFL_VERIFY(!CommitSnapshot || !!InsertWriteId);
 
     if (result->GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
-        //        AFL_VERIFY(!!InsertWriteId);
+//        AFL_VERIFY(!!InsertWriteId);
     } else {
         AFL_VERIFY(!CommitSnapshot);
         AFL_VERIFY(!InsertWriteId);

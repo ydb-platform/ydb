@@ -9,14 +9,15 @@ namespace NKikimr::NOlap::NLoading {
 bool TGranuleOnlyPortionsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     std::vector<TPortionInfo::TPtr> portions;
-    Context->MutableConstructors().ClearPortions();
-    return db.LoadPortions(Self->GetPathId(), [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+    if (!db.LoadPortions(Self->GetPathId(), [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
         const TIndexInfo& indexInfo = portion.GetSchema(*VersionedIndex)->GetIndexInfo();
         AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
         portions.emplace_back(portion.BuildPortionPtr());
-    });
+    })) {
+        return false;
+    }
     for (auto&& i : portions) {
-        UpsertPortionOnLoad(i);
+        Self->UpsertPortionOnLoad(i);
     }
     return true;
 }
@@ -35,7 +36,6 @@ bool TGranulePortionsReader::DoExecute(NTabletFlatExecutor::TTransactionContext&
         AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
         AFL_VERIFY(Context->MutableConstructors().AddConstructorVerified(std::move(portion)));
     });
-    return true;
 }
 
 bool TGranulePortionsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {

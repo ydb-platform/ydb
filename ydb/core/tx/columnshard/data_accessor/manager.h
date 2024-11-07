@@ -1,7 +1,8 @@
 #pragma once
-#include "controller.h"
 #include "events.h"
 #include "request.h"
+
+#include "abstract/collector.h"
 
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
@@ -14,9 +15,22 @@ private:
     virtual void DoUnregisterController(const ui64 pathId) = 0;
     virtual void DoAddPortion(const TPortionDataAccessor& accessor) = 0;
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portion) = 0;
+    const NActors::TActorId TabletActorId;
 
 public:
+    const NActors::TActorId& GetTabletActorId() const {
+        return TabletActorId;
+    }
+
+    IDataAccessorsManager(const NActors::TActorId& tabletActorId)
+        : TabletActorId(tabletActorId)
+    {
+
+    }
+
     virtual ~IDataAccessorsManager() = default;
+
+
 
     void AddPortion(const TPortionDataAccessor& accessor) {
         DoAddPortion(accessor);
@@ -47,6 +61,7 @@ public:
 
 class TActorAccessorsManager: public IDataAccessorsManager {
 private:
+    using TBase = IDataAccessorsManager;
     const NActors::TActorId ActorId;
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override {
         NActors::TActivationContext::Send(ActorId, std::make_unique<TEvAskDataAccessors>(request));
@@ -65,13 +80,16 @@ private:
     }
 
 public:
-    TActorAccessorsManager(const NActors::TActorId& actorId)
-        : ActorId(actorId) {
+    TActorAccessorsManager(const NActors::TActorId& actorId, const NActors::TActorId& tabletActorId)
+        : TBase(tabletActorId)
+        , ActorId(actorId) {
+        AFL_VERIFY(!!tabletActorId);
     }
 };
 
 class TLocalManager: public IDataAccessorsManager {
 private:
+    using TBase = IDataAccessorsManager;
     THashMap<ui64, std::unique_ptr<IGranuleDataAccessor>> Managers;
 
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override {
@@ -93,7 +111,7 @@ private:
     virtual void DoAddPortion(const TPortionDataAccessor& accessor) override {
         auto it = Managers.find(accessor.GetPortionInfo().GetPathId());
         AFL_VERIFY(it != Managers.end());
-        it->second->ModifyPortions( { accessor }, {} );
+        it->second->ModifyPortions({ accessor }, {});
     }
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portionInfo) override {
         auto it = Managers.find(portionInfo->GetPathId());
@@ -102,7 +120,11 @@ private:
     }
 
 public:
-    TLocalManager() = default;
+    TLocalManager()
+        : TBase(NActors::TActorId())
+    {
+
+    };
 };
 
 }   // namespace NKikimr::NOlap::NDataAccessorControl

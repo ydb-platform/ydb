@@ -1,6 +1,6 @@
 #pragma once
 
-#include "controller.h"
+#include "abstract/collector.h"
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>

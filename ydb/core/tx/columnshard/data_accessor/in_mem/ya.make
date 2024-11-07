@@ -6,6 +6,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/tx/columnshard/data_accessor/abstract
 )
 
 END()

@@ -3,6 +3,7 @@
 #include "storage.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/data_accessor/local_db/manager.h>
 #include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/tx_reader/composite.h>
@@ -12,10 +13,11 @@
 namespace NKikimr::NOlap {
 
 void TGranuleMeta::AppendPortion(const TPortionDataAccessor& info, const bool addAsAccessor) {
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info.GetPortionInfo().DebugString())("path_id", GetPathId());
-    auto it = Portions.find(info.GetPortionInfo().GetPortionId());
-    AFL_VERIFY(info.GetPortionInfo().GetPathId() == GetPathId())("event", "incompatible_granule")("portion", info.GetPortionInfo().DebugString())(
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "upsert_portion")("portion", info.GetPortionInfo().DebugString())(
         "path_id", GetPathId());
+    auto it = Portions.find(info.GetPortionInfo().GetPortionId());
+    AFL_VERIFY(info.GetPortionInfo().GetPathId() == GetPathId())("event", "incompatible_granule")(
+        "portion", info.GetPortionInfo().DebugString())("path_id", GetPathId());
 
     AFL_VERIFY(info.GetPortionInfo().ValidSnapshotInfo())("event", "incorrect_portion_snapshots")(
         "portion", info.GetPortionInfo().DebugString());
@@ -138,13 +140,13 @@ TGranuleMeta::TGranuleMeta(
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(
         PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
     OptimizerPlanner = versionedIndex.GetLastSchema()->GetIndexInfo().GetCompactionPlannerConstructor()->BuildPlanner(context).DetachResult();
-    MetadataMemoryManager = std::make_shared<NDataAccessorControl::NLocalDB::TManager>();
-//    MetadataMemoryManager = versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataMemoryManagerConstructor()->Build().DetachResult();
+    MetadataMemoryManager = std::make_shared<NDataAccessorControl::NLocalDB::TManager>(DataAccessorsManager->GetTabletActorId());
+    //    MetadataMemoryManager = versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataMemoryManagerConstructor()->Build().DetachResult();
     AFL_VERIFY(!!OptimizerPlanner);
     ActualizationIndex = std::make_unique<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 }
 
-void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>&& portion) {
+void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& portion) {
     if (portion->HasInsertWriteId() && !portion->HasCommitSnapshot()) {
         const TInsertWriteId insertWriteId = portion->GetInsertWriteIdVerified();
         AFL_VERIFY(InsertedPortions.emplace(insertWriteId, portion).second);

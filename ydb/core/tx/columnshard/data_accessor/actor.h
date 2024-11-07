@@ -1,7 +1,8 @@
 #pragma once
-#include "controller.h"
 #include "events.h"
 #include "manager.h"
+
+#include "abstract/collector.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>

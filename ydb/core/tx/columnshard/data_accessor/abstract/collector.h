@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/tx/columnshard/data_accessor/request.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 
 namespace NKikimr::NOlap::NDataAccessorControl {
 class IGranuleDataAccessor {
@@ -19,11 +21,7 @@ public:
         : PathId(pathId) {
     }
 
-    void AskData(const std::shared_ptr<TDataAccessorsRequest>& request) {
-        AFL_VERIFY(request);
-        AFL_VERIFY(request->HasSubscriber());
-        return DoAskData(request);
-    }
+    void AskData(const std::shared_ptr<TDataAccessorsRequest>& request);
     void ModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) {
         return DoModifyPortions(add, remove);
     }

@@ -1,5 +1,6 @@
 #pragma once
-#include "request.h"
+#include <ydb/core/tx/columnshard/data_accessor/abstract/collector.h>
+#include <ydb/core/tx/columnshard/data_accessor/request.h>
 
 namespace NKikimr::NOlap::NDataAccessorControl::NLocalDB {
 
@@ -12,9 +13,11 @@ private:
     }
 
 public:
-    TCollector(const ui64 pathId)
-        : TBase(pathId) {
+    TCollector(const ui64 pathId, const NActors::TActorId& actorId)
+        : TBase(pathId)
+        , TabletActorId(actorId)
+    {
     }
 };
 
-}   // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap::NDataAccessorControl::NLocalDB

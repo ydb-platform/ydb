@@ -4,7 +4,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
-#include <ydb/core/tx/columnshard/data_accessor/controller.h>
+#include <ydb/core/tx/columnshard/data_accessor/abstract/manager.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
@@ -166,7 +166,7 @@ public:
     void FinishLoading(const std::shared_ptr<NLoading::TPortionsLoadContext>& context);
     bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
 
-    std::unique_ptr<IGranuleDataAccessor> BuildDataAccessor() {
+    std::unique_ptr<NDataAccessorControl::IGranuleDataAccessor> BuildDataAccessor() {
         AFL_VERIFY(!DataAccessorConstructed);
         DataAccessorConstructed = true;
         return MetadataMemoryManager->BuildCollector(PathId);
@@ -322,7 +322,7 @@ public:
                                 << ")";
     }
 
-    void UpsertPortionOnLoad(TPortionDataAccessor&& accessor);
+    void UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& portion);
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;

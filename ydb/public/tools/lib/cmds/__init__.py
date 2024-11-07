@@ -358,6 +358,10 @@ def deploy(arguments):
 
     if 'YDB_EXPERIMENTAL_PG' in os.environ:
         optionals['pg_compatible_expirement'] = True
+    
+    if os.environ.get('YDB_KAFKA_API_ENABLED', "0") == "1":
+        kafka_port = int(os.environ.get("YDB_KAFKA_PROXY_PORT", "9092"))
+        optionals['kafka_api_port'] = kafka_port
 
     configuration = KikimrConfigGenerator(
         erasure=parse_erasure(arguments),

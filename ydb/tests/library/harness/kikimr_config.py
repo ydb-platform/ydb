@@ -156,6 +156,7 @@ class KikimrConfigGenerator(object):
             default_user_sid=None,
             pg_compatible_expirement=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
+            kafka_api_port=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -175,9 +176,16 @@ class KikimrConfigGenerator(object):
         self.__grpc_tls_key = None
         self.__grpc_tls_cert = None
         self._pdisks_info = []
+
+        need_cert = self.__grpc_ssl_enable or kafka_api_tls
+        if need_cert:
+            cert_pem, key_pem = tls_tools.generate_selfsigned_cert(_get_fqdn())
+        else:
+            cert_pem, key_pem = None, None
+
+
         if self.__grpc_ssl_enable:
             self.__grpc_tls_data_path = grpc_tls_data_path or yatest.common.output_path()
-            cert_pem, key_pem = tls_tools.generate_selfsigned_cert(_get_fqdn())
             self.__grpc_tls_ca = cert_pem
             self.__grpc_tls_key = key_pem
             self.__grpc_tls_cert = cert_pem
@@ -424,6 +432,13 @@ class KikimrConfigGenerator(object):
 
             self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
             self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
+
+            if kafka_api_port is not None:
+                kafka_proxy_config = dict()
+                kafka_proxy_config["enable_kafka_proxy"] = True
+                kafka_proxy_config["listening_port"] = kafka_api_port
+
+                self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
 
     @property
     def pdisks_info(self):

@@ -228,7 +228,7 @@ class TestPqRowDispatcher(TestYdsBase):
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT data FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data Json NOT NULL, event String NOT NULL))
-                WHERE event = "event1" or event = "event2";'''
+                WHERE event = "event1" or event = "event2" or event = "event4";'''
 
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
@@ -238,12 +238,14 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 101, "data": {"key": "value", "second_key":"' + large_string + '"}, "event": "event1"}',
             '{"time": 102, "data": ["key1", "key2", "' + large_string + '"], "event": "event2"}',
             '{"time": 103, "data": ["' + large_string + '"], "event": "event3"}',
+            '{"time": 104, "data": "' + large_string + '", "event": "event4"}',
         ]
 
         self.write_stream(data)
         expected = [
             '{"key": "value", "second_key":"' + large_string + '"}',
-            '["key1", "key2", "' + large_string + '"]'
+            '["key1", "key2", "' + large_string + '"]',
+            '"' + large_string + '"'
         ]
         assert self.read_stream(len(expected), topic_path=self.output_topic) == expected
 

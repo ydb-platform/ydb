@@ -609,10 +609,15 @@ void TTopicSession::SendData(TClientsInfo& info) {
         LOG_ROW_DISPATCHER_TRACE("Buffer empty");
     }
 
+    if (!info.NextMessageOffset) {
+        LOG_ROW_DISPATCHER_ERROR("Try SendData() without NextMessageOffset, " << info.ReadActorId 
+            << " unread " << info.UnreadBytes << " DataArrivedSent " << info.DataArrivedSent);
+        return;
+    }
+
     do {
         auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
         event->Record.SetPartitionId(PartitionId);
-        Y_ENSURE(info.NextMessageOffset);
         event->ReadActorId = info.ReadActorId;
 
         ui64 batchSize = 0;

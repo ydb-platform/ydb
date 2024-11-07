@@ -26,9 +26,10 @@ class BaseSystemViews(object):
             KikimrConfigGenerator(
                 additional_log_configs={
                     'SYSTEM_VIEWS': LogLevels.DEBUG
-                }
+                },
             )
         )
+        cls.cluster.config.yaml_config['feature_flags']['enable_column_statistics'] = False
         cls.cluster.start()
 
     @classmethod

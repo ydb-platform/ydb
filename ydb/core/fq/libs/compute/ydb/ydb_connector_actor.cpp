@@ -47,7 +47,7 @@ public:
         const auto& event = *ev->Get();
         NYdb::NQuery::TExecuteScriptSettings settings;
         settings.ResultsTtl(event.ResultTtl);
-        settings.OperationTimeout(event.OperationTimeout);
+        settings.OperationTimeout(event.OperationDeadline - TInstant::Now());
         settings.Syntax(event.Syntax);
         settings.ExecMode(event.ExecMode);
         settings.StatsMode(event.StatsMode);

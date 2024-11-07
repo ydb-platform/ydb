@@ -197,6 +197,7 @@ enum EJobSortField
     JSF_DURATION = 6;
     JSF_PROGRESS = 7;
     JSF_ID = 8;
+    JSF_TASK_NAME = 9;
 }
 
 enum EJobSortDirection

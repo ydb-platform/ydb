@@ -141,8 +141,7 @@ namespace NYdb::NConsoleClient {
         // TODO(shmel1k@): add JSONStreamReader & etc interfaces.
         // TODO(shmel1k@): add stream parsing here & improve performance.
         if (!WriterParams_.Delimiter().Defined()) {
-            std::cout << "Enter message, then hit enter to send: ";
-            TString body = input.ReadTo('\n');
+            TString body = input.ReadAll();
             return TSendMessageData{
                 .Data = TransformBody(body, WriterParams_.Transform()),
                 .NeedSend = true,

@@ -23,9 +23,11 @@
 #include <memory>
 #include <utility>
 #include <boost/asio/any_completion_executor.hpp>
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/associated_allocator.hpp>
 #include <boost/asio/associated_cancellation_slot.hpp>
 #include <boost/asio/associated_executor.hpp>
+#include <boost/asio/associated_immediate_executor.hpp>
 #include <boost/asio/cancellation_state.hpp>
 #include <boost/asio/recycling_allocator.hpp>
 
@@ -124,6 +126,13 @@ public:
   {
     return any_completion_executor(std::nothrow,
         (get_associated_executor)(handler_, candidate));
+  }
+
+  any_completion_executor immediate_executor(
+      const any_io_executor& candidate) const BOOST_ASIO_NOEXCEPT
+  {
+    return any_completion_executor(std::nothrow,
+        (get_associated_immediate_executor)(handler_, candidate));
   }
 
   void* allocate(std::size_t size, std::size_t align) const
@@ -306,6 +315,36 @@ private:
   type executor_fn_;
 };
 
+class any_completion_handler_immediate_executor_fn
+{
+public:
+  using type = any_completion_executor(*)(
+      any_completion_handler_impl_base*, const any_io_executor&);
+
+  constexpr any_completion_handler_immediate_executor_fn(type fn)
+    : immediate_executor_fn_(fn)
+  {
+  }
+
+  any_completion_executor immediate_executor(
+      any_completion_handler_impl_base* impl,
+      const any_io_executor& candidate) const
+  {
+    return immediate_executor_fn_(impl, candidate);
+  }
+
+  template <typename Handler>
+  static any_completion_executor impl(any_completion_handler_impl_base* impl,
+      const any_io_executor& candidate)
+  {
+    return static_cast<any_completion_handler_impl<Handler>*>(
+        impl)->immediate_executor(candidate);
+  }
+
+private:
+  type immediate_executor_fn_;
+};
+
 class any_completion_handler_allocate_fn
 {
 public:
@@ -368,6 +407,7 @@ template <typename... Signatures>
 class any_completion_handler_fn_table
   : private any_completion_handler_destroy_fn,
     private any_completion_handler_executor_fn,
+    private any_completion_handler_immediate_executor_fn,
     private any_completion_handler_allocate_fn,
     private any_completion_handler_deallocate_fn,
     private any_completion_handler_call_fns<Signatures...>
@@ -377,11 +417,13 @@ public:
   constexpr any_completion_handler_fn_table(
       any_completion_handler_destroy_fn::type destroy_fn,
       any_completion_handler_executor_fn::type executor_fn,
+      any_completion_handler_immediate_executor_fn::type immediate_executor_fn,
       any_completion_handler_allocate_fn::type allocate_fn,
       any_completion_handler_deallocate_fn::type deallocate_fn,
       CallFns... call_fns)
     : any_completion_handler_destroy_fn(destroy_fn),
       any_completion_handler_executor_fn(executor_fn),
+      any_completion_handler_immediate_executor_fn(immediate_executor_fn),
       any_completion_handler_allocate_fn(allocate_fn),
       any_completion_handler_deallocate_fn(deallocate_fn),
       any_completion_handler_call_fns<Signatures...>(call_fns...)
@@ -390,6 +432,7 @@ public:
 
   using any_completion_handler_destroy_fn::destroy;
   using any_completion_handler_executor_fn::executor;
+  using any_completion_handler_immediate_executor_fn::immediate_executor;
   using any_completion_handler_allocate_fn::allocate;
   using any_completion_handler_deallocate_fn::deallocate;
   using any_completion_handler_call_fns<Signatures...>::call;
@@ -402,6 +445,7 @@ struct any_completion_handler_fn_table_instance
     value = any_completion_handler_fn_table<Signatures...>(
         &any_completion_handler_destroy_fn::impl<Handler>,
         &any_completion_handler_executor_fn::impl<Handler>,
+        &any_completion_handler_immediate_executor_fn::impl<Handler>,
         &any_completion_handler_allocate_fn::impl<Handler>,
         &any_completion_handler_deallocate_fn::impl<Handler>,
         &any_completion_handler_call_fn<Signatures>::template impl<Handler>...);
@@ -577,6 +621,9 @@ private:
   template <typename, typename>
   friend struct associated_executor;
 
+  template <typename, typename>
+  friend struct associated_immediate_executor;
+
   const detail::any_completion_handler_fn_table<Signatures...>* fn_table_;
   detail::any_completion_handler_impl_base* impl_;
 #endif // !defined(GENERATING_DOCUMENTATION)
@@ -748,6 +795,20 @@ struct associated_executor<any_completion_handler<Signatures...>, Candidate>
   {
     return handler.fn_table_->executor(handler.impl_,
         any_completion_executor(std::nothrow, candidate));
+  }
+};
+
+template <typename... Signatures, typename Candidate>
+struct associated_immediate_executor<
+    any_completion_handler<Signatures...>, Candidate>
+{
+  using type = any_completion_executor;
+
+  static type get(const any_completion_handler<Signatures...>& handler,
+      const Candidate& candidate = Candidate()) BOOST_ASIO_NOEXCEPT
+  {
+    return handler.fn_table_->immediate_executor(handler.impl_,
+        any_io_executor(std::nothrow, candidate));
   }
 };
 

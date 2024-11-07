@@ -387,6 +387,7 @@ boost::system::error_code signal_set_service::add(
         if (state->flags_[signal_number] != signal_set_base::flags::dont_care)
         {
           ec = boost::asio::error::invalid_argument;
+          delete new_registration;
           return ec;
         }
         struct sigaction sa;
@@ -398,6 +399,7 @@ boost::system::error_code signal_set_service::add(
         {
           ec = boost::system::error_code(errno,
               boost::asio::error::get_system_category());
+          delete new_registration;
           return ec;
         }
         state->flags_[signal_number] = f;

@@ -670,7 +670,7 @@ public:
 
   struct result_type
   {
-    exception_ptr ex_;
+    exception_ptr* ex_;
     return_type* value_;
   };
 
@@ -788,7 +788,7 @@ public:
 
   struct result_type
   {
-    exception_ptr ex_;
+    exception_ptr* ex_;
     return_type* value_;
   };
 

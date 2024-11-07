@@ -4451,11 +4451,11 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         }
     };
 
-    for (size_t groupIndex : xrange(rowScheme->Families.size())) {
-        auto familyId = rowScheme->Families[groupIndex];
+    for (size_t group : xrange(rowScheme->Families.size())) {
+        auto familyId = rowScheme->Families[group];
         static const NTable::TScheme::TFamily defaultFamilySettings;
         const auto& family = tableInfo->Families.ValueRef(familyId, defaultFamilySettings); // Workaround for KIKIMR-17222
-        
+
         auto* room = tableInfo->Rooms.FindPtr(family.Room);
         Y_ABORT_UNLESS(room, "Cannot find room %" PRIu32 " in table %" PRIu32, family.Room, table);
 

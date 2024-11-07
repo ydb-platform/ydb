@@ -2693,7 +2693,7 @@ private:
                             PooledString_.resize(length);
                             CodedStream_.ReadRaw(PooledString_.data(), PooledString_.size());
                             Y_UNUSED(message->ParseFromArray(PooledString_.data(), PooledString_.size()));
-                            converter.Serializer(Consumer_, message.get());
+                            converter.Serializer(Consumer_, message.get(), Options_);
                             YPathStack_.Pop();
                         } else {
                             LimitStack_.push_back(CodedStream_.PushLimit(static_cast<int>(length)));

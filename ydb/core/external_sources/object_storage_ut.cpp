@@ -30,6 +30,31 @@ Y_UNIT_TEST_SUITE(ObjectStorageTest) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Partition by must always be specified");
     }
 
+    Y_UNIT_TEST(FailedJsonListValidation) {
+        static auto invalidTypes = {
+            Ydb::Type::DATE,
+            Ydb::Type::DATETIME,
+            Ydb::Type::TIMESTAMP,
+            Ydb::Type::INTERVAL,
+            Ydb::Type::DATE32,
+            Ydb::Type::DATETIME64,
+            Ydb::Type::TIMESTAMP64,
+            Ydb::Type::INTERVAL64,
+            Ydb::Type::TZ_DATE,
+            Ydb::Type::TZ_DATETIME,
+            Ydb::Type::TZ_TIMESTAMP,
+        };
+        auto source = NExternalSource::CreateObjectStorageExternalSource({}, nullptr, 1000, nullptr, false, false);
+        NKikimrExternalSources::TSchema schema;
+        for (const auto typeId : invalidTypes) {
+            auto newColumn = schema.add_column();
+            newColumn->mutable_type()->set_type_id(typeId);
+        }
+        NKikimrExternalSources::TGeneral general;
+        general.mutable_attributes()->insert({"format", "json_list"});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Date, Timestamp and Interval types are not allowed in json_list format");
+    }
+
     Y_UNIT_TEST(WildcardsValidation) {
         auto source = NExternalSource::CreateObjectStorageExternalSource({}, nullptr, 1000, nullptr, false, false);
         NKikimrExternalSources::TSchema schema;

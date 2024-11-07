@@ -610,7 +610,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
     }
 
     if (!info.NextMessageOffset) {
-        LOG_ROW_DISPATCHER_ERROR("Try SendData() without  {NextMessageOffset, " << info.ReadActorId 
+        LOG_ROW_DISPATCHER_ERROR("Try SendData() without NextMessageOffset, " << info.ReadActorId 
             << " unread " << info.UnreadBytes << " DataArrivedSent " << info.DataArrivedSent);
     }
 

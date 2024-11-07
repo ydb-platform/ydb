@@ -22,18 +22,13 @@ void THandlerSessionServiceCheckNebius::StartOidcProcess(const NActors::TActorCo
     NHttp::THeaders headers(Request->Headers);
     LOG_DEBUG_S(ctx, EService::MVP, "Start OIDC process");
 
+    NHttp::TCookies cookies(headers.Get("Cookie"));
     TString sessionCookieName = CreateNameSessionCookie(Settings.ClientId);
-
-    TStringBuf cookieParser(headers["Cookie"]);
-    TString sessionCookieValue;
-    for (TStringBuf param = cookieParser.NextTok(';'); !param.empty(); param = cookieParser.NextTok(';')) {
-        param.SkipPrefix(" ");
-        TStringBuf name = param.NextTok('=');
-        if (name == sessionCookieName) {
-            sessionCookieValue = param;
-            LOG_DEBUG_S(ctx, EService::MVP, "Using session cookie (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
-        }
+    TStringBuf sessionCookieValue = cookies.Get(sessionCookieName);
+    if (!sessionCookieValue.Empty()) {
+        LOG_DEBUG_S(ctx, EService::MVP, "Using session cookie (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
     }
+    
 
     TString sessionToken;
     try {

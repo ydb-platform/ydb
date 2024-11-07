@@ -761,8 +761,8 @@ namespace {
             .StoreResult(&Consumer_);
         config.Opts->AddLongOption("no-consumer", "Read without consumer. You need to explicitly specify partitions to read through --partition-ids. Exclusive with --consumer (-c)")
             .Optional()
-            .DefaultValue(true)
-            .StoreResult(&ReadWithoutConsumer_);
+            .StoreTrue(&ReadWithoutConsumer_)
+            .DefaultValue(true);
 
         config.Opts->MutuallyExclusive("consumer", "no-consumer");
 
@@ -845,10 +845,10 @@ namespace {
     NTopic::TReadSessionSettings TCommandTopicRead::PrepareReadSessionSettings() {
         NTopic::TReadSessionSettings settings;
         settings.AutoPartitioningSupport(true);
-        if (ReadWithoutConsumer_) {
-            settings.WithoutConsumer();
-        } else {
+        if (Consumer_) {
             settings.ConsumerName(Consumer_);
+        } else {
+            settings.WithoutConsumer();
         }
         // settings.ReadAll(); // TODO(shmel1k@): change to read only original?
         if (Timestamp_.Defined()) {

@@ -573,6 +573,12 @@ public:
         ScheduleMore();
     }
 
+    void Invoke(TMutableRange<TClosure> callbacks) override
+    {
+        Queue_.EnqueueAll(std::move(callbacks));
+        ScheduleMore();
+    }
+
     TFuture<void> Suspend() override
     {
         YT_VERIFY(!Suspended_.exchange(true));

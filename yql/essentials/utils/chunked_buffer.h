@@ -18,9 +18,17 @@ public:
     explicit TChunkedBuffer(TStringBuf buf, const std::shared_ptr<const void>& owner);
     explicit TChunkedBuffer(TString&& str);
 
-    size_t ContigousSize() const;
-    size_t Size() const;
-    bool Empty() const;
+    inline size_t ContigousSize() const {
+        return Items_.empty() ? 0 : Front().Buf.size();
+    }
+
+    inline size_t Size() const {
+        return Size_;
+    }
+
+    inline bool Empty() const {
+        return Size_ == 0;
+    }
 
     struct TChunk {
         TStringBuf Buf;
@@ -39,6 +47,7 @@ public:
 
 private:
     std::deque<TChunk> Items_;
+    size_t Size_ = 0;
 };
 
 class TChunkedBufferOutput : public IOutputStream {

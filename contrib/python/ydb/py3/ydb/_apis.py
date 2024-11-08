@@ -9,6 +9,7 @@ try:
         ydb_table_v1_pb2_grpc,
         ydb_operation_v1_pb2_grpc,
         ydb_topic_v1_pb2_grpc,
+        ydb_bsconfig_v1_pb2_grpc,
         ydb_query_v1_pb2_grpc,
     )
 
@@ -20,6 +21,7 @@ try:
         ydb_value_pb2,
         ydb_operation_pb2,
         ydb_common_pb2,
+        ydb_bsconfig_pb2,
         ydb_query_pb2,
     )
 
@@ -31,6 +33,7 @@ except ImportError:
         ydb_table_v1_pb2_grpc,
         ydb_operation_v1_pb2_grpc,
         ydb_topic_v1_pb2_grpc,
+        ydb_bsconfig_v1_pb2_grpc,
         ydb_query_v1_pb2_grpc,
     )
 
@@ -42,6 +45,7 @@ except ImportError:
         ydb_value_pb2,
         ydb_operation_pb2,
         ydb_common_pb2,
+        ydb_bsconfig_pb2,
         ydb_query_pb2,
     )
 
@@ -54,6 +58,7 @@ ydb_scheme = ydb_scheme_pb2
 ydb_table = ydb_table_pb2
 ydb_discovery = ydb_discovery_pb2
 ydb_operation = ydb_operation_pb2
+ydb_bsconfig = ydb_bsconfig_pb2
 ydb_query = ydb_query_pb2
 
 
@@ -115,6 +120,13 @@ class TopicService(object):
     DropTopic = "DropTopic"
     StreamRead = "StreamRead"
     StreamWrite = "StreamWrite"
+
+
+class BSConfigService(object):
+    Stub = ydb_bsconfig_v1_pb2_grpc.BSConfigServiceStub
+
+    ReplaceStorageConfig = "ReplaceStorageConfig"
+    FetchStorageConfig = "FetchStorageConfig"
 
 
 class QueryService(object):

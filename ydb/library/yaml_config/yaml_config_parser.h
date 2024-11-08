@@ -10,6 +10,7 @@
 #include <google/protobuf/message.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/public/api/protos/ydb_bsconfig.pb.h>
 
 #include <util/generic/string.h>
 
@@ -53,6 +54,9 @@ namespace NKikimr::NYaml {
         TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector = nullptr);
 
     NKikimrBlobStorage::TConfigRequest BuildInitDistributedStorageCommand(const TString& data);
+    Ydb::BSConfig::ReplaceStorageConfigRequest BuildReplaceDistributedStorageCommand(const TString& data);
+    NKikimrBlobStorage::TConfigRequest BuildReplaceProtoConfig(const TString& data);
+    TString ParseProtoToYaml(const Ydb::BSConfig::StorageConfig& protoConfig);
 
     void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx);
     void ClearEphemeralFields(NJson::TJsonValue& json);

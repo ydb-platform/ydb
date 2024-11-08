@@ -1,9 +1,10 @@
 #include "abstract.h"
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
+#include <ydb/core/tx/columnshard/data_accessor/abstract/constructor.h>
 
 namespace NKikimr::NKqp {
 
-class TUpsertOptionsOperation : public ITableStoreOperation {
+class TUpsertOptionsOperation: public ITableStoreOperation {
 private:
     static TString GetTypeName() {
         return "UPSERT_OPTIONS";

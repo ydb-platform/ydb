@@ -11,6 +11,16 @@ public:
 
 private:
     virtual std::shared_ptr<IMetadataMemoryManager> DoBuild(const TManagerConstructionContext& context) const override;
+    virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& /*jsonValue*/) override {
+        return TConclusionStatus::Success();
+    }
+    virtual bool DoDeserializeFromProto(const TProto& /*proto*/) override {
+        return true;
+    }
+    virtual void DoSerializeToProto(TProto& /*proto*/) const override {
+        return;
+    }
+
     static const inline TFactory::TRegistrator<TManagerConstructor> Registrator =
         TFactory::TRegistrator<TManagerConstructor>(GetClassNameStatic());
 

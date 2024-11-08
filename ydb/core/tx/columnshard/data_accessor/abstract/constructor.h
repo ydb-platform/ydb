@@ -16,26 +16,53 @@ public:
 };
 
 class IManagerConstructor {
-private:
-    virtual std::shared_ptr<IMetadataMemoryManager> DoBuild(const TManagerConstructionContext& context) const = 0;
-
 public:
     using TFactory = NObjectFactory::TObjectFactory<IManagerConstructor, TString>;
     using TProto = NKikimrSchemeOp::TMetadataManagerConstructorContainer;
 
+private:
+    virtual std::shared_ptr<IMetadataMemoryManager> DoBuild(const TManagerConstructionContext& context) const = 0;
+    virtual bool DoDeserializeFromProto(const TProto& proto) = 0;
+    virtual void DoSerializeToProto(TProto& proto) const = 0;
+    virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) = 0;
+
+public:
+    static std::shared_ptr<IManagerConstructor> BuildDefault();
+
+    virtual ~IManagerConstructor() = default;
+
     virtual TString GetClassName() const = 0;
+
+    TConclusionStatus DeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
+        return DoDeserializeFromJson(jsonInfo);
+    }
+
+    bool DeserializeFromProto(const TProto& proto) {
+        return DoDeserializeFromProto(proto);
+    }
+    void SerializeToProto(TProto& proto) const {
+        DoSerializeToProto(proto);
+    }
 
     std::shared_ptr<IMetadataMemoryManager> Build(const TManagerConstructionContext& context) {
         return DoBuild(context);
     }
 };
 
-class TMetadataManagerConstructorConatiner: public NBackgroundTasks::TInterfaceProtoContainer<IManagerConstructor> {
+class TMetadataManagerConstructorContainer: public NBackgroundTasks::TInterfaceProtoContainer<IManagerConstructor> {
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IManagerConstructor>;
 
 public:
     using TBase::TBase;
+
+    static TConclusion<TMetadataManagerConstructorContainer> BuildFromProto(const NKikimrSchemeOp::TMetadataManagerConstructorContainer& proto) {
+        TMetadataManagerConstructorContainer result;
+        if (!result.DeserializeFromProto(proto)) {
+            return TConclusionStatus::Fail("cannot parse interface from proto: " + proto.DebugString());
+        }
+        return result;
+    }
 };
 
 }   // namespace NKikimr::NOlap::NDataAccessorControl

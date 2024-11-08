@@ -1,7 +1,7 @@
 #include "constructor.h"
 #include "manager.h"
 
-namespace NKikimr::NOlap::NDataAccessorControl::NInMem {
+namespace NKikimr::NOlap::NDataAccessorControl::NLocalDB {
 
 std::shared_ptr<IMetadataMemoryManager> TManagerConstructor::DoBuild(
     const TManagerConstructionContext& context) const {

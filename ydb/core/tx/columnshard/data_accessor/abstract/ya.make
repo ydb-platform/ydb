@@ -8,6 +8,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/tx/columnshard/engines/portions
+    ydb/core/protos
 )
 
 END()

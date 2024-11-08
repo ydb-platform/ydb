@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructors.h>
 #include <ydb/core/tx/columnshard/tx_reader/abstract.h>
 
@@ -8,16 +9,54 @@ class TGranuleMeta;
 
 namespace NKikimr::NOlap::NLoading {
 
-class TPortionsLoadContext {
+class TPortionDataAccessors {
 private:
-    TInGranuleConstructors Constructors;
+    YDB_ACCESSOR_DEF(std::vector<TColumnChunkLoadContextV1>, Records);
+    std::vector<TIndexChunkLoadContext> Indexes;
 
 public:
-    TInGranuleConstructors& MutableConstructors() {
-        return Constructors;
+    std::vector<TIndexChunkLoadContext>& MutableIndexes() {
+        return Indexes;
     }
-    const TInGranuleConstructors& GetConstructors() const {
-        return Constructors;
+
+    TPortionDataAccessors() = default;
+};
+
+class TPortionsLoadContext {
+private:
+    THashMap<ui64, TPortionDataAccessors> Constructors;
+    TPortionDataAccessors& MutableConstructor(const ui64 portionId) {
+        auto it = Constructors.find(portionId);
+        if (it == Constructors.end()) {
+            it = Constructors.emplace(portionId, TPortionDataAccessors()).first;
+        }
+        return it->second;
+    }
+
+public:
+    void ClearRecords() {
+        for (auto&& i : Constructors) {
+            i.second.MutableRecords().clear();
+        }
+    }
+
+    void ClearIndexes() {
+        for (auto&& i : Constructors) {
+            i.second.MutableIndexes().clear();
+        }
+    }
+
+    THashMap<ui64, TPortionDataAccessors>&& ExtractConstructors() {
+        return std::move(Constructors);
+    }
+
+    void Add(TIndexChunkLoadContext&& chunk) {
+        auto& constructor = MutableConstructor(chunk.GetPortionId());
+        constructor.MutableIndexes().emplace_back(std::move(chunk));
+    }
+    void Add(TColumnChunkLoadContextV1&& chunk) {
+        auto& constructor = MutableConstructor(chunk.GetPortionId());
+        constructor.MutableRecords().emplace_back(std::move(chunk));
     }
 };
 
@@ -68,17 +107,6 @@ public:
         AFL_VERIFY(Self);
         AFL_VERIFY(Context);
     }
-};
-
-class TGranulePortionsReader: public IGranuleTxReader {
-private:
-    using TBase = IGranuleTxReader;
-    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
-
-    virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
-
-public:
-    using TBase::TBase;
 };
 
 class TGranuleColumnsReader: public IGranuleTxReader {

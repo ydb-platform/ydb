@@ -208,16 +208,26 @@ void TGranuleMeta::ResetMetadataManager(const std::shared_ptr<NDataAccessorContr
 
 std::shared_ptr<NKikimr::ITxReader> TGranuleMeta::BuildLoader(
     const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex) {
-    return MetadataMemoryManager->BuildGranuleLoader(vIndex, this, dsGroupSelector);
+    auto portionsLoader =
+        std::make_shared<NLoading::TGranuleOnlyPortionsReader>("portions", &vIndex, this, dsGroupSelector);
+    auto metadataLoader = MetadataMemoryManager->BuildLoader(vIndex, this, dsGroupSelector);
+    if (!metadataLoader) {
+        return portionsLoader;
+    } else {
+        auto result = std::make_shared<TTxCompositeReader>("granule");
+        result->AddChildren(portionsLoader);
+        result->AddChildren(metadataLoader);
+        return result;
+    }
 }
 
 bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex) {
-    auto constructors = std::make_shared<NLoading::TPortionsLoadContext>();
+    TInGranuleConstructors constructors;
     {
         if (!db.LoadPortions(PathId, [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
                 const TIndexInfo& indexInfo = portion.GetSchema(versionedIndex)->GetIndexInfo();
                 AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
-                AFL_VERIFY(constructors->MutableConstructors().AddConstructorVerified(std::move(portion)));
+                AFL_VERIFY(constructors.AddConstructorVerified(std::move(portion)));
             })) {
             return false;
         }
@@ -226,7 +236,7 @@ bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedI
     {
         TPortionInfo::TSchemaCursor schema(versionedIndex);
         if (!db.LoadColumns(PathId, [&](TColumnChunkLoadContextV1&& loadContext) {
-                auto* constructor = constructors->MutableConstructors().GetConstructorVerified(loadContext.GetPortionId());
+                auto* constructor = constructors.GetConstructorVerified(loadContext.GetPortionId());
                 constructor->LoadRecord(std::move(loadContext));
             })) {
             return false;
@@ -235,24 +245,18 @@ bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedI
 
     {
         if (!db.LoadIndexes(PathId, [&](const ui64 /*pathId*/, const ui64 portionId, TIndexChunkLoadContext&& loadContext) {
-                auto* constructor = constructors->MutableConstructors().GetConstructorVerified(portionId);
+                auto* constructor = constructors.GetConstructorVerified(portionId);
                 constructor->LoadIndex(std::move(loadContext));
             })) {
             return false;
         };
     }
-    FinishLoading(constructors);
-    return true;
-}
-
-void TGranuleMeta::FinishLoading(const std::shared_ptr<NLoading::TPortionsLoadContext>& context) {
-    AFL_VERIFY(!LoadingFinished);
-    LoadingFinished = true;
-    for (auto&& [portionId, constructor] : context->MutableConstructors()) {
+    for (auto&& [portionId, constructor] : constructors) {
         auto accessor = constructor.Build(false);
         DataAccessorsManager->AddPortion(accessor);
         UpsertPortionOnLoad(accessor.MutablePortionInfoPtr());
     }
+    return true;
 }
 
 void TGranuleMeta::InsertPortionOnComplete(const TPortionDataAccessor& portion, IColumnEngine& /*engine*/) {

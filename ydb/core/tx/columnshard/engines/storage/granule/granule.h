@@ -159,12 +159,13 @@ private:
         return it->second;
     }
     bool DataAccessorConstructed = false;
-    bool LoadingFinished = false;
 
 public:
     std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
-    void FinishLoading(const std::shared_ptr<NLoading::TPortionsLoadContext>& context);
     bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
+    const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& GetDataAccessorsManager() const {
+        return DataAccessorsManager;
+    }
 
     std::unique_ptr<NDataAccessorControl::IGranuleDataAccessor> BuildDataAccessor() {
         AFL_VERIFY(!DataAccessorConstructed);

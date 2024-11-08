@@ -6,12 +6,10 @@
 
 namespace NKikimr::NOlap::NDataAccessorControl::NInMem {
 
-std::shared_ptr<NKikimr::ITxReader> TManager::DoBuildGranuleLoader(
+std::shared_ptr<NKikimr::ITxReader> TManager::DoBuildLoader(
     const TVersionedIndex& versionedIndex, TGranuleMeta* granule, const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) {
     auto result = std::make_shared<TTxCompositeReader>("granule");
     auto portionsLoadContext = std::make_shared<NLoading::TPortionsLoadContext>();
-    result->AddChildren(
-        std::make_shared<NLoading::TGranulePortionsReader>("portions", &versionedIndex, granule, dsGroupSelector, portionsLoadContext));
     result->AddChildren(
         std::make_shared<NLoading::TGranuleColumnsReader>("columns", &versionedIndex, granule, dsGroupSelector, portionsLoadContext));
     result->AddChildren(

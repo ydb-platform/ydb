@@ -27,29 +27,12 @@ bool TGranuleOnlyPortionsReader::DoPrecharge(NTabletFlatExecutor::TTransactionCo
     return db.Table<NColumnShard::Schema::IndexPortions>().Prefix(Self->GetPathId()).Select().IsReady();
 }
 
-bool TGranulePortionsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    TDbWrapper db(txc.DB, &*DsGroupSelector);
-    const TVersionedIndex& index = *VersionedIndex;
-    Context->MutableConstructors().ClearPortions();
-    return db.LoadPortions(Self->GetPathId(), [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-        const TIndexInfo& indexInfo = portion.GetSchema(index)->GetIndexInfo();
-        AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, db.GetDsGroupSelectorVerified()));
-        AFL_VERIFY(Context->MutableConstructors().AddConstructorVerified(std::move(portion)));
-    });
-}
-
-bool TGranulePortionsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    NIceDb::TNiceDb db(txc.DB);
-    return db.Table<NColumnShard::Schema::IndexPortions>().Prefix(Self->GetPathId()).Select().IsReady();
-}
-
 bool TGranuleColumnsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     TPortionInfo::TSchemaCursor schema(*VersionedIndex);
-    Context->MutableConstructors().ClearColumns();
+    Context->ClearRecords();
     return db.LoadColumns(Self->GetPathId(), [&](TColumnChunkLoadContextV1&& loadContext) {
-        auto* constructor = Context->MutableConstructors().GetConstructorVerified(loadContext.GetPortionId());
-        constructor->LoadRecord(std::move(loadContext));
+        Context->Add(std::move(loadContext));
     });
 }
 
@@ -60,10 +43,9 @@ bool TGranuleColumnsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext
 
 bool TGranuleIndexesReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
-    Context->MutableConstructors().ClearIndexes();
-    return db.LoadIndexes(Self->GetPathId(), [&](const ui64 /*pathId*/, const ui64 portionId, TIndexChunkLoadContext&& loadContext) {
-        auto* constructor = Context->MutableConstructors().GetConstructorVerified(portionId);
-        constructor->LoadIndex(std::move(loadContext));
+    Context->ClearIndexes();
+    return db.LoadIndexes(Self->GetPathId(), [&](const ui64 /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& loadContext) {
+        Context->Add(std::move(loadContext));
     });
 }
 
@@ -73,7 +55,14 @@ bool TGranuleIndexesReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext
 }
 
 bool TGranuleFinishLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
-    Self->FinishLoading(Context);
+    THashMap<ui64, TPortionDataAccessors> constructors = Context->ExtractConstructors();
+    AFL_VERIFY(Self->GetPortions().size() == constructors.size());
+    for (auto&& i : Self->GetPortions()) {
+        auto it = constructors.find(i.first);
+        AFL_VERIFY(it != constructors.end());
+        auto accessor = TPortionAccessorConstructor::BuildForLoading(i.second, std::move(it->second.MutableRecords()), std::move(it->second.MutableIndexes()));
+        Self->GetDataAccessorsManager()->AddPortion(accessor);
+    }
     return true;
 }
 

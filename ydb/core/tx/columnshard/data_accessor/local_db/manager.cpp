@@ -5,7 +5,7 @@
 
 namespace NKikimr::NOlap::NDataAccessorControl::NLocalDB {
 
-std::shared_ptr<NKikimr::ITxReader> TManager::DoBuildGranuleLoader(
+std::shared_ptr<NKikimr::ITxReader> TManager::DoBuildLoader(
     const TVersionedIndex& versionedIndex, TGranuleMeta* granule, const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) {
     return std::make_shared<NLoading::TGranuleOnlyPortionsReader>("granule", &versionedIndex, granule, dsGroupSelector);
 }

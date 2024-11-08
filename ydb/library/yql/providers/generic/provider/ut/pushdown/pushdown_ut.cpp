@@ -412,12 +412,14 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                     }
                     operands {
                         bool_expression {
-                            typed_value {
-                                type {
-                                    type_id: BOOL
-                                }
-                                value {
-                                    bool_value: true
+                            value {
+                                typed_value {
+                                    type {
+                                        type_id: BOOL
+                                    }
+                                    value {
+                                        bool_value: true
+                                    }
                                 }
                             }
                         }

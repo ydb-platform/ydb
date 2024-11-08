@@ -3,8 +3,8 @@ import shutil
 import yatest.common
 import yql_utils
 import cyson as yson
-import ydb.library.yql.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
-import ydb.library.yql.core.file_storage.proto.file_storage_pb2 as file_storage_pb2
+import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
+import yql.essentials.core.file_storage.proto.file_storage_pb2 as file_storage_pb2
 
 import six
 

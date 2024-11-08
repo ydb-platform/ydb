@@ -5,7 +5,7 @@ import codecs
 import yatest.common
 
 from google.protobuf import text_format
-import ydb.library.yql.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
+import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
 from yqlrun import YQLRun
 
 from yql_utils import (

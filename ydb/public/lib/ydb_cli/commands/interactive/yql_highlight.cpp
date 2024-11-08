@@ -10,6 +10,7 @@
 #include <util/string/strip.h>
 
 #include <regex>
+#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 
 #define TOKEN(NAME) SQLv1Antlr4Lexer::TOKEN_##NAME
 

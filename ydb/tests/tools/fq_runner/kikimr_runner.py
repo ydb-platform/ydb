@@ -17,7 +17,7 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_port_allocator import KikimrPortManagerPortAllocator
 from ydb.tests.library.harness.util import LogLevels
 
-from ydb.library.yql.providers.common.proto import gateways_config_pb2
+from yql.essentials.providers.common.proto import gateways_config_pb2
 
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics
 

@@ -4,6 +4,7 @@
 #include <ydb/library/yql/parser/lexer_common/lexer.h>
 
 #include <util/generic/fwd.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 
 #include <regex>
 

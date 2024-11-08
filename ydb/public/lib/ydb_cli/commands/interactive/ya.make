@@ -13,6 +13,8 @@ PEERDIR(
     ydb/library/yql/sql/v1/lexer
     ydb/library/yql/sql/settings
     ydb/library/yql/utils
+    contrib/libs/antlr4_cpp_runtime
+    yql/essentials/parser/proto_ast/gen/v1_antlr4
     ydb/public/lib/ydb_cli/common
 )
 

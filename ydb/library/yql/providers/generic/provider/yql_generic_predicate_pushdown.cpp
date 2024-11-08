@@ -69,6 +69,7 @@ namespace NYql {
             }
 
             // data
+            MATCH_ATOM(Bool, BOOL, bool, bool);
             MATCH_ATOM(Int8, INT8, int32, i8);
             MATCH_ATOM(Uint8, UINT8, uint32, ui8);
             MATCH_ATOM(Int16, INT16, int32, i16);
@@ -140,9 +141,7 @@ namespace NYql {
             if (depth == 0) {
                 auto value = coalesce.Value().Maybe<TCoBool>();
                 if (value && TStringBuf(value.Cast().Literal()) == "false"sv) {
-                    if (!SerializePredicate(TExprBase(coalesce.Predicate()), proto, arg, err, 0)) {
-                        return false;
-                    }
+                    return SerializePredicate(TExprBase(coalesce.Predicate()), proto, arg, err, 0);
                 }
             }
 
@@ -259,8 +258,9 @@ namespace NYql {
                 return SerializePredicate(TExprBase(just.Cast().Input()), proto, arg, err, depth + 1);
             }
 
-            err << "unknown predicate: " << predicate.Raw()->Content();
-            return false;
+            // Try to serialize predicate as boolean expression
+            // For example single bool value TRUE in COALESCE or IF
+            return SerializeExpression(predicate, proto->mutable_bool_expression()->mutable_value(), arg, err);
         }
     }
 
@@ -271,7 +271,7 @@ namespace NYql {
     TString FormatValue(const Ydb::TypedValue& value) {
         switch (value.value().value_case()) {
             case  Ydb::Value::kBoolValue:
-                return ToString(value.value().bool_value());
+                return value.value().bool_value() ? "TRUE" : "FALSE";
             case Ydb::Value::kInt32Value:
                 return ToString(value.value().int32_value());
             case Ydb::Value::kUint32Value:

@@ -209,7 +209,7 @@ protected:
                         << ","
                         << Address
                         << ") Response: "
-                        << TString(response->GetRawData()).substr(0, MAX_LOGGED_SIZE));
+                        << response->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
         }
         THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildIncomingRequestSensors(request, response));
         ctx.Send(Endpoint->Owner, sensors.Release());

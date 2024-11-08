@@ -35,12 +35,14 @@ struct TRowDispatcherMetrics {
         ErrorsCount = Counters->GetCounter("ErrorsCount");
         ClientsCount = Counters->GetCounter("ClientsCount");
         RowsSent = Counters->GetCounter("RowsSent", true);
+        DataRate = Counters->GetCounter("DataRate", true);
     }
 
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr ErrorsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr ClientsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr RowsSent;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DataRate;
 };
 
 
@@ -213,7 +215,7 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev);
-    void Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev);
 
     void Handle(NActors::TEvents::TEvPing::TPtr& ev);
@@ -242,7 +244,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStopSession, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
-        hFunc(NFq::TEvRowDispatcher::TEvStatus, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvStatistics, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionStatistic, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvPing, Handle);
@@ -350,10 +352,13 @@ void TRowDispatcher::UpdateMetrics() {
     if (Consumers.empty()) {
         return;
     }
+    NYql::TCounters::TEntry readBytes;
     TMap<TString, TQueryStat> queryStats;
     
     for (auto& [key, sessionsInfo] : TopicSessions) {
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
+            readBytes.Add(NYql::TCounters::TEntry(sessionInfo.Stat.ReadBytes));
+
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
                 auto& stat = queryStats[consumer->QueryId];
                 stat.UnreadRows.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadRows));
@@ -362,6 +367,8 @@ void TRowDispatcher::UpdateMetrics() {
             }
         }
     }
+    Metrics.DataRate->Add(readBytes.Sum);
+    
     for (const auto& [queryId, stat] : queryStats) {
         auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryId);
         queryGroup->GetCounter("MaxUnreadRows")->Set(stat.UnreadRows.Max);
@@ -613,15 +620,15 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
     DeleteConsumer(key);
 }
 
-void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStatus::TPtr& ev) {
-    LOG_ROW_DISPATCHER_TRACE("TEvStatus from " << ev->Sender);
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
+    LOG_ROW_DISPATCHER_TRACE("TEvStatistics from " << ev->Sender);
     ConsumerSessionKey key{ev->Get()->ReadActorId, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_WARN("Ignore TEvStatus, no such session");
+        LOG_ROW_DISPATCHER_WARN("Ignore TEvStatistics, no such session");
         return;
     }
-    LOG_ROW_DISPATCHER_TRACE("Forward TEvStatus to " << ev->Get()->ReadActorId);
+    LOG_ROW_DISPATCHER_TRACE("Forward TEvStatistics to " << ev->Get()->ReadActorId);
     it->second->EventsQueue.Send(ev->Release().Release());
 }
 
@@ -651,7 +658,8 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev
     }
 
     auto& sessionInfo = sessionIt->second;
-    sessionInfo.Stat = ev->Get()->Stat.Common;
+    sessionInfo.Stat.UnreadBytes = ev->Get()->Stat.Common.UnreadBytes;
+    sessionInfo.Stat.ReadBytes += ev->Get()->Stat.Common.ReadBytes;
 
     for (const auto& clientStat : ev->Get()->Stat.Clients) {
         auto it = sessionInfo.Consumers.find(clientStat.ReadActorId);

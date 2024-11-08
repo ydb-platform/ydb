@@ -11,11 +11,13 @@ struct TopicSessionClientStatistic {
     i64 UnreadRows = 0;
     i64 UnreadBytes = 0;
     ui64 Offset = 0;
-    ui64 ReadBytes = 0;
+    ui64 ReadBytes = 0;     // filtered
 };
 
 struct TopicSessionCommonStatistic {
     ui64 UnreadBytes = 0;
+    ui64 ReadBytes = 0;
+    ui64 ReadEvents = 0;
 };
 
 struct TopicSessionParams {

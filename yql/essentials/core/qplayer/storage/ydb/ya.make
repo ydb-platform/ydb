@@ -1,3 +1,5 @@
+IF (NOT OPENSOURCE)
+
 LIBRARY()
 
 SRCS(
@@ -16,3 +18,6 @@ END()
 RECURSE_FOR_TESTS(
     ut
 )
+
+ENDIF()
+

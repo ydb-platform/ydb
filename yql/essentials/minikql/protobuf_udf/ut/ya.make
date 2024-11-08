@@ -1,3 +1,5 @@
+IF (NOT OPENSOURCE)
+
 UNITTEST_FOR(yql/essentials/minikql/protobuf_udf)
 
 SRCS(
@@ -24,3 +26,6 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+ENDIF()
+

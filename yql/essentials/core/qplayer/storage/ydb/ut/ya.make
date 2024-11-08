@@ -1,3 +1,5 @@
+IF (NOT OPENSOURCE)
+
 UNITTEST_FOR(yql/essentials/core/qplayer/storage/ydb)
 
 SRCS(
@@ -9,3 +11,6 @@ PEERDIR(
 )
 
 END()
+
+ENDIF()
+

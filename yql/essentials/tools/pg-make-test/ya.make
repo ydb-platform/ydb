@@ -1,3 +1,5 @@
+IF (NOT OPENSOURCE)
+
 PY3_PROGRAM(pg-make-test)
 
 PY_SRCS(
@@ -18,4 +20,7 @@ RECURSE(
   ../pgrun
   update-test-status
 )
+
+ENDIF()
+
 

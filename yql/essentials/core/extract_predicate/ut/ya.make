@@ -1,3 +1,5 @@
+IF (NOT OPENSOURCE)
+
 UNITTEST_FOR(yql/essentials/core/extract_predicate)
 
 SRCS(
@@ -37,3 +39,6 @@ ELSE()
 ENDIF()
 
 END()
+
+ENDIF()
+

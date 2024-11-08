@@ -1,4 +1,4 @@
-#include <ydb/library/yql/providers/common/schema/parser/yql_type_parser.h>
+#include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
 #include <yql/essentials/public/udf/udf_version.h>
 #include <ydb/library/yql/public/purecalc/purecalc.h>
 #include <ydb/library/yql/public/purecalc/io_specs/mkql/spec.h>

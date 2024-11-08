@@ -3,7 +3,7 @@
 #include <library/cpp/cgiparam/cgiparam.h>
 
 #include <ydb/library/yql/providers/yt/lib/init_yt_api/init.h>
-#include <ydb/library/yql/utils/fetch/fetch.h>
+#include <yql/essentials/utils/fetch/fetch.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/interface/client.h>

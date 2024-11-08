@@ -3,8 +3,8 @@
 #include <ydb/public/lib/ydb_cli/commands/interactive/yql_position.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
-#include <ydb/library/yql/sql/settings/translation_settings.h>
-#include <ydb/library/yql/sql/v1/lexer/lexer.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
+#include <yql/essentials/sql/v1/lexer/lexer.h>
 
 #include <util/charset/utf8.h>
 #include <util/string/strip.h>

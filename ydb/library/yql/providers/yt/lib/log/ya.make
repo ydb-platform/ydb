@@ -9,7 +9,7 @@ PEERDIR(
     ydb/library/yql/providers/yt/lib/init_yt_api
     yt/cpp/mapreduce/interface/logging
     yql/essentials/utils/log
-    ydb/library/yql/utils/backtrace
+    yql/essentials/utils/backtrace
 )
 
 END()

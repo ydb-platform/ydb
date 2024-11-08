@@ -806,7 +806,7 @@ private:
         TString prefixColumns = PrefixColumns.GetBuffer();
         TString lastCommonPrefix = NextPrefix(CommonPrefixesRows.back());
 
-        TSerializedCellVec::UnsafeAppendCells({TCell(lastCommonPrefix.Data(), lastCommonPrefix.Size())}, prefixColumns);
+        TSerializedCellVec::UnsafeAppendCells({TCell(lastCommonPrefix.data(), lastCommonPrefix.size())}, prefixColumns);
 
         TSerializedCellVec afterLastFolderPrefix;
         afterLastFolderPrefix.Parse(prefixColumns);

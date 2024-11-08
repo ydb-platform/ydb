@@ -14,6 +14,7 @@ private:
     bool SchemeNeedActualization = false;
     std::optional<bool> ExternalGuaranteeExclusivePK;
     NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer CompactionPlannerConstructor;
+    NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer MetadataManagerConstructor;
 public:
     TConclusionStatus DoDeserialize(NYql::TObjectSettingsImpl::TFeaturesExtractor& features) override;
 

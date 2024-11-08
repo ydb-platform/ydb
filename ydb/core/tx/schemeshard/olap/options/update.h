@@ -13,11 +13,20 @@ private:
     YDB_ACCESSOR(bool, SchemeNeedActualization, false);
     YDB_ACCESSOR_DEF(std::optional<bool>, ExternalGuaranteeExclusivePK);
     YDB_ACCESSOR_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
+    YDB_ACCESSOR_DEF(NOlap::NDataAccessorControl::TManagerConstructorContainer, MetadataManagerConstructor);
 public:
     bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
         SchemeNeedActualization = alterRequest.GetOptions().GetSchemeNeedActualization();
         if (alterRequest.GetOptions().HasExternalGuaranteeExclusivePK()) {
             ExternalGuaranteeExclusivePK = alterRequest.GetOptions().GetExternalGuaranteeExclusivePK();
+        }
+        if (alterRequest.GetOptions().HasMetadataManagerConstructor()) {
+            auto container = NOlap::NDataAccessorControl::TManagerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetMetadataManagerConstructor());
+            if (container.IsFail()) {
+                errors.AddError(container.GetErrorMessage());
+                return false;
+            }
+            MetadataManagerConstructor = container.DetachResult();
         }
         if (alterRequest.GetOptions().HasCompactionPlannerConstructor()) {
             auto container = NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetCompactionPlannerConstructor());
@@ -36,6 +45,9 @@ public:
         }
         if (CompactionPlannerConstructor.HasObject()) {
             CompactionPlannerConstructor.SerializeToProto(*alterRequest.MutableOptions()->MutableCompactionPlannerConstructor());
+        }
+        if (MetadataManagerConstructor.HasObject()) {
+            MetadataManagerConstructor.SerializeToProto(*alterRequest.MutableOptions()->MutableMetadataManagerConstructor());
         }
     }
 };

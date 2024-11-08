@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     manager.cpp
     collector.cpp
+    GLOBAL constructor.cpp
 )
 
 PEERDIR(

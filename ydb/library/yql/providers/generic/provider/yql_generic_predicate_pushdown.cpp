@@ -193,6 +193,17 @@ namespace NYql {
             return true;
         }
 
+        bool SerializeIsNotDistinctFrom(const TExprBase& predicate, TPredicate* predicateProto, const TCoArgument& arg, TStringBuilder& err, bool invert) {
+            if (predicate.Ref().ChildrenSize() != 2) {
+                err << "unknown predicate, expected 2, children size " << predicate.Ref().ChildrenSize();
+                return false;
+            }
+            TPredicate::TComparison* proto = predicateProto->mutable_comparison();
+            proto->set_operation(!invert ? TPredicate::TComparison::IND : TPredicate::TComparison::ID);
+            return SerializeExpression(TExprBase(predicate.Ref().Child(0)), proto->mutable_left_value(), arg, err)
+                && SerializeExpression(TExprBase(predicate.Ref().Child(1)), proto->mutable_right_value(), arg, err);
+        }
+
         bool SerializeAnd(const TCoAnd& andExpr, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
             auto* dstProto = proto->mutable_conjunction();
             for (const auto& child : andExpr.Ptr()->Children()) {
@@ -250,6 +261,12 @@ namespace NYql {
             }
             if (auto sqlIn = predicate.Maybe<TCoSqlIn>()) {
                 return SerializeSqlIn(sqlIn.Cast(), proto, arg, err);
+            }
+            if (predicate.Ref().IsCallable("IsNotDistinctFrom")) {
+                return SerializeIsNotDistinctFrom(predicate, proto, arg, err, false);
+            }
+            if (predicate.Ref().IsCallable("IsDistinctFrom")) {
+                return SerializeIsNotDistinctFrom(predicate, proto, arg, err, true);
             }
             if (auto sqlIf = predicate.Maybe<TCoIf>()) {
                 return SerializeSqlIf(sqlIf.Cast(), proto, arg, err, depth);

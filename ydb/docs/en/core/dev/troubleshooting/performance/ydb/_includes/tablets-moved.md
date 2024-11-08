@@ -1,4 +1,4 @@
-1. See if the **Tablets moved by Hive** chart in the **DB status** Grafana dashboard shows any spikes.
+1. See if the **Tablets moved by Hive** chart in the **[DB status](../../../../../reference/observability/metrics/grafana-dashboards.md#dbstatus)** Grafana dashboard shows any spikes.
 
     ![](../_assets/tablets-moved.png)
 

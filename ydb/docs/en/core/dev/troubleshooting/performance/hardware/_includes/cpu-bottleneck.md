@@ -1,6 +1,6 @@
 1. Analyze CPU utilization in all pools:
 
-    1. Open the **CPU** dashboard in Grafana.
+    1. Open the **[CPU](../../../../../reference/observability/metrics/grafana-dashboards.md#cpu)** dashboard in Grafana.
 
     1. See if the following charts show any spikes:
 

@@ -7,6 +7,9 @@ Addressing database performance issues often requires a holistic approach, which
 Troubleshooting performance issues in {{ ydb-short-name }} involves the following tools:
 
 - [{{ ydb-short-name }} metrics](../../../reference/observability/metrics/index.md)
+
+    Diagnistic steps for most performance issues involve analyzing [Grafana dashboards](../../../reference/observability/metrics/grafana-dashboards.md) that use {{ ydb-short-name }} metrics collected by Prometheus. For information on installing Grafana and Prometheus, see [{#T}](../../../devops/manual/monitoring.md).
+
 - [{{ ydb-short-name }} logs](../../../devops/manual/logging.md)
 - [Tracing](../../../reference/observability/tracing/setup.md)
 - [{{ ydb-short-name }} CLI](../../../reference/ydb-cli/index.md)

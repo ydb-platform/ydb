@@ -141,9 +141,8 @@ TGranuleMeta::TGranuleMeta(
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(
         PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
     OptimizerPlanner = versionedIndex.GetLastSchema()->GetIndexInfo().GetCompactionPlannerConstructor()->BuildPlanner(context).DetachResult();
-    //    MetadataMemoryManager = std::make_shared<NDataAccessorControl::NInMem::TManager>();
-    MetadataMemoryManager = std::make_shared<NDataAccessorControl::NLocalDB::TManager>(DataAccessorsManager->GetTabletActorId());
-    //    MetadataMemoryManager = versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataMemoryManagerConstructor()->Build().DetachResult();
+    MetadataMemoryManager =
+        versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataManagerConstructor()->Build(context).DetachResult();
     AFL_VERIFY(!!OptimizerPlanner);
     ActualizationIndex = std::make_unique<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 }

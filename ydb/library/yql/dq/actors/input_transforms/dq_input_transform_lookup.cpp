@@ -288,10 +288,10 @@ private: //IDqComputeActorAsyncInput
             return;
         }
         auto component = taskCounters->GetSubgroup("component", "Lookup");
-        LruHits = component->GetCounter("Hits");
-        LruMiss = component->GetCounter("Miss");
-        CpuTimeUs = component->GetCounter("CpuUs");
-        Batches = component->GetCounter("Batches");
+        LruHits = component->GetCounter("Hits", true);
+        LruMiss = component->GetCounter("Miss", true);
+        CpuTimeUs = component->GetCounter("CpuUs", true);
+        Batches = component->GetCounter("Batches", true);
     }
 
     static TDuration GetCpuTimeDelta(ui64 startCycleCount) {

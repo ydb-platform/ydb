@@ -10,7 +10,7 @@ public:
     }
 
 private:
-    virtual std::shared_ptr<IMetadataMemoryManager> DoBuild(const TManagerConstructionContext& context) const override;
+    virtual TConclusion<std::shared_ptr<IMetadataMemoryManager>> DoBuild(const TManagerConstructionContext& context) const override;
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& /*jsonValue*/) override {
         return TConclusionStatus::Success();
     }

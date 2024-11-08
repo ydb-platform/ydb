@@ -21,7 +21,7 @@ public:
     using TProto = NKikimrSchemeOp::TMetadataManagerConstructorContainer;
 
 private:
-    virtual std::shared_ptr<IMetadataMemoryManager> DoBuild(const TManagerConstructionContext& context) const = 0;
+    virtual TConclusion<std::shared_ptr<IMetadataMemoryManager>> DoBuild(const TManagerConstructionContext& context) const = 0;
     virtual bool DoDeserializeFromProto(const TProto& proto) = 0;
     virtual void DoSerializeToProto(TProto& proto) const = 0;
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) = 0;
@@ -44,7 +44,7 @@ public:
         DoSerializeToProto(proto);
     }
 
-    std::shared_ptr<IMetadataMemoryManager> Build(const TManagerConstructionContext& context) {
+    TConclusion<std::shared_ptr<IMetadataMemoryManager>> Build(const TManagerConstructionContext& context) {
         return DoBuild(context);
     }
 };

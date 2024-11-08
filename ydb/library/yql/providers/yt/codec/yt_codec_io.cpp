@@ -2,7 +2,7 @@
 
 #include <yql/essentials/public/udf/arrow/args_dechunker.h>
 #include <ydb/library/yql/providers/common/codec/arrow/yql_codec_buf_input_stream.h>
-#include <yql/essentials/providers/yt/codec/yt_arrow_converter.h>
+#include <ydb/library/yql/providers/yt/codec/yt_arrow_converter.h>
 #include <yql/essentials/public/result_format/yql_restricted_yson.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>

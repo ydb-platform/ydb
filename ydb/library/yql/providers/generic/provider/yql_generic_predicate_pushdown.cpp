@@ -194,7 +194,7 @@ namespace NYql {
         }
 
         bool SerializeIsNotDistinctFrom(const TExprBase& predicate, TPredicate* predicateProto, const TCoArgument& arg, TStringBuilder& err, bool invert) {
-            if (predicate.Ref().ChildrenSize() != 2 ) {
+            if (predicate.Ref().ChildrenSize() != 2) {
                 err << "unknown predicate, expected 2, children size " << predicate.Ref().ChildrenSize();
                 return false;
             }

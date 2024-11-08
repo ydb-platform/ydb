@@ -3,7 +3,7 @@
 #include "names.h"
 #include "worker_factory.h"
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 using namespace NYql;
 using namespace NYql::NPureCalc;

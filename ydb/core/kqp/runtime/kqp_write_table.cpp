@@ -9,8 +9,8 @@
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NKikimr {
 namespace NKqp {

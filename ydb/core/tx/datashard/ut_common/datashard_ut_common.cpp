@@ -18,7 +18,7 @@
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <google/protobuf/text_format.h>

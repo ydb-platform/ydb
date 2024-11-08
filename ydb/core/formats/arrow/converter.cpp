@@ -1,9 +1,9 @@
 #include "converter.h"
 #include "switch/switch_type.h"
 
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/binary_json/write.h>
-#include <ydb/library/dynumber/dynumber.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <util/generic/set.h>
 #include <util/memory/pool.h>

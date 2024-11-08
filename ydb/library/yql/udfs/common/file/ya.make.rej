@@ -1,0 +1,20 @@
+--- ydb/library/yql/udfs/common/file/ya.make	(ba7d8a34ba1d6526d6f7a570d7bc4eea9185964d)
++++ ydb/library/yql/udfs/common/file/ya.make	(c7da95636144d28db109d6b17ddc762e9bacb59f)
+@@ -1,17 +0,0 @@
+-YQL_UDF_CONTRIB(file_udf)
+-
+-YQL_ABI_VERSION(
+-    2
+-    27
+-    0
+-)
+-
+-SRCS(
+-    file_udf.cpp
+-)
+-
+-PEERDIR(
+-    ydb/library/yql/core
+-)
+-
+-END()

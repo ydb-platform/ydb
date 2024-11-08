@@ -3,7 +3,7 @@
 
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 

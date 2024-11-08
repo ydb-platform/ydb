@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/library/yql/providers/yt/provider/yql_yt_join_impl.h>
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 
 namespace NYql {

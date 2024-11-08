@@ -1,0 +1,11 @@
+--- ydb/public/lib/ydb_cli/commands/interactive/ya.make	(ba7d8a34ba1d6526d6f7a570d7bc4eea9185964d)
++++ ydb/public/lib/ydb_cli/commands/interactive/ya.make	(c7da95636144d28db109d6b17ddc762e9bacb59f)
+@@ -9,7 +9,7 @@ SRCS(
+ PEERDIR(
+     contrib/restricted/patched/replxx
+     contrib/libs/antlr4_cpp_runtime
+-    ydb/library/yql/parser/proto_ast/gen/v1_antlr4
++    yql/essentials/parser/proto_ast/gen/v1_antlr4
+     ydb/public/lib/ydb_cli/common
+ )
+ 

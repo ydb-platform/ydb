@@ -1,0 +1,26 @@
+--- ydb/library/yql/udfs/common/protobuf/ya.make	(ba7d8a34ba1d6526d6f7a570d7bc4eea9185964d)
++++ ydb/library/yql/udfs/common/protobuf/ya.make	(c7da95636144d28db109d6b17ddc762e9bacb59f)
+@@ -1,23 +0,0 @@
+-YQL_UDF_CONTRIB(protobuf_udf)
+-
+-YQL_ABI_VERSION(
+-    2
+-    9
+-    0
+-)
+-
+-SRCS(
+-    protobuf_udf.cpp
+-)
+-
+-PEERDIR(
+-    library/cpp/protobuf/yql
+-    ydb/library/yql/minikql/protobuf_udf
+-    ydb/library/yql/public/udf
+-)
+-
+-END()
+-
+-RECURSE_FOR_TESTS(
+-    test
+-)

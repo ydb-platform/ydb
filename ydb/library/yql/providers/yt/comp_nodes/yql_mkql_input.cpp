@@ -2,11 +2,11 @@
 #include "yql_mkql_table.h"
 
 #include <ydb/library/yql/providers/yt/codec/yt_codec_io.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
-#include <ydb/library/yql/public/udf/udf_value_builder.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <algorithm>
 #include <functional>

@@ -1,0 +1,33 @@
+--- ydb/library/yql/udfs/common/unicode_base/ya.make	(ba7d8a34ba1d6526d6f7a570d7bc4eea9185964d)
++++ ydb/library/yql/udfs/common/unicode_base/ya.make	(c7da95636144d28db109d6b17ddc762e9bacb59f)
+@@ -1,30 +0,0 @@
+-IF (YQL_PACKAGED)
+-    PACKAGE()
+-        FROM_SANDBOX(FILE 7319907306 OUT_NOAUTO libunicode_udf.so
+-        )
+-    END()
+-ELSE ()
+-YQL_UDF_CONTRIB(unicode_udf)
+-    
+-    YQL_ABI_VERSION(
+-        2
+-        27
+-        0
+-    )
+-    
+-    SRCS(
+-        unicode_base.cpp
+-    )
+-    
+-    PEERDIR(
+-        ydb/library/yql/udfs/common/unicode_base/lib
+-    )
+-    
+-    END()
+-ENDIF ()
+-
+-
+-RECURSE_FOR_TESTS(
+-    test
+-)
+-

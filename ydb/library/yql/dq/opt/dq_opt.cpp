@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/dq/integration/yql_dq_optimization.h>
 

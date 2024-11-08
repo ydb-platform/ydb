@@ -9,7 +9,7 @@ PEERDIR(
     library/cpp/yson/node
     ydb/public/sdk/cpp/client/ydb_result
     ydb/public/sdk/cpp/client/ydb_value
-    ydb/library/uuid
+    yql/essentials/types/uuid
 )
 
 END()

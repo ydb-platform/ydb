@@ -19,7 +19,7 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
     ydb/library/login
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 YQL_LAST_ABI_VERSION()

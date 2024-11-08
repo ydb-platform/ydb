@@ -1,11 +1,11 @@
 #include "fastcheck.h"
-#include <ydb/library/yql/ast/yql_ast.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
-#include <ydb/library/yql/core/user_data/yql_user_data.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/core/yql_user_data_storage.h>
-#include <ydb/library/yql/sql/sql.h>
+#include <yql/essentials/ast/yql_ast.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/core/user_data/yql_user_data.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_user_data_storage.h>
+#include <yql/essentials/sql/sql.h>
 
 namespace NYql {
 namespace NFastCheck {

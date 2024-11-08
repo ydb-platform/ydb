@@ -33,12 +33,12 @@ class YQLRun(object):
         self.extra_args = extra_args
 
         try:
-            self.sql2yql_binary = yql_utils.yql_binary_path(os.getenv('YQL_SQL2YQL_PATH') or 'ydb/library/yql/tools/sql2yql/sql2yql')
+            self.sql2yql_binary = yql_utils.yql_binary_path(os.getenv('YQL_SQL2YQL_PATH') or 'yql/essentials/tools/sql2yql/sql2yql')
         except BaseException:
             self.sql2yql_binary = None
 
         try:
-            self.udf_resolver_binary = yql_utils.yql_binary_path(os.getenv('YQL_UDFRESOLVER_PATH') or 'ydb/library/yql/tools/udf_resolver/udf_resolver')
+            self.udf_resolver_binary = yql_utils.yql_binary_path(os.getenv('YQL_UDFRESOLVER_PATH') or 'yql/essentials/tools/udf_resolver/udf_resolver')
         except Exception:
             self.udf_resolver_binary = None
 

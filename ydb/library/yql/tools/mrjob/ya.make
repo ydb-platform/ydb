@@ -25,17 +25,17 @@ ELSE()
 
     PEERDIR(
         yt/cpp/mapreduce/client
-        ydb/library/yql/public/udf/service/terminate_policy
-        ydb/library/yql/providers/common/gateway
-        ydb/library/yql/utils/backtrace
-        ydb/library/yql/parser/pg_wrapper
-        ydb/library/yql/sql/pg
+        yql/essentials/public/udf/service/terminate_policy
+        yql/essentials/providers/common/gateway
+        yql/essentials/utils/backtrace
+        yql/essentials/parser/pg_wrapper
+        yql/essentials/sql/pg
         ydb/library/yql/providers/yt/job
         ydb/library/yql/providers/yt/codec/codegen
         ydb/library/yql/providers/yt/comp_nodes/llvm14
-        ydb/library/yql/minikql/computation/llvm14
-        ydb/library/yql/minikql/invoke_builtins/llvm14
-        ydb/library/yql/minikql/comp_nodes/llvm14
+        yql/essentials/minikql/computation/llvm14
+        yql/essentials/minikql/invoke_builtins/llvm14
+        yql/essentials/minikql/comp_nodes/llvm14
     )
 
     YQL_LAST_ABI_VERSION()

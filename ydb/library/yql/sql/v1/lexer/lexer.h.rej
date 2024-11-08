@@ -1,0 +1,12 @@
+--- ydb/library/yql/sql/v1/lexer/lexer.h	(ba7d8a34ba1d6526d6f7a570d7bc4eea9185964d)
++++ ydb/library/yql/sql/v1/lexer/lexer.h	(c7da95636144d28db109d6b17ddc762e9bacb59f)
+@@ -1,9 +0,0 @@
+-#pragma once
+-
+-#include <ydb/library/yql/parser/lexer_common/lexer.h>
+-
+-namespace NSQLTranslationV1 {
+-
+-NSQLTranslation::ILexer::TPtr MakeLexer(bool ansi, bool antlr4);
+-
+-}

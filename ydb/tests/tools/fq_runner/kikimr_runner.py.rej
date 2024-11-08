@@ -1,0 +1,11 @@
+--- ydb/tests/tools/fq_runner/kikimr_runner.py	(ba7d8a34ba1d6526d6f7a570d7bc4eea9185964d)
++++ ydb/tests/tools/fq_runner/kikimr_runner.py	(c7da95636144d28db109d6b17ddc762e9bacb59f)
+@@ -17,7 +17,7 @@ from contrib.ydb.tests.library.harness.kikimr_port_allocator import KikimrPortMa
+ from contrib.ydb.tests.library.harness.util import LogLevels
+ import contrib.ydb.tests.library.common.yatest_common as yatest_common
+ 
+-from contrib.ydb.library.yql.providers.common.proto import gateways_config_pb2
++from yql.essentials.providers.common.proto import gateways_config_pb2
+ 
+ from contrib.ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics
+ 

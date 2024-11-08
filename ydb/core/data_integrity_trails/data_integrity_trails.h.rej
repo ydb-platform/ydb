@@ -1,0 +1,11 @@
+--- ydb/core/data_integrity_trails/data_integrity_trails.h	(ba7d8a34ba1d6526d6f7a570d7bc4eea9185964d)
++++ ydb/core/data_integrity_trails/data_integrity_trails.h	(c7da95636144d28db109d6b17ddc762e9bacb59f)
+@@ -6,7 +6,7 @@ namespace NKikimr {
+ namespace NDataIntegrity {
+ 
+ inline void LogKeyValue(const TString& key, const TString& value, TStringStream& ss, bool last = false) {
+-    ss << key << ": " << (value.Empty() ? "Empty" : value) << (last ? "" : ",");
++    ss << key << ": " << (value.empty() ? "Empty" : value) << (last ? "" : ",");
+ }
+ 
+ template <class TransactionSettings>

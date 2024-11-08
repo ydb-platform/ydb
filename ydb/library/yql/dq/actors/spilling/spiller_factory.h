@@ -2,7 +2,7 @@
 
 #include "compute_storage.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_spiller_factory.h>
+#include <yql/essentials/minikql/computation/mkql_spiller_factory.h>
 
 namespace NYql::NDq {
 

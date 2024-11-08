@@ -1,14 +1,15 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/library/yql/core
+    yql/essentials/core
     ydb/library/yql/dq/integration
-    ydb/library/yql/providers/common/mkql
+    yql/essentials/providers/common/mkql
     ydb/library/yql/providers/dq/expr_nodes
 )
 
 SRCS(
     dqs_mkql_compiler.cpp
+    parser.cpp
 )
 
 YQL_LAST_ABI_VERSION()

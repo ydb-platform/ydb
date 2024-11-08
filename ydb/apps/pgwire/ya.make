@@ -21,8 +21,8 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/draft
-    ydb/library/yql/parser/pg_wrapper
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/public/udf/service/exception_policy
 )
 
 END()

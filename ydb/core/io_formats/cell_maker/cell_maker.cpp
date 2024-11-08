@@ -1,14 +1,14 @@
 #include "cell_maker.h"
 
-#include <ydb/library/binary_json/write.h>
-#include <ydb/library/dynumber/dynumber.h>
-#include <ydb/library/uuid/uuid.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
+#include <yql/essentials/types/uuid/uuid.h>
 
-#include <ydb/library/yql/minikql/dom/yson.h>
-#include <ydb/library/yql/minikql/dom/json.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
-#include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/utils/utf8.h>
+#include <yql/essentials/minikql/dom/yson.h>
+#include <yql/essentials/minikql/dom/json.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/utils/utf8.h>
 
 #include <contrib/libs/double-conversion/double-conversion/double-conversion.h>
 #include <library/cpp/json/json_writer.h>

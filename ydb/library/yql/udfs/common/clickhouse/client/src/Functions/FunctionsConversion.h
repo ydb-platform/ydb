@@ -2,7 +2,7 @@
 
 #include <type_traits>
 
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
 
 #include <IO/WriteBufferFromVector.h>
 #include <IO/ReadBufferFromMemory.h>

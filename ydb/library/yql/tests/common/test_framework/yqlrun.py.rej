@@ -1,0 +1,13 @@
+--- ydb/library/yql/tests/common/test_framework/yqlrun.py	(ba7d8a34ba1d6526d6f7a570d7bc4eea9185964d)
++++ ydb/library/yql/tests/common/test_framework/yqlrun.py	(c7da95636144d28db109d6b17ddc762e9bacb59f)
+@@ -3,8 +3,8 @@ import shutil
+ import yatest.common
+ import yql_utils
+ import cyson as yson
+-import contrib.ydb.library.yql.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
+-import contrib.ydb.library.yql.core.file_storage.proto.file_storage_pb2 as file_storage_pb2
++import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
++import yql.essentials.core.file_storage.proto.file_storage_pb2 as file_storage_pb2
+ 
+ import six
+ 

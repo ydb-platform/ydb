@@ -1,0 +1,11 @@
+--- ydb/library/yql/tools/dqrun/dqrun.cpp	(ba7d8a34ba1d6526d6f7a570d7bc4eea9185964d)
++++ ydb/library/yql/tools/dqrun/dqrun.cpp	(c7da95636144d28db109d6b17ddc762e9bacb59f)
+@@ -476,7 +476,7 @@ int RunProgram(TProgramPtr program, const TRunOptions& options, const THashMap<T
+                 }
+             }
+ 
+-            options.ResultOut->Write(str.Data(), str.Size());
++            options.ResultOut->Write(str.data(), str.size());
+         }
+     }
+ 

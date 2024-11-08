@@ -1,12 +1,8 @@
 RECURSE(
-    ast
     core
     dq
-    minikql
-    parser
     providers
     public
-    sql
     tests
     tools
     udfs

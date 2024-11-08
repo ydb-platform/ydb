@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -155,7 +156,7 @@ private:
         auto& batch = batches.front();
 
         batch.Proto = std::move(*computeData.Proto.MutableChannelData()->MutableData());
-        batch.Payload = std::move(computeData.Payload);
+        batch.Payload = NYql::MakeChunkedBuffer(std::move(computeData.Payload));
 
         TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
         auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), ItemType, ColumnOrder, ColumnHints);
@@ -193,7 +194,7 @@ private:
     virtual void SendResults(TEvComputeChannelDataOOB& computeData, TActorId sender) {
         NYql::NDq::TDqSerializedBatch batch;
         batch.Proto = std::move(*computeData.Proto.MutableChannelData()->MutableData());
-        batch.Payload = std::move(computeData.Payload);
+        batch.Payload = NYql::MakeChunkedBuffer(std::move(computeData.Payload));
 
         auto channelId = computeData.Proto.GetChannelData().GetChannelId();
 

@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/minikql
+    yql/essentials/minikql
 )
 
 YQL_LAST_ABI_VERSION()

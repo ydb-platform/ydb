@@ -1,9 +1,0 @@
-{
-    "fdate"="2018-12-15";
-    "fdatetime"="2018-12-15T01:02:03Z";
-    "ftimestamp"="2018-12-15T01:02:03.456789Z";
-    "ftzdate"="2018-12-15,Europe/Moscow";
-    "ftzdatetime"="2018-12-15T01:02:03,Europe/Moscow";
-    "ftztimestamp"="2018-12-15T01:02:03.456789,Europe/Moscow"
-};
-

@@ -1,8 +1,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/hook/hook.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/optimizer.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/parser/pg_wrapper/interface/optimizer.h>
 
 #include "dq_opt_log.h"
 #include "dq_opt_join.h"

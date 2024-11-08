@@ -1,0 +1,18 @@
+--- ydb/library/yql/core/url_lister/interface/ya.make	(ba7d8a34ba1d6526d6f7a570d7bc4eea9185964d)
++++ ydb/library/yql/core/url_lister/interface/ya.make	(c7da95636144d28db109d6b17ddc762e9bacb59f)
+@@ -1,15 +0,0 @@
+-LIBRARY()
+-
+-SRCS(
+-    url_lister.cpp
+-    url_lister_manager.cpp
+-)
+-
+-PEERDIR(
+-    library/cpp/uri
+-    library/cpp/yson/node
+-    ydb/library/yql/core/credentials
+-    ydb/library/yql/core/url_preprocessing/interface
+-)
+-
+-END()

@@ -3,8 +3,8 @@
 #include "yql_mkql_input_stream.h"
 
 #include <ydb/library/yql/providers/yt/codec/yt_codec.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_custom_list.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>

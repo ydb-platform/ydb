@@ -1,8 +1,8 @@
 #include "predicate_node.h"
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
 
 namespace NYql::NPushdown {

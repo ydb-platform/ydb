@@ -10,7 +10,7 @@
 #include <ydb/core/base/feature_flags.h>
 
 #include <ydb/library/yaml_config/yaml_config.h>
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 #include <util/generic/bitmap.h>
 #include <util/random/random.h>

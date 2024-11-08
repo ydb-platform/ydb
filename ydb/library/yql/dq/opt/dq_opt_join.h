@@ -3,7 +3,7 @@
 #include "dq_opt.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
 
 namespace NYql {

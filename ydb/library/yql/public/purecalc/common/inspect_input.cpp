@@ -1,6 +1,6 @@
 #include "inspect_input.h"
 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 namespace NYql::NPureCalc {
     bool TryFetchInputIndexFromSelf(const TExprNode& node, TExprContext& ctx, ui32 inputsCount, ui32& result) {

@@ -1,0 +1,11 @@
+--- ydb/core/yt/export_yt.cpp	(ba7d8a34ba1d6526d6f7a570d7bc4eea9185964d)
++++ ydb/core/yt/export_yt.cpp	(c7da95636144d28db109d6b17ddc762e9bacb59f)
+@@ -7,7 +7,7 @@
+ #include <ydb/library/services/services.pb.h>
+ #include <ydb/core/tablet_flat/flat_row_state.h>
+ #include <ydb/core/tx/datashard/export_common.h>
+-#include <ydb/library/binary_json/read.h>
++#include <yql/essentials/types/binary_json/read.h>
+ #include <ydb/library/actors/core/actor_bootstrapped.h>
+ #include <ydb/library/actors/core/hfunc.h>
+ 

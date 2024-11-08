@@ -1,6 +1,6 @@
 #include "yql_dq_integration.h"
 
-#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
 namespace NYql {
 

@@ -29,32 +29,32 @@ ELSE()
         library/cpp/getopt
         library/cpp/yson
         library/cpp/svnversion
-        ydb/library/yql/sql/pg
-        ydb/library/yql/core/facade
-        ydb/library/yql/core/file_storage
-        ydb/library/yql/core/file_storage/proto
-        ydb/library/yql/core/file_storage/http_download
-        ydb/library/yql/core/pg_ext
-        ydb/library/yql/core/services/mounts
-        ydb/library/yql/minikql/comp_nodes/llvm14
-        ydb/library/yql/protos
-        ydb/library/yql/public/udf/service/exception_policy
-        ydb/library/yql/utils/backtrace
-        ydb/library/yql/core
-        ydb/library/yql/sql/v1/format
-        ydb/library/yql/providers/common/codec
-        ydb/library/yql/providers/common/comp_nodes
-        ydb/library/yql/providers/common/proto
-        ydb/library/yql/providers/common/provider
-        ydb/library/yql/providers/common/udf_resolve
+        yql/essentials/sql/pg
+        yql/essentials/core/facade
+        yql/essentials/core/file_storage
+        yql/essentials/core/file_storage/proto
+        yql/essentials/core/file_storage/http_download
+        yql/essentials/core/pg_ext
+        yql/essentials/core/services/mounts
+        yql/essentials/minikql/comp_nodes/llvm14
+        yql/essentials/protos
+        yql/essentials/public/udf/service/exception_policy
+        yql/essentials/utils/backtrace
+        yql/essentials/core
+        yql/essentials/sql/v1/format
+        yql/essentials/providers/common/codec
+        yql/essentials/providers/common/comp_nodes
+        yql/essentials/providers/common/proto
+        yql/essentials/providers/common/provider
+        yql/essentials/providers/common/udf_resolve
         ydb/library/yql/providers/dq/provider
         ydb/library/yql/providers/yt/gateway/file
         ydb/library/yql/providers/yt/codec/codegen
         ydb/library/yql/providers/yt/comp_nodes/llvm14
-        ydb/library/yql/core/url_preprocessing
+        yql/essentials/core/url_preprocessing
         ydb/library/yql/tools/yqlrun/http
-        ydb/library/yql/parser/pg_wrapper
-        ydb/library/yql/public/result_format
+        yql/essentials/parser/pg_wrapper
+        yql/essentials/public/result_format
     )
 
     YQL_LAST_ABI_VERSION()

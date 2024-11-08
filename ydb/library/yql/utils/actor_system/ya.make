@@ -8,8 +8,8 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/library/services
-    ydb/library/yql/providers/common/metrics
-    ydb/library/yql/utils
+    yql/essentials/providers/common/metrics
+    yql/essentials/utils
 )
 
 END()

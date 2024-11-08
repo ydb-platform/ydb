@@ -1,8 +1,8 @@
 #include "yql_yt_settings.h"
 
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/regex/pcre/regexp.h>

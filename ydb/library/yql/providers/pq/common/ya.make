@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/public/types
+    yql/essentials/public/types
 )
 
 YQL_LAST_ABI_VERSION()

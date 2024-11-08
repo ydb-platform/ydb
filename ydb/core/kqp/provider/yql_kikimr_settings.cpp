@@ -5,7 +5,7 @@
 #include <util/generic/size_literals.h>
 #include <util/string/split.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 namespace NYql {
 

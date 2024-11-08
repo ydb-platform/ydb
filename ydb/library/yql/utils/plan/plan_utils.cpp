@@ -1,6 +1,6 @@
 #include "plan_utils.h"
 
-#include <ydb/library/yql/ast/yql_ast_escaping.h>
+#include <yql/essentials/ast/yql_ast_escaping.h>
 
 #include <util/string/vector.h>
 

@@ -5,10 +5,10 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/minikql
-    ydb/library/yql/core
-    ydb/library/yql/ast
-    ydb/library/yql/utils
+    yql/essentials/minikql
+    yql/essentials/core
+    yql/essentials/ast
+    yql/essentials/utils
 )
 
 YQL_LAST_ABI_VERSION()

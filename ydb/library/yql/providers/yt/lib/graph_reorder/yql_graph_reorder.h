@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <util/digest/numeric.h>
 #include <util/generic/hash.h>

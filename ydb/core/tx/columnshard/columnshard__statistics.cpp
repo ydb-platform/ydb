@@ -5,7 +5,7 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
-#include <ydb/library/minsketch/count_min_sketch.h>
+#include <yql/essentials/core/minsketch/count_min_sketch.h>
 
 
 namespace NKikimr::NColumnShard {

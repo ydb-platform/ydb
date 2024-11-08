@@ -8,7 +8,7 @@
 #include <ydb/library/yql/providers/clickhouse/proto/source.pb.h>
 #include <ydb/library/yql/providers/clickhouse/proto/range.pb.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 namespace NYql {
 

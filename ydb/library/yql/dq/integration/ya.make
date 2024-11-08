@@ -8,8 +8,8 @@ SRCS(
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/yson
-    ydb/library/yql/ast
-    ydb/library/yql/core
+    yql/essentials/ast
+    yql/essentials/core
     ydb/library/yql/dq/tasks
 )
 

@@ -5,11 +5,11 @@
 #include <ydb/library/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/codec/yt_codec.h>
-#include <ydb/library/yql/providers/common/gateway/yql_provider_gateway.h>
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/interface/config.h>

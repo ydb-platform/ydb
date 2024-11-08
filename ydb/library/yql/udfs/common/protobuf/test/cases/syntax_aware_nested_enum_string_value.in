@@ -1,4 +1,0 @@
-{"TestField"="{}"};
-{"TestField"="{\"inner\": {\"l\": 25}}"};
-{"TestField"="{\"inner\": {\"l\": \"B\"}}"};
-{"TestField"="{\"inner\": {\"alphabet\": [0, 1, 25]}"};

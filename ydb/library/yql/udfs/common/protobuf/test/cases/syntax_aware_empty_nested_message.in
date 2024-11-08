@@ -1,4 +1,0 @@
-{"TestField"="{}"};
-{"TestField"="{\"inner\":{}}"};
-{"TestField"="{\"inner\":{\"i\":{}}"};
-{"TestField"="{\"inner\":{\"i\":{\"a\":\"\"}}"};

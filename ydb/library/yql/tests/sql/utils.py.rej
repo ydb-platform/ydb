@@ -1,0 +1,16 @@
+--- ydb/library/yql/tests/sql/utils.py	(ba7d8a34ba1d6526d6f7a570d7bc4eea9185964d)
++++ ydb/library/yql/tests/sql/utils.py	(c7da95636144d28db109d6b17ddc762e9bacb59f)
+@@ -6,11 +6,11 @@ import yatest.common
+ 
+ from yql_utils import get_param as yql_get_param
+ from google.protobuf import text_format
+-import contrib.ydb.library.yql.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
++import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
+ 
+ DATA_PATH = yatest.common.source_path('ydb/library/yql/tests/sql/suites')
+ try:
+-    SQLRUN_PATH = yatest.common.binary_path('ydb/library/yql/tools/sql2yql/sql2yql')
++    SQLRUN_PATH = yatest.common.binary_path('yql/essentials/tools/sql2yql/sql2yql')
+ except BaseException:
+     SQLRUN_PATH = None
+ 

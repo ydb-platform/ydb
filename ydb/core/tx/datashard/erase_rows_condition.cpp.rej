@@ -1,0 +1,13 @@
+--- ydb/core/tx/datashard/erase_rows_condition.cpp	(ba7d8a34ba1d6526d6f7a570d7bc4eea9185964d)
++++ ydb/core/tx/datashard/erase_rows_condition.cpp	(c7da95636144d28db109d6b17ddc762e9bacb59f)
+@@ -169,8 +169,8 @@ class TExpirationCondition: public IEraseRowsCondition {
+                 return value <= *wallClockSerialized;
+             case NScheme::NTypeIds::Pg: {
+                 int result = NPg::PgNativeBinaryCompare(
+-                    value.Data(), value.Size(),
+-                    wallClockSerialized->Data(), wallClockSerialized->Size(),
++                    value.data(), value.size(),
++                    wallClockSerialized->data(), wallClockSerialized->size(),
+                     Type.GetPgTypeDesc());
+                 return result <= 0;
+             }

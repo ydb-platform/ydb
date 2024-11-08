@@ -8,15 +8,15 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/binary_json/write.h>
-#include <ydb/library/dynumber/dynumber.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
-#include <ydb/library/yql/minikql/dom/json.h>
-#include <ydb/library/yql/minikql/dom/yson.h>
-#include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/utils/utf8.h>
+#include <yql/essentials/minikql/dom/json.h>
+#include <yql/essentials/minikql/dom/yson.h>
+#include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/utils/utf8.h>
 
 namespace NKikimr {
 

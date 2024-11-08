@@ -1,0 +1,36 @@
+--- ydb/library/yql/providers/common/codec/ya.make	(ba7d8a34ba1d6526d6f7a570d7bc4eea9185964d)
++++ ydb/library/yql/providers/common/codec/ya.make	(c7da95636144d28db109d6b17ddc762e9bacb59f)
+@@ -1,33 +0,0 @@
+-LIBRARY()
+-
+-SRCS(
+-    yql_codec.cpp
+-    yql_codec.h
+-    yql_codec_buf.cpp
+-    yql_codec_buf.h
+-    yql_codec_type_flags.cpp
+-    yql_codec_type_flags.h
+-    yql_json_codec.cpp
+-)
+-
+-PEERDIR(
+-    ydb/library/yql/minikql/computation
+-    ydb/library/yql/parser/pg_wrapper/interface
+-    ydb/library/yql/providers/common/mkql
+-    ydb/library/yql/public/result_format
+-    library/cpp/yson/node
+-    library/cpp/yson
+-    library/cpp/json
+-    library/cpp/enumbitset
+-    yt/yt/library/decimal
+-)
+-
+-YQL_LAST_ABI_VERSION()
+-
+-GENERATE_ENUM_SERIALIZATION(yql_codec_type_flags.h)
+-
+-END()
+-
+-RECURSE_FOR_TESTS(
+-    ut
+-)

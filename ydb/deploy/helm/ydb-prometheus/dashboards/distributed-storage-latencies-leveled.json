@@ -2336,8 +2336,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -2443,8 +2442,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -2616,8 +2614,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -2723,8 +2720,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -2896,8 +2892,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -3005,8 +3000,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -3178,8 +3172,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -3287,8 +3280,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -3460,8 +3452,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -3569,8 +3560,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -3742,8 +3732,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -3851,8 +3840,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -3985,6 +3973,23 @@
     "list": [
       {
         "current": {
+          "text": "prometheus",
+          "value": "prometheus"
+        },
+        "label": "ds",
+        "name": "ds",
+        "options": [
+          {
+            "selected": true,
+            "text": "prometheus",
+            "value": "prometheus"
+          }
+        ],
+        "query": "prometheus",
+        "type": "textbox"
+      },
+      {
+        "current": {
           "text": "dynamic_storage_pool:1",
           "value": "dynamic_storage_pool:1"
         },
@@ -4005,34 +4010,17 @@
         "refresh": 1,
         "regex": "",
         "type": "query"
-      },
-      {
-        "current": {
-          "text": "prometheus",
-          "value": "prometheus"
-        },
-        "label": "ds",
-        "name": "ds",
-        "options": [
-          {
-            "selected": true,
-            "text": "prometheus",
-            "value": "prometheus"
-          }
-        ],
-        "query": "prometheus",
-        "type": "textbox"
       }
     ]
   },
   "time": {
-    "from": "2024-10-30T11:59:02.430Z",
-    "to": "2024-10-30T12:59:02.430Z"
+    "from": "now-1h",
+    "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Distributed Storage Latencies Overview",
   "uid": "rd_distributed-storage-latencies-leveled",
-  "version": 51,
+  "version": 52,
   "weekStart": ""
 }

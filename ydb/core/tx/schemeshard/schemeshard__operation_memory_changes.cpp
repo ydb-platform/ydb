@@ -187,7 +187,7 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->ShardInfos[id] = *elem;
         } else {
             ss->ShardInfos.erase(id);
-            ss->ShardRemoved(id);
+            ss->OnShardRemoved(id);
         }
         Shards.pop();
     }

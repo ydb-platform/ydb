@@ -8,7 +8,15 @@ from ..base import BasePackageManager, PackageManagerError
 from ..base.constants import NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
 from ..base.node_modules_bundler import bundle_node_modules
 from ..base.timeit import timeit
-from ..base.utils import b_rooted, build_nm_bundle_path, build_pj_path, home_dir, s_rooted
+from ..base.utils import (
+    b_rooted,
+    build_nm_bundle_path,
+    build_nm_path,
+    build_nm_store_path,
+    build_pj_path,
+    home_dir,
+    s_rooted,
+)
 
 
 class PnpmPackageManager(BasePackageManager):
@@ -55,8 +63,10 @@ class PnpmPackageManager(BasePackageManager):
         if local_cli:
             # Use single CAS for all the projects built locally
             store_dir = self.get_local_pnpm_store()
-            # It's a default value of pnpm itself. But it should be defined explicitly for not using values from the lockfiles or from the previous installations.
-            virtual_store_dir = self._nm_path('.pnpm')
+
+            nm_store_path = build_nm_store_path(self.module_path)
+            # Use single virtual-store location in ~/.nots/nm_store/$MODDIR/node_modules/.pnpm/virtual-store
+            virtual_store_dir = os.path.join(build_nm_path(nm_store_path), self._VSTORE_NM_PATH)
 
         self._run_pnpm_install(store_dir, virtual_store_dir)
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir)
@@ -106,39 +116,26 @@ class PnpmPackageManager(BasePackageManager):
         resources = []
 
         if has_deps:
-            for dep_path in self.get_local_peers_from_package_json():
-                ins.append(b_rooted(build_ws_config_path(dep_path)))
-                ins.append(b_rooted(build_pre_lockfile_path(dep_path)))
-
             for pkg in self.extract_packages_meta_from_lockfiles([build_lockfile_path(self.sources_path)]):
                 resources.append(pkg.to_uri())
                 outs.append(b_rooted(self._tarballs_store_path(pkg, store_path)))
 
         return ins, outs, resources
 
-    # TODO: FBP-1254
-    # def calc_node_modules_inouts(self, local_cli=False) -> (list[str], list[str]):
-    def calc_node_modules_inouts(self, local_cli=False):
+    def calc_node_modules_inouts(self, local_cli: bool, has_deps: bool) -> tuple[list[str], list[str]]:
         """
         Returns input and output paths for command that creates `node_modules` bundle.
         It relies on .PEERDIRSELF=TS_PREPARE_DEPS
         Inputs:
             - source package.json
-            - merged pre-lockfiles and workspace configs of TS_PREPARE_DEPS
         Outputs:
             - created node_modules bundle
         """
         ins = [s_rooted(build_pj_path(self.module_path))]
         outs = []
 
-        pj = self.load_package_json_from_dir(self.sources_path)
-        if pj.has_dependencies():
-            ins.append(b_rooted(build_pre_lockfile_path(self.module_path)))
-            ins.append(b_rooted(build_ws_config_path(self.module_path)))
-            if not local_cli:
-                outs.append(b_rooted(build_nm_bundle_path(self.module_path)))
-            for dep_path in self.get_local_peers_from_package_json():
-                ins.append(b_rooted(build_pj_path(dep_path)))
+        if not local_cli and has_deps:
+            outs.append(b_rooted(build_nm_bundle_path(self.module_path)))
 
         return ins, outs
 

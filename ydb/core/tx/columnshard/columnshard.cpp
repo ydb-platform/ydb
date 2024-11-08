@@ -3,6 +3,8 @@
 #include "bg_tasks/manager/manager.h"
 #include "blobs_reader/actor.h"
 #include "counters/aggregation/table_stats.h"
+#include "data_accessor/actor.h"
+#include "data_accessor/manager.h"
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor.h"
 #include "hooks/abstract/abstract.h"
@@ -11,6 +13,7 @@
 
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
+#include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/tiering/manager.h>
 
 namespace NKikimr {
@@ -29,6 +32,10 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     }
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
+    ctx.Send(DataAccessorsControlActorId, new TEvents::TEvPoisonPill);
+    if (PrioritizationClientId) {
+        NPrioritiesQueue::TCompServiceOperator::UnregisterClient(PrioritizationClientId);
+    }
     for (auto&& i : ActorsToStop) {
         ctx.Send(i, new TEvents::TEvPoisonPill);
     }
@@ -101,6 +108,10 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
+    DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
+    DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(DataAccessorsControlActorId),
+
+    PrioritizationClientId = NPrioritiesQueue::TCompServiceOperator::RegisterClient();
     Execute(CreateTxInitSchema(), ctx);
 }
 
@@ -265,7 +276,6 @@ void TColumnShard::UpdateIndexCounters() {
     auto& stats = TablesManager.MutablePrimaryIndex().GetTotalStats();
     const std::shared_ptr<const TTabletCountersHandle>& counters = Counters.GetTabletCounters();
     counters->SetCounter(COUNTER_INDEX_TABLES, stats.Tables);
-    counters->SetCounter(COUNTER_INDEX_COLUMN_RECORDS, stats.ColumnRecords);
     counters->SetCounter(COUNTER_INSERTED_PORTIONS, stats.GetInsertedStats().Portions);
     counters->SetCounter(COUNTER_INSERTED_BLOBS, stats.GetInsertedStats().Blobs);
     counters->SetCounter(COUNTER_INSERTED_ROWS, stats.GetInsertedStats().Rows);
@@ -295,8 +305,7 @@ void TColumnShard::UpdateIndexCounters() {
     LOG_S_DEBUG("Index: tables " << stats.Tables << " inserted " << stats.GetInsertedStats().DebugString() << " compacted "
                                  << stats.GetCompactedStats().DebugString() << " s-compacted " << stats.GetSplitCompactedStats().DebugString()
                                  << " inactive " << stats.GetInactiveStats().DebugString() << " evicted "
-                                 << stats.GetEvictedStats().DebugString() << " column records " << stats.ColumnRecords << " at tablet "
-                                 << TabletID());
+                                 << stats.GetEvictedStats().DebugString() << " at tablet " << TabletID());
 }
 
 ui64 TColumnShard::MemoryUsage() const {

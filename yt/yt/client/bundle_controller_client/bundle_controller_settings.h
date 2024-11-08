@@ -55,6 +55,7 @@ struct TInstanceResources
     : public NYTree::TYsonStruct
 {
     i64 Memory;
+    // Bits per second.
     std::optional<i64> Net;
 
     TString Type;
@@ -93,6 +94,8 @@ struct TInstanceSize
 {
     TInstanceResourcesPtr ResourceGuarantee;
     TDefaultInstanceConfigPtr DefaultConfig;
+
+    std::optional<TString> HostTagFilter;
 
     REGISTER_YSON_STRUCT(TInstanceSize);
 
@@ -142,6 +145,7 @@ struct TBundleResourceQuota
 {
     int Vcpu;
     i64 Memory;
+    i64 Network;
 
     REGISTER_YSON_STRUCT(TBundleResourceQuota);
 

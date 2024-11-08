@@ -5,7 +5,9 @@ import logging
 import time
 
 from ydb.tests.library.common.wait_for import wait_for
-from .kikimr_client import kikimr_client_factory
+from ydb.tests.library.clients.kikimr_client import kikimr_client_factory
+from ydb.tests.library.clients.kikimr_keyvalue_client import keyvalue_client_factory
+from ydb.tests.library.clients.kikimr_scheme_client import scheme_client_factory
 from ydb.tests.library.common.protobuf_console import (
     CreateTenantRequest, AlterTenantRequest, GetTenantStatusRequest,
     RemoveTenantRequest, GetOperationRequest)
@@ -22,6 +24,8 @@ class KiKiMRClusterInterface(object):
 
     def __init__(self):
         self.__client = None
+        self.__kv_client = None
+        self.__scheme_client = None
         self.__clients = None
         self.__monitors = None
         self.__ready_timeout_seconds = 60
@@ -83,6 +87,28 @@ class KiKiMRClusterInterface(object):
                 retry_count=10,
             )
         return self.__client
+
+    @property
+    def kv_client(self):
+        if self.__kv_client is None:
+            self.__kv_client = keyvalue_client_factory(
+                server=self.nodes[1].host,
+                port=self.nodes[1].grpc_port,
+                cluster=self,
+                retry_count=10,
+            )
+        return self.__kv_client
+
+    @property
+    def scheme_client(self):
+        if self.__scheme_client is None:
+            self.__scheme_client = scheme_client_factory(
+                server=self.nodes[1].host,
+                port=self.nodes[1].grpc_port,
+                cluster=self,
+                retry_count=10,
+            )
+        return self.__scheme_client
 
     def get_database_status(self, database_name):
         response = self.client.send_request(

@@ -1,5 +1,3 @@
-#include <util/datetime/cputimer.h>
-
 #include "query_uploader.h"
 #include "util.h"
 
@@ -62,17 +60,12 @@ bool TUploader::Push(const TString& path, TValue&& value) {
 
             if (status.IsSuccess()) {
                 if (status.GetIssues()) {
-                    LOG_ERR("BulkUpsert has finished successfull, but has issues# {"
-                            << status.GetIssues().ToString() << "}");
+                    LOG_W("Bulk upsert was completed with issues: " << status.GetIssues().ToOneLineString());
                 }
                 return;
             // Since upsert of data is an idempotent operation it is possible to retry transport errors
             } else if (status.IsTransportError() && retry < Opts.TransportErrorsMaxRetries) {
-                LOG_DEBUG("Notice: transport error in BulkUpsert, issues# {" << status.GetIssues().ToString() << "}"
-                        << " current Retry is " << retry
-                        << " < MaxRetries# " << Opts.TransportErrorsMaxRetries
-                        << ", so sleep for " << retrySleep.Seconds() << "s"
-                        << " and try again");
+                LOG_D("Retry bulk upsert: " << status.GetIssues().ToOneLineString());
                 ++retry;
                 TInstant deadline = retrySleep.ToDeadLine();
                 while (TInstant::Now() < deadline) {
@@ -84,9 +77,7 @@ bool TUploader::Push(const TString& path, TValue&& value) {
                 retrySleep *= 2;
                 continue;
             } else {
-                LOG_ERR("Error in BulkUpsert, so stop working. Issues# {" << status.GetIssues().ToString() << "}"
-                        << " IsTransportError# " << (status.IsTransportError() ? "true" : "false")
-                        << " retries done# " << retry);
+                LOG_E("Bulk upsert failed: " << status.GetIssues().ToOneLineString());
                 PleaseStop();
                 return;
             }
@@ -136,11 +127,10 @@ bool TUploader::Push(TParams params) {
 
         if (status.IsSuccess()) {
             if (status.GetIssues()) {
-                LOG_ERR("Upload tx has finished successfull, but has issues# {"
-                    << status.GetIssues().ToString() << "}");
+                LOG_W("Write tx was completed with issues: " << status.GetIssues().ToOneLineString());
             }
         } else {
-            LOG_ERR("Error in upload tx, issues# {" << status.GetIssues().ToString() << "}");
+            LOG_E("Write tx failed: " << status.GetIssues().ToOneLineString());
             PleaseStop();
             return;
         }

@@ -422,7 +422,7 @@ public:
 
         for (const auto& shardStats : Proto_.table_stats().partition_stats()) {
             PartitionStats_.emplace_back(
-                TPartitionStats{shardStats.rows_estimate(), shardStats.store_size()}
+                TPartitionStats{shardStats.rows_estimate(), shardStats.store_size(), shardStats.leader_node_id()}
             );
         }
 
@@ -2280,6 +2280,12 @@ TCopyItem& TCopyItem::SetOmitIndexes() {
 
 bool TCopyItem::OmitIndexes() const {
     return OmitIndexes_;
+}
+
+void TCopyItem::Out(IOutputStream& o) const {
+    o << "{ src: \"" << Source_ << "\""
+      << ", dst: \"" << Destination_ << "\""
+      << " }";
 }
 
 ////////////////////////////////////////////////////////////////////////////////

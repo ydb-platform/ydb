@@ -10,6 +10,8 @@ SRCS(
 
 PEERDIR(
     library/cpp/bucket_quoter
+    library/cpp/logger
+    library/cpp/regex/pcre
     library/cpp/string_utils/quote
     ydb/library/backup
     ydb/public/api/protos
@@ -17,5 +19,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/dump/util
     ydb/public/sdk/cpp/client/ydb_proto
 )
+
+GENERATE_ENUM_SERIALIZATION(dump.h)
 
 END()

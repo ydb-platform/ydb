@@ -8,7 +8,7 @@ import pytest
 from ydb import Driver, DriverConfig, SessionPool
 
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 
@@ -46,7 +46,7 @@ def ydb_cluster(ydb_configurator, request):
     logger.info("setup ydb_cluster for %s", module_name)
 
     logger.info("setup ydb_cluster as local")
-    cluster = kikimr_cluster_factory(
+    cluster = KiKiMR(
         configurator=ydb_configurator,
     )
     cluster.is_local_test = True

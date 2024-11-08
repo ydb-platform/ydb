@@ -37,6 +37,7 @@ EDiskUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsa
     for (const auto& [poolKind, usage] : storagePoolsUsage) {
         if (const auto* quota = storagePoolsQuotas.FindPtr(poolKind)) {
             const auto totalSize = usage.DataSize + usage.IndexSize;
+            // If a quota is equal to zero, then it sets no limit on the disk space usage.
             if (quota->HardQuota && totalSize > quota->HardQuota) {
                 return EDiskUsageStatus::AboveHardQuota;
             }
@@ -152,24 +153,40 @@ bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
         return changeSubdomainState(EDiskUsageStatus::BelowSoftQuota);
     }
 
-    ui64 totalUsage = TotalDiskSpaceUsage();
-    const auto storagePoolsUsageStatus = CheckStoragePoolsQuotas(DiskSpaceUsage.StoragePoolsUsage, quotas.StoragePoolsQuotas);
+    if (!AppData()->FeatureFlags.GetEnableSeparateDiskSpaceQuotas()) {
+        // If the feature flag is turned off, then the storage pool quotas are ignored:
+        // they are not accounted for when we make a decision to change the state of the subdomain.
+        ui64 totalUsage = TotalDiskSpaceUsage();
 
-    // Quota being equal to zero is treated as if there is no limit set on disk space usage.
-    const bool overallHardQuotaIsExceeded = quotas.HardQuota && totalUsage > quotas.HardQuota;
-    const bool someStoragePoolHardQuotaIsExceeded = !quotas.StoragePoolsQuotas.empty()
-                                                        && storagePoolsUsageStatus == EDiskUsageStatus::AboveHardQuota;
-    if (overallHardQuotaIsExceeded || someStoragePoolHardQuotaIsExceeded) {
-        return changeSubdomainState(EDiskUsageStatus::AboveHardQuota);
+        // If a quota is equal to zero, then it sets no limit on the disk space usage.
+        const bool isHardQuotaExceeded = quotas.HardQuota && totalUsage > quotas.HardQuota;
+        const bool isTotalUsageBelowSoftQuota = !quotas.SoftQuota || totalUsage < quotas.SoftQuota;
+
+        if (isHardQuotaExceeded) {
+            return changeSubdomainState(EDiskUsageStatus::AboveHardQuota);
+        }
+        if (isTotalUsageBelowSoftQuota) {
+            return changeSubdomainState(EDiskUsageStatus::BelowSoftQuota);
+        }
+    } else {
+        // If the feature flag is turned on, then the overall quota is ignored:
+        // it is not accounted for when we make a decision to change the state of the subdomain.
+        const auto storagePoolsUsageStatus = CheckStoragePoolsQuotas(DiskSpaceUsage.StoragePoolsUsage, quotas.StoragePoolsQuotas);
+
+        const bool isSomeStoragePoolHardQuotaExceeded = !quotas.StoragePoolsQuotas.empty()
+                                                            && storagePoolsUsageStatus == EDiskUsageStatus::AboveHardQuota;
+        const bool isEachStoragePoolUsageBelowSoftQuota = quotas.StoragePoolsQuotas.empty()
+                                                            || storagePoolsUsageStatus == EDiskUsageStatus::BelowSoftQuota;
+
+        if (isSomeStoragePoolHardQuotaExceeded) {
+            return changeSubdomainState(EDiskUsageStatus::AboveHardQuota);
+        }
+        if (isEachStoragePoolUsageBelowSoftQuota) {
+            return changeSubdomainState(EDiskUsageStatus::BelowSoftQuota);
+        }
     }
 
-    const bool totalUsageIsBelowOverallSoftQuota = !quotas.SoftQuota || totalUsage < quotas.SoftQuota;
-    const bool allStoragePoolsUsageIsBelowSoftQuota = quotas.StoragePoolsQuotas.empty()
-                                                          || storagePoolsUsageStatus == EDiskUsageStatus::BelowSoftQuota;
-    if (totalUsageIsBelowOverallSoftQuota && allStoragePoolsUsageIsBelowSoftQuota) {
-        return changeSubdomainState(EDiskUsageStatus::BelowSoftQuota);
-    }
-
+    // made no changes to the state of the subdomain
     return false;
 }
 
@@ -365,6 +382,13 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             ui32 colId = colName2Id[colName];
             const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
 
+            if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromSequence) {
+                if (isDropNotNull || columnFamily) {
+                    errStr = Sprintf("Cannot alter serial column '%s'", colName.c_str());
+                    return nullptr;
+                }
+            }
+
             if (col.HasDefaultFromSequence()) {
                 switch (sourceColumn.PType.GetTypeId()) {
                     case NScheme::NTypeIds::Int8:
@@ -464,7 +488,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 if (!featureFlags.EnableParameterizedDecimal && decimalType != NScheme::TDecimalType::Default()){
                     errStr = Sprintf("Type '%s' specified for column '%s', but support for parametrized decimal is disabled (EnableParameterizedDecimal feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
-                }   
+                }
                 break;
             }
             case NScheme::NTypeIds::Pg:
@@ -472,7 +496,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     errStr = Sprintf("Type '%s' specified for column '%s', but support for pg types is disabled (EnableTablePgTypes feature flag is off)", col.GetType().data(), colName.data());
                     return nullptr;
                 }
-                break;                             
+                break;
             default:
                 break;
             }
@@ -524,7 +548,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
 
             ui32 colId = it->second;
-            if (source->Columns.find(colId) == source->Columns.end()) {
+
+            auto colIt = source->Columns.find(colId);
+            if (colIt == source->Columns.end()) {
                 errStr = Sprintf("Add + drop same column: '%s'", colName.data());
                 return nullptr;
             }
@@ -540,8 +566,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 errStr = Sprintf("Can't drop TTL column: '%s', disable TTL first ", colName.data());
                 return nullptr;
             }
+            if (colIt->second.DefaultKind == ETableColumnDefaultKind::FromSequence) {
+                errStr = Sprintf("Can't drop serial column: '%s'", colName.data());
+                return nullptr;
+            }
 
-            alterData->Columns[colId] = source->Columns[colId];
+            alterData->Columns[colId] = colIt->second;
             alterData->Columns[colId].DeleteVersion = alterData->AlterVersion;
         }
     }
@@ -1092,6 +1122,10 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
 
             if (srcStorage.HasExternalThreshold()) {
                 dstStorage.SetExternalThreshold(srcStorage.GetExternalThreshold());
+            }
+
+            if (srcStorage.HasExternalChannelsCount()) {
+                dstStorage.SetExternalChannelsCount(srcStorage.GetExternalChannelsCount());
             }
         }
     }
@@ -2295,15 +2329,16 @@ bool TTopicInfo::FillKeySchema(const NKikimrPQ::TPQTabletConfig& tabletConfig, T
     KeySchema.reserve(tabletConfig.PartitionKeySchemaSize());
 
     for (const auto& component : tabletConfig.GetPartitionKeySchema()) {
-        // TODO: support pg types
         auto typeId = component.GetTypeId();
-        if (!NScheme::NTypeIds::IsYqlType(typeId)) {
+        if (!NScheme::NTypeIds::IsYqlType(typeId) && typeId != NScheme::NTypeIds::Pg) {
             error = TStringBuilder() << "TypeId is not supported"
                 << ": typeId# " << typeId
                 << ", component# " << component.GetName();
             return false;
         }
-        KeySchema.push_back(NScheme::TTypeInfo(typeId));
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(typeId,
+                component.HasTypeInfo() ? &component.GetTypeInfo() : nullptr);
+        KeySchema.push_back(typeInfoMod.TypeInfo);
     }
 
     return true;
@@ -2319,96 +2354,37 @@ bool TTopicInfo::FillKeySchema(const TString& tabletConfig) {
     return FillKeySchema(proto, unused);
 }
 
-TBillingStats::TBillingStats(ui64 rows, ui64 bytes)
-    : Rows(rows)
-    , Bytes(bytes)
+TBillingStats::TBillingStats(ui64 readRows, ui64 readBytes, ui64 uploadRows, ui64 uploadBytes)
+    : UploadRows{uploadRows}
+    , UploadBytes{uploadBytes}
+    , ReadRows{readRows}
+    , ReadBytes{readBytes}
 {
-}
-
-TBillingStats::TBillingStats(const TBillingStats &other)
-    : Rows(other.Rows)
-    , Bytes(other.Bytes)
-{
-}
-
-TBillingStats &TBillingStats::operator =(const TBillingStats &other) {
-    if (this == &other) {
-        return *this;
-    }
-
-    Rows = other.Rows;
-    Bytes = other.Bytes;
-    return *this;
 }
 
 TBillingStats TBillingStats::operator -(const TBillingStats &other) const {
-    Y_ABORT_UNLESS(Rows >= other.Rows);
-    Y_ABORT_UNLESS(Bytes >= other.Bytes);
+    Y_ABORT_UNLESS(UploadRows >= other.UploadRows);
+    Y_ABORT_UNLESS(UploadBytes >= other.UploadBytes);
+    Y_ABORT_UNLESS(ReadRows >= other.ReadRows);
+    Y_ABORT_UNLESS(ReadBytes >= other.ReadBytes);
 
-    return TBillingStats(Rows - other.Rows, Bytes - other.Bytes);
-}
-
-TBillingStats &TBillingStats::operator -=(const TBillingStats &other) {
-    if (this == &other) {
-        Rows = 0;
-        Bytes = 0;
-        return *this;
-    }
-
-    Y_ABORT_UNLESS(Rows >= other.Rows);
-    Y_ABORT_UNLESS(Bytes >= other.Bytes);
-
-    Rows -= other.Rows;
-    Bytes -= other.Bytes;
-    return *this;
+    return {UploadRows - other.UploadRows, UploadBytes - other.UploadBytes,
+            ReadRows - other.ReadRows, ReadBytes - other.ReadBytes};
 }
 
 TBillingStats TBillingStats::operator +(const TBillingStats &other) const {
-    return TBillingStats(Rows + other.Rows, Bytes + other.Bytes);
-}
-
-TBillingStats &TBillingStats::operator +=(const TBillingStats &other) {
-    if (this == &other) {
-        Rows += Rows;
-        Bytes += Bytes;
-        return *this;
-    }
-
-    Rows += other.Rows;
-    Bytes += other.Bytes;
-    return *this;
-}
-
-bool TBillingStats::operator < (const TBillingStats &other) const {
-    return Rows < other.Rows && Bytes < other.Bytes;
-}
-
-bool TBillingStats::operator <= (const TBillingStats &other) const {
-    return Rows <= other.Rows && Bytes <= other.Bytes;
-}
-
-bool TBillingStats::operator ==(const TBillingStats &other) const {
-    return Rows == other.Rows && Bytes == other.Bytes;
+    return {UploadRows + other.UploadRows, UploadBytes + other.UploadBytes,
+            ReadRows + other.ReadRows, ReadBytes + other.ReadBytes};
 }
 
 TString TBillingStats::ToString() const {
     return TStringBuilder()
             << "{"
-            << " rows: " << GetRows()
-            << " bytes: " << GetBytes()
+            << " upload rows: " << UploadRows
+            << ", upload bytes: " << UploadBytes
+            << ", read rows: " << ReadRows
+            << ", read bytes: " << ReadBytes
             << " }";
-}
-
-ui64 TBillingStats::GetRows() const {
-    return Rows;
-}
-
-ui64 TBillingStats::GetBytes() const {
-    return Bytes;
-}
-
-NKikimr::NSchemeShard::TBillingStats::operator bool() const {
-    return Rows || Bytes;
 }
 
 TSequenceInfo::TSequenceInfo(

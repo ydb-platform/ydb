@@ -795,11 +795,12 @@ def on_prepare_deps_configure(unit: NotsUnitType) -> None:
 def on_node_modules_configure(unit: NotsUnitType) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
+    has_deps = pj.has_dependencies()
 
-    if pj.has_dependencies():
+    if has_deps:
         unit.onpeerdir(pm.get_local_peers_from_package_json())
         local_cli = unit.get("TS_LOCAL_CLI") == "yes"
-        ins, outs = pm.calc_node_modules_inouts(local_cli)
+        ins, outs = pm.calc_node_modules_inouts(local_cli, has_deps)
 
         __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives("input", ["hide"], sorted(ins)))
         if not unit.get("TS_TEST_FOR"):
@@ -827,7 +828,7 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
                     ymake.report_configure_error(
                         "Project is configured to use @yatool/prebuilder. \n"
                         + "Some packages in the pnpm-lock.yaml are misconfigured.\n"
-                        + "Run {COLORS.green}`ya tool nots update-lockfile`{COLORS.reset} to fix lockfile.\n"
+                        + f"Run {COLORS.green}`ya tool nots update-lockfile`{COLORS.reset} to fix lockfile.\n"
                         + "All packages with `requiresBuild:true` have to be marked with `hasAddons:true/false`.\n"
                         + "Misconfigured keys: \n"
                         + "  - "
@@ -842,7 +843,7 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
                     ymake.report_configure_error(
                         "Project is configured to use @yatool/prebuilder. \n"
                         + "Some packages are misconfigured.\n"
-                        + "Run {COLORS.green}`ya tool nots update-lockfile`{COLORS.reset} to fix pnpm-lock.yaml and package.json.\n"
+                        + f"Run {COLORS.green}`ya tool nots update-lockfile`{COLORS.reset} to fix pnpm-lock.yaml and package.json.\n"
                         + "Validation details: \n"
                         + "\n".join(validation_messages)
                     )

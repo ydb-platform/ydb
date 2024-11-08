@@ -5,16 +5,17 @@ import os
 import pytest
 import json
 
-from ydb.tests.library.common import yatest_common
+import yatest
+
 from ydb.tests.library.common.local_db_scheme import get_scheme
 from ydb.tests.library.common.types import TabletTypes
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.kv.helpers import create_tablets_and_wait_for_start
 from ydb.tests.oss.canonical import set_canondata_root
 
 
 def write_canonical_file(tablet, content):
-    fn = os.path.join(yatest_common.output_path(), tablet + '.schema')
+    fn = os.path.join(yatest.common.output_path(), tablet + '.schema')
     with open(fn, 'w') as w:
         w.write(
             json.dumps(
@@ -50,7 +51,7 @@ class TestTabletSchemes(object):
 
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
         cls.client = cls.cluster.client
         cls.shard_index = itertools.count(start=1)
@@ -81,7 +82,7 @@ class TestTabletSchemes(object):
         scheme = get_scheme(self.client, self.get_tablet_id(tablet_type))
         scheme = [element.data for element in scheme]
         return {
-            'schema': yatest_common.canonical_file(
+            'schema': yatest.common.canonical_file(
                 local=True,
                 universal_lines=True,
                 path=write_canonical_file(

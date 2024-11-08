@@ -5,6 +5,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
+#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
@@ -138,12 +139,7 @@ public:
             auto row = Build<TCoArgument>(ctx, read->Pos())
                 .Name("row")
                 .Done();
-            auto emptyPredicate = Build<TCoLambda>(ctx, read->Pos())
-                .Args({row})
-                .Body<TCoBool>()
-                    .Literal().Build("true")
-                    .Build()
-                .Done().Ptr();
+            TString emptyPredicate;
 
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TDqPqTopicSource>()
@@ -154,7 +150,7 @@ public:
                     .Token<TCoSecureParam>()
                         .Name().Build(token)
                         .Build()
-                    .FilterPredicate(emptyPredicate)
+                    .FilterPredicate().Value(emptyPredicate).Build()
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
@@ -225,6 +221,8 @@ public:
                         srcDesc.SetEndpoint(TString(Value(setting)));
                     } else if (name == SharedReading) {
                         sharedReading = FromString<bool>(Value(setting));
+                    } else if (name == ReconnectPeriod) {
+                        srcDesc.SetReconnectPeriod(TString(Value(setting)));
                     } else if (name == Format) {
                         format = TString(Value(setting));
                     } else if (name == UseSslSetting) {
@@ -257,17 +255,12 @@ public:
                 const auto rowSchema = topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                 for (const auto& item : rowSchema->GetItems()) {
                     srcDesc.AddColumns(TString(item->GetName()));
-                    srcDesc.AddColumnTypes(FormatType(item->GetItemType()));
+                    srcDesc.AddColumnTypes(NCommon::WriteTypeToYson(item->GetItemType(), NYT::NYson::EYsonFormat::Text));
                 }
 
                 NYql::NConnector::NApi::TPredicate predicateProto;
-                if (auto predicate = topicSource.FilterPredicate(); !NYql::IsEmptyFilterPredicate(predicate)) {
-                    TStringBuilder err;
-                    if (!NYql::SerializeFilterPredicate(predicate, &predicateProto, err)) {
-                        ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
-                        predicateProto.Clear();
-                    }
-                }
+                auto serializedProto = topicSource.FilterPredicate().Ref().Content();
+                YQL_ENSURE (predicateProto.ParseFromString(serializedProto));
 
                 sharedReading = sharedReading && (format == "json_each_row" || format == "raw");
                 TString predicateSql = NYql::FormatWhere(predicateProto);
@@ -347,6 +340,7 @@ public:
 
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
         Add(props, SharedReading, ToString(clusterConfiguration->SharedReading), pos, ctx);
+        Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
 
         

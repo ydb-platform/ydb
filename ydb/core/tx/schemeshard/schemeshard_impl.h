@@ -90,16 +90,16 @@ private:
         TSchemeShard* Self;
     };
 
-    using TCompactionQueue = NOperationQueue::TOperationQueueWithTimer<
+    using TBackgroundCompactionQueue = NOperationQueue::TOperationQueueWithTimer<
         TShardCompactionInfo,
         TCompactionQueueImpl,
         TEvPrivate::EvRunBackgroundCompaction,
         NKikimrServices::FLAT_TX_SCHEMESHARD,
         NKikimrServices::TActivity::SCHEMESHARD_BACKGROUND_COMPACTION>;
 
-    class TCompactionStarter : public TCompactionQueue::IStarter {
+    class TBackgroundCompactionStarter : public TBackgroundCompactionQueue::IStarter {
     public:
-        TCompactionStarter(TSchemeShard* self)
+        TBackgroundCompactionStarter(TSchemeShard* self)
             : Self(self)
         { }
 
@@ -290,8 +290,8 @@ public:
     TAutoPtr<NTabletPipe::IClientCache> PipeClientCache;
     TPipeTracker PipeTracker;
 
-    TCompactionStarter CompactionStarter;
-    TCompactionQueue* CompactionQueue = nullptr;
+    TBackgroundCompactionStarter BackgroundCompactionStarter;
+    TBackgroundCompactionQueue* BackgroundCompactionQueue = nullptr;
 
     TBorrowedCompactionStarter BorrowedCompactionStarter;
     TBorrowedCompactionQueue* BorrowedCompactionQueue = nullptr;
@@ -492,7 +492,7 @@ public:
     bool ApplyStorageConfig(const TStoragePools& storagePools,
                             const NKikimrSchemeOp::TStorageConfig& storageConfig,
                             TChannelsBindings& channelsBinding,
-                            THashMap<TString, ui32>& reverseBinding,
+                            THashMap<TString, TVector<ui32>>& reverseBinding,
                             TStorageRoom& room,
                             TString& errorMsg);
     bool GetBindingsRooms(const TPathId domainId,
@@ -632,6 +632,7 @@ public:
     void SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo);
     void SetPartitioning(TPathId pathId, TColumnTableInfo::TPtr tableInfo);
     void SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning);
+    void OnShardRemoved(const TShardIdx& shardIdx);
     auto BuildStatsForCollector(TPathId tableId, TShardIdx shardIdx, TTabletId datashardId, ui32 followerId,
         TMaybe<ui32> nodeId, TMaybe<ui64> startTime, const TPartitionStats& stats, const TActorContext& ctx);
 
@@ -904,8 +905,6 @@ public:
 
     void UpdateShardMetrics(const TShardIdx& shardIdx, const TPartitionStats& newStats);
     void RemoveShardMetrics(const TShardIdx& shardIdx);
-
-    void ShardRemoved(const TShardIdx& shardIdx);
 
     NOperationQueue::EStartStatus StartBackgroundCompaction(const TShardCompactionInfo& info);
     void OnBackgroundCompactionTimeout(const TShardCompactionInfo& info);
@@ -1317,9 +1316,12 @@ public:
     void PersistBuildIndexUnlockTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexUnlockTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
-    void PersistBuildIndexUploadProgress(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo, const TShardIdx& shardIdx);
-    void PersistBuildIndexUploadInitiate(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo, const TShardIdx& shardIdx);
-    void PersistBuildIndexBilling(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexUploadInitiate(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TShardStatus& shardStatus);
+    void PersistBuildIndexUploadProgress(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, const TIndexBuildInfo::TShardStatus& shardStatus);
+    void PersistBuildIndexUploadReset(NIceDb::TNiceDb& db, TIndexBuildId buildId, const TShardIdx& shardIdx, TIndexBuildInfo::TShardStatus& shardStatus);
+    void PersistBuildIndexUploadReset(NIceDb::TNiceDb& db, TIndexBuildInfo& info);
+    void PersistBuildIndexProcessed(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexBilled(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
     void PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
@@ -1344,6 +1346,7 @@ public:
         struct TTxReplyRetry;
         struct TTxReplySampleK;
         struct TTxReplyReshuffleKMeans;
+        struct TTxReplyLocalKMeans;
         struct TTxReplyUpload;
 
         struct TTxPipeReset;
@@ -1362,6 +1365,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& progress);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvSampleKResponse::TPtr& sampleK);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvLocalKMeansResponse::TPtr& local);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload);
     NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId);
     NTabletFlatExecutor::ITransaction* CreateTxBilling(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev);
@@ -1375,6 +1379,7 @@ public:
     void Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvLocalKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx);

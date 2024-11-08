@@ -5,7 +5,7 @@
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/testlib/test_client.h>
-#include <ydb/core/util/testactorsys.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 #include <ydb/core/tx/scheme_board/helpers.h>
 
 namespace NKikimr::NDataShard {

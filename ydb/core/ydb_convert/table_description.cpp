@@ -733,10 +733,17 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     return true;
 }
 
-bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
-    const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error) {
-    auto* schema = out.MutableSchema();
+NKikimrSchemeOp::TOlapColumnDescription* GetAddColumn(NKikimrSchemeOp::TColumnTableDescription& out) {
+    return out.MutableSchema()->AddColumns();
+}
 
+NKikimrSchemeOp::TOlapColumnDescription* GetAddColumn(NKikimrSchemeOp::TAlterColumnTable& out) {
+    return out.MutableAlterSchema()->AddAddColumns();
+}
+
+template <typename TColumnTable>
+bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error) {
     for (const auto& column : in) {
         if (column.type().has_pg_type()) {
             status = Ydb::StatusIds::BAD_REQUEST;
@@ -744,7 +751,7 @@ bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
             return false;
         }
 
-        auto* columnDesc = schema->AddColumns();
+        auto* columnDesc = GetAddColumn(out);
         columnDesc->SetName(column.name());
 
         NScheme::TTypeInfo typeInfo;
@@ -761,6 +768,81 @@ bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out,
     }
 
     return true;
+}
+
+bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error) {
+    return FillColumnDescriptionImpl(out, in, status, error);
+}
+
+bool FillColumnDescription(NKikimrSchemeOp::TAlterColumnTable& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
+    Ydb::StatusIds::StatusCode& status, TString& error) {
+    return FillColumnDescriptionImpl(out, in, status, error);
+}
+
+bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& status, TString& error) {
+    const auto ops = GetAlterOperationKinds(req);
+    if (ops.empty()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Empty alter";
+        return false;
+    }
+
+    if (ops.size() > 1) {
+        status = Ydb::StatusIds::UNSUPPORTED;
+        error = "Mixed alter is unsupported";
+        return false;
+    }
+
+    const auto OpType = *ops.begin();
+
+    std::pair<TString, TString> pathPair;
+    try {
+        pathPair = SplitPathIntoWorkingDirAndName(path);
+    } catch (const std::exception&) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        return false;
+    }
+
+    const auto& workingDir = pathPair.first;
+    const auto& name = pathPair.second;
+    modifyScheme->SetWorkingDir(workingDir);
+
+    if (OpType == EAlterOperationKind::Common) {
+        auto alterColumnTable = modifyScheme->MutableAlterColumnTable();
+        alterColumnTable->SetName(name);
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
+
+        for (const auto& drop : req->drop_columns()) {
+            alterColumnTable->MutableAlterSchema()->AddDropColumns()->SetName(drop);
+        }
+
+        if (!FillColumnDescription(*alterColumnTable, req->add_columns(), status, error)) {
+            return false;
+        }
+
+        if (req->has_set_ttl_settings()) {
+            if (!FillTtlSettings(*alterColumnTable->MutableAlterTtlSettings()->MutableEnabled(), req->Getset_ttl_settings(), status, error)) {
+                return false;
+            }
+        } else if (req->has_drop_ttl_settings()) {
+            alterColumnTable->MutableAlterTtlSettings()->MutableDisabled();
+        }
+
+        if (req->has_set_tiering()) {
+            alterColumnTable->MutableAlterTtlSettings()->SetUseTiering(req->set_tiering());
+        } else if (req->has_drop_tiering()) {
+            alterColumnTable->MutableAlterTtlSettings()->SetUseTiering("");
+        }
+    }
+
+    return true;
+}
+
+bool BuildAlterColumnTableModifyScheme(
+    const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& code, TString& error) {
+    return BuildAlterColumnTableModifyScheme(req->path(), req, modifyScheme, code, error);
 }
 
 template <typename TYdbProto>
@@ -1153,7 +1235,7 @@ bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
 }
 
 void FillTableStats(Ydb::Table::DescribeTableResult& out,
-        const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic) {
+        const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic, const TMap<ui64, ui64>& nodeMap) {
 
     auto stats = out.mutable_table_stats();
 
@@ -1162,6 +1244,21 @@ void FillTableStats(Ydb::Table::DescribeTableResult& out,
             auto partition = stats->add_partition_stats();
             partition->set_rows_estimate(tablePartitionStat.GetRowCount());
             partition->set_store_size(tablePartitionStat.GetDataSize() + tablePartitionStat.GetIndexSize());
+        }
+    }
+
+    if (!nodeMap.empty()) {
+        size_t id = 0;
+        if ((size_t)stats->partition_stats_size() != in.TablePartitionsSize()) {
+            ythrow yexception() << "malformed TPathDescription.";
+        }
+
+        for (const auto& part : in.GetTablePartitions()) {
+            auto it = nodeMap.find(part.GetDatashardId());
+            if (it == nodeMap.end()) {
+                ythrow yexception() << "unknown datashardId to fill DescribeTableResult";
+            }
+            stats->mutable_partition_stats(id++)->set_leader_node_id(it->second);
         }
     }
 
@@ -1667,4 +1764,4 @@ bool FillSequenceDescription(NKikimrSchemeOp::TSequenceDescription& out, const Y
     return true;
 }
 
-} // namespace NKikimr
+}  // namespace NKikimr

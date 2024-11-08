@@ -271,7 +271,6 @@ struct TTestOlap {
                     Columns { Name: "request_id" Type: "Utf8" }
                     KeyColumnNames: "timestamp"
                     KeyColumnNames: "uid"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
                 }
             }
         )", storeName.c_str());

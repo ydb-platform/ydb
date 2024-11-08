@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 
 namespace NKikimr::NOlap {
 class TGranuleMeta;
@@ -10,14 +11,14 @@ namespace NKikimr::NOlap::NGranule::NPortionsIndex {
 
 class TPortionInfoStat {
 private:
-    std::shared_ptr<TPortionInfo> PortionInfo;
+    TPortionInfo::TConstPtr PortionInfo;
     YDB_READONLY(ui64, MinRawBytes, 0);
     YDB_READONLY(ui64, BlobBytes, 0);
 
 public:
-    TPortionInfoStat(const std::shared_ptr<TPortionInfo>& portionInfo)
+    TPortionInfoStat(const TPortionInfo::TConstPtr& portionInfo)
         : PortionInfo(portionInfo)
-        , MinRawBytes(PortionInfo->GetMinMemoryForReadColumns({}))
+        , MinRawBytes(PortionInfo->GetTotalBlobBytes())
         , BlobBytes(PortionInfo->GetTotalBlobBytes())
     {
 

@@ -533,7 +533,7 @@ private:
     };
 
     class TInvoker
-        : public TInvokerWrapper
+        : public TInvokerWrapper<false>
     {
     public:
         TInvoker(IInvokerPtr underlyingInvoker_, int index, TWeakPtr<TFairShareInvokerPool> parent)

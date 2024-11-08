@@ -56,9 +56,8 @@ public:
 
     private:
         TString GetFullTableName(const char* table) const;
-        static ui64 CalcCountToGenerate(const TTpchWorkloadDataInitializerGenerator& owner, int tableNum, bool useState);
+        static ui64 CalcCountToGenerate(const TTpchWorkloadDataInitializerGenerator& owner, int tableNum);
         const TTpchWorkloadDataInitializerGenerator& Owner;
-        ui64 TableSize;
     };
 
 };

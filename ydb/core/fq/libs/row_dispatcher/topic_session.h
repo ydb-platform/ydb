@@ -8,6 +8,7 @@
 
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
+#include <ydb/library/yql/public/purecalc/common/fwd.h>
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -17,11 +18,14 @@ namespace NFq {
 
 std::unique_ptr<NActors::IActor> NewTopicSession(
     const TString& topicPath,
+    const TString& endpoint,
+    const TString& database,
     const NConfig::TRowDispatcherConfig& config,
     NActors::TActorId rowDispatcherActorId,
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway);
 

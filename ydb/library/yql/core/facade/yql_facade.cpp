@@ -80,13 +80,13 @@ TProgram::TStatus SyncExecution(
             (program->*method)(std::forward<Params2>(params)...);
     YQL_ENSURE(future.Initialized());
     future.Wait();
-    YQL_ENSURE(!future.HasException());
+    HandleFutureException(future);
 
     TProgram::TStatus status = future.GetValue();
     while (status == TProgram::TStatus::Async) {
         auto continueFuture = program->ContinueAsync();
         continueFuture.Wait();
-        YQL_ENSURE(!continueFuture.HasException());
+        HandleFutureException(continueFuture);
         status = continueFuture.GetValue();
     }
 
@@ -312,6 +312,11 @@ TProgram::TProgram(
         QContext_.GetWriter()->Put({FacadeComponent, StaticCredentialsLabel}, credList).GetValueSync();
     } else if (QContext_.CanRead()) {
         Credentials_ = MakeIntrusive<TCredentials>();
+        Credentials_->SetUserCredentials({
+            .OauthToken = "REPLAY_OAUTH",
+            .BlackboxSessionIdCookie = "REPLAY_SESSIONID"
+        });
+
         for (const auto& label : {StaticCredentialsLabel, DynamicCredentialsLabel}) {
             auto item = QContext_.GetReader()->Get({FacadeComponent, label}).GetValueSync();
             if (item) {

@@ -2478,7 +2478,7 @@ private:
                             && outerMap.DataSink().Cluster().Value() == op.DataSink().Cluster().Value()
                             && NYql::HasSetting(op.Settings().Ref(), EYtSettingType::Flow) == NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::Flow)
                             && !NYql::HasSetting(op.Settings().Ref(), EYtSettingType::JobCount)
-                            && !NYql::HasSetting(outerMap.Settings().Ref(), EYtSettingType::JobCount)
+                            && !NYql::HasAnySetting(outerMap.Settings().Ref(), EYtSettingType::JobCount | EYtSettingType::BlockInputApplied)
                             && !HasYtRowNumber(outerMap.Mapper().Body().Ref())
                             && IsYieldTransparent(outerMap.Mapper().Ptr(), *State_->Types)
                             && (!op.Maybe<TYtMapReduce>() || AllOf(outerMap.Output(), [](const auto& out) { return !TYtTableBaseInfo::GetRowSpec(out)->IsSorted(); }))) {
@@ -2507,7 +2507,7 @@ private:
 
                     TExprNode::TPtr updatedBody = lambda.Body().Ptr();
                     if (maxJobMemoryLimit) {
-                        auto status = UpdateTableContentMemoryUsage(lambda.Body().Ptr(), updatedBody, State_, ctx);
+                        auto status = UpdateTableContentMemoryUsage(lambda.Body().Ptr(), updatedBody, State_, ctx, false);
                         if (status.Level != TStatus::Ok) {
                             return status;
                         }
@@ -2526,7 +2526,7 @@ private:
 
                                 updatedBody = outerMap.Mapper().Body().Ptr();
                                 if (maxJobMemoryLimit) {
-                                    auto status = UpdateTableContentMemoryUsage(outerMap.Mapper().Body().Ptr(), updatedBody, State_, ctx);
+                                    auto status = UpdateTableContentMemoryUsage(outerMap.Mapper().Body().Ptr(), updatedBody, State_, ctx, false);
                                     if (status.Level != TStatus::Ok) {
                                         return status;
                                     }

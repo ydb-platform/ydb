@@ -264,7 +264,7 @@ TYPathMaybeRef GetOriginalRequestTargetYPath(const NRpc::NProto::TRequestHeader&
 void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path)
 {
     auto* ypathExt = header->MutableExtension(NProto::TYPathHeaderExt::ypath_header_ext);
-    ypathExt->set_target_path(ToProto<TString>(path));
+    ypathExt->set_target_path(TProtobufString(path));
 }
 
 bool IsRequestMutating(const NRpc::NProto::TRequestHeader& header)

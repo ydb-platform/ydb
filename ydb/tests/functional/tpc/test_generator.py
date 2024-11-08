@@ -9,7 +9,8 @@ import pytest
 import json
 import random
 
-from ydb.tests.library.common import yatest_common
+import yatest
+
 from ydb.tests.oss.canonical import set_canondata_root
 from threading import Thread
 
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 def ydb_bin():
     if os.getenv('YDB_CLI_BINARY'):
-        return yatest_common.binary_path(os.getenv('YDB_CLI_BINARY'))
+        return yatest.common.binary_path(os.getenv('YDB_CLI_BINARY'))
     raise RuntimeError('YDB_CLI_BINARY enviroment variable is not specified')
 
 
@@ -28,7 +29,7 @@ class TpcGeneratorBase(object):
 
     @classmethod
     def execute_generator(cls, output_path, scale=1, import_args=[], generator_args=[]):
-        return yatest_common.execute(
+        return yatest.common.execute(
             [
                 ydb_bin(),
                 '--endpoint', 'grpc://localhost',
@@ -46,7 +47,7 @@ class TpcGeneratorBase(object):
     def canonical_result(output_result, tmp_path):
         with open(tmp_path, 'w') as f:
             f.write(output_result)
-        return yatest_common.canonical_file(tmp_path, local=True, universal_lines=True)
+        return yatest.common.canonical_file(tmp_path, local=True, universal_lines=True)
 
     @staticmethod
     def calc_hashes(files: str | list[str]):

@@ -56,7 +56,7 @@ void AddRowBuild2Build(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> 
 }
 
 void AddRowBuild2Posting(TBufferData& buffer, ui32 parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
-                       ui32 dataPos)
+                         ui32 dataPos)
 {
     std::array<TCell, 1> cells;
     cells[0] = TCell::Make(parent);
@@ -101,10 +101,11 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansReque
 
     auto addType = [&](const auto& column) {
         auto it = types.find(column);
-        Y_ABORT_UNLESS(it != types.end());
-        NScheme::ProtoFromTypeInfo(it->second, type);
-        uploadTypes->emplace_back(it->first, type);
-        types.erase(it);
+        if (it != types.end()) {
+            NScheme::ProtoFromTypeInfo(it->second, type);
+            uploadTypes->emplace_back(it->first, type);
+            types.erase(it);
+        }
     };
     for (const auto& column : table.KeyColumnIds) {
         addType(table.Columns.at(column).Name);

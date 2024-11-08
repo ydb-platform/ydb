@@ -28,11 +28,14 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
 
     NActors::TActorId RegisterTopicSession(
         const TString& /*topicPath*/,
+        const TString& /*endpoint*/,
+        const TString& /*database*/,
         const NConfig::TRowDispatcherConfig& /*config*/,
         NActors::TActorId /*rowDispatcherActorId*/,
         ui32 /*partitionId*/,
         NYdb::TDriver /*driver*/,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> /*credentialsProviderFactory*/,
+        NYql::NPureCalc::IProgramFactoryPtr /*pureCalcProgramFactory*/,
         const ::NMonitoring::TDynamicCounterPtr& /*counters*/,
         const NYql::IPqGateway::TPtr& /*pqGateway*/) const override {
         auto actorId  = Runtime.AllocateEdgeActor();

@@ -114,9 +114,9 @@ const TString& GetAuthCallbackUrl() {
     return callbackUrl;
 }
 
-TString CreateSecureCookie(const TString& key, const TString& value) {
+TString CreateSecureCookie(const TString& name, const TString& value) {
     TStringBuilder cookieBuilder;
-    cookieBuilder << CreateNameSessionCookie(key) << "=" << Base64Encode(value)
+    cookieBuilder << name << "=" << value
             << "; Path=/; Secure; HttpOnly; SameSite=None; Partitioned";
     return cookieBuilder;
 }

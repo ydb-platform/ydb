@@ -27,6 +27,7 @@ class TJsonQuery : public TViewerPipeClient {
     TString Stats;
     TString Syntax;
     TString QueryId;
+    TString ResourcePool;
     TString TransactionMode;
     bool IsBase64Encode = true;
     int LimitRows = 10000;
@@ -95,6 +96,9 @@ public:
         if (params.Has("limit_rows")) {
             LimitRows = std::clamp<int>(FromStringWithDefault<int>(params.Get("limit_rows"), 10000), 1, 100000);
         }
+        if (params.Has("resource_pool")) {
+            ResourcePool = params.Get("resource_pool");
+        }
         Direct = FromStringWithDefault<bool>(params.Get("direct"), Direct);
     }
 
@@ -132,6 +136,9 @@ public:
             }
             if (requestData.Has("limit_rows")) {
                 LimitRows = std::clamp<int>(requestData["limit_rows"].GetIntegerRobust(), 1, 100000);
+            }
+            if (requestData.Has("resource_pool")) {
+                ResourcePool = requestData["resource_pool"].GetStringRobust();
             }
         }
         return success;
@@ -188,7 +195,6 @@ public:
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
             hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
-            hFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, HandleReply);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -276,6 +282,9 @@ public:
         }
         if (Event->Get()->UserToken) {
             event->Record.SetUserToken(Event->Get()->UserToken);
+        }
+        if (ResourcePool) {
+            request.SetPoolId(ResourcePool);
         }
         request.SetClientAddress(Event->Get()->Request.GetRemoteAddr());
         if (Action == "execute-script") {
@@ -540,10 +549,6 @@ private:
         });
 
         TBase::ReplyAndPassAway(GetHTTPOKJSON(stream.Str()));
-    }
-
-    void HandleReply(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev) {
-        Y_UNUSED(ev);
     }
 
     void HandleReply(NKqp::TEvKqp::TEvPingSessionResponse::TPtr& ev) {
@@ -866,6 +871,11 @@ public:
                 in: query
                 description: return ui64 as number to avoid 56-bit js rounding
                 type: boolean
+                required: false
+              - name: resource_pool
+                in: query
+                description: resource pool in which the query will be executed
+                type: string
                 required: false
             requestBody:
                 description: Executes SQL query

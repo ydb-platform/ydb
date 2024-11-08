@@ -10,13 +10,13 @@ $ss = (
  where i_item_id in (select
      i_item_id
 from {{item}} as item
-where item.i_color in ('orchid','chiffon','lace'))
+where item.i_color in ('slate','blanched','burnished'))
  and     ss_item_sk              = item.i_item_sk
  and     ss_sold_date_sk         = date_dim.d_date_sk
- and     date_dim.d_year                  = 2000
- and     date_dim.d_moy                   = 1
+ and     date_dim.d_year                  = 2001
+ and     date_dim.d_moy                   = 2
  and     ss_addr_sk              = customer_address.ca_address_sk
- and     customer_address.ca_gmt_offset           = -8
+ and     customer_address.ca_gmt_offset           = -5
  group by item.i_item_id);
 
 $cs = (
@@ -30,13 +30,13 @@ $cs = (
          item.i_item_id               in (select
   i_item_id
 from {{item}} as item
-where item.i_color in ('orchid','chiffon','lace'))
+where item.i_color in ('slate','blanched','burnished'))
  and     cs_item_sk              = item.i_item_sk
  and     cs_sold_date_sk         = date_dim.d_date_sk
- and     date_dim.d_year                  = 2000
- and     date_dim.d_moy                   = 1
+ and     date_dim.d_year                  = 2001
+ and     date_dim.d_moy                   = 2
  and     cs_bill_addr_sk         = customer_address.ca_address_sk
- and     customer_address.ca_gmt_offset           = -8
+ and     customer_address.ca_gmt_offset           = -5
  group by item.i_item_id);
 
 $ws = (
@@ -50,13 +50,13 @@ $ws = (
          item.i_item_id               in (select
   i_item_id
 from {{item}} as item
-where i_color in ('orchid','chiffon','lace'))
+where i_color in ('slate','blanched','burnished'))
  and     ws_item_sk              = item.i_item_sk
  and     ws_sold_date_sk         = date_dim.d_date_sk
- and     date_dim.d_year                  = 2000
- and     date_dim.d_moy                   = 1
+ and     date_dim.d_year                  = 2001
+ and     date_dim.d_moy                   = 2
  and     ws_bill_addr_sk         = customer_address.ca_address_sk
- and     customer_address.ca_gmt_offset           = -8
+ and     customer_address.ca_gmt_offset           = -5
  group by item.i_item_id);
 
   select  i_item_id ,sum(total_sales) total_sales
@@ -70,4 +70,4 @@ where i_color in ('orchid','chiffon','lace'))
           i_item_id
  limit 100;
 
--- end query 1 in stream 0 using template ../query_templates/query56.tpl
+-- end query 2 in stream 0 using template ../query_templates/query56.tpl

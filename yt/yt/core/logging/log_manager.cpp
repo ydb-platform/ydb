@@ -410,8 +410,6 @@ public:
             return;
         }
 
-        EnsureStarted();
-
         TConfigEvent event{
             .Instant = GetCpuInstant(),
             .Config = std::move(config),
@@ -421,6 +419,7 @@ public:
         auto future = event.Promise.ToFuture();
 
         PushEvent(std::move(event));
+        EnsureStarted();
 
         DequeueExecutor_->ScheduleOutOfBand();
 
@@ -519,10 +518,6 @@ public:
         ::TSourceLocation sourceLocation,
         TStringBuf message)
     {
-        if (anchor->Registered.exchange(true)) {
-            return;
-        }
-
         auto guard = Guard(SpinLock_);
         auto config = Config_.Acquire();
         anchor->SourceLocation = sourceLocation;
@@ -537,12 +532,13 @@ public:
         if (auto it = AnchorMap_.find(anchorMessage)) {
             return it->second;
         }
+        auto config = Config_.Acquire();
         auto anchor = std::make_unique<TLoggingAnchor>();
-        anchor->Registered = true;
         anchor->AnchorMessage = std::move(anchorMessage);
         auto* rawAnchor = anchor.get();
         DynamicAnchors_.push_back(std::move(anchor));
         DoRegisterAnchor(rawAnchor);
+        DoUpdateAnchor(config, rawAnchor);
         return rawAnchor;
     }
 

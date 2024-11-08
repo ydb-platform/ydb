@@ -468,7 +468,7 @@ public:
             ("Items", itemsNode);
 
         return MakeHash(NYT::NodeToCanonicalYsonString(keyNode, NYT::NYson::EYsonFormat::Binary));
-    }    
+    }
 
     template <typename T>
     static NYT::TNode SerializeFolderItem(const T& item) {
@@ -712,7 +712,7 @@ public:
             ("IsTemp", req.IsTemp())
             ("IsAnonymous", req.IsAnonymous())
             ("Epoch", req.Epoch());
-        
+
         node("Path", path);
         return MakeHash(NYT::NodeToCanonicalYsonString(node));
     }
@@ -885,6 +885,22 @@ public:
 
     NYT::TRichYPath GetWriteTable(const TString& sessionId, const TString& cluster, const TString& table, const TString& tmpFolder) const final {
         return Inner_->GetWriteTable(sessionId, cluster, table, tmpFolder);
+    }
+
+    NThreading::TFuture<TDownloadTablesResult> DownloadTables(TDownloadTablesOptions&& options) final {
+        if (QContext_.CanRead()) {
+            TDownloadTablesResult res;
+            res.SetSuccess();
+            return NThreading::MakeFuture(std::move(res));
+        }
+        return Inner_->DownloadTables(std::move(options));
+    }
+
+    NThreading::TFuture<TUploadTableResult> UploadTable(TUploadTableOptions&& options) final {
+        if (QContext_.CanRead()) {
+            throw yexception() << "Can't replay UploadTable";
+        }
+        return Inner_->UploadTable(std::move(options));
     }
 
     TFullResultTableResult PrepareFullResultTable(TFullResultTableOptions&& options) final {

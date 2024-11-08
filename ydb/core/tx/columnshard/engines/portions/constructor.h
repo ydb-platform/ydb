@@ -1,6 +1,7 @@
 #pragma once
 #include "column_record.h"
 #include "constructor_meta.h"
+#include "data_accessor.h"
 #include "index_chunk.h"
 #include "portion_info.h"
 
@@ -15,6 +16,7 @@ class TGranuleShardingInfo;
 
 class TPortionInfoConstructor {
 private:
+    bool Constructed = false;
     YDB_ACCESSOR(ui64, PathId, 0);
     std::optional<ui64> PortionId;
 
@@ -30,27 +32,6 @@ private:
 
     std::vector<TIndexChunk> Indexes;
     YDB_ACCESSOR_DEF(std::vector<TColumnRecord>, Records);
-    std::vector<TUnifiedBlobId> BlobIds;
-
-    class TAddressBlobId {
-    private:
-        TChunkAddress Address;
-        YDB_READONLY(TBlobRangeLink16::TLinkId, BlobIdx, 0);
-
-    public:
-        const TChunkAddress& GetAddress() const {
-            return Address;
-        }
-
-        TAddressBlobId(const TChunkAddress& address, const TBlobRangeLink16::TLinkId blobIdx)
-            : Address(address)
-            , BlobIdx(blobIdx)
-        {
-
-        }
-    };
-    std::vector<TAddressBlobId> BlobIdxs;
-    bool NeedBlobIdxsSort = false;
 
     TPortionInfoConstructor(const TPortionInfoConstructor&) = default;
     TPortionInfoConstructor& operator=(const TPortionInfoConstructor&) = default;
@@ -58,6 +39,14 @@ private:
 public:
     TPortionInfoConstructor(TPortionInfoConstructor&&) noexcept = default;
     TPortionInfoConstructor& operator=(TPortionInfoConstructor&&) noexcept = default;
+
+    void ClearRecords() {
+        Records.clear();
+    }
+
+    void ClearIndexes() {
+        Indexes.clear();
+    }
 
     class TTestCopier {
     public:
@@ -73,7 +62,8 @@ public:
 
     void AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch);
 
-    void AddMetadata(const ISnapshotSchema& snapshotSchema, const ui32 deletionsCount, const NArrow::TFirstLastSpecialKeys& firstLastRecords, const NArrow::TMinMaxSpecialKeys& minMaxSpecial) {
+    void AddMetadata(const ISnapshotSchema& snapshotSchema, const ui32 deletionsCount, const NArrow::TFirstLastSpecialKeys& firstLastRecords,
+        const std::optional<NArrow::TMinMaxSpecialKeys>& minMaxSpecial) {
         MetaConstructor.FillMetaInfo(firstLastRecords, deletionsCount, minMaxSpecial, snapshotSchema.GetIndexInfo());
     }
 
@@ -96,7 +86,7 @@ public:
         return *InsertWriteId;
     }
 
-    TPortionInfoConstructor(const TPortionInfo& portion, const bool withBlobs, const bool withMetadata)
+    TPortionInfoConstructor(const TPortionInfo& portion, const bool withBlobs, const bool withMetadata, const bool withMetadataBlobs)
         : PathId(portion.GetPathId())
         , PortionId(portion.GetPortionId())
         , MinSnapshotDeprecated(portion.GetMinSnapshotDeprecated())
@@ -104,15 +94,14 @@ public:
         , SchemaVersion(portion.GetSchemaVersionOptional())
         , ShardingVersion(portion.GetShardingVersionOptional())
         , CommitSnapshot(portion.GetCommitSnapshotOptional())
-        , InsertWriteId(portion.GetInsertWriteIdOptional())
-    {
+        , InsertWriteId(portion.GetInsertWriteIdOptional()) {
         if (withMetadata) {
-            MetaConstructor = TPortionMetaConstructor(portion.Meta);
+            MetaConstructor = TPortionMetaConstructor(portion.Meta, withMetadataBlobs);
         }
         if (withBlobs) {
-            Indexes = portion.GetIndexes();
-            Records = portion.GetRecords();
-            BlobIds = portion.BlobIds;
+            AFL_VERIFY(withMetadata);
+            Indexes = portion.Indexes;
+            Records = portion.Records;
         }
     }
 
@@ -123,10 +112,9 @@ public:
         , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
         , SchemaVersion(portion.GetSchemaVersionOptional())
         , ShardingVersion(portion.GetShardingVersionOptional()) {
-        MetaConstructor = TPortionMetaConstructor(portion.Meta);
+        MetaConstructor = TPortionMetaConstructor(portion.Meta, true);
         Indexes = std::move(portion.Indexes);
         Records = std::move(portion.Records);
-        BlobIds = std::move(portion.BlobIds);
     }
 
     TPortionAddress GetAddress() const {
@@ -135,6 +123,25 @@ public:
 
     bool HasRemoveSnapshot() const {
         return !!RemoveSnapshot;
+    }
+
+    static void Validate(const TColumnRecord& rec) {
+        AFL_VERIFY(rec.GetColumnId());
+    }
+
+    static ui32 GetRecordsCount(const TColumnRecord& rec) {
+        return rec.GetMeta().GetRecordsCount();
+    }
+
+    static void Validate(const TIndexChunk& rec) {
+        AFL_VERIFY(rec.GetIndexId());
+        if (const auto* blobData = rec.GetBlobDataOptional()) {
+            AFL_VERIFY(blobData->size());
+        }
+    }
+
+    static ui32 GetRecordsCount(const TIndexChunk& rec) {
+        return rec.GetRecordsCount();
     }
 
     template <class TChunkInfo>
@@ -150,36 +157,33 @@ public:
             return sb;
         };
 
+        std::optional<ui32> recordsCount;
+        ui32 recordsCountCurrent = 0;
         for (auto&& i : chunks) {
+            Validate(i);
             if (entityId != i.GetEntityId()) {
+                if (entityId) {
+                    if (recordsCount) {
+                        AFL_VERIFY(recordsCountCurrent == *recordsCount);
+                    } else {
+                        recordsCount = recordsCountCurrent;
+                    }
+                }
                 AFL_VERIFY(entityId < i.GetEntityId())("entity", entityId)("next", i.GetEntityId())("details", debugString());
                 AFL_VERIFY(i.GetChunkIdx() == 0);
                 entityId = i.GetEntityId();
                 chunkIdx = 0;
+                recordsCountCurrent = 0;
             } else {
-                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)("chunkIdx", chunkIdx)("i.GetChunkIdx()", i.GetChunkIdx())("entity", entityId)("details", debugString());
+                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)("chunkIdx", chunkIdx)("i.GetChunkIdx()", i.GetChunkIdx())("entity", entityId)(
+                                                  "details", debugString());
                 chunkIdx = i.GetChunkIdx();
             }
+            recordsCountCurrent += GetRecordsCount(i);
             AFL_VERIFY(i.GetEntityId());
         }
-    }
-
-    void Merge(TPortionInfoConstructor&& item) {
-        AFL_VERIFY(item.PathId == PathId);
-        AFL_VERIFY(item.PortionId == PortionId);
-        if (item.MinSnapshotDeprecated) {
-            if (MinSnapshotDeprecated) {
-                AFL_VERIFY(*MinSnapshotDeprecated == *item.MinSnapshotDeprecated);
-            } else {
-                MinSnapshotDeprecated = item.MinSnapshotDeprecated;
-            }
-        }
-        if (item.RemoveSnapshot) {
-            if (RemoveSnapshot) {
-                AFL_VERIFY(*RemoveSnapshot == *item.RemoveSnapshot);
-            } else {
-                RemoveSnapshot = item.RemoveSnapshot;
-            }
+        if (recordsCount) {
+            AFL_VERIFY(recordsCountCurrent == *recordsCount);
         }
     }
 
@@ -221,12 +225,12 @@ public:
     }
 
     void SetSchemaVersion(const ui64 version) {
-//        AFL_VERIFY(version);
+        //        AFL_VERIFY(version);
         SchemaVersion = version;
     }
 
     void SetShardingVersion(const ui64 version) {
-//        AFL_VERIFY(version);
+        //        AFL_VERIFY(version);
         ShardingVersion = version;
     }
 
@@ -241,14 +245,15 @@ public:
         SetRemoveSnapshot(TSnapshot(planStep, txId));
     }
 
-    void LoadRecord(const TIndexInfo& indexInfo, const TColumnChunkLoadContext& loadContext);
+    void LoadRecord(const TColumnChunkLoadContextV1& loadContext);
 
     ui32 GetRecordsCount() const {
+        AFL_VERIFY(Records.size());
         ui32 result = 0;
         std::optional<ui32> columnIdFirst;
         for (auto&& i : Records) {
             if (!columnIdFirst || *columnIdFirst == i.ColumnId) {
-                result += i.GetMeta().GetNumRows();
+                result += i.GetMeta().GetRecordsCount();
                 columnIdFirst = i.ColumnId;
             }
         }
@@ -257,46 +262,27 @@ public:
     }
 
     TBlobRangeLink16::TLinkId RegisterBlobId(const TUnifiedBlobId& blobId) {
-        AFL_VERIFY(blobId.IsValid());
-        TBlobRangeLink16::TLinkId idx = 0;
-        for (auto&& i : BlobIds) {
-            if (i == blobId) {
-                return idx;
-            }
-            ++idx;
-        }
-        BlobIds.emplace_back(blobId);
-        return idx;
+        return MetaConstructor.RegisterBlobId(blobId);
     }
 
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
-        return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
+        return MetaConstructor.RestoreBlobRange(linkRange);
     }
 
     const TBlobRange RestoreBlobRangeSlow(const TBlobRangeLink16& linkRange, const TChunkAddress& address) const {
-        for (auto&& i : BlobIdxs) {
-            if (i.GetAddress() == address) {
-                return linkRange.RestoreRange(GetBlobId(i.GetBlobIdx()));
-            }
-        }
-        AFL_VERIFY(false);
-        return TBlobRange();
+        return MetaConstructor.RestoreBlobRangeSlow(linkRange, address);
     }
 
     const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-        AFL_VERIFY(linkId < BlobIds.size());
-        return BlobIds[linkId];
+        return MetaConstructor.GetBlobId(linkId);
     }
 
     ui32 GetBlobIdsCount() const {
-        return BlobIds.size();
+        return MetaConstructor.GetBlobIdsCount();
     }
 
     void RegisterBlobIdx(const TChunkAddress& address, const TBlobRangeLink16::TLinkId blobIdx) {
-        if (BlobIdxs.size() && address < BlobIdxs.back().GetAddress()) {
-            NeedBlobIdxsSort = true;
-        }
-        BlobIdxs.emplace_back(address, blobIdx);
+        return MetaConstructor.RegisterBlobIdx(address, blobIdx);
     }
 
     TString DebugString() const {
@@ -323,20 +309,16 @@ public:
             std::sort(Indexes.begin(), Indexes.end(), pred);
             CheckChunksOrder(Indexes);
         }
-        if (NeedBlobIdxsSort) {
-            auto pred = [](const TAddressBlobId& l, const TAddressBlobId& r) {
-                return l.GetAddress() < r.GetAddress();
-            };
-            std::sort(BlobIdxs.begin(), BlobIdxs.end(), pred);
-        }
+        MetaConstructor.ReorderBlobs();
     }
 
     void FullValidation() const {
         AFL_VERIFY(Records.size());
         CheckChunksOrder(Records);
         CheckChunksOrder(Indexes);
-        if (BlobIdxs.size()) {
-            AFL_VERIFY(BlobIdxs.size() <= Records.size() + Indexes.size())("blobs", BlobIdxs.size())("records", Records.size())(
+        if (MetaConstructor.BlobIdxs.size()) {
+            AFL_VERIFY(MetaConstructor.BlobIdxs.size() <= Records.size() + Indexes.size())("blobs", MetaConstructor.BlobIdxs.size())(
+                                                                               "records", Records.size())(
                                                                "indexes", Indexes.size());
         } else {
             std::set<ui32> blobIdxs;
@@ -348,9 +330,9 @@ public:
                     blobIdxs.emplace(i.GetBlobRangeVerified().GetBlobIdxVerified());
                 }
             }
-            if (BlobIds.size()) {
-                AFL_VERIFY(BlobIds.size() == blobIdxs.size());
-                AFL_VERIFY(BlobIds.size() == *blobIdxs.rbegin() + 1);
+            if (MetaConstructor.BlobIds.size()) {
+                AFL_VERIFY(MetaConstructor.BlobIds.size() == blobIdxs.size());
+                AFL_VERIFY(MetaConstructor.BlobIds.size() == *blobIdxs.rbegin() + 1);
             } else {
                 AFL_VERIFY(blobIdxs.empty());
             }
@@ -373,10 +355,7 @@ public:
         Indexes.emplace_back(chunk);
     }
 
-    TPortionInfo Build(const bool needChunksNormalization);
-    std::shared_ptr<TPortionInfo> BuildPtr(const bool needChunksNormalization) {
-        return std::make_shared<TPortionInfo>(Build(needChunksNormalization));
-    }
+    TPortionDataAccessor Build(const bool needChunksNormalization);
 };
 
 class TPortionConstructors {
@@ -407,20 +386,48 @@ public:
         AFL_VERIFY(info.second);
         return &info.first->second;
     }
+};
 
-    TPortionInfoConstructor* MergeConstructor(TPortionInfoConstructor&& constructor) {
-        const ui64 pathId = constructor.GetPathId();
-        const ui64 portionId = constructor.GetPortionIdVerified();
-        auto itPathId = Constructors.find(pathId);
-        if (itPathId == Constructors.end()) {
-            return AddConstructorVerified(std::move(constructor));
+class TInGranuleConstructors {
+private:
+    THashMap<ui64, TPortionInfoConstructor> Constructors;
+
+public:
+    THashMap<ui64, TPortionInfoConstructor>::iterator begin() {
+        return Constructors.begin();
+    }
+
+    THashMap<ui64, TPortionInfoConstructor>::iterator end() {
+        return Constructors.end();
+    }
+
+    void ClearPortions() {
+        Constructors.clear();
+    }
+
+    void ClearColumns() {
+        for (auto&& i : Constructors) {
+            i.second.ClearRecords();
         }
-        auto itPortionId = itPathId->second.find(portionId);
-        if (itPortionId == itPathId->second.end()) {
-            return AddConstructorVerified(std::move(constructor));
+    }
+
+    void ClearIndexes() {
+        for (auto&& i : Constructors) {
+            i.second.ClearIndexes();
         }
-        itPortionId->second.Merge(std::move(constructor));
+    }
+
+    TPortionInfoConstructor* GetConstructorVerified(const ui64 portionId) {
+        auto itPortionId = Constructors.find(portionId);
+        AFL_VERIFY(itPortionId != Constructors.end());
         return &itPortionId->second;
+    }
+
+    TPortionInfoConstructor* AddConstructorVerified(TPortionInfoConstructor&& constructor) {
+        const ui64 portionId = constructor.GetPortionIdVerified();
+        auto info = Constructors.emplace(portionId, std::move(constructor));
+        AFL_VERIFY(info.second);
+        return &info.first->second;
     }
 };
 

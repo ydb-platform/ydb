@@ -418,6 +418,7 @@ bool operator!=(const TChangefeedDescription& lhs, const TChangefeedDescription&
 struct TPartitionStats {
     ui64 Rows = 0;
     ui64 Size = 0;
+    ui32 LeaderNodeId = 0;
 };
 
 class TDateTypeColumnModeSettings {
@@ -977,6 +978,9 @@ public:
 
     TCopyItem& SetOmitIndexes();
     bool OmitIndexes() const;
+
+    void Out(IOutputStream& out) const;
+
 private:
     TString Source_;
     TString Destination_;
@@ -1634,6 +1638,7 @@ struct TDescribeTableSettings : public TOperationRequestSettings<TDescribeTableS
     FLUENT_SETTING_DEFAULT(bool, WithTableStatistics, false);
     FLUENT_SETTING_DEFAULT(bool, WithPartitionStatistics, false);
     FLUENT_SETTING_DEFAULT(bool, WithSetVal, false);
+    FLUENT_SETTING_DEFAULT(bool, WithShardNodesInfo, false);
 };
 
 struct TExplainDataQuerySettings : public TOperationRequestSettings<TExplainDataQuerySettings> {

@@ -204,6 +204,8 @@ struct TYtSettings {
     NCommon::TConfSetting<TDuration, true> DQRPCReaderTimeout;
     NCommon::TConfSetting<TSet<TString>, true> BlockReaderSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> BlockReaderSupportedDataTypes;
+    NCommon::TConfSetting<TSet<TString>, true> JobBlockInputSupportedTypes;
+    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> JobBlockInputSupportedDataTypes;
 
     // Optimizers
     NCommon::TConfSetting<bool, true> _EnableDq;
@@ -248,7 +250,7 @@ struct TYtSettings {
     NCommon::TConfSetting<NSize::TSize, false> TableContentMinAvgChunkSize;
     NCommon::TConfSetting<ui32, false> TableContentMaxInputTables;
     NCommon::TConfSetting<ui32, false> TableContentMaxChunksForNativeDelivery;
-    NCommon::TConfSetting<bool, false> TableContentLocalExecution;
+    NCommon::TConfSetting<NSize::TSize, false> TableContentLocalExecution;
     NCommon::TConfSetting<bool, false> UseTypeV2;
     NCommon::TConfSetting<bool, false> UseNativeYtTypes;
     NCommon::TConfSetting<bool, false> UseNativeDescSort;
@@ -273,7 +275,6 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> JoinCommonUseMapMultiOut;
     NCommon::TConfSetting<bool, false> UseAggPhases;
     NCommon::TConfSetting<bool, false> UsePartitionsByKeysForFinalAgg;
-    NCommon::TConfSetting<bool, false> _EnableWriteReorder;
     NCommon::TConfSetting<double, false> MaxCpuUsageToFuseMultiOuts;
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseMultiOuts;
     NCommon::TConfSetting<ui64, false> ApplyStoredConstraints;
@@ -283,6 +284,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui16, false> MinColumnGroupSize;
     NCommon::TConfSetting<ui16, false> MaxColumnGroups;
     NCommon::TConfSetting<ui64, false> ExtendedStatsMaxChunkCount;
+    NCommon::TConfSetting<bool, false> JobBlockInput;
     NCommon::TConfSetting<bool, false> _EnableYtDqProcessWriteConstraints;
 };
 
@@ -295,7 +297,7 @@ inline TString GetTablesTmpFolder(const TYtSettings& settings) {
 struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher {
     using TPtr = TIntrusivePtr<TYtConfiguration>;
 
-    TYtConfiguration();
+    TYtConfiguration(TTypeAnnotationContext& typeCtx);
     TYtConfiguration(const TYtConfiguration&) = delete;
 
     template <class TProtoConfig, typename TFilter>
@@ -336,7 +338,11 @@ public:
         TYtSettings::TConstPtr Snapshot;
     };
 
-    TYtVersionedConfiguration() = default;
+    TYtVersionedConfiguration(TTypeAnnotationContext& types)
+        : TYtConfiguration(types)
+    {
+    }
+    
     ~TYtVersionedConfiguration() = default;
 
     size_t FindNodeVer(const TExprNode& node);

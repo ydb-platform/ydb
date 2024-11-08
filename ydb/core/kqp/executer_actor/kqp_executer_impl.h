@@ -130,8 +130,11 @@ public:
         TKqpRequestCounters::TPtr counters,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
-        ui32 statementResultIndex, ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase", bool streamResult = false)
+        ui32 statementResultIndex, ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
+        bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr)
         : Request(std::move(request))
+        , BufferActorId(bufferActorId)
+        , TxManager(txManager)
         , Database(database)
         , UserToken(userToken)
         , Counters(counters)
@@ -298,10 +301,9 @@ protected:
             batch.Proto = std::move(*computeData.Proto.MutableChannelData()->MutableData());
             batch.Payload = std::move(computeData.Payload);
 
-            TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
-            auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), txResult.MkqlItemType, txResult.ColumnOrder, txResult.ColumnHints);
-
             if (!trailingResults) {
+                TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
+                auto resultSet = protoBuilder.BuildYdbResultSet(std::move(batches), txResult.MkqlItemType, txResult.ColumnOrder, txResult.ColumnHints);
                 auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
                 streamEv->Record.SetSeqNo(computeData.Proto.GetSeqNo());
                 streamEv->Record.SetQueryResultIndex(*txResult.QueryResultIndex + StatementResultIndex);
@@ -319,10 +321,11 @@ protected:
                 ackEv->Record.SetChannelId(channel.Id);
                 ackEv->Record.SetFreeSpace(50_MB);
                 this->Send(channelComputeActorId, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channel.Id);
-                txResult.TrailingResult.Swap(&resultSet);
+                ui64 rowCount = batch.RowCount();
+                ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
                 txResult.HasTrailingResult = true;
                 LOG_D("staging TEvStreamData to " << Target << ", seqNo: " << computeData.Proto.GetSeqNo()
-                    << ", nRows: " << txResult.TrailingResult.rows().size());
+                    << ", nRows: " << rowCount);
             }
 
             return;
@@ -505,6 +508,12 @@ protected:
             for (auto& tx : Request.Transactions) {
                 LOG_D("Executing physical tx, type: " << (ui32) tx.Body->GetType() << ", stages: " << tx.Body->StagesSize());
             }
+        }
+
+        if (BufferActorId && Request.LocksOp == ELocksOp::Rollback) {
+            YQL_ENSURE(Request.Transactions.empty());
+            static_cast<TDerived*>(this)->Finalize();
+            return;
         }
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterSpan.GetTraceId(), "WaitForTableResolve", NWilson::EFlags::AUTO_END);
@@ -828,7 +837,7 @@ protected:
         std::map<ui32, TStageScheduleInfo> result;
         if (!resourceSnapshot.empty()) // can't schedule w/o node count
         {
-            // collect costs and schedule stages with external sources only 
+            // collect costs and schedule stages with external sources only
             double totalCost = 0.0;
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
@@ -843,11 +852,11 @@ protected:
             if (!result.empty()) {
                 // allow use 2/3 of threads in single stage
                 ui32 maxStageTaskCount = (TStagePredictor::GetUsableThreads() * 2 + 2) / 3;
-                // total limit per mode is x2 
+                // total limit per mode is x2
                 ui32 maxTotalTaskCount = maxStageTaskCount * 2;
                 for (auto& [_, stageInfo] : result) {
                     // schedule tasks evenly between nodes
-                    stageInfo.TaskCount = 
+                    stageInfo.TaskCount =
                         std::max<ui32>(
                             std::min(static_cast<ui32>(maxTotalTaskCount * stageInfo.StageCost / totalCost), maxStageTaskCount)
                             , 1
@@ -939,6 +948,9 @@ protected:
             if (lockTxId) {
                 settings.SetLockTxId(*lockTxId);
                 settings.SetLockNodeId(SelfId().NodeId());
+            }
+            if (!settings.GetInconsistentTx() && !settings.GetIsOlap()) {
+                ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
             }
             output.SinkSettings.ConstructInPlace();
             output.SinkSettings->PackFrom(settings);
@@ -1052,8 +1064,7 @@ protected:
         std::sort(std::begin(shardsRanges), std::end(shardsRanges), [&](const TShardRangesWithShardId& lhs, const TShardRangesWithShardId& rhs) {
                 // Special case for infinity
                 if (lhs.Ranges->GetRightBorder().first->GetCells().empty() || rhs.Ranges->GetRightBorder().first->GetCells().empty()) {
-                    YQL_ENSURE(!lhs.Ranges->GetRightBorder().first->GetCells().empty() || !rhs.Ranges->GetRightBorder().first->GetCells().empty());
-                    return rhs.Ranges->GetRightBorder().first->GetCells().empty();
+                    return !lhs.Ranges->GetRightBorder().first->GetCells().empty();
                 }
                 return CompareTypedCellVectors(
                     lhs.Ranges->GetRightBorder().first->GetCells().data(),
@@ -1918,7 +1929,7 @@ protected:
             if (Stats->CollectStatsByLongTasks) {
                 const auto& txPlansWithStats = response.GetResult().GetStats().GetTxPlansWithStats();
                 if (!txPlansWithStats.empty()) {
-                    LOG_N("Full stats: " << response.GetResult().GetStats());
+                    LOG_I("Full stats: " << response.GetResult().GetStats());
                 }
             }
         }
@@ -1996,6 +2007,8 @@ protected:
 
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
+    TActorId BufferActorId;
+    IKqpTransactionManagerPtr TxManager;
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TKqpRequestCounters::TPtr Counters;
@@ -2065,7 +2078,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo);
+    const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

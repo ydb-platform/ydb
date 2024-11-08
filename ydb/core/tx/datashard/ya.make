@@ -215,6 +215,7 @@ SRCS(
     type_serialization.cpp
     upload_stats.cpp
     volatile_tx.cpp
+    volatile_tx_mon.cpp
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
 )
@@ -227,9 +228,10 @@ GENERATE_ENUM_SERIALIZATION(datashard_s3_upload.h)
 GENERATE_ENUM_SERIALIZATION(execution_unit.h)
 GENERATE_ENUM_SERIALIZATION(execution_unit_kind.h)
 GENERATE_ENUM_SERIALIZATION(operation.h)
+GENERATE_ENUM_SERIALIZATION(volatile_tx.h)
 
 RESOURCE(
-    index.html datashard/index.html
+    ui/index.html datashard/index.html
 )
 
 PEERDIR(
@@ -306,6 +308,7 @@ RECURSE_FOR_TESTS(
     ut_column_stats
     ut_compaction
     ut_erase_rows
+    ut_external_blobs
     ut_followers
     ut_incremental_backup
     ut_incremental_restore_scan

@@ -193,7 +193,6 @@ TString THelper::GetTestTableSchema() const {
     sb << R"(
         KeyColumnNames: "timestamp"
         KeyColumnNames: "uid"
-        Engine : COLUMN_ENGINE_REPLACING_TIMESERIES
     )";
     return sb;
 }

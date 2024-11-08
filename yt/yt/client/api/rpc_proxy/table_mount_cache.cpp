@@ -94,7 +94,7 @@ private:
                     replicaInfo->ReplicaId = FromProto<TTableReplicaId>(protoReplicaInfo.replica_id());
                     replicaInfo->ClusterName = protoReplicaInfo.cluster_name();
                     replicaInfo->ReplicaPath = protoReplicaInfo.replica_path();
-                    replicaInfo->Mode = ETableReplicaMode(protoReplicaInfo.mode());
+                    replicaInfo->Mode = FromProto<ETableReplicaMode>(protoReplicaInfo.mode());
                     tableInfo->Replicas.push_back(replicaInfo);
                 }
 

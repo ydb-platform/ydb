@@ -13,10 +13,10 @@ import enum
 from concurrent import futures
 
 from hamcrest import assert_that, is_, equal_to, raises, none
-import ydb.tests.library.common.yatest_common as yatest_common
+import yatest
 from yatest.common import source_path, test_source_path
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.oss.canonical import set_canondata_root
@@ -199,10 +199,10 @@ def wrap_rows(rows):
 
 
 def write_canonical_response(response, file):
-    output_path = os.path.join(yatest_common.output_path(), file)
+    output_path = os.path.join(yatest.common.output_path(), file)
     with open(output_path, 'w') as w:
         w.write(json.dumps(response, indent=4, sort_keys=True))
-    return yatest_common.canonical_file(
+    return yatest.common.canonical_file(
         local=True,
         universal_lines=True,
         path=output_path
@@ -243,9 +243,9 @@ def format_as_table(data):
 class BaseSuiteRunner(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(
+        cls.cluster = KiKiMR(
             KikimrConfigGenerator(
-                load_udfs=True,
+                udfs_path=yatest.common.build_path("yql/udfs"),
                 use_in_memory_pdisks=True,
                 disable_iterator_reads=True,
                 disable_iterator_lookups=True,
@@ -420,13 +420,13 @@ class BaseSuiteRunner(object):
         yql_text = "--!syntax_v1\n" + yql_text + "\n\n"
         result = self.execute_scan_query(yql_text)
         file_name = statement.suite_name.split('/')[1] + '.out'
-        output_path = os.path.join(yatest_common.output_path(), file_name)
+        output_path = os.path.join(yatest.common.output_path(), file_name)
         with open(output_path, 'a+') as w:
             w.write(yql_text)
             w.write(format_as_table(result))
             w.write("\n\n")
 
-        self.files[file_name] = yatest_common.canonical_file(
+        self.files[file_name] = yatest.common.canonical_file(
             path=output_path,
             local=True,
             universal_lines=True,

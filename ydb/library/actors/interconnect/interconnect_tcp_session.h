@@ -100,25 +100,23 @@ namespace NActors {
     };
 
     struct TReceiveContext: public TAtomicRefCount<TReceiveContext> {
-        /* All invokations to these fields should be thread-safe */
-
         ui64 ControlPacketSendTimer = 0;
         ui64 ControlPacketId = 0;
 
         // last processed packet by input session
-        std::atomic_uint64_t LastPacketSerialToConfirm = 0;
+        ui64 LastPacketSerialToConfirm = 0;
         static constexpr uint64_t LastPacketSerialToConfirmLockBit = uint64_t(1) << 63;
 
         // for hardened checks
-        TAtomic NumInputSessions = 0;
+        ui32 NumInputSessions = 0;
 
         NHPTimer::STime StartTime;
 
-        std::atomic<ui64> PingRTT_us = 0;
-        std::atomic<i64> ClockSkew_us = 0;
+        ui64 PingRTT_us = 0;
+        i64 ClockSkew_us = 0;
 
-        std::atomic<EUpdateState> UpdateState;
-        static_assert(std::atomic<EUpdateState>::is_always_lock_free);
+        bool UpdateInFlight = false;
+        bool NextUpdatePending = false;
 
         bool MainWriteBlocked = false;
         bool XdcWriteBlocked = false;
@@ -153,6 +151,7 @@ namespace NActors {
         std::array<TPerChannelContext, 16> ChannelArray;
         std::unordered_map<ui16, TPerChannelContext> ChannelMap;
         ui64 LastProcessedSerial = 0;
+        bool Terminated = false;
 
         TReceiveContext() {
             GetTimeFast(&StartTime);
@@ -160,28 +159,17 @@ namespace NActors {
 
         // returns false if sessions needs to be terminated
         bool AdvanceLastPacketSerialToConfirm(ui64 nextValue) {
-            for (;;) {
-                uint64_t value = LastPacketSerialToConfirm.load();
-                if (value & LastPacketSerialToConfirmLockBit) {
-                    return false;
-                }
-                Y_DEBUG_ABORT_UNLESS(value + 1 == nextValue);
-                if (LastPacketSerialToConfirm.compare_exchange_weak(value, nextValue)) {
-                    return true;
-                }
+            if (LastPacketSerialToConfirm & LastPacketSerialToConfirmLockBit) {
+                return false;
             }
+            Y_DEBUG_ABORT_UNLESS(LastPacketSerialToConfirm + 1 == nextValue);
+            LastPacketSerialToConfirm = nextValue;
+            return true;
         }
 
         ui64 LockLastPacketSerialToConfirm() {
-            for (;;) {
-                uint64_t value = LastPacketSerialToConfirm.load();
-                if (value & LastPacketSerialToConfirmLockBit) {
-                    return value & ~LastPacketSerialToConfirmLockBit;
-                }
-                if (LastPacketSerialToConfirm.compare_exchange_strong(value, value | LastPacketSerialToConfirmLockBit)) {
-                    return value;
-                }
-            }
+            LastPacketSerialToConfirm |= LastPacketSerialToConfirmLockBit;
+            return GetLastPacketSerialToConfirm();
         }
 
         void UnlockLastPacketSerialToConfirm() {
@@ -189,7 +177,7 @@ namespace NActors {
         }
 
         ui64 GetLastPacketSerialToConfirm() {
-            return LastPacketSerialToConfirm.load() & ~LastPacketSerialToConfirmLockBit;
+            return LastPacketSerialToConfirm & ~LastPacketSerialToConfirmLockBit;
         }
     };
 
@@ -501,7 +489,7 @@ namespace NActors {
             return 128 * 1024;
         }
 
-        void SendUpdateToWhiteboard(bool connected = true);
+        void SendUpdateToWhiteboard(bool connected = true, bool reschedule = true);
         ui32 CalculateQueueUtilization();
 
         void Handle(TEvPollerReady::TPtr& ev);

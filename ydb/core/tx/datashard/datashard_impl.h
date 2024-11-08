@@ -193,7 +193,6 @@ class TDataShard
     class TTxStoreTablePath;
     class TTxGoOffline;
     class TTxGetTableStats;
-    class TTxMonitoring;
     class TTxMonitoringCleanupBorrowedParts;
     class TTxMonitoringCleanupBorrowedPartsActor;
     class TTxMonitoringResetSchemaVersion;
@@ -204,9 +203,6 @@ class TDataShard
     class TTxRemoveOldInReadSets;
     class TTxReadContinue;
     class TTxReadColumns;
-    class TTxGetInfo;
-    class TTxListOperations;
-    class TTxGetOperation;
     class TTxStoreScanState;
     class TTxRefreshVolatileSnapshot;
     class TTxDiscardVolatileSnapshot;
@@ -240,6 +236,7 @@ class TDataShard
 
     class TTxReadViaPipeline;
     class TReadOperation;
+    class TReadScan;
 
     class TTxHandleSafeKqpScan;
     class TTxHandleSafeBuildIndexScan;
@@ -250,22 +247,11 @@ class TDataShard
 
     class TTxMediatorStateRestored;
 
-    ITransaction *CreateTxMonitoring(TDataShard *self,
-                                     NMon::TEvRemoteHttpInfo::TPtr ev);
-    ITransaction *CreateTxGetInfo(TDataShard *self,
-                                  TEvDataShard::TEvGetInfoRequest::TPtr ev);
-    ITransaction *CreateTxListOperations(TDataShard *self,
-                                         TEvDataShard::TEvListOperationsRequest::TPtr ev);
-    ITransaction *CreateTxGetOperation(TDataShard *self,
-                                       TEvDataShard::TEvGetOperationRequest::TPtr ev);
-
-    ITransaction *CreateTxMonitoringCleanupBorrowedParts(
-            TDataShard *self,
-            NMon::TEvRemoteHttpInfo::TPtr ev);
-
-    ITransaction *CreateTxMonitoringResetSchemaVersion(
-            TDataShard *self,
-            NMon::TEvRemoteHttpInfo::TPtr ev);
+    void HandleMonIndexPage(NMon::TEvRemoteHttpInfo::TPtr& ev);
+    void HandleMonVolatileTxs(NMon::TEvRemoteHttpInfo::TPtr& ev);
+    void HandleMonVolatileTxs(NMon::TEvRemoteHttpInfo::TPtr& ev, ui64 txId);
+    void HandleMonCleanupBorrowedParts(NMon::TEvRemoteHttpInfo::TPtr& ev);
+    void HandleMonResetSchemaVersion(NMon::TEvRemoteHttpInfo::TPtr& ev);
 
     friend class TDataShardMiniKQLFactory;
     friend class TDataTransactionProcessor;
@@ -1291,16 +1277,18 @@ class TDataShard
     void Handle(TEvDataShard::TEvReadContinue::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvReadScanStarted::TPtr& ev);
+    void Handle(TEvDataShard::TEvReadScanFinished::TPtr& ev);
     void Handle(TEvDataShard::TEvReadColumnsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvListOperationsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetOperationRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev);
+    void Handle(TEvDataShard::TEvListOperationsRequest::TPtr& ev);
+    void Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr& ev);
+    void Handle(TEvDataShard::TEvGetOperationRequest::TPtr& ev);
     void Handle(TEvDataShard::TEvGetReadTableSinkStateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetReadTableScanStateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetReadTableStreamStateRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvGetRSInfoRequest::TPtr& ev);
+    void Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev);
     void Handle(TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvMigrateSchemeShardRequest::TPtr& ev, const TActorContext& ctx);
@@ -2089,6 +2077,7 @@ public:
     void CheckChangesQueueNoOverflow(ui64 cookie = 0);
 
     void DeleteReadIterator(TReadIteratorsMap::iterator it);
+    void DeleteReadIterator(TReadIteratorsLocalMap::iterator it);
     void CancelReadIterators(Ydb::StatusIds::StatusCode code, const TString& issue, const TActorContext& ctx);
     void ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, const TActorContext &ctx);
     void UnsubscribeReadIteratorSessions(const TActorContext& ctx);
@@ -2963,6 +2952,7 @@ private:
     TReplicatedTableState* EnsureReplicatedTable(const TPathId& pathId);
 
     TReadIteratorsMap ReadIterators;
+    TReadIteratorsLocalMap ReadIteratorsByLocalReadId;
     THashMap<TActorId, TReadIteratorSession> ReadIteratorSessions;
 
     NTable::ITransactionObserverPtr BreakWriteConflictsTxObserver;
@@ -3115,17 +3105,19 @@ protected:
             HFunc(TEvDataShard::TEvReadContinue, Handle);
             HFunc(TEvDataShard::TEvReadAck, Handle);
             HFunc(TEvDataShard::TEvReadCancel, Handle);
+            hFunc(TEvDataShard::TEvReadScanStarted, Handle);
+            hFunc(TEvDataShard::TEvReadScanFinished, Handle);
             HFunc(TEvDataShard::TEvReadColumnsRequest, Handle);
             HFunc(NEvents::TDataEvents::TEvWrite, Handle);
-            HFunc(TEvDataShard::TEvGetInfoRequest, Handle);
-            HFunc(TEvDataShard::TEvListOperationsRequest, Handle);
-            HFunc(TEvDataShard::TEvGetDataHistogramRequest, Handle);
-            HFunc(TEvDataShard::TEvGetOperationRequest, Handle);
+            hFunc(TEvDataShard::TEvGetInfoRequest, Handle);
+            hFunc(TEvDataShard::TEvListOperationsRequest, Handle);
+            hFunc(TEvDataShard::TEvGetDataHistogramRequest, Handle);
+            hFunc(TEvDataShard::TEvGetOperationRequest, Handle);
             HFunc(TEvDataShard::TEvGetReadTableSinkStateRequest, Handle);
             HFunc(TEvDataShard::TEvGetReadTableScanStateRequest, Handle);
             HFunc(TEvDataShard::TEvGetReadTableStreamStateRequest, Handle);
-            HFunc(TEvDataShard::TEvGetRSInfoRequest, Handle);
-            HFunc(TEvDataShard::TEvGetSlowOpProfilesRequest, Handle);
+            hFunc(TEvDataShard::TEvGetRSInfoRequest, Handle);
+            hFunc(TEvDataShard::TEvGetSlowOpProfilesRequest, Handle);
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
@@ -3196,6 +3188,8 @@ protected:
             HFuncTraced(TEvDataShard::TEvReadContinue, Handle);
             HFuncTraced(TEvDataShard::TEvReadAck, Handle);
             HFuncTraced(TEvDataShard::TEvReadCancel, Handle);
+            hFuncTraced(TEvDataShard::TEvReadScanStarted, Handle);
+            hFuncTraced(TEvDataShard::TEvReadScanFinished, Handle);
             HFuncTraced(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

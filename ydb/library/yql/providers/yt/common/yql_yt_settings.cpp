@@ -5,8 +5,8 @@
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 
 #include <library/cpp/yson/node/node_io.h>
-
 #include <library/cpp/regex/pcre/regexp.h>
+#include <library/cpp/string_utils/parse_size/parse_size.h>
 
 #include <util/generic/yexception.h>
 #include <util/generic/size_literals.h>
@@ -54,7 +54,7 @@ void MediaValidator(const NYT::TNode& value) {
     }
 }
 
-TYtConfiguration::TYtConfiguration()
+TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
 {
     const auto codecValidator = [] (const TString&, TString str) {
         if (!ValidateCompressionCodecValue(str)) {
@@ -188,7 +188,7 @@ TYtConfiguration::TYtConfiguration()
             }
         });
     REGISTER_SETTING(*this, ExpirationDeadline)
-        .Lower(Now())
+        .Lower(typeCtx.QContext.CanRead() ? TInstant::Zero() : Now())
         .ValueSetter([this] (const TString& cluster, TInstant value) {
             ExpirationDeadline[cluster] = value;
         });
@@ -252,7 +252,17 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, TableContentTmpFolder);
     REGISTER_SETTING(*this, TableContentColumnarStatistics);
     REGISTER_SETTING(*this, TableContentUseSkiff);
-    REGISTER_SETTING(*this, TableContentLocalExecution);
+    REGISTER_SETTING(*this, TableContentLocalExecution)
+        .Parser([](const TString& v) {
+            // backward compatible parse from bool
+            bool value = true;
+            if (!v || TryFromString<bool>(v, value)) {
+                return value ? 10_MB : 0_MB;
+            } else {
+                return NSize::ParseSize(v);
+            }
+        })
+        .Upper(5_GB);
     REGISTER_SETTING(*this, DisableJobSplitting);
     REGISTER_SETTING(*this, UseColumnarStatistics)
         .Parser([](const TString& v) {
@@ -447,13 +457,23 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
     REGISTER_SETTING(*this, ForceJobSizeAdjuster);
-    REGISTER_SETTING(*this, _EnableWriteReorder);
     REGISTER_SETTING(*this, EnforceJobUtc);
     REGISTER_SETTING(*this, UseRPCReaderInDQ);
     REGISTER_SETTING(*this, DQRPCReaderInflight).Lower(1);
     REGISTER_SETTING(*this, DQRPCReaderTimeout);
     REGISTER_SETTING(*this, BlockReaderSupportedTypes);
     REGISTER_SETTING(*this, BlockReaderSupportedDataTypes)
+        .Parser([](const TString& v) {
+            TSet<TString> vec;
+            StringSplitter(v).SplitBySet(",").AddTo(&vec);
+            TSet<NUdf::EDataSlot> res;
+            for (auto& s: vec) {
+                res.emplace(NUdf::GetDataSlot(s));
+            }
+            return res;
+        });
+    REGISTER_SETTING(*this, JobBlockInputSupportedTypes);
+    REGISTER_SETTING(*this, JobBlockInputSupportedDataTypes)
         .Parser([](const TString& v) {
             TSet<TString> vec;
             StringSplitter(v).SplitBySet(",").AddTo(&vec);
@@ -487,6 +507,7 @@ TYtConfiguration::TYtConfiguration()
     REGISTER_SETTING(*this, MinColumnGroupSize).Lower(2);
     REGISTER_SETTING(*this, MaxColumnGroups);
     REGISTER_SETTING(*this, ExtendedStatsMaxChunkCount);
+    REGISTER_SETTING(*this, JobBlockInput);
     REGISTER_SETTING(*this, _EnableYtDqProcessWriteConstraints);
 }
 

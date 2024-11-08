@@ -60,10 +60,10 @@ protected:
 
     TLead Lead;
 
-    // Sample
-    TStats ReadStats;
-    // TODO(mbkkt) Sent or Upload stats?
+    ui64 ReadRows = 0;
+    ui64 ReadBytes = 0;
 
+    // Sample
     ui64 MaxProbability = std::numeric_limits<ui64>::max();
     TReallyFastRng32 Rng;
 
@@ -100,6 +100,9 @@ protected:
     TTags UploadScan;
 
     TUploadStatus UploadStatus;
+
+    ui64 UploadRows = 0;
+    ui64 UploadBytes = 0;
 
     // Response
     TActorId ResponseActorId;
@@ -163,6 +166,10 @@ public:
         }
 
         auto& record = Response->Record;
+        record.SetReadRows(ReadRows);
+        record.SetReadBytes(ReadBytes);
+        record.SetUploadRows(UploadRows);
+        record.SetUploadBytes(UploadBytes);
         if (abort != EAbort::None) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else if (UploadStatus.IsSuccess()) {
@@ -243,6 +250,8 @@ protected:
         UploadStatus.StatusCode = ev->Get()->Status;
         UploadStatus.Issues = ev->Get()->Issues;
         if (UploadStatus.IsSuccess()) {
+            UploadRows += WriteBuf.GetRows();
+            UploadBytes += WriteBuf.GetBytes();
             WriteBuf.Clear();
             if (!ReadBuf.IsEmpty() && ReadBuf.IsReachLimits(Limits)) {
                 ReadBuf.FlushTo(WriteBuf);
@@ -366,6 +375,9 @@ public:
             if (!InitAggregatedClusters()) {
                 // We don't need to do anything,
                 // because this datashard doesn't have valid embeddings for this parent
+                if (UploadStatus.IsNone()) {
+                    UploadStatus.StatusCode = Ydb::StatusIds::SUCCESS;
+                }
                 return EScan::Final;
             }
             ++Round;
@@ -391,6 +403,8 @@ public:
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
     {
         LOG_T("Feed " << Debug());
+        ++ReadRows;
+        ReadBytes += CountBytes(key, row);
         switch (State) {
             case EState::SAMPLE:
                 return FeedSample(row);
@@ -467,8 +481,6 @@ private:
     {
         Y_ASSERT(row.Size() == 1);
         const auto embedding = row.Get(0).AsRef();
-        ReadStats.Rows += 1;
-        ReadStats.Bytes += embedding.size(); // TODO(mbkkt) add some constant overhead?
         if (!this->IsExpectedSize(embedding)) {
             return EScan::Feed;
         }
@@ -495,14 +507,14 @@ private:
     EScan FeedKMeans(const TRow& row) noexcept
     {
         Y_ASSERT(row.Size() == 1);
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, 0, ReadStats);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, 0);
         AggregateToCluster(pos, row.Get(0).Data());
         return EScan::Feed;
     }
 
     EScan FeedUploadMain2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
             return EScan::Feed;
         }
@@ -512,7 +524,7 @@ private:
 
     EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
             return EScan::Feed;
         }
@@ -522,7 +534,7 @@ private:
 
     EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
             return EScan::Feed;
         }
@@ -532,7 +544,7 @@ private:
 
     EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
             return EScan::Feed;
         }
@@ -571,7 +583,11 @@ void TDataShard::Handle(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TAc
 void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx)
 {
     auto& record = ev->Get()->Record;
+    const bool needsSnapshot = record.HasSnapshotStep() || record.HasSnapshotTxId();
     TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
+    if (!needsSnapshot) {
+        rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
+    }
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
@@ -627,14 +643,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         return;
     }
 
-    if (!record.HasSnapshotStep() || !record.HasSnapshotTxId()) {
-        badRequest(TStringBuilder() << " request doesn't have Shapshot Step or TxId");
-        return;
-    }
-
     const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
-    const TSnapshot* snapshot = SnapshotManager.FindAvailable(snapshotKey);
-    if (!snapshot) {
+    if (needsSnapshot && !SnapshotManager.FindAvailable(snapshotKey)) {
         badRequest(TStringBuilder() << "no snapshot has been found" << " , path id is " << pathId.OwnerId << ":"
                                     << pathId.LocalPathId << " , snapshot step is " << snapshotKey.Step
                                     << " , snapshot tx is " << snapshotKey.TxId);
@@ -665,7 +675,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     TScanOptions scanOpts;
     scanOpts.SetSnapshotRowVersion(rowVersion);
     scanOpts.SetResourceBroker("build_index", 10); // TODO(mbkkt) Should be different group?
-    const auto scanId = QueueScan(userTable.LocalTid, std::move(scan), ev->Cookie, scanOpts);
+    const auto scanId = QueueScan(userTable.LocalTid, std::move(scan), 0, scanOpts);
     TScanRecord recCard = {scanId, seqNo};
     ScanManager.Set(id, recCard);
 }

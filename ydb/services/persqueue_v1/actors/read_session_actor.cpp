@@ -62,6 +62,13 @@ TReadSessionActor<UseMigrationProtocol>::TReadSessionActor(
     , AutoPartitioningSupport(false)
 {
     Y_ASSERT(Request);
+
+    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_APPLICATION_NAME); !values.empty()) {
+        UserAgent = values[0];
+    }
+    if (auto values = Request->GetStreamCtx()->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER); !values.empty()) {
+        SdkBuildInfo = values[0];
+    }
 }
 
 template <bool UseMigrationProtocol>
@@ -884,6 +891,18 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
     }
 }
 
+template<bool UseMigrationProtocol>
+void TReadSessionActor<UseMigrationProtocol>::SetupBytesReadByUserAgentCounter() {
+    static constexpr auto protocol = UseMigrationProtocol ? "pqv1" : "topic";
+    BytesReadByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
+        ->GetSubgroup("host", "")
+        ->GetSubgroup("protocol", protocol)
+        ->GetSubgroup("consumer", ClientPath)
+        ->GetSubgroup("sdk_build_info", CleanupCounterValueString(SdkBuildInfo))
+        ->GetSubgroup("user_agent", DropUserAgentSuffix(CleanupCounterValueString(UserAgent)))
+        ->GetExpiringNamedCounter("sensor", "BytesReadByUserAgent", true);
+}
+
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::SetupCounters() {
     if (SessionsCreated) {
@@ -913,6 +932,8 @@ void TReadSessionActor<UseMigrationProtocol>::SetupCounters() {
     ++(*SessionsCreated);
     ++(*SessionsActive);
     PartsPerSession.IncFor(Partitions.size(), 1); // for 0
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 template <bool UseMigrationProtocol>
@@ -937,6 +958,8 @@ void TReadSessionActor<UseMigrationProtocol>::SetupTopicCounters(const NPersQueu
     topicCounters.CommitLatency          = CommitLatency;
     topicCounters.SLIBigLatency          = SLIBigLatency;
     topicCounters.SLITotal               = SLITotal;
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 template <bool UseMigrationProtocol>
@@ -960,6 +983,8 @@ void TReadSessionActor<UseMigrationProtocol>::SetupTopicCounters(const NPersQueu
     topicCounters.CommitLatency          = CommitLatency;
     topicCounters.SLIBigLatency          = SLIBigLatency;
     topicCounters.SLITotal               = SLITotal;
+
+    SetupBytesReadByUserAgentCounter();
 }
 
 template <bool UseMigrationProtocol>
@@ -1955,6 +1980,8 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(typename TFormedRead
     if constexpr (!UseMigrationProtocol) {
         formedResponse->Response.mutable_read_response()->set_bytes_size(sizeEstimation);
     }
+
+    BytesReadByUserAgent->Add(sizeEstimation);
 
     if (formedResponse->IsDirectRead) {
         auto it = Partitions.find(formedResponse->AssignId);

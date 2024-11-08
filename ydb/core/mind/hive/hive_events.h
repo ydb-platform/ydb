@@ -34,6 +34,8 @@ struct TEvPrivate {
         EvDeleteNode,
         EvCanMoveTablets,
         EvUpdateDataCenterFollowers,
+        EvGenerateTestData,
+        EvRefreshScaleRecommendation,
         EvEnd
     };
 
@@ -127,6 +129,10 @@ struct TEvPrivate {
 
         TEvUpdateDataCenterFollowers(TDataCenterId dataCenter) : DataCenter(dataCenter) {};
     };
+
+    struct TEvGenerateTestData : TEventLocal<TEvGenerateTestData, EvGenerateTestData> {};
+  
+    struct TEvRefreshScaleRecommendation : TEventLocal<TEvRefreshScaleRecommendation, EvRefreshScaleRecommendation> {};
 };
 
 } // NHive

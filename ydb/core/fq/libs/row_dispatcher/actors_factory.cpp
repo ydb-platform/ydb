@@ -2,6 +2,8 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/topic_session.h>
 
+#include <ydb/library/yql/public/purecalc/common/interface.h>
+
 namespace NFq::NRowDispatcher {
 
 
@@ -10,21 +12,27 @@ struct TActorFactory : public IActorFactory {
 
     NActors::TActorId RegisterTopicSession(
         const TString& topicPath,
+        const TString& endpoint,
+        const TString& database,
         const NConfig::TRowDispatcherConfig& config,
         NActors::TActorId rowDispatcherActorId,
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const NYql::IPqGateway::TPtr& pqGateway) const override {
 
         auto actorPtr = NFq::NewTopicSession(
             topicPath,
+            endpoint,
+            database,
             config,
             rowDispatcherActorId,
             partitionId,
             std::move(driver),
             credentialsProviderFactory,
+            pureCalcProgramFactory,
             counters,
             pqGateway
         );

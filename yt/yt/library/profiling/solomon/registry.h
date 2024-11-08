@@ -149,8 +149,8 @@ public:
     int GetWindowSize() const;
     int IndexOf(i64 iteration) const;
 
-    void Profile(const TProfiler& profiler);
-    const TProfiler& GetSelfProfiler() const;
+    void Profile(const TWeakProfiler& profiler);
+    const TWeakProfiler& GetSelfProfiler() const;
 
     NProto::TSensorDump DumpSensors();
     NProto::TSensorDump DumpSensors(std::vector<TTagId> extraTags);
@@ -160,7 +160,7 @@ private:
     i64 Iteration_ = 0;
     std::optional<int> WindowSize_;
     std::function<int(const std::string&)> GridFactor_;
-    TProfiler SelfProfiler_;
+    TWeakProfiler SelfProfiler_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, DynamicTagsLock_);
     std::vector<TTag> DynamicTags_;

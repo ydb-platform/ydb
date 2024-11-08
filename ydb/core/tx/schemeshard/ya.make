@@ -64,7 +64,7 @@ SRCS(
     schemeshard__backup_collection_common.cpp
     schemeshard__borrowed_compaction.cpp
     schemeshard__clean_pathes.cpp
-    schemeshard__compaction.cpp
+    schemeshard__background_compaction.cpp
     schemeshard__conditional_erase.cpp
     schemeshard__delete_tablet_reply.cpp
     schemeshard__describe_scheme.cpp
@@ -202,6 +202,7 @@ SRCS(
     schemeshard_build_index__list.cpp
     schemeshard_build_index__progress.cpp
     schemeshard_build_index_tx_base.cpp
+    schemeshard_cdc_stream_common.cpp
     schemeshard_cdc_stream_scan.cpp
     schemeshard_domain_links.cpp
     schemeshard_domain_links.h

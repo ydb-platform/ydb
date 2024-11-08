@@ -12,16 +12,18 @@ void TRetryEventsQueue::Init(
     const NActors::TActorId& senderId,
     const NActors::TActorId& selfId,
     ui64 eventQueueId,
-    bool keepAlive) {
+    bool keepAlive,
+    bool useConnect) {
     TxId = txId;
     SenderId = senderId;
     SelfId = selfId;
     Y_ASSERT(SelfId.NodeId() == SenderId.NodeId());
     EventQueueId = eventQueueId;
     KeepAlive = keepAlive;
+    UseConnect = useConnect;
 }
 
-void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe) {
+void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, bool unsubscribe, bool connected) {
     if (unsubscribe) {
         Unsubscribe();
     }
@@ -31,7 +33,7 @@ void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, b
     Events.clear();
     MyConfirmedSeqNo = 0;
     ReceivedEventsSeqNos.clear();
-    Connected = false;
+    Connected = connected;
     RetryState = Nothing();
 }
 
@@ -135,7 +137,7 @@ void TRetryEventsQueue::SendRetryable(const IRetryableEvent::TPtr& ev) {
 }
 
 void TRetryEventsQueue::ScheduleRetry() {
-    if (RetryScheduled) {
+    if (!UseConnect || RetryScheduled) {
         return;
     } 
     RetryScheduled = true;
@@ -170,8 +172,8 @@ TDuration TRetryEventsQueue::TRetryState::RandomizeDelay(TDuration baseDelay) {
 }
 
 void TRetryEventsQueue::PrintInternalState(TStringStream& stream) const {
-    stream << "RetryQueue: id " << EventQueueId << ", NextSeqNo " 
-        << NextSeqNo << ", MyConfirmedSeqNo " << MyConfirmedSeqNo << ", SeqNos " << ReceivedEventsSeqNos.size() << ", events size " << Events.size() << "\n";
+    stream << "id " << EventQueueId << ", NextSeqNo "
+        << NextSeqNo << ", MyConfSeqNo " << MyConfirmedSeqNo << ", SeqNos " << ReceivedEventsSeqNos.size() << ", events size " << Events.size() << "\n";
 }
 
 

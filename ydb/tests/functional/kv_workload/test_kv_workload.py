@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 import os
 
-from ydb.tests.library.common import yatest_common
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+import yatest
+
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 
@@ -10,7 +11,7 @@ from ydb.tests.library.common.types import Erasure
 class TestYdbKvWorkload(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory(KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC))
+        cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC))
         cls.cluster.start()
 
     @classmethod
@@ -18,9 +19,9 @@ class TestYdbKvWorkload(object):
         cls.cluster.stop()
 
     def test(self):
-        yatest_common.execute(
+        yatest.common.execute(
             [
-                yatest_common.binary_path(os.getenv("YDB_CLI_BINARY")),
+                yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
                 "--verbose",
                 "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
                 "--database=/Root",
@@ -38,9 +39,9 @@ class TestYdbKvWorkload(object):
             wait=True
         )
 
-        yatest_common.execute(
+        yatest.common.execute(
             [
-                yatest_common.binary_path(os.getenv("YDB_CLI_BINARY")),
+                yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
                 "--verbose",
                 "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
                 "--database=/Root",

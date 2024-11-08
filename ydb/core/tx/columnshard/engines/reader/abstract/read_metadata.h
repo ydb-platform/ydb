@@ -107,6 +107,7 @@ public:
     }
 
     ISnapshotSchema::TPtr GetResultSchema() const {
+        AFL_VERIFY(ResultIndexSchema);
         return ResultIndexSchema;
     }
 
@@ -121,6 +122,7 @@ public:
     }
 
     const TIndexInfo& GetIndexInfo(const std::optional<TSnapshot>& version = {}) const {
+        AFL_VERIFY(ResultIndexSchema);
         if (version && version < RequestSnapshot) {
             return GetIndexVersions().GetSchema(*version)->GetIndexInfo();
         }
@@ -150,6 +152,7 @@ public:
     }
 
     std::set<ui32> GetProcessingColumnIds() const {
+        AFL_VERIFY(ResultIndexSchema);
         std::set<ui32> result;
         for (auto&& i : GetProgram().GetProcessingColumns()) {
             result.emplace(ResultIndexSchema->GetIndexInfo().GetColumnIdVerified(i));
@@ -184,6 +187,7 @@ public:
     }
 
     std::shared_ptr<arrow::Schema> GetReplaceKey() const {
+        AFL_VERIFY(ResultIndexSchema);
         return ResultIndexSchema->GetIndexInfo().GetReplaceKey();
     }
 

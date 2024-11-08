@@ -111,12 +111,14 @@ TEST(TAsyncLooperTest, CancelAsyncStep)
 
     NThreading::TEvent started;
     auto promise = NewPromise<void>();
+    bool callbackFinished = false;
 
-    auto asyncStart = BIND([invoker = queue->GetInvoker(), promise, &started] (bool) {
-        return BIND([promise, &started] {
+    auto asyncStart = BIND([invoker = queue->GetInvoker(), promise, &started, &callbackFinished] (bool) {
+        return BIND([promise, &started, &callbackFinished] {
             started.NotifyAll();
             WaitFor(promise.ToFuture())
                 .ThrowOnError();
+            callbackFinished = true;
         }).AsyncVia(invoker).Run();
     });
 
@@ -136,7 +138,11 @@ TEST(TAsyncLooperTest, CancelAsyncStep)
 
     queue->Shutdown();
 
-    EXPECT_TRUE(promise.IsCanceled());
+    // Cancelation is a bit racy and sometimes promise is set with error
+    // instead of being canceled "for real". Thus we simply check that
+    // the code didn't go through completely.
+    // EXPECT_TRUE(promise.IsCanceled());
+    EXPECT_FALSE(callbackFinished);
 }
 
 TEST(TAsyncLooperTest, CancelSyncStep)

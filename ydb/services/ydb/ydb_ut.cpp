@@ -5667,32 +5667,51 @@ Y_UNIT_TEST(DisableWritesToDatabase) {
         ), false
     );
 
-    ExecSQL(server, sender, Sprintf(R"(
-                UPSERT INTO `%s` (Key, Value) VALUES (1u, "Foo");
-            )", table.c_str()
-        )
-    );
+    auto upsert = [&](
+        const TString& table, const TString& row,
+        Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS
+    ) {
+        ExecSQL(server, sender, Sprintf(R"(
+                    UPSERT INTO `%s` (Key, Value) VALUES (%s);
+                )", table.c_str(), row.c_str()
+            ), true, expectedStatus
+        );
+    };
+
+    upsert(table, "1u, \"Foo\"");
 
     auto shards = GetTableShards(server, sender, table);
     UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1);
     auto& datashard = shards[0];
     auto tableId = ResolveTableId(server, sender, table);
-
     // Compaction is a must. Table stats are missing channels usage statistics until the table is compacted at least once.
     CompactTableAndCheckResult(runtime, datashard, tableId);
-    WaitTableStats(runtime, datashard, 1);
 
-    ExecSQL(server, sender, Sprintf(R"(
-                UPSERT INTO `%s` (Key, Value) VALUES (2u, "Bar");
-            )", table.c_str()
-        ), true, Ydb::StatusIds::UNAVAILABLE
-    );
-    auto schemeEntry = Navigate(runtime, sender, tenantPath, NSchemeCache::TSchemeCacheNavigate::EOp::OpPath)->ResultSet.at(0);
-    UNIT_ASSERT_C(schemeEntry.DomainDescription, schemeEntry.ToString());
-    auto& domainDescription = schemeEntry.DomainDescription->Description;
-    UNIT_ASSERT_C(domainDescription.HasDomainState(), domainDescription.DebugString());
-    bool quotaExceeded = domainDescription.GetDomainState().GetDiskQuotaExceeded();
-    UNIT_ASSERT_C(quotaExceeded, domainDescription.DebugString());
+    auto checkDatabaseState = [&](const TString& database, bool expectedQuotaExceeded) {
+        auto schemeEntry = Navigate(
+            runtime, sender, database, NSchemeCache::TSchemeCacheNavigate::EOp::OpPath
+        )->ResultSet.at(0);
+        UNIT_ASSERT_C(schemeEntry.DomainDescription, schemeEntry.ToString());
+        auto& domainDescription = schemeEntry.DomainDescription->Description;
+        bool quotaExceeded = domainDescription.GetDomainState().GetDiskQuotaExceeded();
+        UNIT_ASSERT_VALUES_EQUAL_C(quotaExceeded, expectedQuotaExceeded, domainDescription.DebugString());
+    };
+
+    // try upsert when the feature flag is enabled
+    {
+        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(true);
+        WaitTableStats(runtime, datashard, 1);
+        upsert(table, "2u, \"Bar\"", Ydb::StatusIds::UNAVAILABLE);
+        checkDatabaseState(tenantPath, true);
+    }
+
+    // try upsert when the feature flag is disabled
+    {
+        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(false);
+        WaitTableStats(runtime, datashard, 1);
+        upsert(table, "2u, \"Bar\"");
+        checkDatabaseState(tenantPath, false);
+    }
 }
 
 }

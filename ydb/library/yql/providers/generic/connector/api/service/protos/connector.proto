@@ -369,6 +369,18 @@ message TPredicate {
         repeated TPredicate operands = 1;
     }
 
+    // "COALESCE($predicate_1, $predicate_2, ..., $predicate_n)"
+    message TCoalesce {
+        repeated TPredicate operands = 1;
+    }
+
+    // "IF($predicate, $then_predicate, $else_predicate)"
+    message TIf {
+        TPredicate predicate = 1;
+        TPredicate then_predicate = 2;
+        TPredicate else_predicate = 3;
+    }
+
     // "$column BETWEEN $least AND $greatest"
     message TBetween {
         TExpression value = 1;
@@ -410,6 +422,8 @@ message TPredicate {
             NE = 4; // "$column != value"
             GE = 5; // "$column >= value"
             G = 6;  // "$column > value"
+            IND = 7;// "$column IS NOT DISTINCT value"
+            ID = 8; // "$column IS DISTINCT value"
         }
 
         EOperation operation = 1;
@@ -427,6 +441,8 @@ message TPredicate {
         TIsNotNull is_not_null = 7;
         TComparison comparison = 8;
         TBoolExpression bool_expression = 9;
+        TCoalesce coalesce = 10;
+        TIf if = 11;
     }
 }
 

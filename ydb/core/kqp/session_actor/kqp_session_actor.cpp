@@ -3,6 +3,8 @@
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
 
+#include <ydb/core/kqp/common/buffer/buffer.h>
+#include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
@@ -851,7 +853,9 @@ public:
                             "Write transactions between column and row tables are disabled at current time.");
             return false;
         }
+
         QueryState->TxCtx->SetTempTables(QueryState->TempTablesState);
+        QueryState->TxCtx->ApplyPhysicalQuery(phyQuery);
         auto [success, issues] = QueryState->TxCtx->ApplyTableOperations(phyQuery.GetTableOps(), phyQuery.GetTableInfos(),
             EKikimrQueryType::Dml);
         if (!success) {
@@ -1020,15 +1024,19 @@ public:
 
     bool CheckTransactionLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         auto& txCtx = *QueryState->TxCtx;
-        if (!txCtx.DeferredEffects.Empty() && txCtx.Locks.Broken()) {
+        const bool broken = txCtx.TxManager
+            ? !!txCtx.TxManager->GetLockIssue()
+            : txCtx.Locks.Broken();
+
+        if (!txCtx.DeferredEffects.Empty() && broken) {
             ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has deferred effects, but locks are broken",
-                MessageFromIssues(std::vector<TIssue>{txCtx.Locks.GetIssue()}));
+                MessageFromIssues(std::vector<TIssue>{txCtx.TxManager ? *txCtx.TxManager->GetLockIssue() : txCtx.Locks.GetIssue()}));
             return false;
         }
 
-        if (tx && tx->GetHasEffects() && txCtx.Locks.Broken()) {
+        if (tx && tx->GetHasEffects() && broken) {
             ReplyQueryError(Ydb::StatusIds::ABORTED, "tx has effects, but locks are broken",
-                MessageFromIssues(std::vector<TIssue>{txCtx.Locks.GetIssue()}));
+                MessageFromIssues(std::vector<TIssue>{txCtx.TxManager ? *txCtx.TxManager->GetLockIssue() : txCtx.Locks.GetIssue()}));
             return false;
         }
 
@@ -1136,9 +1144,10 @@ public:
 
         auto& txCtx = *QueryState->TxCtx;
         bool literal = tx && tx->IsLiteralTx();
+        const bool hasLocks = txCtx.TxManager ? txCtx.TxManager->HasLocks() : txCtx.Locks.HasLocks();
 
         if (commit) {
-            if (txCtx.TxHasEffects() || txCtx.Locks.HasLocks() || txCtx.TopicOperations.HasOperations()) {
+            if (txCtx.TxHasEffects() || hasLocks || txCtx.TopicOperations.HasOperations()) {
                 // Cannot perform commit in literal execution
                 literal = false;
             } else if (!tx) {
@@ -1202,27 +1211,44 @@ public:
                 request.PerShardKeysSizeLimitBytes = Config->_CommitPerShardKeysSizeLimitBytes.Get().GetRef();
             }
 
-            if (txCtx.Locks.HasLocks() || txCtx.TopicOperations.HasOperations()) {
-                if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasOperations()) {
-                    LOG_D("TExecPhysicalRequest, tx has commit locks");
+            if (Settings.TableService.GetEnableOltpSink()) {
+                if (txCtx.TxHasEffects() || hasLocks || txCtx.TopicOperations.HasOperations()) {
+                    request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
+                }
+
+                if (hasLocks) {
+                    if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasOperations()) {
+                        LOG_D("TExecPhysicalRequest, tx has commit locks");
+                        request.LocksOp = ELocksOp::Commit;
+                    } else {
+                        LOG_D("TExecPhysicalRequest, tx has rollback locks");
+                        request.LocksOp = ELocksOp::Rollback;
+                    }
+                } else if (txCtx.TxHasEffects()) {
+                    LOG_D("TExecPhysicalRequest, need commit locks");
                     request.LocksOp = ELocksOp::Commit;
-                } else {
-                    LOG_D("TExecPhysicalRequest, tx has rollback locks");
-                    request.LocksOp = ELocksOp::Rollback;
                 }
-
-                for (auto& [lockId, lock] : txCtx.Locks.LocksMap) {
-                    auto dsLock = ExtractLock(lock.GetValueRef(txCtx.Locks.LockType));
-                    request.DataShardLocks[dsLock.GetDataShard()].emplace_back(dsLock);
+            } else {
+                if (hasLocks || txCtx.TopicOperations.HasOperations()) {
+                    if (!txCtx.GetSnapshot().IsValid() || txCtx.TxHasEffects() || txCtx.TopicOperations.HasOperations()) {
+                        LOG_D("TExecPhysicalRequest, tx has commit locks");
+                        request.LocksOp = ELocksOp::Commit;
+                    } else {
+                        LOG_D("TExecPhysicalRequest, tx has rollback locks");
+                        request.LocksOp = ELocksOp::Rollback;
+                    }
+                    for (auto& [lockId, lock] : txCtx.Locks.LocksMap) {
+                        auto dsLock = ExtractLock(lock.GetValueRef(txCtx.Locks.LockType));
+                        request.DataShardLocks[dsLock.GetDataShard()].emplace_back(dsLock);
+                    }
                 }
-
             }
 
             request.TopicOperations = std::move(txCtx.TopicOperations);
         } else if (QueryState->ShouldAcquireLocks(tx) && (!txCtx.HasOlapTable || Settings.TableService.GetEnableOlapSink())) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
 
-            if (txCtx.HasUncommittedChangesRead || Config->FeatureFlags.GetEnableForceImmediateEffectsExecution() || txCtx.HasOlapTable) {
+            if (!txCtx.CanDeferEffects()) {
                 request.UseImmediateEffects = true;
             }
         }
@@ -1231,7 +1257,7 @@ public:
             QueryState->Orbit,
             QueryState->CurrentTx,
             request.Transactions.size(),
-            txCtx.Locks.Size(),
+            (txCtx.TxManager ? txCtx.TxManager->GetShardsCount() : txCtx.Locks.Size()),
             request.AcquireLocksTxId.Defined());
 
         SendToExecuter(QueryState->TxCtx.Get(), std::move(request));
@@ -1282,19 +1308,33 @@ public:
         request.ResourceManager_ = ResourceManager_;
         LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
 
+        if (Settings.TableService.GetEnableOltpSink() && !txCtx->TxManager) {
+            txCtx->TxManager = CreateKqpTransactionManager();
+        }
+        if (Settings.TableService.GetEnableOltpSink() && !txCtx->BufferActorId && txCtx->HasTableWrite) {
+            TKqpBufferWriterSettings settings {
+                .SessionActorId = SelfId(),
+                .TxManager = txCtx->TxManager,
+                .TraceId = request.TraceId.GetTraceId(),
+                .Counters = Counters,
+            };
+            auto* actor = CreateKqpBufferWriterActor(std::move(settings));
+            txCtx->BufferActorId = RegisterWithSameMailbox(actor);
+        }
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             RequestCounters, Settings.TableService,
             AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings, txCtx->ShardIdToTableInfo);
+            QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings,
+            txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId);
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
         auto ev = std::make_unique<TEvTxUserProxy::TEvProposeKqpTransaction>(exId);
         Send(MakeTxProxyID(), ev.release());
         if (!isRollback) {
-            Y_ABORT_UNLESS(!ExecuterId);
+            YQL_ENSURE(!ExecuterId);
         }
         ExecuterId = exId;
     }
@@ -1444,9 +1484,13 @@ public:
             // Invalidate query cache on scheme/internal errors
             switch (status) {
                 case Ydb::StatusIds::ABORTED: {
-                    if (ev->BrokenLockPathId) {
+                    if (QueryState->TxCtx->TxManager && QueryState->TxCtx->TxManager->BrokenLocks()) {
+                        issues.AddIssue(*QueryState->TxCtx->TxManager->GetLockIssue());
+                    } else if (ev->BrokenLockPathId) {
+                        YQL_ENSURE(!QueryState->TxCtx->TxManager);
                         issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx, *ev->BrokenLockPathId));
                     } else if (ev->BrokenLockShardId) {
+                        YQL_ENSURE(!QueryState->TxCtx->TxManager);
                         issues.AddIssue(GetLocksInvalidatedIssue(*QueryState->TxCtx->ShardIdToTableInfo, *ev->BrokenLockShardId));
                     }
                     break;
@@ -1494,7 +1538,7 @@ public:
             QueryState->TxCtx->Locks.LockHandle = std::move(ev->LockHandle);
         }
 
-        if (!MergeLocksWithTxResult(executerResults)) {
+        if (!QueryState->TxCtx->TxManager && !MergeLocksWithTxResult(executerResults)) {
             return;
         }
 
@@ -1537,6 +1581,29 @@ public:
             Send(ExecuterId, abortEv.Release(), IEventHandle::FlagTrackDelivery);
         } else {
             ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), "", MessageFromIssues(issues));
+        }
+    }
+
+    void Handle(TEvKqpBuffer::TEvError::TPtr& ev) {
+        const auto& msg = *ev->Get();
+
+        TString logMsg = TStringBuilder() << "got TEvKqpBuffer::TEvError in " << CurrentStateFuncName()
+            << ", status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.StatusCode) << " send to: " << ExecuterId << " from: " << ev->Sender;
+
+        if (!QueryState || !QueryState->TxCtx || QueryState->TxCtx->BufferActorId != ev->Sender) {
+            LOG_E(logMsg <<  ": Old error.");
+            return;
+        } else {
+            LOG_W(logMsg);
+        }
+
+        TString reason = TStringBuilder() << msg.Message << "; " << msg.SubIssues.ToString();
+
+        if (ExecuterId) {
+            auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(msg.StatusCode, reason);
+            Send(ExecuterId, abortEv.Release(), IEventHandle::FlagTrackDelivery);
+        } else {
+            ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.StatusCode), logMsg, MessageFromIssues(msg.SubIssues));
         }
     }
 
@@ -1780,10 +1847,12 @@ public:
             size_t trailingResultsCount = 0;
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
                 if (QueryState->IsStreamResult()) {
-                    auto ydbResult = QueryState->QueryData->ExtractTrailingTxResult(
-                        phyQuery.GetResultBindings(i), response->GetArena());
 
-                    if (ydbResult) {
+                    if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
+                        auto ydbResult = QueryState->QueryData->GetYdbTxResult(
+                            phyQuery.GetResultBindings(i), response->GetArena(), {});
+
+                        YQL_ENSURE(ydbResult);
                         ++trailingResultsCount;
                         YQL_ENSURE(trailingResultsCount <= 1);
                         response->AddYdbResults()->Swap(ydbResult);
@@ -1888,7 +1957,7 @@ public:
     }
 
     void Reply() {
-        YQL_ENSURE(QueryState);
+        Y_ABORT_UNLESS(QueryState);
         YQL_ENSURE(Counters);
 
         auto& record = QueryResponse->Record;
@@ -2030,10 +2099,12 @@ public:
 
         request.LocksOp = ELocksOp::Rollback;
 
-        // Should tx with empty LocksMap be aborted?
-        for (auto& [lockId, lock] : txCtx->Locks.LocksMap) {
-            auto dsLock = ExtractLock(lock.GetValueRef(txCtx->Locks.LockType));
-            request.DataShardLocks[dsLock.GetDataShard()].emplace_back(dsLock);
+        if (!txCtx->TxManager) {
+            // Should tx with empty LocksMap be aborted?
+            for (auto& [lockId, lock] : txCtx->Locks.LocksMap) {
+                auto dsLock = ExtractLock(lock.GetValueRef(txCtx->Locks.LockType));
+                request.DataShardLocks[dsLock.GetDataShard()].emplace_back(dsLock);
+            }
         }
 
         SendToExecuter(txCtx, std::move(request), true);
@@ -2043,6 +2114,13 @@ public:
         if (QueryState->TxCtx) {
             QueryState->TxCtx->ClearDeferredEffects();
             QueryState->TxCtx->Locks.Clear();
+            QueryState->TxCtx->TxManager.reset();
+
+            if (QueryState->TxCtx->BufferActorId) {
+                Send(QueryState->TxCtx->BufferActorId, new TEvKqpBuffer::TEvTerminate{});
+                QueryState->TxCtx->BufferActorId = {};
+            }
+
             QueryState->TxCtx->Finish();
         }
     }
@@ -2307,6 +2385,7 @@ public:
                 hFunc(NWorkload::TEvContinueRequest, HandleNoop);
                 // message from KQP proxy in case of our reply just after kqp proxy timer tick
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
 
             default:
@@ -2341,6 +2420,7 @@ public:
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleExecute);
 
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleExecute);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
 
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleExecute);
                 hFunc(NGRpcService::TEvClientLost, HandleClientLost);
@@ -2388,6 +2468,7 @@ public:
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
                 hFunc(TEvKqp::TEvSplitResponse, HandleNoop);
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);

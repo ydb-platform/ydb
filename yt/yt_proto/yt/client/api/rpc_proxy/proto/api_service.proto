@@ -605,6 +605,7 @@ message TQueryStatistics
     optional bool incomplete_input = 11;
     optional bool incomplete_output = 12;
     optional uint64 memory_usage = 15;
+    optional int64 total_grouped_row_count = 16;
 
     repeated TQueryStatistics inner_statistics = 14;
 }

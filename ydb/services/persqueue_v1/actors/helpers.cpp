@@ -27,4 +27,43 @@ bool HasMessages(const Topic::StreamReadMessage::ReadResponse& data) {
     return false;
 }
 
+
+TString CleanupCounterValueString(const TString& value) {
+    // Internal Monitoring system requires metrics values to be no longer than 200 characters
+    // and prohibits some ASCII characters.
+
+    TString clean;
+    constexpr auto valueLenghtLimit = 200;
+
+    for (auto c : value) {
+        switch (c) {
+        case '|':
+        case '*':
+        case '?':
+        case '"':
+        case '\'':
+        case '`':
+        case '\\':
+            continue;
+        default:
+            clean.push_back(c);
+            if (clean.size() == valueLenghtLimit) {
+                break;
+            }
+        }
+    }
+    return clean;
+}
+
+
+TString DropUserAgentSuffix(const TString& userAgent) {
+    auto ua = TStringBuf(userAgent);
+    TStringBuf beforeParen, afterParen;
+    ua.Split('(', beforeParen, afterParen);
+    while (beforeParen.ends_with(' ')) {
+        beforeParen.Chop(1);
+    }
+    return TString(beforeParen);
+}
+
 }

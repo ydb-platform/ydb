@@ -303,7 +303,7 @@ NProto::Profile TSignalSafeProfiler::ReadProfile()
             return it->second;
         }
         auto nameId = profile.string_table_size();
-        profile.add_string_table(ToProto<TProtobufString>(str));
+        profile.add_string_table(ToProto(str));
         stringTable[str] = nameId;
         return nameId;
     };

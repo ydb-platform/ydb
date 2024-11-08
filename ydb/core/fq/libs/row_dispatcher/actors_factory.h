@@ -5,6 +5,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
+#include <ydb/library/yql/public/purecalc/common/fwd.h>
 
 namespace NFq::NRowDispatcher {
 
@@ -13,11 +14,14 @@ struct IActorFactory : public TThrRefBase {
 
     virtual NActors::TActorId RegisterTopicSession(
         const TString& topicPath,
+        const TString& endpoint,
+        const TString& database,
         const NConfig::TRowDispatcherConfig& config,
         NActors::TActorId rowDispatcherActorId,
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const NYql::IPqGateway::TPtr& pqGateway) const = 0;
 };

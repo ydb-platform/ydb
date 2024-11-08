@@ -526,6 +526,18 @@ void TPushStreamWorker::FeedToConsumer() {
     }
 }
 
+NYql::NUdf::IBoxedValue* TPushStreamWorker::GetPushStream() const {
+    auto& ctx = Graph_.ComputationGraph_->GetContext();
+    NUdf::TUnboxedValue pushStream = SelfNode_->GetValue(ctx);
+
+    if (Y_UNLIKELY(pushStream.IsInvalid())) {
+        SelfNode_->SetValue(ctx, Graph_.ComputationGraph_->GetHolderFactory().Create<TPushStream>());
+        pushStream = SelfNode_->GetValue(ctx);
+    }
+
+    return pushStream.AsBoxed().Get();
+}
+
 void TPushStreamWorker::SetConsumer(THolder<IConsumer<const NKikimr::NUdf::TUnboxedValue*>> consumer) {
     auto guard = Guard(GetScopedAlloc());
     const auto inputsCount = Graph_.SelfNodes_.size();
@@ -553,7 +565,7 @@ void TPushStreamWorker::Push(NKikimr::NUdf::TUnboxedValue&& value) {
     YQL_ENSURE(!Finished_, "OnFinish has already been sent to the consumer; no new values can be pushed");
 
     if (Y_LIKELY(SelfNode_)) {
-        static_cast<TPushStream*>(SelfNode_->GetValue(Graph_.ComputationGraph_->GetContext()).AsBoxed().Get())->SetValue(std::move(value));
+        static_cast<TPushStream*>(GetPushStream())->SetValue(std::move(value));
     }
 
     FeedToConsumer();
@@ -564,7 +576,7 @@ void TPushStreamWorker::OnFinish() {
     YQL_ENSURE(!Finished_, "already finished");
 
     if (Y_LIKELY(SelfNode_)) {
-        static_cast<TPushStream*>(SelfNode_->GetValue(Graph_.ComputationGraph_->GetContext()).AsBoxed().Get())->SetFinished();
+        static_cast<TPushStream*>(GetPushStream())->SetFinished();
     }
 
     FeedToConsumer();

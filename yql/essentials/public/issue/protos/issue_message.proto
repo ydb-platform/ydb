@@ -1,0 +1,17 @@
+package NYql.NIssue.NProto;
+option java_package = "com.yandex.yql.issue.proto";
+
+message IssueMessage {
+    message Position {
+        optional uint32 row = 1;
+        optional uint32 column = 2;
+        optional string file = 3;
+    }
+
+    optional Position position = 1;
+    optional string message = 2;
+    optional Position end_position = 3;
+    optional uint32 issue_code = 4;
+    optional uint32 severity = 5;
+    repeated IssueMessage issues = 6;
+}

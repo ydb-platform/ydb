@@ -23,7 +23,7 @@ Next, from the same working directory, run the following command to start the te
 
 App code snippet for driver initialization:
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Synchronous
 
@@ -65,7 +65,7 @@ App code snippet for driver initialization:
 
 App code snippet for session pool initialization:
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Synchronous
 
@@ -106,7 +106,7 @@ There are two primary methods for executing queries, each with different propert
 
 To execute `CREATE TABLE` queries, use the `pool.execute_with_retries()` method:
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Synchronous
 
@@ -206,7 +206,7 @@ To execute `CREATE TABLE` queries, use the `pool.execute_with_retries()` method:
 
 Code snippet for data insert/update:
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Synchronous
 
@@ -238,7 +238,7 @@ Code snippet for data insert/update:
 
 To execute YQL queries, the `pool.execute_with_retries()` method is often sufficient.
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Synchronous
 
@@ -333,7 +333,7 @@ Automatic conversion of lists and dictionaries is possible only if the structure
 
 A code snippet demonstrating the parameterized query execution:
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Synchronous
 
@@ -421,7 +421,7 @@ For more information about transaction modes, see [{#T}](../../../concepts/trans
 
 The result of executing `tx.execute()` is an iterator. This iterator allows you to read result rows without loading the entire result set into memory. However, the iterator must be read to the end after each request to correctly maintain the transaction state on the {{ ydb-short-name }} server side. If this is not done, write queries could not be applied on the {{ ydb-short-name }} server side. For convenience, the result of the `tx.execute()` function can be used as a context manager that automatically iterates to the end upon exit.
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Synchronous
 
@@ -441,7 +441,7 @@ The result of executing `tx.execute()` is an iterator. This iterator allows you 
 
 The code snippet below demonstrates the explicit use of `transaction().begin()` and `tx.commit()`:
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Synchronous
 
@@ -531,7 +531,7 @@ If a `SELECT` query is expected to return a potentially large number of rows, it
 
 Example of a `SELECT` with unlimited data and implicit transaction control:
 
-{% list tabs %}
+{% list tabs group=sync %}
 
 - Synchronous
 

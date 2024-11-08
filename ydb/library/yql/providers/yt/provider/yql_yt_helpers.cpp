@@ -2,6 +2,7 @@
 #include "yql_yt_provider_impl.h"
 #include "yql_yt_op_settings.h"
 #include "yql_yt_op_hash.h"
+#include "yql_yt_optimize.h"
 
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
@@ -712,6 +713,11 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
     auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, *state->Types);
 
     TExprNode::TPtr optimized;
+    status = UpdateTableContentMemoryUsage(list, optimized, state, ctx, true);
+    if (status.Level == IGraphTransformer::TStatus::Error) {
+        return SyncStatus(status);
+    }
+
     bool hasNonDeterministicFunctions = false;
     status = PeepHoleOptimizeNode(list, optimized, ctx, *state->Types, typeTransformer.Get(), hasNonDeterministicFunctions);
     if (status.Level == IGraphTransformer::TStatus::Error) {
@@ -2163,5 +2169,22 @@ bool HasYtRowNumber(const TExprNode& node) {
     return hasRowNumber;
 }
 
+bool IsYtTableSuitableForArrowInput(NNodes::TExprBase tableNode, std::function<void(const TString&)> unsupportedHandler) {
+    auto meta = TYtTableBaseInfo::GetMeta(tableNode);
+    if (meta->InferredScheme) {
+        unsupportedHandler("can't use arrow input on tables with inferred schema");
+        return false;
+    }
+    if (auto table = tableNode.Maybe<TYtTable>(); table && NYql::HasAnySetting(table.Cast().Settings().Ref(), EYtSettingType::UserColumns | EYtSettingType::UserSchema)) {
+        unsupportedHandler("can't use arrow input on tables with overridden schema/columns");
+        return false;
+    }
+    if (meta->Attrs.contains(SCHEMA_MODE_ATTR_NAME) && meta->Attrs[SCHEMA_MODE_ATTR_NAME] == "weak") {
+        unsupportedHandler("can't use arrow input on tables with weak schema");
+        return false;
+    }
+
+    return true;
+}
 
 } // NYql

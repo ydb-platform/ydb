@@ -953,6 +953,7 @@ class ClassProvides(Declaration, ClassProvidesBase):
     __get__ = ClassProvidesBase.__get__
 
 
+# autopep8: off (it breaks the statements in the "if")
 def directlyProvidedBy(object):  # pylint:disable=redefined-builtin
     """Return the interfaces directly provided by the given object
 
@@ -970,6 +971,7 @@ def directlyProvidedBy(object):  # pylint:disable=redefined-builtin
 
     # Strip off the class part of the spec:
     return Declaration(provides.__bases__[:-1])
+# autopep8: on
 
 
 class provider:

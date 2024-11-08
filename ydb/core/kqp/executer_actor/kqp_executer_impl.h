@@ -993,8 +993,7 @@ protected:
         std::sort(std::begin(shardsRanges), std::end(shardsRanges), [&](const TShardRangesWithShardId& lhs, const TShardRangesWithShardId& rhs) {
                 // Special case for infinity
                 if (lhs.Ranges->GetRightBorder().first->GetCells().empty() || rhs.Ranges->GetRightBorder().first->GetCells().empty()) {
-                    YQL_ENSURE(!lhs.Ranges->GetRightBorder().first->GetCells().empty() || !rhs.Ranges->GetRightBorder().first->GetCells().empty());
-                    return rhs.Ranges->GetRightBorder().first->GetCells().empty();
+                    return !lhs.Ranges->GetRightBorder().first->GetCells().empty();
                 }
                 return CompareTypedCellVectors(
                     lhs.Ranges->GetRightBorder().first->GetCells().data(),

@@ -1,4 +1,4 @@
-d_year,i_category_id,i_category,sum(ss_ext_sales_price)
+dt.d_year,item.i_category_id,item.i_category,sum_price
 2000,7,Home,458017.85
 2000,3,Children,370261.29
 2000,2,Men,368718.95

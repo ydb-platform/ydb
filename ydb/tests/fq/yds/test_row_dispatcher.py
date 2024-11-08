@@ -340,13 +340,15 @@ class TestPqRowDispatcher(TestYdsBase):
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String, event String)) WHERE '''
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String, event String, flag Bool)) WHERE '''
         data = [
-            '{"time": 101, "data": "hello1", "event": "event1"}',
-            '{"time": 102, "data": "hello2", "event": "event2"}']
+            '{"time": 101, "data": "hello1", "event": "event1", "flag": false}',
+            '{"time": 102, "data": "hello2", "event": "event2", "flag": true}']
         expected = ['102']
         filter = 'data = "hello2"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `data` = \\"hello2\\"')
+        filter = 'flag'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `flag`')
         # filter = ' event IS NOT DISTINCT FROM "event2"'
         # self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS NOT DISTINCT FROM \\"event2\\"')
         # filter = ' event IS DISTINCT FROM "event1"'

@@ -29,6 +29,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/core/services/yql_out_transformers.h>
 

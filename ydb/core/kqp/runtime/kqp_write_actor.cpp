@@ -303,10 +303,11 @@ public:
         // TODO: Maybe there are better ways to initialize new shards...
         for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
             TxManager->AddShard(shardInfo.ShardId, IsOlap(), TablePath);
-            TxManager->AddAction(shardInfo.ShardId, IKqpTransactionManager::EAction::WRITE);
+            IKqpTransactionManager::TActionFlags flags = IKqpTransactionManager::EAction::WRITE;
             if (shardInfo.HasRead) {
-                TxManager->AddAction(shardInfo.ShardId, IKqpTransactionManager::EAction::READ);
+                flags |= IKqpTransactionManager::EAction::READ;
             }
+            TxManager->AddAction(shardInfo.ShardId, flags);
         }
     }
 

@@ -141,8 +141,9 @@ TGranuleMeta::TGranuleMeta(
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(
         PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
     OptimizerPlanner = versionedIndex.GetLastSchema()->GetIndexInfo().GetCompactionPlannerConstructor()->BuildPlanner(context).DetachResult();
+    NDataAccessorControl::TManagerConstructionContext mmContext(DataAccessorsManager->GetTabletActorId());
     MetadataMemoryManager =
-        versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataManagerConstructor()->Build(context).DetachResult();
+        versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataManagerConstructor()->Build(mmContext).DetachResult();
     AFL_VERIFY(!!OptimizerPlanner);
     ActualizationIndex = std::make_unique<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 }
@@ -184,6 +185,26 @@ void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOpti
     }
     OptimizerPlanner->ModifyPortions(portions, {});
 }
+/*
+
+void TGranuleMeta::ResetMetadataManager(const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& constructor,
+    std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema) {
+    if (constructor->ApplyToCurrentObject(MetadataMemoryManager)) {
+        return;
+    }
+    NStorageOptimizer::IManagerConstructor::TBuildContext context(PathId, storages, pkSchema);
+    MetadataMemoryManager = constructor->Build(context).DetachResult();
+    AFL_VERIFY(!!OptimizerPlanner);
+    THashMap<ui64, std::shared_ptr<TPortionInfo>> portions;
+    for (auto&& i : Portions) {
+        if (i.second->HasRemoveSnapshot()) {
+            continue;
+        }
+        portions.emplace(i.first, i.second);
+    }
+    OptimizerPlanner->ModifyPortions(portions, {});
+}
+*/
 
 std::shared_ptr<NKikimr::ITxReader> TGranuleMeta::BuildLoader(
     const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex) {

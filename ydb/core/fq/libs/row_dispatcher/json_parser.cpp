@@ -7,7 +7,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 

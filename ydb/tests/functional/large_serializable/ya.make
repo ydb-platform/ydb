@@ -12,7 +12,6 @@ REQUIREMENTS(
     ram:32
 )
 
-TIMEOUT(1800)
 SIZE(LARGE)
 TAG(ya:fat)
 

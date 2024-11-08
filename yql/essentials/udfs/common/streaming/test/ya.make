@@ -5,7 +5,6 @@ YQL_UDF_TEST_CONTRIB()
         yql/essentials/udfs/common/string
         yql/essentials/udfs/common/streaming
     )
-    TIMEOUT(300)
     SIZE(MEDIUM)
 
     IF (SANITIZER_TYPE == "memory")

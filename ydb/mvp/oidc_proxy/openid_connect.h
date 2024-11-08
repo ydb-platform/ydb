@@ -45,8 +45,10 @@ void SetHeader(NYdbGrpc::TCallMeta& meta, const TString& name, const TString& va
 NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpIncomingRequestPtr& request, const TOpenIdConnectSettings& settings);
 TString CreateNameYdbOidcCookie(TStringBuf key, TStringBuf state);
 TString CreateNameSessionCookie(TStringBuf key);
+TString CreateNameImpersonatedCookie(TStringBuf key);
 const TString& GetAuthCallbackUrl();
 TString CreateSecureCookie(const TString& name, const TString& value);
+TString ClearSecureCookie(const TString& name);
 void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers);
 TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key);
 TCheckStateResult CheckState(const TString& state, const TString& key);

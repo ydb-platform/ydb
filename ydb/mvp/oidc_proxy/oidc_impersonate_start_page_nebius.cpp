@@ -1,45 +1,74 @@
-#include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/library/actors/http/http.h>
+#include <ydb/library/security/util.h>
 #include <ydb/mvp/core/mvp_log.h>
+#include <ydb/mvp/core/mvp_tokens.h>
 #include "openid_connect.h"
 #include "oidc_session_create.h"
-#include "oidc_settings.h"
+#include "oidc_impersonate_start_page_nebius.h"
 
 namespace NMVP {
 namespace NOIDC {
 
 THandlerImpersonateStart::THandlerImpersonateStart(const NActors::TActorId& sender,
-                                             const NHttp::THttpIncomingRequestPtr& request,
-                                             const NActors::TActorId& httpProxyId,
-                                             const TOpenIdConnectSettings& settings)
+                                                const NHttp::THttpIncomingRequestPtr& request,
+                                                const NActors::TActorId& httpProxyId,
+                                                const TOpenIdConnectSettings& settings)
     : Sender(sender)
     , Request(request)
     , HttpProxyId(httpProxyId)
     , Settings(settings)
 {}
 
+TString THandlerImpersonateStart::DecodeToken(const TStringBuf& cookie, const NActors::TActorContext& ctx) {
+    TString token;
+    try {
+        Base64StrictDecode(cookie, token);
+    } catch (std::exception& e) {
+        LOG_DEBUG_S(ctx, EService::MVP, "Base64Decode " << cookie << " cookie: " << e.what());
+        token.clear();
+    }
+    return token;
+}
+
 void THandlerImpersonateStart::Bootstrap(const NActors::TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, EService::MVP, "Start impersonation process");
     NHttp::TUrlParameters urlParameters(Request->URL);
-    TString serviceAccountId = urlParameters["service_accound_id"];
+    TString serviceAccountId = urlParameters["service_account_id"];
 
     NHttp::THeaders headers(Request->Headers);
-    LOG_DEBUG_S(ctx, EService::MVP, "Start impersonation process");
     NHttp::TCookies cookies(headers.Get("Cookie"));
-    TString sessionToken = DecodeToken(cookies, CreateNameSessionCookie(Settings.ClientId));
 
-    if (sessionToken && serviceAccountId) {
-        RequestImpersonatedToken(sessionToken, serviceAccountId, ctx);
-    } else {
+    TString sessionCookieName = CreateNameSessionCookie(Settings.ClientId);
+    TStringBuf sessionCookieValue = cookies.Get(sessionCookieName);
+    if (!sessionCookieValue.Empty()) {
+        LOG_DEBUG_S(ctx, EService::MVP, "Using session cookie (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
+    }
+
+    TString sessionToken = DecodeToken(sessionCookieValue, ctx);
+
+    TString jsonError;
+    if (sessionToken.empty()) {
+        jsonError = "Wrong impersonate parameter: session cookie not found";
+    } else if (serviceAccountId.empty()) {
+        jsonError = "Wrong impersonate parameter: account_id not found";
+    }
+
+    if (jsonError) {
         NHttp::THeadersBuilder responseHeaders;
         responseHeaders.Set("Content-Type", "text/plain");
-        httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error);
+        SetCORS(Request, &responseHeaders);
+        NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, jsonError);
+        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
+        Die(ctx);
+    } else {
+        RequestImpersonatedToken(sessionToken, serviceAccountId, ctx);
     }
 }
 
-void THandlerImpersonateStart::RequestImpersonatedToken(const TString sessionToken, const TString serviceAccountId, const NActors::TActorContext& ctx) {
+void THandlerImpersonateStart::RequestImpersonatedToken(const TString& sessionToken, const TString& serviceAccountId, const NActors::TActorContext& ctx) {
     LOG_DEBUG_S(ctx, EService::MVP, "Request impersonated token");
-    NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetExchangeEndpointURL());
+    NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetImpersonateEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
 
     TMvpTokenator* tokenator = MVPAppData()->Tokenator;
@@ -48,16 +77,28 @@ void THandlerImpersonateStart::RequestImpersonatedToken(const TString sessionTok
         token = tokenator->GetToken(Settings.SessionServiceTokenName);
     }
     httpRequest->Set("Authorization", token); // Bearer included
+
     TStringBuilder body;
-    body << "grant_type=urn:ietf:params:oauth:grant-type:token-exchange"
-            << "&requested_token_type=urn:ietf:params:oauth:token-type:access_token"
-            << "&subject_token_type=urn:ietf:params:oauth:token-type:session_token"
-            << "&subject_token=" << sessionToken;
+    body << "session=" << sessionToken
+         << "&service_account_id=" << serviceAccountId;
     httpRequest->Set<&NHttp::THttpRequest::Body>(body);
 
     ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
+    Become(&THandlerImpersonateStart::StateWork);
+}
 
-    Become(&THandlerSessionServiceCheckNebius::StateExchange);
+void THandlerImpersonateStart::ProcessImpersonatedToken(const TString& impersonatedToken, const NActors::TActorContext& ctx) {
+    TString impersonatedCookieName = CreateNameImpersonatedCookie(Settings.ClientId);
+    TString impersonatedCookieValue = Base64Encode(impersonatedToken);
+    LOG_DEBUG_S(ctx, EService::MVP, "Set impersonated cookie: (" << impersonatedCookieName << ": " << NKikimr::MaskTicket(impersonatedCookieValue) << ")");
+
+    NHttp::THeadersBuilder responseHeaders;
+    responseHeaders.Set("Set-Cookie", CreateSecureCookie(impersonatedCookieName, impersonatedCookieValue));
+    SetCORS(Request, &responseHeaders);
+    NHttp::THttpOutgoingResponsePtr httpResponse;
+    httpResponse = Request->CreateResponse("200", "OK", responseHeaders);
+    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
+    Die(ctx);
 }
 
 void THandlerImpersonateStart::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
@@ -70,79 +111,48 @@ void THandlerImpersonateStart::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRespon
             NJson::TJsonValue jsonValue;
             NJson::TJsonReaderConfig jsonConfig;
             if (NJson::ReadJsonTree(response->Body, &jsonConfig, &jsonValue)) {
-                const NJson::TJsonValue* jsonAccessToken;
-                if (jsonValue.GetValuePointer("access_token", &jsonAccessToken)) {
-                    TString sessionToken = jsonAccessToken->GetStringRobust();
-                    ProcessSessionToken(sessionToken, ctx);
+                const NJson::TJsonValue* jsonImpersonatedToken;
+                if (jsonValue.GetValuePointer("impersonation", &jsonImpersonatedToken)) {
+                    TString impersonatedToken = jsonImpersonatedToken->GetStringRobust();
+                    ProcessImpersonatedToken(impersonatedToken, ctx);
                     return;
                 } else {
-                    jsonError = "Wrong OIDC provider response: access_token not found";
+                    jsonError = "Wrong OIDC provider response: impersonated token not found";
                 }
             } else {
                 jsonError =  "Wrong OIDC response";
             }
             NHttp::THeadersBuilder responseHeaders;
             responseHeaders.Set("Content-Type", "text/plain");
+            SetCORS(Request, &responseHeaders);
             httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, jsonError);
         } else {
             NHttp::THeadersBuilder responseHeaders;
-            responseHeaders.Parse(response->Headers);
+            NHttp::THeaders headers(response->Headers);
+            if (headers.Has("Content-Type")) {
+                responseHeaders.Set("Content-Type", headers.Get("Content-Type"));
+            }
+            SetCORS(Request, &responseHeaders);
             httpResponse = Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body);
         }
     } else {
         NHttp::THeadersBuilder responseHeaders;
         responseHeaders.Set("Content-Type", "text/plain");
+        SetCORS(Request, &responseHeaders);
         httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error);
     }
     ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
     Die(ctx);
 }
 
-TString THandlerImpersonateStart::ChangeSameSiteFieldInSessionCookie(const TString& cookie) {
-    const static TStringBuf SameSiteParameter {"SameSite=Lax"};
-    size_t n = cookie.find(SameSiteParameter);
-    if (n == TString::npos) {
-        return cookie;
-    }
-    TStringBuilder cookieBuilder;
-    cookieBuilder << cookie.substr(0, n);
-    cookieBuilder << "SameSite=None";
-    cookieBuilder << cookie.substr(n + SameSiteParameter.size());
-    return cookieBuilder;
-}
+TImpersonateStartPageHandler::TImpersonateStartPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings)
+    : TBase(&TImpersonateStartPageHandler::StateWork)
+    , HttpProxyId(httpProxyId)
+    , Settings(settings)
+{}
 
-void THandlerImpersonateStart::RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx) {
-    NHttp::THeadersBuilder responseHeaders;
-    RetryRequestToProtectedResourceAndDie(&responseHeaders, ctx);
-}
-
-void THandlerImpersonateStart::RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx) {
-    SetCORS(Request, responseHeaders);
-    responseHeaders->Set("Location", Context.GetRequestedAddress());
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("302", "Found", *responseHeaders)));
-    Die(ctx);
-}
-
-void THandlerImpersonateStart::SendUnknownErrorResponseAndDie(const NActors::TActorContext& ctx) {
-    NHttp::THeadersBuilder responseHeaders;
-    responseHeaders.Set("Content-Type", "text/html");
-    SetCORS(Request, &responseHeaders);
-    const static TStringBuf BAD_REQUEST_HTML_PAGE = "<html>"
-                                                        "<head>"
-                                                            "<title>"
-                                                                "400 Bad Request"
-                                                            "</title>"
-                                                        "</head>"
-                                                        "<body bgcolor=\"white\">"
-                                                            "<center>"
-                                                                "<h1>"
-                                                                    "Unknown error has occurred. Please open the page again"
-                                                                "</h1>"
-                                                            "</center>"
-                                                        "</body>"
-                                                    "</html>";
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("400", "Bad Request", responseHeaders, BAD_REQUEST_HTML_PAGE)));
-    Die(ctx);
+void TImpersonateStartPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
+    ctx.Register(new THandlerImpersonateStart(event->Sender, event->Get()->Request, HttpProxyId, Settings));
 }
 
 } // NOIDC

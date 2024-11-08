@@ -20,6 +20,7 @@ THandlerSessionCreate::THandlerSessionCreate(const NActors::TActorId& sender,
 {}
 
 void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
+    LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Restore oidc session");
     NHttp::TUrlParameters urlParameters(Request->URL);
     TString code = urlParameters["code"];
     TString state = urlParameters["state"];
@@ -56,6 +57,7 @@ void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
             SendUnknownErrorResponseAndDie(ctx);
         }
     }
+
 }
 
 void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {

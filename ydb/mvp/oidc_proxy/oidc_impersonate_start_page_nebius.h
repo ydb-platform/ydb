@@ -1,11 +1,5 @@
 #pragma once
 
-#include <util/generic/string.h>
-#include <util/generic/strbuf.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/actors/http/http.h>
-#include <ydb/library/actors/http/http_proxy.h>
 #include "oidc_settings.h"
 #include "context.h"
 
@@ -24,24 +18,39 @@ protected:
     TContext Context;
 
 public:
+    TString DecodeToken(const TStringBuf& cookie, const NActors::TActorContext& ctx);
     THandlerImpersonateStart(const NActors::TActorId& sender,
-                          const NHttp::THttpIncomingRequestPtr& request,
-                          const NActors::TActorId& httpProxyId,
-                          const TOpenIdConnectSettings& settings);
-
-    virtual void RequestSessionToken(const TString&, const NActors::TActorContext&) = 0;
-    virtual void ProcessSessionToken(const TString& accessToken, const NActors::TActorContext&) = 0;
+                             const NHttp::THttpIncomingRequestPtr& request,
+                             const NActors::TActorId& httpProxyId,
+                             const TOpenIdConnectSettings& settings);
+    void RequestImpersonatedToken(const TString&, const TString&, const NActors::TActorContext&);
+    void ProcessImpersonatedToken(const TString& impersonatedToken, const NActors::TActorContext& ctx);
 
     void Bootstrap(const NActors::TActorContext& ctx);
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
 
-protected:
-    TString ChangeSameSiteFieldInSessionCookie(const TString& cookie);
-    void RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx);
-    void RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx);
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+        }
+    }
+};
 
-private:
-    void SendUnknownErrorResponseAndDie(const NActors::TActorContext& ctx);
+class TImpersonateStartPageHandler : public NActors::TActor<TImpersonateStartPageHandler> {
+    using TBase = NActors::TActor<TImpersonateStartPageHandler>;
+
+    const NActors::TActorId HttpProxyId;
+    const TOpenIdConnectSettings Settings;
+
+public:
+    TImpersonateStartPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings);
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx);
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+        }
+    }
 };
 
 }  // NOIDC

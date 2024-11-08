@@ -8,7 +8,6 @@
 #include "openid_connect.h"
 #include "context.h"
 #include "oidc_protected_page_nebius.h"
-
 namespace NMVP {
 namespace NOIDC {
 
@@ -19,12 +18,20 @@ THandlerSessionServiceCheckNebius::THandlerSessionServiceCheckNebius(const NActo
     : THandlerSessionServiceCheck(sender, request, httpProxyId, settings)
 {}
 
-TString DecodeToken(NHttp::TCookies& cookies, const TString& name) {
+TStringBuf THandlerSessionServiceCheckNebius::GetCookie(const NHttp::TCookies& cookies, const TString& cookieName, const NActors::TActorContext& ctx) {
+    TStringBuf cookieValue = cookies.Get(cookieName);
+    if (!cookieValue.Empty()) {
+        LOG_DEBUG_S(ctx, EService::MVP, "Using cookie (" << cookieName << ": " << NKikimr::MaskTicket(cookieValue) << ")");
+    }
+    return cookieValue;
+}
+
+TString THandlerSessionServiceCheckNebius::DecodeToken(const TStringBuf& cookie, const NActors::TActorContext& ctx) {
     TString token;
     try {
-        Base64StrictDecode(cookies.Get(name), value);
+        Base64StrictDecode(cookie, token);
     } catch (std::exception& e) {
-        LOG_DEBUG("Base64Decode " << name << " cookie: " << e.what());
+        LOG_DEBUG_S(ctx, EService::MVP, "Base64Decode " << cookie << " cookie: " << e.what());
         token.clear();
     }
     return token;
@@ -35,17 +42,14 @@ void THandlerSessionServiceCheckNebius::StartOidcProcess(const NActors::TActorCo
     LOG_DEBUG_S(ctx, EService::MVP, "Start OIDC process");
 
     NHttp::TCookies cookies(headers.Get("Cookie"));
-    TString sessionCookieName = CreateNameSessionCookie(Settings.ClientId);
-    TStringBuf sessionCookieValue = cookies.Get(sessionCookieName);
-    if (!sessionCookieValue.Empty()) {
-        LOG_DEBUG_S(ctx, EService::MVP, "Using session cookie (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
-    }
+    TStringBuf sessionCookieValue = GetCookie(cookies, CreateNameSessionCookie(Settings.ClientId), ctx);
+    TStringBuf impersonatedCookieValue = GetCookie(cookies, CreateNameImpersonatedCookie(Settings.ClientId), ctx);
 
-    TString sessionToken = DecodeToken(cookies, CreateNameSessionCookie(Settings.ClientId));
+    TString sessionToken = DecodeToken(sessionCookieValue, ctx);
     if (sessionToken) {
-        TString impersonatedToken = DecodeToken(cookies, CreateNameImpersonatedCookie(Settings.ClientId));
+        TString impersonatedToken = DecodeToken(impersonatedCookieValue, ctx);
         if (impersonatedToken) {
-            ExchangeImpersonatedToken(impersonatedToken, sessionToken, ctx);
+            ExchangeImpersonatedToken(sessionToken, impersonatedToken, ctx);
         } else {
             ExchangeSessionToken(sessionToken, ctx);
         }
@@ -64,7 +68,7 @@ void THandlerSessionServiceCheckNebius:: HandleExchange(NHttp::TEvHttpProxy::TEv
         Die(ctx);
     } else {
         NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
-        LOG_DEBUG_S(ctx, EService::MVP, "Getting access token: " << response->Status);
+        LOG_DEBUG_S(ctx, EService::MVP, "Getting access token: " << response->Status << " " << response->Message);
         if (response->Status == "200") {
             TString iamToken;
             static const NJson::TJsonReaderConfig JsonConfig;
@@ -77,7 +81,12 @@ void THandlerSessionServiceCheckNebius:: HandleExchange(NHttp::TEvHttpProxy::TEv
                 return;
             }
         } else if (response->Status == "400" || response->Status == "401") {
-            RequestAuthorizationCode(ctx);
+            LOG_DEBUG_S(ctx, EService::MVP, "Getting access token: " << response->Body);
+            if (tokenExchangeType == ETokenExchangeType::ImpersonatedToken) {
+                ClearImpersonatedCookie(ctx);
+            } else {
+                RequestAuthorizationCode(ctx);
+            }
             return;
         }
         // don't know what to do, just forward response
@@ -92,6 +101,7 @@ void THandlerSessionServiceCheckNebius:: HandleExchange(NHttp::TEvHttpProxy::TEv
 
 void THandlerSessionServiceCheckNebius::ExchangeSessionToken(const TString sessionToken, const NActors::TActorContext& ctx) {
     LOG_DEBUG_S(ctx, EService::MVP, "Exchange session token");
+    tokenExchangeType = ETokenExchangeType::SessionToken;
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetExchangeEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
 
@@ -114,7 +124,8 @@ void THandlerSessionServiceCheckNebius::ExchangeSessionToken(const TString sessi
 }
 
 void THandlerSessionServiceCheckNebius::ExchangeImpersonatedToken(const TString sessionToken, const TString impersonatedToken, const NActors::TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, EService::MVP, "Exchange session token");
+    LOG_DEBUG_S(ctx, EService::MVP, "Exchange impersonated token");
+    tokenExchangeType = ETokenExchangeType::ImpersonatedToken;
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetExchangeEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
 
@@ -125,7 +136,7 @@ void THandlerSessionServiceCheckNebius::ExchangeImpersonatedToken(const TString 
     }
     httpRequest->Set("Authorization", token); // Bearer included
     TStringBuilder body;
-    body << "grant_type=urn:ietf:params:oauth:grant-type:impersonation"
+    body << "grant_type=urn:ietf:params:oauth:grant-type:token-exchange"
             << "&requested_token_type=urn:ietf:params:oauth:token-type:access_token"
             << "&subject_token_type=urn:ietf:params:oauth:token-type:jwt"
             << "&subject_token=" << impersonatedToken
@@ -136,6 +147,17 @@ void THandlerSessionServiceCheckNebius::ExchangeImpersonatedToken(const TString 
     ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
 
     Become(&THandlerSessionServiceCheckNebius::StateExchange);
+}
+
+void THandlerSessionServiceCheckNebius::ClearImpersonatedCookie(const NActors::TActorContext& ctx) {
+    TString impersonatedCookieName = CreateNameImpersonatedCookie(Settings.ClientId);
+    LOG_DEBUG_S(ctx, EService::MVP, "Clear impersonated cookie (" << impersonatedCookieName << ") and retry");
+    NHttp::THeadersBuilder responseHeaders;
+    SetCORS(Request, &responseHeaders);
+    responseHeaders.Set("Set-Cookie", ClearSecureCookie(impersonatedCookieName));
+    responseHeaders.Set("Location", Request->URL);
+    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("307", "Temporary Redirect", responseHeaders)));
+    Die(ctx);
 }
 
 void THandlerSessionServiceCheckNebius::RequestAuthorizationCode(const NActors::TActorContext& ctx) {

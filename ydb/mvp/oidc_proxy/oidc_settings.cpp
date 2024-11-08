@@ -21,5 +21,9 @@ TString TOpenIdConnectSettings::GetExchangeEndpointURL() const {
     return AuthorizationServerAddress + ExchangeUrlPath;
 }
 
+TString TOpenIdConnectSettings::GetImpersonateEndpointURL() const {
+    return AuthorizationServerAddress + ImpersonateUrlPath;
+}
+
 } // NOIDC
 } // NMVP

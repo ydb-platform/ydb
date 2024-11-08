@@ -127,6 +127,12 @@ TString CreateSecureCookie(const TString& name, const TString& value) {
     return cookieBuilder;
 }
 
+TString ClearSecureCookie(const TString& name) {
+    TStringBuilder cookieBuilder;
+    cookieBuilder << name << "=; Path=/; Secure; HttpOnly; SameSite=None; Partitioned; Max-Age=0";
+    return cookieBuilder;
+}
+
 TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key) {
     TStringBuilder errorMessage;
     errorMessage << "Restore oidc context failed: ";

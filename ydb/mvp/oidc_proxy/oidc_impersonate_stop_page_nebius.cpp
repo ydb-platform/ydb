@@ -1,18 +1,14 @@
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/string_utils/base64/base64.h>
-#include <ydb/library/actors/http/http.h>
-#include <ydb/mvp/core/mvp_log.h>
 #include "openid_connect.h"
 #include "oidc_session_create.h"
-#include "oidc_settings.h"
+#include "oidc_impersonate_stop_page_nebius.h"
 
 namespace NMVP {
 namespace NOIDC {
 
-THandlerImpersonateStop::THandlerSessionCreate(const NActors::TActorId& sender,
-                                             const NHttp::THttpIncomingRequestPtr& request,
-                                             const NActors::TActorId& httpProxyId,
-                                             const TOpenIdConnectSettings& settings)
+THandlerImpersonateStop::THandlerImpersonateStop(const NActors::TActorId& sender,
+                                                const NHttp::THttpIncomingRequestPtr& request,
+                                                const NActors::TActorId& httpProxyId,
+                                                const TOpenIdConnectSettings& settings)
     : Sender(sender)
     , Request(request)
     , HttpProxyId(httpProxyId)
@@ -20,14 +16,27 @@ THandlerImpersonateStop::THandlerSessionCreate(const NActors::TActorId& sender,
 {}
 
 void THandlerImpersonateStop::Bootstrap(const NActors::TActorContext& ctx) {
-    NHttp::THeadersBuilder responseHeaders;responseHeaders
+    TString impersonatedCookieName = CreateNameImpersonatedCookie(Settings.ClientId);
+    LOG_DEBUG_S(ctx, EService::MVP, "Clear impersonated cookie: (" << impersonatedCookieName << ")");
+
+    NHttp::THeadersBuilder responseHeaders;
+    responseHeaders.Set("Set-Cookie", ClearSecureCookie(impersonatedCookieName));
     SetCORS(Request, &responseHeaders);
-    responseHeaders.Set("Set-Cookie", CreateSecureCookie(Settings.ClientId, sessionToken));
 
     NHttp::THttpOutgoingResponsePtr httpResponse;
     httpResponse = Request->CreateResponse("200", "OK", responseHeaders);
     ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
     Die(ctx);
+}
+
+TImpersonateStopPageHandler::TImpersonateStopPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings)
+    : TBase(&TImpersonateStopPageHandler::StateWork)
+    , HttpProxyId(httpProxyId)
+    , Settings(settings)
+{}
+
+void TImpersonateStopPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
+    ctx.Register(new THandlerImpersonateStop(event->Sender, event->Get()->Request, HttpProxyId, Settings));
 }
 
 } // NOIDC

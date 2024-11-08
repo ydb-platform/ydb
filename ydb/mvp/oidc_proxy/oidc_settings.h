@@ -15,6 +15,7 @@ struct TOpenIdConnectSettings {
     static const inline TString DEFAULT_AUTH_URL_PATH = "/oauth/authorize";
     static const inline TString DEFAULT_TOKEN_URL_PATH = "/oauth/token";
     static const inline TString DEFAULT_EXCHANGE_URL_PATH = "/oauth2/session/exchange";
+    static const inline TString DEFAULT_IMPERSONATE_URL_PATH = "/oauth2/impersonation/impersonate";
 
     TString ClientId = DEFAULT_CLIENT_ID;
     TString SessionServiceEndpoint;
@@ -27,11 +28,13 @@ struct TOpenIdConnectSettings {
     TString AuthUrlPath = DEFAULT_AUTH_URL_PATH;
     TString TokenUrlPath = DEFAULT_TOKEN_URL_PATH;
     TString ExchangeUrlPath = DEFAULT_EXCHANGE_URL_PATH;
+    TString ImpersonateUrlPath = DEFAULT_IMPERSONATE_URL_PATH;
 
     TString GetAuthorizationString() const;
     TString GetAuthEndpointURL() const;
     TString GetTokenEndpointURL() const;
     TString GetExchangeEndpointURL() const;
+    TString GetImpersonateEndpointURL() const;
 };
 
 } // NOIDC

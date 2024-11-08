@@ -1,11 +1,5 @@
 #pragma once
 
-#include <util/generic/string.h>
-#include <util/generic/strbuf.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/actors/http/http.h>
-#include <ydb/library/actors/http/http_proxy.h>
 #include "oidc_settings.h"
 #include "context.h"
 
@@ -25,11 +19,28 @@ protected:
 
 public:
     THandlerImpersonateStop(const NActors::TActorId& sender,
-                          const NHttp::THttpIncomingRequestPtr& request,
-                          const NActors::TActorId& httpProxyId,
-                          const TOpenIdConnectSettings& settings);
+                            const NHttp::THttpIncomingRequestPtr& request,
+                            const NActors::TActorId& httpProxyId,
+                            const TOpenIdConnectSettings& settings);
 
     void Bootstrap(const NActors::TActorContext& ctx);
+};
+
+class TImpersonateStopPageHandler : public NActors::TActor<TImpersonateStopPageHandler> {
+    using TBase = NActors::TActor<TImpersonateStopPageHandler>;
+
+    const NActors::TActorId HttpProxyId;
+    const TOpenIdConnectSettings Settings;
+
+public:
+    TImpersonateStopPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings);
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx);
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+        }
+    }
 };
 
 }  // NOIDC

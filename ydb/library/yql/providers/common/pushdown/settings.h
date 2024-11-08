@@ -26,7 +26,8 @@ struct TSettings {
         DoNotCheckCompareArgumentsTypes = 1 << 16,
         TimestampCtor = 1 << 17,
         JustPassthroughOperators = 1 << 18, // if + coalesce + just
-        InOperator = 1 << 19 // IN()
+        InOperator = 1 << 19, // IN()
+        IsDistinctOperator = 1 << 20 // IS NOT DISTINCT FROM / IS DISTINCT FROM 
     };
 
     explicit TSettings(NLog::EComponent logComponent)

@@ -7381,7 +7381,7 @@ void TSchemeShard::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& 
         StatisticsAggregatorId = TTabletId(entry.DomainInfo->Params.GetStatisticsAggregator());
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult, StatisticsAggregatorId=" << StatisticsAggregatorId
-            << ", at schemeshard: " << TabletID()); 
+            << ", at schemeshard: " << TabletID());
         ConnectToSA();
     }
 }
@@ -7390,12 +7390,15 @@ void TSchemeShard::Handle(TEvPrivate::TEvSendBaseStatsToSA::TPtr&, const TActorC
     TDuration delta = SendBaseStatsToSA();
     LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
         "Schedule next SendBaseStatsToSA in " << delta
-        << ", at schemeshard: " << TabletID());    
+        << ", at schemeshard: " << TabletID());
     ctx.Schedule(delta, new TEvPrivate::TEvSendBaseStatsToSA());
 }
 
 void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
     ResolveSA();
+    // since columnshard statistics is now sent once in a minute,
+    // we expect that in most cases we will gather full stats
+    // before sending them to StatisticsAggregator
     ctx.Schedule(TDuration::Seconds(120), new TEvPrivate::TEvSendBaseStatsToSA());
 }
 
@@ -7496,6 +7499,8 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         const auto& tableInfo = ColumnTables.GetVerified(pathId);
         const auto& stats = tableInfo->GetStats();
         const TTableAggregatedStats* aggregatedStats = nullptr;
+
+        // stats are stored differently for standalone and non-standalone column tables
         if (tableInfo->IsStandalone()) {
             aggregatedStats = &stats;
         } else {

@@ -25,6 +25,10 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
         NKikimrStat::TSchemeShardStats statRecord;
         Y_PROTOBUF_SUPPRESS_NODISCARD statRecord.ParseFromString(stats);
 
+        // if statistics is sent from schemeshard for the first time or
+        // AreAllStatsFull field is not set (schemeshard is working on previous code version) or
+        // statistics is full for all tables
+        // then persist incoming statistics without changes
         if (!Self->BaseStatistics.contains(schemeShardId) ||
             !statRecord.HasAreAllStatsFull() || statRecord.GetAreAllStatsFull())
         {

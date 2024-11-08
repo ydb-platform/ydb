@@ -304,11 +304,11 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
             if (manager->IsReady()) {
                 PrimaryIndex->OnTieringModified(manager, Ttl, {});
             }
-            auto& key = VersionCounters->GetVersionToKey()[versionInfo.GetSchema().GetVersion()];
-            key.emplace_back(presetId, version.GetPlanStep(), version.GetTxId());
         } else {
             PrimaryIndex->RegisterSchemaVersion(version, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
         }
+        auto& key = VersionCounters->GetVersionToKey()[versionInfo.GetSchema().GetVersion()];
+        key.emplace_back(presetId, version.GetPlanStep(), version.GetTxId());
     }
 }
 

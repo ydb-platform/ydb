@@ -1,3 +1,5 @@
+IF (NOT OPENSOURCE)
+
 PY3TEST()
 
 TEST_SRCS(
@@ -39,3 +41,6 @@ IF (SANITIZER_TYPE == "memory")
 ENDIF()
 
 END()
+
+ENDIF()
+

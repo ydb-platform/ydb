@@ -94,9 +94,8 @@ public:
         return Snapshots.begin()->second;
     }
 
-<<<<<<< HEAD
-    ISnapshotSchema::TPtr GetLastSchemaBeforeOrEqualSnapshotOptional(const ui64 version) const {
-        ISnapshotSchema::TPtr res = nullptr;
+    ISchema::TPtr GetLastSchemaBeforeOrEqualSnapshotOptional(const ui64 version) const {
+        ISchema::TPtr res = nullptr;
         for (auto it = SnapshotByVersion.rbegin(); it != SnapshotByVersion.rend(); ++it) {
             if (it->first <= version) {
                 res = it->second;
@@ -106,10 +105,7 @@ public:
         return res;
     }
 
-    ISnapshotSchema::TPtr GetLastSchema() const {
-=======
     ISchema::TPtr GetLastSchema() const {
->>>>>>> 87d5c9db72 (rename)
         Y_ABORT_UNLESS(!Snapshots.empty());
         return Snapshots.rbegin()->second;
     }

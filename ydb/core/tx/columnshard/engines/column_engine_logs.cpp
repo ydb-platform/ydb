@@ -171,14 +171,14 @@ void TColumnEngineForLogs::RegisterOldSchemaVersion(const TSnapshot& snapshot, c
 
     ui64 version = schema.GetVersion();
 
-    ISnapshotSchema::TPtr prevSchema = VersionedIndex.GetLastSchemaBeforeOrEqualSnapshotOptional(version);
+    ISchema::TPtr prevSchema = VersionedIndex.GetLastSchemaBeforeOrEqualSnapshotOptional(version);
 
     if (prevSchema && version == prevSchema->GetVersion()) {
         // skip already registered version
         return;
     }
 
-    ISnapshotSchema::TPtr secondLast =
+    ISchema::TPtr secondLast =
         VersionedIndex.GetLastSchemaBeforeOrEqualSnapshotOptional(VersionedIndex.GetLastSchema()->GetVersion() - 1);
 
     AFL_VERIFY(!secondLast || secondLast->GetVersion() <= version)("reason", "incorrect schema registration order");

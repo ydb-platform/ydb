@@ -27,7 +27,8 @@ int TagInvoke(const T&, const U&)
 // struct inside of ns NYT (and not some anonymous ones).
 struct TUniquelyTaggedForTagInvokeImplUt
 {
-    friend int TagInvoke(TUniquelyTaggedForTagInvokeImplUt, int v) {
+    friend int TagInvoke(TUniquelyTaggedForTagInvokeImplUt, int v)
+    {
         return v + 2;
     }
 };

@@ -8,7 +8,8 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline constexpr struct TFooFn {
+inline constexpr struct TFooFn
+{
 
     // Customizable overload.
     template <class... TArgs>

@@ -1039,6 +1039,9 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
                     return;
                 }
 
+                LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie <<
+                            " Write statistics ");
+
                 addAck(partitionCmdWriteResult, batchWriteResponse, batchWriteResponse->mutable_write_statistics());
                 ++partitionCmdWriteResultIndex;
             }
@@ -1091,6 +1094,34 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     }
 
     ProcessWriteResponse(resp, ctx);
+
+    NPQ::SetGRpcWriteSessionEnd(*ev->Get()->Record.MutablePartitionResponse(), ctx.Now());
+
+    PrintWritePipelineExecutionTime(result, ctx);
+}
+
+template<bool UseMigrationProtocol>
+void TWriteSessionActor<UseMigrationProtocol>::PrintWritePipelineExecutionTime(const NPQ::TEvPartitionWriter::TEvWriteResponse& event,
+                                                                               const TActorContext& ctx)
+{
+    TStringBuilder string;
+    string << "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " write pipeline times: ";
+
+    const NKikimrClient::TPersQueuePartitionResponse& resp = event.Record.GetPartitionResponse();
+    if (!resp.HasPipelineExecutionTime()) {
+        //LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, string);
+        return;
+    }
+
+    const NKikimrClient::TPersQueuePartitionWritePipelineExecutionTime& execTime = resp.GetPipelineExecutionTime();
+    for (size_t i = 0; i < execTime.ExecutionTimeSize(); ++i) {
+        const auto& e = execTime.GetExecutionTime(i);
+        string <<
+            " [" << GetPartitionWritePipelineStageName(static_cast<EPartitionWritePipelineStage>(i)) << "]: " <<
+            (TInstant::MicroSeconds(e.GetEnd()) - TInstant::MicroSeconds(e.GetBegin())).MilliSeconds();
+    };
+
+    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, string);
 }
 
 template<bool UseMigrationProtocol>
@@ -1205,6 +1236,8 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
             addData(writeRequest, messageIndex);
         }
     }
+
+    NPQ::SetGRpcWriteSessionBegin(*request.MutablePartitionRequest(), ctx.Now());
 
     pendingRequest->UserWriteRequests.push_back(std::move(ev));
     pendingRequest->ByteSize = request.ByteSize();

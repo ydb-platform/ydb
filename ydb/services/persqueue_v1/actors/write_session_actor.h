@@ -170,6 +170,9 @@ private:
     void CreatePartitionWriterCache(const TActorContext& ctx);
     void DestroyPartitionWriterCache(const TActorContext& ctx);
 
+    void PrintWritePipelineExecutionTime(const NPQ::TEvPartitionWriter::TEvWriteResponse& response,
+                                         const TActorContext& ctx);
+
     std::unique_ptr<TEvStreamWriteRequest> Request;
 
     enum EState {

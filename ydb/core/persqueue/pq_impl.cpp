@@ -12,6 +12,7 @@
 #include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
+#include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/metering/metering.h>
@@ -374,6 +375,8 @@ public:
                 ResourceMetrics->Network.Increment(Response->Record.ByteSizeLong());
                 ResourceMetrics->TryUpdate(ctx);
             }
+
+            NPQ::SetPqTabletEnd(*Response->Record.MutablePartitionResponse(), ctx.Now());
 
             ctx.Send(Sender, Response.Release());
             return true;
@@ -2724,6 +2727,12 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     } else {
         ans = CreateResponseProxy(ev->Sender, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
     }
+
+    if (req.HasPipelineExecutionTime()) {
+        *ans->Response->Record.MutablePartitionResponse()->MutablePipelineExecutionTime() = req.GetPipelineExecutionTime();
+        NPQ::SetPqTabletBegin(*ans->Response->Record.MutablePartitionResponse(), ctx.Now());
+    }
+
     ResponseProxy[responseCookie] = ans;
     Counters->Simple()[COUNTER_PQ_TABLET_INFLIGHT].Set(ResponseProxy.size());
 

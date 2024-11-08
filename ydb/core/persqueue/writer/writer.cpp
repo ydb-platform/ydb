@@ -105,6 +105,103 @@ TString TEvPartitionWriter::TEvWriteResponse::ToString() const {
     return out;
 }
 
+TString GetPartitionWritePipelineStageName(EPartitionWritePipelineStage stage)
+{
+    switch (stage) {
+    case EPartitionWritePipelineStage::GRpcWriteSession:
+        return "GRpcWriteSession";
+    case EPartitionWritePipelineStage::GRpcPartitionWriter:
+        return "GRpcPartitionWriter";
+    case EPartitionWritePipelineStage::PqPartitionWriter:
+        return "PqPartitionWriter";
+    case EPartitionWritePipelineStage::KqpWriteId:
+        return "KqpWriteId";
+    case EPartitionWritePipelineStage::PqTablet:
+        return "PqTablet";
+    case EPartitionWritePipelineStage::PqPartition:
+        return "PqPartition";
+    case EPartitionWritePipelineStage::KqpPartitionId:
+        return "KqpPartitionId";
+    case EPartitionWritePipelineStage::End:
+        return "End";
+    }
+}
+
+NKikimrClient::TExecutionTime* MutableExecutionTime(EPartitionWritePipelineStage stage,
+                                                    NKikimrClient::TPersQueuePartitionWritePipelineExecutionTime& pipeline)
+{
+    if (!pipeline.ExecutionTimeSize()) {
+        for (size_t i = 0; i < static_cast<size_t>(EPartitionWritePipelineStage::End); ++i) {
+            pipeline.AddExecutionTime();
+        }
+    }
+
+    return pipeline.MutableExecutionTime(static_cast<size_t>(stage));
+}
+
+void SetPQWriteTraceLabelBegin(EPartitionWritePipelineStage stage, NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t)
+{
+    MutableExecutionTime(stage, *ev.MutablePipelineExecutionTime())->SetBegin(t.MicroSeconds());
+}
+
+void SetPQWriteTraceLabelEnd(EPartitionWritePipelineStage stage, NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t)
+{
+    MutableExecutionTime(stage, *ev.MutablePipelineExecutionTime())->SetEnd(t.MicroSeconds());
+}
+
+void SetPQWriteTraceLabelEnd(EPartitionWritePipelineStage stage, NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t);
+
+#define DEFINE_PQWRITETRACE_FUNCS(name) \
+void Set##name##Begin(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t) \
+{                                                                                \
+    SetPQWriteTraceLabelBegin(EPartitionWritePipelineStage::name, ev, t);        \
+}                                                                                \
+                                                                                 \
+void Set##name##End(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t)   \
+{                                                                                \
+    SetPQWriteTraceLabelEnd(EPartitionWritePipelineStage::name, ev, t);          \
+}
+
+DEFINE_PQWRITETRACE_FUNCS(GRpcWriteSession);
+DEFINE_PQWRITETRACE_FUNCS(GRpcPartitionWriter);
+DEFINE_PQWRITETRACE_FUNCS(PqPartitionWriter);
+DEFINE_PQWRITETRACE_FUNCS(KqpWriteId);
+DEFINE_PQWRITETRACE_FUNCS(PqTablet);
+DEFINE_PQWRITETRACE_FUNCS(PqPartition);
+DEFINE_PQWRITETRACE_FUNCS(KqpPartitionId);
+
+void SetGRpcWriteSessionEnd(NKikimrClient::TPersQueuePartitionResponse& ev, TInstant t)
+{
+    MutableExecutionTime(EPartitionWritePipelineStage::GRpcWriteSession, *ev.MutablePipelineExecutionTime())->SetEnd(t.MicroSeconds());
+}
+
+void SetGRpcPartitionWriterEnd(NKikimrClient::TPersQueuePartitionResponse& ev, TInstant t)
+{
+    MutableExecutionTime(EPartitionWritePipelineStage::GRpcPartitionWriter, *ev.MutablePipelineExecutionTime())->SetEnd(t.MicroSeconds());
+}
+
+void SetPqPartitionWriterEnd(NKikimrClient::TPersQueuePartitionResponse& ev, TInstant t)
+{
+    MutableExecutionTime(EPartitionWritePipelineStage::PqPartitionWriter, *ev.MutablePipelineExecutionTime())->SetEnd(t.MicroSeconds());
+}
+
+void SetPqPartitionEnd(NKikimrClient::TPersQueuePartitionResponse& ev, TInstant t)
+{
+    MutableExecutionTime(EPartitionWritePipelineStage::PqPartition, *ev.MutablePipelineExecutionTime())->SetEnd(t.MicroSeconds());
+}
+
+void SetPqTabletBegin(NKikimrClient::TPersQueuePartitionResponse& ev, TInstant t)
+{
+    MutableExecutionTime(EPartitionWritePipelineStage::PqTablet, *ev.MutablePipelineExecutionTime())->SetBegin(t.MicroSeconds());
+}
+
+void SetPqTabletEnd(NKikimrClient::TPersQueuePartitionResponse& ev, TInstant t)
+{
+    MutableExecutionTime(EPartitionWritePipelineStage::PqTablet, *ev.MutablePipelineExecutionTime())->SetEnd(t.MicroSeconds());
+}
+
+#undef DEFINE_PQWRITETRACE_FUNCS
+
 class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRlHelpers {
     using EErrorCode = TEvPartitionWriter::TEvWriteResponse::EErrorCode;
 
@@ -226,6 +323,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     /// GetWriteId
 
     void GetWriteId(const TActorContext& ctx) {
+        GetWriteIdBegin = ctx.Now();
         auto ev = MakeWriteIdRequest();
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
         Become(&TThis::StateGetWriteId);
@@ -248,11 +346,13 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             break;
         case Ydb::StatusIds::SESSION_BUSY:
         case Ydb::StatusIds::PRECONDITION_FAILED: // see TKqpSessionActor::ReplyBusy
+            ++GetWriteIdCount;
             return Retry(record.GetYdbStatus());
         default:
             return InitResult("Invalid KQP session", record);
         }
 
+        GetWriteIdEnd = ctx.Now();
         WriteId = NPQ::GetWriteId(record.GetResponse().GetTopicOperations());
 
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY,
@@ -327,6 +427,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         SetWriteId(request);
         SetNeedSupportivePartition(request, true);
 
+        GetOwnershipBegin = ActorContext().Now();
+
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
         Become(&TThis::StateGetOwnership);
     }
@@ -359,6 +461,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             return InitResult("Partition is inactive", std::move(record));
         }
 
+        GetOwnershipEnd = ActorContext().Now();
+
         auto& reply = response.GetCmdGetOwnershipResult();
         OwnerCookie = reply.GetOwnerCookie();
         if (reply.HasSupportivePartition()) {
@@ -376,6 +480,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         Y_ABORT_UNLESS(HasWriteId());
         Y_ABORT_UNLESS(HasSupportivePartitionId());
 
+        SavePartitionIdBegin = ctx.Now();
+
         auto ev = MakeWriteIdRequest();
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
@@ -387,10 +493,13 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             break;
         case Ydb::StatusIds::SESSION_BUSY:
         case Ydb::StatusIds::PRECONDITION_FAILED: // see TKqpSessionActor::ReplyBusy
+            ++SavePartitionIdCount;
             return Retry(record.GetYdbStatus());
         default:
             return InitResult("Invalid KQP session", record);
         }
+
+        SavePartitionIdEnd = ActorContext().Now();
 
         GetMaxSeqNo();
     }
@@ -402,6 +511,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdGetMaxSeqNo();
         cmd.AddSourceId(NSourceIdEncoding::EncodeSimple(SourceId));
+
+        GetMaxSeqNoBegin = ActorContext().Now();
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
         Become(&TThis::StateGetMaxSeqNo);
@@ -450,6 +561,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
                 return InitResult("Unknown source state", std::move(record));
             }
         }
+
+        GetMaxSeqNoEnd = ActorContext().Now();
 
         Y_VERIFY(sourceIdInfo.GetSeqNo() >= 0);
         if (Opts.InitialSeqNo && (ui64)sourceIdInfo.GetSeqNo() < Opts.InitialSeqNo.value()) {
@@ -538,7 +651,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         auto& request = *record.MutablePartitionRequest();
         SetWriteId(request);
-
+        NPQ::SetPqPartitionWriterBegin(request, TAppData::TimeProvider->Now());
         Pending.emplace(cookie, std::move(record));
 
         return true;
@@ -688,9 +801,27 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
             request.SetPartition(PartitionId);
         }
 
+        SetPartitionWritePipelineTime(request);
+
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
 
         PendingWrite.emplace_back(cookie);
+    }
+
+    void SetPartitionWritePipelineTime(NKikimrClient::TPersQueuePartitionRequest& request) {
+        if (GetWriteIdBegin != TInstant::Zero()) {
+            NPQ::SetKqpWriteIdBegin(request, GetWriteIdBegin);
+        }
+        if (GetWriteIdEnd != TInstant::Zero()) {
+            NPQ::SetKqpWriteIdEnd(request, GetWriteIdEnd);
+        }
+
+        if (SavePartitionIdBegin != TInstant()) {
+            NPQ::SetKqpPartitionIdBegin(request, SavePartitionIdBegin);
+        }
+        if (SavePartitionIdEnd != TInstant()) {
+            NPQ::SetKqpPartitionIdEnd(request, SavePartitionIdEnd);
+        }
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
@@ -747,6 +878,8 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
                     << ", got# " << response.GetCookie();
                 return WriteResult(EErrorCode::InternalError, error, std::move(record));
             }
+
+            NPQ::SetPqPartitionWriterEnd(*record.MutablePartitionResponse(), ActorContext().Now());
 
             WriteResult(std::move(record));
         }
@@ -943,6 +1076,20 @@ private:
     };
 
     IRetryState::TPtr RetryState;
+
+    TInstant GetWriteIdBegin;
+    TInstant GetWriteIdEnd;
+    size_t GetWriteIdCount = 0;
+
+    TInstant SavePartitionIdBegin;
+    TInstant SavePartitionIdEnd;
+    size_t SavePartitionIdCount = 0;
+
+    TInstant GetOwnershipBegin;
+    TInstant GetOwnershipEnd;
+
+    TInstant GetMaxSeqNoBegin;
+    TInstant GetMaxSeqNoEnd;
 }; // TPartitionWriter
 
 

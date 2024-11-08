@@ -75,6 +75,8 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvTxWriteReque
             PendingWriteResponse.Expected = event.Request->GetCookie();
         }
 
+        NPQ::SetGRpcPartitionWriterBegin(*event.Request->Record.MutablePartitionRequest(), ctx.Now());
+
         writer->LastActivity = ctx.Now();
         writer->OnWriteRequest(std::move(event.Request), ctx);
     } else {
@@ -166,7 +168,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepte
 
 void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev, const TActorContext& ctx)
 {
-    const auto& result = *ev->Get();
+    auto& result = *ev->Get();
 
     auto key = std::make_pair(result.SessionId, result.TxId);
     auto p = Writers.find(key);
@@ -176,6 +178,8 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteRespons
         ui64 cookie = result.Record.GetPartitionResponse().GetCookie();
         if (cookie == p->second->AcceptedRequests.front()) {
             p->second->OnWriteResponse(result);
+
+            NPQ::SetGRpcPartitionWriterEnd(*result.Record.MutablePartitionResponse(), ctx.Now());
 
             TryForwardToOwner(ev->Release().Release(), PendingWriteResponse,
                               cookie,

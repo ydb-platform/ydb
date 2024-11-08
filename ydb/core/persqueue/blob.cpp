@@ -28,8 +28,12 @@ void TBlobIterator::ParseBatch() {
     Count += Header.GetCount();
     Offset += Header.GetCount();
     InternalPartsCount += Header.GetInternalPartsCount();
-    Y_ABORT_UNLESS(Count <= Key.GetCount());
-    Y_ABORT_UNLESS(InternalPartsCount <= Key.GetInternalPartsCount());
+    Y_ABORT_UNLESS(Count <= Key.GetCount(),
+                   "Count %" PRIu32 ", Key.Count %" PRIu32,
+                   Count, Key.GetCount());
+    Y_ABORT_UNLESS(InternalPartsCount <= Key.GetInternalPartsCount(),
+                   "InternalPartsCount %" PRIu16 ", Key.InternalPartsCount %" PRIu16,
+                   InternalPartsCount, Key.GetInternalPartsCount());
 }
 
 bool TBlobIterator::IsValid()

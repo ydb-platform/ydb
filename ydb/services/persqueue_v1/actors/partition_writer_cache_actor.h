@@ -9,6 +9,8 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 class TPartitionWriterCacheActor : public NActors::TActorBootstrapped<TPartitionWriterCacheActor> {
 public:
+    static constexpr char ActorName[] = "TPartitionWriterCacheActor";
+
     TPartitionWriterCacheActor(const TActorId& owner,
                                ui32 partition,
                                ui64 tabletId,

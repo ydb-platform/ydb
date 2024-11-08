@@ -466,11 +466,9 @@ bool IsDistinctCanBePushed(const TExprBase& predicate, const TExprNode* lambdaAr
         || !CheckExpressionNodeForPushdown(expr2, lambdaArg, settings)) {
         return false;
     }
-    const TTypeAnnotationNode* inputType = lambdaBody.Ptr()->GetTypeAnn();
-    if (!settings.IsEnabled(TSettings::EFeatureFlag::DoNotCheckCompareArgumentsTypes)) {
-        if (!IsComparableTypes(expr1, expr2, false, inputType, settings)) {
-            return false;
-        }
+    if (!settings.IsEnabled(TSettings::EFeatureFlag::DoNotCheckCompareArgumentsTypes)
+        && !IsComparableTypes(expr1, expr2, false, lambdaBody.Ptr()->GetTypeAnn(), settings)) {
+        return false;
     }
     return true;
 }
@@ -616,7 +614,7 @@ void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree
         predicateTree.CanBePushed = SqlInCanBePushed(sqlIn, lambdaArg, lambdaBody, settings);
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::IsDistinctOperator) && 
         (predicate.Ref().IsCallable({"IsNotDistinctFrom", "IsDistinctFrom"}))) {
-        predicateTree.CanBePushed = IsDistinctCanBePushed(predicate, lambdaArg, lambdaBody, settings);;
+        predicateTree.CanBePushed = IsDistinctCanBePushed(predicate, lambdaArg, lambdaBody, settings);
     } else {
         predicateTree.CanBePushed = false;
     }

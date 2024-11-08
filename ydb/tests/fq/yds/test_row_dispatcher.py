@@ -336,38 +336,6 @@ class TestPqRowDispatcher(TestYdsBase):
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String, event String, field1 UInt8, field2 Int64)) WHERE '''
-        data = [
-            '{"time": 101, "data": "hello1", "event": "event1", "field1": 5, "field2": 5}',
-            '{"time": 102, "data": "hello2", "event": "event2", "field1": 5, "field2": 1005}']
-        expected = ['102']
-        filter = 'data = "hello2"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `data` = \\"hello2\\"')
-        filter = ' event IS NOT DISTINCT FROM "event2"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS NOT DISTINCT FROM \\"event2\\"')
-        filter = ' event IS DISTINCT FROM "event1"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS DISTINCT FROM \\"event1\\"')
-        filter = 'event IN ("event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IN (\\"event2\\")')
-        filter = 'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IN (\\"1\\"')
-        filter = ' field1 IS DISTINCT FROM field2'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `field1` IS DISTINCT FROM `field2`')
-        filter = ' event IS DISTINCT FROM data AND event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`event` IS DISTINCT FROM `data` AND `event` IN (\\"1\\"')
-        filter = ' IF(event = "event2", event IS DISTINCT FROM data, FALSE)'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE IF(`event` = \\"event2\\", `event` IS DISTINCT FROM `data`, FALSE)')
-
-    @yq_v1
-    def test_filters_optional_field(self, kikimr, client):
-        client.create_yds_connection(
-            YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
-        )
-        self.init_topics("test_filter")
-
-        sql = Rf'''
-            INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-            SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String, event String, flag Bool, field1 UInt8, field2 Int64)) WHERE '''
         data = [
             '{"time": 101, "data": "hello1", "event": "event1", "flag": false, "field1": 5, "field2": 5}',

@@ -208,12 +208,8 @@ Y_UNIT_TEST_SUITE(BasicStatistics) {
         auto pathId = ResolvePathId(runtime, "/Root/Database/Table");
 
         TBlockEvents<TEvDataShard::TEvPeriodicTableStats> block(runtime);
-        runtime.WaitFor("TEvPeriodicTableStats 1", [&]{ return block.size() >= 1; });
-        block.Unblock(1);
-        runtime.WaitFor("TEvPeriodicTableStats 2", [&]{ return block.size() >= 1; });
-        block.Unblock(1);
-        runtime.WaitFor("TEvPeriodicTableStats 3", [&]{ return block.size() >= 1; });
-        block.Unblock(1);
+        runtime.WaitFor("TEvPeriodicTableStats", [&]{ return block.size() >= 3; });
+        block.Unblock(3);
 
         bool firstStatsToSA = false;
         auto statsObserver1 = runtime.AddObserver<TEvStatistics::TEvSchemeShardStats>([&](auto&){

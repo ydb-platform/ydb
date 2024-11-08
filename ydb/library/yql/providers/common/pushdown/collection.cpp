@@ -513,9 +513,14 @@ bool JsonExistsCanBePushed(const TCoJsonExists& jsonExists, const TExprNode* lam
 }
 
 bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
-    if (!coalesce.Value().Maybe<TCoBool>()) {
+    auto value = coalesce.Value().Maybe<TCoBool>();
+    if (!value) {
         return false;
     }
+    if (TStringBuf(value.Cast().Literal()) != "false"sv) {
+        return false;
+    }
+
     auto predicate = coalesce.Predicate();
 
     if (auto maybeCompare = predicate.Maybe<TCoCompare>()) {

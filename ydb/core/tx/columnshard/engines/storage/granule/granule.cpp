@@ -3,6 +3,7 @@
 #include "storage.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/data_accessor/in_mem/manager.h>
 #include <ydb/core/tx/columnshard/data_accessor/local_db/manager.h>
 #include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
@@ -140,6 +141,7 @@ TGranuleMeta::TGranuleMeta(
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(
         PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
     OptimizerPlanner = versionedIndex.GetLastSchema()->GetIndexInfo().GetCompactionPlannerConstructor()->BuildPlanner(context).DetachResult();
+    //    MetadataMemoryManager = std::make_shared<NDataAccessorControl::NInMem::TManager>();
     MetadataMemoryManager = std::make_shared<NDataAccessorControl::NLocalDB::TManager>(DataAccessorsManager->GetTabletActorId());
     //    MetadataMemoryManager = versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataMemoryManagerConstructor()->Build().DetachResult();
     AFL_VERIFY(!!OptimizerPlanner);

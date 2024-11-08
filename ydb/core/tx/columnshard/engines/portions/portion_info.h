@@ -171,18 +171,6 @@ public:
         SetRemoveSnapshot(TSnapshot(planStep, txId));
     }
 
-/*
-    std::vector<TString> GetIndexInplaceDataVerified(const ui32 indexId) const {
-        std::vector<TString> result;
-        for (auto&& i : Indexes) {
-            if (i.GetEntityId() == indexId) {
-                result.emplace_back(i.GetBlobDataVerified());
-            }
-        }
-        return result;
-    }
-*/
-
     void InitRuntimeFeature(const ERuntimeFeature feature, const bool activity) {
         if (activity) {
             AddRuntimeFeature(feature);

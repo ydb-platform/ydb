@@ -8,7 +8,6 @@
 #include "changes/indexation.h"
 #include "changes/ttl.h"
 #include "loading/stages.h"
-#include "portions/constructor.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>

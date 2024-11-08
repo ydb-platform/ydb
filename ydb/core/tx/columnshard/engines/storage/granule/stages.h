@@ -1,6 +1,6 @@
 #pragma once
+#include <ydb/core/tx/columnshard/engines/portions/constructors.h>
 #include <ydb/core/tx/columnshard/tx_reader/abstract.h>
-#include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 
 namespace NKikimr::NOlap {
 class TGranuleMeta;
@@ -56,8 +56,8 @@ protected:
     const std::shared_ptr<TPortionsLoadContext> Context;
 
 public:
-    IGranuleTxReader(const TString& name, const TVersionedIndex* versionedIndex, TGranuleMeta* self, const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector,
-        const std::shared_ptr<TPortionsLoadContext>& context)
+    IGranuleTxReader(const TString& name, const TVersionedIndex* versionedIndex, TGranuleMeta* self,
+        const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const std::shared_ptr<TPortionsLoadContext>& context)
         : TBase(name)
         , DsGroupSelector(dsGroupSelector)
         , Self(self)
@@ -115,4 +115,4 @@ public:
     using TBase::TBase;
 };
 
-}   // namespace NKikimr::NColumnShard::NLoading
+}   // namespace NKikimr::NOlap::NLoading

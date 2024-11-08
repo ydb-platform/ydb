@@ -13,7 +13,7 @@ class TSplitterCounters;
 namespace NKikimr::NOlap {
 
 class TPortionInfo;
-class TPortionInfoConstructor;
+class TPortionAccessorConstructor;
 class TSimpleColumnInfo;
 
 class IPortionDataChunk {
@@ -34,8 +34,8 @@ protected:
 
     virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const = 0;
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const = 0;
-    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfoConstructor& portionInfo) const = 0;
-    virtual void DoAddInplaceIntoPortion(TPortionInfoConstructor& /*portionInfo*/) const {
+    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const = 0;
+    virtual void DoAddInplaceIntoPortion(TPortionAccessorConstructor& /*portionInfo*/) const {
         AFL_VERIFY(false)("problem", "implemented only in index chunks");
     }
     virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& /*data*/, const TSimpleColumnInfo& /*columnInfo*/) const {
@@ -126,12 +126,12 @@ public:
         }
     }
 
-    void AddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionInfoConstructor& portionInfo) const {
+    void AddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const {
         AFL_VERIFY(!bRange.IsValid());
         return DoAddIntoPortionBeforeBlob(bRange, portionInfo);
     }
 
-    void AddInplaceIntoPortion(TPortionInfoConstructor& portionInfo) const {
+    void AddInplaceIntoPortion(TPortionAccessorConstructor& portionInfo) const {
         return DoAddInplaceIntoPortion(portionInfo);
     }
 };

@@ -12,7 +12,7 @@ bool TGranuleOnlyPortionsReader::DoExecute(NTabletFlatExecutor::TTransactionCont
     if (!db.LoadPortions(Self->GetPathId(), [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
         const TIndexInfo& indexInfo = portion.GetSchema(*VersionedIndex)->GetIndexInfo();
         AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
-        portions.emplace_back(portion.BuildPortionPtr());
+        portions.emplace_back(portion.Build());
     })) {
         return false;
     }

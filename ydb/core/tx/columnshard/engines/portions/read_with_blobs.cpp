@@ -114,10 +114,10 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         }
     }
 
-    TPortionInfoConstructor constructor = TPortionInfoConstructor::BuildForRewriteBlobs(source.PortionInfo.GetPortionInfo());
-    constructor.SetMinSnapshotDeprecated(to->GetSnapshot());
-    constructor.SetSchemaVersion(to->GetVersion());
-    constructor.MutableMeta().ResetTierName(targetTier);
+    TPortionAccessorConstructor constructor = TPortionAccessorConstructor::BuildForRewriteBlobs(source.PortionInfo.GetPortionInfo());
+    constructor.MutablePortionConstructor().SetMinSnapshotDeprecated(to->GetSnapshot());
+    constructor.MutablePortionConstructor().SetSchemaVersion(to->GetVersion());
+    constructor.MutablePortionConstructor().MutableMeta().ResetTierName(targetTier);
 
     TIndexInfo::TSecondaryData secondaryData;
     secondaryData.MutableExternalData() = entityChunksNew;

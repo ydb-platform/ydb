@@ -1,7 +1,7 @@
 #include "db_wrapper.h"
 #include "defs.h"
 
-#include "portions/constructor.h"
+#include "portions/constructor_portion.h"
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -224,8 +224,8 @@ void TDbWrapper::EraseIndex(const TPortionInfo& portion, const TIndexChunk& row)
     db.Table<IndexIndexes>().Key(portion.GetPathId(), portion.GetPortionId(), row.GetIndexId(), 0).Delete();
 }
 
-bool TDbWrapper::LoadIndexes(const std::optional<ui64> pathId,
-    const std::function<void(const ui64 pathId, const ui64 portionId, TIndexChunkLoadContext&&)>& callback) {
+bool TDbWrapper::LoadIndexes(
+    const std::optional<ui64> pathId, const std::function<void(const ui64 pathId, const ui64 portionId, TIndexChunkLoadContext&&)>& callback) {
     NIceDb::TNiceDb db(Database);
     using IndexIndexes = NColumnShard::Schema::IndexIndexes;
     const auto pred = [&](auto& rowset) {
@@ -235,7 +235,8 @@ bool TDbWrapper::LoadIndexes(const std::optional<ui64> pathId,
 
         while (!rowset.EndOfSet()) {
             NOlap::TIndexChunkLoadContext chunkLoadContext(rowset, DsGroupSelector);
-            callback(rowset.template GetValue<IndexIndexes::PathId>(), rowset.template GetValue<IndexIndexes::PortionId>(), std::move(chunkLoadContext));
+            callback(rowset.template GetValue<IndexIndexes::PathId>(), rowset.template GetValue<IndexIndexes::PortionId>(),
+                std::move(chunkLoadContext));
 
             if (!rowset.Next()) {
                 return false;

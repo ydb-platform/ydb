@@ -87,10 +87,10 @@ public:
     }
 
     TConclusionStatus InitPortions(
-        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
+        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionAccessorConstructor>& portions);
     TConclusionStatus InitColumns(
-        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
-    TConclusionStatus InitIndexes(NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
+        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionAccessorConstructor>& portions);
+    TConclusionStatus InitIndexes(NIceDb::TNiceDb& db, THashMap<ui64, TPortionAccessorConstructor>& portions);
 
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
         const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override final;

@@ -1264,8 +1264,9 @@ public:
                         }
                     }
                 }
-                NOlap::TPortionInfoConstructor constructor = NOlap::TPortionInfoConstructor::BuildForLoading(p, std::move(records), std::move(indexes));
-                Accessors[i.first].emplace_back(constructor.Build(true));
+                NOlap::TPortionDataAccessor accessor =
+                    NOlap::TPortionAccessorConstructor::BuildForLoading(p, std::move(records), std::move(indexes));
+                Accessors[i.first].emplace_back(accessor);
                 i.second.pop_back();
             }
         }

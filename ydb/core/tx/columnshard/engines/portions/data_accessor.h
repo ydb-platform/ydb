@@ -37,10 +37,24 @@ private:
     }
 
     void FullValidation() const;
+    TPortionDataAccessor() = default;
 
 public:
+    const std::vector<TColumnRecord>& TestGetRecords() const {
+        AFL_VERIFY(Records);
+        return std::move(*Records);
+    }
+    std::vector<TColumnRecord> ExtractRecords() {
+        AFL_VERIFY(Records);
+        return std::move(*Records);
+    }
+    std::vector<TIndexChunk> ExtractIndexes() {
+        AFL_VERIFY(Indexes);
+        return std::move(*Indexes);
+    }
+
     TPortionDataAccessor SwitchPortionInfo(TPortionInfo&& newPortion) const {
-        return TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(newPortion)), GetRecordsVerified(), GetIndexesVerified());
+        return TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(newPortion)), GetRecordsVerified(), GetIndexesVerified(), true);
     }
 
     template <class TAggregator, class TChunkInfo>
@@ -71,23 +85,41 @@ public:
         }
     }
 
-    explicit TPortionDataAccessor(
-        const TPortionInfo::TConstPtr& portionInfo, std::vector<TColumnRecord>&& records, std::vector<TIndexChunk>&& indexes)
+    explicit TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo, std::vector<TColumnRecord>&& records,
+        std::vector<TIndexChunk>&& indexes, const bool validate)
         : PortionInfo(portionInfo)
         , Records(std::move(records))
-        , Indexes(std::move(indexes))
-    {
+        , Indexes(std::move(indexes)) {
+        if (validate) {
+            FullValidation();
+        }
     }
 
-    explicit TPortionDataAccessor(
-        const TPortionInfo::TConstPtr& portionInfo, const std::vector<TColumnRecord>& records, const std::vector<TIndexChunk>& indexes)
+    explicit TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo, const std::vector<TColumnRecord>& records,
+        const std::vector<TIndexChunk>& indexes, const bool validate)
         : PortionInfo(portionInfo)
         , Records(records)
         , Indexes(indexes) {
+        if (validate) {
+            FullValidation();
+        }
     }
 
     static TConclusion<TPortionDataAccessor> BuildFromProto(
         const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector);
+
+    std::vector<TString> GetIndexInplaceDataVerified(const ui32 indexId) const {
+        if (!Indexes) {
+            return {};
+        }
+        std::vector<TString> result;
+        for (auto&& i : *Indexes) {
+            if (i.GetEntityId() == indexId) {
+                result.emplace_back(i.GetBlobDataVerified());
+            }
+        }
+        return result;
+    }
 
     std::set<ui32> GetColumnIds() const {
         std::set<ui32> result;

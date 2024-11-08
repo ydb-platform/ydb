@@ -584,7 +584,8 @@ TConclusion<TPortionDataAccessor> TPortionDataAccessor::BuildFromProto(
         }
     }
     {
-        TPortionDataAccessor result(resultPortion, {}, {});
+        TPortionDataAccessor result;
+        result.PortionInfo = resultPortion;
         auto parse = result.DeserializeFromProto(proto);
         if (!parse) {
             return parse;

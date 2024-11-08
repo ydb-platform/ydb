@@ -1,4 +1,4 @@
-c,c,cd_education_status,cnt1,cd_purchase_estimate,cnt2,cd_credit_,cnt3
+customer_demographics.cd_gender,customer_demographics.cd_marital_status,customer_demographics.cd_education_status,cnt1,customer_demographics.cd_purchase_estimate,cnt2,customer_demographics.cd_credit_rating,cnt3
 F,D,2 yr Degree,1,2500,1,Low Risk,1
 F,D,2 yr Degree,1,4500,1,Good,1
 F,D,2 yr Degree,2,4500,2,Low Risk,2

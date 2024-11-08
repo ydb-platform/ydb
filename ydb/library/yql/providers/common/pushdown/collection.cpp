@@ -456,7 +456,7 @@ bool SqlInCanBePushed(const TCoSqlIn& sqlIn, const TExprNode* lambdaArg, const T
     return true;
 }
 
-bool IsDistinctCanBePushed(const TExprBase& predicate, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {    
+bool IsDistinctCanBePushed(const TExprBase& predicate, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     if (predicate.Ref().ChildrenSize() != 2 ) {
         return false;
     }

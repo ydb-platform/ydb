@@ -24,7 +24,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "ce1xrujy8ag3ke"
+        "uid": "${ds}"
       },
       "fieldConfig": {
         "defaults": {
@@ -106,7 +106,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "ce1xrujy8ag3ke"
+            "uid": "${ds}"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
@@ -125,7 +125,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "ce1xrujy8ag3ke"
+            "uid": "${ds}"
           },
           "editorMode": "code",
           "expr": "(sum(rate(vdisks_UserDiskCost{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval]))) + (sum(rate(vdisks_InternalDiskCost{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval]))) + (sum(rate(vdisks_CompactionDiskCost{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval]))) + (sum(rate(vdisks_DefragDiskCost{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval]))) + (sum(rate(vdisks_ScrubDiskCost{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval])))",
@@ -142,7 +142,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "ce1xrujy8ag3ke"
+        "uid": "${ds}"
       },
       "fieldConfig": {
         "defaults": {
@@ -224,7 +224,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "ce1xrujy8ag3ke"
+            "uid": "${ds}"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
@@ -243,7 +243,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "ce1xrujy8ag3ke"
+            "uid": "${ds}"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
@@ -262,7 +262,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "ce1xrujy8ag3ke"
+            "uid": "${ds}"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
@@ -281,7 +281,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "ce1xrujy8ag3ke"
+            "uid": "${ds}"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
@@ -300,7 +300,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "ce1xrujy8ag3ke"
+            "uid": "${ds}"
           },
           "disableTextWrap": false,
           "editorMode": "builder",
@@ -323,7 +323,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "ce1xrujy8ag3ke"
+        "uid": "${ds}"
       },
       "fieldConfig": {
         "defaults": {
@@ -403,6 +403,10 @@
       "pluginVersion": "11.3.0",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${ds}"
+          },
           "disableTextWrap": false,
           "editorMode": "builder",
           "expr": "sum(rate(vdisks_BurstDetector_redMs{storagePool=\"$storagePool\", group=~\"$storageGroup\"}[$__rate_interval]))",
@@ -423,6 +427,18 @@
   "tags": [],
   "templating": {
     "list": [
+      {
+        "current": {
+          "text": "prometheus",
+          "value": "ce1xrujy8ag3ke"
+        },
+        "name": "ds",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "type": "datasource"
+      },
       {
         "current": {
           "text": "dynamic_storage_pool:1",
@@ -472,6 +488,6 @@
   "timezone": "browser",
   "title": "Distributed Storage performance metrics",
   "uid": "ce1xsce90d24ge",
-  "version": 40,
+  "version": 47,
   "weekStart": ""
 }

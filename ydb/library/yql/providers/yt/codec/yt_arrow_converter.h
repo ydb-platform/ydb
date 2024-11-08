@@ -1,4 +1,4 @@
-#include <ydb/library/yql/public/udf/arrow/block_builder.h>
+#include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/minikql/mkql_node.h>
 
 #include <arrow/io/interfaces.h>

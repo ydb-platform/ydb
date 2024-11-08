@@ -1,8 +1,8 @@
 #include "yt_arrow_converter.h"
 
-#include <ydb/library/yql/public/udf/arrow/defs.h>
-#include <ydb/library/yql/public/udf/arrow/block_builder.h>
-#include <ydb/library/yql/public/udf/arrow/block_reader.h>
+#include <yql/essentials/public/udf/arrow/defs.h>
+#include <yql/essentials/public/udf/arrow/block_builder.h>
+#include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>

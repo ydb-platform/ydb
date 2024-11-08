@@ -31,7 +31,7 @@ PEERDIR(
 
 DEPENDS(
     contrib/ydb/library/yql/tools/yqlrun
-    contrib/ydb/library/yql/udfs/common/re2
+    yql/essentials/udfs/common/re2
 )
 
 IF (SANITIZER_TYPE == "memory")

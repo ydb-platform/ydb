@@ -1,0 +1,41 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Yson"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "Yson"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [];
+                        [
+                            []
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

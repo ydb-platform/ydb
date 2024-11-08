@@ -1,0 +1,172 @@
+{
+    "test.test[AccessJson]": [
+        {
+            "uri": "file://test.test_AccessJson_/results.txt"
+        }
+    ],
+    "test.test[Access]": [
+        {
+            "uri": "file://test.test_Access_/results.txt"
+        }
+    ],
+    "test.test[Attrs]": [
+        {
+            "uri": "file://test.test_Attrs_/results.txt"
+        }
+    ],
+    "test.test[AutoConvertTo]": [
+        {
+            "uri": "file://test.test_AutoConvertTo_/results.txt"
+        }
+    ],
+    "test.test[Contains]": [
+        {
+            "uri": "file://test.test_Contains_/results.txt"
+        }
+    ],
+    "test.test[ConvertTo]": [
+        {
+            "uri": "file://test.test_ConvertTo_/results.txt"
+        }
+    ],
+    "test.test[Dicts]": [
+        {
+            "uri": "file://test.test_Dicts_/results.txt"
+        }
+    ],
+    "test.test[EmptyDicts]": [
+        {
+            "uri": "file://test.test_EmptyDicts_/results.txt"
+        }
+    ],
+    "test.test[EmptyLists]": [
+        {
+            "uri": "file://test.test_EmptyLists_/results.txt"
+        }
+    ],
+    "test.test[Equals]": [
+        {
+            "uri": "file://test.test_Equals_/results.txt"
+        }
+    ],
+    "test.test[From]": [
+        {
+            "uri": "file://test.test_From_/results.txt"
+        }
+    ],
+    "test.test[GenericConvertToEmptyStruct]": [
+        {
+            "uri": "file://test.test_GenericConvertToEmptyStruct_/results.txt"
+        }
+    ],
+    "test.test[GenericConvertToWithAutoConvert]": [
+        {
+            "uri": "file://test.test_GenericConvertToWithAutoConvert_/results.txt"
+        }
+    ],
+    "test.test[GenericConvertToWithNoStrict]": [
+        {
+            "uri": "file://test.test_GenericConvertToWithNoStrict_/results.txt"
+        }
+    ],
+    "test.test[GenericConvertTo]": [
+        {
+            "uri": "file://test.test_GenericConvertTo_/results.txt"
+        }
+    ],
+    "test.test[GenericFrom]": [
+        {
+            "uri": "file://test.test_GenericFrom_/results.txt"
+        }
+    ],
+    "test.test[GetHash]": [
+        {
+            "uri": "file://test.test_GetHash_/results.txt"
+        }
+    ],
+    "test.test[Get]": [
+        {
+            "uri": "file://test.test_Get_/results.txt"
+        }
+    ],
+    "test.test[GoodForYsonBadForJson]": [
+        {
+            "uri": "file://test.test_GoodForYsonBadForJson_/results.txt"
+        }
+    ],
+    "test.test[ImplicitFromRes]": [
+        {
+            "uri": "file://test.test_ImplicitFromRes_/results.txt"
+        }
+    ],
+    "test.test[IsType]": [
+        {
+            "uri": "file://test.test_IsType_/results.txt"
+        }
+    ],
+    "test.test[JsonSerializeSkipMapEntity]": [
+        {
+            "uri": "file://test.test_JsonSerializeSkipMapEntity_/results.txt"
+        }
+    ],
+    "test.test[JsonWithUtf8]": [
+        {
+            "uri": "file://test.test_JsonWithUtf8_/results.txt"
+        }
+    ],
+    "test.test[JsonWithNanAsString]": [
+        {
+            "uri": "file://test.test_JsonWithNanAsString_/results.txt"
+        }
+    ],
+    "test.test[Lists]": [
+        {
+            "uri": "file://test.test_Lists_/results.txt"
+        }
+    ],
+    "test.test[Lookup]": [
+        {
+            "uri": "file://test.test_Lookup_/results.txt"
+        }
+    ],
+    "test.test[NegativeArrayIndex]": [
+        {
+            "uri": "file://test.test_NegativeArrayIndex_/results.txt"
+        }
+    ],
+    "test.test[ParseString]": [
+        {
+            "uri": "file://test.test_ParseString_/results.txt"
+        }
+    ],
+    "test.test[Scalars]": [
+        {
+            "uri": "file://test.test_Scalars_/results.txt"
+        }
+    ],
+    "test.test[SerializeDouble]": [
+        {
+            "uri": "file://test.test_SerializeDouble_/results.txt"
+        }
+    ],
+    "test.test[Serialize]": [
+        {
+            "uri": "file://test.test_Serialize_/results.txt"
+        }
+    ],
+    "test.test[WeakYsonRest]": [
+        {
+            "uri": "file://test.test_WeakYsonRest_/results.txt"
+        }
+    ],
+    "test.test[WithAttrs]": [
+        {
+            "uri": "file://test.test_WithAttrs_/results.txt"
+        }
+    ],
+    "test.test[YPath]": [
+        {
+            "uri": "file://test.test_YPath_/results.txt"
+        }
+    ]
+}

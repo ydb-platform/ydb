@@ -1,0 +1,66 @@
+{
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "fdatetime1";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "fdatetime2";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "fdatetime3";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "fdatetime4";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "frfc822";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "fiso8601";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "fhttp";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "fx509";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}
+

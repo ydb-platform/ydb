@@ -33,6 +33,7 @@ struct TTopicSessionMetrics {
         InFlyAsyncInputData = SubGroup->GetCounter("InFlyAsyncInputData");
         RowsRead = SubGroup->GetCounter("RowsRead", true);
         InFlySubscribe = SubGroup->GetCounter("InFlySubscribe");
+        ReconnectRate = SubGroup->GetCounter("ReconnectRate", true);
     }
 
     ~TTopicSessionMetrics() {
@@ -43,6 +44,7 @@ struct TTopicSessionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
     ::NMonitoring::TDynamicCounters::TCounterPtr RowsRead;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
 };
 
 struct TEvPrivate {
@@ -56,6 +58,7 @@ struct TEvPrivate {
         EvDataFiltered,
         EvSendStatistic,
         EvStartParsing,
+        EvReconnectSession,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
@@ -66,6 +69,7 @@ struct TEvPrivate {
     struct TEvSendStatistic : public NActors::TEventLocal<TEvSendStatistic, EvSendStatistic> {};
     struct TEvStatus : public NActors::TEventLocal<TEvStatus, EvStatus> {};
     struct TEvStartParsing : public NActors::TEventLocal<TEvStartParsing, EvStartParsing> {};
+    struct TEvReconnectSession : public NActors::TEventLocal<TEvReconnectSession, EvReconnectSession> {};
 
     struct TEvDataFiltered : public NActors::TEventLocal<TEvDataFiltered, EvDataFiltered> {
         explicit TEvDataFiltered(ui64 offset)
@@ -136,6 +140,8 @@ private:
         TParserInputType InputType;
     };
 
+    bool InflightReconnect = false;
+    TDuration ReconnectPeriod;
     const TString TopicPath;
     const TString Endpoint;
     const TString Database;
@@ -143,6 +149,7 @@ private:
     ui32 PartitionId;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
+    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
     NYql::ITopicClient::TPtr TopicClient;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     const i64 BufferSize;
@@ -173,6 +180,7 @@ public:
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const NYql::IPqGateway::TPtr& pqGateway);
 
@@ -205,6 +213,7 @@ private:
 
     void Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&);
     void Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&);
+    void Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&);
     void Handle(NFq::TEvPrivate::TEvDataAfterFilteration::TPtr&);
     void Handle(NFq::TEvPrivate::TEvStatus::TPtr&);
     void Handle(NFq::TEvPrivate::TEvDataFiltered::TPtr&);
@@ -261,6 +270,7 @@ TTopicSession::TTopicSession(
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway)
     : TopicPath(topicPath)
@@ -270,6 +280,7 @@ TTopicSession::TTopicSession(
     , PartitionId(partitionId)
     , Driver(std::move(driver))
     , CredentialsProviderFactory(credentialsProviderFactory)
+    , PureCalcProgramFactory(pureCalcProgramFactory)
     , BufferSize(16_MB)
     , LogPrefix("TopicSession")
     , Config(config)
@@ -375,6 +386,17 @@ void TTopicSession::CreateTopicSession() {
         ReadSession = GetTopicClient(sourceParams).CreateReadSession(GetReadSessionSettings(sourceParams));
         SubscribeOnNextEvent();
     }
+
+    if (!InflightReconnect) {
+        // Use any sourceParams.
+        const NYql::NPq::NProto::TDqPqTopicSource& sourceParams = Clients.begin()->second.Settings.GetSource();
+        Y_UNUSED(TDuration::TryParse(sourceParams.GetReconnectPeriod(), ReconnectPeriod));
+        if (ReconnectPeriod != TDuration::Zero()) {
+            Metrics.ReconnectRate->Inc();
+            Schedule(ReconnectPeriod, new NFq::TEvPrivate::TEvReconnectSession());
+        }
+        InflightReconnect = true;
+    }
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
@@ -430,6 +452,17 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvStatus::TPtr&) {
         LOG_ROW_DISPATCHER_TRACE("Send status to " << info.ReadActorId << ", offset " << *info.NextMessageOffset);
         Send(RowDispatcherActorId, event.release());
     }
+}
+
+void TTopicSession::Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&) {
+    Metrics.ReconnectRate->Inc();
+    TInstant minTime = GetMinStartingMessageTimestamp();
+    LOG_ROW_DISPATCHER_DEBUG("Reconnect topic session, Path " << TopicPath
+        << ", StartingMessageTimestamp " << minTime
+        << ", BufferSize " << BufferSize << ", WithoutConsumer " << Config.GetWithoutConsumer());
+    StopReadSession();
+    CreateTopicSession();
+    Schedule(ReconnectPeriod, new NFq::TEvPrivate::TEvReconnectSession());
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvDataFiltered::TPtr& ev) {
@@ -609,10 +642,15 @@ void TTopicSession::SendData(TClientsInfo& info) {
         LOG_ROW_DISPATCHER_TRACE("Buffer empty");
     }
 
+    if (!info.NextMessageOffset) {
+        LOG_ROW_DISPATCHER_ERROR("Try SendData() without NextMessageOffset, " << info.ReadActorId 
+            << " unread " << info.UnreadBytes << " DataArrivedSent " << info.DataArrivedSent);
+        return;
+    }
+
     do {
         auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
         event->Record.SetPartitionId(PartitionId);
-        Y_ENSURE(info.NextMessageOffset);
         event->ReadActorId = info.ReadActorId;
 
         ui64 batchSize = 0;
@@ -700,7 +738,8 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 predicate,
                 [&, actorId = clientInfo.ReadActorId](ui64 offset, const TString& json){
                     Send(SelfId(), new NFq::TEvPrivate::TEvDataAfterFilteration(offset, json, actorId));
-                });
+                },
+                PureCalcProgramFactory);
         } else {
             ClientsWithoutPredicate.insert(ev->Sender);
         }
@@ -925,9 +964,10 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway) {
-    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, pqGateway));
+    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, pureCalcProgramFactory, counters, pqGateway));
 }
 
 } // namespace NFq

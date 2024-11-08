@@ -10,6 +10,7 @@
 #include <ydb/core/testlib/actor_helpers.h>
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/public/purecalc/common/interface.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -22,16 +23,24 @@ class TFixture : public NUnitTest::TBaseFixture {
 
 public:
     TFixture()
-        : Runtime(true)
+        : PureCalcProgramFactory(NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions()))
+        , Runtime(true)
         , Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false)
     {}
 
+    static void SegmentationFaultHandler(int) {
+        Cerr << "segmentation fault call stack:" << Endl;
+        FormatBackTrace(&Cerr);
+        abort();
+    }
+
     void SetUp(NUnitTest::TTestContext&) override {
+        NKikimr::EnableYDBBacktraceFormat();
+        signal(SIGSEGV, &SegmentationFaultHandler);
+
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
-
-        NKikimr::EnableYDBBacktraceFormat();
     }
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {
@@ -55,7 +64,8 @@ public:
             columns,
             types,
             whereFilter,
-            callback);
+            callback,
+            PureCalcProgramFactory);
     }
 
     const NKikimr::NMiniKQL::TUnboxedValueVector* MakeVector(size_t size, std::function<NYql::NUdf::TUnboxedValuePod(size_t)> valueCreator) {
@@ -90,8 +100,9 @@ public:
         });
     }
 
-    TActorSystemStub actorSystemStub;
+    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
     NActors::TTestActorRuntime Runtime;
+    TActorSystemStub ActorSystemStub;
     std::unique_ptr<NFq::TJsonFilter> Filter;
 
     NKikimr::NMiniKQL::TScopedAlloc Alloc;

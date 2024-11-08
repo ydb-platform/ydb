@@ -1362,6 +1362,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 300 }];
+        optional uint64 HugeDefragFreeSpaceBorderPerMille = 13 [(ControlOptions) = {
+            Description: "Huge garbage threshold = DefaultHugeGarbagePerMille * min((free space share) / (this param), 1)",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 260 }];
     }
 
     message TTabletControls {

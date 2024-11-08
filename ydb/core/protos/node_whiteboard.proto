@@ -105,7 +105,7 @@ message TNodeStateInfo {
     optional uint64 ConnectTime = 7; // changed every time the connection changes it state
     optional uint32 PeerNodeId = 8 [(DefaultField) = true]; // node if of the peer
     optional int64 ClockSkewUs = 9; // a positive value means the peer is ahead in time; a negative value means it's behind
-    optional uint32 PingTimeUs = 10; // RTT for the peer
+    optional uint64 PingTimeUs = 10; // RTT for the peer
     optional float Utilization = 11; // network utilization 0-1
     optional NActorsInterconnect.TScopeId ScopeId = 12; // scope id of the peer
     optional uint32 Count = 13; // filled during group count

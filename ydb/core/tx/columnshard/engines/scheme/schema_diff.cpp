@@ -77,6 +77,29 @@ TConclusionStatus TSchemaDiffView::DeserializeFromProto(const NKikimrSchemeOp::T
     return TConclusionStatus::Success();
 }
 
+TConclusionStatus TSchemaDiffView::SerializeToProto(NKikimrSchemeOp::TColumnTableSchemaDiff& proto) {
+    proto.MutableOptions()->CopyFrom(*SchemaOptions);
+    proto.SetVersion(Version);
+    if (CompressionOptions != nullptr) {
+        proto.MutableDefaultCompression()->CopyFrom(*CompressionOptions);
+    }
+    for (auto& [id, column]: ModifiedColumns) {
+        if (column == nullptr) {
+            proto.AddDropColumns(id);
+        } else {
+            proto.AddUpsertColumns()->CopyFrom(*column);
+        }
+    }
+    for (auto& [id, index]: ModifiedIndexes) {
+        if (index == nullptr) {
+            proto.AddDropIndexes(id);
+        } else {
+            proto.AddUpsertIndexes()->CopyFrom(*index);
+        }
+    }
+    return TConclusionStatus::Success();
+}
+
 ui64 TSchemaDiffView::GetVersion() const {
     AFL_VERIFY(Version);
     return Version;

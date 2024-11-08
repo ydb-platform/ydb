@@ -50,7 +50,6 @@ public:
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<false>));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildPureFlatmapStage));
-        AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
         AddHandler(0, &TCoCombineByKey::Match, HNDL(PushCombineToStage<false>));
         AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage<false>));
         AddHandler(0, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<false>));
@@ -95,6 +94,7 @@ public:
         AddHandler(0, &TCoAggregateMergeManyFinalize::Match, HNDL(ExpandAggregatePhase));
         AddHandler(0, &TCoAggregateFinalize::Match, HNDL(ExpandAggregatePhase));
 
+        AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
         AddHandler(1, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<true>));
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<true>));

@@ -263,15 +263,15 @@ public:
     TImpl(const TVector<TString>& columns,
         const TVector<TString>& types,
         const TString& whereFilter,
-        TCallback callback)
+        TCallback callback,
+        NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory)
         : Sql(GenerateSql(whereFilter)) {
         Y_ENSURE(columns.size() == types.size(), "Number of columns and types should by equal");
-        auto factory = NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions());
 
         // Program should be stateless because input values
         // allocated on another allocator and should be released
         LOG_ROW_DISPATCHER_DEBUG("Creating program...");
-        Program = factory->MakePushStreamProgram(
+        Program = pureCalcProgramFactory->MakePushStreamProgram(
             TFilterInputSpec(MakeInputSchema(columns, types)),
             TFilterOutputSpec(MakeOutputSchema()),
             Sql,
@@ -311,8 +311,9 @@ TJsonFilter::TJsonFilter(
     const TVector<TString>& columns,
     const TVector<TString>& types,
     const TString& whereFilter,
-    TCallback callback)
-    : Impl(std::make_unique<TJsonFilter::TImpl>(columns, types, whereFilter, callback)) { 
+    TCallback callback,
+    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory)
+    : Impl(std::make_unique<TJsonFilter::TImpl>(columns, types, whereFilter, callback, pureCalcProgramFactory)) { 
 }
 
 TJsonFilter::~TJsonFilter() {
@@ -330,8 +331,9 @@ std::unique_ptr<TJsonFilter> NewJsonFilter(
     const TVector<TString>& columns,
     const TVector<TString>& types,
     const TString& whereFilter,
-    TCallback callback) {
-    return std::unique_ptr<TJsonFilter>(new TJsonFilter(columns, types, whereFilter, callback));
+    TCallback callback,
+    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory) {
+    return std::unique_ptr<TJsonFilter>(new TJsonFilter(columns, types, whereFilter, callback, pureCalcProgramFactory));
 }
 
 } // namespace NFq

@@ -149,6 +149,7 @@ private:
     ui32 PartitionId;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
+    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
     NYql::ITopicClient::TPtr TopicClient;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     const i64 BufferSize;
@@ -179,6 +180,7 @@ public:
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const NYql::IPqGateway::TPtr& pqGateway);
 
@@ -268,6 +270,7 @@ TTopicSession::TTopicSession(
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway)
     : TopicPath(topicPath)
@@ -277,6 +280,7 @@ TTopicSession::TTopicSession(
     , PartitionId(partitionId)
     , Driver(std::move(driver))
     , CredentialsProviderFactory(credentialsProviderFactory)
+    , PureCalcProgramFactory(pureCalcProgramFactory)
     , BufferSize(16_MB)
     , LogPrefix("TopicSession")
     , Config(config)
@@ -734,7 +738,8 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 predicate,
                 [&, actorId = clientInfo.ReadActorId](ui64 offset, const TString& json){
                     Send(SelfId(), new NFq::TEvPrivate::TEvDataAfterFilteration(offset, json, actorId));
-                });
+                },
+                PureCalcProgramFactory);
         } else {
             ClientsWithoutPredicate.insert(ev->Sender);
         }
@@ -959,9 +964,10 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway) {
-    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, pqGateway));
+    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, pureCalcProgramFactory, counters, pqGateway));
 }
 
 } // namespace NFq

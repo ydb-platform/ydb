@@ -1,6 +1,5 @@
 #include "aligned_page_pool.h"
 #include "util/string/builder.h"
-#include <contrib/ydb/library/actors/util/intrinsics.h>
 
 #include <util/generic/yexception.h>
 #include <util/string/cast.h>
@@ -49,7 +48,7 @@ public:
     void* GetPage() {
         void *page = nullptr;
         if (Pages.Dequeue(&page)) {
-            AtomicDecrement(Count);
+            --Count;
             return page;
         }
 
@@ -57,7 +56,7 @@ public:
     }
 
     ui64 GetPageCount() const {
-        return RelaxedLoad(&Count);
+        return Count.load(std::memory_order_relaxed);
     }
 
     size_t GetPageSize() const {
@@ -75,7 +74,7 @@ private:
         FreePage(addr);
         return GetPageSize();
 #else
-        AtomicIncrement(Count);
+        ++Count;
         Pages.Enqueue(addr);
         return 0;
 #endif
@@ -88,7 +87,7 @@ private:
 
 private:
     const size_t PageSize;
-    TAtomic Count = 0;
+    std::atomic<ui64> Count = 0;
     TLockFreeStack<void*> Pages;
 };
 

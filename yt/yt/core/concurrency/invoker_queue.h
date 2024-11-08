@@ -139,7 +139,6 @@ public:
     void SetThreadId(NThreading::TThreadId threadId);
 
     void Invoke(TClosure callback) override;
-
     void Invoke(TMutableRange<TClosure> callbacks) override;
 
     void Invoke(

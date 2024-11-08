@@ -1,0 +1,5 @@
+{"key"="020";"subkey"="1";"_rest"={"animal"="wombat";"size"="small";"weightMin"=20.;"weightMax"=35.;"wild"=%true};"binZ"="\x04";"strY"="\1\x08test";"realZ"="\x03\x18-DT\xfb!\t@"                 ;"uiData"=1};
+{"key"="075";"subkey"="5";"_rest"={"animal"="dog";"size"="huge";"weightMin"=5.;"weightMax"=75.;"pet"=%true}                    ;"binZ"=%true ;"strY"="\1\nfunny" ;"realZ"="\x03iW\x14\x8b\n\xbf\x05@"           ;"uiData"=1u};
+{"key"="150";"subkey"="4";"_rest"={"animal"="chipmunk";"size"="small";"weightMin"=0.05;"weightMax"=0.15;"wild"=%true}          ;"binZ"="\x05";"strY"="\1\nbunny" ;"realZ"="\x03\xcd;\x7ff\x9e\xa0\xf6?"         ;"uiData"=100500u};
+{"key"="500";"subkey"="2";"_rest"={"animal"="hamster";"size"="verysmall";"weightMin"=0.015;"weightMax"=0.045;"pet"=%true}      ;"binZ"=%false;"strY"="33.33"     ;"realZ"="\x03\x00\x00\x00\x00\x00\x00\xf0?"   ;"uiData"=10010005001000000u};
+{"key"="800";"subkey"="3";"_rest"={"animal"="dingo";"size"="huge";"weightMin"=10.;"weightMax"=20.;"wild"=%true}                  ;"binZ"=%false;"strY"="\1\x06zzz" ;"realZ"="\x03\x00\x00\x00\x00\x00\x00\xf0\xbf";"uiData"=33};

@@ -1,0 +1,12 @@
+{
+    "fts_seconds" = 3875345u;
+    "fts_msec" = 3875345000u;
+    "fts_usec" = 3875345000000u;
+
+    "fdays" = 7;
+    "fhours" = 168;
+    "fminutes" = 10080;
+    "fseconds" = 604800;
+    "fmsec" = 604800000;
+    "fusec" = -604800000000;
+};

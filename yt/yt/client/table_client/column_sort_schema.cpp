@@ -81,7 +81,7 @@ void ToProto(
 
     for (const auto& sortColumn : sortColumns) {
         protoSortColumns->add_names(ToProto(sortColumn.Name));
-        protoSortColumns->add_sort_orders(ToProto<int>(sortColumn.SortOrder));
+        protoSortColumns->add_sort_orders(ToProto(sortColumn.SortOrder));
     }
 }
 

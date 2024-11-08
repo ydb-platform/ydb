@@ -657,7 +657,7 @@ private:
                 YT_VERIFY(Pipe_);
                 ssize_t size = HandleEintr(::write, Pipe_->GetWriteFD(), &data, sizeof(data));
                 YT_VERIFY(size == sizeof(data));
-                AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
+                AbortProcessSilently(EProcessExitCode::GenericError);
             }
         }
         YT_ABORT();

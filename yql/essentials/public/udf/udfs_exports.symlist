@@ -1,0 +1,4 @@
+{
+global: Register; AbiVersion; SetBackTraceCallback; BindSymbols;
+local: *;
+};

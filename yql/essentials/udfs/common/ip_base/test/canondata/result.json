@@ -1,0 +1,12 @@
+{
+    "test.test[Basic]": [
+        {
+            "uri": "file://test.test_Basic_/results.txt"
+        }
+    ],
+    "test.test[Subnets]": [
+        {
+            "uri": "file://test.test_Subnets_/results.txt"
+        }
+    ]
+}

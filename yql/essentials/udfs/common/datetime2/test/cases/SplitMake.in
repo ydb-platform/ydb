@@ -1,0 +1,49 @@
+{
+    "fdate"="1945-05-09";
+    "fdatetime"="1945-05-09T00:00:00Z";
+    "ftimestamp"="1945-05-09T00:00:00.000000Z";
+    "ftzdate"="1945-05-09,Europe/Moscow";
+    "ftzdatetime"="1945-05-09T00:00:00,Europe/Moscow";
+    "ftztimestamp"="1945-05-09T00:00:00.000000,Europe/Moscow"
+};
+{
+    "fdate"="1970-01-01";
+    "fdatetime"="1970-01-01T00:30:00Z";
+    "ftimestamp"="1970-01-01T00:30:00.000000Z";
+    "ftzdate"="1970-01-01,Europe/Moscow";
+    "ftzdatetime"="1970-01-01T01:00:00,Europe/Moscow";
+    "ftztimestamp"="1970-01-01T05:00:00.000000,Europe/Moscow"
+};
+{
+    "fdate"="2018-12-15";
+    "fdatetime"="2018-12-15T01:02:03Z";
+    "ftimestamp"="2018-12-15T01:02:03.456789Z";
+    "ftzdate"="2018-12-15,Europe/Moscow";
+    "ftzdatetime"="2018-12-15T01:02:03,Europe/Moscow";
+    "ftztimestamp"="2018-12-15T01:02:03.456789,Europe/Moscow"
+};
+{
+    "fdate"="2105-12-31";
+    "fdatetime"="2105-12-31T23:59:59Z";
+    "ftimestamp"="2105-12-31T23:59:59.999999Z";
+    "ftzdate"="2105-12-31,Canada/Central";
+    "ftzdatetime"="2105-12-31T16:00:00,Canada/Central";
+    "ftztimestamp"="2105-12-31T23:00:00.000000,Canada/Central"
+};
+{
+    "fdate"="2106-01-01";
+    "fdatetime"="2106-01-01T00:00:00Z";
+    "ftimestamp"="2106-01-01T00:00:00.000000Z";
+    "ftzdate"="2106-01-01,Europe/Moscow";
+    "ftzdatetime"="2106-01-01T01:00:00,Europe/Moscow";
+    "ftztimestamp"="2106-01-01T05:00:00.000000,Europe/Moscow"
+};
+{
+    "fdate"="2117-11-07";
+    "fdatetime"="2117-11-07T00:00:00Z";
+    "ftimestamp"="2117-11-07T00:00:00.000000Z";
+    "ftzdate"="2117-11-07,Europe/Moscow";
+    "ftzdatetime"="2117-11-07T00:00:00,Europe/Moscow";
+    "ftztimestamp"="2117-11-07T00:00:00.000000,Europe/Moscow"
+};
+

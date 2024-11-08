@@ -1,0 +1,49 @@
+{
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "finterval1";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "String"
+                        ]
+                    ]
+                ];
+                [
+                    "finterval2";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "String"
+                        ]
+                    ]
+                ];
+                [
+                    "finterval3";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "String"
+                        ]
+                    ]
+                ];
+                [
+                    "finterval4";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "String"
+                        ]
+                    ]
+                ];
+            ]
+        ]
+    }
+}

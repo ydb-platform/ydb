@@ -1,0 +1,6 @@
+{"key"="1";"subkey"="1";"value"="a@b@c"};
+{"key"="1";"subkey"="1";"value"="@a@b@c"};
+{"key"="1";"subkey"="1";"value"="@@@a@a"};
+{"key"="2";"subkey"="2";"value"="d#e#f"};
+{"key"="3";"subkey"="3";"value"="d"};
+{"key"="4";"subkey"="4";"value"=""};

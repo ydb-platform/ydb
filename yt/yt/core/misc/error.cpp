@@ -548,8 +548,11 @@ void TErrorSerializer::Save(TStreamSaveContext& context, const TError& error)
     // Cf. TAttributeDictionaryValueSerializer.
     auto attributePairs = error.Attributes().ListPairs();
     size_t attributeCount = attributePairs.size();
+    if (HasHost(error)) {
+        attributeCount += 1;
+    }
     if (error.HasOriginAttributes()) {
-        attributeCount += 5;
+        attributeCount += 4;
     }
     if (error.HasDatetime()) {
         attributeCount += 1;
@@ -569,10 +572,12 @@ void TErrorSerializer::Save(TStreamSaveContext& context, const TError& error)
             Save(context, ConvertToYsonString(value));
         };
 
-        if (error.HasOriginAttributes()) {
+        if (HasHost(error)) {
             static const TString HostKey("host");
             saveAttribute(HostKey, GetHost(error));
+        }
 
+        if (error.HasOriginAttributes()) {
             static const TString PidKey("pid");
             saveAttribute(PidKey, error.GetPid());
 

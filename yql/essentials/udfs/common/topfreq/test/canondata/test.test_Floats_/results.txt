@@ -1,0 +1,55 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "ListType";
+                                    [
+                                        "StructType";
+                                        [
+                                            [
+                                                "Frequency";
+                                                [
+                                                    "DataType";
+                                                    "Uint64"
+                                                ]
+                                            ];
+                                            [
+                                                "Value";
+                                                [
+                                                    "DataType";
+                                                    "Double"
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            [
+                                "2";
+                                "-0"
+                            ];
+                            [
+                                "2";
+                                "nan"
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

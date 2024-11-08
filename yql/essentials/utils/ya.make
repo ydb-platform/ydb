@@ -2,6 +2,8 @@ LIBRARY()
 
 SRCS(
     cast.h
+    chunked_buffer.cpp
+    chunked_buffer.h
     debug_info.cpp
     debug_info.h
     exceptions.cpp
@@ -48,20 +50,20 @@ PEERDIR(
 
 END()
 
-RECURSE(
-    backtrace
-    failure_injector
-    fetch
-    log
-    network
-    rope
-    signals
-    sys
-    test_http_server
-    threading
-)
-
 RECURSE_FOR_TESTS(
     ut
 )
 
+IF (OPENSOURCE_PROJECT != "yt")
+    RECURSE(
+        backtrace
+        failure_injector
+        fetch
+        log
+        network
+        signals
+        sys
+        test_http_server
+        threading
+    )
+ENDIF()

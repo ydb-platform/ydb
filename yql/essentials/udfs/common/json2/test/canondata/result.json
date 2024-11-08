@@ -1,0 +1,42 @@
+{
+    "test.test[AsJsonNode]": [
+        {
+            "uri": "file://test.test_AsJsonNode_/results.txt"
+        }
+    ],
+    "test.test[SerializeParse]": [
+        {
+            "uri": "file://test.test_SerializeParse_/results.txt"
+        }
+    ],
+    "test.test[SqlExists]": [
+        {
+            "uri": "file://test.test_SqlExists_/results.txt"
+        }
+    ],
+    "test.test[SqlQueryError]": [
+        {
+            "uri": "file://test.test_SqlQueryError_/extracted"
+        }
+    ],
+    "test.test[SqlQuery]": [
+        {
+            "uri": "file://test.test_SqlQuery_/results.txt"
+        }
+    ],
+    "test.test[SqlTryExistsError]": [
+        {
+            "uri": "file://test.test_SqlTryExistsError_/extracted"
+        }
+    ],
+    "test.test[SqlTryExists]": [
+        {
+            "uri": "file://test.test_SqlTryExists_/results.txt"
+        }
+    ],
+    "test.test[SqlValue]": [
+        {
+            "uri": "file://test.test_SqlValue_/results.txt"
+        }
+    ]
+}

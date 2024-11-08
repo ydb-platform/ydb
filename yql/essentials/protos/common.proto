@@ -1,0 +1,17 @@
+package NYql.NProto;
+option java_package = "ru.yandex.yql.proto";
+
+message TTime {
+    enum TUnit {
+        NANOSECONDS = 1;
+        MICROSECONDS = 2;
+        MILLISECONDS = 3;
+        SECONDS = 4;
+        MINUTES = 5;
+        HOURS = 6;
+        DAYS = 7;
+    }
+
+    optional uint64 Value = 1;
+    optional TUnit Unit = 2;
+}

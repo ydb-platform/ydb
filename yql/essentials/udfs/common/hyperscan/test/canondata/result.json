@@ -1,0 +1,17 @@
+{
+    "test.test[Basic]": [
+        {
+            "uri": "file://test.test_Basic_/results.txt"
+        }
+    ],
+    "test.test[CharacterClasses]": [
+        {
+            "uri": "file://test.test_CharacterClasses_/results.txt"
+        }
+    ],
+    "test.test[Error]": [
+        {
+            "uri": "file://test.test_Error_/extracted"
+        }
+    ]
+}

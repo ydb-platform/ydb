@@ -1,4 +1,4 @@
-customer_id,customer_first_name,customer_last_name,customer_preferred_cust_flag,
+t_s_secyear.customer_id,t_s_secyear.customer_first_name,t_s_secyear.customer_last_name,t_s_secyear.customer_preferred_cust_flag
 AAAAAAAABIJBAAAA,James,White,N,
 AAAAAAAADIIOAAAA,David,Carroll,Y,
 AAAAAAAAIJCIBAAA,Thomas,Oneal,Y,

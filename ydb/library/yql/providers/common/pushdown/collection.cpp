@@ -456,6 +456,23 @@ bool SqlInCanBePushed(const TCoSqlIn& sqlIn, const TExprNode* lambdaArg, const T
     return true;
 }
 
+bool IsDistinctCanBePushed(const TExprBase& predicate, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+    if (predicate.Ref().ChildrenSize() != 2 ) {
+        return false;
+    }
+    auto expr1 = TExprBase(predicate.Ref().Child(0));
+    auto expr2 = TExprBase(predicate.Ref().Child(1));
+    if (!CheckExpressionNodeForPushdown(expr1, lambdaArg, settings)
+        || !CheckExpressionNodeForPushdown(expr2, lambdaArg, settings)) {
+        return false;
+    }
+    if (!settings.IsEnabled(TSettings::EFeatureFlag::DoNotCheckCompareArgumentsTypes)
+        && !IsComparableTypes(expr1, expr2, false, lambdaBody.Ptr()->GetTypeAnn(), settings)) {
+        return false;
+    }
+    return true;
+}
+
 bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprNode* lambdaArg, const TSettings& settings) {
     /*
      * There are three ways of comparison in following format:
@@ -595,6 +612,9 @@ void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree
     } else if (settings.IsEnabled(TSettings::EFeatureFlag::InOperator) && predicate.Maybe<TCoSqlIn>()) {
         auto sqlIn = predicate.Cast<TCoSqlIn>();
         predicateTree.CanBePushed = SqlInCanBePushed(sqlIn, lambdaArg, lambdaBody, settings);
+    } else if (settings.IsEnabled(TSettings::EFeatureFlag::IsDistinctOperator) && 
+        (predicate.Ref().IsCallable({"IsNotDistinctFrom", "IsDistinctFrom"}))) {
+        predicateTree.CanBePushed = IsDistinctCanBePushed(predicate, lambdaArg, lambdaBody, settings);
     } else {
         predicateTree.CanBePushed = false;
     }

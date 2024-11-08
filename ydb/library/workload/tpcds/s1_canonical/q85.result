@@ -1,4 +1,4 @@
-substr(r_reason_desc,avg(ws_quantity),avg(wr_refunded_cash),avg(wr_fee)
+bla,bla2,bla3,bla4
 Gift exchange,76,464.36,8.62
 Not the product that,70,876.67,46.67
 Parts missing,7,129.42,38.65

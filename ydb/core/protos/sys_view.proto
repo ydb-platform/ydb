@@ -173,6 +173,7 @@ message TPDiskInfo {
     optional uint32 NumActiveSlots = 16;
     optional uint64 Category = 17;
     optional string DecommitStatus = 18;
+    optional string State = 19;
     // metrics ?
     // physical location ?
     // config ?
@@ -215,6 +216,9 @@ message TVSlotInfo {
     optional string StatusV2 = 12;
     optional string Kind = 13;
     optional bool IsBeingDeleted = 14;
+    optional string DiskSpace = 15;
+    optional bool Replicated = 16;
+    optional string State = 17;
     // metrics ?
 }
 

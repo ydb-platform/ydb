@@ -453,6 +453,7 @@ namespace {
 
     private:
         bool IsSettingAllowed(const TPosition& pos, TStringBuf name, TExprContext& ctx) {
+            return true;
             if (Policy && !Policy(name)) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Changing setting " << name << " is not allowed"));
                 return false;

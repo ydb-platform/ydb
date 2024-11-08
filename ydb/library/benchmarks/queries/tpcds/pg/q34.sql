@@ -18,7 +18,7 @@ select c_last_name
          household_demographics.hd_buy_potential = 'Unknown')
     and household_demographics.hd_vehicle_count > 0
     and (case when household_demographics.hd_vehicle_count > 0
-	then (household_demographics.hd_dep_count  as double)/ household_demographics.hd_vehicle_count
+	then cast(household_demographics.hd_dep_count  as double)/ household_demographics.hd_vehicle_count
 	else null::int4
 	end)  > 1.2
     and date_dim.d_year in (1999,1999+1,1999+2)

@@ -109,6 +109,7 @@ private:
             if (Settings.HasOffset()) {
                 NextMessageOffset = Settings.GetOffset();
             }
+            Y_UNUSED(TDuration::TryParse(Settings.GetSource().GetReconnectPeriod(), ReconnectPeriod));
         }
         NFq::NRowDispatcherProto::TEvStartSession Settings;
         NActors::TActorId ReadActorId;
@@ -119,6 +120,7 @@ private:
         TMaybe<ui64> NextMessageOffset;
         ui64 LastSendedNextMessageOffset = 0;
         TVector<ui64> FieldsIds;
+        TDuration ReconnectPeriod;
     };
 
     struct TTopicEventProcessor {
@@ -389,13 +391,12 @@ void TTopicSession::CreateTopicSession() {
 
     if (!InflightReconnect) {
         // Use any sourceParams.
-        const NYql::NPq::NProto::TDqPqTopicSource& sourceParams = Clients.begin()->second.Settings.GetSource();
-        Y_UNUSED(TDuration::TryParse(sourceParams.GetReconnectPeriod(), ReconnectPeriod));
+        ReconnectPeriod = Clients.begin()->second.ReconnectPeriod;
         if (ReconnectPeriod != TDuration::Zero()) {
             Metrics.ReconnectRate->Inc();
             Schedule(ReconnectPeriod, new NFq::TEvPrivate::TEvReconnectSession());
+            InflightReconnect = true;
         }
-        InflightReconnect = true;
     }
 }
 

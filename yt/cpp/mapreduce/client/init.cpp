@@ -266,12 +266,23 @@ void ExecJob(int argc, const char** argv, const TInitializeOptions& options)
     Y_UNREACHABLE();
 }
 
+void EnsureInitialized()
+{
+    if (GetInitStatus() == EInitStatus::NotInitialized) {
+        JoblessInitialize();
+    }
+}
+
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static TMutex InitializeLock;
+
 void JoblessInitialize(const TInitializeOptions& options)
 {
+    auto g = Guard(InitializeLock);
+
     static const char* fakeArgv[] = {"unknown..."};
     NDetail::CommonInitialize(1, fakeArgv);
     NDetail::NonJobInitialize(options);
@@ -280,12 +291,15 @@ void JoblessInitialize(const TInitializeOptions& options)
 
 void Initialize(int argc, const char* argv[], const TInitializeOptions& options)
 {
+    auto g = Guard(InitializeLock);
+
     NDetail::CommonInitialize(argc, argv);
 
     NDetail::ElevateInitStatus(NDetail::EInitStatus::FullInitialization);
 
     const bool isInsideJob = !GetEnv("YT_JOB_ID").empty();
     if (isInsideJob) {
+        g.Release();
         NDetail::ExecJob(argc, argv, options);
     } else {
         NDetail::NonJobInitialize(options);

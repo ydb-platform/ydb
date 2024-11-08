@@ -441,8 +441,8 @@
       },
       {
         "current": {
-          "text": "dynamic_storage_pool:1",
-          "value": "dynamic_storage_pool:1"
+          "text": "static",
+          "value": "static"
         },
         "definition": "label_values(storagePool)",
         "description": "storagePool",
@@ -460,8 +460,8 @@
       },
       {
         "current": {
-          "text": "All",
-          "value": "$__all"
+          "text": "000000000",
+          "value": "000000000"
         },
         "definition": "label_values({storagePool=\"$storagePool\"},group)",
         "description": "",

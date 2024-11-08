@@ -83,8 +83,6 @@ ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_se
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[pushdown-kqprun]
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch_ch-dqrun]
 ydb/library/yql/tests/sql/hybrid_file/part1 test.py.test[in-in_noansi_join--Debug]
-ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/with_offset_ranges_mode_ut [*/*] chunk chunk
-ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/with_offset_ranges_mode_ut [*/*]+chunk+chunk
 ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ReadSessionCorrectClose
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*] chunk chunk
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*]+chunk+chunk

@@ -516,7 +516,6 @@ bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg
     if (!coalesce.Value().Maybe<TCoBool>()) {
         return false;
     }
-
     auto predicate = coalesce.Predicate();
 
     if (auto maybeCompare = predicate.Maybe<TCoCompare>()) {

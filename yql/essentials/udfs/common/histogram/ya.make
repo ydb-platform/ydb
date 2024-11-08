@@ -1,12 +1,3 @@
-IF (YQL_PACKAGED)
-    PACKAGE()
-
-    FROM_SANDBOX(
-        FILE 7319896927 OUT_NOAUTO libhistogram_udf.so
-    )
-
-    END()
-ELSE()
 YQL_UDF_CONTRIB(histogram_udf)
 
     YQL_ABI_VERSION(
@@ -24,8 +15,6 @@ YQL_UDF_CONTRIB(histogram_udf)
     )
 
     END()
-
-ENDIF()
 
 RECURSE_FOR_TESTS(
     test

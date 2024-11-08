@@ -1,9 +1,3 @@
-IF (YQL_PACKAGED)
-    PACKAGE()
-        FROM_SANDBOX(FILE 7319907306 OUT_NOAUTO libunicode_udf.so
-        )
-    END()
-ELSE ()
 YQL_UDF_CONTRIB(unicode_udf)
     
     YQL_ABI_VERSION(
@@ -21,8 +15,6 @@ YQL_UDF_CONTRIB(unicode_udf)
     )
     
     END()
-ENDIF ()
-
 
 RECURSE_FOR_TESTS(
     test

@@ -16,7 +16,7 @@
 #include <ydb/library/yql/providers/dq/actors/proto_builder.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/dq/planner/execution_planner.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_control.h>
@@ -1460,7 +1460,6 @@ private:
             settings, progressWriter, UploadCache_->ModulesMapping, fillSettings.Discard, executionTimeout);
 
         future.Subscribe([publicIds, progressWriter = State->ProgressWriter](const NThreading::TFuture<IDqGateway::TResult>& completedFuture) {
-            HandleFutureException(completedFuture);
             MarkProgressFinished(publicIds->AllPublicIds, completedFuture.GetValueSync().Success(), progressWriter);
         });
         executionPlanner.Destroy();
@@ -1857,7 +1856,6 @@ private:
                 if (filesRes.first.Level == TStatus::Async) {
                     precomputeFuture = filesRes.second.Apply([execState = ExecPrecomputeState_, node = input.Get(), logCtx](const TAsyncTransformCallbackFuture& future) {
                         YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
-                        HandleFutureException(future);
                         YQL_CLOG(DEBUG, ProviderDq) << "Finishing freezing files";
                         CompleteNode(execState, node, future.GetValue());
                     });
@@ -1981,7 +1979,6 @@ private:
             bool neverFallback = settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default) == EFallbackPolicy::Never;
             precomputeFuture = future.Apply([publicIds, state = State, startTime, execState = ExecPrecomputeState_, node = input.Get(), neverFallback, logCtx](const NThreading::TFuture<IDqGateway::TResult>& completedFuture) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
-                HandleFutureException(completedFuture);
                 const IDqGateway::TResult& res = completedFuture.GetValueSync();
 
                 MarkProgressFinished(publicIds->AllPublicIds, res.Success(), state->ProgressWriter);

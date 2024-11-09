@@ -14,7 +14,7 @@ PEERDIR(
     yql/essentials/minikql/computation/llvm14
     yql/essentials/minikql/comp_nodes/llvm14
 
-    ydb/library/yql/dq/integration/transform
+    yql/essentials/core/dq_integration/transform
     ydb/library/yql/dq/comp_nodes
     yql/essentials/providers/common/comp_nodes
     yql/essentials/minikql/comp_nodes

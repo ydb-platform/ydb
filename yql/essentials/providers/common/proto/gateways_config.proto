@@ -2,8 +2,8 @@ package NYql;
 option java_package = "ru.yandex.yql.proto";
 
 import "yql/essentials/protos/clickhouse.proto";
-import "contrib/ydb/library/yql/providers/generic/connector/api/common/data_source.proto";
-import "contrib/ydb/library/yql/providers/generic/connector/api/common/endpoint.proto";
+import "ydb/library/yql/providers/generic/connector/api/common/data_source.proto";
+import "ydb/library/yql/providers/generic/connector/api/common/endpoint.proto";
 
 
 /////////////////////////////// common ///////////////////////////////

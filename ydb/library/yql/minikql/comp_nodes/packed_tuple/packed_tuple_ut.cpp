@@ -12,8 +12,8 @@
 #include <util/stream/null.h>
 #include <util/system/mem_info.h>
 
-#include <yql/essentials/minikql/comp_nodes/packed_tuple/hashes_calc.h>
-#include <yql/essentials/minikql/comp_nodes/packed_tuple/tuple.h>
+#include <ydb/library/yql/minikql/comp_nodes/packed_tuple/hashes_calc.h>
+#include <ydb/library/yql/minikql/comp_nodes/packed_tuple/tuple.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 

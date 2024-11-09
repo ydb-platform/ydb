@@ -1,3 +1,5 @@
+IF (NOT OPENSOURCE)
+
 UNITTEST_FOR(yql/essentials/core)
 
 SRCS(
@@ -59,3 +61,5 @@ ENDIF()
 YQL_LAST_ABI_VERSION()
 
 END()
+
+ENDIF()

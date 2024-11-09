@@ -222,10 +222,11 @@ struct TDataRow {
         NKikimr::TDbTupleRef value = ToDbTupleRef();
         std::vector<TCell> cells(value.Cells().data(), value.Cells().data() + value.Cells().size());
 
-        auto binaryJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(JsonDocument.data(), JsonDocument.size()));
-        UNIT_ASSERT(binaryJson.IsSuccess());
+        auto maybeBinaryJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(JsonDocument.data(), JsonDocument.size()));
+        UNIT_ASSERT(std::holds_alternative<NBinaryJson::TBinaryJson>(maybeBinaryJson));
 
-        cells[19] = TCell(binaryJson->Data(), binaryJson->Size());
+        const auto& binaryJson = std::get<NBinaryJson::TBinaryJson>(maybeBinaryJson);
+        cells[19] = TCell(binaryJson.Data(), binaryJson.Size());
         return TOwnedCellVec(cells);
     }
 };

@@ -8,7 +8,7 @@ PEERDIR(
     yql/essentials/utils/log
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
-    ydb/library/yql/dq/integration
+    yql/essentials/core/dq_integration
     yql/essentials/core
     yql/essentials/core/peephole_opt
     yql/essentials/core/type_ann

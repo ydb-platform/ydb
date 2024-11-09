@@ -6,10 +6,14 @@ namespace NYql {
 
 TChunkedBuffer::TChunkedBuffer(TChunkedBuffer&& other) {
     Items_ = std::move(other.Items_);
+    Size_ = other.Size_;
+    other.Size_ = 0;
 }
 
 TChunkedBuffer& TChunkedBuffer::operator=(TChunkedBuffer&& other) {
     Items_ = std::move(other.Items_);
+    Size_ = other.Size_;
+    other.Size_ = 0;
     return *this;
 }
 
@@ -40,25 +44,10 @@ size_t TChunkedBuffer::CopyTo(IOutputStream& dst, size_t toCopy) const {
     return copied;
 }
 
-size_t TChunkedBuffer::ContigousSize() const {
-    return Items_.empty() ? 0 : Front().Buf.size();
-}
-
-size_t TChunkedBuffer::Size() const {
-    size_t result = 0;
-    for (auto& item : Items_) {
-        result += item.Buf.size();
-    }
-    return result;
-}
-
-bool TChunkedBuffer::Empty() const {
-    return Items_.empty();
-}
-
 TChunkedBuffer& TChunkedBuffer::Append(TStringBuf buf, const std::shared_ptr<const void>& owner) {
     if (!buf.empty()) {
         Items_.emplace_back(TChunk{buf, owner});
+        Size_ += buf.size();
     }
     return *this;
 }
@@ -67,6 +56,7 @@ TChunkedBuffer& TChunkedBuffer::Append(TString&& str) {
     if (!str.empty()) {
         auto owner = std::make_shared<TString>(std::move(str));
         Items_.emplace_back(TChunk{*owner, owner});
+        Size_ += owner->size();
     }
     return *this;
 }
@@ -74,13 +64,16 @@ TChunkedBuffer& TChunkedBuffer::Append(TString&& str) {
 TChunkedBuffer& TChunkedBuffer::Append(TChunkedBuffer&& other) {
     while (!other.Items_.empty()) {
         Items_.emplace_back(std::move(other.Items_.front()));
+        Size_ += Items_.back().Buf.size();
         other.Items_.pop_front();
     }
+    other.Size_ = 0;
     return *this;
 }
 
 TChunkedBuffer& TChunkedBuffer::Clear() {
     Items_.clear();
+    Size_ = 0;
     return *this;
 }
 
@@ -90,6 +83,7 @@ TChunkedBuffer& TChunkedBuffer::Erase(size_t size) {
         size_t toErase = std::min(buf.size(), size);
         buf.Skip(toErase);
         size -= toErase;
+        Size_ -= toErase;
         if (buf.empty()) {
             Items_.pop_front();
         }

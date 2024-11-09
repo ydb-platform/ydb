@@ -9,6 +9,7 @@
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
+#include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
 #include <yql/essentials/minikql/mkql_alloc.h>

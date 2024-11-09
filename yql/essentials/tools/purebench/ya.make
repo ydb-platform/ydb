@@ -1,3 +1,5 @@
+IF (NOT OPENSOURCE)
+
 PROGRAM(purebench)
 
 ALLOCATOR(J)
@@ -29,3 +31,6 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+ENDIF()
+

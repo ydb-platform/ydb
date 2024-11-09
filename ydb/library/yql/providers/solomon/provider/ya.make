@@ -19,7 +19,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/protos
     ydb/library/yql/dq/expr_nodes
-    ydb/library/yql/dq/integration
+    yql/essentials/core/dq_integration
     ydb/library/yql/dq/opt
     yql/essentials/providers/common/config
     yql/essentials/providers/common/proto

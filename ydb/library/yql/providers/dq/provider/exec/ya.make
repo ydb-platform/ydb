@@ -13,7 +13,7 @@ PEERDIR(
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/client/ydb_driver
     yql/essentials/core
-    ydb/library/yql/dq/integration
+    yql/essentials/core/dq_integration
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/tasks
     ydb/library/yql/dq/type_ann

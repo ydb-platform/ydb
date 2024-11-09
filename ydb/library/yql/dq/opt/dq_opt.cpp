@@ -4,7 +4,7 @@
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/dq/integration/yql_dq_optimization.h>
+#include <yql/essentials/core/dq_integration/yql_dq_optimization.h>
 
 using namespace NYql::NNodes;
 

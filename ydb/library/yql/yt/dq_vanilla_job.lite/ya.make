@@ -7,7 +7,7 @@ PEERDIR(
     yql/essentials/public/udf/service/terminate_policy
     yql/essentials/utils/backtrace
     ydb/library/yql/dq/comp_nodes
-    ydb/library/yql/dq/integration/transform
+    yql/essentials/core/dq_integration/transform
     ydb/library/yql/dq/transform
     ydb/library/yql/dq/runtime
     yql/essentials/providers/common/comp_nodes

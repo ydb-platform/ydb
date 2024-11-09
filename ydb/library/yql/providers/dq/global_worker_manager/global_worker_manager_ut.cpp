@@ -11,7 +11,7 @@
 #include <ydb/library/yql/providers/dq/actors/dynamic_nameserver.h>
 #include <ydb/library/yql/providers/dq/actors/resource_allocator.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>

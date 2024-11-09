@@ -17,8 +17,8 @@ YQL_LAST_ABI_VERSION()
 PEERDIR(
     yql/essentials/core
     yql/essentials/core/type_ann
-    contrib/ydb/library/yql/dq/integration
-    contrib/ydb/library/yql/providers/common/dq
+    yql/essentials/core/dq_integration
+    yql/essentials/providers/common/dq
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/transform
     yql/essentials/providers/pg/expr_nodes

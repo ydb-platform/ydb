@@ -45,7 +45,7 @@ public:
         };
 
         for (const TStringBuf json : testCases) {
-            const auto binaryJson = *SerializeToBinaryJson(json);
+            const auto binaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(json));
             const TStringBuf buffer(binaryJson.Data(), binaryJson.Size());
             const auto error = IsValidBinaryJsonWithError(buffer);
             UNIT_ASSERT_C(!error.Defined(), TStringBuilder() << "BinaryJson for '" << json << "' is invalid because of '" << *error << "'");

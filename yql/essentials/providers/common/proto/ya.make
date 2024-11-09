@@ -7,7 +7,7 @@ SRCS(
 
 PEERDIR(
     yql/essentials/protos
-    contrib/ydb/library/yql/providers/generic/connector/api/common
+    ydb/library/yql/providers/generic/connector/api/common
 )
 
 IF (NOT PY_PROTOS_FOR)

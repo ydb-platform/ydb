@@ -26,7 +26,7 @@ void TJsonPathTestBase::RunTestCase(const TString& rawJson, const TString& rawJs
     try {
         const auto unboxedValueJson = TValue(ParseJson(rawJson));
 
-        const auto binaryJson = *SerializeToBinaryJson(rawJson);;
+        const auto binaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(rawJson));
         auto reader = TBinaryJsonReader::Make(binaryJson);
         auto binaryJsonRoot = TValue(reader->GetRootCursor());
 
@@ -77,7 +77,7 @@ void TJsonPathTestBase::RunRuntimeErrorTestCase(const TString& rawJson, const TS
     try {
         const auto unboxedValueJson = TValue(ParseJson(rawJson));
 
-        const auto binaryJson = *SerializeToBinaryJson(rawJson);
+        const auto binaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(rawJson));
         auto reader = TBinaryJsonReader::Make(binaryJson);
         auto binaryJsonRoot = TValue(reader->GetRootCursor());
 
@@ -105,7 +105,7 @@ void TJsonPathTestBase::RunVariablesTestCase(const TString& rawJson, const THash
     try {
         const auto unboxedValueJson = TValue(ParseJson(rawJson));
 
-        const auto binaryJson = *SerializeToBinaryJson(rawJson);
+        const auto binaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(rawJson));
         auto reader = TBinaryJsonReader::Make(binaryJson);
         auto binaryJsonRoot = TValue(reader->GetRootCursor());
 
@@ -120,7 +120,7 @@ void TJsonPathTestBase::RunVariablesTestCase(const TString& rawJson, const THash
         storage.reserve(variables.size());
         readers.reserve(variables.size());
         for (const auto& it : variables) {
-            storage.push_back(*SerializeToBinaryJson(it.second));
+            storage.push_back(std::get<TBinaryJson>(SerializeToBinaryJson(it.second)));
             readers.push_back(TBinaryJsonReader::Make(storage.back()));
             binaryJsonVariables[it.first] = TValue(readers.back()->GetRootCursor());
         }

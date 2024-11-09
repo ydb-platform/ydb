@@ -8,7 +8,7 @@ SRCS(
 IF (OS_LINUX)
     # prevent external python extensions to lookup protobuf symbols (and maybe
     # other common stuff) in main binary
-    EXPORTS_SCRIPT(${ARCADIA_ROOT}/contrib/ydb/library/yql/tools/exports.symlist)
+    EXPORTS_SCRIPT(${ARCADIA_ROOT}/yql/essentials/tools/exports.symlist)
     PEERDIR(
         contrib/libs/libc_compat
     )

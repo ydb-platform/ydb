@@ -1,7 +1,7 @@
 #include "yql_clickhouse_dq_integration.h"
 #include "yql_clickhouse_mkql_compiler.h"
 
-#include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/clickhouse/expr_nodes/yql_clickhouse_expr_nodes.h>

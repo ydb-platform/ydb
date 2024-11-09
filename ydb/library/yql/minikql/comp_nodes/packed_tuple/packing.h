@@ -1,5 +1,5 @@
 #include <util/system/unaligned_mem.h>
-#include <contrib/ydb/library/yql/utils/simd/simd.h>
+#include <ydb/library/yql/utils/simd/simd.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

@@ -40,8 +40,8 @@ PEERDIR(
     yql/essentials/core/issue
     yql/essentials/utils/backtrace
     yql/essentials/utils/failure_injector
-    ydb/library/yql/dq/integration
-    ydb/library/yql/dq/integration/transform
+    yql/essentials/core/dq_integration
+    yql/essentials/core/dq_integration/transform
     ydb/library/yql/dq/transform
     ydb/library/yql/dq/tasks
     ydb/library/yql/dq/type_ann

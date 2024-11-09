@@ -7,7 +7,7 @@
 #include <util/generic/buffer.h>
 
 #include <util/system/cpu_id.h>
-#include <contrib/ydb/library/yql/utils/simd/simd.h>
+#include <ydb/library/yql/utils/simd/simd.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

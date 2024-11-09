@@ -55,7 +55,6 @@ SRCS(
 PEERDIR(
     contrib/libs/apache/arrow
     contrib/libs/cctz/tzdata
-    contrib/ydb/library/actors/util
     library/cpp/deprecated/enum_codegen
     library/cpp/enumbitset
     library/cpp/monlib/dynamic_counters

@@ -67,11 +67,12 @@ extern "C" void YtCodecReadJsonDocument(void* vbuf, void* vpod) {
     buf.ReadMany(json.AsStringRef().Data(), size);
 
     const auto binaryJson = NBinaryJson::SerializeToBinaryJson(json.AsStringRef());
-    if (binaryJson.IsFail()) {
+    if (std::holds_alternative<TString>(binaryJson)) {
         YQL_ENSURE(false, "Invalid JSON stored for JsonDocument type");
     }
 
-    TStringBuf binaryJsonRef(binaryJson->Data(), binaryJson->Size());
+    const auto& value = std::get<NBinaryJson::TBinaryJson>(binaryJson);
+    TStringBuf binaryJsonRef(value.Data(), value.Size());
     pod = MakeString(binaryJsonRef);
 }
 

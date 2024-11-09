@@ -1,4 +1,4 @@
-UNITTEST_FOR(yql/essentials/minikql/comp_nodes/packed_tuple)
+UNITTEST_FOR(ydb/library/yql/minikql/comp_nodes/packed_tuple)
 
 IF (SANITIZER_TYPE OR NOT OPENSOURCE)
     REQUIREMENTS(ram:32)

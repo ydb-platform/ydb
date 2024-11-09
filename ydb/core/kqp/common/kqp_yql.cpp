@@ -3,7 +3,7 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 
 namespace NYql {
 

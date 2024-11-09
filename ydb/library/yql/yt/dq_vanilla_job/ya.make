@@ -4,7 +4,7 @@ PEERDIR(
     library/cpp/svnversion
     library/cpp/yt/mlock
     ydb/library/yql/dq/comp_nodes
-    ydb/library/yql/dq/integration/transform
+    yql/essentials/core/dq_integration/transform
     ydb/library/yql/dq/transform
     yql/essentials/providers/common/comp_nodes
     ydb/library/yql/providers/yt/codec/codegen

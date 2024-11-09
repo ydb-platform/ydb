@@ -56,7 +56,7 @@ PEERDIR(
     yql/essentials/ast
     yql/essentials/core/facade
     yql/essentials/core/services/mounts
-    ydb/library/yql/dq/integration/transform
+    yql/essentials/core/dq_integration/transform
     yql/essentials/minikql/comp_nodes
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/comp_nodes

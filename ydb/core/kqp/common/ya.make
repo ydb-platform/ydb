@@ -40,7 +40,7 @@ PEERDIR(
     yql/essentials/core/services
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/common
-    ydb/library/yql/dq/integration
+    yql/essentials/core/dq_integration
     yql/essentials/parser/pg_wrapper/interface
     ydb/public/lib/operation_id
     ydb/public/lib/operation_id/protos

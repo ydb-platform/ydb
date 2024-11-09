@@ -2,7 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/library/actors/core
-    ydb/library/yql/dq/integration/transform
+    yql/essentials/core/dq_integration/transform
     yql/essentials/minikql/computation
     yql/essentials/utils
 )

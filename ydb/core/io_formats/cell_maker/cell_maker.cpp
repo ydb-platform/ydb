@@ -88,11 +88,11 @@ namespace {
         }
 
         auto serializedJson = NBinaryJson::SerializeToBinaryJson(unescaped);
-        if (serializedJson.IsFail()) {
+        if (std::holds_alternative<TString>(serializedJson)) {
             return false;
         }
 
-        result = serializedJson.DetachResult();
+        result = std::get<NBinaryJson::TBinaryJson>(std::move(serializedJson));
         return true;
     }
 
@@ -400,8 +400,8 @@ bool MakeCell(TCell& cell, const NJson::TJsonValue& value, const NScheme::TTypeI
         case NScheme::NTypeIds::Json:
             return TCellMaker<TString, TStringBuf>::MakeDirect(cell, NFormats::WriteJson(value), pool, err);
         case NScheme::NTypeIds::JsonDocument:
-            if (auto result = NBinaryJson::SerializeToBinaryJson(NFormats::WriteJson(value)); result.IsSuccess()) {
-                return TCellMaker<TMaybe<NBinaryJson::TBinaryJson>, TStringBuf>::MakeDirect(cell, result.DetachResult(), pool, err, &BinaryJsonToStringBuf);
+            if (auto result = NBinaryJson::SerializeToBinaryJson(NFormats::WriteJson(value)); std::holds_alternative<NBinaryJson::TBinaryJson>(result)) {
+                return TCellMaker<TMaybe<NBinaryJson::TBinaryJson>, TStringBuf>::MakeDirect(cell, std::get<NBinaryJson::TBinaryJson>(std::move(result)), pool, err, &BinaryJsonToStringBuf);
             } else {
                 return false;
             }

@@ -84,13 +84,13 @@ PEERDIR(
     yql/essentials/core/type_ann
     yql/essentials/core/file_storage
     yql/essentials/core/url_lister/interface
-    ydb/library/yql/dq/integration
+    yql/essentials/core/dq_integration
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
     yql/essentials/minikql
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/config
-    ydb/library/yql/providers/common/dq
+    yql/essentials/providers/common/dq
     yql/essentials/providers/common/mkql
     yql/essentials/providers/common/proto
     yql/essentials/providers/common/activation

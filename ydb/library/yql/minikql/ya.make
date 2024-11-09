@@ -1,0 +1,3 @@
+RECURSE(
+    comp_nodes
+)

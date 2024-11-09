@@ -20,7 +20,7 @@
 #include <ydb/library/yql/providers/dq/runtime/task_command_executor.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_pipe.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
-#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>

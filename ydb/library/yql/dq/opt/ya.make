@@ -5,7 +5,7 @@ PEERDIR(
     yql/essentials/core
     ydb/library/yql/dq/common
     ydb/library/yql/dq/expr_nodes
-    ydb/library/yql/dq/integration
+    yql/essentials/core/dq_integration
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/type_ann
     ydb/library/yql/providers/dq/expr_nodes

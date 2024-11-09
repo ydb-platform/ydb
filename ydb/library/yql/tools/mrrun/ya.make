@@ -35,7 +35,7 @@ PEERDIR(
     yql/essentials/core/services/mounts
     yql/essentials/core/url_lister
     ydb/library/yql/dq/comp_nodes
-    ydb/library/yql/dq/integration/transform
+    yql/essentials/core/dq_integration/transform
     yql/essentials/minikql/comp_nodes/llvm14
     yql/essentials/minikql/invoke_builtins/llvm14
     yql/essentials/protos

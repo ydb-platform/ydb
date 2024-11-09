@@ -10,7 +10,6 @@
 namespace NYql {
 
 using namespace NNodes;
-using namespace NDq;
 using namespace NPrivate;
 
 TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::TPtr state)

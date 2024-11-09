@@ -39,7 +39,4 @@ void AuditLogExportEnd(const TExportInfo& exportInfo, TSchemeShard* SS);
 void AuditLogImportStart(const NKikimrImport::TEvCreateImportRequest& request, const NKikimrImport::TEvCreateImportResponse& response, TSchemeShard* SS);
 void AuditLogImportEnd(const TImportInfo& importInfo, TSchemeShard* SS);
 
-void AuditLogLogin(const NKikimrScheme::TEvLogin& request, const NKikimrScheme::TEvLoginResult& response, TSchemeShard* SS);
-void AuditLogWebUILogout(const NHttp::THttpIncomingRequest& request, const TString& userSID);
-
 }

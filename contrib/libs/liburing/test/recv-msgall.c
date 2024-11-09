@@ -172,12 +172,14 @@ static int do_send(void)
 	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sockfd < 0) {
 		perror("socket");
+		free(buf);
 		return 1;
 	}
 
 	ret = connect(sockfd, (struct sockaddr *)&saddr, sizeof(saddr));
 	if (ret < 0) {
 		perror("connect");
+		free(buf);
 		return 1;
 	}
 
@@ -202,6 +204,7 @@ static int do_send(void)
 		if (cqe->res == -EINVAL) {
 			fprintf(stdout, "send not supported, skipping\n");
 			close(sockfd);
+			free(buf);
 			return 0;
 		}
 		if (cqe->res != iov.iov_len) {
@@ -212,9 +215,11 @@ static int do_send(void)
 	}
 
 	close(sockfd);
+	free(buf);
 	return 0;
 err:
 	close(sockfd);
+	free(buf);
 	return 1;
 }
 

@@ -9,7 +9,7 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/core/services/yql_out_transformers.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>

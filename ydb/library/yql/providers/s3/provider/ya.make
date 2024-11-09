@@ -30,10 +30,10 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/core/type_ann
     ydb/library/yql/dq/expr_nodes
-    ydb/library/yql/dq/integration
+    yql/essentials/core/dq_integration
     yql/essentials/minikql/comp_nodes
     yql/essentials/providers/common/config
-    ydb/library/yql/providers/common/dq
+    yql/essentials/providers/common/dq
     ydb/library/yql/providers/common/http_gateway
     yql/essentials/providers/common/mkql
     yql/essentials/providers/common/proto

@@ -7,7 +7,7 @@
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <yql/essentials/providers/pg/expr_nodes/yql_pg_expr_nodes.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 namespace NYql {

@@ -3,7 +3,7 @@ LIBRARY()
 PEERDIR(
     yql/essentials/core/services
     yql/essentials/minikql/comp_nodes
-    ydb/library/yql/dq/integration
+    yql/essentials/core/dq_integration
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
     ydb/library/yql/dq/tasks

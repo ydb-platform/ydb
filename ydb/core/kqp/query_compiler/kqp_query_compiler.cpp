@@ -12,7 +12,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>

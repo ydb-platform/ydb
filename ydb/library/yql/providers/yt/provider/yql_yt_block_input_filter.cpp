@@ -1,4 +1,5 @@
 #include "yql_yt_provider_impl.h"
+#include "yql_yt_dq_integration.h" // TODO remove
 
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
@@ -11,7 +12,6 @@ namespace NYql {
 namespace {
 
 using namespace NNodes;
-
 class YtBlockInputFilterTransformer : public TOptimizeTransformerBase {
 public:
     YtBlockInputFilterTransformer(TYtState::TPtr state, THolder<IGraphTransformer>&& finalizer)
@@ -88,7 +88,7 @@ private:
                 return false;
             }
 
-            if (!CheckSupportedTypes(items, supportedTypes, supportedDataTypes, [](const TString&) {})) {
+            if (!CheckSupportedTypesOld(items, supportedTypes, supportedDataTypes, [](const TString&) {})) {
                 return false;
             }
         } else if (lambdaInputType->GetKind() == ETypeAnnotationKind::Struct) {
@@ -102,7 +102,7 @@ private:
                 itemTypes.push_back(item->GetItemType());
             }
 
-            if (!CheckSupportedTypes(itemTypes, supportedTypes, supportedDataTypes, [](const TString&) {})) {
+            if (!CheckSupportedTypesOld(itemTypes, supportedTypes, supportedDataTypes, [](const TString&) {})) {
                 return false;
             }
         } else {

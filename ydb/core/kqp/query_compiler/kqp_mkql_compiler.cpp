@@ -5,7 +5,7 @@
 
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 
 namespace NKikimr {
 namespace NKqp {

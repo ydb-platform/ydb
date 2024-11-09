@@ -27,12 +27,12 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/core/type_ann
     ydb/library/yql/dq/expr_nodes
-    ydb/library/yql/dq/integration
+    yql/essentials/core/dq_integration
     ydb/library/yql/dq/opt
     yql/essentials/minikql/comp_nodes
     yql/essentials/providers/common/config
     ydb/library/yql/providers/common/db_id_async_resolver
-    ydb/library/yql/providers/common/dq
+    yql/essentials/providers/common/dq
     yql/essentials/providers/common/proto
     yql/essentials/providers/common/provider
     ydb/library/yql/providers/common/pushdown

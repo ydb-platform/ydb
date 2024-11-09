@@ -5,7 +5,7 @@
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/proto/range.pb.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>

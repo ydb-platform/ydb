@@ -7,7 +7,7 @@ PEERDIR(
     yql/essentials/utils/backtrace
     yql/essentials/core/expr_nodes
     ydb/library/yql/dq/common
-    ydb/library/yql/dq/integration/transform
+    yql/essentials/core/dq_integration/transform
     ydb/library/yql/dq/runtime
     yql/essentials/providers/common/proto
     yql/essentials/providers/common/provider

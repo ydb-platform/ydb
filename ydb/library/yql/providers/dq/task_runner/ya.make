@@ -4,7 +4,7 @@ PEERDIR(
     library/cpp/svnversion
     library/cpp/threading/task_scheduler
     library/cpp/yson/node
-    ydb/library/yql/dq/integration/transform
+    yql/essentials/core/dq_integration/transform
     yql/essentials/minikql/invoke_builtins
     yql/essentials/protos
     yql/essentials/utils

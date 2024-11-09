@@ -12,9 +12,9 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/dq/integration
+    yql/essentials/core/dq_integration
     ydb/library/yql/providers/common/token_accessor/client
-    ydb/library/yql/providers/common/dq
+    yql/essentials/providers/common/dq
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/schema/mkql
     ydb/library/yql/providers/function/expr_nodes

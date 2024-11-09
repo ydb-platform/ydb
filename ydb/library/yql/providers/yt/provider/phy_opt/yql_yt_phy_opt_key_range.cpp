@@ -2,6 +2,7 @@
 #include "yql_yt_phy_opt_helper.h"
 
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
 #include <yql/essentials/utils/log/log.h>
 

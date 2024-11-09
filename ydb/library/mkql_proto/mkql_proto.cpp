@@ -1601,10 +1601,11 @@ Y_FORCE_INLINE NUdf::TUnboxedValue KindDataImport(const TType* type, const Ydb::
         case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
             CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "JsonDocument");
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(value.text_value());
-            if (binaryJson.IsFail()) {
+            if (std::holds_alternative<TString>(binaryJson)) {
                 throw yexception() << "Invalid JsonDocument value";
             }
-            return MakeString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
+            const auto& value = std::get<NBinaryJson::TBinaryJson>(binaryJson);
+            return MakeString(TStringBuf(value.Data(), value.Size()));
         }
         case NUdf::TDataType<NUdf::TDyNumber>::Id: {
             CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "DyNumber");

@@ -23,7 +23,7 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
-#include <ydb/library/yql/dq/integration/transform/yql_dq_task_transform.h>
+#include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <library/cpp/yson/node/node_io.h>

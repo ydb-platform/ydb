@@ -33,7 +33,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            const auto binaryJson = *SerializeToBinaryJson(testCase.first);
+            const auto binaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(testCase.first));
             const auto reader = TBinaryJsonReader::Make(binaryJson);
             const auto container = reader->GetRootCursor();
 
@@ -50,7 +50,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            const auto binaryJson = *SerializeToBinaryJson(testCase.first);
+            const auto binaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(testCase.first));
             const auto reader = TBinaryJsonReader::Make(binaryJson);
             const auto container = reader->GetRootCursor();
             const auto innerContainer = container.GetElement(0).GetContainer();
@@ -67,7 +67,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            const auto binaryJson = *SerializeToBinaryJson(testCase.first);
+            const auto binaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(testCase.first));
             const auto reader = TBinaryJsonReader::Make(binaryJson);
             const auto container = reader->GetRootCursor();
 
@@ -86,7 +86,7 @@ public:
         };
 
         for (const auto& testCase : testCases) {
-            const auto binaryJson = *SerializeToBinaryJson(testCase.first);
+            const auto binaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(testCase.first));
             const auto reader = TBinaryJsonReader::Make(binaryJson);
             const auto container = reader->GetRootCursor();
 

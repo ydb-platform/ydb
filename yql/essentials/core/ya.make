@@ -98,6 +98,7 @@ END()
 RECURSE(
     cbo
     credentials
+    dq_integration
     file_storage
     issue
     minsketch

@@ -2518,11 +2518,12 @@ NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef bu
 
     case NUdf::EDataSlot::JsonDocument: {
         auto binaryJson = NKikimr::NBinaryJson::SerializeToBinaryJson(buf);
-        if (binaryJson.IsFail()) {
+        if (std::holds_alternative<TString>(binaryJson)) {
             // JSON parse error happened, return NULL
             return NUdf::TUnboxedValuePod();
         }
-        return MakeString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
+        const auto& value = std::get<NKikimr::NBinaryJson::TBinaryJson>(binaryJson);
+        return MakeString(TStringBuf(value.Data(), value.Size()));
     }
 
     case NUdf::EDataSlot::Decimal:

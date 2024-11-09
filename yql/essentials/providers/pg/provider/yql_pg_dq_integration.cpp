@@ -1,5 +1,5 @@
 #include "yql_pg_provider_impl.h"
-#include <contrib/ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <yql/essentials/providers/pg/expr_nodes/yql_pg_expr_nodes.h>
 
 namespace NYql {

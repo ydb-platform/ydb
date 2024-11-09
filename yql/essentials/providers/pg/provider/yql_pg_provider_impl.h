@@ -4,7 +4,7 @@
 #include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/providers/common/transform/yql_exec.h>
-#include <contrib/ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 
 #include <util/generic/ptr.h>
 

@@ -11,7 +11,6 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
-#include <contrib/ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

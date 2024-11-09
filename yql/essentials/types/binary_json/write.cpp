@@ -715,26 +715,31 @@ template <typename TOnDemandValue>
 }
 }
 
-TConclusion<TBinaryJson> SerializeToBinaryJsonImpl(const TStringBuf json) {
+std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf json) {
+    std::variant<TBinaryJson, TString> res;
     TBinaryJsonCallbacks callbacks(/* throwException */ false);
     const simdjson::padded_string paddedJson(json);
     simdjson::ondemand::parser parser;
     try {
         auto doc = parser.iterate(paddedJson);
         if (auto status = doc.error(); status != simdjson::SUCCESS) {
-            return TConclusionStatus::Fail(simdjson::error_message(status));
+            res = TString(simdjson::error_message(status));
+            return res;
         }
         if (auto status = SimdJsonToJsonIndex(doc.value_unsafe(), callbacks); status != simdjson::SUCCESS) {
-            return TConclusionStatus::Fail(simdjson::error_message(status));
+            res = TString(simdjson::error_message(status));
+            return res;
         }
     } catch (const simdjson::simdjson_error& e) {
-        return TConclusionStatus::Fail(e.what());
+        res = TString(e.what());
+        return res;
     }
     TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
-    return std::move(serializer).Serialize();
+    res = std::move(serializer).Serialize();
+    return res;
 }
 
-TConclusion<TBinaryJson> SerializeToBinaryJson(const TStringBuf json) {
+std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json) {
     return SerializeToBinaryJsonImpl(json);
 }
 

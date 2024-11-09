@@ -4,6 +4,7 @@ RECURSE(
     codec
     comp_nodes
     config
+    dq
     gateway
     metrics
     mkql

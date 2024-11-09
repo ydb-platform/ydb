@@ -572,12 +572,13 @@ struct TStringConvert {
 };
 
 NUdf::TUnboxedValuePod JsonToJsonDocument(const NUdf::TUnboxedValuePod value) {
-    auto binaryJson = NKikimr::NBinaryJson::SerializeToBinaryJson(value.AsStringRef());
-    if (!binaryJson.IsSuccess()) {
+    auto maybeBinaryJson = NKikimr::NBinaryJson::SerializeToBinaryJson(value.AsStringRef());
+    if (std::holds_alternative<TString>(maybeBinaryJson)) {
         // JSON parse error happened, return NULL
         return NUdf::TUnboxedValuePod();
     }
-    return MakeString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
+    const auto& binaryJson = std::get<NKikimr::NBinaryJson::TBinaryJson>(maybeBinaryJson);
+    return MakeString(TStringBuf(binaryJson.Data(), binaryJson.Size()));
 }
 
 struct TJsonToJsonDocumentConvert {

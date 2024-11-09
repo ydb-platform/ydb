@@ -160,7 +160,6 @@ PEERDIR(
     yql/essentials/public/udf/arrow
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/utils
-    contrib/ydb/library/actors/core
     yql/essentials/public/issue/protos
 )
 

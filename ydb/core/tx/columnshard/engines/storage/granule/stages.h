@@ -84,6 +84,24 @@ public:
     }
 };
 
+class TGranuleFinishCommonLoading: public ITxReader {
+private:
+    using TBase = ITxReader;
+    TGranuleMeta* Self = nullptr;
+    bool Started = false;
+    virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
+        return true;
+    }
+    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override;
+
+public:
+    TGranuleFinishCommonLoading(const TString& name, TGranuleMeta* self)
+        : TBase(name)
+        , Self(self) {
+        AFL_VERIFY(Self);
+    }
+};
+
 class IGranuleTxReader: public ITxReader {
 private:
     using TBase = ITxReader;
@@ -131,7 +149,7 @@ public:
     using TBase::TBase;
 };
 
-class TGranuleFinishLoading: public IGranuleTxReader {
+class TGranuleFinishAccessorsLoading: public IGranuleTxReader {
 private:
     using TBase = IGranuleTxReader;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;

@@ -15,7 +15,7 @@ std::shared_ptr<NKikimr::ITxReader> TManager::DoBuildLoader(
     result->AddChildren(
         std::make_shared<NLoading::TGranuleIndexesReader>("indexes", &versionedIndex, granule, dsGroupSelector, portionsLoadContext));
     result->AddChildren(
-        std::make_shared<NLoading::TGranuleFinishLoading>("finish", &versionedIndex, granule, dsGroupSelector, portionsLoadContext));
+        std::make_shared<NLoading::TGranuleFinishAccessorsLoading>("finish", &versionedIndex, granule, dsGroupSelector, portionsLoadContext));
     return result;
 }
 

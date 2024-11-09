@@ -159,6 +159,7 @@ private:
         return it->second;
     }
     bool DataAccessorConstructed = false;
+    bool LoadingFinished = false;
 
 public:
     std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
@@ -174,8 +175,14 @@ public:
     }
 
     void RefreshTiering(const std::optional<TTiering>& tiering) {
-        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
-        ActualizationIndex->RefreshTiering(tiering, context);
+        if (LoadingFinished) {
+            NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+            ActualizationIndex->RefreshTiering(tiering, context);
+        } else {
+            NActualizer::TAddExternalContext context(
+                HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Default<THashMap<ui64, std::shared_ptr<TPortionInfo>>>());
+            ActualizationIndex->RefreshTiering(tiering, context);
+        }
     }
 
     template <class TModifier>
@@ -286,10 +293,12 @@ public:
     }
 
     void OnAfterPortionsLoad() {
+        AFL_VERIFY(!LoadingFinished);
         auto g = OptimizerPlanner->StartModificationGuard();
         for (auto&& i : Portions) {
             OnAfterChangePortion(i.second, &g);
         }
+        LoadingFinished = true;
     }
 
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;

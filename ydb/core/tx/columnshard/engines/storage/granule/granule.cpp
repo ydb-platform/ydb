@@ -142,8 +142,7 @@ TGranuleMeta::TGranuleMeta(
         PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
     OptimizerPlanner = versionedIndex.GetLastSchema()->GetIndexInfo().GetCompactionPlannerConstructor()->BuildPlanner(context).DetachResult();
     NDataAccessorControl::TManagerConstructionContext mmContext(DataAccessorsManager->GetTabletActorId());
-    MetadataMemoryManager =
-        versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataManagerConstructor()->Build(mmContext).DetachResult();
+    MetadataMemoryManager = versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataManagerConstructor()->Build(mmContext).DetachResult();
     AFL_VERIFY(!!OptimizerPlanner);
     ActualizationIndex = std::make_unique<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 }
@@ -208,17 +207,17 @@ void TGranuleMeta::ResetMetadataManager(const std::shared_ptr<NDataAccessorContr
 
 std::shared_ptr<NKikimr::ITxReader> TGranuleMeta::BuildLoader(
     const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex) {
-    auto portionsLoader =
-        std::make_shared<NLoading::TGranuleOnlyPortionsReader>("portions", &vIndex, this, dsGroupSelector);
+    auto portionsLoader = std::make_shared<NLoading::TGranuleOnlyPortionsReader>("portions", &vIndex, this, dsGroupSelector);
     auto metadataLoader = MetadataMemoryManager->BuildLoader(vIndex, this, dsGroupSelector);
-    if (!metadataLoader) {
-        return portionsLoader;
-    } else {
-        auto result = std::make_shared<TTxCompositeReader>("granule");
-        result->AddChildren(portionsLoader);
+    auto commonFinish = std::make_shared<NLoading::TGranuleFinishCommonLoading>("granule_finished_common", this);
+
+    auto result = std::make_shared<TTxCompositeReader>("granule");
+    result->AddChildren(portionsLoader);
+    if (metadataLoader) {
         result->AddChildren(metadataLoader);
-        return result;
     }
+    result->AddChildren(commonFinish);
+    return result;
 }
 
 bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex) {

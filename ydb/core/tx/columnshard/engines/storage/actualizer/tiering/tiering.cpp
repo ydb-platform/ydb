@@ -75,12 +75,13 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
 }
 
 void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExternalContext& addContext) {
+    AFL_VERIFY(PathId == portion.GetPathId());
     if (!addContext.GetPortionExclusiveGuarantee()) {
         if (PortionsInfo.contains(portion.GetPortionId())) {
             return;
         }
     } else {
-        AFL_VERIFY(!PortionsInfo.contains(portion.GetPortionId()));
+        AFL_VERIFY(!PortionsInfo.contains(portion.GetPortionId()))("id", portion.GetPortionId())("path_id", portion.GetPathId());
     }
     auto info = BuildActualizationInfo(portion, addContext.GetNow());
     if (!info) {

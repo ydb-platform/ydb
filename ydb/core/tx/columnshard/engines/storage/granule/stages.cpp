@@ -54,7 +54,7 @@ bool TGranuleIndexesReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext
     return db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(Self->GetPathId()).Select().IsReady();
 }
 
-bool TGranuleFinishLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
+bool TGranuleFinishAccessorsLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
     THashMap<ui64, TPortionDataAccessors> constructors = Context->ExtractConstructors();
     AFL_VERIFY(Self->GetPortions().size() == constructors.size());
     for (auto&& i : Self->GetPortions()) {
@@ -63,6 +63,14 @@ bool TGranuleFinishLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& 
         auto accessor = TPortionAccessorConstructor::BuildForLoading(i.second, std::move(it->second.MutableRecords()), std::move(it->second.MutableIndexes()));
         Self->GetDataAccessorsManager()->AddPortion(accessor);
     }
+    return true;
+}
+
+bool TGranuleFinishCommonLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
+    AFL_VERIFY(!Started);
+    Started = true;
+    TMemoryProfileGuard g("TTxInit/LoadColumns/After");
+    Self->OnAfterPortionsLoad();
     return true;
 }
 

@@ -212,13 +212,6 @@ std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(const std::shared_p
 }
 
 bool TColumnEngineForLogs::FinishLoading() {
-    {
-        TMemoryProfileGuard g("TTxInit/LoadColumns/After");
-        for (auto&& i : GranulesStorage->GetTables()) {
-            i.second->OnAfterPortionsLoad();
-        }
-    }
-
     for (const auto& [pathId, spg] : GranulesStorage->GetTables()) {
         for (const auto& [_, portionInfo] : spg->GetPortions()) {
             UpdatePortionStats(*portionInfo, EStatsUpdateType::ADD);

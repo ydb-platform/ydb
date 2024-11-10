@@ -2882,11 +2882,18 @@ private:
             for (size_t outIndex = 0; outIndex < usage.UsedByMerges.size(); ++outIndex) {
                 for (auto merge: usage.UsedByMerges[outIndex]) {
                     const TColumnUsage& mergeUsage = colUsages.at(merge);
-                    usage.FullUsage[outIndex] = usage.FullUsage[outIndex] || mergeUsage.FullUsage.at(0);
-                    usage.PublishUsage[outIndex].insert(mergeUsage.PublishUsage.at(0).cbegin(), mergeUsage.PublishUsage.at(0).cend());
-                    auto& cu = usage.ColumnUsage[outIndex];
-                    for (const auto& p: mergeUsage.ColumnUsage.at(0)) {
-                        cu[p.first].insert(p.second.cbegin(), p.second.cend());
+                    if (TYtCopy::Match(merge)) {
+                        usage.FullUsage[outIndex] = mergeUsage.FullUsage.at(0);
+                        usage.PublishUsage[outIndex] = mergeUsage.PublishUsage.at(0);
+                        usage.ColumnUsage[outIndex] = mergeUsage.ColumnUsage.at(0);
+                        break; // Don't process others. YtCopy enforces exact the same column groups
+                    } else {
+                        usage.FullUsage[outIndex] = usage.FullUsage[outIndex] || mergeUsage.FullUsage.at(0);
+                        usage.PublishUsage[outIndex].insert(mergeUsage.PublishUsage.at(0).cbegin(), mergeUsage.PublishUsage.at(0).cend());
+                        auto& cu = usage.ColumnUsage[outIndex];
+                        for (const auto& p: mergeUsage.ColumnUsage.at(0)) {
+                            cu[p.first].insert(p.second.cbegin(), p.second.cend());
+                        }
                     }
                 }
             }

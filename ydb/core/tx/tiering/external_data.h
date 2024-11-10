@@ -9,7 +9,7 @@
 
 namespace NKikimr::NColumnShard::NTiers {
 
-class TSnapshotConstructor: public NMetadata::NFetcher::TSnapshotsFetcher<TConfigsSnapshot> {
+class TSnapshotConstructor: public NMetadata::NFetcher::TSnapshotsFetcher<TTiersSnapshot> {
 private:
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
     using TBaseActor = TActor<TSnapshotConstructor>;

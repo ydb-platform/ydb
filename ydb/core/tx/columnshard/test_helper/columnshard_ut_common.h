@@ -246,20 +246,22 @@ struct TTestSchema {
                            const TTableSpecials& specials,
                            NKikimrSchemeOp::TColumnTableSchema* schema);
 
-    static void InitTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle::TTtl* ttl) {
-        Y_ABORT_UNLESS(specials.HasTtl());
-        Y_ABORT_UNLESS(!specials.TtlColumn.empty());
-        ttl->SetColumnName(specials.TtlColumn);
-        ttl->SetExpireAfterSeconds((*specials.EvictAfter).Seconds());
-    }
-
     static bool InitTiersAndTtl(const TTableSpecials& specials, NKikimrSchemeOp::TColumnDataLifeCycle* ttlSettings) {
         ttlSettings->SetVersion(1);
-        if (specials.HasTiers()) {
-            ttlSettings->SetUseTiering("Tiering1");
-        }
         if (specials.HasTtl()) {
-            InitTtl(specials, ttlSettings->MutableEnabled());
+            ttlSettings->MutableEnabled()->SetColumnName(specials.TtlColumn);
+            ttlSettings->MutableEnabled()->SetExpireAfterSeconds((*specials.EvictAfter).Seconds());
+        }
+        for (const auto& tier : specials.Tiers) {
+            UNIT_ASSERT(tier.EvictAfter);
+            auto* tierSettings = ttlSettings->MutableEnabled()->AddTiers();
+            tierSettings->SetStorageName(tier.Name);
+            tierSettings->SetEvictAfterSeconds(tier.EvictAfter->Seconds());
+            if (ttlSettings->MutableEnabled()->HasColumnName()) {
+                UNIT_ASSERT_EQUAL(tier.TtlColumn, ttlSettings->MutableEnabled()->GetColumnName());
+            } else {
+                ttlSettings->MutableEnabled()->SetColumnName(tier.TtlColumn);
+            }
         }
         return specials.HasTiers() || specials.HasTtl();
     }

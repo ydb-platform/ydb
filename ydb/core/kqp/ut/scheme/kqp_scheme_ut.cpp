@@ -5135,15 +5135,18 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         runnerSettings.SetEnableTieringInColumnShard(true);
-        TKikimrRunner kikimr(runnerSettings);
-        auto db = kikimr.GetTableClient();
+        TTestHelper testHelper(runnerSettings);
+        auto db = testHelper.GetKikimr().GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString tableName = "/Root/ColumnTableTest";
+
+        testHelper.CreateTier("tier1");
+        testHelper.CreateTier("tier2");
 
         auto query = TStringBuilder() << R"(
             --!syntax_v1
             CREATE TABLE `)" << tableName << R"(` (
-                Key Uint64 NOT NULL,
+                Key Timestamp NOT NULL,
                 Value1 String,
                 Value2 Int64 NOT NULL,
                 PRIMARY KEY (Key)
@@ -5152,23 +5155,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             WITH (
                 STORE = COLUMN,
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10,
-                TIERING = 'tiering1'
+                TTL = Interval("PT10S") TO tier1 ON Key
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-#if 0 // TODO
         { // describe table
             auto desc = session.DescribeTable(tableName).ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
-            auto tiering = desc.GetTableDescription().GetTiering();
-            UNIT_ASSERT(tiering);
-            UNIT_ASSERT_VALUES_EQUAL(*tiering, "tiering1");
+            UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
+            auto ttl = desc.GetTableDescription().GetTtlSettings()->GetDateTypeColumn();
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers()[0].GetStorageName(), "tier1");
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers()[0].GetEvictionDelay(), TDuration::Seconds(10));
         }
-#endif
         auto query2 = TStringBuilder() << R"(
             --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(` SET(TIERING = 'tiering2');)";
+            ALTER TABLE `)" << tableName << R"(` SET (TTL = Interval("PT10S") TO tier2 ON Key);)";
         result = session.ExecuteSchemeQuery(query2).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -5176,14 +5179,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto desc = session.DescribeTable(tableName).ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
-            auto tiering = desc.GetTableDescription().GetTiering();
-            UNIT_ASSERT(tiering);
-            UNIT_ASSERT_VALUES_EQUAL(*tiering, "tiering2");
+            UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
+            auto ttl = desc.GetTableDescription().GetTtlSettings()->GetDateTypeColumn();
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers()[0].GetStorageName(), "tier2");
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers()[0].GetEvictionDelay(), TDuration::Seconds(10));
         }
 
         auto query3 = TStringBuilder() << R"(
             --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(` RESET (TIERING);)";
+            ALTER TABLE `)" << tableName << R"(` RESET (TTL);)";
         result = session.ExecuteSchemeQuery(query3).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -5191,13 +5196,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto desc = session.DescribeTable(tableName).ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
-            auto tiering = desc.GetTableDescription().GetTiering();
-            UNIT_ASSERT(!tiering);
+            auto ttl = desc.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT(!ttl);
         }
 
         auto query4 = TStringBuilder() << R"(
             --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(` SET (TIERING = 'tiering1');)";
+            ALTER TABLE `)" << tableName << R"(` SET (TTL = Interval("PT10S") TO tier1 ON Key);)";
         result = session.ExecuteSchemeQuery(query4).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -5205,9 +5210,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto desc = session.DescribeTable(tableName).ExtractValueSync();
             UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
 
-            auto tiering = desc.GetTableDescription().GetTiering();
-            UNIT_ASSERT(tiering);
-            UNIT_ASSERT_VALUES_EQUAL(*tiering, "tiering1");
+            UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
+            auto ttl = desc.GetTableDescription().GetTtlSettings()->GetDateTypeColumn();
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers()[0].GetStorageName(), "tier1");
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers()[0].GetEvictionDelay(), TDuration::Seconds(10));
         }
 
         auto query5 = TStringBuilder() << R"(
@@ -7825,9 +7832,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        // const auto ruleName = testHelper.CreateTieringRule("tier1", "created_att");
-        const auto ruleName = testHelper.CreateTieringRule("tier1", "created_at");
-        testHelper.SetTiering(tableName, ruleName);
+        testHelper.SetTiering(tableName, "tier1", "created_at");
 
         while (csController->GetTieringUpdates().Val() == 0) {
             Cout << "Wait tiering..." << Endl;
@@ -7852,6 +7857,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id", "id_second"}).SetSharding({"id"}).SetSchema(schema);
         testHelper.CreateTable(testTable);
+        testHelper.CreateTier("tier1");
 
         {
             auto alterQuery = TStringBuilder() << R"(
@@ -7893,16 +7899,22 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL(columns.size(), 5);
             UNIT_ASSERT_VALUES_EQUAL(description.GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(), TDuration::Hours(1));
         }
-        testHelper.SetTiering("/Root/ColumnTableTest", "tiering1");
+        {
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`SET (TTL = Interval(\"PT10S\") TO tier1, Interval(\"PT1H\") DELETE ON created_at);";
+            auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
         {
             auto settings = TDescribeTableSettings().WithTableStatistics(true);
             auto describeResult = testHelper.GetSession().DescribeTable("/Root/ColumnTableTest", settings).GetValueSync();
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
 
             const auto& description = describeResult.GetTableDescription();
-            UNIT_ASSERT(description.GetTiering());
-            UNIT_ASSERT_VALUES_EQUAL(*description.GetTiering(), "tiering1");
-            UNIT_ASSERT_VALUES_EQUAL(description.GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(), TDuration::Hours(1));
+            UNIT_ASSERT(describeResult.GetTableDescription().GetTtlSettings());
+            auto ttl = describeResult.GetTableDescription().GetTtlSettings()->GetDateTypeColumn();
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetExpireAfter(), TDuration::Hours(1));
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ttl.GetTiers()[0].GetStorageName(), "tier1");
         }
         {
             auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() <<  R"(` RESET (TTL);)";
@@ -7915,18 +7927,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
 
             const auto& description = describeResult.GetTableDescription();
-            UNIT_ASSERT(description.GetTiering());
-            UNIT_ASSERT_VALUES_EQUAL(*description.GetTiering(), "tiering1");
-            UNIT_ASSERT(!description.GetTtlSettings());
-        }
-        testHelper.ResetTiering("/Root/ColumnTableTest");
-        {
-            auto settings = TDescribeTableSettings().WithTableStatistics(true);
-            auto describeResult = testHelper.GetSession().DescribeTable("/Root/ColumnTableTest", settings).GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-
-            const auto& description = describeResult.GetTableDescription();
-            UNIT_ASSERT(!description.GetTiering());
             UNIT_ASSERT(!description.GetTtlSettings());
         }
     }

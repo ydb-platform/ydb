@@ -3,25 +3,21 @@
 namespace NKikimr::NSchemeShard {
 
 void TTablesStorage::OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr object) {
-    const TString& tieringId = object->Description.GetTtlSettings().GetUseTiering();
-    if (!!tieringId) {
-        PathsByTieringId[tieringId].emplace(pathId);
+    for (const auto& tier : object->Description.GetTtlSettings().GetEnabled().GetTiers()) {
+        AFL_VERIFY(PathsByTier[tier.GetStorageName()].emplace(pathId).second);
     }
     for (auto&& s : object->GetColumnShards()) {
-        TablesByShard[s].AddId(pathId);
+        AFL_VERIFY(TablesByShard[s].AddId(pathId));
     }
 }
 
 void TTablesStorage::OnRemoveObject(const TPathId& pathId, TColumnTableInfo::TPtr object) {
-    const TString& tieringId = object->Description.GetTtlSettings().GetUseTiering();
-    if (!!tieringId) {
-        auto it = PathsByTieringId.find(tieringId);
-        if (PathsByTieringId.end() == it) {
-            return;
-        }
-        it->second.erase(pathId);
-        if (it->second.empty()) {
-            PathsByTieringId.erase(it);
+    for (const auto& tier : object->Description.GetTtlSettings().GetEnabled().GetTiers()) {
+        auto findTier = PathsByTier.find(tier.GetStorageName());
+        AFL_VERIFY(findTier);
+        AFL_VERIFY(findTier->second.erase(pathId));
+        if (findTier->second.empty()) {
+            PathsByTier.erase(findTier);
         }
     }
     for (auto&& s : object->GetColumnShards()) {
@@ -29,9 +25,9 @@ void TTablesStorage::OnRemoveObject(const TPathId& pathId, TColumnTableInfo::TPt
     }
 }
 
-const THashSet<TPathId>& TTablesStorage::GetTablesWithTiering(const TString& tieringId) const {
-    auto it = PathsByTieringId.find(tieringId);
-    if (it != PathsByTieringId.end()) {
+const THashSet<TPathId>& TTablesStorage::GetTablesWithTier(const TString& storageId) const {
+    auto it = PathsByTier.find(storageId);
+    if (it != PathsByTier.end()) {
         return it->second;
     } else {
         return Default<THashSet<TPathId>>();
@@ -78,13 +74,14 @@ TTablesStorage::TTableCreatedGuard TTablesStorage::BuildNew(const TPathId& id) {
     return TTableCreatedGuard(*this, id);
 }
 
-size_t TTablesStorage::Drop(const TPathId& id) {
+bool TTablesStorage::Drop(const TPathId& id) {
     auto it = Tables.find(id);
     if (it == Tables.end()) {
-        return 0;
+        return false;
     } else {
         OnRemoveObject(id, it->second);
-        return Tables.erase(id);
+        Tables.erase(it);
+        return true;
     }
 }
 

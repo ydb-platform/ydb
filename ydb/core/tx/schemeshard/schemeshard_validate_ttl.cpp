@@ -32,6 +32,11 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
         const auto& enabled = ttl.GetEnabled();
         const TString colName = enabled.GetColumnName();
 
+        if (enabled.TiersSize()) {
+            errStr = "Cannot enable tiering: tiering on OLTP tables is not supported";
+            return false;
+        }
+
         auto it = colName2Id.find(colName);
         if (it == colName2Id.end()) {
             errStr = Sprintf("Cannot enable TTL on unknown column: '%s'", colName.data());

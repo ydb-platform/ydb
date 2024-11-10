@@ -203,7 +203,7 @@ bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     }
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, tablesManagerLocal.GetTables().size());
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, tablesManagerLocal.GetSchemaPresets().size());
-    Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, tablesManagerLocal.GetTtl().PathsCount());
+    Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, tablesManagerLocal.GetTtl().size());
 
     Self->TablesManager = std::move(tablesManagerLocal);
     return true;

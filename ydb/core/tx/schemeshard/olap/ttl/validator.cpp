@@ -44,7 +44,7 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         return false;
     }
 
-    if (!ttl.HasExpireAfterSeconds()) {
+    if (!ttl.HasExpireAfterSeconds() && ttl.GetTiers().empty()) {
         errors.AddError("TTL without eviction time");
         return false;
     }

@@ -92,6 +92,10 @@ TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString
     return pathPromise.GetFuture();
 }
 
+void TTtlSettings::TTier::SerializeToProto(Ydb::Table::EvictionTier& proto) const {
+    proto.set_storage_name(StorageName);
+    proto.set_evict_after_seconds(EvictionDelay.Seconds());
+}
 
 bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error) {
     using namespace NNodes;
@@ -101,15 +105,50 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
         if (name == "columnName") {
             YQL_ENSURE(field.Value().Maybe<TCoAtom>());
             settings.ColumnName = field.Value().Cast<TCoAtom>().StringValue();
-        } else if (name == "expireAfter") {
-            YQL_ENSURE(field.Value().Maybe<TCoInterval>());
-            auto value = FromString<i64>(field.Value().Cast<TCoInterval>().Literal().Value());
-            if (value < 0) {
-                error = "Interval value cannot be negative";
-                return false;
+        } else if (name == "tiers") {
+            YQL_ENSURE(field.Value().Maybe<TExprList>());
+            auto listNode = field.Value().Cast<TExprList>();
+
+            for (size_t i = 0; i < listNode.Size(); ++i) {
+                auto tierNode = listNode.Item(i);
+
+                std::optional<TString> storageName;
+                TDuration evictionDelay;
+                YQL_ENSURE(tierNode.Maybe<TCoNameValueTupleList>());
+                for (const auto& tierField : tierNode.Cast<TCoNameValueTupleList>()) {
+                    auto tierFieldName = tierField.Name().Value();
+                    if (tierFieldName == "storageName") {
+                        YQL_ENSURE(tierField.Value().Maybe<TCoAtom>());
+                        storageName = tierField.Value().Cast<TCoAtom>().StringValue();
+                    } else if (tierFieldName == "evictionDelay") {
+                        YQL_ENSURE(tierField.Value().Maybe<TCoInterval>());
+                        auto value = FromString<i64>(tierField.Value().Cast<TCoInterval>().Literal().Value());
+                        if (value < 0) {
+                            error = "Interval value cannot be negative";
+                            return false;
+                        }
+                        evictionDelay = TDuration::FromValue(value);
+                    } else {
+                        error = TStringBuilder() << "Unknown field: " << tierFieldName;
+                        return false;
+                    }
+                }
+
+                if (storageName) {
+                    settings.Tiers.emplace_back(evictionDelay, *storageName);
+                } else {
+                    if (settings.ExpireAfter) {
+                        error = "Cannot be more that one tier without storage";
+                        return false;
+                    }
+                    settings.ExpireAfter = evictionDelay;
+                }
             }
 
-            settings.ExpireAfter = TDuration::FromValue(value);
+            if (!settings.ExpireAfter && settings.Tiers.empty()) {
+                error = "TTL must contain at least one tier";
+                return false;
+            }
         } else if (name == "columnUnit") {
             YQL_ENSURE(field.Value().Maybe<TCoAtom>());
             auto value = field.Value().Cast<TCoAtom>().StringValue();
@@ -283,12 +322,22 @@ void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::T
     if (!settings.ColumnUnit) {
         auto& opts = *proto.mutable_date_type_column();
         opts.set_column_name(settings.ColumnName);
-        opts.set_expire_after_seconds(settings.ExpireAfter.Seconds());
+        if (settings.ExpireAfter) {
+            opts.set_expire_after_seconds(settings.ExpireAfter->Seconds());
+        }
+        for (const auto& tier : settings.Tiers) {
+            tier.SerializeToProto(*opts.add_storage_tiers());
+        }
     } else {
         auto& opts = *proto.mutable_value_since_unix_epoch();
         opts.set_column_name(settings.ColumnName);
         opts.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(*settings.ColumnUnit));
-        opts.set_expire_after_seconds(settings.ExpireAfter.Seconds());
+        if (settings.ExpireAfter) {
+            opts.set_expire_after_seconds(settings.ExpireAfter->Seconds());
+        }
+        for (const auto& tier : settings.Tiers) {
+            tier.SerializeToProto(*opts.add_storage_tiers());
+        }
     }
 }
 

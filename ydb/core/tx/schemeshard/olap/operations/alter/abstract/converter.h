@@ -25,11 +25,9 @@ private:
                 if (enabled.HasColumnUnit()) {
                     alterEnabled->SetColumnUnit(enabled.GetColumnUnit());
                 }
+                *alterEnabled->MutableTiers() = enabled.GetTiers();
             } else if (tableTtl.HasDisabled()) {
                 alterTtl->MutableDisabled();
-            }
-            if (tableTtl.HasUseTiering()) {
-                alterTtl->SetUseTiering(tableTtl.GetUseTiering());
             }
         }
 

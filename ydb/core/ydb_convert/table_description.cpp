@@ -48,8 +48,6 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
         req->alter_columns_size() ||
         req->ttl_action_case() !=
             Ydb::Table::AlterTableRequest::TTL_ACTION_NOT_SET ||
-        req->tiering_action_case() !=
-            Ydb::Table::AlterTableRequest::TIERING_ACTION_NOT_SET ||
         req->has_alter_storage_settings() || req->add_column_families_size() ||
         req->alter_column_families_size() || req->set_compaction_policy() ||
         req->has_alter_partitioning_settings() ||
@@ -509,11 +507,22 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
 
 template <typename TYdbProto, typename TTtl>
 static void AddTtl(TYdbProto& out, const TTtl& inTTL) {
+    static const auto& fillCommonFields = []<class TModeSettings>(TModeSettings& out, const TTtl& in) {
+        out.set_column_name(in.GetColumnName());
+        if (in.HasExpireAfterSeconds()) {
+            out.set_expire_after_seconds(in.GetExpireAfterSeconds());
+        }
+        for (const auto& in_tier : in.GetTiers()) {
+            auto* out_tier = out.add_storage_tiers();
+            out_tier->set_evict_after_seconds(in_tier.GetEvictAfterSeconds());
+            out_tier->set_storage_name(in_tier.GetStorageName());
+        }
+    };
+
     switch (inTTL.GetColumnUnit()) {
     case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {
         auto& outTTL = *out.mutable_ttl_settings()->mutable_date_type_column();
-        outTTL.set_column_name(inTTL.GetColumnName());
-        outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
+        fillCommonFields(outTTL, inTTL);
         break;
     }
 
@@ -522,9 +531,8 @@ static void AddTtl(TYdbProto& out, const TTtl& inTTL) {
     case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
     case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: {
         auto& outTTL = *out.mutable_ttl_settings()->mutable_value_since_unix_epoch();
-        outTTL.set_column_name(inTTL.GetColumnName());
+        fillCommonFields(outTTL, inTTL);
         outTTL.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(inTTL.GetColumnUnit()));
-        outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
         break;
     }
 
@@ -572,10 +580,6 @@ void FillColumnDescriptionImpl(TYdbProto& out,
         if (in.GetTTLSettings().HasEnabled()) {
             AddTtl(out, in.GetTTLSettings().GetEnabled());
         }
-
-        if (in.GetTTLSettings().HasUseTiering()) {
-            out.set_tiering(in.GetTTLSettings().GetUseTiering());
-        }
     }
 }
 
@@ -611,10 +615,6 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
     if (in.HasTtlSettings()) {
         if (in.GetTtlSettings().HasEnabled()) {
             AddTtl(out, in.GetTtlSettings().GetEnabled());
-        }
-
-        if (in.GetTtlSettings().HasUseTiering()) {
-            out.set_tiering(in.GetTtlSettings().GetUseTiering());
         }
     }
 
@@ -828,12 +828,6 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             }
         } else if (req->has_drop_ttl_settings()) {
             alterColumnTable->MutableAlterTtlSettings()->MutableDisabled();
-        }
-
-        if (req->has_set_tiering()) {
-            alterColumnTable->MutableAlterTtlSettings()->SetUseTiering(req->set_tiering());
-        } else if (req->has_drop_tiering()) {
-            alterColumnTable->MutableAlterTtlSettings()->SetUseTiering("");
         }
     }
 

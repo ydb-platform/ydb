@@ -470,7 +470,14 @@ Y_UNIT_TEST_SUITE(TOlap) {
             Name: "Table3"
             ColumnShardCount: 1
             TtlSettings {
-                UseTiering : "Tiering1"
+                Enabled: {
+                    ColumnName: "timestamp"
+                    ColumnUnit: UNIT_AUTO
+                    Tiers: {
+                        EvictAfterSeconds: 360
+                        StorageName: "Tier1"
+                    }
+                }
             }
         )";
 
@@ -481,13 +488,20 @@ Y_UNIT_TEST_SUITE(TOlap) {
             NLs::HasColumnTableSchemaPreset("default"),
             NLs::HasColumnTableSchemaVersion(1),
             NLs::HasColumnTableTtlSettingsVersion(1),
-            NLs::HasColumnTableTtlSettingsTiering("Tiering1")));
+            NLs::HasColumnTableTtlSettingsTier("timestamp", TDuration::Seconds(360), "Tier1")));
 
         TString tableSchema4 = R"(
             Name: "Table4"
             ColumnShardCount: 1
             TtlSettings {
-                UseTiering : "Tiering1"
+                Enabled: {
+                    ColumnName: "timestamp"
+                    ColumnUnit: UNIT_AUTO
+                    Tiers: {
+                        EvictAfterSeconds: 3600000000
+                        StorageName: "Tier1"
+                    }
+                }
             }
         )";
 
@@ -631,7 +645,14 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
             Name: "ColumnTable"
             AlterTtlSettings {
-                UseTiering : "Tiering1"
+                Enabled: {
+                    ColumnName: "timestamp"
+                    ColumnUnit: UNIT_AUTO
+                    Tiers: {
+                        EvictAfterSeconds: 3600000000
+                        StorageName: "Tier1"
+                    }
+                }
             }
         )");
         env.TestWaitNotification(runtime, txId);

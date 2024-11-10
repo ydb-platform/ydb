@@ -1647,13 +1647,9 @@ public:
                             ConvertTtlSettingsToProto(ttlSettings, *alterTableRequest.mutable_set_ttl_settings());
                         } else if (name == "resetTtlSettings") {
                             alterTableRequest.mutable_drop_ttl_settings();
-                        } else if (name == "setTiering") {
-                            const auto tieringName = TString(
-                                setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                            );
-                            alterTableRequest.set_set_tiering(tieringName);
-                        } else if (name == "resetTiering") {
-                            alterTableRequest.mutable_drop_tiering();
+                        } else if (name == "setTiering" || name == "resetTiering") {
+                            ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), "Unknown property: tiering"));
+                            return SyncError();
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                 TStringBuilder() << "Unknown table profile setting: " << name));

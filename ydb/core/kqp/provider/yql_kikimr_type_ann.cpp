@@ -1251,13 +1251,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                     "Can't reset TTL settings"));
                 return TStatus::Error;
-            } else if (name == "setTiering") {
-                meta->TableSettings.Tiering.Set(TString(
-                    setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
-                ));
-            } else if (name == "resetTiering") {
+            } else if (name == "setTiering" || name == "resetTiering") {
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                    "Can't reset TIERING"));
+                    "Unknown property: tiering"));
                 return TStatus::Error;
             } else if (name == "storeType") {
                 TMaybe<TString> storeType = TString(setting.Value().Cast<TCoAtom>().Value());

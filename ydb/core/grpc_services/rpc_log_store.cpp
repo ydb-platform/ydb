@@ -434,8 +434,6 @@ private:
             if (!FillTtlSettings(*create->MutableTtlSettings()->MutableEnabled(), req->ttl_settings(), status, error)) {
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }
-        } else if (req->has_tiering_settings()) {
-            create->MutableTtlSettings()->SetUseTiering(req->tiering_settings().tiering_id());
         }
 
         create->SetColumnShardCount(req->shards_count());
@@ -515,6 +513,7 @@ private:
                         auto& outTTL = *describeLogTableResult.mutable_ttl_settings()->mutable_date_type_column();
                         outTTL.set_column_name(inTTL.GetColumnName());
                         outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
+                        FillTiersSettings(*outTTL.mutable_storage_tiers(), inTTL.GetTiers());
                         break;
                     }
 
@@ -526,6 +525,7 @@ private:
                         outTTL.set_column_name(inTTL.GetColumnName());
                         outTTL.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(inTTL.GetColumnUnit()));
                         outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
+                        FillTiersSettings(*outTTL.mutable_storage_tiers(), inTTL.GetTiers());
                         break;
                     }
 
@@ -553,6 +553,14 @@ private:
             default: {
                 return Reply(Ydb::StatusIds::GENERIC_ERROR, ctx);
             }
+        }
+    }
+
+    static void FillTiersSettings(NProtoBuf::RepeatedPtrField<Ydb::Table::EvictionTier>& out, const NProtoBuf::RepeatedPtrField<NKikimrSchemeOp::TTTLSettings_TTier>& in) {
+        for (const auto& inTier : in) {
+            auto* outTier = out.Add();
+            outTier->set_storage_name(inTier.GetStorageName());
+            outTier->set_evict_after_seconds(inTier.GetEvictAfterSeconds());
         }
     }
 
@@ -618,12 +626,6 @@ private:
             }
         } else if (req->has_drop_ttl_settings()) {
             alter->MutableAlterTtlSettings()->MutableDisabled();
-        }
-
-        if (req->has_set_tiering_settings()) {
-            alter->MutableAlterTtlSettings()->SetUseTiering(req->set_tiering_settings().tiering_id());
-        } else if (req->has_drop_tiering_settings()) {
-            alter->MutableAlterTtlSettings()->SetUseTiering("");
         }
 
         ctx.Send(MakeTxProxyID(), proposeRequest.release());

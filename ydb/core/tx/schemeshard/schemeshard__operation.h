@@ -11,6 +11,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
     using TPtr = TIntrusivePtr<TOperation>;
 
     const TTxId TxId;
+    ui32 PreparedParts = 0;
     TVector<ISubOperation::TPtr> Parts;
 
     THashSet<TActorId> Subscribers;
@@ -67,6 +68,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
         NKikimrScheme::EStatus Status = NKikimrScheme::StatusSuccess;
         TString Reason;
         TVector<TTxTransaction> Transactions;
+        std::optional<TTxTransaction> Transaction;
     };
 
     TOperation(TTxId txId)
@@ -80,7 +82,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
     static TSplitTransactionsResult SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context);
 
     ISubOperation::TPtr RestorePart(TTxState::ETxType opType, TTxState::ETxState opState, TOperationContext& context) const;
-    TVector<ISubOperation::TPtr> ConstructParts(const TTxTransaction& tx, TOperationContext& context) const;
+    TVector<ISubOperation::TPtr> ConstructParts(const TTxTransaction& tx, THashSet<TString>& requiredPaths, TOperationContext& context) const;
     void AddPart(ISubOperation::TPtr part);
 
     bool AddPublishingPath(TPathId pathId, ui64 version);
@@ -144,7 +146,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
     }
 
     TOperationId NextPartId() const {
-        return TOperationId(TxId, TSubTxId(Parts.size()));
+        return TOperationId(TxId, TSubTxId(PreparedParts));
     }
 };
 

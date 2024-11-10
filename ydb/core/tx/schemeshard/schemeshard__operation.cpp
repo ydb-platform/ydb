@@ -87,6 +87,94 @@ NKikimrScheme::TEvModifySchemeTransaction GetRecordForPrint(const NKikimrScheme:
     return recordForPrint;
 }
 
+bool TSchemeShard::ProcessOperationParts(
+    const TVector<ISubOperation::TPtr>& parts,
+    const TTxId& txId,
+    const NKikimrScheme::TEvModifySchemeTransaction& record,
+    TOperation::TPtr& operation,
+    THolder<TProposeResponse>& response,
+    TOperationContext& context)
+{
+    auto selfId = SelfTabletId();
+    bool prevProposeUndoSafe = context.IsUndoChangesSafe();
+    const TString owner = record.HasOwner() ? record.GetOwner() : BUILTIN_ACL_ROOT;
+
+    if (parts.size() > 1) {
+        // allow altering impl index tables as part of consistent operation
+        context.IsAllowedPrivateTables = true;
+    }
+
+    for (auto& part : parts) {
+        TString errStr;
+        if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
+            response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
+            response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+        } else {
+            response = part->Propose(owner, context);
+        }
+
+        Y_ABORT_UNLESS(response);
+
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "IgniteOperation"
+                            << ", opId: " << operation->NextPartId()
+                            << ", propose status:" << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
+                            << ", reason: " << response->Record.GetReason()
+                            << ", at schemeshard: " << selfId);
+
+        if (response->IsDone()) {
+            operation->AddPart(part); //at ApplyOnExecute parts is erased
+            context.OnComplete.DoneOperation(part->GetOperationId()); //mark it here by self for sure
+        } else if (response->IsConditionalAccepted()) {
+            //happens on retries, we answer like AlreadyExist or StatusSuccess with error message and do nothing in operation
+            operation->AddPart(part); //at ApplyOnExecute parts is erased
+            context.OnComplete.DoneOperation(part->GetOperationId()); //mark it here by self for sure
+        } else if (response->IsAccepted()) {
+            operation->AddPart(part);
+            //context.OnComplete.ActivateTx(partOpId) ///TODO maybe it is good idea
+        } else {
+            if (!operation->Parts.empty()) {
+                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "Abort operation: IgniteOperation fail to propose a part"
+                                << ", opId: " << part->GetOperationId()
+                                << ", at schemeshard:  " << selfId
+                                << ", already accepted parts: " << operation->Parts.size()
+                                << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
+                                << ", with reason: " << response->Record.GetReason()
+                                << ", tx message: " << SecureDebugString(record));
+            }
+
+            Y_VERIFY_S(context.IsUndoChangesSafe(),
+                        "Operation is aborted and all changes should be reverted"
+                            << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
+                            << ", opId: " << part->GetOperationId()
+                            << ", at schemeshard:  " << selfId
+                            << ", already accepted parts: " << operation->Parts.size()
+                            << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
+                            << ", with reason: " << response->Record.GetReason()
+                            << ", tx message: " << SecureDebugString(record));
+
+            AbortOperationPropose(txId, context);
+
+            return false;
+        }
+
+        // Check suboperations for undo safety. Log first unsafe suboperation in the schema transaction.
+        if (prevProposeUndoSafe && !context.IsUndoChangesSafe()) {
+            prevProposeUndoSafe = false;
+
+            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Operation part proposed ok, but propose itself is undo unsafe"
+                    << ", suboperation type: " << NKikimrSchemeOp::EOperationType_Name(part->GetTransaction().GetOperationType())
+                    << ", opId: " << part->GetOperationId()
+                    << ", at schemeshard:  " << selfId
+            );
+        }
+    }
+
+    return true;
+}
+
 THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request, TOperationContext& context) {
     THolder<TProposeResponse> response = nullptr;
 
@@ -123,7 +211,13 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
+    Operations[txId] = operation; //record is erased at ApplyOnExecute if all parts are done at propose
     TVector<TTxTransaction> transactions;
+    TVector<TTxTransaction> generatedTransactions;
+
+    // # Phase One
+    // Generate MkDir transactions based on object name.
+
     for (const auto& transaction : record.GetTransaction()) {
         auto splitResult = operation->SplitIntoTransactions(transaction, context);
         if (splitResult.Status != NKikimrScheme::StatusSuccess) {
@@ -132,89 +226,77 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             return std::move(response);
         }
 
-        std::move(splitResult.Transactions.begin(), splitResult.Transactions.end(), std::back_inserter(transactions));
+        std::move(splitResult.Transactions.begin(), splitResult.Transactions.end(), std::back_inserter(generatedTransactions));
+        if (splitResult.Transaction) {
+            transactions.push_back(*splitResult.Transaction);
+        }
     }
 
-    const TString owner = record.HasOwner() ? record.GetOwner() : BUILTIN_ACL_ROOT;
 
-    bool prevProposeUndoSafe = true;
 
-    Operations[txId] = operation; //record is erased at ApplyOnExecute if all parts are done at propose
+    // # Phase Two
+    // For generated MkDirs parts are constructed and proposed.
+    // It is done to simplify checks in dependent (splitted) transactions
+
+    THashSet<TString> requiredPaths;
+    TVector<TVector<ISubOperation::TPtr>> partsByTransaction;
+
+    for (const auto& transaction : generatedTransactions) {
+        auto parts = operation->ConstructParts(transaction, requiredPaths, context);
+        operation->PreparedParts += parts.size();
+
+        if (!ProcessOperationParts(parts, txId, record, operation, response, context)) {
+            return std::move(response);
+        }
+    }
+
+    generatedTransactions.clear();
+
+    // # Phase Three
+    // For all initial transactions parts are constructed.
+    // Consistent operations (Transactions consisting from multiple suboperations) may fill required paths
+    // For those paths additional MkDirs are generated
 
     for (const auto& transaction : transactions) {
-        auto parts = operation->ConstructParts(transaction, context);
+        auto parts = operation->ConstructParts(transaction, requiredPaths, context);
+        operation->PreparedParts += parts.size();
+        partsByTransaction.emplace_back(std::move(parts));
+    }
 
-        if (parts.size() > 1) {
-            // allow altering impl index tables as part of consistent operation
-            context.IsAllowedPrivateTables = true;
+    THashSet<TString> createdPaths;
+    for (auto requiredPath : requiredPaths) {
+        TPath path = TPath::Resolve(requiredPath, context.SS);
+
+        while (!path.IsResolved() && !createdPaths.contains(path.PathString())) {
+            createdPaths.emplace(path.PathString());
+            const TString name = path.LeafName();
+            path.Rise();
+
+            TTxTransaction mkdir;
+            mkdir.SetFailOnExist(true);
+            mkdir.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
+            mkdir.SetWorkingDir(path.PathString());
+            mkdir.MutableMkDir()->SetName(name);
+            generatedTransactions.push_back(mkdir);
         }
+    }
 
-        for (auto& part : parts) {
-            TString errStr;
-            if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
-                response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
-                response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            } else {
-                response = part->Propose(owner, context);
-            }
+    requiredPaths.clear();
 
-            Y_ABORT_UNLESS(response);
+    // # Phase Four
+    // For MkDirs required by consistent operations parts are constructed and proposed.
 
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "IgniteOperation"
-                             << ", opId: " << operation->NextPartId()
-                             << ", propose status:" << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
-                             << ", reason: " << response->Record.GetReason()
-                             << ", at schemeshard: " << selfId);
+    for (const auto& transaction : generatedTransactions) {
+        auto parts = operation->ConstructParts(transaction, requiredPaths, context);
+        operation->PreparedParts += parts.size();
+        partsByTransaction.emplace_back(std::move(parts));
+    }
 
-            if (response->IsDone()) {
-                operation->AddPart(part); //at ApplyOnExecute parts is erased
-                context.OnComplete.DoneOperation(part->GetOperationId()); //mark it here by self for sure
-            } else if (response->IsConditionalAccepted()) {
-                //happens on retries, we answer like AlreadyExist or StatusSuccess with error message and do nothing in operation
-                operation->AddPart(part); //at ApplyOnExecute parts is erased
-                context.OnComplete.DoneOperation(part->GetOperationId()); //mark it here by self for sure
-            } else if (response->IsAccepted()) {
-                operation->AddPart(part);
-                //context.OnComplete.ActivateTx(partOpId) ///TODO maybe it is good idea
-            } else {
-                if (!operation->Parts.empty()) {
-                    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                                "Abort operation: IgniteOperation fail to propose a part"
-                                    << ", opId: " << part->GetOperationId()
-                                    << ", at schemeshard:  " << selfId
-                                    << ", already accepted parts: " << operation->Parts.size()
-                                    << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
-                                    << ", with reason: " << response->Record.GetReason()
-                                    << ", tx message: " << SecureDebugString(record));
-                }
+    Y_VERIFY(requiredPaths.size() == 0, "MkDir must not produce any new required paths");
 
-                Y_VERIFY_S(context.IsUndoChangesSafe(),
-                           "Operation is aborted and all changes should be reverted"
-                               << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
-                               << ", opId: " << part->GetOperationId()
-                               << ", at schemeshard:  " << selfId
-                               << ", already accepted parts: " << operation->Parts.size()
-                               << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
-                               << ", with reason: " << response->Record.GetReason()
-                               << ", tx message: " << SecureDebugString(record));
-
-                AbortOperationPropose(txId, context);
-
-                return std::move(response);
-            }
-
-            // Check suboperations for undo safety. Log first unsafe suboperation in the schema transaction.
-            if (prevProposeUndoSafe && !context.IsUndoChangesSafe()) {
-                prevProposeUndoSafe = false;
-
-                LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Operation part proposed ok, but propose itself is undo unsafe"
-                        << ", suboperation type: " << NKikimrSchemeOp::EOperationType_Name(part->GetTransaction().GetOperationType())
-                        << ", opId: " << part->GetOperationId()
-                        << ", at schemeshard:  " << selfId
-                );
-            }
+    for (const auto& parts : partsByTransaction) {
+        if (!ProcessOperationParts(parts, txId, record, operation, response, context)) {
+            return std::move(response);
         }
     }
 
@@ -741,6 +823,14 @@ TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& t
     return result;
 }
 
+// # Generates additional MkDirs for transactions
+//
+//     WorkingDir  |        TxType.ObjectName
+//  /Root/some_dir | other_dir/another_dir/object_name
+//                  ^---------^----------^
+// MkDir('/Root/some_dir', 'other_dir') and MkDir('/Root/some_dir/other_dir', 'another_dir') will be generated
+// tx.WorkingDir will be changed to '/Root/some_dir/other_dir/another_dir'
+// tx.TxType.ObjectName will be changed to 'object_name'
 TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context) {
     TSplitTransactionsResult result;
 
@@ -1216,7 +1306,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     Y_UNREACHABLE();
 }
 
-TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx, TOperationContext& context) const {
+TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx, THashSet<TString>& requiredPaths, TOperationContext& context) const {
     const auto& opType = tx.GetOperationType();
     switch (opType) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
@@ -1470,6 +1560,8 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         Y_ABORT("TODO: implement");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
         return {CreateDropBackupCollection(NextPartId(), tx)};
+
+    Y_UNUSED(requiredPaths);
 
     }
 

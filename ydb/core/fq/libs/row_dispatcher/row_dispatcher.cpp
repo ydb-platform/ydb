@@ -362,7 +362,10 @@ TRowDispatcher::TRowDispatcher(
     const NYql::IPqGateway::TPtr& pqGateway)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
-    , PureCalcProgramFactory(NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions()))
+    , PureCalcProgramFactory(NYql::NPureCalc::MakeProgramFactory(
+        NYql::NPureCalc::TProgramFactoryOptions()
+            .SetLLVMSettings("ON")
+    ))
     , YqSharedResources(yqSharedResources)
     , CredentialsFactory(credentialsFactory)
     , LogPrefix("RowDispatcher: ")

@@ -17,7 +17,7 @@ TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicat
     }
 
     if (predicateTree.Op != NPushdown::EBoolOp::And && (!settings.IsEnabled(TSettings::EFeatureFlag::SplitOrOperator) || predicateTree.Op != NPushdown::EBoolOp::Or)) {
-        // Predicat can't be splited, so return invalid value and skip this branch
+        // Predicate can't be split, so return invalid value and skip this branch
         return NPushdown::TPredicateNode();
     }
 
@@ -27,7 +27,7 @@ TPredicateNode SplitForPartialPushdown(const NPushdown::TPredicateNode& predicat
         if (pushablePredicate.IsValid()) {
             pushable.emplace_back(pushablePredicate);
         } else if (predicateTree.Op == NPushdown::EBoolOp::Or) {
-            // One of or branch was invalid, so whole predicat is invalid
+            // One of the OR branch was invalid, so the whole predicate is invalid
             return NPushdown::TPredicateNode();
         }
     }

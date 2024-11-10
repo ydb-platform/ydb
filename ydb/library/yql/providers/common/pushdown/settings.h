@@ -7,7 +7,6 @@ namespace NYql::NPushdown {
 
 struct TSettings {
     enum EFeatureFlag : ui64 {
-        // Supported operators
         LikeOperator = 1,
         LikeOperatorOnlyForUtf8 = 1 << 1,
         JsonQueryOperators = 1 << 2,
@@ -30,8 +29,13 @@ struct TSettings {
         InOperator = 1 << 19, // IN()
         IsDistinctOperator = 1 << 20, // IS NOT DISTINCT FROM / IS DISTINCT FROM 
 
-        // Expression spliting features
-        SplitOrOperator = 1ll << 32 // (...) OR (...) OR (...)
+        // Option which enables partial pushdown for sequence of OR
+        // For example next predicate:
+        // ($A AND $B) OR ($C AND $D)
+        // May be partially pushdowned as:
+        // $A OR $C
+        // In case of unsupported / complicated expressions $B and $D
+        SplitOrOperator = 1 << 21
     };
 
     explicit TSettings(NLog::EComponent logComponent)

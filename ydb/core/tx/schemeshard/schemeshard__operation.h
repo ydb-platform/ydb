@@ -82,7 +82,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
     static TSplitTransactionsResult SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context);
 
     ISubOperation::TPtr RestorePart(TTxState::ETxType opType, TTxState::ETxState opState, TOperationContext& context) const;
-    TVector<ISubOperation::TPtr> ConstructParts(const TTxTransaction& tx, THashSet<TString>& requiredPaths, TOperationContext& context) const;
+    TVector<ISubOperation::TPtr> ConstructParts(const TTxTransaction& tx, TOperationContext& context) const;
     void AddPart(ISubOperation::TPtr part);
 
     bool AddPublishingPath(TPathId pathId, ui64 version);

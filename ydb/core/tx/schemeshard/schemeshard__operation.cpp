@@ -8,6 +8,7 @@
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -236,11 +237,10 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // For generated MkDirs parts are constructed and proposed.
     // It is done to simplify checks in dependent (splitted) transactions
 
-    THashSet<TString> requiredPaths;
     TVector<TVector<ISubOperation::TPtr>> partsByTransaction;
 
     for (const auto& transaction : generatedTransactions) {
-        auto parts = operation->ConstructParts(transaction, requiredPaths, context);
+        auto parts = operation->ConstructParts(transaction, context);
         operation->PreparedParts += parts.size();
 
         if (!ProcessOperationParts(parts, txId, record, operation, response, context)) {
@@ -248,89 +248,13 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
-    generatedTransactions.clear();
-
     // # Phase Three
-    // For all initial transactions parts are constructed.
-    // Consistent operations (Transactions consisting from multiple suboperations) may fill required paths
-    // For those paths additional MkDirs are generated
+    // For all initial transactions parts are constructed and proposed
 
     for (const auto& transaction : transactions) {
-        auto parts = operation->ConstructParts(transaction, requiredPaths, context);
+        auto parts = operation->ConstructParts(transaction, context);
         operation->PreparedParts += parts.size();
-        partsByTransaction.emplace_back(std::move(parts));
-    }
 
-    THashSet<TString> createdPaths;
-    for (auto requiredPath : requiredPaths) {
-        TPath path = TPath::Resolve(requiredPath, context.SS);
-
-        while (createdPaths.contains(path.PathString())) {
-            createdPaths.emplace(path.PathString());
-
-            TPath::TChecker checks = path.Check();
-            checks
-                .NotUnderDomainUpgrade()
-                .IsAtLocalSchemeShard();
-
-            if (path.IsResolved()) {
-                checks.IsResolved();
-
-                if (path.IsDeleted()) {
-                    checks.IsDeleted();
-                } else {
-                    checks
-                        .NotDeleted()
-                        .NotUnderDeleting()
-                        .IsCommonSensePath()
-                        .IsLikeDirectory();
-
-                    if (checks) {
-                        break;
-                    }
-                }
-            } else {
-                checks
-                    .NotEmpty()
-                    .NotResolved();
-            }
-
-            if (checks) {
-                checks.IsValidLeafName();
-            }
-
-            if (!checks) {
-                response.Reset(new TProposeResponse(checks.GetStatus(), ui64(txId), ui64(selfId)));
-                response->SetError(checks.GetStatus(), checks.GetError());
-                return std::move(response);
-            }
-
-            const TString name = path.LeafName();
-            path.Rise();
-
-            TTxTransaction mkdir;
-            mkdir.SetFailOnExist(true);
-            mkdir.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
-            mkdir.SetWorkingDir(path.PathString());
-            mkdir.MutableMkDir()->SetName(name);
-            generatedTransactions.push_back(mkdir);
-        }
-    }
-
-    requiredPaths.clear();
-
-    // # Phase Four
-    // For MkDirs required by consistent operations parts are constructed and proposed.
-
-    for (const auto& transaction : generatedTransactions) {
-        auto parts = operation->ConstructParts(transaction, requiredPaths, context);
-        operation->PreparedParts += parts.size();
-        partsByTransaction.emplace_back(std::move(parts));
-    }
-
-    Y_VERIFY(requiredPaths.size() == 0, "MkDir must not produce any new required paths");
-
-    for (const auto& parts : partsByTransaction) {
         if (!ProcessOperationParts(parts, txId, record, operation, response, context)) {
             return std::move(response);
         }
@@ -868,7 +792,11 @@ TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& t
 // tx.WorkingDir will be changed to '/Root/some_dir/other_dir/another_dir'
 // tx.TxType.ObjectName will be changed to 'object_name'
 TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context) {
+    using namespace NGenerated;
+
     TSplitTransactionsResult result;
+
+    // TODO generate transactions right here
 
     const TPath parentPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     {
@@ -890,64 +818,15 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
 
     TString targetName;
 
-    switch (tx.GetOperationType()) {
-    case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
-        targetName = tx.GetMkDir().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
-        if (tx.GetCreateTable().HasCopyFromTable()) {
-            result.Transactions.push_back(tx);
-            return result;
-        }
-        targetName = tx.GetCreateTable().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
-        targetName = tx.GetCreatePersQueueGroup().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
-        targetName = tx.GetSubDomain().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume:
-        targetName = tx.GetCreateRtmrVolume().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume:
-        targetName = tx.GetCreateBlockStoreVolume().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
-        targetName = tx.GetCreateFileStore().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus:
-        targetName = tx.GetKesus().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume:
-        targetName = tx.GetCreateSolomonVolume().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable:
-        targetName = tx.GetCreateIndexedTable().GetTableDescription().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
-        targetName = tx.GetCreateColumnStore().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
-        targetName = tx.GetCreateColumnTable().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
-        targetName = tx.GetCreateExternalTable().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
-        targetName = tx.GetCreateExternalDataSource().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
-        targetName = tx.GetCreateView().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
-        targetName = tx.GetCreateResourcePool().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
-        targetName = tx.GetCreateBackupCollection().GetName();
-        break;
-    default:
+    if (!DispatchOp(tx, [&](auto traits) {
+            auto name = traits.GetTargetName(tx);
+            if (name) {
+                targetName = *name;
+                return true;
+            }
+            return false;
+        }))
+    {
         result.Transactions.push_back(tx);
         return result;
     }
@@ -990,60 +869,10 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         create.SetWorkingDir(path.PathString());
         create.SetFailOnExist(tx.GetFailOnExist());
 
-        switch (tx.GetOperationType()) {
-        case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
-            create.MutableMkDir()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
-            create.MutableCreateTable()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
-            create.MutableCreatePersQueueGroup()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
-            create.MutableSubDomain()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume:
-            create.MutableCreateRtmrVolume()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume:
-            create.MutableCreateBlockStoreVolume()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
-            create.MutableCreateFileStore()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus:
-            create.MutableKesus()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume:
-            create.MutableCreateSolomonVolume()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable:
-            create.MutableCreateIndexedTable()->MutableTableDescription()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
-            create.MutableCreateColumnStore()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
-            create.MutableCreateColumnTable()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
-            create.MutableCreateExternalTable()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
-            create.MutableCreateExternalDataSource()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
-            create.MutableCreateView()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
-            create.MutableCreateResourcePool()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
-            create.MutableCreateBackupCollection()->SetName(name);
-            break;
-        default:
+        if (!DispatchOp(tx, [&](auto traits) {
+                return traits.SetName(create, name);
+            }))
+        {
             Y_ABORT("Invariant violation");
         }
 
@@ -1342,7 +1171,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     Y_UNREACHABLE();
 }
 
-TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx, THashSet<TString>& requiredPaths, TOperationContext& context) const {
+TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx, TOperationContext& context) const {
     const auto& opType = tx.GetOperationType();
     switch (opType) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
@@ -1596,8 +1425,6 @@ TVector<ISubOperation::TPtr> TOperation::ConstructParts(const TTxTransaction& tx
         Y_ABORT("TODO: implement");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
         return {CreateDropBackupCollection(NextPartId(), tx)};
-
-    Y_UNUSED(requiredPaths);
 
     }
 

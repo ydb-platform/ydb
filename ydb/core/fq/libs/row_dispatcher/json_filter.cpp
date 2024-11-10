@@ -293,6 +293,7 @@ public:
 private:
     TString GenerateSql(const TString& whereFilter) {
         TStringStream str;
+        str << "PRAGMA config.flags(\"LLVM\", \"ON\");";
         str << "$filtered = SELECT * FROM Input " << whereFilter << ";\n";
 
         str << "SELECT " << OffsetFieldName <<  ", Unwrap(Json::SerializeJson(Yson::From(RemoveMembers(TableRow(), [\"" << OffsetFieldName;

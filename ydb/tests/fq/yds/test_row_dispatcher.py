@@ -349,12 +349,16 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `data` = \\"hello2\\"')
         filter = 'flag'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `flag`')
+        filter = 'time * (field2 - field1) != 0'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`time` * (`field2` - `field1`)) <> 0')
         filter = ' event IS NOT DISTINCT FROM "event2"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS NOT DISTINCT FROM \\"event2\\"')
         filter = ' event IS DISTINCT FROM "event1"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS DISTINCT FROM \\"event1\\"')
         filter = ' field1 IS DISTINCT FROM field2'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `field1` IS DISTINCT FROM `field2`')
+        filter = 'time == 102 OR (field2 IS NOT DISTINCT FROM 1005 AND Random(field1) < 10.0)'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`time` = 102 OR `field2` IS NOT DISTINCT FROM 1005)')
         filter = 'event IN ("event2")'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IN (\\"event2\\")')
         filter = 'event IN ("1", "2", "3", "4", "5", "6", "7", "event2")'

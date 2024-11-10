@@ -7,6 +7,7 @@ namespace NYql::NPushdown {
 
 struct TSettings {
     enum EFeatureFlag : ui64 {
+        // Supported operators
         LikeOperator = 1,
         LikeOperatorOnlyForUtf8 = 1 << 1,
         JsonQueryOperators = 1 << 2,
@@ -27,7 +28,10 @@ struct TSettings {
         TimestampCtor = 1 << 17,
         JustPassthroughOperators = 1 << 18, // if + coalesce + just
         InOperator = 1 << 19, // IN()
-        IsDistinctOperator = 1 << 20 // IS NOT DISTINCT FROM / IS DISTINCT FROM 
+        IsDistinctOperator = 1 << 20, // IS NOT DISTINCT FROM / IS DISTINCT FROM 
+
+        // Expression spliting features
+        SplitOrOperator = 1ll << 32 // (...) OR (...) OR (...)
     };
 
     explicit TSettings(NLog::EComponent logComponent)

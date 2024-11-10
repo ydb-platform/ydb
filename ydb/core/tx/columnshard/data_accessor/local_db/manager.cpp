@@ -6,12 +6,12 @@
 namespace NKikimr::NOlap::NDataAccessorControl::NLocalDB {
 
 std::shared_ptr<NKikimr::ITxReader> TManager::DoBuildLoader(
-    const TVersionedIndex& versionedIndex, TGranuleMeta* granule, const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) {
-    return std::make_shared<NLoading::TGranuleOnlyPortionsReader>("granule", &versionedIndex, granule, dsGroupSelector);
+    const TVersionedIndex& /*versionedIndex*/, TGranuleMeta* /*granule*/, const std::shared_ptr<IBlobGroupSelector>& /*dsGroupSelector*/) {
+    return nullptr;
 }
 
 std::unique_ptr<IGranuleDataAccessor> TManager::DoBuildCollector(const ui64 pathId) {
-    return std::make_unique<TCollector>(pathId, TabletActorId);
+    return std::make_unique<TCollector>(pathId, MemoryCacheSize, TabletActorId);
 }
 
 }   // namespace NKikimr::NOlap::NDataAccessorControl::NLocalDB

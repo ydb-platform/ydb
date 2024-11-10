@@ -1,11 +1,11 @@
 #include "constructor.h"
 
+#include <ydb/core/tx/columnshard/data_accessor/local_db/constructor.h>
+
 namespace NKikimr::NOlap::NDataAccessorControl {
 
 std::shared_ptr<IManagerConstructor> IManagerConstructor::BuildDefault() {
-    std::shared_ptr<IManagerConstructor> result(TFactory::Construct("in_mem"));
-    AFL_VERIFY(!!result);
-    return result;
+    return NLocalDB::TManagerConstructor::BuildDefault();
 }
 
-}
+}   // namespace NKikimr::NOlap::NDataAccessorControl

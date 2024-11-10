@@ -143,8 +143,8 @@ TGranuleMeta::TGranuleMeta(
     NStorageOptimizer::IOptimizerPlannerConstructor::TBuildContext context(
         PathId, owner.GetStoragesManager(), versionedIndex.GetLastSchema()->GetIndexInfo().GetPrimaryKey());
     OptimizerPlanner = versionedIndex.GetLastSchema()->GetIndexInfo().GetCompactionPlannerConstructor()->BuildPlanner(context).DetachResult();
-    NDataAccessorControl::TManagerConstructionContext mmContext(DataAccessorsManager->GetTabletActorId());
-    MetadataMemoryManager = versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataManagerConstructor()->Build(mmContext).DetachResult();
+    NDataAccessorControl::TManagerConstructionContext mmContext(DataAccessorsManager->GetTabletActorId(), false);
+    ResetAccessorsManager(versionedIndex.GetLastSchema()->GetIndexInfo().GetMetadataManagerConstructor(), mmContext);
     AFL_VERIFY(!!OptimizerPlanner);
     ActualizationIndex = std::make_unique<NActualizer::TGranuleActualizationIndex>(PathId, versionedIndex);
 }
@@ -167,6 +167,12 @@ void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& 
     NActualizer::TExternalTasksContext extTasks(Portions);
     ActualizationIndex->ExtractActualizationTasks(context, extTasks);
     NextActualizations = context.GetActualInstant() + actualizationLag;
+}
+
+void TGranuleMeta::ResetAccessorsManager(const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& constructor,
+    const NDataAccessorControl::TManagerConstructionContext& context) {
+    MetadataMemoryManager = constructor->Build(context).DetachResult();
+    DataAccessorsManager->RegisterController(MetadataMemoryManager->BuildCollector(PathId), context.IsUpdate());
 }
 
 void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,

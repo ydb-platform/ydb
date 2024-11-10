@@ -17,6 +17,9 @@ private:
 
 public:
     virtual ~IMetadataMemoryManager() = default;
+    virtual bool NeedPrefetch() const {
+        return false;
+    }
 
     std::unique_ptr<IGranuleDataAccessor> BuildCollector(const ui64 pathId) {
         return DoBuildCollector(pathId);

@@ -40,6 +40,11 @@ private:
     TPortionDataAccessor() = default;
 
 public:
+    ui64 GetMetadataSize() const {
+        return (Records ? (Records->size() * sizeof(TColumnRecord)) : 0) + 
+            (Indexes ? (Indexes->size() * sizeof(TIndexChunk)) : 0);
+    }
+
     const std::vector<TColumnRecord>& TestGetRecords() const {
         AFL_VERIFY(Records);
         return std::move(*Records);
@@ -183,6 +188,10 @@ public:
         THashMap<TString, THashSet<TUnifiedBlobId>> result;
         FillBlobIdsByStorage(result, indexInfo);
         return result;
+    }
+
+    static TPortionDataAccessor BuildEmpty() {
+        return TPortionDataAccessor();
     }
 
     const TColumnRecord* GetRecordPointer(const TChunkAddress& address) const;

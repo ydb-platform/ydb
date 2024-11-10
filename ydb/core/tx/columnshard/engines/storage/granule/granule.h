@@ -232,6 +232,8 @@ public:
 
     void ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
         std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema);
+    void ResetAccessorsManager(const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& constructor,
+        const NDataAccessorControl::TManagerConstructionContext& context);
 
     void RefreshScheme() {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
@@ -290,6 +292,16 @@ public:
         for (auto&& i : Portions) {
             OnAfterChangePortion(i.second, &g, true);
         }
+        if (MetadataMemoryManager->NeedPrefetch() && Portions.size()) {
+            auto request = std::make_shared<TDataAccessorsRequest>();
+            for (auto&& p : Portions) {
+                request->AddPortion(p.second);
+            }
+            request->RegisterSubscriber(std::make_shared<TFakeDataAccessorsSubscriber>());
+
+            DataAccessorsManager->AskData(request);
+        }
+        
     }
 
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;

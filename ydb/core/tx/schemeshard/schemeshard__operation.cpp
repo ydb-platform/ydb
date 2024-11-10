@@ -232,8 +232,6 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
-
-
     // # Phase Two
     // For generated MkDirs parts are constructed and proposed.
     // It is done to simplify checks in dependent (splitted) transactions
@@ -267,8 +265,46 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     for (auto requiredPath : requiredPaths) {
         TPath path = TPath::Resolve(requiredPath, context.SS);
 
-        while (!path.IsResolved() && !createdPaths.contains(path.PathString())) {
+        while (createdPaths.contains(path.PathString())) {
             createdPaths.emplace(path.PathString());
+
+            TPath::TChecker checks = path.Check();
+            checks
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard();
+
+            if (path.IsResolved()) {
+                checks.IsResolved();
+
+                if (path.IsDeleted()) {
+                    checks.IsDeleted();
+                } else {
+                    checks
+                        .NotDeleted()
+                        .NotUnderDeleting()
+                        .IsCommonSensePath()
+                        .IsLikeDirectory();
+
+                    if (checks) {
+                        break;
+                    }
+                }
+            } else {
+                checks
+                    .NotEmpty()
+                    .NotResolved();
+            }
+
+            if (checks) {
+                checks.IsValidLeafName();
+            }
+
+            if (!checks) {
+                response.Reset(new TProposeResponse(checks.GetStatus(), ui64(txId), ui64(selfId)));
+                response->SetError(checks.GetStatus(), checks.GetError());
+                return std::move(response);
+            }
+
             const TString name = path.LeafName();
             path.Rise();
 

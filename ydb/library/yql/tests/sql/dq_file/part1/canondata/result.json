@@ -2531,6 +2531,28 @@
         }
     ],
     "test.test[produce-reduce_lambda_presort_twin_list-default.txt-Results]": [],
+    "test.test[produce-reduce_multi_in-empty-Analyze]": [
+        {
+            "checksum": "9ca09e642e32d555ae193ebb53450aa7",
+            "size": 5061,
+            "uri": "https://{canondata_backend}/1937492/a3be8907a794dd8afc1b0615834f797b64dd9927/resource.tar.gz#test.test_produce-reduce_multi_in-empty-Analyze_/plan.txt"
+        }
+    ],
+    "test.test[produce-reduce_multi_in-empty-Debug]": [
+        {
+            "checksum": "5ee56492dc75920918834c1591b2d875",
+            "size": 2287,
+            "uri": "https://{canondata_backend}/1937492/a3be8907a794dd8afc1b0615834f797b64dd9927/resource.tar.gz#test.test_produce-reduce_multi_in-empty-Debug_/opt.yql_patched"
+        }
+    ],
+    "test.test[produce-reduce_multi_in-empty-Plan]": [
+        {
+            "checksum": "9ca09e642e32d555ae193ebb53450aa7",
+            "size": 5061,
+            "uri": "https://{canondata_backend}/1937492/a3be8907a794dd8afc1b0615834f797b64dd9927/resource.tar.gz#test.test_produce-reduce_multi_in-empty-Plan_/plan.txt"
+        }
+    ],
+    "test.test[produce-reduce_multi_in-empty-Results]": [],
     "test.test[produce-reduce_multi_in_keytuple_difftype--Analyze]": [
         {
             "checksum": "f60d354ca933908da1ef3fdfbf613ddc",

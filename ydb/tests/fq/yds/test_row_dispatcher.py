@@ -303,7 +303,7 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
-        self.init_topics("test_filter")
+        self.init_topics("test_filters_non_optional_field")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
@@ -335,7 +335,7 @@ class TestPqRowDispatcher(TestYdsBase):
         client.create_yds_connection(
             YDS_CONNECTION, os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"), shared_reading=True
         )
-        self.init_topics("test_filter")
+        self.init_topics("test_filters_optional_field")
 
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`

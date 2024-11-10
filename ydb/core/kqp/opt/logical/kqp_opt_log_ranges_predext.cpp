@@ -193,6 +193,18 @@ TMaybeNode<TCoLambda> ExtractTopSortKeySelector(TExprBase node, const NYql::TPar
     return {};
 }
 
+bool IsIdLambda(TExprBase body) {
+    if (auto cond = body.Maybe<TCoConditionalValueBase>()) {
+        if (auto boolLit = cond.Cast().Predicate().Maybe<TCoBool>()) {
+            return boolLit.Literal().Cast().Value() == "true" && cond.Value().Maybe<TCoArgument>();
+        }
+    }
+    if (body.Maybe<TCoArgument>()) {
+        return true;
+    }
+    return false;
+}
+
 } // namespace
 
 TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
@@ -305,7 +317,7 @@ TExprBase KqpPushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx
             const NYql::TKikimrTableDescription & tableDesc) -> TIndexComparisonKey
         {
             return std::make_tuple(
-                keySelector.IsValid() && IsSortKeyPrimary(keySelector.Cast(), tableDesc),
+                keySelector.IsValid() && IsSortKeyPrimary(keySelector.Cast(), tableDesc) && IsIdLambda(TCoLambda(buildResult.PrunedLambda).Body()),
                 buildResult.PointPrefixLen >= descriptionKeyColumns,
                 buildResult.PointPrefixLen >= descriptionKeyColumns ? 0 : buildResult.PointPrefixLen,
                 buildResult.UsedPrefixLen >= descriptionKeyColumns,

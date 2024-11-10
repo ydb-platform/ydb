@@ -44,7 +44,7 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         return false;
     }
 
-    if (!ttl.HasExpireAfterSeconds()) {
+    if (!ttl.HasExpireAfterSeconds() && ttl.GetTiers().empty()) {
         errors.AddError("TTL without eviction time");
         return false;
     }
@@ -63,6 +63,10 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
 
     TString errStr;
     if (!NValidation::TTTLValidator::ValidateUnit(columnType, unit, errStr)) {
+        errors.AddError(errStr);
+        return false;
+    }
+    if (!NValidation::TTTLValidator::ValidateTiers(ttl.GetTiers(), errStr)) {
         errors.AddError(errStr);
         return false;
     }

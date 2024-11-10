@@ -285,8 +285,8 @@ public:
     }
 
     virtual NMetadata::NFetcher::ISnapshot::TPtr GetFallbackTiersSnapshot() const {
-        static std::shared_ptr<NColumnShard::NTiers::TConfigsSnapshot> result =
-            std::make_shared<NColumnShard::NTiers::TConfigsSnapshot>(TInstant::Now());
+        static std::shared_ptr<NColumnShard::NTiers::TTiersSnapshot> result =
+            std::make_shared<NColumnShard::NTiers::TTiersSnapshot>(TInstant::Now());
         return result;
     }
 

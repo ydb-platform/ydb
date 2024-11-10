@@ -92,12 +92,12 @@ bool TSchemeShard::ProcessOperationParts(
     const TVector<ISubOperation::TPtr>& parts,
     const TTxId& txId,
     const NKikimrScheme::TEvModifySchemeTransaction& record,
+    bool prevProposeUndoSafe,
     TOperation::TPtr& operation,
     THolder<TProposeResponse>& response,
     TOperationContext& context)
 {
     auto selfId = SelfTabletId();
-    bool prevProposeUndoSafe = context.IsUndoChangesSafe();
     const TString owner = record.HasOwner() ? record.GetOwner() : BUILTIN_ACL_ROOT;
 
     if (parts.size() > 1) {
@@ -212,7 +212,6 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
-    Operations[txId] = operation; //record is erased at ApplyOnExecute if all parts are done at propose
     TVector<TTxTransaction> transactions;
     TVector<TTxTransaction> generatedTransactions;
 
@@ -233,17 +232,20 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
+    //
+
+    Operations[txId] = operation; //record is erased at ApplyOnExecute if all parts are done at propose
+    bool prevProposeUndoSafe = true;
+
     // # Phase Two
     // For generated MkDirs parts are constructed and proposed.
     // It is done to simplify checks in dependent (splitted) transactions
-
-    TVector<TVector<ISubOperation::TPtr>> partsByTransaction;
 
     for (const auto& transaction : generatedTransactions) {
         auto parts = operation->ConstructParts(transaction, context);
         operation->PreparedParts += parts.size();
 
-        if (!ProcessOperationParts(parts, txId, record, operation, response, context)) {
+        if (!ProcessOperationParts(parts, txId, record, prevProposeUndoSafe, operation, response, context)) {
             return std::move(response);
         }
     }
@@ -255,7 +257,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         auto parts = operation->ConstructParts(transaction, context);
         operation->PreparedParts += parts.size();
 
-        if (!ProcessOperationParts(parts, txId, record, operation, response, context)) {
+        if (!ProcessOperationParts(parts, txId, record, prevProposeUndoSafe, operation, response, context)) {
             return std::move(response);
         }
     }
@@ -811,7 +813,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             .IsLikeDirectory();
 
         if (!checks) {
-            result.Transactions.push_back(tx);
+            result.Transaction = tx;
             return result;
         }
     }
@@ -827,12 +829,12 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             return false;
         }))
     {
-        result.Transactions.push_back(tx);
+        result.Transaction = tx;
         return result;
     }
 
     if (!targetName || targetName.StartsWith('/') || targetName.EndsWith('/')) {
-        result.Transactions.push_back(tx);
+        result.Transaction = tx;
         return result;
     }
 
@@ -858,7 +860,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         if (!checks) {
             result.Status = checks.GetStatus();
             result.Reason = checks.GetError();
-            result.Transactions.push_back(tx);
+            result.Transaction = tx;
             return result;
         }
 
@@ -919,7 +921,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             result.Status = checks.GetStatus();
             result.Reason = checks.GetError();
             result.Transactions.clear();
-            result.Transactions.push_back(tx);
+            result.Transaction = tx;
             return result;
         }
 

@@ -382,6 +382,7 @@ public:
         const TVector<ISubOperation::TPtr>& parts,
         const TTxId& txId,
         const NKikimrScheme::TEvModifySchemeTransaction& record,
+        bool prevProposeUndoSafe,
         TOperation::TPtr& operation,
         THolder<TProposeResponse>& response,
         TOperationContext& context);

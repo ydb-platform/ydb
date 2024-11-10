@@ -228,7 +228,7 @@ public:
 
         TStatus status = TStatus::Ok;
         if (!disableOptimizers.contains("BypassMergeBeforeLength")) {
-            status = BypassMergeBeforeLength(input, output, opDeps, lefts, ctx);
+            status = BypassMergeOrCopyBeforeLength(input, output, opDeps, lefts, ctx);
             if (status.Level != TStatus::Ok) {
                 return status;
             }
@@ -1549,33 +1549,35 @@ private:
         return lambda;
     }
 
-    TStatus BypassMergeBeforeLength(TExprNode::TPtr input, TExprNode::TPtr& output, const TOpDeps& opDeps, const TNodeSet& lefts, TExprContext& ctx) {
+    TStatus BypassMergeOrCopyBeforeLength(TExprNode::TPtr input, TExprNode::TPtr& output, const TOpDeps& opDeps, const TNodeSet& lefts, TExprContext& ctx) {
         TNodeOnNodeOwnedMap replaces;
         for (auto& x: opDeps) {
-            if (TYtMerge::Match(x.first) && x.second.size() > 0 && AllOf(x.second, [](const auto& item) { return TYtLength::Match(std::get<0>(item)); } )) {
-                auto merge = TYtMerge(x.first);
-                if (merge.Ref().HasResult()) {
+            if ((TYtMerge::Match(x.first) || TYtCopy::Match(x.first)) && x.second.size() > 0 && AllOf(x.second, [](const auto& item) { return TYtLength::Match(std::get<0>(item)); } )) {
+                auto op = TYtTransientOpBase(x.first);
+                if (op.Ref().HasResult()) {
                     continue;
                 }
 
-                if (NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::Limit)) {
-                    continue;
-                }
+                auto section = op.Input().Item(0);
+                if (op.Maybe<TYtMerge>()) {
+                    if (NYql::HasSetting(op.Settings().Ref(), EYtSettingType::Limit)) {
+                        continue;
+                    }
 
-                auto section = merge.Input().Item(0);
-                if (NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample)) {
-                    continue;
-                }
-                if (NYql::HasNonEmptyKeyFilter(section)) {
-                    continue;
-                }
+                    if (NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample)) {
+                        continue;
+                    }
+                    if (NYql::HasNonEmptyKeyFilter(section)) {
+                        continue;
+                    }
 
-                if (AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>() || TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic; })) {
-                    continue;
-                }
-                // Dependency on more than 1 operation
-                if (1 < Accumulate(section.Paths(), 0ull, [](ui64 val, const TYtPath& path) { return val + path.Table().Maybe<TYtOutput>().IsValid(); })) {
-                    continue;
+                    if (AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>() || TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic; })) {
+                        continue;
+                    }
+                    // Dependency on more than 1 operation
+                    if (1 < Accumulate(section.Paths(), 0ull, [](ui64 val, const TYtPath& path) { return val + path.Table().Maybe<TYtOutput>().IsValid(); })) {
+                        continue;
+                    }
                 }
 
                 TSyncMap syncList;
@@ -1584,10 +1586,10 @@ private:
                         syncList.emplace(GetOutputOp(out.Cast()).Ptr(), syncList.size());
                     }
                 }
-                auto newWorld = ApplySyncListToWorld(merge.World().Ptr(), syncList, ctx);
+                auto newWorld = ApplySyncListToWorld(op.World().Ptr(), syncList, ctx);
                 for (auto node: lefts) {
                     TCoLeft left(node);
-                    if (left.Input().Raw() == merge.Raw()) {
+                    if (left.Input().Raw() == op.Raw()) {
                         replaces[node] = newWorld;
                     }
                 }
@@ -1634,7 +1636,7 @@ private:
         }
 
         if (!replaces.empty()) {
-            YQL_CLOG(INFO, ProviderYt) << "PhysicalFinalizing-BypassMergeBeforeLength";
+            YQL_CLOG(INFO, ProviderYt) << "PhysicalFinalizing-BypassMergeOrCopyBeforeLength";
             return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(State_->Types));
         }
 

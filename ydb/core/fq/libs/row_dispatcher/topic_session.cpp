@@ -241,6 +241,7 @@ private:
         hFunc(NFq::TEvPrivate::TEvStatus, Handle);
         hFunc(NFq::TEvPrivate::TEvDataFiltered, Handle);
         hFunc(NFq::TEvPrivate::TEvSendStatistic, Handle);
+        hFunc(NFq::TEvPrivate::TEvReconnectSession, Handle);
         hFunc(TEvRowDispatcher::TEvGetNextBatch, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
         sFunc(NFq::TEvPrivate::TEvStartParsing, DoParsing);
@@ -389,10 +390,11 @@ void TTopicSession::CreateTopicSession() {
         SubscribeOnNextEvent();
     }
 
-    if (!InflightReconnect) {
+    if (!InflightReconnect && Clients) {
         // Use any sourceParams.
         ReconnectPeriod = Clients.begin()->second.ReconnectPeriod;
         if (ReconnectPeriod != TDuration::Zero()) {
+            LOG_ROW_DISPATCHER_INFO("ReconnectPeriod " << ReconnectPeriod.ToString());
             Metrics.ReconnectRate->Inc();
             Schedule(ReconnectPeriod, new NFq::TEvPrivate::TEvReconnectSession());
             InflightReconnect = true;

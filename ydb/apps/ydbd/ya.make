@@ -1,7 +1,5 @@
 PROGRAM(ydbd)
 
-SPLIT_DWARF()
-
 IF (NOT SANITIZER_TYPE)  # for some reasons some tests with asan are failed, see comment in CPPCOM-32
     NO_EXPORT_DYNAMIC_SYMBOLS()
 ENDIF()

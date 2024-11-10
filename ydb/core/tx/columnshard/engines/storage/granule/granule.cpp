@@ -47,8 +47,8 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
     return true;
 }
 
-void TGranuleMeta::OnAfterChangePortion(
-    const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard) {
+void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter,
+    NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard, const bool onLoad) {
     if (portionAfter) {
         PortionInfoGuard.OnNewPortion(portionAfter);
         if (!portionAfter->HasRemoveSnapshot()) {
@@ -59,7 +59,9 @@ void TGranuleMeta::OnAfterChangePortion(
                 OptimizerPlanner->StartModificationGuard().AddPortion(portionAfter);
             }
             NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
-            ActualizationIndex->AddPortion(portionAfter, context);
+            if (!onLoad) {
+                ActualizationIndex->AddPortion(portionAfter, context);
+            }
         }
         Stats->OnAddPortion(*portionAfter);
     }

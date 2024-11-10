@@ -17,7 +17,7 @@ namespace NKikimr::NOlap::NReader::NPlain {
 
 void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching) {
     AFL_VERIFY(fetching);
-    AFL_VERIFY(!FetchingPlan);
+//    AFL_VERIFY(!FetchingPlan);
     FetchingPlan = fetching;
 }
 

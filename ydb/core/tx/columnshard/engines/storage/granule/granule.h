@@ -140,7 +140,7 @@ private:
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
     void OnAfterChangePortion(
-        const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard);
+        const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard, const bool onLoad = false);
     void OnAdditiveSummaryChange() const;
     YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 
@@ -159,7 +159,6 @@ private:
         return it->second;
     }
     bool DataAccessorConstructed = false;
-    bool LoadingFinished = false;
 
 public:
     std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
@@ -175,14 +174,8 @@ public:
     }
 
     void RefreshTiering(const std::optional<TTiering>& tiering) {
-        if (LoadingFinished) {
-            NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
-            ActualizationIndex->RefreshTiering(tiering, context);
-        } else {
-            NActualizer::TAddExternalContext context(
-                HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Default<THashMap<ui64, std::shared_ptr<TPortionInfo>>>());
-            ActualizationIndex->RefreshTiering(tiering, context);
-        }
+        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+        ActualizationIndex->RefreshTiering(tiering, context);
     }
 
     template <class TModifier>
@@ -293,12 +286,10 @@ public:
     }
 
     void OnAfterPortionsLoad() {
-        AFL_VERIFY(!LoadingFinished);
         auto g = OptimizerPlanner->StartModificationGuard();
         for (auto&& i : Portions) {
-            OnAfterChangePortion(i.second, &g);
+            OnAfterChangePortion(i.second, &g, true);
         }
-        LoadingFinished = true;
     }
 
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;

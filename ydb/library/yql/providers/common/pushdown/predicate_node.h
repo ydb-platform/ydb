@@ -23,7 +23,7 @@ struct TPredicateNode {
     ~TPredicateNode();
 
     bool IsValid() const;
-    void SetPredicates(const std::vector<TPredicateNode>& predicates, TExprContext& ctx, TPositionHandle pos, EBoolOp op = EBoolOp::And);
+    void SetPredicates(const std::vector<TPredicateNode>& predicates, TExprContext& ctx, TPositionHandle pos, EBoolOp op);
 
     NNodes::TMaybeNode<NNodes::TExprBase> ExprNode;
     std::vector<TPredicateNode> Children;

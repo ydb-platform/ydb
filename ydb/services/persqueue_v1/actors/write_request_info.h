@@ -6,6 +6,11 @@ template<class TEvWrite>
 struct TWriteRequestInfoImpl : public TSimpleRefCount<TWriteRequestInfoImpl<TEvWrite>> {
     using TPtr = TIntrusivePtr<TWriteRequestInfoImpl<TEvWrite>>;
 
+    struct TUserWriteRequest {
+        THolder<TEvWrite> Write;
+        TInstant BeginTime;
+    };
+
     explicit TWriteRequestInfoImpl(ui64 cookie)
         : PartitionWriteRequest(new NPQ::TEvPartitionWriter::TEvWriteRequest(cookie))
         , Cookie(cookie)
@@ -17,7 +22,7 @@ struct TWriteRequestInfoImpl : public TSimpleRefCount<TWriteRequestInfoImpl<TEvW
     std::pair<TString, TString> GetTransactionId() const;
 
     // Source requests from user (grpc session object)
-    std::deque<THolder<TEvWrite>> UserWriteRequests;
+    std::deque<TUserWriteRequest> UserWriteRequests;
 
     // Partition write request
     THolder<NPQ::TEvPartitionWriter::TEvWriteRequest> PartitionWriteRequest;
@@ -30,6 +35,9 @@ struct TWriteRequestInfoImpl : public TSimpleRefCount<TWriteRequestInfoImpl<TEvW
 
     // Quota in term of RUs
     ui64 RequiredQuota;
+
+    TInstant QuotaTime;
+    TInstant SendTime;
 };
 
 template<class TEvWrite>
@@ -42,7 +50,7 @@ std::pair<TString, TString> TWriteRequestInfoImpl<TEvWrite>::GetTransactionId() 
     if constexpr (UseMigrationProtocol) {
         return {"", ""};
     } else {
-        auto& request = UserWriteRequests.front()->Request.write_request();
+        auto& request = UserWriteRequests.front().Write->Request.write_request();
         return {request.tx().session(), request.tx().id()};
     }
 }

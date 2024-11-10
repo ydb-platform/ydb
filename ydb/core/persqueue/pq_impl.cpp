@@ -376,8 +376,6 @@ public:
                 ResourceMetrics->TryUpdate(ctx);
             }
 
-            NPQ::SetPqTabletEnd(*Response->Record.MutablePartitionResponse(), ctx.Now());
-
             ctx.Send(Sender, Response.Release());
             return true;
         }
@@ -2726,11 +2724,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         ans = CreateResponseProxy(rr, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
     } else {
         ans = CreateResponseProxy(ev->Sender, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
-    }
-
-    if (req.HasPipelineExecutionTime()) {
-        *ans->Response->Record.MutablePartitionResponse()->MutablePipelineExecutionTime() = req.GetPipelineExecutionTime();
-        NPQ::SetPqTabletBegin(*ans->Response->Record.MutablePartitionResponse(), ctx.Now());
     }
 
     ResponseProxy[responseCookie] = ans;

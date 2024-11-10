@@ -11,15 +11,6 @@ message TReadSessionKey {
     optional uint64 PartitionSessionId = 2;
 }
 
-message TExecutionTime {
-    optional int64 Begin = 1;
-    optional int64 End = 2;
-}
-
-message TPersQueuePartitionWritePipelineExecutionTime {
-    repeated TExecutionTime ExecutionTime = 1;
-}
-
 message TPersQueuePartitionRequest {
     message TCmdRead {
         optional string ClientId = 1; // mandatory
@@ -179,8 +170,6 @@ message TPersQueuePartitionRequest {
     optional uint64 PutUnitsSize = 19;
     optional int64 InitialSeqNo = 26;
     optional bool MeteringV2Enabled = 27 [default = false];
-
-    optional TPersQueuePartitionWritePipelineExecutionTime PipelineExecutionTime = 29;
 }
 
 message TPersQueueMetaRequest {
@@ -517,6 +506,4 @@ message TPersQueuePartitionResponse {
     optional TCmdPublishDirectReadResult CmdForgetReadResult = 9;
 
     optional uint64 Cookie = 6;
-
-    optional TPersQueuePartitionWritePipelineExecutionTime PipelineExecutionTime = 10;
 }

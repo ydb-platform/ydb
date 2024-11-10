@@ -12,7 +12,7 @@ struct TPartitionWriter {
     void OnEvInitResult(const NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev);
     void OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteRequest>&& ev, const TActorContext& ctx);
     void OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAccepted& ev, const TActorContext& ctx);
-    void OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteResponse& ev);
+    TInstant OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteResponse& ev);
 
     bool HasPendingRequests() const;
 
@@ -21,12 +21,22 @@ struct TPartitionWriter {
     ui64 MaxSeqNo = 0;
     TInstant LastActivity;
 
+    struct TUserWriteRequest {
+        THolder<NPQ::TEvPartitionWriter::TEvWriteRequest> Write;
+        TInstant BeginTime;
+    };
+
+    struct TSentRequest {
+        ui64 Cookie;
+        TInstant BeginTime;
+    };
+
     // Quoted, but not sent requests
-    TDeque<THolder<NPQ::TEvPartitionWriter::TEvWriteRequest>> QuotedRequests;
+    TDeque<TUserWriteRequest> QuotedRequests;
     // Requests that is sent to partition actor, but not accepted
-    TDeque<ui64> SentRequests;
+    TDeque<TSentRequest> SentRequests;
     // Accepted requests
-    TDeque<ui64> AcceptedRequests;
+    TDeque<TSentRequest> AcceptedRequests;
 };
 
 }

@@ -3,6 +3,7 @@
 #include "events.h"
 #include "partition_writer.h"
 
+#include <ydb/core/persqueue/sli_duration_counter.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -74,6 +75,8 @@ private:
 
     TEventQueue<NPQ::TEvPartitionWriter::TEvWriteAccepted> PendingWriteAccepted;
     TEventQueue<NPQ::TEvPartitionWriter::TEvWriteResponse> PendingWriteResponse;
+
+    NPQ::TPercentileCounter RequestLatency;
 };
 
 }

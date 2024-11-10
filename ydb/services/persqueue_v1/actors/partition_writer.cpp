@@ -19,19 +19,24 @@ void TPartitionWriter::OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteR
     Y_ABORT_UNLESS(ev->Record.HasPartitionRequest());
 
     if (SentRequests.size() < MAX_RESERVE_REQUESTS_INFLIGHT) {
-        SentRequests.push_back(ev->Record.GetPartitionRequest().GetCookie());
+        SentRequests.emplace_back(ev->Record.GetPartitionRequest().GetCookie(),
+                                  ctx.Now());
+
         ctx.Send(Actor, ev.Release());
     } else {
-        QuotedRequests.push_back(std::move(ev));
+        QuotedRequests.emplace_back(std::move(ev),
+                                    ctx.Now());
     }
 }
 
 void TPartitionWriter::OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAccepted& ev, const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(!SentRequests.empty());
-    Y_ABORT_UNLESS(ev.Cookie == SentRequests.front());
+    Y_ABORT_UNLESS(ev.Cookie == SentRequests.front().Cookie);
 
-    AcceptedRequests.push_back(SentRequests.front());
+    const TSentRequest& front = SentRequests.front();
+
+    AcceptedRequests.emplace_back(front.Cookie, front.BeginTime);
     SentRequests.pop_front();
 
     if (QuotedRequests.empty()) {
@@ -42,19 +47,25 @@ void TPartitionWriter::OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAc
         auto next = std::move(QuotedRequests.front());
         QuotedRequests.pop_front();
 
-        SentRequests.push_back(next->Record.GetPartitionRequest().GetCookie());
-        ctx.Send(Actor, next.Release());
+        SentRequests.emplace_back(next.Write->Record.GetPartitionRequest().GetCookie(),
+                                  next.BeginTime);
+
+        ctx.Send(Actor, next.Write.Release());
     }
 }
 
-void TPartitionWriter::OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteResponse& ev)
+TInstant TPartitionWriter::OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteResponse& ev)
 {
     Y_ABORT_UNLESS(ev.IsSuccess());
 
     Y_ABORT_UNLESS(!AcceptedRequests.empty());
-    Y_ABORT_UNLESS(ev.Record.GetPartitionResponse().GetCookie() == AcceptedRequests.front());
+    Y_ABORT_UNLESS(ev.Record.GetPartitionResponse().GetCookie() == AcceptedRequests.front().Cookie);
+
+    TInstant beginTime = AcceptedRequests.front().BeginTime;
 
     AcceptedRequests.pop_front();
+
+    return beginTime;
 }
 
 bool TPartitionWriter::HasPendingRequests() const

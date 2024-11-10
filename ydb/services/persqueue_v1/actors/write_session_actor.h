@@ -170,9 +170,6 @@ private:
     void CreatePartitionWriterCache(const TActorContext& ctx);
     void DestroyPartitionWriterCache(const TActorContext& ctx);
 
-    void PrintWritePipelineExecutionTime(const NPQ::TEvPartitionWriter::TEvWriteResponse& response,
-                                         const TActorContext& ctx);
-
     std::unique_ptr<TEvStreamWriteRequest> Request;
 
     enum EState {
@@ -272,6 +269,8 @@ private:
     TInstant StartTime;
     NKikimr::NPQ::TPercentileCounter InitLatency;
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
+    NKikimr::NPQ::TPercentileCounter RequestLatency;
+    NKikimr::NPQ::TPercentileCounter QuotaLatency;
 
     TInitRequest InitRequest;
 

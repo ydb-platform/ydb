@@ -20,6 +20,7 @@
 #include <util/string/escape.h>
 #include <util/string/printf.h>
 
+#include <ydb/core/persqueue/sli_duration_counter.h>
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -709,6 +710,19 @@ void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 parti
     if (initDurationMs >= border) {
         SLIBigLatency.Inc();
     }
+
+    Y_ABORT_UNLESS(FullConverter);
+
+    RequestLatency = NPQ::CreateSLIDurationCounter(ctx,
+                                                   "WriteSessionLatency",
+                                                   {2, 5, 10, 20, 50, 100, 150, 200, 250, 300, 400, 500, 750, 1'000, 1'500, 2'000},
+                                                   FullConverter->GetAccount(),
+                                                   0);
+    QuotaLatency = NPQ::CreateSLIDurationCounter(ctx,
+                                                 "QuotaLatency",
+                                                 {2, 5, 10, 20, 50, 100, 150, 200, 250, 300, 400, 500, 750, 1'000, 1'500, 2'000},
+                                                 FullConverter->GetAccount(),
+                                                 0);
 }
 
 template <bool UseMigrationProtocol>
@@ -992,7 +1006,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
 
     ui32 partitionCmdWriteResultIndex = 0;
     // TODO: Send single batch write response for all user write requests up to some max size/count
-    for (const auto& userWriteRequest : writeRequest->UserWriteRequests) {
+    for (const auto& [userWriteRequest, beginTime] : writeRequest->UserWriteRequests) {
         TServerMessage result;
         result.set_status(Ydb::StatusIds::SUCCESS);
 
@@ -1048,6 +1062,8 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
 
         }
 
+        RequestLatency.IncFor(ToMilliSeconds(ctx.Now() - beginTime));
+
         if (!Request->GetStreamCtx()->Write(std::move(result))) {
             // TODO: Log gRPC write error code
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc write failed");
@@ -1094,34 +1110,6 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     }
 
     ProcessWriteResponse(resp, ctx);
-
-    NPQ::SetGRpcWriteSessionEnd(*ev->Get()->Record.MutablePartitionResponse(), ctx.Now());
-
-    PrintWritePipelineExecutionTime(result, ctx);
-}
-
-template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::PrintWritePipelineExecutionTime(const NPQ::TEvPartitionWriter::TEvWriteResponse& event,
-                                                                               const TActorContext& ctx)
-{
-    TStringBuilder string;
-    string << "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " write pipeline times: ";
-
-    const NKikimrClient::TPersQueuePartitionResponse& resp = event.Record.GetPartitionResponse();
-    if (!resp.HasPipelineExecutionTime()) {
-        //LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, string);
-        return;
-    }
-
-    const NKikimrClient::TPersQueuePartitionWritePipelineExecutionTime& execTime = resp.GetPipelineExecutionTime();
-    for (size_t i = 0; i < execTime.ExecutionTimeSize(); ++i) {
-        const auto& e = execTime.GetExecutionTime(i);
-        string <<
-            " [" << GetPartitionWritePipelineStageName(static_cast<EPartitionWritePipelineStage>(i)) << "]: " <<
-            (TInstant::MicroSeconds(e.GetEnd()) - TInstant::MicroSeconds(e.GetBegin())).MilliSeconds();
-    };
-
-    LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, string);
 }
 
 template<bool UseMigrationProtocol>
@@ -1163,7 +1151,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     } else if constexpr (!UseMigrationProtocol) {
         Y_ABORT_UNLESS(!PendingRequests.back()->UserWriteRequests.empty());
 
-        auto& last = PendingRequests.back()->UserWriteRequests.back()->Request.write_request();
+        auto& last = PendingRequests.back()->UserWriteRequests.back().Write->Request.write_request();
 
         if (writeRequest.has_tx()) {
             if (last.has_tx()) {
@@ -1237,9 +1225,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         }
     }
 
-    NPQ::SetGRpcWriteSessionBegin(*request.MutablePartitionRequest(), ctx.Now());
-
-    pendingRequest->UserWriteRequests.push_back(std::move(ev));
+    pendingRequest->UserWriteRequests.emplace_back(std::move(ev), ctx.Now());
     pendingRequest->ByteSize = request.ByteSize();
 
     auto msgMetaEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicMessageMeta();
@@ -1263,6 +1249,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         if (!PendingQuotaRequest) {
             if (MaybeRequestQuota(PendingRequests.front()->RequiredQuota, EWakeupTag::RlAllowed, ctx)) {
                 PendingQuotaRequest = std::move(PendingRequests.front());
+                PendingQuotaRequest->QuotaTime = ctx.Now();
                 PendingRequests.pop_front();
             }
         }
@@ -1280,7 +1267,7 @@ void TWriteSessionActor<UseMigrationProtocol>::SendWriteRequest(typename TWriteR
     Y_ABORT_UNLESS(request->PartitionWriteRequest);
 
     i64 diff = 0;
-    for (const auto& w : request->UserWriteRequests) {
+    for (const auto& [w, _] : request->UserWriteRequests) {
         diff -= w->Request.ByteSize();
     }
 
@@ -1299,6 +1286,7 @@ void TWriteSessionActor<UseMigrationProtocol>::SendWriteRequest(typename TWriteR
         std::make_unique<NPQ::TEvPartitionWriter::TEvTxWriteRequest>(sessionId, txId,
                                                                      std::move(request->PartitionWriteRequest));
 
+    request->SendTime = ctx.Now();
     ctx.Send(PartitionWriterCache, std::move(event));
 
     BytesWrittenByUserAgent->Add(request->ByteSize);
@@ -1557,11 +1545,14 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& 
                 counters->AddConsumedRequestUnits(PendingQuotaRequest->RequiredQuota);
             }
 
+            QuotaLatency.IncFor(ToMilliSeconds(ctx.Now() - PendingQuotaRequest->QuotaTime));
+
             SendWriteRequest(std::move(PendingQuotaRequest), ctx);
 
             if (!PendingRequests.empty()) {
                 Y_ABORT_UNLESS(MaybeRequestQuota(PendingRequests.front()->RequiredQuota, EWakeupTag::RlAllowed, ctx));
                 PendingQuotaRequest = std::move(PendingRequests.front());
+                PendingQuotaRequest->QuotaTime = ctx.Now();
                 PendingRequests.pop_front();
             }
 
@@ -1570,7 +1561,9 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvents::TEvWakeup::TPtr& 
 
         case EWakeupTag::RlNoResource:
         case EWakeupTag::RlInitNoResource:
+            QuotaLatency.IncFor(ToMilliSeconds(ctx.Now() - PendingQuotaRequest->QuotaTime));
             if (PendingQuotaRequest) {
+                PendingQuotaRequest->QuotaTime = ctx.Now();
                 Y_ABORT_UNLESS(MaybeRequestQuota(PendingQuotaRequest->RequiredQuota, EWakeupTag::RlAllowed, ctx));
             } else {
                 return CloseSession("Throughput limit exceeded", PersQueue::ErrorCode::OVERLOAD, ctx);

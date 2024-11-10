@@ -171,51 +171,6 @@ struct TEvPartitionWriter {
     };
 }; // TEvPartitionWriter
 
-enum class EPartitionWritePipelineStage {
-    GRpcWriteSession,
-    GRpcPartitionWriter,
-    PqPartitionWriter,
-    KqpWriteId,
-    PqTablet,
-    PqPartition,
-    KqpPartitionId,
-    End
-};
-
-TString GetPartitionWritePipelineStageName(EPartitionWritePipelineStage stage);
-
-void SetGRpcWriteSessionBegin(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t);
-void SetGRpcWriteSessionEnd(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t);
-
-void SetGRpcWriteSessionEnd(NKikimrClient::TPersQueuePartitionResponse& ev, TInstant t);
-
-void SetGRpcPartitionWriterBegin(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t);
-void SetGRpcPartitionWriterEnd(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t);
-
-void SetGRpcPartitionWriterEnd(NKikimrClient::TPersQueuePartitionResponse& ev, TInstant t);
-
-void SetPqPartitionWriterBegin(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t);
-void SetPqPartitionWriterEnd(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t);
-
-void SetPqPartitionWriterEnd(NKikimrClient::TPersQueuePartitionResponse& ev, TInstant t);
-
-void SetKqpWriteIdBegin(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t);
-void SetKqpWriteIdEnd(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t);
-
-void SetPqTabletBegin(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t);
-void SetPqTabletEnd(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t);
-
-void SetPqTabletBegin(NKikimrClient::TPersQueuePartitionResponse& ev, TInstant t);
-void SetPqTabletEnd(NKikimrClient::TPersQueuePartitionResponse& ev, TInstant t);
-
-void SetPqPartitionBegin(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t);
-void SetPqPartitionEnd(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t);
-
-void SetPqPartitionEnd(NKikimrClient::TPersQueuePartitionResponse& ev, TInstant t);
-
-void SetKqpPartitionIdBegin(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t);
-void SetKqpPartitionIdEnd(NKikimrClient::TPersQueuePartitionRequest& ev, TInstant t);
-
 struct TPartitionWriterOpts {
     bool CheckState = false;
     bool AutoRegister = false;

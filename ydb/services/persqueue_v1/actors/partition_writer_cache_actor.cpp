@@ -18,6 +18,12 @@ void TPartitionWriterCacheActor::Bootstrap(const TActorContext& ctx)
 {
     RegisterDefaultPartitionWriter(ctx);
 
+    RequestLatency = NPQ::CreateSLIDurationCounter(ctx,
+                                                   "SessionCacheLatency",
+                                                   {2, 5, 10, 20, 50, 100, 150, 200, 250, 300, 400, 500, 750, 1'000, 1'500, 2'000},
+                                                   "", // account
+                                                   0);
+
     this->Become(&TPartitionWriterCacheActor::StateWork);
 }
 
@@ -74,8 +80,6 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvTxWriteReque
             PendingWriteAccepted.Expected = event.Request->GetCookie();
             PendingWriteResponse.Expected = event.Request->GetCookie();
         }
-
-        NPQ::SetGRpcPartitionWriterBegin(*event.Request->Record.MutablePartitionRequest(), ctx.Now());
 
         writer->LastActivity = ctx.Now();
         writer->OnWriteRequest(std::move(event.Request), ctx);
@@ -151,7 +155,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepte
     auto p = Writers.find(key);
     Y_ABORT_UNLESS(p != Writers.end());
 
-    if (result.Cookie == p->second->SentRequests.front()) {
+    if (result.Cookie == p->second->SentRequests.front().Cookie) {
         p->second->OnWriteAccepted(result, ctx);
 
         TryForwardToOwner(ev->Release().Release(), PendingWriteAccepted,
@@ -160,7 +164,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepte
     } else {
         ReplyError(result.SessionId, result.TxId,
                    EErrorCode::InternalError, "out of order reserve bytes response from server, may be previous is lost",
-                   p->second->SentRequests.front(),
+                   p->second->SentRequests.front().Cookie,
                    ctx);
         this->Become(&TPartitionWriterCacheActor::StateBroken);
     }
@@ -176,10 +180,10 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteRespons
 
     if (result.IsSuccess()) {
         ui64 cookie = result.Record.GetPartitionResponse().GetCookie();
-        if (cookie == p->second->AcceptedRequests.front()) {
-            p->second->OnWriteResponse(result);
+        if (cookie == p->second->AcceptedRequests.front().Cookie) {
+            TInstant beginTime = p->second->OnWriteResponse(result);
 
-            NPQ::SetGRpcPartitionWriterEnd(*result.Record.MutablePartitionResponse(), ctx.Now());
+            RequestLatency.IncFor(NPQ::ToMilliSeconds(ctx.Now() - beginTime));
 
             TryForwardToOwner(ev->Release().Release(), PendingWriteResponse,
                               cookie,
@@ -187,7 +191,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteRespons
         } else {
             ReplyError(result.SessionId, result.TxId,
                        EErrorCode::InternalError, "out of order write response from server, may be previous is lost",
-                       p->second->AcceptedRequests.front(),
+                       p->second->AcceptedRequests.front().Cookie,
                        ctx);
             this->Become(&TPartitionWriterCacheActor::StateBroken);
         }

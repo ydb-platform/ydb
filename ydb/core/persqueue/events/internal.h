@@ -246,8 +246,6 @@ struct TEvPQ {
         TVector<TMsg> Msgs;
         bool IsDirectWrite;
         std::optional<ui64> InitialSeqNo;
-
-        std::unique_ptr<NKikimrClient::TPersQueuePartitionWritePipelineExecutionTime> WritePipelineExecutionTime;
     };
 
     struct TEvReadTimeout : public TEventLocal<TEvReadTimeout, EvReadTimeout> {

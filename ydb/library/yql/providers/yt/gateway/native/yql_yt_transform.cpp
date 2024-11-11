@@ -449,7 +449,7 @@ void TGatewayTransformer::ApplyUserJobSpec(NYT::TUserJobSpec& spec, bool localRu
         auto udfFiles = std::move(*DeferredUdfFiles_);
         TTransactionCache::TEntry::TPtr entry = GetEntry();
         for (auto& file: udfFiles) {
-            YQL_ENSURE(!file.second.Hash.Empty());
+            YQL_ENSURE(!file.second.Hash.empty());
             if (auto snapshot = entry->GetBinarySnapshotFromCache(binCacheFolder, file.second.Hash, file.first)) {
                 spec.AddFile(TRichYPath(snapshot->first).TransactionId(snapshot->second)
                                                         .FileName(TFsPath(file.first)
@@ -477,7 +477,7 @@ void TGatewayTransformer::ApplyUserJobSpec(NYT::TUserJobSpec& spec, bool localRu
             auto entry = GetEntry();
             for (auto& file: *DeferredUdfFiles_) {
                 YQL_ENSURE(TFileStat(file.first).Size != 0);
-                YQL_ENSURE(!file.second.Hash.Empty());
+                YQL_ENSURE(!file.second.Hash.empty());
                 auto snapshot = entry->GetBinarySnapshot(binTmpFolder, file.second.Hash, file.first, binExpiration);
                 spec.AddFile(TRichYPath(snapshot.first).TransactionId(snapshot.second).FileName(TFsPath(file.first).GetName()).Executable(true).BypassArtifactCache(file.second.BypassArtifactCache));
             }

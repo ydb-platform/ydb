@@ -825,6 +825,55 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
         .Done();
 }
 
+TExprBase DqBuildFlatmapStageOnlyPushable(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    if (!node.Maybe<TCoFlatMapBase>().Input().Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
+    auto flatmap = node.Cast<TCoFlatMapBase>();
+    if (!IsDqSelfContainedExpr(flatmap.Lambda())) {
+        return node;
+    }
+    auto dqUnion = flatmap.Input().Cast<TDqCnUnionAll>();
+    if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
+
+    bool isPure;
+    TVector<TDqConnection> innerConnections;
+    FindDqConnections(flatmap.Lambda(), innerConnections, isPure);
+    if (!isPure) {
+        return node;
+    }
+
+    TMaybeNode<TDqStage> flatmapStage;
+    if (!innerConnections.empty()) {
+        return node;
+    } else {
+        if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+            return TExprBase(ctx.ChangeChild(*node.Raw(), TCoFlatMapBase::idx_Input, std::move(connToPushableStage)));
+        }
+
+        auto lambda = TCoLambda(ctx.Builder(flatmap.Lambda().Pos())
+            .Lambda()
+                .Param("stream")
+                .Callable(flatmap.Ref().Content())
+                    .Arg(0, "stream")
+                    .Add(1, ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
+                .Seal()
+            .Seal().Build());
+
+        auto pushResult = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
+        if (pushResult) {
+            return pushResult.Cast();
+        }
+    }
+
+    return node;
+}
+
 template <typename BaseLMap>
 TExprBase DqPushBaseLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true)
@@ -997,9 +1046,12 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
         return node;
     }
 
+    YQL_CLOG(TRACE, CoreDq) << "Pushing combine to stage";
+
     auto combine = node.Cast<TCoCombineByKey>();
     auto dqUnion = combine.Input().Cast<TDqCnUnionAll>();
     if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
+        YQL_CLOG(TRACE, CoreDq) << "Multiple use!";
         return node;
     }
 
@@ -1009,10 +1061,12 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
         !IsDqCompletePureExpr(combine.UpdateHandlerLambda()) ||
         !IsDqCompletePureExpr(combine.FinishHandlerLambda()))
     {
+        YQL_CLOG(TRACE, CoreDq) << "Not pure!";
         return node;
     }
 
     if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+        YQL_CLOG(TRACE, CoreDq) << "All good!";
         return TExprBase(ctx.ChangeChild(*node.Raw(), TCoCombineByKey::idx_Input, std::move(connToPushableStage)));
     }
 
@@ -1043,6 +1097,17 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
             .Done();
     }
 
+    if (!IsDqDependsOnStage(combine.PreMapLambda(), dqUnion.Output().Stage()))
+        YQL_CLOG(TRACE, CoreDq) << "Prelambda not dependent!";
+    if (!IsDqDependsOnStage(combine.KeySelectorLambda(), dqUnion.Output().Stage()))
+        YQL_CLOG(TRACE, CoreDq) << "Key selector not dependent!";
+    if (!IsDqDependsOnStage(combine.InitHandlerLambda(), dqUnion.Output().Stage()))
+        YQL_CLOG(TRACE, CoreDq) << "init handler not dependent!";
+    if (!IsDqDependsOnStage(combine.UpdateHandlerLambda(), dqUnion.Output().Stage()))
+        YQL_CLOG(TRACE, CoreDq) << "updated handler not dependent!";
+    if (!IsDqDependsOnStage(combine.FinishHandlerLambda(), dqUnion.Output().Stage()))
+        YQL_CLOG(TRACE, CoreDq) << "finish handler not dependent!";
+
     if (IsDqDependsOnStage(combine.PreMapLambda(), dqUnion.Output().Stage()) ||
         IsDqDependsOnStage(combine.KeySelectorLambda(), dqUnion.Output().Stage()) ||
         IsDqDependsOnStage(combine.InitHandlerLambda(), dqUnion.Output().Stage()) ||
@@ -1065,9 +1130,11 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
 
     auto result = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
     if (!result) {
+        YQL_CLOG(TRACE, CoreDq) << "Something went bad!";
         return node;
     }
 
+    YQL_CLOG(TRACE, CoreDq) << "All good #2";
     return result.Cast();
 }
 

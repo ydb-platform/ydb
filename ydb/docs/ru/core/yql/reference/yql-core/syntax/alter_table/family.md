@@ -39,10 +39,22 @@ ALTER TABLE series_with_families
   ALTER COLUMN release_date SET FAMILY family_small;
 ```
 
-При помощи команды `ALTER FAMILY` можно изменить параметры группы колонок. Приведенный ниже код для группы колонок `default` в таблице `series_with_families` сменит тип хранилища на `hdd`:
+При помощи команды `ALTER FAMILY` можно изменить параметры группы колонок. Приведенный ниже код для группы колонок `default` в таблице `series_with_families` сменит тип хранилища на `hdd` (поддерживается только для [строковых](../../../../concepts/datamodel/table.md#row-oriented-tables) таблиц.):
 
 ```yql
 ALTER TABLE series_with_families ALTER FAMILY default SET DATA "hdd";
+```
+
+Приведенный ниже код для группы колонок `default` в таблице `series_with_families` сменит кодек сжатия на `lz4`:
+
+```yql
+ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION "lz4";
+```
+
+Приведенный ниже код для группы колонок `default` в таблице `series_with_families` сменит уровень сжатия кодека, если он поддерживает различные уровни сжатия (поддерживается только для [колоночных](../../../../concepts/datamodel/table.md#column-oriented-tables) таблиц):
+
+```yql
+ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION_LEVEL 5;
 ```
 
 {% note info %}

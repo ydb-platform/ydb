@@ -44,6 +44,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
+    , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/string.h>
+#include <util/generic/map.h>
 
 #include <optional>
 
@@ -21,14 +22,21 @@ struct TSchemeTxTraitsFallback {
         return false;
     }
 
+    static THashMap<TString, THashSet<TString>> GetRequiredPaths(const TTxTransaction& tx) {
+        Y_UNUSED(tx);
+        return {};
+    }
+
     constexpr inline static bool CreateDirsFromName = false;
+
+    constexpr inline static bool CreateAdditionalDirs = false;
 };
 
 template <NKikimrSchemeOp::EOperationType opType>
 struct TSchemeTxTraits : public TSchemeTxTraitsFallback {};
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpMkDir> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpMkDir> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetMkDir().GetName();
     }
@@ -42,7 +50,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpMkDir> {
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         if (tx.GetCreateTable().HasCopyFromTable()) {
             return std::nullopt;
@@ -59,7 +67,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable> {
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetCreatePersQueueGroup().GetName();
     }
@@ -73,7 +81,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueue
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetSubDomain().GetName();
     }
@@ -87,7 +95,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetSubDomain().GetName();
     }
@@ -101,7 +109,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDom
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetCreateRtmrVolume().GetName();
     }
@@ -115,7 +123,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolum
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetCreateBlockStoreVolume().GetName();
     }
@@ -129,7 +137,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStor
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetCreateFileStore().GetName();
     }
@@ -143,7 +151,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetKesus().GetName();
     }
@@ -157,7 +165,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus> {
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetCreateSolomonVolume().GetName();
     }
@@ -171,7 +179,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVo
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetCreateIndexedTable().GetTableDescription().GetName();
     }
@@ -185,7 +193,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTa
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetCreateColumnStore().GetName();
     }
@@ -199,7 +207,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnSto
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetCreateColumnTable().GetName();
     }
@@ -213,7 +221,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTab
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetCreateExternalTable().GetName();
     }
@@ -227,7 +235,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalT
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetCreateExternalDataSource().GetName();
     }
@@ -241,7 +249,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalD
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateView> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateView> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetCreateView().GetName();
     }
@@ -255,7 +263,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateView> {
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetCreateResourcePool().GetName();
     }
@@ -269,7 +277,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourceP
 };
 
 template <>
-struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection> {
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection> : public TSchemeTxTraitsFallback {
     static std::optional<TString> GetTargetName(const TTxTransaction& tx) {
         return tx.GetCreateBackupCollection().GetName();
     }

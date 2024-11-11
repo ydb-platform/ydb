@@ -847,23 +847,19 @@ bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, T
 }
 
 // # Generates additional MkDirs for transactions
-//
-//     WorkingDir  |        TxType.ObjectName
-//  /Root/some_dir | other_dir/another_dir/object_name
-//                  ^---------^----------^
-// MkDir('/Root/some_dir', 'other_dir') and MkDir('/Root/some_dir/other_dir', 'another_dir') will be generated
-// tx.WorkingDir will be changed to '/Root/some_dir/other_dir/another_dir'
-// tx.TxType.ObjectName will be changed to 'object_name'
 TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context) {
     using namespace NGenerated;
 
     TSplitTransactionsResult result;
+    THashSet<TString> createdPaths;
 
-    struct TPathsToCreate {
-        TString Parent;
-        THashSet<TString> Paths;
-    };
-
+    // # Generates MkDirs based on WorkingDir and path
+    //     WorkingDir  |        TxType.ObjectName
+    //  /Root/some_dir | other_dir/another_dir/object_name
+    //                  ^---------^----------^
+    // MkDir('/Root/some_dir', 'other_dir') and MkDir('/Root/some_dir/other_dir', 'another_dir') will be generated
+    // tx.WorkingDir will be changed to '/Root/some_dir/other_dir/another_dir'
+    // tx.TxType.ObjectName will be changed to 'object_name'
     if (DispatchOp(tx, [&](auto traits) { return traits.CreateDirsFromName; })) {
         TString targetName;
 
@@ -950,10 +946,38 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             }
         }
 
-        THashSet<TString> createdPaths;
-
         if (!CreateDirs(tx, parentPath, path, createdPaths, result)) {
             return result;
+        }
+    }
+
+    // # Generates MkDirs based on transaction-specific requirements
+    if (DispatchOp(tx, [&](auto traits) { return traits.CreateAdditionalDirs; })) {
+        for (const auto& [parentPathStr, pathStrs] : DispatchOp(tx, [&](auto traits) { return traits.GetRequiredPaths(tx); })) {
+            const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
+            {
+                TPath::TChecker checks = parentPath.Check();
+                checks
+                    .NotUnderDomainUpgrade()
+                    .IsAtLocalSchemeShard()
+                    .IsResolved()
+                    .NotDeleted()
+                    .NotUnderDeleting()
+                    .IsCommonSensePath()
+                    .IsLikeDirectory();
+
+                if (!checks) {
+                    result.Transaction = tx;
+                    return result;
+                }
+            }
+
+            for (const auto& pathStr : pathStrs) {
+                TPath path = TPath::Resolve(JoinPath(parentPathStr, pathStr), context.SS);
+                if (!CreateDirs(tx, parentPath, path, createdPaths, result)) {
+                    return result;
+                }
+            }
         }
     }
 

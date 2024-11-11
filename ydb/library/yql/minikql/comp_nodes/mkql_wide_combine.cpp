@@ -842,6 +842,12 @@ private:
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
+                std::sort(SpilledBuckets.begin(), SpilledBuckets.end(), [](const TSpilledBucket& lhs, const TSpilledBucket& rhs) {
+                    bool lhs_in_memory = lhs.BucketState == TSpilledBucket::EBucketState::InMemory;
+                    bool rhs_in_memory = rhs.BucketState == TSpilledBucket::EBucketState::InMemory;
+                    return lhs_in_memory > rhs_in_memory;
+                });
+
                 YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");

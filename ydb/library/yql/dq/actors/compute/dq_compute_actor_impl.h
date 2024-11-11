@@ -203,14 +203,17 @@ protected:
     }
 
     ~TDqComputeActorBase() override {
-        if (Terminated)
+        if (Terminated) {
             return;
+        }
         Free();
     }
 
     void Free() {
         auto guard = BindAllocator();
-        if (!guard) return;
+        if (!guard) {
+            return;
+        }
 #define CLEANUP(what) decltype(what) what##_; what.swap(what##_);
         CLEANUP(InputChannelsMap);
         CLEANUP(SourcesMap);

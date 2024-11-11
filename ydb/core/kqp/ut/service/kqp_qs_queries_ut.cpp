@@ -90,6 +90,85 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         WaitForZeroSessions(counters);
     }
 
+    Y_UNIT_TEST(PeriodicTaskInSessionPool) {
+        auto kikimr = DefaultKikimrRunner();
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        {
+            auto db = kikimr.GetQueryClient();
+
+            TString id;
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetSession().GetId());
+                auto session = result.GetSession();
+                id = session.GetId();
+
+                auto execResult = session.ExecuteQuery("SELECT 1;",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::SUCCESS);
+            }
+            // This time is more then internal sdk periodic timeout but less than close session
+            // expect nothing happens with session in the pool
+            Sleep(TDuration::Seconds(10));
+
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetSession().GetId() == id);
+
+                auto execResult = result.GetSession().ExecuteQuery("SELECT 1;",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+                UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::SUCCESS);
+            }
+        }
+        WaitForZeroSessions(counters);
+    }
+
+    Y_UNIT_TEST(PeriodicTaskInSessionPoolSessionCloseByIdle) {
+        auto kikimr = DefaultKikimrRunner();
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+        NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+        {
+            auto settings = NYdb::NQuery::TClientSettings().SessionPoolSettings(
+                NYdb::NQuery::TSessionPoolSettings()
+                    .MinPoolSize(0)
+                    .CloseIdleThreshold(TDuration::Seconds(1)));
+            auto db = kikimr.GetQueryClient(settings);
+
+            TString id;
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetSession().GetId());
+                auto session = result.GetSession();
+                id = session.GetId();
+
+                auto execResult = session.ExecuteQuery("SELECT 1;",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::SUCCESS);
+            }
+
+            Sleep(TDuration::Seconds(11));
+            UNIT_ASSERT_VALUES_EQUAL(db.GetCurrentPoolSize(), 0);
+
+            {
+                auto result = db.GetSession().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT(result.GetSession().GetId() != id);
+
+                auto execResult = result.GetSession().ExecuteQuery("SELECT 1;",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(execResult.GetStatus(), EStatus::SUCCESS);
+            }
+        }
+        WaitForZeroSessions(counters);
+    }
+
     Y_UNIT_TEST(StreamExecuteQueryPure) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();

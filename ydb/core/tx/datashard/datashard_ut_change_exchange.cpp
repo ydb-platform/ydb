@@ -3868,7 +3868,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         MustNotLoseSchemaSnapshot(true);
     }
 
-    Y_UNIT_TEST(ShouldBreakLocksOnConsurrentSchemeTx) {
+    Y_UNIT_TEST(ShouldBreakLocksOnConcurrentSchemeTx) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
@@ -3897,7 +3897,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         WaitTxNotification(server, edgeActor, AsyncAlterAddExtraColumn(server, "/Root", "Table"));
 
-        KqpSimpleCommit(runtime, sessionId, txId, "SELECT key, value FROM `/Root/Table`;");
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, "SELECT 1;"),
+            "ERROR: ABORTED");
 
         WaitForContent(server, edgeActor, "/Root/Table/Stream", {
             R"({"update":{"value":10},"key":[1]})",

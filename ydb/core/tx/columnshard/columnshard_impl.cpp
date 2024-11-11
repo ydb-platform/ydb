@@ -1288,7 +1288,7 @@ public:
     void Complete(const TActorContext& /*ctx*/) override {
     }
     TTxType GetTxType() const override {
-        return TXTYPE_WRITE_INDEX;
+        return TXTYPE_ASK_PORTION_METADATA;
     }
 };
 

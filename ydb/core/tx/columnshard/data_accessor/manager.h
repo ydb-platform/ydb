@@ -177,7 +177,6 @@ public:
 
     public:
         void InitManager(const std::weak_ptr<TLocalManager>& manager) {
-            AFL_VERIFY(!Manager);
             Manager = manager;
         }
     };

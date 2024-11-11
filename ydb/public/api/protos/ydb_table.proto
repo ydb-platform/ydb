@@ -635,7 +635,7 @@ message CreateTableRequest {
     Ydb.FeatureFlag.Status key_bloom_filter = 16;
     // Read replicas settings for table
     ReadReplicasSettings read_replicas_settings = 17;
-    // Tiering rules name. It specifies how data migrates from one tier (logical storage) to another.
+    // Deprecated. Use TTL instead.
     string tiering = 18;
     // Is temporary table
     bool temporary = 19;
@@ -715,7 +715,7 @@ message AlterTableRequest {
     repeated string drop_changefeeds = 20;
     // Rename existed index
     repeated RenameIndexItem rename_indexes = 21;
-    // Setup or remove tiering
+    // Deprecated. Use ttl_action instead
     oneof tiering_action {
         string set_tiering = 22;
         google.protobuf.Empty drop_tiering = 23;

@@ -445,6 +445,7 @@ public:
     const TString& GetColumnName() const;
     const TDuration& GetExpireAfter() const;
     bool HasExpireAfter() const;
+    const TVector<TEvictionTierSettings>& GetTiers() const;
 
 private:
     TString ColumnName_;
@@ -472,6 +473,7 @@ public:
     EUnit GetColumnUnit() const;
     const TDuration& GetExpireAfter() const;
     bool HasExpireAfter() const;
+    const TVector<TEvictionTierSettings>& GetTiers() const;
 
     static void Out(IOutputStream& o, EUnit unit);
     static TString ToString(EUnit unit);
@@ -633,6 +635,7 @@ public:
     TVector<TIndexDescription> GetIndexDescriptions() const;
     TVector<TChangefeedDescription> GetChangefeedDescriptions() const;
     TMaybe<TTtlSettings> GetTtlSettings() const;
+    // Deprecated. Use GetTtlSettings() instead
     TMaybe<TString> GetTiering() const;
     EStoreType GetStoreType() const;
 

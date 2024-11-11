@@ -345,11 +345,6 @@ class TTableDescription::TImpl {
             break;
         }
 
-        // tiering
-        if (proto.tiering().size()) {
-            Tiering_ = proto.tiering();
-        }
-
         if (proto.store_type()) {
             StoreType_ = (proto.store_type() == Ydb::Table::STORE_TYPE_COLUMN) ? EStoreType::Column : EStoreType::Row;
         }
@@ -580,10 +575,6 @@ public:
         return TtlSettings_;
     }
 
-    const TMaybe<TString>& GetTiering() const {
-        return Tiering_;
-    }
-
     EStoreType GetStoreType() const {
         return StoreType_;
     }
@@ -664,7 +655,6 @@ private:
     TVector<TIndexDescription> Indexes_;
     TVector<TChangefeedDescription> Changefeeds_;
     TMaybe<TTtlSettings> TtlSettings_;
-    TMaybe<TString> Tiering_;
     TString Owner_;
     TVector<NScheme::TPermissions> Permissions_;
     TVector<NScheme::TPermissions> EffectivePermissions_;
@@ -731,7 +721,7 @@ TMaybe<TTtlSettings> TTableDescription::GetTtlSettings() const {
 }
 
 TMaybe<TString> TTableDescription::GetTiering() const {
-    return Impl_->GetTiering();
+    return Nothing();
 }
 
 EStoreType TTableDescription::GetStoreType() const {
@@ -952,10 +942,6 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
 
     if (const auto& ttl = Impl_->GetTtlSettings()) {
         ttl->SerializeTo(*request.mutable_ttl_settings());
-    }
-
-    if (const auto& tiering = Impl_->GetTiering()) {
-        request.set_tiering(*tiering);
     }
 
     if (Impl_->GetStoreType() == EStoreType::Column) {
@@ -2941,6 +2927,18 @@ bool operator!=(const TChangefeedDescription& lhs, const TChangefeedDescription&
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+TVector<TEvictionTierSettings> DeserializeTiers(const NProtoBuf::RepeatedPtrField<Ydb::Table::EvictionTier>& serialized) {
+    TVector<TEvictionTierSettings> tiers;
+    for (const auto& tier : serialized) {
+        tiers.push_back(TEvictionTierSettings(tier));
+    }
+    return tiers;
+}
+
+}
+
 TEvictionTierSettings::TEvictionTierSettings(TString storageName, TDuration evictionDelay)
     : StorageName_(storageName)
     , EvictionDelay_(evictionDelay)
@@ -2981,7 +2979,7 @@ void TDateTypeColumnModeSettings::SerializeTo(Ydb::Table::DateTypeColumnModeSett
         proto.set_expire_after_seconds(ExpireAfter_->Seconds());
     }
     for (const auto& tier : Tiers_) {
-        tier.SerializeTo(*proto.Addstorage_tiers());
+        tier.SerializeTo(*proto.add_storage_tiers());
     }
 }
 
@@ -2999,6 +2997,10 @@ const TDuration& TDateTypeColumnModeSettings::GetExpireAfter() const {
 
 bool TDateTypeColumnModeSettings::HasExpireAfter() const {
     return !!ExpireAfter_;
+}
+
+const TVector<TEvictionTierSettings>& TDateTypeColumnModeSettings::GetTiers() const {
+    return Tiers_;
 }
 
 TValueSinceUnixEpochModeSettings::TValueSinceUnixEpochModeSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter)
@@ -3043,6 +3045,10 @@ const TDuration& TValueSinceUnixEpochModeSettings::GetExpireAfter() const {
 
 bool TValueSinceUnixEpochModeSettings::HasExpireAfter() const {
     return !!ExpireAfter_;
+}
+
+const TVector<TEvictionTierSettings>& TValueSinceUnixEpochModeSettings::GetTiers() const {
+    return Tiers_;
 }
 
 void TValueSinceUnixEpochModeSettings::Out(IOutputStream& out, EUnit unit) {
@@ -3096,14 +3102,7 @@ TTtlSettings::TTtlSettings(const TString& columnName, const TDuration& expireAft
 TTtlSettings::TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds)
     : TTtlSettings(mode.column_name(),
           mode.has_expire_after_seconds() ? std::optional<TDuration>(TDuration::Seconds(mode.expire_after_seconds())) : std::nullopt,
-          [&tiers = mode.storage_tiers()]() {
-              TVector<TEvictionTierSettings> result;
-              for (const auto& tier : tiers) {
-                  result.push_back(TEvictionTierSettings(tier));
-              }
-              return result;
-          }())
-{
+          DeserializeTiers(mode.storage_tiers())) {
     RunInterval_ = TDuration::Seconds(runIntervalSeconds);
 }
 
@@ -3122,14 +3121,7 @@ TTtlSettings::TTtlSettings(const TString& columnName, EUnit columnUnit, const TD
 TTtlSettings::TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds)
     : TTtlSettings(mode.column_name(), TProtoAccessor::FromProto(mode.column_unit()),
           mode.has_expire_after_seconds() ? std::optional<TDuration>(TDuration::Seconds(mode.expire_after_seconds())) : std::nullopt,
-          [&tiers = mode.storage_tiers()]() {
-              TVector<TEvictionTierSettings> result;
-              for (const auto& tier : tiers) {
-                  result.push_back(TEvictionTierSettings(tier));
-              }
-              return result;
-          }())
-{
+          DeserializeTiers(mode.storage_tiers())) {
     RunInterval_ = TDuration::Seconds(runIntervalSeconds);
 }
 

@@ -10,6 +10,7 @@ SRCS(
     ydb_auth_v1.proto
     ydb_cms_v1.proto
     ydb_coordination_v1.proto
+    ydb_debug_v1.proto
     ydb_discovery_v1.proto
     ydb_export_v1.proto
     ydb_import_v1.proto

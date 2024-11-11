@@ -644,6 +644,10 @@ public:
         Send(ev->Sender, responseEv.Release(), 0, ev->Cookie);
     }
 
+    void Handle(TEvKqp::TEvProxyPingRequest::TPtr& ev) {
+        Send(ev->Sender, new TEvKqp::TEvProxyPingResponse());
+    }
+
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
         if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(EDelayedRequestType::QueryRequest), ActorContext())) {
             return;
@@ -1346,6 +1350,7 @@ public:
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
+            hFunc(TEvKqp::TEvProxyPingRequest, Handle);
             hFunc(TEvKqp::TEvQueryRequest, Handle);
             hFunc(TEvKqp::TEvScriptRequest, Handle);
             hFunc(TEvKqp::TEvCloseSessionRequest, Handle);

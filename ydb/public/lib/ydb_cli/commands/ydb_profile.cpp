@@ -244,6 +244,12 @@ namespace {
         if (profile->Has("ca-file")) {
             Cout << "  ca-file: " << profile->GetValue("ca-file").as<TString>() << Endl;
         }
+        if (profile->Has("client-cert-file")) {
+            Cout << "  client-cert-file: " << profile->GetValue("client-cert-file").as<TString>() << Endl;
+        }
+        if (profile->Has("client-cert-key-file")) {
+            Cout << "  client-cert-key-file: " << profile->GetValue("client-cert-key-file").as<TString>() << Endl;
+        }
     }
 }
 
@@ -306,6 +312,10 @@ void TCommandConnectionInfo::PrintInfo(TConfig& config) {
     }
     if (config.CaCertsFile) {
         Cout << "ca-file: " << config.CaCertsFile << Endl;
+    }
+    if (config.ClientCertFile) {
+        Cout << "client-cert-file: " << config.ClientCertFile << Endl;
+        Cout << "client-cert-key-file: " << config.ClientCertPrivateKeyFile << Endl;
     }
 }
 
@@ -382,7 +392,9 @@ void TCommandProfileCommon::GetOptionsFromStdin() {
         {"user", User},
         {"password-file", PasswordFile},
         {"iam-endpoint", IamEndpoint},
-        {"ca-file", CaCertsFile}
+        {"ca-file", CaCertsFile},
+        {"client-cert-file", ClientCertFile},
+        {"client-cert-key-file", ClientCertPrivateKeyFile},
     };
     while (Cin.ReadLine(line)) {
         Strip(line, trimmedLine);
@@ -431,6 +443,12 @@ void TCommandProfileCommon::ConfigureProfile(const TString& profileName, std::sh
     SetupProfileAuthentication(existingProfile, profileName, profile, config, interactive, cmdLine);
     if (cmdLine && CaCertsFile) {
         profile->SetValue("ca-file", CaCertsFile);
+    }
+    if (cmdLine && ClientCertFile) {
+        profile->SetValue("client-cert-file", ClientCertFile);
+    }
+    if (cmdLine && ClientCertPrivateKeyFile) {
+        profile->SetValue("client-cert-key-file", ClientCertPrivateKeyFile);
     }
 
     if (interactive) {
@@ -669,11 +687,22 @@ void TCommandProfileCommon::ValidateAuth() {
     }
 }
 
+void TCommandProfileCommon::ValidateClientCert() {
+    if (ClientCertFile.empty() && ClientCertPrivateKeyFile.empty()) {
+        return;
+    }
+    if (ClientCertFile.empty() || ClientCertPrivateKeyFile.empty()) { // One option is set, another is not set
+        throw TMisuseException()
+            << "Both \"client-cert-file\" and \"client-cert-key-file\" options must be provided.";
+    }
+}
+
 bool TCommandProfileCommon::AnyProfileOptionInCommandLine() {
     return Endpoint || Database || TokenFile || Oauth2KeyFile ||
            IamTokenFile || YcTokenFile ||
            SaKeyFile || UseMetadataCredentials || User ||
-           PasswordFile || IamEndpoint || AnonymousAuth || CaCertsFile;
+           PasswordFile || IamEndpoint || AnonymousAuth || CaCertsFile ||
+           ClientCertFile || ClientCertPrivateKeyFile;
 }
 
 TCommandCreateProfile::TCommandCreateProfile()
@@ -711,8 +740,14 @@ void TCommandProfileCommon::Config(TConfig& config) {
         .RequiredArgument("STR").StoreResult(&IamEndpoint);
     }
     opts.AddLongOption("ca-file",
-        "Path to a file containing the PEM encoding of the server root certificates for tls connections.")
+        "Path to a file containing PEM encoded root certificates for TLS connections.")
         .RequiredArgument("PATH").StoreResult(&CaCertsFile);
+    opts.AddLongOption("client-cert-file",
+        "Path to a file containing PEM encoded client certificate for TLS connections")
+        .RequiredArgument("PATH").StoreResult(&ClientCertFile);
+    opts.AddLongOption("client-cert-key-file",
+        "Path to a file containing PEM encoded client certificate private key for TLS connections")
+        .RequiredArgument("PATH").StoreResult(&ClientCertPrivateKeyFile);
     if (!IsStdinInteractive()) {
         GetOptionsFromStdin();
     }
@@ -721,6 +756,7 @@ void TCommandProfileCommon::Config(TConfig& config) {
 void TCommandProfileCommon::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ValidateAuth();
+    ValidateClientCert();
 }
 
 void TCommandCreateProfile::Config(TConfig& config) {
@@ -1064,8 +1100,12 @@ void TCommandUpdateProfile::Config(TConfig& config) {
     if (config.UseIamAuth) {
         opts.AddLongOption("no-iam-endpoint", "Delete endpoint of IAM service from the profile").StoreTrue(&NoIamEndpoint);
     }
-    opts.AddLongOption("no-ca-file", "Delete path to file containing the PEM encoding of the "
-        "server root certificates for tls connections from the profile").StoreTrue(&NoCaCertsFile);
+    opts.AddLongOption("no-ca-file", "Delete path to file containing PEM encoded "
+        "server root certificates for TLS connections from the profile").StoreTrue(&NoCaCertsFile);
+    opts.AddLongOption("no-client-cert-file", "Delete path to a file containing PEM encoded "
+        "client certificate for TLS connections").StoreTrue(&NoClientCertFile);
+    opts.AddLongOption("no-client-cert-key-file", "Delete path to a file containing PEM encoded "
+        "client certificate private key for TLS connections").StoreTrue(&NoClientCertPrivateKeyFile);
 }
 
 void TCommandUpdateProfile::ValidateNoOptions() {
@@ -1082,21 +1122,29 @@ void TCommandUpdateProfile::ValidateNoOptions() {
     TStringBuilder str;
     if (Endpoint && NoEndpoint) {
         str << "\"--endpoint\" and \"--no-endpoint\"";
-    } else {
-        if (Database && NoDatabase) {
-            str << "\"--database and \"--no-database\"";
-        } else {
-            if (IamEndpoint && NoIamEndpoint) {
-                str << "\"--iam-endpoint\" and \"--no-iam-endpoint\"";
-            } else {
-                if (CaCertsFile && NoCaCertsFile) {
-                    str << "\"--ca-file\" and \"--no-ca-file\"";
-                }
-            }
-        }
     }
+    if (!str && Database && NoDatabase) {
+        str << "\"--database and \"--no-database\"";
+    }
+    if (!str && IamEndpoint && NoIamEndpoint) {
+        str << "\"--iam-endpoint\" and \"--no-iam-endpoint\"";
+    }
+    if (!str && CaCertsFile && NoCaCertsFile) {
+        str << "\"--ca-file\" and \"--no-ca-file\"";
+    }
+    if (!str && ClientCertFile && NoClientCertFile) {
+        str << "\"--client-cert-file\" and \"--no-client-cert-file\"";
+    }
+    if (!str && ClientCertPrivateKeyFile && NoClientCertPrivateKeyFile) {
+        str << "\"--client-cert-key-file\" and \"--no-client-cert-key-file\"";
+    }
+
     if (!str.empty()) {
         throw TMisuseException() << "Options " << str << " are mutually exclusive";
+    }
+
+    if (NoClientCertFile && !NoClientCertPrivateKeyFile || !NoClientCertFile && NoClientCertPrivateKeyFile) {
+        throw TMisuseException() << "Options \"--no-client-cert-file\" and \"--no-client-cert-key-file\" must be both set or unset";
     }
 }
 
@@ -1115,6 +1163,12 @@ void TCommandUpdateProfile::DropNoOptions(std::shared_ptr<IProfile> profile) {
     }
     if (NoCaCertsFile) {
         profile->RemoveValue("ca-file");
+    }
+    if (NoClientCertFile) {
+        profile->RemoveValue("client-cert-file");
+    }
+    if (NoClientCertPrivateKeyFile) {
+        profile->RemoveValue("client-cert-key-file");
     }
 }
 

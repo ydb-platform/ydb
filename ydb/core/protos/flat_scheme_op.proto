@@ -1432,6 +1432,7 @@ message TSequenceDescription {
     optional bool Cycle = 10; // true when cycle on overflow is allowed
     optional TSetVal SetVal = 11; // SetVal(NextValue, NextUsed) is executed atomically when creating
     optional string DataType = 12; // data type of the sequence: Int64/pgint8, Int32/pgint4, Int16/pgint2, defaults to Int64/pgint8
+    optional bool Restart = 13; // flag for changing the current value of the sequence with SetVal if it is set, or start value otherwise
 }
 
 message TSequenceSharding {

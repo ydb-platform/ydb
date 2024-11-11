@@ -112,6 +112,9 @@ public:
             auto event = MakeHolder<NSequenceShard::TEvSequenceShard::TEvUpdateSequence>(txState->TargetPathId);
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
+            if (alterData->Description.HasStartValue()) {
+                event->Record.SetStartValue(alterData->Description.GetStartValue());
+            }
             if (alterData->Description.HasMinValue()) {
                 event->Record.SetMinValue(alterData->Description.GetMinValue());
             }
@@ -129,6 +132,10 @@ public:
             }
             if (alterData->Description.HasCycle()) {
                 event->Record.SetCycle(alterData->Description.GetCycle());
+            }
+            if (alterData->Description.HasSetVal()) {
+                event->Record.SetNextValue(alterData->Description.GetSetVal().GetNextValue());
+                event->Record.SetNextUsed(alterData->Description.GetSetVal().GetNextUsed());
             }
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -304,7 +311,40 @@ std::optional<NKikimrSchemeOp::TSequenceDescription> GetAlterSequenceDescription
     i64 increment = result.GetIncrement();
     if (alter.HasIncrement()) {
         increment = alter.GetIncrement();
+        if (increment == 0) {
+            errStr = Sprintf("INCREMENT must not be zero");
+            return std::nullopt;
+        }
     }
+
+    if (alter.HasRestart() && alter.GetRestart()) {
+        i64 nextValue = startValue;
+        if (alter.HasSetVal()) {
+            nextValue = alter.GetSetVal().GetNextValue();
+            if (nextValue > maxValue) {
+                errStr = Sprintf("RESTART value (%ld) cannot be greater than MAXVALUE (%ld)", nextValue, maxValue);
+                return std::nullopt;
+            }
+            if (nextValue < minValue) {
+                errStr = Sprintf("RESTART value (%ld) cannot be less than MINVALUE (%ld)",  nextValue, minValue);
+                return std::nullopt;
+            }
+        }
+        bool nextUsed = false;
+        if (increment > 0) {
+            if (nextValue == maxValue) {
+                nextUsed = true;
+            }
+        } else {
+            if (nextValue == minValue) {
+                nextUsed = true;
+            }
+        }
+        auto setVal = result.MutableSetVal();
+        setVal->SetNextUsed(nextUsed);
+        setVal->SetNextValue(nextValue);
+    }
+
     ui64 cache = result.GetCache();
     if (alter.HasCache()) {
         cache = alter.GetCache();
@@ -443,12 +483,6 @@ public:
         Y_ABORT_UNLESS(context.SS->Sequences.contains(dstPath->PathId));
         TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(dstPath->PathId);
         Y_ABORT_UNLESS(!sequenceInfo->AlterData);
-
-        if (sequenceAlter.HasSetVal()) {
-            errStr = "Set value by alter sequence is not supported";
-            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-            return result;
-        }
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         auto description = GetAlterSequenceDescription(

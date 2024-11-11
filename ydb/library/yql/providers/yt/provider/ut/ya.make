@@ -1,3 +1,5 @@
+IF (NOT OPENSOURCE)
+
 UNITTEST_FOR(ydb/library/yql/providers/yt/provider)
 
 SIZE(SMALL)
@@ -35,3 +37,5 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+ENDIF()

@@ -25,11 +25,13 @@ public:
     void AddNext(const TSchemaDiffView& nextDiff) {
         Version = nextDiff.GetVersion();
         SchemaOptions = &nextDiff.GetSchemaOptions();
-        CompressionOptions = nextDiff.GetCompressionOptions();
-        for (auto& [id, column]: nextDiff.GetModifiedColumns()) {
+        if (nextDiff.GetCompressionOptions()) {
+            CompressionOptions = nextDiff.GetCompressionOptions();
+        }
+        for (const auto& [id, column]: nextDiff.GetModifiedColumns()) {
             ModifiedColumns[id] = column;
         }
-        for (auto& [id, index]: nextDiff.GetModifiedIndexes()) {
+        for (const auto& [id, index]: nextDiff.GetModifiedIndexes()) {
             ModifiedIndexes[id] = index;
         }
     }

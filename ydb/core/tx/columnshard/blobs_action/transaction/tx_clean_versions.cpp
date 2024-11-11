@@ -53,95 +53,113 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
         Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
     };
 
-    auto updateDiff = [&](const auto& key, auto&& modifier) {
-        NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
-        getSchemaPresetInfo(key, info);
-        modifier(info);
-        TString serialized;
-        Y_ABORT_UNLESS(info.SerializeToString(&serialized));
-        table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Update(NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(serialized));
-    };
-
-    auto updateDiffs = [&](const ui64 schemaVersion, auto&& modifier) {
-        auto iter = Self->VersionCounters->GetVersionToKey().find(schemaVersion);
+    auto updateDiffs = [&](const auto iter, bool checkSchema, auto&& modifier) {
         AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
         for (const NOlap::TVersionCounters::TSchemaKey& key: iter->second) {
-            updateDiff(key, modifier);
+            NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
+            getSchemaPresetInfo(key, info);
+            if (checkSchema && !info.has_schema()) {
+                return false;
+            }
+            modifier(info);
+            TString serialized;
+            Y_ABORT_UNLESS(info.SerializeToString(&serialized));
+            table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Update(NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(serialized));
         }
+        return true;
+    };
+
+    auto getSchemaByIter = [&](const auto iter) {
+        NKikimrTxColumnShard::TSchemaPresetVersionInfo pinfo;
+        AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
+        getSchemaPresetInfo(*iter->second.cbegin(), pinfo);
+        return pinfo;
+    };
+
+    auto getSchema = [&](const ui64 schemaVersion) {
+        return getSchemaByIter(Self->VersionCounters->GetVersionToKey().find(schemaVersion));
     };
 
     auto tryUpdateFromSchemas = [&](const std::pair<ui64, ui64>& prevNext) {
-        NKikimrTxColumnShard::TSchemaPresetVersionInfo pinfo;
-        auto prevIter = Self->VersionCounters->GetVersionToKey().find(prevNext.first);
-        AFL_VERIFY(prevIter != Self->VersionCounters->GetVersionToKey().end());
-        getSchemaPresetInfo(*prevIter->second.cbegin(), pinfo);
+        NKikimrTxColumnShard::TSchemaPresetVersionInfo pinfo = getSchema(prevNext.first);
         if (!pinfo.has_schema()) {
             return false;
         }
 
-        NKikimrTxColumnShard::TSchemaPresetVersionInfo ninfo;
         auto nextIter = Self->VersionCounters->GetVersionToKey().find(prevNext.second);
-        AFL_VERIFY(nextIter != Self->VersionCounters->GetVersionToKey().end());
-        getSchemaPresetInfo(*nextIter->second.cbegin(), ninfo);
+        NKikimrTxColumnShard::TSchemaPresetVersionInfo ninfo = getSchemaByIter(nextIter);
         if (!ninfo.has_schema()) {
             return false;
         }
 
         auto schemaDiff = NOlap::TSchemaDiffView::MakeSchemasDiff(pinfo.schema(), ninfo.schema());
 
-        for (const NOlap::TVersionCounters::TSchemaKey& key: nextIter->second) {
-            updateDiff(key, [&](NKikimrTxColumnShard::TSchemaPresetVersionInfo& info){
-                *info.MutableDiff() = schemaDiff;
-            });
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Updating diff in version from db")("vesion", prevNext.second)("base version", prevNext.first)("tablet_id", Self->TabletID());
-        }
+        updateDiffs(nextIter, false, [&](NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
+            *info.MutableDiff() = schemaDiff;
+        });
         return true;
+    };
+
+    auto recalcDiffByRowset = [&](auto& rowset, const ui64 prevSchemaVersion, const ui64 nextSchemaVersion) {
+        NOlap::TSchemaDiffView newDiff;
+        AFL_VERIFY(rowset.IsReady() && !rowset.EndOfSet());
+        std::vector<NKikimrSchemeOp::TColumnTableSchemaDiff> diffProtos;
+        while (!rowset.EndOfSet()) {
+            TSchemaPreset::TSchemaPresetVersionInfo info;
+            Y_ABORT_UNLESS(info.ParseFromString(rowset.template GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+            ui64 schemaVersion = info.GetSchema().GetVersion();
+            if (schemaVersion > nextSchemaVersion) {
+                break;
+            }
+            if (schemaVersion > prevSchemaVersion) {
+                diffProtos.push_back(info.GetDiff());
+            }
+            if (!rowset.Next()) {
+                break;
+            }
+        }
+        AFL_VERIFY(diffProtos.size() > 0);
+        for (const auto& diffProto: diffProtos) {
+            NOlap::TSchemaDiffView diff;
+            diff.DeserializeFromProto(diffProto);
+            newDiff.AddNext(diff);
+        }
+        NKikimrSchemeOp::TColumnTableSchemaDiff newDiffProto;
+        newDiff.SerializeToProto(newDiffProto);
+        auto iter = Self->VersionCounters->GetVersionToKey().find(nextSchemaVersion);
+        updateDiffs(iter, false, [&](NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Updating diff in version from db")("vesion", nextSchemaVersion)("base version", prevSchemaVersion)("tablet_id", Self->TabletID());
+            *info.MutableDiff() = newDiffProto;
+        });
+    };
+
+    auto recalcDiff = [&](const ui64 prevSchemaVersion, const ui64 nextSchemaVersion) {
+        auto iter = Self->VersionCounters->GetVersionToKey().find(prevSchemaVersion);
+        auto& key = *iter->second.cbegin();
+        AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
+        auto rowset = table.GreaterOrEqual(key.GetId(), key.GetPlanStep(), key.GetTxId()).Select();
+        recalcDiffByRowset(rowset, prevSchemaVersion, nextSchemaVersion);
+    };
+
+    auto recalcDiffNoPrev = [&](const ui64 nextSchemaVersion) {
+        auto rowset = table.Select();
+        recalcDiffByRowset(rowset, 0, nextSchemaVersion);
     };
 
     std::vector<std::pair<ui64, ui64>> prevNextSchemaVersions = GetPrevNextSchemas();
     for (const auto& prevNext: prevNextSchemaVersions) {
+        AFL_VERIFY(prevNext.second != 0);
         if (prevNext.first == 0) {
-            AFL_VERIFY(prevNext.second != 0);
-
-            updateDiffs(prevNext.second, [&](NKikimrTxColumnShard::TSchemaPresetVersionInfo& info){
+            auto iter = Self->VersionCounters->GetVersionToKey().find(prevNext.second);
+            if (!updateDiffs(iter, true, [&](NKikimrTxColumnShard::TSchemaPresetVersionInfo& info){
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Clearing schema diff in db")("vesion", prevNext.second)("tablet_id", Self->TabletID());
                 info.ClearDiff();
-            });
+            })) {
+                recalcDiffNoPrev(prevNext.second);
+            }
         } else {
             if (!tryUpdateFromSchemas(prevNext)) {
-                NOlap::TSchemaDiffView newDiff;
-                auto iter = Self->VersionCounters->GetVersionToKey().find(prevNext.first);
-                auto& key = *iter->second.cbegin();
-                AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
-                auto rowset = table.GreaterOrEqual(key.GetId(), key.GetPlanStep(), key.GetTxId()).Select();
-                AFL_VERIFY(rowset.IsReady() && !rowset.EndOfSet());
-                std::vector<NKikimrSchemeOp::TColumnTableSchemaDiff> diffProtos;
-                while (!rowset.EndOfSet()) {
-                    TSchemaPreset::TSchemaPresetVersionInfo info;
-                    Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
-                    ui64 schemaVersion = info.GetSchema().GetVersion();
-                    if (schemaVersion > prevNext.second) {
-                        break;
-                    }
-                    if (schemaVersion > prevNext.first) {
-                        diffProtos.push_back(info.GetDiff());
-                    }
-                    if (!rowset.Next()) {
-                        break;
-                    }
-                }
-                AFL_VERIFY(diffProtos.size() > 0);
-                for (auto& diffProto: diffProtos) {
-                    NOlap::TSchemaDiffView diff;
-                    diff.DeserializeFromProto(diffProto);
-                    newDiff.AddNext(diff);
-                }
-                NKikimrSchemeOp::TColumnTableSchemaDiff newDiffProto;
-                newDiff.SerializeToProto(newDiffProto);
-                updateDiffs(prevNext.second, [&](NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Updating diff in version from db")("vesion", prevNext.second)("base version", prevNext.first)("tablet_id", Self->TabletID());
-                    *info.MutableDiff() = newDiffProto;
-                });
+                recalcDiff(prevNext.first, prevNext.second);
             }
         }
     }

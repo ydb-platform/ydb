@@ -949,6 +949,8 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         if (!CreateDirs(tx, parentPath, path, createdPaths, result)) {
             return result;
         }
+
+        Reverse(result.Transactions.begin(), result.Transactions.end());
     }
 
     // # Generates MkDirs based on transaction-specific requirements

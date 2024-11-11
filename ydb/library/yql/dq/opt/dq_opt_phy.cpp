@@ -849,11 +849,6 @@ TExprBase DqPushFlatmapToStage(TExprBase node, TExprContext& ctx, IOptimizationC
             return TExprBase(ctx.ChangeChild(*node.Raw(), TCoFlatMapBase::idx_Input, std::move(connToPushableStage)));
         }
 
-//        auto lambda = Build<TCoLambda>(ctx, flatmap.Lambda().Pos())
-//            .Args({"stream"})
-//            .Body(ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
-//            .Done();
-
         auto lambda = TCoLambda(ctx.Builder(flatmap.Lambda().Pos())
             .Lambda()
                 .Param("stream")

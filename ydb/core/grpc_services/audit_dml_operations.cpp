@@ -60,9 +60,11 @@ namespace {
 
 namespace NKikimr::NGRpcService {
 
-void AuditContextStart(IAuditCtx* ctx, const TString& database, const TString& userSID, const std::vector<std::pair<TString, TString>>& databaseAttrs) {
+void AuditContextStart(IAuditCtx* ctx, const TString& database, const TString& userSID, const TString& sanitizedToken, const std::vector<std::pair<TString, TString>>& databaseAttrs) {
     ctx->AddAuditLogPart("remote_address", NKikimr::NAddressClassifier::ExtractAddress(ctx->GetPeerName()));
     ctx->AddAuditLogPart("subject", userSID);
+    static const TString EMPTY_VALUE = "{none}";
+    ctx->AddAuditLogPart("sanitized_token", !sanitizedToken.empty() ? sanitizedToken : EMPTY_VALUE);
     ctx->AddAuditLogPart("database", database);
     ctx->AddAuditLogPart("operation", ctx->GetRequestName());
     ctx->AddAuditLogPart("start_time", TInstant::Now().ToString());

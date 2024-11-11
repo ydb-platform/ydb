@@ -427,7 +427,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
             familyDescription->SetColumnCodec(codec);
         } else {
             code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Compression is not set for column familu'" << family.Name << "'";
+            error = TStringBuilder() << "Compression is not set for column family'" << family.Name << "'";
             return false;
         }
 

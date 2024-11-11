@@ -387,7 +387,7 @@ protected:
         auto status = ProcessOutputsState.LastRunStatus;
 
         if (status == ERunStatus::PendingInput && ProcessOutputsState.AllOutputsFinished) {
-            CA_LOG_D("All outputs have been finished. Consider finished");
+            CA_LOG_D_RATELIMITED("All outputs have been finished. Consider finished", AllFinishedLogRateLimit, TDuration::Seconds(1));
             status = ERunStatus::Finished;
         }
 
@@ -433,8 +433,8 @@ protected:
         // Handle finishing of our task.
         if (status == ERunStatus::Finished && State != NDqProto::COMPUTE_STATE_FINISHED) {
             if (ProcessOutputsState.HasDataToSend || !ProcessOutputsState.ChannelsReady) {
-                CA_LOG_D("Continue execution, either output buffers are not empty or not all channels are ready"
-                    << ", hasDataToSend: " << ProcessOutputsState.HasDataToSend << ", channelsReady: " << ProcessOutputsState.ChannelsReady);
+                CA_LOG_D_RATELIMITED("Continue execution, either output buffers are not empty or not all channels are ready"
+                    << ", hasDataToSend: " << ProcessOutputsState.HasDataToSend << ", channelsReady: " << ProcessOutputsState.ChannelsReady, ContinueExecutionLogRateLimit, TDuration::Seconds(1));
             } else {
                 if (!Channels->FinishInputChannels()) {
                     CA_LOG_D("Continue execution, not all input channels are initialized");
@@ -1988,6 +1988,8 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputTransformCpuTimeMs;
     THolder<NYql::TCounters> Stat;
     TDuration CpuTimeSpent;
+    ::NActors::TLogRateLimiter AllFinishedLogRateLimit;
+    ::NActors::TLogRateLimiter ContinueExecutionLogRateLimit;
 };
 
 } // namespace NYql

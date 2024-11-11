@@ -22,3 +22,5 @@
 #define CA_LOG(prio, s) \
     LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, this->LogPrefix << s)
 
+#define CA_LOG_D_RATELIMITED(s, rateLimit, limit)                                       \
+    LOG_DEBUG_S_RATELIMITED(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, this->LogPrefix << s, rateLimit, limit)

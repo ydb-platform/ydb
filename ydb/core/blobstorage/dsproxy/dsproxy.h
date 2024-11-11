@@ -12,6 +12,7 @@
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/blobstorage/base/batched_vec.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/immediate_control_default_values.h>
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -51,14 +52,6 @@ const ui32 BeginRequestSize = 10;
 const ui32 MaxRequestSize = 1000;
 
 const ui32 MaskSizeBits = 32;
-
-constexpr bool DefaultEnablePutBatching = true;
-constexpr bool DefaultEnableVPatch = false;
-
-constexpr double DefaultSlowDiskThreshold = 2;
-constexpr double DefaultPredictedDelayMultiplier = 1;
-constexpr TDuration DefaultLongRequestThreshold = TDuration::Seconds(50);
-constexpr ui32 DefaultMaxNumOfSlowDisks = 2;
 
 constexpr bool WithMovingPatchRequestToStaticNode = true;
 

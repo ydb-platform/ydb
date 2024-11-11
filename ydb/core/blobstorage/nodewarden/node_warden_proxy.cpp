@@ -13,6 +13,19 @@ TActorId TNodeWarden::StartEjectedProxy(ui32 groupId) {
     return Register(CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
 }
 
+#define SELECT_CONTROL_BY_DEVICE_TYPE(prefix, info)                 \
+    ([&](NPDisk::EDeviceType deviceType) -> TControlWrapper& {      \
+        switch (deviceType) {                                       \
+        case NPDisk::DEVICE_TYPE_ROT:                               \
+            return prefix##HDD;                                     \
+        case NPDisk::DEVICE_TYPE_SSD:                               \
+        case NPDisk::DEVICE_TYPE_NVME:                              \
+            return prefix##SSD;                                     \
+        default:                                                    \
+            return prefix;                                          \
+        }                                                           \
+    })(info ? info->GetDeviceType() : NPDisk::DEVICE_TYPE_UNKNOWN)
+
 void TNodeWarden::StartLocalProxy(ui32 groupId) {
     STLOG(PRI_DEBUG, BS_NODE, NW12, "StartLocalProxy", (GroupId, groupId));
 
@@ -45,9 +58,9 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                             .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
                             .EnablePutBatching = EnablePutBatching,
                             .EnableVPatch = EnableVPatch,
-                            .SlowDiskThreshold = SlowDiskThreshold,
-                            .PredictedDelayMultiplier = PredictedDelayMultiplier,
-                            .MaxNumOfSlowDisks = MaxNumOfSlowDisks,
+                            .SlowDiskThreshold = SELECT_CONTROL_BY_DEVICE_TYPE(SlowDiskThreshold, info),
+                            .PredictedDelayMultiplier = SELECT_CONTROL_BY_DEVICE_TYPE(PredictedDelayMultiplier, info),
+                            .MaxNumOfSlowDisks = SELECT_CONTROL_BY_DEVICE_TYPE(MaxNumOfSlowDisks, info),
                         }), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
                     [[fallthrough]];
                 case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
@@ -66,9 +79,9 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                         .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
                         .EnablePutBatching = EnablePutBatching,
                         .EnableVPatch = EnableVPatch,
-                        .SlowDiskThreshold = SlowDiskThreshold,
-                        .PredictedDelayMultiplier = PredictedDelayMultiplier,
-                        .MaxNumOfSlowDisks = MaxNumOfSlowDisks,
+                        .SlowDiskThreshold = SELECT_CONTROL_BY_DEVICE_TYPE(SlowDiskThreshold, info),
+                        .PredictedDelayMultiplier = SELECT_CONTROL_BY_DEVICE_TYPE(PredictedDelayMultiplier, info),
+                        .MaxNumOfSlowDisks = SELECT_CONTROL_BY_DEVICE_TYPE(MaxNumOfSlowDisks, info),
                     }
                 )
             );
@@ -79,9 +92,9 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
             .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
             .EnablePutBatching = EnablePutBatching,
             .EnableVPatch = EnableVPatch,
-            .SlowDiskThreshold = SlowDiskThreshold,
-            .PredictedDelayMultiplier = PredictedDelayMultiplier,
-            .MaxNumOfSlowDisks = MaxNumOfSlowDisks,
+            .SlowDiskThreshold = SELECT_CONTROL_BY_DEVICE_TYPE(SlowDiskThreshold, info),
+            .PredictedDelayMultiplier = SELECT_CONTROL_BY_DEVICE_TYPE(PredictedDelayMultiplier, info),
+            .MaxNumOfSlowDisks = SELECT_CONTROL_BY_DEVICE_TYPE(MaxNumOfSlowDisks, info),
         }));
     }
 
@@ -185,3 +198,5 @@ void TNodeWarden::Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate::
         TActivationContext::Send(ev->Forward(WhiteboardId));
     }
 }
+
+#undef SELECT_CONTROL_BY_DEVICE_TYPE

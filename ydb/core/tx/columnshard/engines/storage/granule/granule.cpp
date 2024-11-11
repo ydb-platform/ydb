@@ -52,7 +52,7 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
     if (portionAfter) {
         PortionInfoGuard.OnNewPortion(portionAfter);
         if (!portionAfter->HasRemoveSnapshot()) {
-//            PortionsIndex.AddPortion(portionAfter);
+            PortionsIndex.AddPortion(portionAfter);
             if (modificationGuard) {
                 modificationGuard->AddPortion(portionAfter);
             } else {
@@ -80,7 +80,7 @@ void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> por
     if (portionBefore) {
         PortionInfoGuard.OnDropPortion(portionBefore);
         if (!portionBefore->HasRemoveSnapshot()) {
-//            PortionsIndex.RemovePortion(portionBefore);
+            PortionsIndex.RemovePortion(portionBefore);
             OptimizerPlanner->StartModificationGuard().RemovePortion(portionBefore);
             ActualizationIndex->RemovePortion(portionBefore);
         }

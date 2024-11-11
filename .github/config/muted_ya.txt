@@ -19,6 +19,17 @@ ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1_clean_with_restart
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingConsistency64
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingModuloN
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.UpsertWhileSplitTest
+ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMerge
+ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplits
+ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsThenMerges
+ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsWithRestartsAfterWait
+ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsWithRestartsWhenWait
+ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMergesWithRestartsAfterWait
+ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMergesWithRestartsWhenWait
+ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesActualization
+ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesInBS
+ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesInLocalMetadata
+ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesModificationError
 ydb/core/kqp/ut/olap KqpOlapStatistics.StatsUsageWithTTL
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap KqpOlapIndexes.Indexes*

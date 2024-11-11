@@ -134,17 +134,20 @@ async def sensors_data(request):
 
     labels = _dict_to_labels(await request.json())
     labels["project"] = project
-    return web.json_response({"vector": [
-        {
-            "timeseries": {
-                "kind": "MY_KIND",
-                "type": "MY_TYPE",
-                "labels": labels,
-                "timestamps": [1, 2, 3],
-                "values": [100, 200, 300],
-            }
+    timeseries = {
+        "timeseries": {
+            "kind": "MY_KIND",
+            "type": "MY_TYPE",
+            "labels": labels,
+            "timestamps": [1, 2, 3],
+            "values": [100, 200, 300],
         }
-    ]})
+    }
+
+    if project == "hist":
+        return web.json_response(timeseries)
+
+    return web.json_response({"vector": [timeseries]})
 
 
 @routes.get("/metrics")

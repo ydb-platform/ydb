@@ -16,8 +16,7 @@ NKikimr::TConclusion<NKikimrSchemeOp::TOlapColumn::TSerializer> ConvertFamilyDes
     }
     auto codec = NArrow::CompressionFromProto(familyDescription.GetColumnCodec());
     if (!codec.has_value()) {
-        return NKikimr::TConclusionStatus::Fail(TStringBuilder() << "family `" << familyDescription.GetName()
-                                                                 << "`: unknow codec for column family `" << familyDescription.GetName() << "`");
+        return NKikimr::TConclusionStatus::Fail(TStringBuilder() << "family `" << familyDescription.GetName() << "`: unknow codec");
     }
     if (familyDescription.HasColumnCodecLevel() && !NArrow::SupportsCompressionLevel(codec.value())) {
         return NKikimr::TConclusionStatus::Fail(TStringBuilder() << "family `" << familyDescription.GetName() << "`: codec `"

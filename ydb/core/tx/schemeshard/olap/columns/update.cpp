@@ -217,9 +217,14 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
     }
 
     bool TOlapColumnAdd::ApplySerializerFromColumnFamily(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors) {
+        if (!HasColumnFamily()) {
+            ColumnFamilyId = 0;
+            ColumnFamilyName = "default";
+        }
+
         if (GetColumnFamilyId().has_value()) {
             SetSerializer(columnFamilies.GetByIdVerified(GetColumnFamilyId().value())->GetSerializerContainer());
-        } else {
+        } else if (GetColumnFamilyName().has_value()) {
             TString familyName = GetColumnFamilyName().value();
             auto idIt = columnFamilies.GetColumnFamiliesByName().find(familyName);
 
@@ -231,6 +236,8 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
 
             SetColumnFamilyId(idIt->second);
             SetSerializer(columnFamilies.GetByIdVerified(idIt->second)->GetSerializerContainer());
+        } else {
+            return false;
         }
         return true;
     }
@@ -280,7 +287,7 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
         if (diffColumn.GetSerializer()) {
             Serializer = diffColumn.GetSerializer();
         } else {
-            if (HasColumnFamily() && !ApplySerializerFromColumnFamily(columnFamilies, errors)) {
+            if (!columnFamilies.GetColumnFamilies().empty() && !ApplySerializerFromColumnFamily(columnFamilies, errors)) {
                 return false;
             }
         }

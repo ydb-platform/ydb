@@ -9293,6 +9293,68 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
     }
 
+    Y_UNIT_TEST(AddColumnWithoutColumnFamily) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
+
+        TString tableName = "/Root/TableWithColumnFamily";
+        TTestHelper::TCompression zstdCompression =
+            TTestHelper::TCompression().SetCompressionType(NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD).SetCompressionLevel(1);
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default").SetCompression(zstdCompression),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto session = testHelper.GetSession();
+        auto& runner = testHelper.GetKikimr();
+        auto runtime = runner.GetTestServer().GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        {
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ADD COLUMN Value3 Uint32;)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = DescribeTable(&runner.GetTestServer(), sender, tableName);
+            auto schema = describeResult.GetPathDescription().GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_EQUAL(schema.ColumnFamiliesSize(), families.size());
+            for (ui32 i = 0; i < families.size(); i++) {
+                TTestHelper::TColumnFamily familyFromScheme;
+                UNIT_ASSERT(familyFromScheme.DeserializeFromProto(schema.GetColumnFamilies(i)));
+                TString errorMessage;
+                UNIT_ASSERT_C(familyFromScheme.IsEqual(families[i], errorMessage), errorMessage);
+            }
+
+            auto columns = schema.GetColumns();
+            for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
+                UNIT_ASSERT(columns[i].HasSerializer());
+                UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), 0,
+                    TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[0].GetFamilyName()
+                                     << "`");
+                UNIT_ASSERT_EQUAL(columns[i].GetColumnFamilyName(), families[0].GetFamilyName());
+                TTestHelper::TCompression compression;
+                UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
+                TString errorMessage;
+                UNIT_ASSERT_C(compression.IsEqual(families[0].GetCompression(), errorMessage), errorMessage);
+            }
+        }
+
+    }
+
     Y_UNIT_TEST(AddColumnWithColumnFamily) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;

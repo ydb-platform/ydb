@@ -578,7 +578,6 @@ public:
                 mutableSchema->MutableColumns(i)->SetColumnFamilyId(0);
             }
         }
-        Cerr << createDescription.GetSchema().DebugString() << Endl;
     }
 
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {

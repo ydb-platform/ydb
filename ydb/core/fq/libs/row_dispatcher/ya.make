@@ -14,12 +14,14 @@ SRCS(
 PEERDIR(
     contrib/libs/fmt
     contrib/libs/simdjson
+    ydb/core/base
     ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/control_plane_storage
     ydb/core/fq/libs/row_dispatcher/events
     ydb/core/fq/libs/shared_resources
     ydb/core/fq/libs/ydb
+    ydb/core/mon
     ydb/library/actors/core
     ydb/library/security
     ydb/library/yql/dq/actors/common

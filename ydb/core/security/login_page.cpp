@@ -23,7 +23,7 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NMonitoring;
 
-void AuditLogWebUILogout(const NHttp::THttpIncomingRequest& request, const TString& userSID) {
+void AuditLogWebUILogout(const NHttp::THttpIncomingRequest& request, const TString& userSID, const TString& sanitizedToken) {
     static const TString WebLoginComponentName = "web-login";
     static const TString LogoutOperationName = "LOGOUT";
     static const TString EmptyValue = "{none}";
@@ -35,6 +35,7 @@ void AuditLogWebUILogout(const NHttp::THttpIncomingRequest& request, const TStri
         AUDIT_PART("component", WebLoginComponentName)
         AUDIT_PART("remote_address", (!remoteAddress.empty() ? remoteAddress : EmptyValue))
         AUDIT_PART("subject", (!userSID.empty() ? userSID : EmptyValue))
+        AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue))
         //NOTE: no database specified as web logout considered cluster-wide
         AUDIT_PART("operation", LogoutOperationName)
         AUDIT_PART("status", TString("SUCCESS"))
@@ -311,7 +312,7 @@ public:
             return ReplyErrorAndPassAway("403", "Forbidden", "Empty token");
         }
 
-        ReplyDeleteCookieAndPassAway(result.Token->GetUserSID());
+        ReplyDeleteCookieAndPassAway(result.Token->GetUserSID(), result.Token->GetSanitizedToken());
     }
 
     void HandlePoisonPill(TEvents::TEvPoisonPill::TPtr&) {
@@ -342,14 +343,14 @@ public:
         headers.Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
     }
 
-    void ReplyDeleteCookieAndPassAway(const TString& userSID) {
+    void ReplyDeleteCookieAndPassAway(const TString& userSID, const TString& sanitizedToken) {
         ALOG_DEBUG(NActorsServices::HTTP, "Logout success");
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         headers.Set("Set-Cookie", "ydb_session_id=; Max-Age=0");
         Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("200", "OK", headers)));
 
-        AuditLogWebUILogout(*Request, userSID);
+        AuditLogWebUILogout(*Request, userSID, sanitizedToken);
 
         PassAway();
     }

@@ -37,6 +37,7 @@ message TEvCreateExportRequest {
     optional TCreateExportRequest Request = 3;
     optional string UserSID = 4;
     optional string PeerName = 5;
+    optional string SanitizedToken = 6;
 }
 
 message TCreateExportResponse {

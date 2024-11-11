@@ -170,12 +170,14 @@ public:
         const bool inconsistentTx,
         const NMiniKQL::TTypeEnvironment& typeEnv,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        const NKikimrDataEvents::TMvccSnapshot& mvccSnapshot,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
         TIntrusivePtr<TKqpCounters> counters,
         NWilson::TTraceId traceId)
         : TypeEnv(typeEnv)
         , Alloc(alloc)
+        , MvccSnapshot(mvccSnapshot)
         , TableId(tableId)
         , TablePath(tablePath)
         , LockTxId(lockTxId)
@@ -813,6 +815,7 @@ public:
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
+            *evWrite->Record.MutableMvccSnapshot() = MvccSnapshot;
         }
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite);
@@ -954,6 +957,8 @@ public:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
+    NKikimrDataEvents::TMvccSnapshot MvccSnapshot;
+
     const TTableId TableId;
     const TString TablePath;
 
@@ -1019,6 +1024,7 @@ public:
             Settings.GetInconsistentTx(),
             TypeEnv,
             Alloc,
+            Settings.GetMvccSnapshot(),
             nullptr,
             TActorId{},
             Counters,
@@ -1206,6 +1212,7 @@ struct TTransactionSettings {
     ui64 LockTxId = 0;
     ui64 LockNodeId = 0;
     bool InconsistentTx = false;
+    NKikimrDataEvents::TMvccSnapshot MvccSnapshot;
 };
 
 struct TWriteSettings {
@@ -1316,10 +1323,14 @@ public:
                 AFL_ENSURE(LockTxId == settings.TransactionSettings.LockTxId);
                 AFL_ENSURE(LockNodeId == settings.TransactionSettings.LockNodeId);
                 AFL_ENSURE(InconsistentTx == settings.TransactionSettings.InconsistentTx);
+                AFL_ENSURE(MvccSnapshot.GetStep() == settings.TransactionSettings.MvccSnapshot.GetStep());
+                AFL_ENSURE(MvccSnapshot.GetTxId() == settings.TransactionSettings.MvccSnapshot.GetTxId());
             } else {
                 LockTxId = settings.TransactionSettings.LockTxId;
                 LockNodeId = settings.TransactionSettings.LockNodeId;
                 InconsistentTx = settings.TransactionSettings.InconsistentTx;
+                MvccSnapshot.SetStep(settings.TransactionSettings.MvccSnapshot.GetStep());
+                MvccSnapshot.SetTxId(settings.TransactionSettings.MvccSnapshot.GetTxId());
             }
 
             auto& writeInfo = WriteInfos[settings.TableId];
@@ -1333,6 +1344,7 @@ public:
                     InconsistentTx,
                     TypeEnv,
                     Alloc,
+                    MvccSnapshot,
                     TxManager,
                     SessionActorId,
                     Counters,
@@ -2011,6 +2023,7 @@ private:
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     NMiniKQL::TTypeEnvironment TypeEnv;
+    NKikimrDataEvents::TMvccSnapshot MvccSnapshot;
 
     struct TWriteInfo {
         TKqpTableWriteActor* WriteTableActor = nullptr;
@@ -2137,6 +2150,7 @@ private:
                     .LockTxId = Settings.GetLockTxId(),
                     .LockNodeId = Settings.GetLockNodeId(),
                     .InconsistentTx = Settings.GetInconsistentTx(),
+                    .MvccSnapshot = Settings.GetMvccSnapshot(),
                 },
                 .Priority = Settings.GetPriority(),
             };

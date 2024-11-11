@@ -282,10 +282,6 @@ public:
             }
         }
 
-        if (TxManager) {
-            TxManager->SetHasSnapshot(GetSnapshot().IsValid());
-        }
-
         if (!BufferActorId || (ReadOnlyTx && Request.LocksOp != ELocksOp::Rollback)) {
             Become(&TKqpDataExecuter::FinalizeState);
             MakeResponseAndPassAway();
@@ -2241,6 +2237,8 @@ private:
             ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterAcquireSnapshot, ExecuterSpan.GetTraceId(), "WaitForSnapshot");
 
             return;
+        } else if (TxManager && GetSnapshot().IsValid()) {
+            TxManager->SetSnapshot(GetSnapshot().Step, GetSnapshot().TxId);
         }
 
         ContinueExecute();
@@ -2276,6 +2274,9 @@ private:
 
         SetSnapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
         ImmediateTx = true;
+        if (TxManager) {
+            TxManager->SetSnapshot(GetSnapshot().Step, GetSnapshot().TxId);
+        }
 
         ContinueExecute();
     }

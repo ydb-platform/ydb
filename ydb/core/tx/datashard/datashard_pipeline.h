@@ -85,6 +85,7 @@ public:
     TPipeline(TDataShard * self);
     ~TPipeline();
 
+    void Reset();
     bool Load(NIceDb::TNiceDb& db);
     void UpdateConfig(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TPipelineConfig& cfg);
 
@@ -469,6 +470,11 @@ private:
         inline void Remove(TRowVersion version) {
             if (auto it = ItemsSet.find(version); it != ItemsSet.end() && --it->Counter == 0)
                 ItemsSet.erase(it);
+        }
+
+        void Reset() {
+            TxIdMap.clear();
+            ItemsSet.clear();
         }
 
         inline bool HasOpsBelow(TRowVersion upperBound) const {

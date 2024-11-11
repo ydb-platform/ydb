@@ -3871,7 +3871,7 @@ void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
 
         tx->AddCmdWrite(request, state);
 
-        ChangedTxs.insert(txId);
+        ChangedTxs.push_back(txId);
     }
 
     WriteTxs.clear();
@@ -3890,7 +3890,7 @@ void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
 
         auto tx = GetTransaction(ctx, txId);
         if (tx) {
-            ChangedTxs.insert(txId);
+            ChangedTxs.push_back(txId);
         }
     }
 
@@ -4182,7 +4182,8 @@ void TPersQueue::SendEvProposeTransactionResult(const TActorContext& ctx,
     result->Record.SetTxId(tx.TxId);
     result->Record.SetStep(tx.Step);
 
-    PQ_LOG_D("send TEvPersQueue::TEvProposeTransactionResult(" <<
+    PQ_LOG_D("TxId: " << tx.TxId <<
+             " send TEvPersQueue::TEvProposeTransactionResult(" <<
              NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(result->Record.GetStatus()) <<
              ")");
     ctx.Send(tx.SourceActor, std::move(result));
@@ -4701,7 +4702,8 @@ void TPersQueue::SendProposeTransactionAbort(const TActorId& target,
         error->SetReason(reason);
     }
 
-    PQ_LOG_D("send TEvPersQueue::TEvProposeTransactionResult(" <<
+    PQ_LOG_D("TxId: " << txId <<
+             " send TEvPersQueue::TEvProposeTransactionResult(" <<
              NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event->Record.GetStatus()) <<
              ")");
     ctx.Send(target, std::move(event));

@@ -98,13 +98,13 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
       The `YDB_USE_IN_MEMORY_PDISKS` setting makes all data volatile, stored only in RAM. Currently, data persistence by turning it off is supported only on x86_64 processors.
 
       {% note warning %}
-      
+
       You can use one of the following methods to save data using the disable `YDB_USE_IN_MEMORY_PDISKS` option when running a Docker container on a Mac with ARM processors:
 
       - Use [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/)
-      
+
       - Use [colima](https://github.com/abiosoft/colima)
-        
+
         1. You can install it via brew
 
            ```bash

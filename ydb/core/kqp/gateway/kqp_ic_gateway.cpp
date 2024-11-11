@@ -209,11 +209,6 @@ public:
         ctx.Send(ev->Sender, resp.Release());
     }
 
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ctx);
-        Executions.push_back(std::move(*ev->Get()->Record.MutableProfile()));
-    }
-
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
@@ -228,11 +223,6 @@ public:
         auto& response = *ev->Get()->Record.MutableResponse();
 
         response.AddYdbResults()->CopyFrom(ResultSet);
-        for (auto& execStats : Executions) {
-            response.MutableQueryStats()->AddExecutions()->Swap(&execStats);
-        }
-        Executions.clear();
-
         TBase::HandleResponse(ev, ctx);
     }
 
@@ -240,7 +230,6 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
-            HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, Handle);
             HFunc(TResponse, HandleResponse);
 
         default:
@@ -253,7 +242,6 @@ private:
     TActorId ExecuterActorId;
     bool HasMeta = false;
     Ydb::ResultSet ResultSet;
-    TVector<NYql::NDqProto::TDqExecutionStats> Executions;
 };
 
 // Handles data query request for StreamExecuteYqlScript
@@ -384,11 +372,6 @@ public:
         TlsActivationContext->Send(ev->Forward(ExecuterActorId));
     }
 
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ctx);
-        Executions.push_back(std::move(*ev->Get()->Record.MutableProfile()));
-    }
-
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
@@ -404,11 +387,6 @@ public:
 
         Ydb::ResultSet resultSet;
         response.AddYdbResults()->CopyFrom(resultSet);
-        for (auto& execStats : Executions) {
-            response.MutableQueryStats()->AddExecutions()->Swap(&execStats);
-        }
-        Executions.clear();
-
         TBase::HandleResponse(ev, ctx);
     }
 
@@ -416,7 +394,6 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
-            HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, Handle);
             HFunc(TResponse, HandleResponse);
 
         default:
@@ -427,7 +404,6 @@ public:
 private:
     TActorId ExecuterActorId;
     TActorId TargetActorId;
-    TVector<NYql::NDqProto::TDqExecutionStats> Executions;
 };
 
 class TKqpGenericQueryRequestHandler: public TRequestHandlerBase<

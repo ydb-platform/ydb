@@ -1094,6 +1094,16 @@ namespace NKikimr {
                 ev->Record.SetReplicationSecondsRemaining(0);
             }
             ctx.Send(SelfId(), ev.release());
+            ctx.Send(MakeBlobStorageNodeWardenID(VCtx->NodeId),
+                     new TEvBlobStorage::TEvControllerUpdateDiskStatus(
+                         SelfVDiskId,
+                         SelfId().NodeId(),
+                         Config->BaseInfo.PDiskId,
+                         Config->BaseInfo.VDiskSlotId,
+                         std::nullopt,
+                         state,
+                         replicated,
+                         outOfSpaceFlags));
             // repeat later
             if (schedule) {
                 ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard);

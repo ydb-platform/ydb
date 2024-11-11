@@ -13,6 +13,7 @@
 #include "flat_comp.h"
 #include "flat_executor_misc.h"
 #include "flat_bio_stats.h"
+#include "util_channel.h"
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/appdata.h>
@@ -70,8 +71,8 @@ namespace NTabletFlatExecutor {
             , Mask(mask)
             , Owner(owner)
             , Conf(std::move(conf))
-            , Bundle(new TBundle(Mask, Conf->Writer))
         {
+            Bundle = new TBundle(Mask, Conf->Writer);
         }
 
         ~TOpsCompact()
@@ -364,9 +365,9 @@ namespace NTabletFlatExecutor {
             if (fail) {
                 prod->Results.clear(); /* shouldn't sent w/o fixation in bs */
             } else if (bool(prod->Results) != bool(WriteStats.Rows > 0)) {
-                Y_ABORT("Unexpexced rows production result after compaction");
+                Y_ABORT("Unexpected rows production result after compaction");
             } else if ((bool(prod->Results) || bool(prod->TxStatus)) != bool(Blobs > 0)) {
-                Y_ABORT("Unexpexced blobs production result after compaction");
+                Y_ABORT("Unexpected blobs production result after compaction");
             }
 
             Driver = nullptr;
@@ -424,9 +425,9 @@ namespace NTabletFlatExecutor {
             Writing -= msg.Id.BlobSize();
             Flushing -= msg.Id.BlobSize();
 
+            const ui32 channel = msg.Id.Channel();
 
             if (msg.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
-                const ui32 channel = msg.Id.Channel();
                 Y_DEBUG_ABORT_UNLESS(channel < 256);
                 if (!SeenYellowMoveChannels[channel]) {
                     SeenYellowMoveChannels[channel] = true;
@@ -434,13 +435,14 @@ namespace NTabletFlatExecutor {
                 }
             }
             if (msg.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
-                const ui32 channel = msg.Id.Channel();
                 Y_DEBUG_ABORT_UNLESS(channel < 256);
                 if (!SeenYellowStopChannels[channel]) {
                     SeenYellowStopChannels[channel] = true;
                     YellowStopChannels.push_back(channel);
                 }
             }
+
+            Conf->Writer.ChannelsShares.Update(channel, msg.ApproximateFreeSpaceShare);
 
             const auto ok = (msg.Status == NKikimrProto::OK);
 

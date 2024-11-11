@@ -1,4 +1,4 @@
-w_,i_item_id,sales_before,sales_after
+warehouse.w_state,item.i_item_id,sales_before,sales_after
 TN,AAAAAAAAAABDAAAA,0,-82.1
 TN,AAAAAAAAAACDAAAA,-216.54,158.04
 TN,AAAAAAAAAAHDAAAA,186.55,0

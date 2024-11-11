@@ -1,0 +1,11 @@
+package NKikimrWhiteboard;
+
+
+enum EVDiskState {
+    Initial = 1;
+    LocalRecoveryError = 2;
+    SyncGuidRecovery = 3;
+    SyncGuidRecoveryError = 4;
+    OK = 5;
+    PDiskError = 6;
+}

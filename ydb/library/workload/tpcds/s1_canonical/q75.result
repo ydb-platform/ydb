@@ -1,4 +1,4 @@
-prev_year,year,i_brand_id,i_class_id,i_category_id,i_manufact_id,prev_yr_cnt,curr_yr_cnt,sales_cnt_diff,sales_amt_diff
+prev_year,year,curr_yr.i_brand_id,curr_yr.i_class_id,curr_yr.i_category_id,curr_yr.i_manufact_id,prev_yr_cnt,curr_yr_cnt,sales_cnt_diff,sales_amt_diff
 2001,2002,9011004,11,9,730,6136,3927,-2209,-64592.86
 2001,2002,9004008,4,9,454,6130,4012,-2118,-137401.99
 2001,2002,9006010,6,9,373,6584,4510,-2074,-56824.27

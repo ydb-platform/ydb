@@ -9,6 +9,8 @@ namespace NKqp {
 struct TKqpBufferWriterSettings {
     TActorId SessionActorId;
     IKqpTransactionManagerPtr TxManager;
+    NWilson::TTraceId TraceId;
+    TIntrusivePtr<TKqpCounters> Counters;
 };
 
 NActors::IActor* CreateKqpBufferWriterActor(TKqpBufferWriterSettings&& settings);

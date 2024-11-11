@@ -195,7 +195,6 @@ public:
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
             hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
-            hFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, HandleReply);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -552,10 +551,6 @@ private:
         TBase::ReplyAndPassAway(GetHTTPOKJSON(stream.Str()));
     }
 
-    void HandleReply(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev) {
-        Y_UNUSED(ev);
-    }
-
     void HandleReply(NKqp::TEvKqp::TEvPingSessionResponse::TPtr& ev) {
         Y_UNUSED(ev);
     }
@@ -881,7 +876,7 @@ public:
                 in: query
                 description: resource pool in which the query will be executed
                 type: string
-                required: false 
+                required: false
             requestBody:
                 description: Executes SQL query
                 required: false

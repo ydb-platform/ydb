@@ -40,6 +40,14 @@ public:
     TPortionInfoConstructor(TPortionInfoConstructor&&) noexcept = default;
     TPortionInfoConstructor& operator=(TPortionInfoConstructor&&) noexcept = default;
 
+    void ClearRecords() {
+        Records.clear();
+    }
+
+    void ClearIndexes() {
+        Indexes.clear();
+    }
+
     class TTestCopier {
     public:
         static TPortionInfoConstructor Copy(const TPortionInfoConstructor& source) {
@@ -375,6 +383,49 @@ public:
         const ui64 pathId = constructor.GetPathId();
         const ui64 portionId = constructor.GetPortionIdVerified();
         auto info = Constructors[pathId].emplace(portionId, std::move(constructor));
+        AFL_VERIFY(info.second);
+        return &info.first->second;
+    }
+};
+
+class TInGranuleConstructors {
+private:
+    THashMap<ui64, TPortionInfoConstructor> Constructors;
+
+public:
+    THashMap<ui64, TPortionInfoConstructor>::iterator begin() {
+        return Constructors.begin();
+    }
+
+    THashMap<ui64, TPortionInfoConstructor>::iterator end() {
+        return Constructors.end();
+    }
+
+    void ClearPortions() {
+        Constructors.clear();
+    }
+
+    void ClearColumns() {
+        for (auto&& i : Constructors) {
+            i.second.ClearRecords();
+        }
+    }
+
+    void ClearIndexes() {
+        for (auto&& i : Constructors) {
+            i.second.ClearIndexes();
+        }
+    }
+
+    TPortionInfoConstructor* GetConstructorVerified(const ui64 portionId) {
+        auto itPortionId = Constructors.find(portionId);
+        AFL_VERIFY(itPortionId != Constructors.end());
+        return &itPortionId->second;
+    }
+
+    TPortionInfoConstructor* AddConstructorVerified(TPortionInfoConstructor&& constructor) {
+        const ui64 portionId = constructor.GetPortionIdVerified();
+        auto info = Constructors.emplace(portionId, std::move(constructor));
         AFL_VERIFY(info.second);
         return &info.first->second;
     }

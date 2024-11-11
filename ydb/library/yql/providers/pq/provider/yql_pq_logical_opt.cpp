@@ -17,6 +17,9 @@
 #include <ydb/library/yql/providers/common/pushdown/physical_opt.h>
 #include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
 
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -27,7 +30,7 @@ namespace {
             : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
         {
             using EFlag = NPushdown::TSettings::EFeatureFlag;
-            Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 | EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes);
+            Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 | EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator | EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators);
         }
     };
 
@@ -250,15 +253,30 @@ public:
             return node;
         }
         TDqPqTopicSource dqPqTopicSource = maybeDqPqTopicSource.Cast();
-        if (!IsEmptyFilterPredicate(dqPqTopicSource.FilterPredicate())) {
+        if (!dqPqTopicSource.FilterPredicate().Ref().Content().empty()) {
             YQL_CLOG(TRACE, ProviderPq) << "Push filter. Lambda is already not empty";
             return node;
         }
-        
+
         auto newFilterLambda = MakePushdownPredicate(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
         if (!newFilterLambda) {
             return node;
         }
+
+        auto predicate = newFilterLambda.Cast();
+        if (NYql::IsEmptyFilterPredicate(predicate)) {
+            return node;
+        }
+
+        TStringBuilder err;
+        NYql::NConnector::NApi::TPredicate predicateProto;
+        if (!NYql::SerializeFilterPredicate(predicate, &predicateProto, err)) {
+            ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
+            return node;
+        }
+        
+        TString serializedProto;
+        YQL_ENSURE(predicateProto.SerializeToString(&serializedProto));       
         YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";
 
         if (maybeExtractMembers) {
@@ -270,7 +288,7 @@ public:
                         .InitFrom(dqSourceWrap)
                         .Input<TDqPqTopicSource>()
                             .InitFrom(dqPqTopicSource)
-                            .FilterPredicate(newFilterLambda.Cast())
+                            .FilterPredicate().Value(serializedProto).Build()
                             .Build()
                         .Build()
                     .Build()
@@ -282,7 +300,7 @@ public:
                 .InitFrom(dqSourceWrap)
                 .Input<TDqPqTopicSource>()
                     .InitFrom(dqPqTopicSource)
-                    .FilterPredicate(newFilterLambda.Cast())
+                    .FilterPredicate().Value(serializedProto).Build()
                     .Build()
                 .Build()
             .Done();

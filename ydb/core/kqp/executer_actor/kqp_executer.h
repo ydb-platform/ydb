@@ -73,9 +73,6 @@ struct TEvKqpExecuter {
     struct TEvStreamDataAck : public TEventPB<TEvStreamDataAck, NKikimrKqp::TEvExecuterStreamDataAck,
         TKqpExecuterEvents::EvStreamDataAck> {};
 
-    struct TEvStreamProfile : public TEventPB<TEvStreamProfile, NKikimrKqp::TEvExecuterStreamProfile,
-        TKqpExecuterEvents::EvStreamProfile> {};
-
     // deprecated event, remove in the future releases.
     struct TEvExecuterProgress : public TEventPB<TEvExecuterProgress, NKikimrKqp::TEvExecuterProgress,
             TKqpExecuterEvents::EvProgress> {};

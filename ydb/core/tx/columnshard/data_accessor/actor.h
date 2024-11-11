@@ -41,6 +41,7 @@ public:
     TActor(const ui64 tabletId, const TActorId& parent)
         : TabletId(tabletId)
         , Parent(parent) {
+        Y_UNUSED(TabletId);
     }
     ~TActor() = default;
 

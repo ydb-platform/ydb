@@ -1,4 +1,4 @@
-YQL_UDF_CONTRIB(streaming_udf)
+YQL_UDF(streaming_udf)
 
 YQL_ABI_VERSION(
     2

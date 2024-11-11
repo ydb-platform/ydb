@@ -1,4 +1,4 @@
-YQL_UDF_CONTRIB(json2_udf)
+YQL_UDF(json2_udf)
     
     YQL_ABI_VERSION(
         2

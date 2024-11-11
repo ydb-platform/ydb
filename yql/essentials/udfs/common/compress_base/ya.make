@@ -1,4 +1,4 @@
-YQL_UDF_CONTRIB(compress_udf)
+YQL_UDF(compress_udf)
 
 YQL_ABI_VERSION(
     2

@@ -1,4 +1,4 @@
-YQL_UDF_CONTRIB(set_udf)
+YQL_UDF(set_udf)
     
     YQL_ABI_VERSION(
         2

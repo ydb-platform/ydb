@@ -2676,8 +2676,9 @@ private:
             hFunc(TEvDqCompute::TEvState, HandleShutdown);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
             hFunc(TEvents::TEvPoison, HandleShutdown);
+            hFunc(TEvDq::TEvAbortExecution, HandleShutdown);
             default:
-                LOG_E("Unexpected event: " << ev->GetTypeName()); // ignore all other events
+                LOG_E("Unexpected event while waiting for shutdown: " << ev->GetTypeName()); // ignore all other events
         }
     }
 
@@ -2715,6 +2716,16 @@ private:
         LOG_I("Timed out on waiting for Compute Actors to finish - forcing shutdown");
 
         if (ev->Sender == SelfId()) {
+            PassAway();
+        }
+    }
+
+    void HandleShutdown(TEvDq::TEvAbortExecution::TPtr& ev) {
+        auto statusCode = NYql::NDq::DqStatusToYdbStatus(ev->Get()->Record.GetStatusCode());
+
+        // In case of external timeout the response is already sent to the client - no need to wait for stats.
+        if (statusCode == Ydb::StatusIds::TIMEOUT) {
+            LOG_I("External timeout while waiting for Compute Actors to finish - forcing shutdown. Sender: " << ev->Sender);
             PassAway();
         }
     }

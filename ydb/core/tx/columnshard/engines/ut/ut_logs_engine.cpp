@@ -497,7 +497,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // load
         TSnapshot indexSnapshot(1, 1);
         TColumnEngineForLogs engine(
-            0, std::make_shared<NDataAccessorControl::TLocalManager>(), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
+            0, std::make_shared<NDataAccessorControl::TLocalManager>(nullptr), CommonStoragesManager, indexSnapshot, TIndexInfo(tableInfo));
         for (auto&& i : paths) {
             engine.RegisterTable(i);
         }

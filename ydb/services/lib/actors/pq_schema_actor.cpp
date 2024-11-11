@@ -1335,6 +1335,10 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (needHandleAutoPartitioning) {
             auto code = ValidatePartitionStrategy(*pqTabletConfig, error);
             if (code) return code->YdbCode;
+
+            if (pqTabletConfig->GetPartitionStrategy().GetPartitionStrategyType() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED) {
+                CHECK_CDC;
+            }
         }
 
         if (request.alter_attributes().size()) {

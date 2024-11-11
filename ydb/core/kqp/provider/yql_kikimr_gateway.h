@@ -739,6 +739,8 @@ struct TSequenceSettings {
     TMaybe<bool> Cycle;
     TMaybe<TString> OwnedBy;
     TMaybe<TString> DataType;
+    TMaybe<bool> Restart;
+    TMaybe<i64> RestartValue;
 };
 
 struct TCreateSequenceSettings {

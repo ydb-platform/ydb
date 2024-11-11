@@ -408,7 +408,7 @@ TWriteSequenceSettings ParseSequenceSettings(NNodes::TExprList node, TExprContex
     TVector<TCoNameValueTuple> other;
 
     const static std::unordered_set<TString> sequenceSettingNames =
-        {"start", "increment", "cache", "minvalue", "maxvalue", "cycle"};
+        {"start", "increment", "cache", "minvalue", "maxvalue", "cycle", "restart"};
 
     for (auto child : node) {
         if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {

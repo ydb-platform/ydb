@@ -15,7 +15,7 @@ RUN \
 FROM base AS base-debug
 RUN \
     apt-get -yqq update && \
-    apt-get -yqq install dnsutils telnet netcat-openbsd iputils-ping gdb atop strace curl linux-tools-generic && \
+    apt-get -yqq install binutils dnsutils telnet netcat-openbsd iputils-ping gdb atop strace curl linux-tools-generic && \
     apt-get -yqq clean all && \
     rm -rf /var/lib/apt/lists/*
 
@@ -31,13 +31,17 @@ COPY --chmod=0644 /libiconv.so /lib/libiconv.so
 COPY --chmod=0644 /liblibidn-dynamic.so /lib/liblibidn-dynamic.so
 COPY --chmod=0644 /liblibaio-dynamic.so /lib/liblibaio-dynamic.so
 
+FROM base AS ydb-binary
+# dynamic libraries
+COPY --chmod=0755 --chown=ydb /ydb /opt/ydb/bin/ydb
+
 ###
 # Image with setcap'ed ydb binary
 ###
 FROM base AS ydbd-setcap
-COPY --chmod=0755 --chown=ydb /ydbd /ydbd
+COPY --chmod=0755 --chown=ydb /ydbd /opt/ydb/bin/ydbd
 # workaround for decrease image size
-RUN /sbin/setcap CAP_SYS_RAWIO=ep /ydbd
+RUN /sbin/setcap CAP_SYS_RAWIO=ep /opt/ydb/bin/ydbd
 
 ###
 # Release image
@@ -52,8 +56,8 @@ COPY --link --from=libs /lib/libiconv.so /lib/libiconv.so
 COPY --link --from=libs /lib/liblibidn-dynamic.so /lib/liblibidn-dynamic.so
 COPY --link --from=libs /lib/liblibaio-dynamic.so /lib/liblibaio-dynamic.so
 # ydb binaries
-COPY --chmod=0755 --chown=ydb /ydb /opt/ydb/bin/ydb
-COPY --link --from=ydbd-setcap /ydbd /opt/ydb/bin/ydbd
+COPY --link --from=ydb-binary /opt/ydb/bin/ydb /opt/ydb/bin/ydb
+COPY --link --from=ydbd-setcap /opt/ydb/bin/ydbd /opt/ydb/bin/ydbd
 
 WORKDIR /opt/ydb/bin
 USER ydb
@@ -75,14 +79,20 @@ COPY --link --from=license /README.md /README.md
 COPY --link --from=libs /lib/libiconv.so /lib/libiconv.so
 COPY --link --from=libs /lib/liblibidn-dynamic.so /lib/liblibidn-dynamic.so
 COPY --link --from=libs /lib/liblibaio-dynamic.so /lib/liblibaio-dynamic.so
-# ydb binaries
-COPY --chmod=0755 --chown=ydb /ydb /opt/ydb/bin/ydb
-COPY --link --from=ydbd-setcap /ydbd /opt/ydb/bin/ydbd
-
-ENV BREAKPAD_MINIDUMPS_PATH=/opt/ydb/volumes/coredumps/
-ENV BREAKPAD_MINIDUMPS_SCRIPT=/opt/ydb/bin/minidump_script.py
+# breakpad section
 ENV LD_PRELOAD=libbreakpad_init.so
+ENV BREAKPAD_MINIDUMPS_PATH=/opt/ydb/volumes/coredumps
+ENV BREAKPAD_MINIDUMPS_SCRIPT=/opt/ydb/bin/minidump_script.py
 COPY --chmod=4644 --link --from=breakpad /usr/lib/libbreakpad_init.so /usr/lib/libbreakpad_init.so
+COPY --chmod=0755 --link --from=breakpad /usr/bin/minidump_stackwalk /usr/bin/minidump_stackwalk
 COPY --chmod=0755 --link --from=breakpad /usr/bin/minidump-2-core /usr/bin/minidump-2-core
+# minidump script
 COPY --chmod=0755 --chown=ydb /minidump_script.py /opt/ydb/bin/minidump_script.py
+# ydb binaries
+COPY --link --from=ydb-binary /opt/ydb/bin/ydb /opt/ydb/bin/ydb
+COPY --link --from=ydbd-setcap /opt/ydb/bin/ydbd /opt/ydb/bin/ydbd
+# ydbd debug symbols
 COPY --chmod=0644 --chown=ydb /ydbd.debug /opt/ydb/bin/ydbd.debug
+
+WORKDIR /opt/ydb/bin
+USER ydb

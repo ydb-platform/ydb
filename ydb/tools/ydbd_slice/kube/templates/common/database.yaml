@@ -19,7 +19,7 @@ spec:
   storageClusterRef:
     name: {{ storage_name }}
   volumes:
-    name: coredumps
+  - name: coredumps
     hostPath:
-      path": /coredumps
-      type": Directory
+      path: /coredumps
+      type: Directory

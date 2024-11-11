@@ -25,7 +25,6 @@ if __name__ == "__main__":
             "/usr/bin/gdb",
             "/opt/ydb/bin/ydbd",
             core_file,
-            "-symbols=/opt/ydb/bin/ydbd.debug",
             "-iex=set auto-load safe-path /",
             "-ex=thread apply all bt",
             "--batch",

@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.4
 FROM cr.yandex/mirror/ubuntu:focal AS breakpad-base
 RUN \
     apt-get -yqq update && \
@@ -23,3 +23,4 @@ FROM scratch AS breakpad-release
 
 COPY --link --from=breakpad-build /breakpad/libbreakpad_init.so /usr/lib/libbreakpad_init.so
 COPY --link --from=breakpad-build /breakpad/src/src/tools/linux/md2core/minidump-2-core /usr/bin/minidump-2-core
+COPY --link --from=breakpad-build /breakpad/src/src/processor/minidump_stackwalk /usr/bin/minidump_stackwalk

@@ -12,6 +12,7 @@
     "docker_target": "release"
   },
   "build": {
+    "build_type": "release",
     "targets": [
         "ydb/apps/ydbd",
         "ydb/apps/ydb",
@@ -27,6 +28,10 @@
       {
           "name": "HARDENING",
           "value": "yes"
+      },
+      {
+          "name": "CFLAGS",
+          "value": "-fno-omit-frame-pointer"
       },
       {
           "name": "SPLIT_DWARF_VALUE",

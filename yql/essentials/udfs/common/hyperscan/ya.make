@@ -6,7 +6,7 @@
 
     NO_BUILD_IF(DISABLE_HYPERSCAN_BUILD)
 
-YQL_UDF(hyperscan_udf)
+YQL_UDF_CONTRIB(hyperscan_udf)
 
     YQL_ABI_VERSION(
         2

@@ -1,4 +1,4 @@
-YQL_UDF(topfreq_udf)
+YQL_UDF_CONTRIB(topfreq_udf)
     
     YQL_ABI_VERSION(
         2

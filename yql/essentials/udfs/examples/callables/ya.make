@@ -1,4 +1,4 @@
-YQL_UDF(callables_udf)
+YQL_UDF_CONTRIB(callables_udf)
 YQL_ABI_VERSION(2 38 0)
 
 SRCS(

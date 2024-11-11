@@ -1,7 +1,6 @@
 #include <ydb/library/security/util.h>
 #include <ydb/core/protos/auth.pb.h>
 
-#include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
 namespace NKikimr {

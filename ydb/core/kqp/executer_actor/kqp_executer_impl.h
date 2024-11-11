@@ -952,7 +952,7 @@ protected:
             if (!settings.GetInconsistentTx() && !settings.GetIsOlap()) {
                 ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
             }
-            if (GetSnapshot().IsValid()) {
+            if (GetSnapshot().IsValid() && settings.GetIsOlap()) {
                 settings.MutableMvccSnapshot()->SetStep(GetSnapshot().Step);
                 settings.MutableMvccSnapshot()->SetTxId(GetSnapshot().TxId);
             }

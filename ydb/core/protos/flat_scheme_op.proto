@@ -473,6 +473,7 @@ message TMetadataManagerConstructorContainer {
 
     message TLocalDB {
         optional uint64 MemoryCacheSize = 1 [default = 128000000];
+        optional bool FetchOnStart = 2 [default = false];
     }
 
     oneof Implementation {

@@ -32,6 +32,8 @@ public:
         return !Value;
     }
 
+    auto operator<=>(const TColumnDefaultScalarValue&) const = default;
+
     NKikimrColumnShardColumnDefaults::TColumnDefault SerializeToProto() const;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardColumnDefaults::TColumnDefault& proto);
     TConclusionStatus ParseFromString(const TString& value, const NScheme::TTypeInfo& type);

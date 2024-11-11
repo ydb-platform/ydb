@@ -79,6 +79,8 @@ public:
     void SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const;
 
     virtual TString GetClassName() const = 0;
+
+    auto operator<=>(const IIndexMeta&) const = default;
 };
 
 class TIndexMetaContainer: public NBackgroundTasks::TInterfaceProtoContainer<IIndexMeta> {

@@ -213,6 +213,10 @@ public:
         return ExternalGuaranteeExclusivePK;
     }
 
+    const std::shared_ptr<TColumnFeatures>& GetColumnFeaturesByIndex(const ui32 index) const {
+        return ColumnFeatures[index];
+    }
+
     const TColumnFeatures& GetColumnFeaturesVerified(const ui32 columnId) const {
         return *ColumnFeatures[GetColumnIndexVerified(columnId)];
     }

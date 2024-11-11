@@ -368,6 +368,10 @@ public:
         return SchemaVersion;
     }
 
+    void SetSchemaVersion(ui64 schemaVersion) {
+        SchemaVersion = schemaVersion;
+    }
+
     bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot = true) const {
         const bool visible = (Meta.RecordSnapshotMin <= snapshot) && (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot) &&
                              (!checkCommitSnapshot || !CommitSnapshot || *CommitSnapshot <= snapshot);

@@ -251,6 +251,10 @@ public:
         ActualizationIndex->RefreshScheme(context);
     }
 
+    void ChangeSchemeToCompatible(const THashMap<ui64, ui64>& versionMap, NOlap::TDbWrapper& db) {
+        ActualizationIndex->ChangeSchemeToCompatible(versionMap, Portions, db);
+    }
+
     void ReturnToIndexes(const THashSet<ui64>& portionIds) {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
         context.SetPortionExclusiveGuarantee(false);

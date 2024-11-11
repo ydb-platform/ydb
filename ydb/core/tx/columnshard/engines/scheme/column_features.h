@@ -50,6 +50,8 @@ public:
         Operator = storagesManager->GetOperatorVerified(columnInfo.GetStorageId() ? columnInfo.GetStorageId() : IStoragesManager::DefaultStorageId);
         return TConclusionStatus::Success();
     }
+
+    auto operator<=>(const TColumnFeatures&) const = default;
 };
 
 } // namespace NKikimr::NOlap

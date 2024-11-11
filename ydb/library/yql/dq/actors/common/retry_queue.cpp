@@ -95,7 +95,7 @@ bool TRetryEventsQueue::Heartbeat() {
     ScheduleHeartbeat();
     auto now = TInstant::Now();
     return (now - LastReceivedDataTime >= TDuration::Seconds(PingPeriodSeconds)
-        || now - LastSendedDataTime >= TDuration::Seconds(PingPeriodSeconds));
+        || (now - LastSentDataTime >= TDuration::Seconds(PingPeriodSeconds)));
 }
 
 void TRetryEventsQueue::Connect() {
@@ -128,7 +128,7 @@ void TRetryEventsQueue::RemoveConfirmedEvents(ui64 confirmedSeqNo) {
 }
 
 void TRetryEventsQueue::SendRetryable(const IRetryableEvent::TPtr& ev) {
-    LastSendedDataTime = TInstant::Now();
+    LastSentDataTime = TInstant::Now();
     NActors::TActivationContext::Send(ev->Clone(MyConfirmedSeqNo).Release());
 }
 

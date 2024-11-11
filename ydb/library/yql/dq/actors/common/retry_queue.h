@@ -91,7 +91,7 @@ public:
     template <TProtobufEventWithTransportMeta T>
     void Send(THolder<T> ev, ui64 cookie = 0) {
         if (LocalRecipient) {
-            LastSendedDataTime = TInstant::Now();
+            LastSentDataTime = TInstant::Now();
             NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), cookie));
             return;
         }
@@ -227,7 +227,7 @@ private:
     TTxId TxId;
     bool KeepAlive = false;
     TInstant LastReceivedDataTime = TInstant::Now();
-    TInstant LastSendedDataTime = TInstant::Now();
+    TInstant LastSentDataTime = TInstant::Now();
     bool UseConnect = true;
 };
 

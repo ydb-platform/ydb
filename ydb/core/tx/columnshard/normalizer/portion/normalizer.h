@@ -4,7 +4,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/defs.h>
-#include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema.h>
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
@@ -19,12 +19,12 @@ class TReadPortionsTask: public NOlap::NBlobOperations::NRead::ITask {
 private:
     using TBase = NOlap::NBlobOperations::NRead::ITask;
     typename TConveyorTask::TDataContainer Data;
-    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+    std::shared_ptr<THashMap<ui64, ISchema::TPtr>> Schemas;
     TNormalizationContext NormContext;
 
 public:
     TReadPortionsTask(const TNormalizationContext& nCtx, const std::vector<std::shared_ptr<IBlobsReadingAction>>& actions,
-        typename TConveyorTask::TDataContainer&& data, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
+        typename TConveyorTask::TDataContainer&& data, std::shared_ptr<THashMap<ui64, ISchema::TPtr>> schemas)
         : TBase(actions, "CS::NORMALIZER")
         , Data(std::move(data))
         , Schemas(std::move(schemas))
@@ -51,7 +51,7 @@ public:
 template <class TConveyorTask>
 class TPortionsNormalizerTask: public INormalizerTask {
     typename TConveyorTask::TDataContainer Package;
-    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+    std::shared_ptr<THashMap<ui64, ISchema::TPtr>> Schemas;
 
 public:
     TPortionsNormalizerTask(typename TConveyorTask::TDataContainer&& package)
@@ -59,7 +59,7 @@ public:
     }
 
     TPortionsNormalizerTask(
-        typename TConveyorTask::TDataContainer&& package, const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
+        typename TConveyorTask::TDataContainer&& package, const std::shared_ptr<THashMap<ui64, ISchema::TPtr>> schemas)
         : Package(std::move(package))
         , Schemas(schemas) {
     }
@@ -97,12 +97,12 @@ public:
 
 protected:
     virtual INormalizerTask::TPtr BuildTask(
-        std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const = 0;
+        std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISchema::TPtr>> schemas) const = 0;
     virtual TConclusion<bool> DoInitImpl(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) = 0;
 
     virtual bool CheckPortion(const NColumnShard::TTablesManager& tablesManager, const TPortionDataAccessor& portionInfo) const = 0;
 
-    virtual std::set<ui32> GetColumnsFilter(const ISnapshotSchema::TPtr& schema) const {
+    virtual std::set<ui32> GetColumnsFilter(const ISchema::TPtr& schema) const {
         return schema->GetPkColumnsIds();
     }
 

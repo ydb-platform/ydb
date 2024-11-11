@@ -3,7 +3,7 @@
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/data_reader/actor.h>
-#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema.h>
 #include <ydb/core/tx/columnshard/operations/common/context.h>
 
 namespace NKikimr::NOlap {

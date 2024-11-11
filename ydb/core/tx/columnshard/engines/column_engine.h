@@ -4,7 +4,7 @@
 #include "changes/abstract/compaction_info.h"
 #include "changes/abstract/settings.h"
 #include "predicate/filter.h"
-#include "scheme/snapshot_scheme.h"
+#include "scheme/versions/schema.h"
 #include "scheme/versions/versioned_index.h"
 
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>

@@ -4,7 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/compaction/common/context.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction/common/result.h>
 #include <ydb/core/tx/columnshard/engines/portions/column_record.h>
-#include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema.h>
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/splitter/chunk_meta.h>
 #include <ydb/core/tx/columnshard/splitter/chunks.h>

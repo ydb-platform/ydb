@@ -7,7 +7,7 @@
 #include <ydb/library/formats/arrow/splitter/similar_packer.h>
 #include <ydb/core/tx/columnshard/counters/indexation.h>
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
-#include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -16,7 +16,7 @@ namespace NKikimr::NOlap {
 
 class TDefaultSchemaDetails: public NArrow::NSplitter::ISchemaDetailInfo {
 private:
-    ISnapshotSchema::TPtr Schema;
+    ISchema::TPtr Schema;
     std::shared_ptr<NArrow::NSplitter::TSerializationStats> Stats;
 
 protected:
@@ -24,7 +24,7 @@ protected:
         return Schema->GetColumnSaver(columnId);
     }
 public:
-    TDefaultSchemaDetails(ISnapshotSchema::TPtr schema, const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats)
+    TDefaultSchemaDetails(ISchema::TPtr schema, const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats)
         : Schema(schema)
         , Stats(stats)
     {

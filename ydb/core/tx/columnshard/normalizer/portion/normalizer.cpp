@@ -37,7 +37,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TPortionsNormalizerBase::DoInit(
     }
 
     THashMap<ui64, TPortionInfoConstructor> portions;
-    auto schemas = std::make_shared<THashMap<ui64, ISnapshotSchema::TPtr>>();
+    auto schemas = std::make_shared<THashMap<ui64, ISchema::TPtr>>();
     {
         auto conclusion = InitPortions(tablesManager, db, portions);
         if (conclusion.IsFail()) {

@@ -53,7 +53,7 @@ private:
     }
 
 protected:
-    std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
+    std::shared_ptr<ISchema> ResultIndexSchema;
     ui64 TxId = 0;
     std::optional<ui64> LockId;
 
@@ -106,7 +106,7 @@ public:
         return PKRangesFilter;
     }
 
-    ISnapshotSchema::TPtr GetResultSchema() const {
+    ISchema::TPtr GetResultSchema() const {
         AFL_VERIFY(ResultIndexSchema);
         return ResultIndexSchema;
     }
@@ -115,7 +115,7 @@ public:
         return GetIndexInfo().GetExternalGuaranteeExclusivePK();
     }
 
-    ISnapshotSchema::TPtr GetLoadSchemaVerified(const TPortionInfo& porition) const;
+    ISchema::TPtr GetLoadSchemaVerified(const TPortionInfo& porition) const;
 
     const std::shared_ptr<NArrow::TSchemaLite>& GetBlobSchema(const ui64 version) const {
         return GetIndexVersions().GetSchema(version)->GetIndexInfo().ArrowSchema();
@@ -135,7 +135,7 @@ public:
     }
 
     TReadMetadataBase(const std::shared_ptr<TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram,
-        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot)
+        const std::shared_ptr<ISchema>& schema, const TSnapshot& requestSnapshot)
         : Sorting(sorting)
         , Program(ssaProgram)
         , IndexVersionsPointer(index)

@@ -59,7 +59,7 @@ public:
         return Filter->GetFilteredCount().value_or(recordsCount);
     }
 
-    void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema);
+    void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISchema& schema);
 
     std::shared_ptr<NArrow::TColumnFilter> GetAppliedFilter() const {
         return UseFilter ? Filter : nullptr;

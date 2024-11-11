@@ -2,7 +2,7 @@
 #include "counters.h"
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/common/address.h>
-#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema.h>
 #include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
 
 namespace NKikimr::NOlap {
@@ -18,7 +18,7 @@ private:
     private:
         TRWAddress Address;
         YDB_ACCESSOR_DEF(TString, TargetTierName);
-        YDB_ACCESSOR_DEF(ISnapshotSchema::TPtr, TargetScheme);
+        YDB_ACCESSOR_DEF(ISchema::TPtr, TargetScheme);
         i64 WaitDurationValue;
     public:
         TString DebugString() const {
@@ -29,7 +29,7 @@ private:
             return Address;
         }
 
-        TFullActualizationInfo(TRWAddress&& address, const TString& targetTierName, const i64 waitDurationValue, const ISnapshotSchema::TPtr& targetScheme)
+        TFullActualizationInfo(TRWAddress&& address, const TString& targetTierName, const i64 waitDurationValue, const ISchema::TPtr& targetScheme)
             : Address(std::move(address))
             , TargetTierName(targetTierName)
             , TargetScheme(targetScheme)
@@ -112,14 +112,14 @@ private:
     std::optional<TTiering> Tiering;
     std::optional<ui32> TieringColumnId;
 
-    std::shared_ptr<ISnapshotSchema> TargetCriticalSchema;
+    std::shared_ptr<ISchema> TargetCriticalSchema;
     const ui64 PathId;
     const TVersionedIndex& VersionedIndex;
 
     THashMap<TRWAddress, TRWAddressPortionsInfo> PortionIdByWaitDuration;
     THashMap<ui64, TFindActualizationInfo> PortionsInfo;
 
-    std::shared_ptr<ISnapshotSchema> GetTargetSchema(const std::shared_ptr<ISnapshotSchema>& portionSchema) const;
+    std::shared_ptr<ISchema> GetTargetSchema(const std::shared_ptr<ISchema>& portionSchema) const;
 
     std::optional<TFullActualizationInfo> BuildActualizationInfo(const TPortionInfo& portion, const TInstant now) const;
 

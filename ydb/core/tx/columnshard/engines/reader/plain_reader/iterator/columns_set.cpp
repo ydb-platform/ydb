@@ -1,6 +1,6 @@
 #include "columns_set.h"
 #include <util/string/join.h>
-#include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_schema.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -73,7 +73,7 @@ void TColumnsSet::Rebuild() {
         ColumnNamesVector.emplace_back(i);
         ColumnNames.emplace(i);
     }
-    FilteredSchema = std::make_shared<TFilteredSnapshotSchema>(FullReadSchema, ColumnIds);
+    FilteredSchema = std::make_shared<TFilteredSchema>(FullReadSchema, ColumnIds);
 }
 
 }

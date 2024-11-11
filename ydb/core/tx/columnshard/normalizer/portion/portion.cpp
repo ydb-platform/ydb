@@ -4,16 +4,16 @@
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
-#include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_schema.h>
 
 namespace NKikimr::NOlap {
 
 class TPortionsNormalizer::TNormalizerResult: public INormalizerChanges {
     std::vector<TPortionDataAccessor> Portions;
-    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+    std::shared_ptr<THashMap<ui64, ISchema::TPtr>> Schemas;
 
 public:
-    TNormalizerResult(std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
+    TNormalizerResult(std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISchema::TPtr>> schemas)
         : Portions(std::move(portions))
         , Schemas(schemas) {
     }
@@ -40,7 +40,7 @@ bool TPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager&, cons
 }
 
 INormalizerTask::TPtr TPortionsNormalizer::BuildTask(
-    std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
+    std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISchema::TPtr>> schemas) const {
     return std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerResult>(std::move(portions), schemas));
 }
 

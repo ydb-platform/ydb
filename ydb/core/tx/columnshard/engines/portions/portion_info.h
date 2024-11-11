@@ -6,7 +6,7 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
-#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/formats/arrow/replace_key.h>
@@ -413,7 +413,7 @@ public:
 
     class TSchemaCursor {
         const NOlap::TVersionedIndex& VersionedIndex;
-        ISnapshotSchema::TPtr CurrentSchema;
+        ISchema::TPtr CurrentSchema;
         TSnapshot LastSnapshot = TSnapshot::Zero();
 
     public:
@@ -421,9 +421,9 @@ public:
             : VersionedIndex(versionedIndex) {
         }
 
-        ISnapshotSchema::TPtr GetSchema(const TPortionInfoConstructor& portion);
+        ISchema::TPtr GetSchema(const TPortionInfoConstructor& portion);
 
-        ISnapshotSchema::TPtr GetSchema(const TPortionInfo& portion) {
+        ISchema::TPtr GetSchema(const TPortionInfo& portion) {
             if (!CurrentSchema || portion.MinSnapshotDeprecated != LastSnapshot) {
                 CurrentSchema = portion.GetSchema(VersionedIndex);
                 LastSnapshot = portion.MinSnapshotDeprecated;
@@ -433,7 +433,7 @@ public:
         }
     };
 
-    ISnapshotSchema::TPtr GetSchema(const TVersionedIndex& index) const;
+    ISchema::TPtr GetSchema(const TVersionedIndex& index) const;
 
     ui32 GetRecordsCount() const {
         return GetMeta().GetRecordsCount();

@@ -11,7 +11,7 @@ namespace NKikimr::NOlap {
 
 class TChunksNormalizer::TNormalizerResult: public INormalizerChanges {
     std::vector<TChunksNormalizer::TChunkInfo> Chunks;
-    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+    std::shared_ptr<THashMap<ui64, ISchema::TPtr>> Schemas;
 
 public:
     TNormalizerResult(std::vector<TChunksNormalizer::TChunkInfo>&& chunks)
@@ -77,7 +77,7 @@ protected:
 
 public:
     TRowsAndBytesChangesTask(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TNormalizationContext& nCtx,
-        std::vector<TChunksNormalizer::TChunkInfo>&& chunks, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>>)
+        std::vector<TChunksNormalizer::TChunkInfo>&& chunks, std::shared_ptr<THashMap<ui64, ISchema::TPtr>>)
         : Blobs(std::move(blobs))
         , Chunks(std::move(chunks))
         , NormContext(nCtx) {

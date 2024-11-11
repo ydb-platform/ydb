@@ -265,9 +265,9 @@ bool TCommittedDataSource::DoStartFetchingColumns(
 
 void TCommittedDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool /*sequential*/) {
     TMemoryProfileGuard mGuard("SCAN_PROFILE::ASSEMBLER::COMMITTED", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-    const ISnapshotSchema::TPtr batchSchema =
+    const ISchema::TPtr batchSchema =
         GetContext()->GetReadMetadata()->GetIndexVersions().GetSchemaVerified(GetCommitted().GetSchemaVersion());
-    const ISnapshotSchema::TPtr resultSchema = GetContext()->GetReadMetadata()->GetResultSchema();
+    const ISchema::TPtr resultSchema = GetContext()->GetReadMetadata()->GetResultSchema();
     if (!GetStageData().GetTable()) {
         AFL_VERIFY(GetStageData().GetBlobs().size() == 1);
         auto bData = MutableStageData().ExtractBlob(GetStageData().GetBlobs().begin()->first);

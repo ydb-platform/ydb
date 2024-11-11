@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap {
 
-void TFetchedData::SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema) {
+void TFetchedData::SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISchema& schema) {
     for (auto&& i : fields) {
         if (Table->GetSchema()->GetFieldByName(i->name())) {
             continue;

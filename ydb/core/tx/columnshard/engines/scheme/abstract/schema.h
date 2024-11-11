@@ -12,17 +12,16 @@
 namespace NKikimr::NOlap {
 
 struct TIndexInfo;
-class TSaverContext;
 class TWritePortionInfoWithBlobsResult;
 
-class ISnapshotSchema {
+class ISchema {
 protected:
     virtual TString DoDebugString() const = 0;
 
 public:
-    using TPtr = std::shared_ptr<ISnapshotSchema>;
+    using TPtr = std::shared_ptr<ISchema>;
 
-    virtual ~ISnapshotSchema() = default;
+    virtual ~ISchema() = default;
     virtual std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderOptional(const ui32 columnId) const = 0;
     std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderVerified(const ui32 columnId) const;
     std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoaderOptional(const std::string& columnName) const;
@@ -74,17 +73,17 @@ public:
     std::set<ui32> GetPkColumnsIds() const;
 
     static std::set<ui32> GetColumnsWithDifferentDefaults(
-        const THashMap<ui64, ISnapshotSchema::TPtr>& schemas, const ISnapshotSchema::TPtr& targetSchema);
+        const THashMap<ui64, ISchema::TPtr>& schemas, const ISchema::TPtr& targetSchema);
 
-    [[nodiscard]] TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> NormalizeBatch(const ISnapshotSchema& dataSchema,
+    [[nodiscard]] TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> NormalizeBatch(const ISchema& dataSchema,
         const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const;
     [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> PrepareForModification(
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
-    [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const ui64 pathId,
+    [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(const ISchema::TPtr& selfPtr, const ui64 pathId,
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
         const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const;
-    void AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISnapshotSchema::TPtr& targetSchema) const;
-    std::set<ui32> GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const;
+    void AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISchema::TPtr& targetSchema) const;
+    std::set<ui32> GetColumnIdsToDelete(const ISchema::TPtr& targetSchema) const;
     std::vector<ui32> ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const;
 };
 

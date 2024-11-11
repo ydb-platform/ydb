@@ -12,7 +12,7 @@ namespace NKikimr::NOlap::NCompaction {
 
 std::shared_ptr<NArrow::TColumnFilter> TGeneralCompactColumnEngineChanges::BuildPortionFilter(
     const std::optional<NKikimr::NOlap::TGranuleShardingInfo>& shardingActual, const std::shared_ptr<NArrow::TGeneralContainer>& batch,
-    const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage, const ISnapshotSchema::TPtr& resultSchema) const {
+    const TPortionInfo& pInfo, const THashSet<ui64>& portionsInUsage, const ISchema::TPtr& resultSchema) const {
     std::shared_ptr<NArrow::TColumnFilter> filter;
     if (shardingActual && pInfo.NeedShardingFilter(*shardingActual)) {
         std::set<std::string> fieldNames;
@@ -90,7 +90,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
         return;
     }
     std::shared_ptr<NArrow::NSplitter::TSerializationStats> stats = std::make_shared<NArrow::NSplitter::TSerializationStats>();
-    std::shared_ptr<TFilteredSnapshotSchema> resultFiltered;
+    std::shared_ptr<TFilteredSchema> resultFiltered;
     NCompaction::TMerger merger(context, SaverContext);
     merger.SetPortionExpectedSize(PortionExpectedSize);
     {
@@ -102,12 +102,12 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
         std::set<ui32> dataColumnIds;
         {
             {
-                THashMap<ui64, ISnapshotSchema::TPtr> schemas;
+                THashMap<ui64, ISchema::TPtr> schemas;
                 for (auto& portion : SwitchedPortions) {
                     auto dataSchema = portion->GetSchema(context.SchemaVersions);
                     schemas.emplace(dataSchema->GetVersion(), dataSchema);
                 }
-                dataColumnIds = ISnapshotSchema::GetColumnsWithDifferentDefaults(schemas, resultSchema);
+                dataColumnIds = ISchema::GetColumnsWithDifferentDefaults(schemas, resultSchema);
             }
             for (auto&& i : SwitchedPortions) {
                 const auto& accessor = GetPortionDataAccessor(i->GetPortionId());
@@ -130,7 +130,7 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
             dataColumnIds.emplace((ui32)IIndexInfo::ESpecialColumn::WRITE_ID);
         }
         dataColumnIds.insert(IIndexInfo::GetSnapshotColumnIds().begin(), IIndexInfo::GetSnapshotColumnIds().end());
-        resultFiltered = std::make_shared<TFilteredSnapshotSchema>(resultSchema, dataColumnIds);
+        resultFiltered = std::make_shared<TFilteredSchema>(resultSchema, dataColumnIds);
         {
             auto seqDataColumnIds = dataColumnIds;
             for (auto&& i : pkColumnIds) {

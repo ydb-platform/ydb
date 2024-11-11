@@ -2,7 +2,7 @@
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/formats/arrow/reader/result_builder.h>
-#include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema.h>
 #include <ydb/library/conclusion/status.h>
 
 namespace NKikimr::NOlap {
@@ -14,11 +14,11 @@ private:
     virtual TConclusionStatus OnEqualKeys(const NArrow::NMerger::TSortableBatchPosition& exists, const NArrow::NMerger::TSortableBatchPosition& incoming) = 0;
     virtual TConclusionStatus OnIncomingOnly(const NArrow::NMerger::TSortableBatchPosition& incoming) = 0;
 protected:
-    std::shared_ptr<ISnapshotSchema> Schema;
+    std::shared_ptr<ISchema> Schema;
     std::shared_ptr<arrow::RecordBatch> IncomingData;
     bool IncomingFinished = false;
 public:
-    IMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema)
+    IMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISchema>& actualSchema)
         : IncomingPosition(incoming, 0, actualSchema->GetPKColumnNames(), incoming->schema()->field_names(), false)
         , Schema(actualSchema)
         , IncomingData(incoming) {
@@ -96,7 +96,7 @@ public:
         return Builder.Finalize();
     }
 
-    TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISnapshotSchema>& actualSchema,
+    TUpdateMerger(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<ISchema>& actualSchema,
         const TString& insertDenyReason, const std::optional<NArrow::NMerger::TSortableBatchPosition>& defaultExists = {});
 };
 

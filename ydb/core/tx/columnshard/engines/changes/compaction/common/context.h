@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/library/formats/arrow/splitter/stats.h>
-#include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/schema.h>
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
@@ -11,7 +11,7 @@ namespace NKikimr::NOlap::NCompaction {
 class TColumnMergeContext {
 private:
     YDB_READONLY(ui32, ColumnId, 0);
-    ISnapshotSchema::TPtr SchemaInfo;
+    ISchema::TPtr SchemaInfo;
     YDB_ACCESSOR_DEF(TColumnSaver, Saver);
     YDB_READONLY_DEF(std::shared_ptr<TColumnLoader>, Loader);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Field>, ResultField);
@@ -30,7 +30,7 @@ public:
         return Loader->GetDefaultValue();
     }
 
-    ISnapshotSchema::TPtr GetSchemaInfo() const {
+    ISchema::TPtr GetSchemaInfo() const {
         return SchemaInfo;
     }
 
@@ -46,7 +46,7 @@ public:
         return IndexInfo;
     }
 
-    TColumnMergeContext(const ui32 columnId, const ISnapshotSchema::TPtr& schema, const ui32 chunkRawBytesLimit,
+    TColumnMergeContext(const ui32 columnId, const ISchema::TPtr& schema, const ui32 chunkRawBytesLimit,
         const std::optional<NArrow::NSplitter::TColumnSerializationStat>& columnStat)
         : ColumnId(columnId)
         , SchemaInfo(schema)

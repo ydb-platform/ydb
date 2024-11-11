@@ -103,7 +103,7 @@ public:
     void RemoveFromDatabase(IDbWrapper& db) const;
     void SaveToDatabase(IDbWrapper& db, const ui32 firstPKColumnId, const bool saveOnlyMeta) const;
 
-    NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
+    NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISchema& schema) const {
         NArrow::NSplitter::TSerializationStats result;
         for (auto&& i : PortionInfo->Records) {
             if (schema.GetFieldByColumnIdOptional(i.ColumnId)) {
@@ -347,9 +347,9 @@ public:
         }
     };
 
-    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
+    TPreparedBatchData PrepareForAssemble(const ISchema& dataSchema, const ISchema& resultSchema,
         THashMap<TChunkAddress, TString>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt) const;
-    TPreparedBatchData PrepareForAssemble(const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema,
+    TPreparedBatchData PrepareForAssemble(const ISchema& dataSchema, const ISchema& resultSchema,
         THashMap<TChunkAddress, TAssembleBlobInfo>& blobsData, const std::optional<TSnapshot>& defaultSnapshot = std::nullopt) const;
 
     class TPage {

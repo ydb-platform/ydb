@@ -4,7 +4,7 @@
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
-#include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_schema.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
 
 namespace NKikimr::NOlap {
@@ -69,7 +69,7 @@ bool TCleanPortionsNormalizer::CheckPortion(const NColumnShard::TTablesManager& 
 }
 
 INormalizerTask::TPtr TCleanPortionsNormalizer::BuildTask(
-    std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas) const {
+    std::vector<TPortionDataAccessor>&& portions, std::shared_ptr<THashMap<ui64, ISchema::TPtr>> schemas) const {
     std::vector<TUnifiedBlobId> blobIds;
     THashMap<TString, THashSet<TUnifiedBlobId>> blobsByStorage;
     for (auto&& portion : portions) {

@@ -9,7 +9,7 @@
 
 namespace NKikimr::NOlap::NActualizer {
 
-std::shared_ptr<NKikimr::NOlap::ISnapshotSchema> TTieringActualizer::GetTargetSchema(const std::shared_ptr<ISnapshotSchema>& portionSchema) const {
+std::shared_ptr<NKikimr::NOlap::ISchema> TTieringActualizer::GetTargetSchema(const std::shared_ptr<ISchema>& portionSchema) const {
     if (!TargetCriticalSchema) {
         return portionSchema;
     }
@@ -20,8 +20,8 @@ std::shared_ptr<NKikimr::NOlap::ISnapshotSchema> TTieringActualizer::GetTargetSc
 }
 
 std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::BuildActualizationInfo(const TPortionInfo& portion, const TInstant now) const {
-    std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);
-    std::shared_ptr<ISnapshotSchema> targetSchema = GetTargetSchema(portionSchema);
+    std::shared_ptr<ISchema> portionSchema = portion.GetSchema(VersionedIndex);
+    std::shared_ptr<ISchema> targetSchema = GetTargetSchema(portionSchema);
     const TString& currentTierName = portion.GetTierNameDef(IStoragesManager::DefaultStorageId);
 
     if (Tiering) {

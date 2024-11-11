@@ -10,7 +10,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/predicate/range.h>
-#include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_schema.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
@@ -277,7 +277,7 @@ class TPortionDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
     const TPortionInfo::TConstPtr Portion;
-    std::shared_ptr<ISnapshotSchema> Schema;
+    std::shared_ptr<ISchema> Schema;
 
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);

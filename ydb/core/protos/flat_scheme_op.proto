@@ -224,7 +224,6 @@ message TTTLSettings {
     message TTier {
         optional uint32 EvictAfterSeconds = 1;
         optional string StorageName = 2;
-        optional TCompressionOptions Compression = 3;
     }
 
     message TEnabled {

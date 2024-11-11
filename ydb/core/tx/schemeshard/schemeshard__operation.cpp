@@ -786,6 +786,8 @@ TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& t
 }
 
 bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, THashSet<TString>& createdPaths, TOperation::TSplitTransactionsResult& result) {
+    auto initialSize = result.Transactions.size();
+
     while (path != parentPath) {
         if (createdPaths.contains(path.PathString())) {
             continue;
@@ -842,6 +844,8 @@ bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, T
         mkdir.MutableMkDir()->SetName(name);
         result.Transactions.push_back(mkdir);
     }
+
+    Reverse(result.Transactions.begin() + initialSize, result.Transactions.end());
 
     return true;
 }
@@ -949,8 +953,6 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         if (!CreateDirs(tx, parentPath, path, createdPaths, result)) {
             return result;
         }
-
-        Reverse(result.Transactions.begin(), result.Transactions.end());
     }
 
     // # Generates MkDirs based on transaction-specific requirements

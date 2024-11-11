@@ -19,7 +19,8 @@ namespace NYdb {
         using NSQLTranslation::ParseTranslationSettings;
         using NSQLTranslation::SQL_MAX_PARSER_ERRORS;
         using NSQLTranslation::TTranslationSettings;
-        using NSQLTranslationV1::IsProbablyKeyword;
+        // maxim-yurchuk: dirty-fix for check
+        // using NSQLTranslationV1::IsProbablyKeyword;
         using NSQLTranslationV1::MakeLexer;
         using NYql::TIssues;
 
@@ -203,7 +204,9 @@ namespace NYdb {
         }
 
         bool YQLHighlight::IsKeyword(const TParsedToken& token) const {
-            return IsProbablyKeyword(token);
+            // maxim-yurchuk: dirty-fix for check
+            // return IsProbablyKeyword(token);
+            return false;
         }
 
         bool YQLHighlight::IsOperation(const TParsedToken& token) const {

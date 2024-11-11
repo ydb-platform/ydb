@@ -384,7 +384,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "status=ERROR");
         UNIT_ASSERT_STRING_CONTAINS(last, "detailed_status=UNAUTHORIZED");
-        UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP");
+        UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP: LDAP login failed for user uid=user1,dc=search,dc=yandex,dc=net on server ldap://localhost:");
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1@ldap");
     }
 
@@ -478,11 +478,11 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "status=ERROR");
         UNIT_ASSERT_STRING_CONTAINS(last, "detailed_status=UNAUTHORIZED");
-        UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP");
+        UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP: LDAP user bad_user does not exist. LDAP search for filter uid=bad_user on server ldap://localhost:");
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=bad_user@ldap");
     }
 
-    // LDAP response to bad BindDn or BindPassword is the same, so this test covers the both cases.
+    // LDAP responses to bad BindDn or bad BindPassword are the same, so this test covers the both cases.
     Y_UNIT_TEST(AuditLogLdapLoginBadBind) {
         TTestBasicRuntime runtime;
         std::vector<std::string> lines;
@@ -573,7 +573,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "operation=LOGIN");
         UNIT_ASSERT_STRING_CONTAINS(last, "status=ERROR");
         UNIT_ASSERT_STRING_CONTAINS(last, "detailed_status=UNAUTHORIZED");
-        UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP");
+        UNIT_ASSERT_STRING_CONTAINS(last, "reason=Could not login via LDAP: Could not perform initial LDAP bind for dn cn=robouser,dc=search,dc=yandex,dc=net on server ldap://localhost:");
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1@ldap");
     }
 

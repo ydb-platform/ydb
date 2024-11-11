@@ -61,8 +61,8 @@ public:
 
     virtual bool IsVolatile() const = 0;
 
-    virtual const std::optional<NKikimrDataEvents::TMvccSnapshot>& GetSnapshot() const = 0;
-    virtual void SetSnapshot(ui64 step, ui64 txId) = 0;
+    virtual bool HasSnapshot() const = 0;
+    virtual void SetHasSnapshot(bool hasSnapshot) = 0;
 
     virtual bool BrokenLocks() const = 0;
     virtual const std::optional<NYql::TIssue>& GetLockIssue() const = 0;

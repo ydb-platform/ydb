@@ -189,18 +189,16 @@ public:
         return !HasOlapTable();
     }
 
-    const std::optional<NKikimrDataEvents::TMvccSnapshot>& GetSnapshot() const override {
-        return Snapshot;
+    bool HasSnapshot() const override {
+        return ValidSnapshot;
     }
 
-    void SetSnapshot(ui64 step, ui64 txId) override {
-        Snapshot.emplace();
-        Snapshot->SetStep(step);
-        Snapshot->SetTxId(txId);
+    void SetHasSnapshot(bool hasSnapshot) override {
+        ValidSnapshot = hasSnapshot;
     }
 
     bool BrokenLocks() const override {
-        return LocksIssue.has_value() && !(GetSnapshot() && IsReadOnly());
+        return LocksIssue.has_value() && !(HasSnapshot() && IsReadOnly());
     }
 
     const std::optional<NYql::TIssue>& GetLockIssue() const override {
@@ -407,8 +405,8 @@ private:
     std::unordered_set<TString> TablePathes;
 
     bool ReadOnly = true;
+    bool ValidSnapshot = false;
     bool HasOlapTableShard = false;
-    std::optional<NKikimrDataEvents::TMvccSnapshot> Snapshot;
     std::optional<NYql::TIssue> LocksIssue;
 
     THashSet<ui64> SendingShards;

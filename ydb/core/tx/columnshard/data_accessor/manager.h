@@ -162,6 +162,33 @@ private:
     }
 
 public:
+    class TTestingCallback: public IAccessorCallback {
+    private:
+        std::weak_ptr<TLocalManager> Manager;
+        virtual void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors) override {
+            auto mImpl = Manager.lock();
+            if (!mImpl) {
+                return;
+            }
+            for (auto&& i : accessors) {
+                mImpl->AddPortion(i);
+            }
+        }
+
+    public:
+        void InitManager(const std::weak_ptr<TLocalManager>& manager) {
+            AFL_VERIFY(!Manager);
+            Manager = manager;
+        }
+    };
+
+    static std::shared_ptr<TLocalManager> BuildForTests() {
+        auto callback = std::make_shared<TTestingCallback>();
+        std::shared_ptr<TLocalManager> result = std::make_shared<TLocalManager>(callback);
+        callback->InitManager(result);
+        return result;
+    }
+
     TLocalManager(const std::shared_ptr<IAccessorCallback>& callback)
         : TBase(NActors::TActorId())
         , AccessorCallback(callback)

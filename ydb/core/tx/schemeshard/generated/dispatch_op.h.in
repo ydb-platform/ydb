@@ -6,7 +6,7 @@
 namespace NKikimr::NSchemeShard::NGenerated {
 
 template <class TFn>
-auto DispatchOp(const TTxTransaction& tx, TFn fn) {
+constexpr auto DispatchOp(const TTxTransaction& tx, TFn fn) {
     switch (tx.GetOperationType()) {
 {% for opType in opTypes %}
         case {{ opType }}:

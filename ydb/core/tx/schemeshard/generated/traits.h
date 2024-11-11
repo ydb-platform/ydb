@@ -20,6 +20,8 @@ struct TSchemeTxTraitsFallback {
         Y_UNUSED(tx, name);
         return false;
     }
+
+    constexpr inline static bool CreateDirsFromName = false;
 };
 
 template <NKikimrSchemeOp::EOperationType opType>
@@ -35,6 +37,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpMkDir> {
         tx.MutableMkDir()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -50,6 +54,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable> {
         tx.MutableCreateTable()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -62,6 +68,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueue
         tx.MutableCreatePersQueueGroup()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -74,6 +82,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain
         tx.MutableSubDomain()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -86,6 +96,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDom
         tx.MutableSubDomain()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -98,6 +110,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolum
         tx.MutableCreateRtmrVolume()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -110,6 +124,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStor
         tx.MutableCreateBlockStoreVolume()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -122,6 +138,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore
         tx.MutableCreateFileStore()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -134,6 +152,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus> {
         tx.MutableKesus()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -146,6 +166,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVo
         tx.MutableCreateSolomonVolume()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -158,6 +180,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTa
         tx.MutableCreateIndexedTable()->MutableTableDescription()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -170,6 +194,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnSto
         tx.MutableCreateColumnStore()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -182,6 +208,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTab
         tx.MutableCreateColumnTable()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -194,6 +222,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalT
         tx.MutableCreateExternalTable()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -206,6 +236,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalD
         tx.MutableCreateExternalDataSource()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -218,6 +250,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateView> {
         tx.MutableCreateView()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -230,6 +264,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourceP
         tx.MutableCreateResourcePool()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 template <>
@@ -242,6 +278,8 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCol
         tx.MutableCreateBackupCollection()->SetName(name);
         return true;
     }
+
+    constexpr inline static bool CreateDirsFromName = true;
 };
 
 } // namespace NKikimr::NSchemeShard::NGenerated

@@ -785,107 +785,12 @@ TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& t
     return result;
 }
 
-// # Generates additional MkDirs for transactions
-//
-//     WorkingDir  |        TxType.ObjectName
-//  /Root/some_dir | other_dir/another_dir/object_name
-//                  ^---------^----------^
-// MkDir('/Root/some_dir', 'other_dir') and MkDir('/Root/some_dir/other_dir', 'another_dir') will be generated
-// tx.WorkingDir will be changed to '/Root/some_dir/other_dir/another_dir'
-// tx.TxType.ObjectName will be changed to 'object_name'
-TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context) {
-    using namespace NGenerated;
-
-    TSplitTransactionsResult result;
-
-    // TODO generate transactions right here
-
-    const TPath parentPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
-    {
-        TPath::TChecker checks = parentPath.Check();
-        checks
-            .NotUnderDomainUpgrade()
-            .IsAtLocalSchemeShard()
-            .IsResolved()
-            .NotDeleted()
-            .NotUnderDeleting()
-            .IsCommonSensePath()
-            .IsLikeDirectory();
-
-        if (!checks) {
-            result.Transaction = tx;
-            return result;
-        }
-    }
-
-    TString targetName;
-
-    if (!DispatchOp(tx, [&](auto traits) {
-            auto name = traits.GetTargetName(tx);
-            if (name) {
-                targetName = *name;
-                return true;
-            }
-            return false;
-        }))
-    {
-        result.Transaction = tx;
-        return result;
-    }
-
-    if (!targetName || targetName.StartsWith('/') || targetName.EndsWith('/')) {
-        result.Transaction = tx;
-        return result;
-    }
-
-    TPath path = TPath::Resolve(JoinPath(tx.GetWorkingDir(), targetName), context.SS);
-    {
-        TPath::TChecker checks = path.Check();
-        checks.IsAtLocalSchemeShard();
-
-        bool exists = false;
-        if (path.IsResolved()) {
-            checks.IsResolved();
-            exists = !path.IsDeleted();
-        } else {
-            checks
-                .NotEmpty()
-                .NotResolved();
-        }
-
-        if (checks && !exists) {
-            checks.IsValidLeafName();
-        }
-
-        if (!checks) {
-            result.Status = checks.GetStatus();
-            result.Reason = checks.GetError();
-            result.Transaction = tx;
-            return result;
-        }
-
-        const TString name = path.LeafName();
-        path.Rise();
-
-        TTxTransaction create(tx);
-        create.SetWorkingDir(path.PathString());
-        create.SetFailOnExist(tx.GetFailOnExist());
-
-        if (!DispatchOp(tx, [&](auto traits) {
-                return traits.SetName(create, name);
-            }))
-        {
-            Y_ABORT("Invariant violation");
-        }
-
-        result.Transactions.push_back(create);
-
-        if (exists) {
-            return result;
-        }
-    }
-
+bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, THashSet<TString>& createdPaths, TOperation::TSplitTransactionsResult& result) {
     while (path != parentPath) {
+        if (createdPaths.contains(path.PathString())) {
+            continue;
+        }
+
         TPath::TChecker checks = path.Check();
         checks
             .NotUnderDomainUpgrade()
@@ -922,9 +827,10 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             result.Reason = checks.GetError();
             result.Transactions.clear();
             result.Transaction = tx;
-            return result;
+            return false;
         }
 
+        createdPaths.emplace(path.PathString());
         const TString name = path.LeafName();
         path.Rise();
 
@@ -937,7 +843,124 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         result.Transactions.push_back(mkdir);
     }
 
-    Reverse(result.Transactions.begin(), result.Transactions.end());
+    return true;
+}
+
+// # Generates additional MkDirs for transactions
+//
+//     WorkingDir  |        TxType.ObjectName
+//  /Root/some_dir | other_dir/another_dir/object_name
+//                  ^---------^----------^
+// MkDir('/Root/some_dir', 'other_dir') and MkDir('/Root/some_dir/other_dir', 'another_dir') will be generated
+// tx.WorkingDir will be changed to '/Root/some_dir/other_dir/another_dir'
+// tx.TxType.ObjectName will be changed to 'object_name'
+TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context) {
+    using namespace NGenerated;
+
+    TSplitTransactionsResult result;
+
+    struct TPathsToCreate {
+        TString Parent;
+        THashSet<TString> Paths;
+    };
+
+    if (DispatchOp(tx, [&](auto traits) { return traits.CreateDirsFromName; })) {
+        TString targetName;
+
+        if (!DispatchOp(tx, [&](auto traits) {
+                auto name = traits.GetTargetName(tx);
+                if (name) {
+                    targetName = *name;
+                    return true;
+                }
+                return false;
+            }))
+        {
+            result.Transaction = tx;
+            return result;
+        }
+
+        if (!targetName || targetName.StartsWith('/') || targetName.EndsWith('/')) {
+            result.Transaction = tx;
+            return result;
+        }
+
+        const TPath parentPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+        {
+            TPath::TChecker checks = parentPath.Check();
+            checks
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting()
+                .IsCommonSensePath()
+                .IsLikeDirectory();
+
+            if (!checks) {
+                result.Transaction = tx;
+                return result;
+            }
+        }
+
+        TPath path = TPath::Resolve(JoinPath(tx.GetWorkingDir(), targetName), context.SS);
+        {
+            TPath::TChecker checks = path.Check();
+            checks.IsAtLocalSchemeShard();
+
+            bool exists = false;
+            if (path.IsResolved()) {
+                checks.IsResolved();
+                exists = !path.IsDeleted();
+            } else {
+                checks
+                    .NotEmpty()
+                    .NotResolved();
+            }
+
+            if (checks && !exists) {
+                checks.IsValidLeafName();
+            }
+
+            if (!checks) {
+                result.Status = checks.GetStatus();
+                result.Reason = checks.GetError();
+                result.Transaction = tx;
+                return result;
+            }
+
+            const TString name = path.LeafName();
+            path.Rise();
+
+            TTxTransaction create(tx);
+            create.SetWorkingDir(path.PathString());
+            create.SetFailOnExist(tx.GetFailOnExist());
+
+            if (!DispatchOp(tx, [&](auto traits) {
+                    return traits.SetName(create, name);
+                }))
+            {
+                Y_ABORT("Invariant violation");
+            }
+
+            result.Transaction = create;
+
+            if (exists) {
+                return result;
+            }
+        }
+
+        THashSet<TString> createdPaths;
+
+        if (!CreateDirs(tx, parentPath, path, createdPaths, result)) {
+            return result;
+        }
+    }
+
+    if (!result.Transaction) {
+        result.Transaction = tx;
+    }
+
     return result;
 }
 

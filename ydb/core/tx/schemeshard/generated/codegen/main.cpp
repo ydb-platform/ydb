@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <iostream>
 
 std::string replace(
     const std::string& str,
@@ -37,7 +38,7 @@ int main(int argc, char** argv) {
     std::vector<std::string> opTypes;
     const auto* d = NKikimrSchemeOp::EOperationType_descriptor();
     for (int i = 0; i < d->value_count(); ++i) {
-        const auto* v = d->FindValueByNumber(i);
+        const auto* v = d->value(i);
         if (v) {
             auto name = v->full_name();
             name = replace(name, ".", "::");

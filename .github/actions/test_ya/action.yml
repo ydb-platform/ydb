@@ -189,6 +189,7 @@ runs:
 
         params=(
           -T
+          -k
           ${test_size[@]/#/--test-size=} ${test_type[@]/#/--test-type=}
           --stat
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"

@@ -1,3 +1,5 @@
+IF (NOT OPENSOURCE)
+
 PY3TEST()
 
 IF(ORIGINAL)
@@ -42,3 +44,6 @@ DEPENDS(
 )
 
 END()
+
+ENDIF()
+

@@ -8,9 +8,9 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/ut/common
-    ydb/library/yql/ast
+    yql/essentials/ast
     yql/essentials/sql/pg_dummy
-    ydb/library/yql/sql/v1
+    yql/essentials/sql/v1
     library/cpp/testing/gmock_in_unittest
 )
 

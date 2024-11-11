@@ -1046,12 +1046,9 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
         return node;
     }
 
-    YQL_CLOG(TRACE, CoreDq) << "Pushing combine to stage";
-
     auto combine = node.Cast<TCoCombineByKey>();
     auto dqUnion = combine.Input().Cast<TDqCnUnionAll>();
     if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
-        YQL_CLOG(TRACE, CoreDq) << "Multiple use!";
         return node;
     }
 
@@ -1061,12 +1058,10 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
         !IsDqCompletePureExpr(combine.UpdateHandlerLambda()) ||
         !IsDqCompletePureExpr(combine.FinishHandlerLambda()))
     {
-        YQL_CLOG(TRACE, CoreDq) << "Not pure!";
         return node;
     }
 
     if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
-        YQL_CLOG(TRACE, CoreDq) << "All good!";
         return TExprBase(ctx.ChangeChild(*node.Raw(), TCoCombineByKey::idx_Input, std::move(connToPushableStage)));
     }
 
@@ -1097,17 +1092,6 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
             .Done();
     }
 
-    if (!IsDqDependsOnStage(combine.PreMapLambda(), dqUnion.Output().Stage()))
-        YQL_CLOG(TRACE, CoreDq) << "Prelambda not dependent!";
-    if (!IsDqDependsOnStage(combine.KeySelectorLambda(), dqUnion.Output().Stage()))
-        YQL_CLOG(TRACE, CoreDq) << "Key selector not dependent!";
-    if (!IsDqDependsOnStage(combine.InitHandlerLambda(), dqUnion.Output().Stage()))
-        YQL_CLOG(TRACE, CoreDq) << "init handler not dependent!";
-    if (!IsDqDependsOnStage(combine.UpdateHandlerLambda(), dqUnion.Output().Stage()))
-        YQL_CLOG(TRACE, CoreDq) << "updated handler not dependent!";
-    if (!IsDqDependsOnStage(combine.FinishHandlerLambda(), dqUnion.Output().Stage()))
-        YQL_CLOG(TRACE, CoreDq) << "finish handler not dependent!";
-
     if (IsDqDependsOnStage(combine.PreMapLambda(), dqUnion.Output().Stage()) ||
         IsDqDependsOnStage(combine.KeySelectorLambda(), dqUnion.Output().Stage()) ||
         IsDqDependsOnStage(combine.InitHandlerLambda(), dqUnion.Output().Stage()) ||
@@ -1130,11 +1114,9 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
 
     auto result = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
     if (!result) {
-        YQL_CLOG(TRACE, CoreDq) << "Something went bad!";
         return node;
     }
 
-    YQL_CLOG(TRACE, CoreDq) << "All good #2";
     return result.Cast();
 }
 

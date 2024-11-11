@@ -9,8 +9,10 @@
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/public/purecalc/common/interface.h>
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/mon/mon.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/actors_factory.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
@@ -223,11 +225,12 @@ public:
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr&);
     void Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&);
     void Handle(NFq::TEvPrivate::TEvPrintStateToLog::TPtr&);
+    void Handle(const NMon::TEvHttpInfo::TPtr&);
     
     void DeleteConsumer(const ConsumerSessionKey& key);
     void UpdateInterconnectSessions(const NActors::TActorId& interconnectSession);
     void UpdateMetrics();
-    void PrintInternalState();
+    TString GetInternalState();
 
     STRICT_STFUNC(
         StateFunc, {
@@ -252,6 +255,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, Handle);
         hFunc(NFq::TEvPrivate::TEvUpdateMetrics, Handle);
         hFunc(NFq::TEvPrivate::TEvPrintStateToLog, Handle);
+        hFunc(NMon::TEvHttpInfo, Handle);
     })
 };
 
@@ -287,6 +291,13 @@ void TRowDispatcher::Bootstrap() {
     Schedule(TDuration::Seconds(CoordinatorPingPeriodSec), new TEvPrivate::TEvCoordinatorPing());
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
     Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
+
+    NActors::TMon* mon = NKikimr::AppData()->Mon;
+    if (mon) {
+        ::NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+        mon->RegisterActorPage(actorsMonPage, "row_dispatcher", "Row Dispatcher", false,
+            TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+    }
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
@@ -372,7 +383,7 @@ void TRowDispatcher::UpdateMetrics() {
     }
 }
 
-void TRowDispatcher::PrintInternalState() {
+TString TRowDispatcher::GetInternalState() {
     TStringStream str;
     str << "Statistics:\n";
     for (auto& [key, sessionsInfo] : TopicSessions) {
@@ -390,7 +401,7 @@ void TRowDispatcher::PrintInternalState() {
             }
         }
     }
-    LOG_ROW_DISPATCHER_DEBUG(str.Str());
+    return str.Str();
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
@@ -632,8 +643,20 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&) {
 }
 
 void TRowDispatcher::Handle(NFq::TEvPrivate::TEvPrintStateToLog::TPtr&) {
-    PrintInternalState();
+    LOG_ROW_DISPATCHER_DEBUG(GetInternalState());
     Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
+}
+
+void TRowDispatcher::Handle(const NMon::TEvHttpInfo::TPtr& ev) {
+    TStringStream str;
+    HTML(str) {
+        PRE() {
+            str << "Current state:" << Endl;
+            str << GetInternalState() << Endl;
+            str << Endl;
+        }
+    }
+    Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev) {

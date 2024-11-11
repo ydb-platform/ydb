@@ -446,8 +446,8 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
             try {
                 return TFileInput(*path).ReadAll();
             } catch (const std::exception& ex) {
-                Cerr << "failed to read " << name << " file '" << *path << "': " << ex.what() << Endl;
-                exit(1);
+                ythrow yexception()
+                    << "failed to read " << name << " file '" << *path << "': " << ex.what();
             }
         }
         return TString();
@@ -743,9 +743,9 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     auto listener = new TInterconnectListenerTCP(
                         address, node.second.second, icCommon);
                     if (int err = listener->Bind()) {
-                        Cerr << "Failed to set up IC listener on port " << node.second.second
-                            << " errno# " << err << " (" << strerror(err) << ")" << Endl;
-                        exit(1);
+                        ythrow yexception()
+                            << "Failed to set up IC listener on port " << node.second.second
+                            << " errno# " << err << " (" << strerror(err) << ")";
                     }
                     setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(false), TActorSetupCmd(listener,
                         TMailboxType::ReadAsFilled, interconnectPoolId));
@@ -763,9 +763,9 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 }
                 auto listener = new TInterconnectListenerTCP(address, info.GetPort(), icCommon);
                 if (int err = listener->Bind()) {
-                    Cerr << "Failed to set up IC listener on port " << info.GetPort()
-                        << " errno# " << err << " (" << strerror(err) << ")" << Endl;
-                    exit(1);
+                    ythrow yexception()
+                        << "Failed to set up IC listener on port " << info.GetPort()
+                        << " errno# " << err << " (" << strerror(err) << ")";
                 }
                 setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(true), TActorSetupCmd(listener,
                     TMailboxType::ReadAsFilled, interconnectPoolId));
@@ -779,9 +779,9 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                         icCommon->TechnicalSelfHostName = nodesManagerConfig.GetHost();
                         auto listener = new TInterconnectListenerTCP({}, nodesManagerConfig.GetPort(), icCommon);
                         if (int err = listener->Bind()) {
-                            Cerr << "Failed to set up IC listener on port " << nodesManagerConfig.GetPort()
-                                << " errno# " << err << " (" << strerror(err) << ")" << Endl;
-                            exit(1);
+                            ythrow yexception()
+                                << "Failed to set up IC listener on port " << nodesManagerConfig.GetPort()
+                                << " errno# " << err << " (" << strerror(err) << ")";
                         }
                         setup->LocalServices.emplace_back(MakeInterconnectListenerActorId(true), TActorSetupCmd(listener,
                             TMailboxType::ReadAsFilled, interconnectPoolId));

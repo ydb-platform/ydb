@@ -141,6 +141,7 @@ protected:
         TStackVec<TString> AdditionalSIDs;
         bool RefreshRetryableErrorImmediately = false;
         TExternalAuthInfo ExternalAuthInfo;
+        bool IsLowAccessServiceRequestPriority = false;
 
         TTokenRecordBase(const TStringBuf ticket)
             : Ticket(ticket)
@@ -392,6 +393,11 @@ private:
             } else {
                 request->Request.set_iam_token(record.Ticket);
             }
+        }
+
+        if (record.IsLowAccessServiceRequestPriority) {
+            auto& headers = request->Headers;
+            headers["x-ya-priority"] = "low";
         }
 
         return request;
@@ -649,14 +655,14 @@ private:
 
             if (record.Ticket.EndsWith("@" BUILTIN_ERROR_DOMAIN)) {
                 record.TokenType = TDerived::ETokenType::Builtin;
-                SetError(key, record, { "Builtin error simulation" });
+                SetError(key, record, { .Message = "Builtin error simulation" });
                 CounterTicketsBuiltin->Inc();
                 return true;
             }
 
             if (record.Ticket.EndsWith("@" BUILTIN_SYSTEM_DOMAIN)) {
                 record.TokenType = TDerived::ETokenType::Builtin;
-                SetError(key, record, { "System domain not available for user usage", false });
+                SetError(key, record, { .Message = "System domain not available for user usage", .Retryable = false });
                 CounterTicketsBuiltin->Inc();
                 return true;
             }
@@ -977,12 +983,12 @@ private:
                         .AuthType = record.GetAuthType()
                     }));
                 } else {
-                    SetError(key, record, {errorMessage, false});
+                    SetError(key, record, {.Message = errorMessage, .Retryable = false});
                 }
             } else {
                 if (record.ResponsesLeft == 0 && (record.TokenType == TDerived::ETokenType::Unknown || record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::ApiKey)) {
                     bool retryable = IsRetryableGrpcError(response->Status);
-                    SetError(key, record, {response->Status.Msg, retryable});
+                    SetError(key, record, {.Message = response->Status.Msg, .Retryable = retryable});
                 }
             }
             if (record.ResponsesLeft == 0) {
@@ -1011,7 +1017,7 @@ private:
             auto& record = it->second;
             record.ResponsesLeft--;
             if (!ev->Get()->Status.Ok()) {
-                SetError(key, record, {ev->Get()->Status.Msg});
+                SetError(key, record, {.Message = ev->Get()->Status.Msg});
             } else {
                 GetDerived()->SetToken(key, record, ev);
             }
@@ -1033,7 +1039,7 @@ private:
             auto& record = it->second;
             record.ResponsesLeft--;
             if (!ev->Get()->Status.Ok()) {
-                SetError(key, record, {ev->Get()->Status.Msg});
+                SetError(key, record, {.Message = ev->Get()->Status.Msg});
             } else {
                 SetToken(key, record, new NACLib::TUserToken(record.Ticket, ev->Get()->Response.name() + "@" + ServiceDomain, {}));
             }
@@ -1322,7 +1328,7 @@ private:
                     }
                 } else {
                     bool retryable = IsRetryableGrpcError(response->Status);
-                    itPermission->second.Error = {response->Status.Msg, retryable};
+                    itPermission->second.Error = {.Message = response->Status.Msg, .Retryable = retryable};
                     if (itPermission->second.Subject.empty() || !retryable) {
                         itPermission->second.Subject.clear();
                         BLOG_TRACE("Ticket "
@@ -1433,7 +1439,7 @@ private:
             } else {
                 BLOG_D("Expired ticket " << record.GetMaskedTicket());
                 if (!record.AuthorizeRequests.empty()) {
-                    record.Error = {"Timed out", true};
+                    record.Error = {.Message = "Timed out", .Retryable = true};
                     Respond(record);
                 }
                 userTokens.erase(it);
@@ -1704,6 +1710,7 @@ protected:
         CounterTicketsBuildTime->Collect((now - record.InitTime).MilliSeconds());
         BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
                     << record.PeerName << ") has now valid token of " << record.Subject);
+        record.IsLowAccessServiceRequestPriority = true;
         RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
     }
 
@@ -1732,6 +1739,7 @@ protected:
                         << record.PeerName << ") has now permanent error message '" << error.Message << "'");
         }
         CounterTicketsErrors->Inc();
+        record.IsLowAccessServiceRequestPriority = true;
         RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
     }
 

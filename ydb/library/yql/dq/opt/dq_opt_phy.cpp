@@ -761,6 +761,8 @@ TExprBase DqBuildPureFlatmapStage(TExprBase node, TExprContext& ctx) {
 TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
+    Y_UNUSED(optCtx);
+    
     if (!node.Maybe<TCoFlatMapBase>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
     }
@@ -788,10 +790,6 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
             return node;
         }
     } else {
-        if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
-            return TExprBase(ctx.ChangeChild(*node.Raw(), TCoFlatMapBase::idx_Input, std::move(connToPushableStage)));
-        }
-
         auto lambda = TCoLambda(ctx.Builder(flatmap.Lambda().Pos())
             .Lambda()
                 .Param("stream")
@@ -800,11 +798,6 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
                     .Add(1, ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
                 .Seal()
             .Seal().Build());
-
-        auto pushResult = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
-        if (pushResult) {
-            return pushResult.Cast();
-        }
 
         flatmapStage = Build<TDqStage>(ctx, flatmap.Pos())
             .Inputs()
@@ -825,7 +818,7 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
         .Done();
 }
 
-TExprBase DqBuildFlatmapStageOnlyPushable(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+TExprBase DqPushFlatmapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
     if (!node.Maybe<TCoFlatMapBase>().Input().Maybe<TDqCnUnionAll>()) {
@@ -855,6 +848,11 @@ TExprBase DqBuildFlatmapStageOnlyPushable(TExprBase node, TExprContext& ctx, IOp
         if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
             return TExprBase(ctx.ChangeChild(*node.Raw(), TCoFlatMapBase::idx_Input, std::move(connToPushableStage)));
         }
+
+//        auto lambda = Build<TCoLambda>(ctx, flatmap.Lambda().Pos())
+//            .Args({"stream"})
+//            .Body(ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
+//            .Done();
 
         auto lambda = TCoLambda(ctx.Builder(flatmap.Lambda().Pos())
             .Lambda()

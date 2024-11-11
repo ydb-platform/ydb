@@ -86,7 +86,7 @@ public:
         AddHandler(0, &TCoAsList::Match, HNDL(PropagatePrecomuteScalarRowset<false>));
         AddHandler(0, &TCoTake::Match, HNDL(PropagatePrecomuteTake<false>));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PropagatePrecomuteFlatmap<false>));
-        AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStageOnlyPushable<false>));
+        AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushFlatmapToStage<false>));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(ExpandAggregatePhase));
         AddHandler(0, &TCoAggregateCombineState::Match, HNDL(ExpandAggregatePhase));
         AddHandler(0, &TCoAggregateMergeState::Match, HNDL(ExpandAggregatePhase));
@@ -298,11 +298,11 @@ protected:
     }
 
     template <bool IsGlobal>
-    TMaybeNode<TExprBase> BuildFlatmapStageOnlyPushable(TExprBase node, TExprContext& ctx,
+    TMaybeNode<TExprBase> PushFlatmapToStage(TExprBase node, TExprContext& ctx,
         IOptimizationContext& optCtx, const TGetParents& getParents)
     {
-        TExprBase output = DqBuildFlatmapStageOnlyPushable(node, ctx, optCtx, *getParents(), IsGlobal);
-        DumpAppliedRule("BuildFlatmapStageOnlyPushable", node.Ptr(), output.Ptr(), ctx);
+        TExprBase output = DqPushFlatmapToStage(node, ctx, optCtx, *getParents(), IsGlobal);
+        DumpAppliedRule("DqPushFlatmapToStage", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

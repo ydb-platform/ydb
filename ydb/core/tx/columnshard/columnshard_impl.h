@@ -675,6 +675,10 @@ public:
         return NKikimrServices::TActivity::TX_COLUMNSHARD_ACTOR;
     }
 
+    void ChangeSchemaVersionsToLastCompatible(NOlap::TDbWrapper& db) {
+        TablesManager.MutablePrimaryIndex().ChangeSchemaVersionsToLastCompatible(db, DataLocksManager);
+    }
+
     TColumnShard(TTabletStorageInfo* info, const TActorId& tablet);
 };
 

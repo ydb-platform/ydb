@@ -218,6 +218,8 @@ public:
 
     void AppendPortion(const TPortionInfo::TPtr& portionInfo);
 
+    void ChangeSchemaVersionsToLastCompatible(NOlap::TDbWrapper& db, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) override;
+
 private:
     TVersionedIndex VersionedIndex;
     ui64 TabletId;

@@ -38,6 +38,8 @@ public:
     }
 
     TString DebugString() const;
+
+    auto operator<=>(const TEncodingSettings&) const = default;
 };
 
 }

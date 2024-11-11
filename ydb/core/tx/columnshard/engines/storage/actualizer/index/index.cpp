@@ -36,6 +36,12 @@ void TGranuleActualizationIndex::RefreshScheme(const TAddExternalContext& contex
     NYDBTest::TControllers::GetColumnShardController()->OnActualizationRefreshScheme();
 }
 
+void TGranuleActualizationIndex::ChangeSchemeToCompatible(const THashMap<ui64, ui64>& versionMap, THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions, NOlap::TDbWrapper& db, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
+    if (SchemeActualizer) {
+        SchemeActualizer->ChangeSchemeToCompatible(versionMap, portions, db, dataLocksManager);
+    }
+}
+
 TGranuleActualizationIndex::TGranuleActualizationIndex(const ui64 pathId, const TVersionedIndex& versionedIndex)
     : PathId(pathId)
     , VersionedIndex(versionedIndex)

@@ -598,4 +598,17 @@ bool TColumnEngineForLogs::LoadCounters(IDbWrapper& db) {
     return db.LoadCounters(callback);
 }
 
-}   // namespace NKikimr::NOlap
+void TColumnEngineForLogs::ChangeSchemaVersionsToLastCompatible(NOlap::TDbWrapper& db, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
+    const THashMap<ui64, ui64> versionMap = VersionedIndex.GetCompatibleSchemaVersions();
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization_start");
+    if (versionMap.empty()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization_start_no_compatible_versions_found");
+        return;
+    }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization_start_found_compatible_versions");
+    for (auto& [_, table]: GranulesStorage->GetTables()) {
+        table->ChangeSchemeToCompatible(versionMap, db, dataLocksManager);
+    }
+}
+
+} // namespace NKikimr::NOlap

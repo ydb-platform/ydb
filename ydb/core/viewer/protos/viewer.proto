@@ -762,11 +762,26 @@ enum EAutocompleteType {
 }
 
 message TQueryAutocomplete {
+    enum EDefaultKind {
+        None = 0;
+        Sequence = 1;
+        Literal = 2;
+        Reserved3 = 3;
+        Reserved4 = 4;
+        Reserved5 = 5;
+        Reserved6 = 6;
+        Reserved7 = 7;
+        Reserved8 = 8;
+        Reserved9 = 9;
+    }
     message TResult {
         message TEntity {
             string Name = 1;
             EAutocompleteType Type = 2;
             string Parent = 3;
+            optional uint32 PKIndex = 4;
+            optional bool NotNull = 5;
+            EDefaultKind Default = 6;
         }
         optional uint32 Total = 1;
         repeated TEntity Entities = 2;

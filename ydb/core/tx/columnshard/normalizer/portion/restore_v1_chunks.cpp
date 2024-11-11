@@ -145,7 +145,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     if (!ready) {
         return TConclusionStatus::Fail("Not ready");
     }
-
+    if (!AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
+        return std::vector<INormalizerTask::TPtr>();
+    }
     THashMap<ui64, TPortionLoadContext> portions0;
     THashSet<ui64> existPortions0;
     THashMap<ui64, std::map<TFullChunkAddress, TColumnChunkLoadContext>> columns0;

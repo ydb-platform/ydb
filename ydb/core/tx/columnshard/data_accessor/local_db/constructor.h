@@ -38,10 +38,15 @@ private:
         if (proto.GetLocalDB().HasMemoryCacheSize()) {
             MemoryCacheSize = proto.GetLocalDB().GetMemoryCacheSize();
         }
+        if (proto.GetLocalDB().HasFetchOnStart()) {
+            FetchOnStart = proto.GetLocalDB().GetFetchOnStart();
+        }
+        
         return true;
     }
     virtual void DoSerializeToProto(TProto& proto) const override {
         proto.MutableLocalDB()->SetMemoryCacheSize(MemoryCacheSize);
+        proto.MutableLocalDB()->SetFetchOnStart(FetchOnStart);
         return;
     }
     static const inline TFactory::TRegistrator<TManagerConstructor> Registrator =

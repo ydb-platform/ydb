@@ -8826,6 +8826,35 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         csController->EnableBackground(NYDBTest::ICSController::EBackground::Indexation);
         csController->WaitIndexation(TDuration::Seconds(5));
     }
+
+    Y_UNIT_TEST(ScanFailedSnapshotTooOld) {
+        using namespace NArrow;
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        appConfig.MutableColumnShardConfig()->SetMaxReadStaleness_ms(100);
+        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        TTestHelper testHelper(settings);
+
+        TTestHelper::TColumnTable cnt;
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("key").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("c").SetType(NScheme::NTypeIds::Int32).SetNullable(true)
+        };
+        cnt.SetName("/Root/cnt").SetPrimaryKey({ "key" }).SetSchema(schema);
+        testHelper.CreateTable(cnt);
+
+        auto client = testHelper.GetKikimr().GetQueryClient();
+        auto result =
+            client
+                .ExecuteQuery(
+                    TStringBuilder() << "$v = SELECT CAST(COUNT(*) AS INT32) FROM `/Root/cnt`; INSERT INTO `/Root/cnt` (key, c) values(1, $v);",
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().Size(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "scan failed, reason: cannot build metadata/Snapshot too old");
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapTypes) {

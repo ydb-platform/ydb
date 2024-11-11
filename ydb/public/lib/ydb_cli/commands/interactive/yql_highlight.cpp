@@ -204,6 +204,7 @@ namespace NYdb {
         }
 
         bool YQLHighlight::IsKeyword(const TParsedToken& token) const {
+            (void)token;
             // maxim-yurchuk: dirty-fix for check
             // return IsProbablyKeyword(token);
             return false;

@@ -1,6 +1,7 @@
 #include "mkql_wide_combine.h"
 #include "mkql_rh_hash.h"
 
+#include <format>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
@@ -314,6 +315,7 @@ public:
         CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
+        StoredDataSize = 0;
 
         CleanupCurrentContext();
         return true;
@@ -342,6 +344,7 @@ public:
     }
 
     EFetchResult InputStatus = EFetchResult::One;
+    ui64 StoredDataSize = 0;
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;
 
@@ -976,6 +979,9 @@ public:
                 }
 
                 const auto initUsage = MemLimit ? ctx.HolderFactory.GetMemoryUsed() : 0ULL;
+                const auto memLimit = MemLimit - ptr->StoredDataSize;
+                Cerr << std::format("MISHA: StoredBytes: {}, MemLimit: {}, memLimit: {}, continue: {}\n", ptr->StoredDataSize, MemLimit, memLimit, !ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage));
+                // Cerr << "Usage: " << ptr->StoredDataSize << "/" << MemLimit << ".Continue: " << !ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage)<< Endl;
 
                 auto **fields = ctx.WideFields.data() + WideFieldsIndex;
 
@@ -987,6 +993,8 @@ public:
                     ptr->InputStatus = Flow->FetchValues(ctx, fields);
                     if constexpr (SkipYields) {
                         if (EFetchResult::Yield == ptr->InputStatus) {
+                            std::cerr << "MISHA yield" << std::endl;
+                            ptr->StoredDataSize = std::max(ptr->StoredDataSize, MemLimit ? ui64(ctx.HolderFactory.GetMemoryUsed() - initUsage) : 0UL);
                             return EFetchResult::Yield;
                         } else if (EFetchResult::Finish == ptr->InputStatus) {
                             break;
@@ -999,12 +1007,13 @@ public:
 
                     Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
                     Nodes.ProcessItem(ctx, ptr->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
-                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage));
+                } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(memLimit, initUsage));
 
                 ptr->PushStat(ctx.Stats);
             }
 
             if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
+                // Cerr << "Extract\n";
                 Nodes.FinishItem(ctx, values, output);
                 return EFetchResult::One;
             }

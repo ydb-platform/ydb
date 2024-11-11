@@ -106,6 +106,18 @@ public:
         return DataAccessorsManager;
     }
 
+    std::vector<TCSMetadataRequest> CollectMetadataRequests() {
+        std::vector<TCSMetadataRequest> result;
+        for (auto&& i : Tables) {
+            auto r = i.second->CollectMetadataRequests();
+            if (!r.size()) {
+                continue;
+            }
+            result.insert(result.end(), r.begin(), r.end());
+        }
+        return result;
+    }
+
     TGranulesStorage(const NColumnShard::TEngineLogsCounters counters,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<IStoragesManager>& storagesManager)

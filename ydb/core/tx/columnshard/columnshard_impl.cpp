@@ -50,6 +50,8 @@
 
 #include <ydb/services/metadata/service.h>
 
+#include <util/generic/object_counter.h>
+
 namespace NKikimr::NColumnShard {
 
 // NOTE: We really want to batch log records by default in columnshards!
@@ -520,6 +522,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SetupCompaction({});
     SetupCleanupPortions();
     SetupCleanupTables();
+    SetupMetadata();
     SetupTtl();
     SetupGC();
     SetupCleanupInsertTable();
@@ -875,6 +878,38 @@ public:
     using TBase::TBase;
 };
 
+class TCSMetadataSubscriber: public NOlap::IDataAccessorRequestsSubscriber, public TObjectCounter<TCSMetadataSubscriber> {
+private:
+    NActors::TActorId TabletActorId;
+    const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
+    const ui64 Generation;
+    virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result) override {
+        NActors::TActivationContext::Send(
+            TabletActorId, std::make_unique<TEvPrivate::TEvMetadataAccessorsInfo>(Processor, Generation, std::move(result)));
+    }
+
+public:
+    TCSMetadataSubscriber(
+        const NActors::TActorId& tabletActorId, const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen)
+        : TabletActorId(tabletActorId)
+        , Processor(processor)
+        , Generation(gen)
+    {
+
+    }
+};
+
+void TColumnShard::SetupMetadata() {
+    if (TObjectCounter<TCSMetadataSubscriber>::ObjectCount()) {
+        return;
+    }
+    std::vector<NOlap::TCSMetadataRequest> requests = TablesManager.MutablePrimaryIndex().CollectMetadataRequests();
+    for (auto&& i : requests) {
+        i.GetRequest()->RegisterSubscriber(std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation()));
+        DataAccessorsManager->AskData(i.GetRequest());
+    }
+}
+
 bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
     if (!AppDataVerified().ColumnShardConfig.GetTTLEnabled() || !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::TTL)) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_ttl")("reason", "disabled");
@@ -998,6 +1033,12 @@ void TColumnShard::SetupGC() {
 
 void TColumnShard::Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActorContext& /*ctx*/) {
     StartCompaction(ev->Get()->GetGuard());
+}
+
+void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& /*ctx*/) {
+    AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
+    ev->Get()->GetProcessor()->ApplyResult(ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
+    SetupMetadata();
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, const TActorContext& ctx) {

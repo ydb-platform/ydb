@@ -161,6 +161,10 @@ private:
     bool DataAccessorConstructed = false;
 
 public:
+    std::vector<TCSMetadataRequest> CollectMetadataRequests() {
+        return ActualizationIndex->CollectMetadataRequests(Portions);
+    }
+
     std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
     bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& GetDataAccessorsManager() const {

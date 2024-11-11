@@ -12,6 +12,7 @@ DEPENDS(
 PEERDIR(
     ydb/public/sdk/python
     ydb/tests/library
+    ydb/tests/library/clients
 )
 
 SIZE(MEDIUM)

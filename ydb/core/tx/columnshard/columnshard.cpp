@@ -3,6 +3,8 @@
 #include "bg_tasks/manager/manager.h"
 #include "blobs_reader/actor.h"
 #include "counters/aggregation/table_stats.h"
+#include "data_accessor/actor.h"
+#include "data_accessor/manager.h"
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor.h"
 #include "hooks/abstract/abstract.h"
@@ -30,6 +32,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     }
     ctx.Send(ResourceSubscribeActor, new TEvents::TEvPoisonPill);
     ctx.Send(BufferizationWriteActorId, new TEvents::TEvPoisonPill);
+    ctx.Send(DataAccessorsControlActorId, new TEvents::TEvPoisonPill);
     if (PrioritizationClientId) {
         NPrioritiesQueue::TCompServiceOperator::UnregisterClient(PrioritizationClientId);
     }
@@ -105,6 +108,9 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
+    DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
+    DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(DataAccessorsControlActorId),
+
     PrioritizationClientId = NPrioritiesQueue::TCompServiceOperator::RegisterClient();
     Execute(CreateTxInitSchema(), ctx);
 }
@@ -299,8 +305,7 @@ void TColumnShard::UpdateIndexCounters() {
     LOG_S_DEBUG("Index: tables " << stats.Tables << " inserted " << stats.GetInsertedStats().DebugString() << " compacted "
                                  << stats.GetCompactedStats().DebugString() << " s-compacted " << stats.GetSplitCompactedStats().DebugString()
                                  << " inactive " << stats.GetInactiveStats().DebugString() << " evicted "
-                                 << stats.GetEvictedStats().DebugString() << " at tablet "
-                                 << TabletID());
+                                 << stats.GetEvictedStats().DebugString() << " at tablet " << TabletID());
 }
 
 ui64 TColumnShard::MemoryUsage() const {

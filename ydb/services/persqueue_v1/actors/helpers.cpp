@@ -29,7 +29,7 @@ bool HasMessages(const Topic::StreamReadMessage::ReadResponse& data) {
 
 
 TString CleanupCounterValueString(const TString& value) {
-    // Internal Monitoring system requires metrics values to no longer than 200 characters
+    // Internal Monitoring system requires metrics values to be no longer than 200 characters
     // and prohibits some ASCII characters.
 
     TString clean;
@@ -53,6 +53,17 @@ TString CleanupCounterValueString(const TString& value) {
         }
     }
     return clean;
+}
+
+
+TString DropUserAgentSuffix(const TString& userAgent) {
+    auto ua = TStringBuf(userAgent);
+    TStringBuf beforeParen, afterParen;
+    ua.Split('(', beforeParen, afterParen);
+    while (beforeParen.ends_with(' ')) {
+        beforeParen.Chop(1);
+    }
+    return TString(beforeParen);
 }
 
 }

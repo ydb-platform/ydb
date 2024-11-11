@@ -215,6 +215,7 @@ public:
     ui64 GetTableSearchHeight(ui32 table) const;
     ui64 EstimateRowSize(ui32 table) const;
     const TCounters& Counters() const noexcept;
+    void UpdateApproximateFreeSharesByChannel(const THashMap<ui32, float>& approximateFreeSpaceShareByChannel);
     TString SnapshotToLog(ui32 table, TTxStamp);
 
     TAutoPtr<TSubset> Subset(ui32 table, TArrayRef<const TLogoBlobID> bundle, TEpoch before) const;

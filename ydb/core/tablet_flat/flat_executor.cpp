@@ -2978,6 +2978,8 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         Y_ABORT("unknown event cookie");
     }
 
+    Database->UpdateApproximateFreeSharesByChannel(msg->ApproximateFreeSpaceShareByChannel);
+
     CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels));
 
     ProcessIoStats(
@@ -4369,6 +4371,12 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         comp->Writer.Slots.emplace_back(channel, group);
     };
 
+    auto addChannels = [&](const std::vector<ui8>& channels) {
+        for (auto channel : channels) {
+            addChannel(channel);
+        }
+    };
+
     for (size_t group : xrange(rowScheme->Families.size())) {
         auto familyId = rowScheme->Families[group];
         const auto* family = tableInfo->Families.FindPtr(familyId);
@@ -4404,10 +4412,12 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
             comp->Layout.LargeEdge = family->Large;
 
             // Small/Large channels are taken from the leader family
-            comp->Writer.BlobsChannel = room->Blobs;
+            comp->Writer.BlobsChannels = room->Blobs;
             comp->Writer.OuterChannel = room->Outer;
-            addChannel(room->Blobs);
+            addChannels(room->Blobs);
             addChannel(room->Outer);
+
+            comp->Writer.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
         }
     }
 

@@ -328,6 +328,12 @@ struct TTableAggregatedStats {
     THashMap<TShardIdx, TPartitionStats> PartitionStats;
     size_t PartitionStatsUpdated = 0;
 
+    THashSet<TShardIdx> UpdatedStats;
+
+    bool AreStatsFull() const {
+        return Aggregated.PartCount && UpdatedStats.size() == Aggregated.PartCount;
+    }
+
     void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
 };
 
@@ -2865,31 +2871,48 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 class TBillingStats {
 public:
     TBillingStats() = default;
-    TBillingStats(ui64 rows, ui64 bytes);
-    TBillingStats(const TBillingStats& other);
+    TBillingStats(const TBillingStats& other) = default;
+    TBillingStats& operator = (const TBillingStats& other) = default;
 
-    TBillingStats& operator = (const TBillingStats& other);
+    TBillingStats(ui64 uploadRows, ui64 uploadBytes, ui64 readRows, ui64 readBytes);
 
     TBillingStats operator - (const TBillingStats& other) const;
-    TBillingStats& operator -= (const TBillingStats& other);
+    TBillingStats& operator -= (const TBillingStats& other) {
+        return *this = *this - other;
+    }
 
     TBillingStats operator + (const TBillingStats& other) const;
-    TBillingStats& operator += (const TBillingStats& other);
+    TBillingStats& operator += (const TBillingStats& other) {
+        return *this = *this + other;
+    }
 
-    bool operator < (const TBillingStats& other) const;
-    bool operator <= (const TBillingStats& other) const;
-    bool operator == (const TBillingStats& other) const;
+    bool operator == (const TBillingStats& other) const = default;
 
-    operator bool () const;
+    explicit operator bool () const {
+        return *this != TBillingStats{};
+    }
 
     TString ToString() const;
 
-    ui64 GetRows() const;
-    ui64 GetBytes() const;
+    ui64 GetUploadRows() const {
+        return UploadRows;
+    }
+    ui64 GetUploadBytes() const {
+        return UploadBytes;
+    }
+
+    ui64 GetReadRows() const {
+        return ReadRows;
+    }
+    ui64 GetReadBytes() const {
+        return ReadBytes;
+    }
 
 private:
-    ui64 Rows = 0;
-    ui64 Bytes = 0;
+    ui64 UploadRows = 0;
+    ui64 UploadBytes = 0;
+    ui64 ReadRows = 0;
+    ui64 ReadBytes = 0;
 };
 
 // TODO(mbkkt) separate it to 3 classes: TBuildColumnsInfo TBuildSecondaryInfo TBuildVectorInfo with single base TBuildInfo
@@ -2998,7 +3021,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Sample = 0,
             // Recompute,
             Reshuffle,
-            // Local,
+            Local,
         };
         ui32 Level = 0;
 
@@ -3394,9 +3417,24 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             row.template GetValueOrDefault<Schema::IndexBuild::AlterMainTableTxDone>(
                 indexInfo->AlterMainTableTxDone);
 
-        indexInfo->Billed = TBillingStats(
+        auto& billed = indexInfo->Billed;
+        billed = {
             row.template GetValueOrDefault<Schema::IndexBuild::RowsBilled>(0),
-            row.template GetValueOrDefault<Schema::IndexBuild::BytesBilled>(0));
+            row.template GetValueOrDefault<Schema::IndexBuild::BytesBilled>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsBilled>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesBilled>(0),
+        };
+        if (billed.GetUploadRows() != 0 && billed.GetReadRows() == 0 && indexInfo->IsFillBuildIndex()) {
+            // old format: assign upload to read
+            billed += {0, 0, billed.GetUploadRows(), billed.GetUploadBytes()};
+        }
+
+        indexInfo->Processed = {
+            row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::ReadRowsProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuild::ReadBytesProcessed>(0),
+        };
 
         return indexInfo;
     }
@@ -3428,17 +3466,26 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Schema::IndexBuildShardStatus::UploadStatus>(
             Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
 
-        shardStatus.Processed = TBillingStats(
-            row.template GetValueOrDefault<
-                Schema::IndexBuildShardStatus::RowsProcessed>(0),
-            row.template GetValueOrDefault<
-                Schema::IndexBuildShardStatus::BytesProcessed>(0));
-
-        Processed += shardStatus.Processed;
+        auto& processed = shardStatus.Processed;
+        processed = {
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::RowsProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::BytesProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadRowsProcessed>(0),
+            row.template GetValueOrDefault<Schema::IndexBuildShardStatus::ReadBytesProcessed>(0),
+        };
+        if (processed.GetUploadRows() != 0 && processed.GetReadRows() == 0 && IsFillBuildIndex()) {
+            // old format: assign upload to read
+            processed += {0, 0, processed.GetUploadRows(), processed.GetUploadBytes()};
+        }
+        Processed += processed;
     }
 
     bool IsCancellationRequested() const {
         return CancelRequested;
+    }
+
+    bool IsFillBuildIndex() const {
+        return IsBuildSecondaryIndex() || IsBuildColumns();
     }
 
     bool IsBuildSecondaryIndex() const {

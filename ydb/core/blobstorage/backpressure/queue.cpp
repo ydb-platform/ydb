@@ -339,7 +339,6 @@ TBlobStorageQueue::TItemList::iterator TBlobStorageQueue::EraseItem(TItemList& q
     TItemList::iterator nextIter = std::next(it);
     if (Queues.Unused.size() < MaxUnusedItems) {
         Queues.Unused.splice(Queues.Unused.end(), queue, it);
-        it->TSenderNode::UnLink();
         it->Event.Discard();
     } else {
         queue.erase(it);

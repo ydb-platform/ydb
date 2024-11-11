@@ -26,6 +26,7 @@ DEPENDS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/clients
 )
 
 FORK_SUBTESTS()

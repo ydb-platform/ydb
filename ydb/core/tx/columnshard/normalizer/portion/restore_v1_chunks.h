@@ -13,11 +13,11 @@ namespace NKikimr::NOlap::NRestoreV1Chunks {
 class TNormalizer: public TNormalizationController::INormalizerComponent {
 public:
     static TString GetClassNameStatic() {
-        return ::ToString(ENormalizerSequentialId::RestoreV1Chunks);
+        return ::ToString(ENormalizerSequentialId::RestoreV1Chunks_V2);
     }
 
     virtual std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
-        return ENormalizerSequentialId::RestoreV1Chunks;
+        return ENormalizerSequentialId::RestoreV1Chunks_V2;
     }
 
     virtual TString GetClassName() const override {

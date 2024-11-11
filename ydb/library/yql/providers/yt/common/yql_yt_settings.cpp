@@ -391,6 +391,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, LLVMNodeCountLimit);
     REGISTER_SETTING(*this, SamplingIoBlockSize);
     REGISTER_SETTING(*this, BinaryTmpFolder);
+    REGISTER_SETTING(*this, BinaryCacheFolder);
     REGISTER_SETTING(*this, BinaryExpirationInterval);
     REGISTER_SETTING(*this, FolderInlineDataLimit);
     REGISTER_SETTING(*this, FolderInlineItemsLimit);
@@ -457,7 +458,6 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
     REGISTER_SETTING(*this, ForceJobSizeAdjuster);
-    REGISTER_SETTING(*this, _EnableWriteReorder);
     REGISTER_SETTING(*this, EnforceJobUtc);
     REGISTER_SETTING(*this, UseRPCReaderInDQ);
     REGISTER_SETTING(*this, DQRPCReaderInflight).Lower(1);

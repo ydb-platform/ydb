@@ -154,14 +154,24 @@ namespace NKikimr {
 
         struct TError {
             TString Message;
+            TString LogMessage;
             bool Retryable = true;
 
             bool empty() const {
-                return Message.empty();
+                return Message.empty() && LogMessage.empty();
+            }
+
+            bool HasMessage() const {
+                return !Message.empty();
+            }
+
+            bool HasLogMessage() const {
+                return !LogMessage.empty();
             }
 
             void clear() {
                 Message.clear();
+                LogMessage.clear();
                 Retryable = true;
             }
 

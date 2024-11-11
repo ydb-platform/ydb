@@ -1214,6 +1214,7 @@ std::tuple<TVector<ui64>, TTableId> CreateShardedTable(
         if (family.ExternalPoolKind) fam->MutableStorageConfig()->MutableExternal()->SetPreferredPoolKind(family.ExternalPoolKind);
         if (family.DataThreshold) fam->MutableStorageConfig()->SetDataThreshold(family.DataThreshold);
         if (family.ExternalThreshold) fam->MutableStorageConfig()->SetExternalThreshold(family.ExternalThreshold);
+        if (family.ExternalChannelsCount) fam->MutableStorageConfig()->SetExternalChannelsCount(family.ExternalChannelsCount);
     }
 
     for (const auto& index : opts.Indexes_) {
@@ -2685,8 +2686,7 @@ std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
     record.MutableTableId()->SetSchemaVersion(description.GetTableSchemaVersion());
 
     if (readVersion) {
-        record.MutableSnapshot()->SetStep(readVersion.Step);
-        record.MutableSnapshot()->SetTxId(readVersion.TxId);
+        readVersion.Serialize(*record.MutableSnapshot());
     }
 
     record.SetResultFormat(format);

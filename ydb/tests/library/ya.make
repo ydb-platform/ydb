@@ -22,15 +22,10 @@ PY_SRCS(
     kv/helpers.py
     harness/__init__.py
     harness/daemon.py
-    harness/kikimr_client.py
-    harness/kikimr_keyvalue_client.py
-    harness/kikimr_scheme_client.py
     harness/kikimr_node_interface.py
-    harness/kikimr_monitoring.py
     harness/kikimr_cluster_interface.py
     harness/kikimr_cluster.py
     harness/kikimr_config.py
-    harness/kikimr_http_client.py
     harness/kikimr_port_allocator.py
     harness/kikimr_runner.py
     harness/param_constants.py
@@ -102,6 +97,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/sdk/python/enable_v3_new_behavior
     ydb/tests/library/wardens
+    ydb/tests/library/clients
     ydb/tests/oss/canonical
     ydb/tests/oss/ydb_sdk_import
 )
@@ -110,6 +106,7 @@ END()
 
 RECURSE(
     compatibility
+    clients
     serializability
     wardens
     sqs

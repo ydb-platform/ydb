@@ -13,6 +13,7 @@
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/public/purecalc/common/interface.h>
 
 namespace {
 
@@ -24,10 +25,11 @@ const ui64 TimeoutBeforeStartSessionSec = 3;
 const ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
 
 class TFixture : public NUnitTest::TBaseFixture {
-
 public:
     TFixture()
-    : Runtime(true) {}
+        : PureCalcProgramFactory(NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions()))
+        , Runtime(true)
+    {}
 
     void SetUp(NUnitTest::TTestContext&) override {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
@@ -39,6 +41,7 @@ public:
 
         ReadActorId1 = Runtime.AllocateEdgeActor();
         ReadActorId2 = Runtime.AllocateEdgeActor();
+        ReadActorId3 = Runtime.AllocateEdgeActor();
         RowDispatcherActorId = Runtime.AllocateEdgeActor();
     }
 
@@ -46,7 +49,7 @@ public:
         Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
         Config.SetSendStatusPeriodSec(2);
-        Config.SetWithoutConsumer(true);
+        Config.SetWithoutConsumer(false);
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
@@ -67,6 +70,7 @@ public:
             0,
             Driver,
             CredentialsProviderFactory,
+            PureCalcProgramFactory,
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(pqServices)
             ).release());
@@ -91,11 +95,11 @@ public:
         Runtime.Send(new IEventHandle(TopicSession, readActorId, event));
     }
 
-    NYql::NPq::NProto::TDqPqTopicSource BuildSource(TString topic, bool emptyPredicate = false) {
+    NYql::NPq::NProto::TDqPqTopicSource BuildSource(TString topic, bool emptyPredicate = false, const TString& consumer = DefaultPqConsumer) {
         NYql::NPq::NProto::TDqPqTopicSource settings;
         settings.SetEndpoint(GetDefaultPqEndpoint());
         settings.SetTopicPath(topic);
-        settings.SetConsumerName("PqConsumer");
+        settings.SetConsumerName(consumer);
         settings.MutableToken()->SetName("token");
         settings.SetDatabase(GetDefaultPqDatabase());
         settings.AddColumns("dt");
@@ -154,14 +158,16 @@ public:
         return eventHolder->Get()->Record.MessagesSize();
     }
 
-    TActorSystemStub actorSystemStub;
+    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
     NActors::TTestActorRuntime Runtime;
+    TActorSystemStub ActorSystemStub;
     NActors::TActorId TopicSession;
     NActors::TActorId RowDispatcherActorId;
     NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr")));
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
     NActors::TActorId ReadActorId1;
     NActors::TActorId ReadActorId2;
+    NActors::TActorId ReadActorId3;
     ui64 PartitionId = 0;
     NConfig::TRowDispatcherConfig Config;
 
@@ -185,6 +191,10 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         ExpectMessageBatch(ReadActorId1, { Json1 });
         ExpectMessageBatch(ReadActorId2, { Json1 });
+
+        auto source2 = BuildSource(topicName, false, "OtherConsumer");
+        StartSession(ReadActorId3, source2);
+        ExpectSessionError(ReadActorId3, "Use the same consumer");
 
         StopSession(ReadActorId1, source);
         StopSession(ReadActorId2, source);

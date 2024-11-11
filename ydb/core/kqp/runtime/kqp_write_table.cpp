@@ -1076,8 +1076,7 @@ public:
         IsOlap = true;
         SchemeEntry = schemeEntry;
         BeforePartitioningChanged();
-        for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
-            auto& writeInfo = WriteInfos.at(token);
+        for (auto& [_, writeInfo] : WriteInfos) {
             writeInfo.Serializer = CreateColumnShardPayloadSerializer(
                 *SchemeEntry,
                 writeInfo.Metadata.InputColumnsMetadata);
@@ -1092,8 +1091,7 @@ public:
         SchemeEntry = schemeEntry;
         PartitionsEntry = std::move(partitionsEntry);
         BeforePartitioningChanged();
-        for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
-            auto& writeInfo = WriteInfos.at(token);
+        for (auto& [_, writeInfo] : WriteInfos) {
             writeInfo.Serializer = CreateDataShardPayloadSerializer(
                 *SchemeEntry,
                 *PartitionsEntry,
@@ -1106,8 +1104,7 @@ public:
         if (!Settings.Inconsistent) {
             return;
         }
-        for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
-            auto& writeInfo = WriteInfos.at(token);
+        for (auto& [token, writeInfo] : WriteInfos) {
             if (writeInfo.Serializer) {
                 if (!writeInfo.Closed) {
                     writeInfo.Serializer->Close();
@@ -1126,8 +1123,7 @@ public:
             ShardsInfo.Close();
             ReshardData();
             ShardsInfo.Clear();
-            for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
-                const auto& writeInfo = WriteInfos.at(token);
+            for (const auto& [token, writeInfo] : WriteInfos) {
                 if (writeInfo.Closed) {
                     Close(token);
                 } else {
@@ -1198,8 +1194,7 @@ public:
 
     void FlushBuffers() override {
         TVector<TWriteToken> writeTokensFoFlush;
-        for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
-            const auto& writeInfo = WriteInfos.at(token);
+        for (const auto& [token, writeInfo] : WriteInfos) {
             YQL_ENSURE(writeInfo.Closed);
             if (writeInfo.Metadata.Priority != 0) {
                 if (!writeInfo.Serializer->IsFinished()) {
@@ -1325,8 +1320,7 @@ public:
 
     i64 GetMemory() const override {
         i64 total = ShardsInfo.GetMemory();
-        for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
-            const auto& writeInfo = WriteInfos.at(token);
+        for (const auto& [_, writeInfo] : WriteInfos) {
             if (writeInfo.Serializer) {
                 total += writeInfo.Serializer->GetMemory();
             } else {
@@ -1337,8 +1331,8 @@ public:
     }
 
     bool IsAllWritesClosed() const override {
-        for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
-            if (!WriteInfos.at(token).Closed) {
+        for (const auto& [_, writeInfo] : WriteInfos) {
+            if (!writeInfo.Closed) {
                 return false;
             }
         }
@@ -1346,8 +1340,7 @@ public:
     }
 
     bool IsAllWritesFinished() const override {
-        for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
-            const auto& writeInfo = WriteInfos.at(token);
+        for (const auto& [_, writeInfo] : WriteInfos) {
             if (!writeInfo.Closed || !writeInfo.Serializer->IsFinished()) {
                 return false;
             }
@@ -1356,8 +1349,7 @@ public:
     }
 
     bool IsReady() const override {
-        for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
-            const auto& writeInfo = WriteInfos.at(token);
+        for (const auto& [_, writeInfo] : WriteInfos) {
             if (!writeInfo.Serializer && !writeInfo.Closed) {
                 return false;
             }
@@ -1366,8 +1358,7 @@ public:
     }
 
     bool IsEmpty() const override {
-        for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
-            const auto& writeInfo = WriteInfos.at(token);
+        for (const auto& [_, writeInfo] : WriteInfos) {
             if (writeInfo.Serializer && !writeInfo.Serializer->IsEmpty()) {
                 return false;
             }
@@ -1392,8 +1383,8 @@ public:
         Y_ABORT_UNLESS(Alloc);
         TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
         ShardsInfo.Clear();
-        for (TWriteToken token = 0; token < CurrentWriteToken; ++token) {
-            WriteInfos.at(token).Serializer = nullptr;
+        for (auto& [_, writeInfo] : WriteInfos) {
+            writeInfo.Serializer = nullptr;
         }
     }
 
@@ -1466,7 +1457,7 @@ private:
         bool Closed = false;
     };
 
-    THashMap<TWriteToken, TWriteInfo> WriteInfos;
+    std::map<TWriteToken, TWriteInfo> WriteInfos;
     TWriteToken CurrentWriteToken = 0;
 
     TShardsInfo ShardsInfo;

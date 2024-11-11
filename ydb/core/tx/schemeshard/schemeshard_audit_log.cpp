@@ -383,25 +383,4 @@ void AuditLogImportEnd(const TImportInfo& info, TSchemeShard* SS) {
     _AuditLogXxportEnd(info, "IMPORT END", ImportKindSpecificParts(info.Settings), SS);
 }
 
-void AuditLogLogin(const NKikimrScheme::TEvLogin& request, const NKikimrScheme::TEvLoginResult& response, TSchemeShard* SS) {
-    static const TString LoginOperationName = "LOGIN";
-
-    TPath databasePath = TPath::Root(SS);
-    auto peerName = NKikimr::NAddressClassifier::ExtractAddress(request.GetPeerName());
-
-    // NOTE: audit field set here must be in sync with ydb/core/security/login_page.cpp, AuditLogWebUILogout()
-    AUDIT_LOG(
-        AUDIT_PART("component", SchemeshardComponentName)
-        AUDIT_PART("remote_address", (!peerName.empty() ? peerName : EmptyValue))
-        AUDIT_PART("database", (!databasePath.PathString().empty() ? databasePath.PathString() : EmptyValue))
-        AUDIT_PART("operation", LoginOperationName)
-        AUDIT_PART("status", TString(response.GetError().empty() ? "SUCCESS" : "ERROR"))
-        AUDIT_PART("reason", response.GetError(), response.HasError())
-
-        // Login
-        AUDIT_PART("login_user", (request.HasUser() ? request.GetUser() : EmptyValue))
-        AUDIT_PART("login_auth_domain", (!request.GetExternalAuth().empty() ? request.GetExternalAuth() : EmptyValue))
-    );
-}
-
 }

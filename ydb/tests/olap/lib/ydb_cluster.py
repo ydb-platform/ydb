@@ -55,9 +55,9 @@ class YdbCluster:
     @classmethod
     def get_cluster_nodes(cls, path=None):
         try:
-            url = f'{cls._get_service_url()}/viewer/json/nodes?'
+            url = f'{cls._get_service_url()}/viewer/json/nodes?database={cls.ydb_database}'
             if path is not None:
-                url += f'path={path}&tablets=true'
+                url += f'&path={path}&tablets=true'
             headers = {}
             # token = os.getenv('OLAP_YDB_OAUTH', None)
             # if token is not None:
@@ -250,7 +250,9 @@ class YdbCluster:
                         min = tablet_count
                     if max is None or tablet_count > max:
                         max = tablet_count
-                if min is not None and max - min > 1:
+                if min is None or max is None:
+                    errors.append(f'Table {p} has no tablets')
+                elif max - min > 1:
                     errors.append(f'Table {p} is not balanced: {min}-{max} shards.')
                 LOGGER.info(f'Table {p} is balanced: {min}-{max} shards.')
 

@@ -2,7 +2,7 @@
 
 #include <util/generic/string.h>
 
-namespace Ydb::Scheme {
+namespace Ydb::View {
     class ViewDescription;
 }
 
@@ -10,7 +10,7 @@ namespace NYdb::NScheme {
 
 class TViewDescription {
 public:
-    explicit TViewDescription(const Ydb::Scheme::ViewDescription& desc);
+    explicit TViewDescription(const Ydb::View::ViewDescription& desc);
 
     const TString& GetQueryText() const;
 

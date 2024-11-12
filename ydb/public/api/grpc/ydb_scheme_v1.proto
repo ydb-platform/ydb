@@ -26,6 +26,9 @@ service SchemeService {
     // Returns information about object with given path.
     rpc DescribePath(Scheme.DescribePathRequest) returns (Scheme.DescribePathResponse);
 
+    // Returns information about object with given path.
+    rpc DescribeSchemeObject(Scheme.DescribeSchemeObjectRequest) returns (Scheme.DescribeSchemeObjectResponse);
+
     // Modify permissions.
     rpc ModifyPermissions(Scheme.ModifyPermissionsRequest) returns (Scheme.ModifyPermissionsResponse);
 }

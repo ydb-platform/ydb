@@ -202,13 +202,40 @@ public:
                     any->UnpackTo(&result);
                 }
 
-                promise.SetValue(TDescribePathResult(TStatus(std::move(status)), std::move(result)));
+                promise.SetValue(TDescribePathResult(TStatus(std::move(status)), result.self()));
             };
 
         Connections_->RunDeferred<Ydb::Scheme::V1::SchemeService, DescribePathRequest, DescribePathResponse>(
             std::move(request),
             extractor,
             &Ydb::Scheme::V1::SchemeService::Stub::AsyncDescribePath,
+            DbDriverState_,
+            INITIAL_DEFERRED_CALL_DELAY,
+            TRpcRequestSettings::Make(settings));
+
+        return promise.GetFuture();
+    }
+
+    TAsyncDescribeSchemeObjectResult DescribeSchemeObject(const TString& path, const TDescribeSchemeObjectSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Scheme::DescribeSchemeObjectRequest>(settings);
+        request.set_path(path);
+
+        auto promise = NThreading::NewPromise<TDescribeSchemeObjectResult>();
+
+        auto extractor = [promise]
+            (google::protobuf::Any* any, TPlainStatus status) mutable {
+                DescribeSchemeObjectResult result;
+                if (any) {
+                    any->UnpackTo(&result);
+                }
+
+                promise.SetValue(TDescribeSchemeObjectResult(TStatus(std::move(status)), std::move(result)));
+            };
+
+        Connections_->RunDeferred<Ydb::Scheme::V1::SchemeService, DescribeSchemeObjectRequest, DescribeSchemeObjectResponse>(
+            std::move(request),
+            extractor,
+            &Ydb::Scheme::V1::SchemeService::Stub::AsyncDescribeSchemeObject,
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
@@ -293,30 +320,50 @@ TDescribePathResult::TDescribePathResult(TStatus&& status, const TSchemeEntry& e
     , Entry_(entry)
 {}
 
-TDescribePathResult::TDescribePathResult(TStatus&& status, Ydb::Scheme::DescribePathResult&& proto)
-    : TStatus(std::move(status))
-    , Entry_(proto.self())
-    , Proto_(std::make_shared<Ydb::Scheme::DescribePathResult>(std::move(proto)))
-{
-}
-
-TDescribePathResult::~TDescribePathResult() {}
-
 const TSchemeEntry& TDescribePathResult::GetEntry() const {
     CheckStatusOk("TDescribePathResult::GetEntry");
     return Entry_;
 }
 
-bool TDescribePathResult::HasViewDescription() const {
+void TDescribePathResult::Out(IOutputStream& out) const {
+    if (IsSuccess()) {
+        return Entry_.Out(out);
+    } else {
+        return TStatus::Out(out);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TDescribeSchemeObjectResult::TDescribeSchemeObjectResult(TStatus&& status, const TSchemeEntry& entry)
+    : TStatus(std::move(status))
+    , Entry_(entry)
+{}
+
+TDescribeSchemeObjectResult::TDescribeSchemeObjectResult(TStatus&& status, Ydb::Scheme::DescribeSchemeObjectResult&& proto)
+    : TStatus(std::move(status))
+    , Entry_(proto.self())
+    , Proto_(std::make_unique<Ydb::Scheme::DescribeSchemeObjectResult>(std::move(proto)))
+{
+}
+
+TDescribeSchemeObjectResult::~TDescribeSchemeObjectResult() {}
+
+const TSchemeEntry& TDescribeSchemeObjectResult::GetEntry() const {
+    CheckStatusOk("TDescribeSchemeObjectResult::GetEntry");
+    return Entry_;
+}
+
+bool TDescribeSchemeObjectResult::HasViewDescription() const {
     return Proto_->has_view_description();
 }
 
-TViewDescription TDescribePathResult::GetViewDescription() const {
-    CheckStatusOk("TDescribePathResult::GetViewDescription");
+TViewDescription TDescribeSchemeObjectResult::GetViewDescription() const {
+    CheckStatusOk("TDescribeSchemeObjectResult::GetViewDescription");
     return TViewDescription(Proto_->view_description());
 }
 
-void TDescribePathResult::Out(IOutputStream& out) const {
+void TDescribeSchemeObjectResult::Out(IOutputStream& out) const {
     if (IsSuccess()) {
         return Entry_.Out(out);
     } else {
@@ -362,6 +409,13 @@ TAsyncDescribePathResult TSchemeClient::DescribePath(const TString& path, const 
     return Impl_->DescribePath(path, settings);
 }
 
+TAsyncDescribeSchemeObjectResult TSchemeClient::DescribeSchemeObject(
+    const TString& path,
+    const TDescribeSchemeObjectSettings& settings
+) {
+    return Impl_->DescribeSchemeObject(path, settings);
+}
+
 TAsyncListDirectoryResult TSchemeClient::ListDirectory(const TString& path,
     const TListDirectorySettings& settings)
 {
@@ -376,7 +430,7 @@ TAsyncStatus TSchemeClient::ModifyPermissions(const TString& path,
 
 } // namespace NScheme
 
-const Ydb::Scheme::DescribePathResult& TProtoAccessor::GetProto(const NScheme::TDescribePathResult& description) {
+const Ydb::Scheme::DescribeSchemeObjectResult& TProtoAccessor::GetProto(const NScheme::TDescribeSchemeObjectResult& description) {
     return *description.Proto_;
 }
 

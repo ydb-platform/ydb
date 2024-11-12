@@ -53,7 +53,7 @@ public:
     static const Ydb::Coordination::DescribeNodeResult& GetProto(const NYdb::NCoordination::TNodeDescription &describeNodeResult);
     static const Ydb::Replication::DescribeReplicationResult& GetProto(const NYdb::NReplication::TDescribeReplicationResult& desc);
     static const Ydb::View::DescribeViewResult& GetProto(const NYdb::NView::TDescribeViewResult& desc);
-    static const Ydb::Scheme::DescribePathResult& GetProto(const NYdb::NScheme::TDescribePathResult& description);
+    static const Ydb::Scheme::DescribeSchemeObjectResult& GetProto(const NYdb::NScheme::TDescribeSchemeObjectResult& description);
 
     static NTable::TQueryStats FromProto(const Ydb::TableStats::QueryStats& queryStats);
     static NTable::TTableDescription FromProto(const Ydb::Table::CreateTableRequest& request);

@@ -5,7 +5,7 @@
 namespace Ydb {
     class VirtualTimestamp;
     namespace Scheme {
-        class DescribePathResult;
+        class DescribeSchemeObjectResult;
         class Entry;
         class ModifyPermissionsRequest;
         class Permissions;
@@ -96,9 +96,11 @@ struct TSchemeEntry {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TDescribePathResult;
+class TDescribeSchemeObjectResult;
 class TListDirectoryResult;
 
 using TAsyncDescribePathResult = NThreading::TFuture<TDescribePathResult>;
+using TAsyncDescribeSchemeObjectResult = NThreading::TFuture<TDescribeSchemeObjectResult>;
 using TAsyncListDirectoryResult = NThreading::TFuture<TListDirectoryResult>;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -108,6 +110,8 @@ struct TMakeDirectorySettings : public TOperationRequestSettings<TMakeDirectoryS
 struct TRemoveDirectorySettings : public TOperationRequestSettings<TRemoveDirectorySettings> {};
 
 struct TDescribePathSettings : public TOperationRequestSettings<TDescribePathSettings> {};
+
+struct TDescribeSchemeObjectSettings : public TOperationRequestSettings<TDescribePathSettings> {};
 
 struct TListDirectorySettings : public TOperationRequestSettings<TListDirectorySettings> {};
 
@@ -165,6 +169,9 @@ public:
     TAsyncDescribePathResult DescribePath(const TString& path,
         const TDescribePathSettings& settings = TDescribePathSettings());
 
+    TAsyncDescribeSchemeObjectResult DescribeSchemeObject(const TString& path,
+        const TDescribeSchemeObjectSettings& settings = TDescribeSchemeObjectSettings());
+
     TAsyncListDirectoryResult ListDirectory(const TString& path,
         const TListDirectorySettings& settings = TListDirectorySettings());
 
@@ -177,13 +184,25 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TViewDescription;
-
 class TDescribePathResult : public TStatus {
 public:
     TDescribePathResult(TStatus&& status, const TSchemeEntry& entry);
-    TDescribePathResult(TStatus&& status, Ydb::Scheme::DescribePathResult&& proto);
-    ~TDescribePathResult();
+
+    const TSchemeEntry& GetEntry() const;
+
+    void Out(IOutputStream& out) const;
+
+private:
+    TSchemeEntry Entry_;
+};
+
+class TViewDescription;
+
+class TDescribeSchemeObjectResult : public TStatus {
+public:
+    TDescribeSchemeObjectResult(TStatus&& status, const TSchemeEntry& entry);
+    TDescribeSchemeObjectResult(TStatus&& status, Ydb::Scheme::DescribeSchemeObjectResult&& proto);
+    ~TDescribeSchemeObjectResult();
 
     const TSchemeEntry& GetEntry() const;
 
@@ -197,7 +216,7 @@ private:
 
     TSchemeEntry Entry_;
     // holds type-specific info
-    std::shared_ptr<Ydb::Scheme::DescribePathResult> Proto_;
+    std::unique_ptr<Ydb::Scheme::DescribeSchemeObjectResult> Proto_;
 };
 
 class TListDirectoryResult : public TDescribePathResult {

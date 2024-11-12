@@ -129,7 +129,7 @@ private:
                     // fill type-specific description
                     switch (pathDescription.GetSelf().GetPathType()) {
                         case NKikimrSchemeOp::EPathTypeView: {
-                            Ydb::Scheme::ViewDescription& viewDescription = *result.mutable_view_description();
+                            Ydb::View::ViewDescription& viewDescription = *result.mutable_view_description();
                             *viewDescription.mutable_query_text() = pathDescription.GetViewDescription().GetQueryText();
                             break;
                         }

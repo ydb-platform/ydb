@@ -28,6 +28,7 @@ struct TEvRowDispatcher {
         EvCoordinatorRequest,
         EvCoordinatorResult,
         EvSessionStatistic,
+        EvHeartbeat,
         EvEnd,
     };
 
@@ -127,6 +128,13 @@ struct TEvRowDispatcher {
         TEvSessionStatistic(const TopicSessionStatistic& stat)
         : Stat(stat) {}
         TopicSessionStatistic Stat;
+    };
+
+    struct TEvHeartbeat : public NActors::TEventPB<TEvHeartbeat, NFq::NRowDispatcherProto::TEvHeartbeat, EEv::EvHeartbeat> {
+        TEvHeartbeat() = default;
+        TEvHeartbeat(ui32 partitionId) {
+            Record.SetPartitionId(partitionId);
+        }
     };
 };
 

@@ -357,6 +357,7 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     Actors.erase(ev->Sender);
 
     ui64 tableId = ev->Get()->TableId;
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "BuildStats result received at datashard " << TabletID() << ", for tableId " << tableId);
 
     i64 dataSize = 0;
     if (TableInfos.contains(tableId)) {
@@ -376,6 +377,7 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
         dataSize += tableInfo.Stats.DataStats.DataSize.Size;
 
         tableInfo.Stats.SearchHeight = ev->Get()->SearchHeight;
+        tableInfo.Stats.HasSchemaChanges = ev->Get()->HasSchemaChanges;
 
         tableInfo.StatsUpdateInProgress = false;
 
@@ -386,29 +388,7 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
                     << ", built for tableId " << tableId << ", but table is gone (moved ot dropped)");
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "BuildStats result received at datashard " << TabletID() 
-        << ", for tableId " << tableId);
-
-    const TUserTable& tableInfo = *TableInfos[tableId];
-
-    if (!tableInfo.StatsUpdateInProgress) { // how can this happen?
-        LOG_ERROR(ctx, NKikimrServices::TX_DATASHARD, "Unexpected async stats update at datashard %" PRIu64, TabletID());
-    }
-
-    tableInfo.Stats.DataStats = std::move(ev->Get()->Stats);
-    tableInfo.Stats.PartOwners = std::move(ev->Get()->PartOwners);
-    tableInfo.Stats.PartCount = ev->Get()->PartCount;
-    tableInfo.Stats.StatsUpdateTime = ev->Get()->StatsUpdateTime;
-    tableInfo.Stats.MemRowCount = ev->Get()->MemRowCount;
-    tableInfo.Stats.MemDataSize = ev->Get()->MemDataSize;
-    tableInfo.Stats.SearchHeight = ev->Get()->SearchHeight;
-    tableInfo.Stats.HasSchemaChanges = ev->Get()->HasSchemaChanges;
-
-    tableInfo.StatsUpdateInProgress = false;
-
-    SendPeriodicTableStats(ctx);
-
-    if (static_cast<i64>(tableInfo.Stats.DataStats.DataSize.Size) > HighDataSizeReportThresholdBytes) {
+    if (dataSize > HighDataSizeReportThresholdBytes) {
         TInstant now = AppData(ctx)->TimeProvider->Now();
 
         if (LastDataSizeWarnTime + TDuration::Seconds(HighDataSizeReportIntervalSeconds) > now)
@@ -419,11 +399,11 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
         TStringBuilder names;
         ListTableNames(GetUserTables(), names);
 
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Data size " << tableInfo.Stats.DataStats.DataSize.Size
-            << " is higher than threshold of " << (i64)HighDataSizeReportThresholdBytes
-            << " at datashard: " << TabletID()
-            << " table: " << names
-            << " consider reconfiguring table partitioning settings");
+        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Data size " << dataSize
+                    << " is higher than threshold of " << (i64)HighDataSizeReportThresholdBytes
+                    << " at datashard: " << TabletID()
+                    << " table: " << names
+                    << " consider reconfiguring table partitioning settings");
     }
 }
 

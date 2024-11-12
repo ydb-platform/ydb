@@ -7,7 +7,7 @@ from ydb.tests.olap.lib.utils import get_external_param
 import ydb
 from copy import deepcopy
 from time import sleep, time
-from typing import List
+from typing import List, Optional
 
 LOGGER = logging.getLogger()
 
@@ -55,7 +55,7 @@ class YdbCluster:
     @classmethod
     def get_cluster_nodes(cls, path=None):
         try:
-            url = f'{cls._get_service_url()}/viewer/json/nodes?database={cls.ydb_database}'
+            url = f'{cls._get_service_url()}/viewer/json/nodes?database=/{cls.ydb_database}'
             if path is not None:
                 url += f'&path={path}&tablets=true'
             headers = {}
@@ -129,17 +129,16 @@ class YdbCluster:
         return cls._ydb_driver
 
     @classmethod
-    def _list_directory_impl(cls, root_path: str, rel_path: str) -> List[ydb.SchemeEntry]:
-        full_path = f'{root_path}/{rel_path}'
-        LOGGER.info(f'list {full_path}')
+    def _list_directory_impl(cls, path) -> List[ydb.SchemeEntry]:
+        LOGGER.info(f'list {path}')
         result = []
-        for child in cls.get_ydb_driver().scheme_client.list_directory(full_path).children:
+        for child in cls.get_ydb_driver().scheme_client.list_directory(path).children:
             if child.name == '.sys':
                 continue
-            child.name = f'{rel_path}/{child.name}'
-            if child.is_directory() or child.is_column_store():
-                result += cls._list_directory_impl(root_path, child.name)
+            child.name = f'{path}/{child.name}'
             result.append(child)
+            if child.is_directory() or child.is_column_store():
+                result += cls._list_directory_impl(child.name)
         return result
 
     @classmethod
@@ -155,7 +154,7 @@ class YdbCluster:
         self_descr = cls._describe_path_impl(full_path)
         if self_descr is not None:
             if self_descr.is_directory():
-                for descr in cls._list_directory_impl(full_path, '/'):
+                for descr in cls._list_directory_impl(full_path):
                     if descr.is_any_table():
                         result.append(descr.name)
             elif self_descr.is_any_table():
@@ -246,10 +245,11 @@ class YdbCluster:
                             errors.append(f'Node {tn.get("SystemState", {}).get("Host")}: {tablet.get("Count")} tablets of type {tablet.get("Type")} in {tablet.get("State")} state')
                         if tablet.get("Type") in {"ColumnShard", "DataShard"}:
                             tablet_count += tablet.get("Count")
-                    if min is None or tablet_count < min:
-                        min = tablet_count
-                    if max is None or tablet_count > max:
-                        max = tablet_count
+                    if tablet_count > 0:
+                        if min is None or tablet_count < min:
+                            min = tablet_count
+                        if max is None or tablet_count > max:
+                            max = tablet_count
                 if min is None or max is None:
                     errors.append(f'Table {p} has no tablets')
                 elif max - min > 1:

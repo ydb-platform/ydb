@@ -88,8 +88,6 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
             result->Record.SetError("Login authentication is disabled");
         }
 
-        AuditLogLogin(Request->Get()->Record, result->Record, Self);
-
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxLogin DoComplete"
                     << ", result: " << result->Record.ShortDebugString()

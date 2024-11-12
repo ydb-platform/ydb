@@ -209,6 +209,13 @@ public:
                 srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
                 srcDesc.SetDatabaseId(clusterDesc->DatabaseId);
 
+                srcDesc.SetEnabledLLVM(false);
+                if (const auto& types = State_->Types) {
+                    if (const auto& optLLVM = types->OptLLVM) {
+                        srcDesc.SetEnabledLLVM(!optLLVM->Empty() && *optLLVM != "OFF");
+                    }
+                }
+
                 bool sharedReading = false;
                 TString format;
                 size_t const settingsCount = topicSource.Settings().Size();

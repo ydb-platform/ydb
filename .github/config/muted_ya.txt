@@ -13,7 +13,6 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.Select
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertEvWrite
 ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.UpsertViaLegacyScripting-Streaming
-ydb/core/tx/columnshard/engines/ut TColumnEngineTestLogs.IndexTtl
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
 ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1_clean_with_restarts

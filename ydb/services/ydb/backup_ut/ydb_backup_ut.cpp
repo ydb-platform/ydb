@@ -481,7 +481,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         return [&driver, &pathToBackup, schemaOnly](const char* table) {
             Y_UNUSED(table);
             // TO DO: implement NDump::TClient::Dump and call it instead of BackupFolder
-            NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, schemaOnly, false);
+            NYdb::NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, schemaOnly, false);
         };
     }
 

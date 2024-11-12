@@ -1890,7 +1890,6 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
     newTableInfo->StatsNeedUpdate = true;
 
     TDataShardLocksDb locksDb(*this, txc);
-
     RemoveUserTable(prevId, &locksDb);
     AddUserTable(newId, newTableInfo);
 
@@ -1967,8 +1966,8 @@ TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxD
     }
 
     newTableInfo->SetSchema(schema);
-
-    AddUserTable(pathId, newTableInfo);
+    TDataShardLocksDb locksDb(*this, txc);
+    AddUserTable(pathId, newTableInfo, &locksDb);
 
     if (newTableInfo->NeedSchemaSnapshots()) {
         AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);

@@ -13,7 +13,7 @@ namespace NYdb {
 namespace NView {
 
 TViewDescription::TViewDescription(const Ydb::View::DescribeViewResult& desc)
-    : QueryText_(desc.query_text())
+    : QueryText_(desc.description().query_text())
 {
 }
 

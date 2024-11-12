@@ -99,7 +99,8 @@ private:
     int DescribeReplication(const TDriver& driver);
     int PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const;
 
-    int PrintViewDescriptionPretty(const NYdb::NScheme::TDescribePathResult& pathDescription) const;
+    int DescribeView(const TDriver& driver);
+    int PrintViewResponsePretty(const NYdb::NScheme::TDescribeSchemeObjectResult& result) const;
 
     int TryTopicConsumerDescribeOrFail(NYdb::TDriver& driver, const NScheme::TDescribePathResult& result);
     std::pair<TString, TString> ParseTopicConsumer() const;

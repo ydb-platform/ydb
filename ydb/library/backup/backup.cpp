@@ -3,6 +3,7 @@
 #include "util.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/ydb_scheme.pb.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
@@ -413,7 +414,7 @@ Ydb::Table::CreateTableRequest ProtoFromTableDescription(const NTable::TTableDes
 
 NScheme::TSchemeEntry DescribePath(TDriver driver, const TString& fullPath) {
     NScheme::TSchemeClient client(driver);
-    
+
     auto status = NDump::DescribePath(client, fullPath);
     VerifyStatus(status);
 

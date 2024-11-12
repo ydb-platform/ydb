@@ -44,11 +44,11 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .StoreResult(&Scenario.ProducerThreadCount);
     config.Opts->AddLongOption("producers-per-thread",
                                "Number of producers in every writer thread. "
-                               "Every producers writes to only one dedicated to it partition. "
+                               "Every producer writes to only one dedicated to it partition. "
                                "If you want to write to all partitions set this param to the number of partitions in the topic. "
-                               "If you use transactions, they will span across all producers that will write during the transaction "
-                               "(e.g. if you have 100 messages per second, transaction commit interval 100ms and 100 producers per thread, "
-                               "in 100 ms commit interval only 10 messages will fit. All those 10 messages will be written by 10 different producers to 10 different partitions in the same transaction).")
+                               "If you use transactions, they will span across all partitions that fit into the transaction "
+                               "(e.g. if you have 100 messages per second, 100ms transaction commit interval and 100 producers per thread "
+                               "then only 10 messages will fit in every transaction).")
         .DefaultValue(1)
         .StoreResult(&Scenario.ProducersPerThread);
     config.Opts->AddLongOption("use-cpu-timestamp", "If specified, worload will use cpu current timestamp as message create ts to measure latency."
@@ -88,7 +88,7 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
     config.Opts->AddLongOption("commit-period", "DEPRECATED: use tx-commit-intervall-ms instead. If both options are specified, tx-commit-intervall-ms will be used. Waiting time between commit in seconds.")
         .DefaultValue(1)
         .StoreResult(&Scenario.CommitPeriodSeconds);
-    config.Opts->AddLongOption("tx-commit-interval-ms", "Intervall of transaction commit in milliseconds.")
+    config.Opts->AddLongOption("tx-commit-interval-ms", "Interval of transaction commit in milliseconds.")
         .DefaultValue(0)
         .StoreResult(&Scenario.TxCommitIntervalMs);
     config.Opts->AddLongOption("commit-messages", "Number of messages per transaction")

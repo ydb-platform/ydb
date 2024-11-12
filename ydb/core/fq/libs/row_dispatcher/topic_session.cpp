@@ -173,6 +173,7 @@ private:
     THashMap<TString, ui64> FieldsIndexes;
     NYql::IPqGateway::TPtr PqGateway;
     TMaybe<TString> ConsumerName;
+    ui64 RestartSessionByOffsets = 0;
 
 public:
     explicit TTopicSession(
@@ -753,6 +754,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             if (clientInfo.Settings.HasOffset() && (clientInfo.Settings.GetOffset() <= LastMessageOffset)) {
                 LOG_ROW_DISPATCHER_INFO("New client has less offset (" << clientInfo.Settings.GetOffset() << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
                 Metrics.RestartSessionByOffsets->Inc();
+                ++RestartSessionByOffsets;
                 StopReadSession();
             }
         }
@@ -920,6 +922,7 @@ void TTopicSession::HandleException(const std::exception& e) {
 void TTopicSession::SendStatistic() {
     TopicSessionStatistic stat;
     stat.Common.UnreadBytes = UnreadBytes;
+    stat.Common.RestartSessionByOffsets = RestartSessionByOffsets;
     stat.SessionKey = TopicSessionParams{Endpoint, Database, TopicPath, PartitionId};
     stat.Clients.reserve(Clients.size());
     for (auto& [readActorId, info] : Clients) {

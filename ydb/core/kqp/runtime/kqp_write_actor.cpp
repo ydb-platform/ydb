@@ -170,12 +170,14 @@ public:
         const bool inconsistentTx,
         const NMiniKQL::TTypeEnvironment& typeEnv,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
         TIntrusivePtr<TKqpCounters> counters,
         NWilson::TTraceId traceId)
         : TypeEnv(typeEnv)
         , Alloc(alloc)
+        , MvccSnapshot(mvccSnapshot)
         , TableId(tableId)
         , TablePath(tablePath)
         , LockTxId(lockTxId)
@@ -303,10 +305,11 @@ public:
         // TODO: Maybe there are better ways to initialize new shards...
         for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
             TxManager->AddShard(shardInfo.ShardId, IsOlap(), TablePath);
-            TxManager->AddAction(shardInfo.ShardId, IKqpTransactionManager::EAction::WRITE);
+            IKqpTransactionManager::TActionFlags flags = IKqpTransactionManager::EAction::WRITE;
             if (shardInfo.HasRead) {
-                TxManager->AddAction(shardInfo.ShardId, IKqpTransactionManager::EAction::READ);
+                flags |= IKqpTransactionManager::EAction::READ;
             }
+            TxManager->AddAction(shardInfo.ShardId, flags);
         }
     }
 
@@ -540,7 +543,6 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
-            
             // TODO: Add new status for splits in datashard. This is tmp solution.
             if (getIssues().ToOneLineString().Contains("in a pre/offline state assuming this is due to a finished split (wrong shard state)")) {
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
@@ -561,13 +563,12 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
-            
-        RuntimeError(
-            TStringBuilder() << "Disk space exhausted for table `"
-                << TablePath << "`. "
-                << getIssues().ToOneLineString(),
-            NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
-            getIssues());
+            RuntimeError(
+                TStringBuilder() << "Disk space exhausted for table `"
+                    << TablePath << "`. "
+                    << getIssues().ToOneLineString(),
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                getIssues());
             return;
         }        
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
@@ -670,7 +671,7 @@ public:
             preparedInfo.Coordinator = domainCoordinators.Select(*TxId);
         }
 
-        OnMessageAcknowledged(ev->Get()->Record.GetOrigin());
+        OnMessageReceived(ev->Get()->Record.GetOrigin());
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
         if (result) {
@@ -713,7 +714,7 @@ public:
             return;
         }
 
-        OnMessageAcknowledged(ev->Get()->Record.GetOrigin());
+        OnMessageReceived(ev->Get()->Record.GetOrigin());
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
         if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
@@ -723,7 +724,7 @@ public:
         }
     }
 
-    void OnMessageAcknowledged(const ui64 shardId) {
+    void OnMessageReceived(const ui64 shardId) {
         if (auto it = SendTime.find(shardId); it != std::end(SendTime)) {
             Counters->WriteActorWritesLatencyHistogram->Collect((TInstant::Now() - it->second).MilliSeconds());
             SendTime.erase(it);
@@ -813,6 +814,9 @@ public:
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
+            if (MvccSnapshot) {
+                *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
+            }
         }
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite);
@@ -847,7 +851,7 @@ public:
             << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode));
         Send(
             PipeCacheId,
-            new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
+            new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
             IEventHandle::FlagTrackDelivery,
             metadata->Cookie,
             TableWriteActorSpan.GetTraceId());
@@ -954,6 +958,8 @@ public:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
+    std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
+
     const TTableId TableId;
     const TString TablePath;
 
@@ -1019,6 +1025,9 @@ public:
             Settings.GetInconsistentTx(),
             TypeEnv,
             Alloc,
+            Settings.GetIsOlap()
+                ? std::optional<NKikimrDataEvents::TMvccSnapshot>{Settings.GetMvccSnapshot()}
+                : std::optional<NKikimrDataEvents::TMvccSnapshot>{},
             nullptr,
             TActorId{},
             Counters,
@@ -1206,6 +1215,7 @@ struct TTransactionSettings {
     ui64 LockTxId = 0;
     ui64 LockNodeId = 0;
     bool InconsistentTx = false;
+    NKikimrDataEvents::TMvccSnapshot MvccSnapshot;
 };
 
 struct TWriteSettings {
@@ -1270,6 +1280,7 @@ public:
         , Alloc(std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__))
         , TypeEnv(*Alloc)
         , Counters(settings.Counters)
+        , TxProxyMon(settings.TxProxyMon)
         , BufferWriteActor(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "TKqpBufferWriteActor", NWilson::EFlags::AUTO_END)
         , BufferWriteActorState(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
             "BufferWriteActorState::Writing", NWilson::EFlags::AUTO_END)
@@ -1333,6 +1344,7 @@ public:
                     InconsistentTx,
                     TypeEnv,
                     Alloc,
+                    std::nullopt,
                     TxManager,
                     SessionActorId,
                     Counters,
@@ -1552,6 +1564,7 @@ public:
                 FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
             }
 
+            SendTime[shardId] = TInstant::Now();
             CA_LOG_D("Send EvWrite (external) to ShardID=" << shardId << ", isPrepare=" << !isRollback << ", isImmediateCommit=" << isRollback << ", TxId=" << evWrite->Record.GetTxId()
             << ", LockTxId=" << evWrite->Record.GetLockTxId() << ", LockNodeId=" << evWrite->Record.GetLockNodeId()
             << ", Locks= " << [&]() {
@@ -1565,10 +1578,11 @@ public:
             << ", OperationsCount=" << 0 << ", IsFinal=" << 1
             << ", Attempts=" << 0);
 
+            // TODO: Track latecy
             Send(
                 NKikimr::MakePipePerNodeCacheID(false),
-                new TEvPipeCache::TEvForward(evWrite.release(), shardId, true),
-                0,
+                new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
+                IEventHandle::FlagTrackDelivery,
                 0);
         }
     }
@@ -1672,26 +1686,30 @@ public:
 
         switch (res->GetStatus()) {
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted:
-                // TODO: metrics
+                TxProxyMon->ClientTxStatusAccepted->Inc();
                 break;
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusProcessed:
+                TxProxyMon->ClientTxStatusProcessed->Inc();
                 break;
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusConfirmed:
+                TxProxyMon->ClientTxStatusConfirmed->Inc();
                 break;
 
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
+                TxProxyMon->ClientTxStatusPlanned->Inc();
                 break;
 
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclined:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting:
-                // TODO: CancelProposal???
+                TxProxyMon->ClientTxStatusCoordinatorDeclined->Inc();
                 ReplyErrorAndDie(TStringBuilder() << "Failed to plan transaction, status: " << res->GetStatus(), NYql::NDqProto::StatusIds::UNAVAILABLE, {});
                 break;
 
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusUnknown:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAborted:
+                TxProxyMon->ClientTxStatusCoordinatorDeclined->Inc();
                 ReplyErrorAndDie(TStringBuilder() << "Unexpected TEvProposeTransactionStatus status: " << res->GetStatus(), NYql::NDqProto::StatusIds::INTERNAL_ERROR, {});
                 break;
         }
@@ -1797,7 +1815,6 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
-            
             ReplyErrorAndDie(
                 TStringBuilder() << "Internal error for table. "
                     << getIssues().ToOneLineString(),
@@ -1810,11 +1827,10 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
-            
             ReplyErrorAndDie(
                 TStringBuilder() << "Disk space exhausted for table. "
                     << getIssues().ToOneLineString(),
-                NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
                 getIssues());
                 return;
         }        
@@ -1824,7 +1840,6 @@ public:
                 << " Sink=" << this->SelfId() << "."
                 << " Ignored this error."
                 << getIssues().ToOneLineString());
-            // TODO: support waiting
             ReplyErrorAndDie(
                 TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is overloaded."
                     << getIssues().ToOneLineString(),
@@ -1886,11 +1901,23 @@ public:
         }
     }
 
+    void OnMessageReceived(const ui64 shardId) {
+        if (auto it = SendTime.find(shardId); it != std::end(SendTime)) {
+            Counters->WriteActorWritesLatencyHistogram->Collect((TInstant::Now() - it->second).MilliSeconds());
+            SendTime.erase(it);
+        }
+    }
+
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         if (State != EState::PREPARING) {
             CA_LOG_D("Ignored write prepared event.");
             return;
         }
+        OnMessageReceived(ev->Get()->Record.GetOrigin());
+        CA_LOG_D("Got prepared result TxId=" << ev->Get()->Record.GetTxId()
+            << ", TabletId=" << ev->Get()->Record.GetOrigin()
+            << ", Cookie=" << ev->Cookie);
+
         const auto& record = ev->Get()->Record;
         IKqpTransactionManager::TPrepareResult preparedInfo;
         preparedInfo.ShardId = record.GetOrigin();
@@ -1912,6 +1939,7 @@ public:
             CA_LOG_D("Ignored write completed event.");
             return;
         }
+        OnMessageReceived(ev->Get()->Record.GetOrigin());
         CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
             << ", Cookie=" << ev->Cookie
@@ -2033,6 +2061,9 @@ private:
     IShardedWriteControllerPtr ShardedWriteController = nullptr;
 
     TIntrusivePtr<TKqpCounters> Counters;
+    TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
+    THashMap<ui64, TInstant> SendTime;
+
     NWilson::TSpan BufferWriteActor;
     NWilson::TSpan BufferWriteActorState;
 };

@@ -90,8 +90,12 @@ namespace NYql::NDq {
             }
 
             if (Y_UNLIKELY(ProfileStats)) {
-                ProfileStats->MkqlMaxUsedMemory = std::max(ProfileStats->MkqlMaxUsedMemory, alloc->GetPeakAllocated());
-                CAMQ_LOG_T("Peak memory usage: " << ProfileStats->MkqlMaxUsedMemory);
+                auto& previousMaxUsedMemory = ProfileStats->MkqlMaxUsedMemory;
+                auto currentUsedMemory = alloc->GetPeakAllocated();
+                if (currentUsedMemory > previousMaxUsedMemory) {
+                    previousMaxUsedMemory = currentUsedMemory;
+                    CAMQ_LOG_T("Peak memory usage: " << currentUsedMemory);
+                }
             }
         }
 

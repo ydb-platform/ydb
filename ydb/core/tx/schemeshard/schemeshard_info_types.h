@@ -328,6 +328,12 @@ struct TTableAggregatedStats {
     THashMap<TShardIdx, TPartitionStats> PartitionStats;
     size_t PartitionStatsUpdated = 0;
 
+    THashSet<TShardIdx> UpdatedStats;
+
+    bool AreStatsFull() const {
+        return Aggregated.PartCount && UpdatedStats.size() == Aggregated.PartCount;
+    }
+
     void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
 };
 
@@ -3015,7 +3021,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Sample = 0,
             // Recompute,
             Reshuffle,
-            // Local,
+            Local,
         };
         ui32 Level = 0;
 

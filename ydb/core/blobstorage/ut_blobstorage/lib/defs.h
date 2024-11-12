@@ -28,6 +28,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/system/rusage.h>
 #include <util/random/fast.h>
+#include <util/stream/null.h>
 
 using namespace NActors;
 using namespace NKikimr;

@@ -1,4 +1,5 @@
 #include "logging.h"
+#include "service.h"
 #include "worker.h"
 
 #include <ydb/core/base/appdata.h>
@@ -211,13 +212,6 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
     }
 
-    void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
-
-        ev->Sender = SelfId();
-        Send(ev->Forward(Parent));
-    }
-
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
         if (ev->Sender == Reader) {
             LOG_I("Reader has gone"
@@ -254,6 +248,19 @@ class TWorker: public TActorBootstrapped<TWorker> {
         Send(ev->Forward(Parent));
 
         PassAway();
+    }
+
+    void Handle(TEvService::TEvTxIdResult::TPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+        Send(ev->Forward(Writer));
+    }
+
+    template <typename TEventPtr>
+    void Forward(TEventPtr& ev) {
+        LOG_D("Handle " << ev->Get()->ToString());
+
+        ev->Sender = SelfId();
+        Send(ev->Forward(Parent));
     }
 
     void ScheduleLagReport() {
@@ -310,8 +317,11 @@ public:
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvPoll, Handle);
             hFunc(TEvWorker::TEvData, Handle);
-            hFunc(TEvWorker::TEvDataEnd, Handle);
+            hFunc(TEvWorker::TEvDataEnd, Forward);
             hFunc(TEvWorker::TEvGone, Handle);
+            hFunc(TEvService::TEvGetTxId, Forward);
+            hFunc(TEvService::TEvTxIdResult, Handle);
+            hFunc(TEvService::TEvHeartbeat, Forward);
             sFunc(TEvents::TEvWakeup, ReportLag);
             sFunc(TEvents::TEvPoison, PassAway);
         }

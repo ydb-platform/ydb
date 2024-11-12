@@ -43,6 +43,18 @@ bool TOlapColumnsDescription::ApplyUpdate(
         if (newColumn.GetKeyOrder()) {
             Y_ABORT_UNLESS(orderedKeyColumnIds.emplace(*newColumn.GetKeyOrder(), newColumn.GetId()).second);
         }
+        if (column.GetColumnFamilyName().has_value()) {
+            TString familyName = column.GetColumnFamilyName().value();
+            const TOlapColumnFamily* columnFamily = columnFamilies.GetByName(familyName);
+
+            if (!columnFamily) {
+                errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                                                                      << "Cannot set column family `" << familyName << "` for column `"
+                                                                      << column.GetName() << "`. Family not found");
+                return false;
+            }
+            newColumn.SetColumnFamilyId(columnFamily->GetId());
+        }
         if (!newColumn.GetSerializer().has_value() && !columnFamilies.GetColumnFamilies().empty() &&
             !newColumn.ApplySerializerFromColumnFamily(columnFamilies, errors)) {
             return false;
@@ -176,12 +188,6 @@ bool TOlapColumnsDescription::Validate(const NKikimrSchemeOp::TColumnTableSchema
         if (colProto.HasColumnFamilyId() && colProto.GetColumnFamilyId() != col->GetColumnFamilyId()) {
             errors.AddError(TStringBuilder() << "Column '" << colName << "' has column family id " << colProto.GetColumnFamilyId()
                                              << " that does not match schema preset");
-            return false;
-        }
-
-        if (colProto.HasColumnFamilyName() && colProto.GetColumnFamilyName() != col->GetColumnFamilyName()) {
-            errors.AddError(TStringBuilder() << "Column '" << colName << "' has column family name `" << colProto.GetColumnFamilyName()
-                                             << "` that does not match schema preset");
             return false;
         }
 

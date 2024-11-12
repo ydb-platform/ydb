@@ -345,8 +345,7 @@ message TOlapColumnDiff {
     optional string StorageId = 6;
     optional string DefaultValue = 7;
     optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
-    optional uint32 ColumnFamilyId = 9;
-    optional string ColumnFamilyName = 10;
+    optional string ColumnFamilyName = 9;
 }
 
 message TOlapColumnDescription {

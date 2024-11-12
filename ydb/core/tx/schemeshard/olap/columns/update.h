@@ -21,14 +21,13 @@ private:
     YDB_READONLY_DEF(std::optional<TString>, StorageId);
     YDB_READONLY_DEF(std::optional<TString>, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TRequestedConstructorContainer, AccessorConstructor);
-    YDB_READONLY_DEF(std::optional<ui32>, ColumnFamilyId);
     YDB_READONLY_DEF(std::optional<TString>, ColumnFamilyName);
 
 public:
     bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& columnSchema, IErrorCollector& errors);
 };
 
-class TOlapColumnAdd {
+class TOlapColumnBase {
 private:
     YDB_READONLY_DEF(std::optional<ui32>, KeyOrder);
     YDB_READONLY_DEF(TString, Name);
@@ -40,20 +39,17 @@ private:
     YDB_READONLY_DEF(std::optional<NArrow::NDictionary::TEncodingSettings>, DictionaryEncoding);
     YDB_READONLY_DEF(NOlap::TColumnDefaultScalarValue, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TConstructorContainer, AccessorConstructor);
-
-    YDB_ACCESSOR_DEF(std::optional<ui32>, ColumnFamilyId);
-    YDB_READONLY_DEF(std::optional<TString>, ColumnFamilyName);
+    YDB_ACCESSOR(std::optional<ui32>, ColumnFamilyId, std::nullopt);
 
 public:
-    TOlapColumnAdd(const std::optional<ui32>& keyOrder)
-        : KeyOrder(keyOrder) {
-
+    TOlapColumnBase(const std::optional<ui32>& keyOrder)
+        : KeyOrder(keyOrder)
+    {
     }
     bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors);
     void ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema);
     void Serialize(NKikimrSchemeOp::TOlapColumnDescription& columnSchema) const;
     bool ApplyDiff(const TOlapColumnDiff& diffColumn, IErrorCollector& errors);
-    bool HasColumnFamily() const;
     bool ApplySerializerFromColumnFamily(const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors);
     bool ApplyDiff(const TOlapColumnDiff& diffColumn, const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors);
     bool IsKeyColumn() const {
@@ -62,6 +58,20 @@ public:
     static bool IsAllowedType(ui32 typeId);
     static bool IsAllowedPkType(ui32 typeId);
     static bool IsAllowedPgType(ui32 pgTypeId);
+};
+
+class TOlapColumnAdd: public TOlapColumnBase {
+private:
+    using TBase = TOlapColumnBase;
+    YDB_READONLY_DEF(std::optional<TString>, ColumnFamilyName);
+
+public:
+    TOlapColumnAdd(const std::optional<ui32>& keyOrder)
+        : TBase(keyOrder)
+    {
+    }
+    bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors);
+    void ParseFromLocalDB(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema);
 };
 
 class TOlapColumnsUpdate {

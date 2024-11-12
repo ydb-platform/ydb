@@ -3,15 +3,15 @@
 
 namespace NKikimr::NSchemeShard {
 
-class TOlapColumnSchema: public TOlapColumnAdd {
+class TOlapColumnSchema: public TOlapColumnBase {
 private:
-    using TBase = TOlapColumnAdd;
+    using TBase = TOlapColumnBase;
     YDB_READONLY(ui32, Id, Max<ui32>());
 public:
-    TOlapColumnSchema(const TOlapColumnAdd& base, const ui32 id)
+    TOlapColumnSchema(const TOlapColumnBase& base, const ui32 id)
         : TBase(base)
-        , Id(id) {
-
+        , Id(id)
+    {
     }
     TOlapColumnSchema(const std::optional<ui32>& keyOrder)
         : TBase(keyOrder) {

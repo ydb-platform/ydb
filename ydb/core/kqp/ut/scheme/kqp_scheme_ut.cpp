@@ -8791,10 +8791,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
             auto column = columns[i];
             UNIT_ASSERT(column.HasSerializer());
-            UNIT_ASSERT(column.HasColumnFamilyName());
             UNIT_ASSERT_EQUAL_C(
                 column.GetColumnFamilyId(), 0, TStringBuilder() << "family for column " << column.GetName() << " is not default");
-            UNIT_ASSERT_EQUAL(column.GetColumnFamilyName(), defaultFamily.GetFamilyName());
             TTestHelper::TCompression compression;
             UNIT_ASSERT(compression.DeserializeFromProto(schema.GetColumns(i).GetSerializer()));
             TString errorMessage;
@@ -8928,7 +8926,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT(column.HasSerializer());
             UNIT_ASSERT_EQUAL_C(
                 column.GetColumnFamilyId(), 0, TStringBuilder() << "family for column " << column.GetName() << " is not default");
-            UNIT_ASSERT_EQUAL(column.GetColumnFamilyName(), families[0].GetFamilyName());
             TTestHelper::TCompression compression;
             UNIT_ASSERT(compression.DeserializeFromProto(column.GetSerializer()));
             TString errorMessage;
@@ -9056,7 +9053,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT(columns[i].HasSerializer());
             UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), i,
                 TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[i].GetFamilyName() << "`");
-            UNIT_ASSERT_EQUAL(columns[i].GetColumnFamilyName(), families[i].GetFamilyName());
             TTestHelper::TCompression compression;
             UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
             TString errorMessage;
@@ -9114,7 +9110,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT(column.HasSerializer());
             UNIT_ASSERT_EQUAL_C(
                 column.GetColumnFamilyId(), 0, TStringBuilder() << "family for column " << column.GetName() << " is not default");
-            UNIT_ASSERT_EQUAL(column.GetColumnFamilyName(), families[0].GetFamilyName());
             TTestHelper::TCompression compression;
             UNIT_ASSERT(compression.DeserializeFromProto(column.GetSerializer()));
             TString errorMessage;
@@ -9211,7 +9206,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT(columns[i].HasSerializer());
             UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), i,
                 TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[i].GetFamilyName() << "`");
-            UNIT_ASSERT_EQUAL(columns[i].GetColumnFamilyName(), families[i].GetFamilyName());
             TTestHelper::TCompression compression;
             UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
             TString errorMessage;
@@ -9345,7 +9339,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                 UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), 0,
                     TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[0].GetFamilyName()
                                      << "`");
-                UNIT_ASSERT_EQUAL(columns[i].GetColumnFamilyName(), families[0].GetFamilyName());
                 TTestHelper::TCompression compression;
                 UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
                 TString errorMessage;
@@ -9422,7 +9415,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                 UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), indexFamily,
                     TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[indexFamily].GetFamilyName()
                                      << "`");
-                UNIT_ASSERT_EQUAL(columns[i].GetColumnFamilyName(), families[indexFamily].GetFamilyName());
                 TTestHelper::TCompression compression;
                 UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
                 TString errorMessage;
@@ -9462,7 +9454,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                 UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), indexFamily,
                     TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[indexFamily].GetFamilyName()
                                      << "`");
-                UNIT_ASSERT_EQUAL(columns[i].GetColumnFamilyName(), families[indexFamily].GetFamilyName());
                 TTestHelper::TCompression compression;
                 UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
                 TString errorMessage;
@@ -9525,7 +9516,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                 UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), indexFamily,
                     TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[indexFamily].GetFamilyName()
                                      << "`");
-                UNIT_ASSERT_EQUAL(columns[i].GetColumnFamilyName(), families[indexFamily].GetFamilyName());
                 TTestHelper::TCompression compression;
                 UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
                 TString errorMessage;
@@ -9565,7 +9555,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
                 UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), indexFamily,
                     TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[indexFamily].GetFamilyName()
                                      << "`");
-                UNIT_ASSERT_EQUAL(columns[i].GetColumnFamilyName(), families[indexFamily].GetFamilyName());
                 TTestHelper::TCompression compression;
                 UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
                 TString errorMessage;
@@ -9706,7 +9695,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT(columns[i].HasSerializer());
             UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), 1,
                 TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[1].GetFamilyName() << "`");
-            UNIT_ASSERT_EQUAL(columns[i].GetColumnFamilyName(), families[1].GetFamilyName());
             TTestHelper::TCompression compression;
             UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
             TString errorMessage;
@@ -9774,7 +9762,6 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT(columns[i].HasSerializer());
             UNIT_ASSERT_EQUAL_C(columns[i].GetColumnFamilyId(), 1,
                 TStringBuilder() << "family for column `" << columns[i].GetName() << "` is not `" << families[1].GetFamilyName() << "`");
-            UNIT_ASSERT_EQUAL(columns[i].GetColumnFamilyName(), families[1].GetFamilyName());
             TTestHelper::TCompression compression;
             UNIT_ASSERT(compression.DeserializeFromProto(columns[i].GetSerializer()));
             TString errorMessage;

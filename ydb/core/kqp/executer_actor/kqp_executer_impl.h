@@ -4,7 +4,6 @@
 #include "kqp_executer_stats.h"
 #include "kqp_planner.h"
 #include "kqp_partition_helper.h"
-#include "kqp_result_channel.h"
 #include "kqp_table_resolver.h"
 
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
@@ -1855,53 +1854,12 @@ protected:
         return true;
     }
 
-    void InitializeChannelProxies() {
-        // notice: forward all respones to executer if
-        // trailing results are allowed.
-        // temporary, will be removed in the next pr.
-        if (Request.IsTrailingResultsAllowed())
-            return;
-
-        for(const auto& channel: TasksGraph.GetChannels()) {
-            if (channel.DstTask) {
-                continue;
-            }
-
-            CreateChannelProxy(channel);
-        }
-    }
-
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
         return TasksGraph.GetMeta().Snapshot;
     }
 
     void SetSnapshot(ui64 step, ui64 txId) {
         TasksGraph.GetMeta().SetSnapshot(step, txId);
-    }
-
-    IActor* CreateChannelProxy(const NYql::NDq::TChannel& channel) {
-        auto channelIt = ResultChannelProxies.find(channel.Id);
-        if (channelIt != ResultChannelProxies.end()) {
-            return channelIt->second;
-        }
-
-        YQL_ENSURE(channel.DstInputIndex < ResponseEv->ResultsSize());
-        const auto& txResult = ResponseEv->TxResults[channel.DstInputIndex];
-
-        IActor* proxy;
-        if (txResult.IsStream && txResult.QueryResultIndex.Defined()) {
-            proxy = CreateResultStreamChannelProxy(TxId, channel.Id, txResult.MkqlItemType,
-                txResult.ColumnOrder, txResult.ColumnHints, *txResult.QueryResultIndex, Target, this->SelfId(), StatementResultIndex);
-        } else {
-            proxy = CreateResultDataChannelProxy(TxId, channel.Id, this->SelfId(),
-                channel.DstInputIndex, ResponseEv.get());
-        }
-
-        this->RegisterWithSameMailbox(proxy);
-        ResultChannelProxies.emplace(std::make_pair(channel.Id, proxy));
-        TasksGraph.GetMeta().ResultChannelProxies.emplace(channel.Id, proxy->SelfId());
-
-        return proxy;
     }
 
 protected:

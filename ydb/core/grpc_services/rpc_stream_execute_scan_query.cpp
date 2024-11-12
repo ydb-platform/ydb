@@ -266,12 +266,10 @@ private:
                 << ", freeSpace: " << freeSpaceBytes
                 << ", to: " << ExecuterActorId_);
 
-            auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-            resp->Record.SetSeqNo(*LastSeqNo_);
+            // scan query has single result set, so it's ok to put zero as channelId here.
+            auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo_, 0);
             resp->Record.SetFreeSpace(freeSpaceBytes);
-
             ctx.Send(ExecuterActorId_, resp.Release());
-
             AckedFreeSpaceBytes_ = freeSpaceBytes;
         }
     }
@@ -320,6 +318,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
+
         auto& record = ev->Get()->Record;
         NYql::TIssues issues = ev->Get()->GetIssues();
 
@@ -355,8 +354,7 @@ private:
             << ", to: " << ev->Sender
             << ", queue: " << FlowControl_.QueueSize());
 
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         resp->Record.SetFreeSpace(freeSpaceBytes);
 
         ctx.Send(ev->Sender, resp.Release());

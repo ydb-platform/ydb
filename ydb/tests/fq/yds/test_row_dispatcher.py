@@ -351,6 +351,8 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `flag`')
         filter = 'time * (field2 - field1) != 0'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`time` * (`field2` - `field1`)) <> 0')
+        filter = '(field1 % field2) / 5 = 1'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((`field1` % `field2`) / 5) = 1')
         filter = ' event IS NOT DISTINCT FROM "event2"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS NOT DISTINCT FROM \\"event2\\"')
         filter = ' event IS DISTINCT FROM "event1"'

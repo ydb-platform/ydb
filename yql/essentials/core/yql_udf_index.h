@@ -72,10 +72,12 @@ struct TResourceInfo : public TThrRefBase {
     TDownloadLink Link;
     TSet<TString> Modules;
     TMap<TString, TFunctionInfo> Functions;
+    TMap<TString, TSet<TString>> ICaseFuncNames;
 
     void SetFunctions(const TVector<TFunctionInfo>& functions) {
         for (auto& f : functions) {
             Functions.emplace(f.Name, f);
+            ICaseFuncNames[to_lower(f.Name)].insert(f.Name);
         }
     }
 };
@@ -96,12 +98,21 @@ public:
         RaiseError
     };
 
+    enum class EStatus {
+        Found,
+        NotFound,
+        Ambigious
+    };
+
 public:
     TUdfIndex();
-    bool ContainsModule(const TString& moduleName) const;
-    bool FindFunction(const TString& moduleName, const TString& functionName, TFunctionInfo& function) const;
+    void SetCaseSentiveSearch(bool caseSensitive);
+    bool CanonizeModule(TString& moduleName) const;
+    EStatus ContainsModule(const TString& moduleName) const;
+    EStatus FindFunction(const TString& moduleName, const TString& functionName, TFunctionInfo& function) const;
     TResourceInfo::TPtr FindResourceByModule(const TString& moduleName) const;
 
+    bool ContainsModuleStrict(const TString& moduleName) const;
     /*
     New resource can contain already registered module.
     In this case 'mode' will be used to resolve conflicts.
@@ -114,7 +125,7 @@ public:
     TIntrusivePtr<TUdfIndex> Clone() const;
 
 private:
-    explicit TUdfIndex(const TMap<TString, TResourceInfo::TPtr>& resources);
+    explicit TUdfIndex(const TMap<TString, TResourceInfo::TPtr>& resources, bool caseSensitive);
 
     bool ContainsAnyModule(const TSet<TString>& modules) const;
     TSet<TResourceInfo::TPtr> FindResourcesByModules(const TSet<TString>& modules) const;
@@ -123,6 +134,8 @@ private:
 private:
     // module => Resource
     TMap<TString, TResourceInfo::TPtr> Resources_;
+    bool CaseSensitive_ = true;
+    TMap<TString, TSet<TString>> ICaseModules_;
 };
 
 void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TVector<TString>& paths, bool isTrusted, TUdfIndex::EOverrideMode mode, TUdfIndex& registry);

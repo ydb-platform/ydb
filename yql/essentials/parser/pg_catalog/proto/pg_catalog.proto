@@ -41,6 +41,9 @@ message TPgProc {
     optional string VariadicArgName = 13;
     optional bool IsStrict = 14;
     optional uint32 Lang = 15;
+    optional uint32 ResultType = 16;
+    optional bool ReturnSet = 17;
+    optional uint32 Kind = 18;
 }
 
 message TPgTable {

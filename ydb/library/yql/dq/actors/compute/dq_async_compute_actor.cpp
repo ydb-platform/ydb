@@ -441,7 +441,7 @@ private:
         if (!shouldSkipData && !outputChannel.EarlyFinish && !hasFreeMemory) {
             CA_LOG_T("DrainOutputChannel return because No free memory in channel, channel: " << outputChannel.ChannelId);
             ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
-            ProcessOutputsState.AllOutputsFinished = !outputChannel.Finished;
+            ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
             return;
         }
 

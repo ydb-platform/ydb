@@ -7,7 +7,7 @@ from ydb.tests.olap.lib.utils import get_external_param
 import ydb
 from copy import deepcopy
 from time import sleep, time
-from typing import List, Optional
+from typing import List
 
 LOGGER = logging.getLogger()
 

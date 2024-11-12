@@ -5,6 +5,8 @@ import os
 import pytest
 import json
 
+from google.protobuf.internal.containers import RepeatedScalarContainer
+
 from ydb.tests.library.common import yatest_common
 from ydb.tests.library.common.local_db_scheme import get_scheme
 from ydb.tests.library.common.types import TabletTypes
@@ -14,11 +16,16 @@ from ydb.tests.oss.canonical import set_canondata_root
 
 
 def write_canonical_file(tablet, content):
+    def convert_to_serializable(obj):
+        if isinstance(obj, RepeatedScalarContainer):
+            return list(obj)
+        raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
     fn = os.path.join(yatest_common.output_path(), tablet + '.schema')
     with open(fn, 'w') as w:
         w.write(
             json.dumps(
-                content, indent=4
+                content, indent=4, default=convert_to_serializable
             )
         )
 

@@ -991,6 +991,16 @@
                         "os": "LINUX"
                     },
                     "target": {
+                        "arch": "wasm32",
+                        "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
                         "arch": "wasm64",
                         "os": "EMSCRIPTEN"
                     }

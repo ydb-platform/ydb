@@ -358,7 +358,7 @@ inline void AssertSuccessResult(const NYdb::TStatus& result) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session, bool populateTables = true);
+void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session, bool populateTables = true, bool withPgTypes = false);
 
 void InitRoot(Tests::TServer::TPtr server, TActorId sender);
 

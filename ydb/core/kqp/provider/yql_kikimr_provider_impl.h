@@ -284,6 +284,7 @@ std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TT
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto);
 // todo gvit switch to ydb typed value.
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKqpProto::TKqpPhyLiteralValue& proto);
+void FillLiteralProto(const NNodes::TCoPgConst& literal, NKqpProto::TKqpPhyLiteralValue& proto);
 
 // Optimizer rules
 TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,

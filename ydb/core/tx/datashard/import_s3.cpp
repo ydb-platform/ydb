@@ -1,11 +1,11 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
-#include "backup_restore_traits.h"
 #include "datashard_impl.h"
-#include "extstorage_usage_config.h"
 #include "import_common.h"
 #include "import_s3.h"
 
+#include <ydb/core/backup/common/backup_restore_traits.h>
+#include <ydb/core/backup/s3/extstorage_usage_config.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -46,6 +46,9 @@ namespace {
 
 namespace NKikimr {
 namespace NDataShard {
+
+using namespace NBackup::NS3;
+using namespace NBackup::NCommon;
 
 using namespace NResourceBroker;
 using namespace NWrappers;
@@ -386,8 +389,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
                 return RetryOrFinish(result.GetError());
             }
 
-            CompressionCodec = NBackupRestoreTraits::NextCompressionCodec(CompressionCodec);
-            if (CompressionCodec == NBackupRestoreTraits::ECompressionCodec::Invalid) {
+            CompressionCodec = NextCompressionCodec(CompressionCodec);
+            if (CompressionCodec == ECompressionCodec::Invalid) {
                 return Finish(false, TStringBuilder() << "Cannot find any supported data file"
                     << ": prefix# " << Settings.GetObjectKeyPattern());
             }
@@ -396,13 +399,13 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         switch (CompressionCodec) {
-        case NBackupRestoreTraits::ECompressionCodec::None:
+        case ECompressionCodec::None:
             Reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
             break;
-        case NBackupRestoreTraits::ECompressionCodec::Zstd:
+        case ECompressionCodec::Zstd:
             Reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
             break;
-        case NBackupRestoreTraits::ECompressionCodec::Invalid:
+        case ECompressionCodec::Invalid:
             Y_ABORT("unreachable");
         }
 
@@ -728,8 +731,8 @@ public:
         , DataShard(dataShard)
         , TxId(txId)
         , Settings(TS3Settings::FromRestoreTask(task))
-        , DataFormat(NBackupRestoreTraits::EDataFormat::Csv)
-        , CompressionCodec(NBackupRestoreTraits::ECompressionCodec::None)
+        , DataFormat(EDataFormat::Csv)
+        , CompressionCodec(ECompressionCodec::None)
         , TableInfo(tableInfo)
         , Scheme(task.GetTableDescription())
         , LogPrefix_(TStringBuilder() << "s3:" << TxId)
@@ -774,9 +777,9 @@ private:
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     const TActorId DataShard;
     const ui64 TxId;
-    const NDataShard::TS3Settings Settings;
-    const NBackupRestoreTraits::EDataFormat DataFormat;
-    NBackupRestoreTraits::ECompressionCodec CompressionCodec;
+    const TS3Settings Settings;
+    const EDataFormat DataFormat;
+    ECompressionCodec CompressionCodec;
     const TTableInfo TableInfo;
     const NKikimrSchemeOp::TTableDescription Scheme;
     const TString LogPrefix_;

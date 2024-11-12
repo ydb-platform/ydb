@@ -2,7 +2,7 @@
 
 #ifndef KIKIMR_DISABLE_S3_OPS
 
-#include "backup_restore_traits.h"
+#include <ydb/core/backup/common/backup_restore_traits.h>
 
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -12,7 +12,7 @@
 #include <util/string/printf.h>
 #include <util/string/builder.h>
 
-namespace NKikimr::NDataShard {
+namespace NKikimr::NBackup::NS3 {
 
 class TS3Settings {
 public:
@@ -43,24 +43,25 @@ public:
     Aws::S3::Model::StorageClass GetStorageClass() const;
 
     inline TString GetPermissionsKey() const {
-        return NBackupRestoreTraits::PermissionsKey(ObjectKeyPattern);
+        return NCommon::PermissionsKey(ObjectKeyPattern);
     }
 
     inline TString GetMetadataKey() const {
-        return NBackupRestoreTraits::MetadataKey(ObjectKeyPattern);
+        return NCommon::MetadataKey(ObjectKeyPattern);
     }
 
     inline TString GetSchemeKey() const {
-        return NBackupRestoreTraits::SchemeKey(ObjectKeyPattern);
+        return NCommon::SchemeKey(ObjectKeyPattern);
     }
 
     inline TString GetDataKey(
-        NBackupRestoreTraits::EDataFormat format,
-        NBackupRestoreTraits::ECompressionCodec codec) const {
-        return NBackupRestoreTraits::DataKey(ObjectKeyPattern, Shard, format, codec);
+        NCommon::EDataFormat format,
+        NCommon::ECompressionCodec codec) const {
+        return NCommon::DataKey(ObjectKeyPattern, Shard, format, codec);
     }
 
 }; // TS3Settings
-}
+
+} // namespace NKikimr::NBackup::NS3
 
 #endif // KIKIMR_DISABLE_S3_OPS

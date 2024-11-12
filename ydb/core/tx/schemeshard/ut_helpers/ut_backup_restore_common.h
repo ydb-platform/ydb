@@ -1,7 +1,7 @@
-#include <ydb/core/tx/datashard/backup_restore_traits.h>
+#include <ydb/core/backup/common/backup_restore_traits.h>
 
-using EDataFormat = NKikimr::NDataShard::NBackupRestoreTraits::EDataFormat;
-using ECompressionCodec = NKikimr::NDataShard::NBackupRestoreTraits::ECompressionCodec;
+using EDataFormat = NKikimr::NBackup::NCommon::EDataFormat;
+using ECompressionCodec = NKikimr::NBackup::NCommon::ECompressionCodec;
 
 #define Y_UNIT_TEST_WITH_COMPRESSION(N)                                                                                               \
     template<ECompressionCodec Codec> void N(NUnitTest::TTestContext&);                                                               \

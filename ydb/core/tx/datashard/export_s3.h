@@ -3,9 +3,10 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 #include "defs.h"
-#include "backup_restore_traits.h"
 #include "export_iface.h"
 #include "export_s3_buffer.h"
+
+#include <ydb/core/backup/common/backup_restore_traits.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -22,7 +23,7 @@ public:
     IActor* CreateUploader(const TActorId& dataShard, ui64 txId) const override;
 
     IBuffer* CreateBuffer() const override {
-        using namespace NBackupRestoreTraits;
+        using namespace NBackup::NCommon;
 
         const auto& scanSettings = Task.GetScanSettings();
         const ui64 maxRows = scanSettings.GetRowsBatchSize() ? scanSettings.GetRowsBatchSize() : Max<ui64>();

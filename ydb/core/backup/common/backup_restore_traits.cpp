@@ -6,9 +6,7 @@
 #include <util/generic/hash.h>
 #include <util/string/cast.h>
 
-namespace NKikimr {
-namespace NDataShard {
-namespace NBackupRestoreTraits {
+namespace NKikimr::NBackup::NCommon {
 
 bool TryCodecFromTask(const NKikimrSchemeOp::TBackupTask& task, ECompressionCodec& codec) {
     if (!task.HasCompression()) {
@@ -72,6 +70,4 @@ TString DataFileExtension(EDataFormat format, ECompressionCodec codec) {
     return Sprintf("%s%s", fit->second.c_str(), cit->second.c_str());
 }
 
-} // NBackupRestoreTraits
-} // NDataShard
-} // NKikimr
+} // namespace NKikimr::NBackup::NCommon

@@ -206,6 +206,9 @@ namespace NKikimr {
                     if (Config->RunRepl) {
                         ctx.Send(Db->ReplID, new TEvMinHugeBlobSizeUpdate(MinREALHugeBlobInBytes));
                     }
+                    if (Hull) {
+                        Hull->ApplyHugeBlobSize(MinREALHugeBlobInBytes, ctx);
+                    }
                     ctx.Send(*SkeletonFrontIDPtr, new TEvMinHugeBlobSizeUpdate(MinREALHugeBlobInBytes));
                 }
             }
@@ -1861,6 +1864,7 @@ namespace NKikimr {
             if (ev->Get()->Status == NKikimrProto::OK) {
                 ApplyHugeBlobSize(Config->MinHugeBlobInBytes);
                 Y_ABORT_UNLESS(MinREALHugeBlobInBytes);
+
                 // handle special case when donor disk starts and finds out that it has been wiped out
                 if (ev->Get()->LsnMngr->GetOriginallyRecoveredLsn() == 0 && Config->BaseInfo.DonorMode) {
                     // send drop donor cmd to NodeWarden
@@ -1939,11 +1943,11 @@ namespace NKikimr {
                     Db->HugeKeeperID);
 
                 // create Hull
-                Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, Db->SkeletonID,
-                        Config->BalancingEnableDelete, std::move(*ev->Get()->Uncond),
-                        ctx.ExecutorThread.ActorSystem, Config->BarrierValidation);
+                Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, HugeBlobCtx, MinREALHugeBlobInBytes,
+                    Db->SkeletonID, Config->BalancingEnableDelete, std::move(*ev->Get()->Uncond),
+                    ctx.ExecutorThread.ActorSystem, Config->BarrierValidation, Db->HugeKeeperID);
                 ActiveActors.Insert(Hull->RunHullServices(Config, HullLogCtx, Db->SyncLogFirstLsnToKeep,
-                        Db->LoggerID, Db->LogCutterID, ctx), ctx, NKikimrServices::BLOBSTORAGE);
+                    Db->LoggerID, Db->LogCutterID, ctx), ctx, NKikimrServices::BLOBSTORAGE);
 
                 // create VDiskCompactionState
                 VDiskCompactionState = std::make_unique<TVDiskCompactionState>(Hull->GetHullDs()->LogoBlobs->LIActor,

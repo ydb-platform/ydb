@@ -8,6 +8,7 @@ option java_outer_classname = "SchemeOperationProtos";
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_scheme_entry.proto";
 
 // Create directory.
 // All intermediate directories must be created
@@ -41,51 +42,6 @@ message ListDirectoryResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
-message Permissions {
-    // SID (Security ID) of user or group
-    string subject = 1;
-    repeated string permission_names = 2;
-}
-
-message Entry {
-    enum Type {
-        TYPE_UNSPECIFIED = 0;
-        DIRECTORY = 1;
-        TABLE = 2;
-        PERS_QUEUE_GROUP = 3;
-        DATABASE = 4;
-        RTMR_VOLUME = 5;
-        BLOCK_STORE_VOLUME = 6;
-        COORDINATION_NODE = 7;
-        COLUMN_STORE = 12;
-        COLUMN_TABLE = 13;
-        SEQUENCE = 15;
-        REPLICATION = 16;
-        TOPIC = 17;
-        EXTERNAL_TABLE = 18;
-        EXTERNAL_DATA_SOURCE = 19;
-        VIEW = 20;
-        RESOURCE_POOL = 21;
-    }
-
-    // Name of scheme entry (dir2 of /dir1/dir2)
-    string name = 1;
-    // SID (Security ID) of user or group
-    string owner = 2;
-    Type type = 5;
-    repeated Permissions effective_permissions = 6;
-    repeated Permissions permissions = 7;
-
-    // Size of entry in bytes. Currently filled for:
-    // - TABLE;
-    // - DATABASE.
-    // Empty (zero) in other cases.
-    uint64 size_bytes = 8;
-
-    // Virtual timestamp when the object was created
-    VirtualTimestamp created_at = 9;
-}
-
 message ListDirectoryResult {
     Entry self = 1;
     repeated Entry children = 2;
@@ -102,15 +58,26 @@ message DescribePathResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
-message ViewDescription {
-    string query_text = 1;
+message DescribePathResult {
+    Entry self = 1;
 }
 
-message DescribePathResult {
+message DescribeSchemeObjectRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string path = 2 [(required) = true];
+}
+
+message DescribeSchemeObjectResponse {
+    // Holds DescribePathResult in case of DescribePathResult
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribeSchemeObjectResult {
     Entry self = 1;
 
     oneof type_specific_description {
-        ViewDescription view_description = 2;
+        Ydb.Table.TableDescription table_description = 2;
+        Ydb.View.ViewDescription view_description = 3;
     }
 }
 

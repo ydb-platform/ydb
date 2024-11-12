@@ -64,7 +64,7 @@ private:
                 }
 
                 ConvertDirectoryEntry(desc.GetSelf(), Result_.mutable_self(), true);
-                Result_.set_query_text(desc.GetViewDescription().GetQueryText());
+                Result_.mutable_description()->set_query_text(desc.GetViewDescription().GetQueryText());
 
                 return ReplyWithResult(StatusIds::SUCCESS, Result_, ctx);
 

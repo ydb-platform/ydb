@@ -19,10 +19,13 @@ message DescribeViewResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message ViewDescription {
+    string query_text = 1;
+}
+
 message DescribeViewResult {
     // Description of a generic scheme object.
     Ydb.Scheme.Entry self = 1;
 
-    // View-specific fields.
-    string query_text = 2;
+    ViewDescription description = 2;
 }

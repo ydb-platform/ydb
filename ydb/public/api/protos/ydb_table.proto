@@ -798,6 +798,47 @@ message DescribeTableResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+// Warning for developers: must be in sync with the contents of the DescribeTableResult.
+message TableDescription {
+    // List of columns
+    repeated ColumnMeta columns = 2;
+    // List of primary key columns
+    repeated string primary_key = 3;
+    // List of key ranges for shard
+    repeated TypedValue shard_key_bounds = 4;
+    // List of indexes
+    repeated TableIndexDescription indexes = 5;
+    // Statistics of table
+    TableStats table_stats = 6;
+    // TTL params
+    TtlSettings ttl_settings = 7;
+    // Storage settings for table
+    StorageSettings storage_settings = 8;
+    // Column families
+    repeated ColumnFamily column_families = 9;
+    // Attributes
+    map<string, string> attributes = 10;
+    // Predefined named set of settings for table compaction
+    reserved 11; // compaction_policy
+    // Partitioning settings for table
+    PartitioningSettings partitioning_settings = 12;
+    // Bloom filter by key
+    Ydb.FeatureFlag.Status key_bloom_filter = 13;
+    // Read replicas settings for table
+    ReadReplicasSettings read_replicas_settings = 14;
+    // List of changefeeds
+    repeated ChangefeedDescription changefeeds = 15;
+    // Tiering rules name
+    string tiering = 16;
+    // Is temporary table
+    bool temporary = 17;
+    // Is table column or row oriented
+    StoreType store_type = 18;
+
+    // Warning for developers: new fields must be added to the DescribeTableResult message too.
+}
+
+// Warning for developers: must be in sync with the contents of the TableDescription.
 message DescribeTableResult {
     // Description of scheme object
     Ydb.Scheme.Entry self = 1;
@@ -835,6 +876,8 @@ message DescribeTableResult {
     bool temporary = 17;
     // Is table column or row oriented
     StoreType store_type = 18;
+
+    // Warning for developers: new fields must be added to the TableDescription message too.
 }
 
 message Query {

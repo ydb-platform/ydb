@@ -27,24 +27,19 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TTopicSessionMetrics {
-    void Init(const ::NMonitoring::TDynamicCounterPtr& counters, NActors::TActorId selfId) {
-        SelfId = selfId;
-        SubGroup = counters->GetSubgroup("actor_id", SelfId.ToString());
+    void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, ui32 partitionId) {
+        TopicGroup = counters->GetSubgroup("topic", topicPath);
+        SubGroup = TopicGroup->GetSubgroup("partition", ToString(partitionId));
         InFlyAsyncInputData = SubGroup->GetCounter("InFlyAsyncInputData");
-        RowsRead = SubGroup->GetCounter("RowsRead", true);
         InFlySubscribe = SubGroup->GetCounter("InFlySubscribe");
         ReconnectRate = SubGroup->GetCounter("ReconnectRate", true);
         DataRate = SubGroup->GetCounter("DataRate", true);
         WaitEventTimeMs = SubGroup->GetHistogram("WaitEventTimeMs", NMonitoring::ExponentialHistogram(12, 2, 1)); // ~ 1ms -> ~ 4s
     }
 
-    ~TTopicSessionMetrics() {
-        SubGroup->RemoveSubgroup("actor_id", SelfId.ToString());
-    }
-    NActors::TActorId SelfId;
+    ::NMonitoring::TDynamicCounterPtr TopicGroup;
     ::NMonitoring::TDynamicCounterPtr SubGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
-    ::NMonitoring::TDynamicCounters::TCounterPtr RowsRead;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataRate;
@@ -314,7 +309,7 @@ TTopicSession::TTopicSession(
 
 void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
-    Metrics.Init(Counters, SelfId());
+    Metrics.Init(Counters, TopicPath, PartitionId);
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << ", PartitionId " << PartitionId
         << ", Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec,  StatusPeriod " << Config.GetSendStatusPeriodSec() << " sec");
@@ -552,8 +547,6 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
 
     Self.SessionStats.Add(dataSize, event.GetMessages().size());
     Self.ClientsStats.Add(dataSize, event.GetMessages().size());
-
-    Self.Metrics.RowsRead->Add(event.GetMessages().size());
     Self.Metrics.DataRate->Add(dataSize);
     Self.SendToParsing(event.GetMessages());
 }

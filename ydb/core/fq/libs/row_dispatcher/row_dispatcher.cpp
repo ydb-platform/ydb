@@ -214,6 +214,11 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         TString LogPrefix = "RowDispatcher: ";
     };
 
+    struct TAggregatedStats{
+        NYql::TCounters::TEntry ReadBytes;              // All sessions
+        TMap<TString, TQueryStat> LastQueryStats;
+        TDuration LastUpdateMetricsPeriod;
+    };
 
     NConfig::TRowDispatcherConfig Config;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
@@ -230,6 +235,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TRowDispatcherMetrics Metrics;
     NYql::IPqGateway::TPtr PqGateway;
     TNodesTracker NodesTracker;
+    TAggregatedStats AggrStats; 
 
     struct ConsumerCounters {
         ui64 NewDataArrived = 0;
@@ -459,24 +465,29 @@ void TRowDispatcher::UpdateMetrics() {
     if (Consumers.empty()) {
         return;
     }
-    NYql::TCounters::TEntry readBytes;
-    TMap<TString, TQueryStat> queryStats;
-    
+    static TInstant LastUpdateMetricsTime = TInstant::Now();
+    auto now = TInstant::Now();
+    AggrStats.LastUpdateMetricsPeriod = now - LastUpdateMetricsTime;
+    LastUpdateMetricsTime = now;
+
+    AggrStats.ReadBytes = NYql::TCounters::TEntry();
+    AggrStats.LastQueryStats.clear();
+
     for (auto& [key, sessionsInfo] : TopicSessions) {
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
-            readBytes.Add(NYql::TCounters::TEntry(sessionInfo.Stat.ReadBytes));
+            AggrStats.ReadBytes.Add(NYql::TCounters::TEntry(sessionInfo.Stat.ReadBytes));
 
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
-                auto& stat = queryStats[consumer->QueryId];
+                auto& stat = AggrStats.LastQueryStats[consumer->QueryId];
                 stat.UnreadRows.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadRows));
                 stat.UnreadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadBytes));
                 stat.ReadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.ReadBytes));
             }
         }
     }
-    Metrics.DataRate->Add(readBytes.Sum);
-    
-    for (const auto& [queryId, stat] : queryStats) {
+    Metrics.DataRate->Add(AggrStats.ReadBytes.Sum);
+
+    for (const auto& [queryId, stat] : AggrStats.LastQueryStats) {
         auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryId);
         queryGroup->GetCounter("MaxUnreadRows")->Set(stat.UnreadRows.Max);
         queryGroup->GetCounter("AvgUnreadRows")->Set(stat.UnreadRows.Avg);
@@ -489,7 +500,23 @@ void TRowDispatcher::UpdateMetrics() {
 TString TRowDispatcher::GetInternalState() {
     TStringStream str;
     NodesTracker.PrintInternalState(str);
-    str << "Statistics:\n";
+    auto printDataRate = [&](NYql::TCounters::TEntry entry) {
+        auto secs = AggrStats.LastUpdateMetricsPeriod.Seconds();
+        if (!secs) {
+            return;
+        }
+        str << " avg " << entry.Sum / secs << " max " << entry.Max / secs << " min " << entry.Min / secs << "\n";
+    };
+
+    str << "DataRate";
+    printDataRate(AggrStats.ReadBytes);
+
+    str << "Queries:\n";
+    for (const auto& [queryId, stat]: AggrStats.LastQueryStats) {
+        str << "  " << queryId << " max unread " << stat.UnreadBytes.Max << " data rate";
+        printDataRate(stat.ReadBytes);
+    }
+    str << "TopicSessions:\n";
     for (auto& [key, sessionsInfo] : TopicSessions) {
         str << "  " << key.Endpoint << " / " << key.Database << " / " << key.TopicPath << " / " << key.PartitionId;
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
@@ -790,16 +817,14 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev
     }
 
     auto& sessionInfo = sessionIt->second;
-    sessionInfo.Stat.UnreadBytes = ev->Get()->Stat.Common.UnreadBytes;
-    sessionInfo.Stat.ReadBytes += ev->Get()->Stat.Common.ReadBytes;
-
+    sessionInfo.Stat.Add(ev->Get()->Stat.Common);
     for (const auto& clientStat : ev->Get()->Stat.Clients) {
         auto it = sessionInfo.Consumers.find(clientStat.ReadActorId);
         if (it == sessionInfo.Consumers.end()) {
             continue;
         }
         auto consumerInfoPtr = it->second; 
-        consumerInfoPtr->Stat = clientStat;
+        consumerInfoPtr->Stat.Add(clientStat);
     }
 }
 

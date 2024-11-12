@@ -1,4 +1,5 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
+#include <yql/essentials/utils/line_split.h>
 
 #include <util/generic/yexception.h>
 #include <util/stream/buffered.h>
@@ -234,52 +235,6 @@ namespace {
 
     private:
         const TTerminateFunc TerminateFunc;
-    };
-
-    class TLineSplitter {
-    public:
-        TLineSplitter(IInputStream& stream)
-            : Stream_(stream)
-        {
-        }
-
-        size_t Next(TString& st) {
-            st.clear();
-            char c;
-            size_t ret = 0;
-            if (HasPendingLineChar_) {
-                st.push_back(PendingLineChar_);
-                HasPendingLineChar_ = false;
-                ++ret;
-            }
-
-            while (Stream_.ReadChar(c)) {
-                ++ret;
-                if (c == '\n') {
-                    break;
-                } else if (c == '\r') {
-                    if (Stream_.ReadChar(c)) {
-                        ++ret;
-                        if (c != '\n') {
-                            --ret;
-                            PendingLineChar_ = c;
-                            HasPendingLineChar_ = true;
-                        }
-                    }
-
-                    break;
-                } else {
-                    st.push_back(c);
-                }
-            }
-
-            return ret;
-        }
-
-    private:
-        IInputStream& Stream_;
-        bool HasPendingLineChar_ = false;
-        char PendingLineChar_ = 0;
     };
 
     template <class TUserType>

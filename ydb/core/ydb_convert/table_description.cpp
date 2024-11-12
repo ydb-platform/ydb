@@ -509,15 +509,35 @@ template <typename TYdbProto, typename TTtl>
 static void AddTtl(TYdbProto& out, const TTtl& inTTL) {
     static const auto& fillCommonFields = []<class TModeSettings>(TModeSettings& out, const TTtl& in) {
         out.set_column_name(in.GetColumnName());
-        if (in.HasExpireAfterSeconds()) {
+        if (in.TiersSize()) {
+            std::optional<ui32> expireInSeconds;
+            for (const auto& inTier : in.GetTiers()) {
+                if (inTier.HasDelete()) {
+                    expireInSeconds = inTier.GetEvictAfterSeconds();
+                    break;
+                }
+            }
+            out.set_expire_after_seconds(expireInSeconds.value_or(std::numeric_limits<uint32_t>::max()));
+        } else {
+            // legacy schema
             out.set_expire_after_seconds(in.GetExpireAfterSeconds());
         }
-        for (const auto& in_tier : in.GetTiers()) {
-            auto* out_tier = out.add_storage_tiers();
-            out_tier->set_evict_after_seconds(in_tier.GetEvictAfterSeconds());
-            out_tier->set_storage_name(in_tier.GetStorageName());
-        }
     };
+
+    for (const auto& inTier : inTTL.GetTiers()) {
+        auto* outTier = out.mutable_ttl_settings()->add_tiers();
+        outTier->set_evict_after_seconds(inTier.GetEvictAfterSeconds());
+        switch (inTier.GetActionCase()) {
+            case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kDelete:
+                outTier->mutable_delete_();
+                break;
+            case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage:
+                outTier->mutable_evict_to_external_storage()->set_storage_name(inTier.GetEvictToExternalStorage().GetStorageName());
+                break;
+            case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::ACTION_NOT_SET:
+                break;
+        }
+    }
 
     switch (inTTL.GetColumnUnit()) {
     case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {

@@ -845,7 +845,7 @@ namespace {
 
     void PrintPartitionInfo(const NTable::TTableDescription& tableDescription, bool showBoundaries, bool showStats) {
         const TVector<NTable::TKeyRange>& ranges = tableDescription.GetKeyRanges();
-        const TVector<NTable::TPartitionStats>& stats = tableDescription.GetPartitionStats();
+        const TVector<NTable::TTPartitionStats>& stats = tableDescription.GetPartitionStats();
         if (showBoundaries) {
             if (showStats) {
                 Cout << Endl << "Partitions info:" << Endl;
@@ -921,7 +921,7 @@ namespace {
                 }
             }
             if (showStats) {
-                const NTable::TPartitionStats& partStats = stats[i];
+                const NTable::TTPartitionStats& partStats = stats[i];
                 row.Column(j++, partStats.Rows);
                 row.Column(j++, PrettySize(partStats.Size));
             }

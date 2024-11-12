@@ -28,25 +28,40 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
         return false;
     };
 
-    static const auto& fillCommonFields = []<class TModeSettings>(TTtlSettingsEnabled& out, const TModeSettings& in) {
+    static const auto& fillCommonFields = []<class TModeSettings>(TTtlSettingsEnabled& out, const TModeSettings& in, std::optional<ui32> expireAfterSeconds) {
         out.SetColumnName(in.column_name());
-        if (in.has_expire_after_seconds()) {
-            out.SetExpireAfterSeconds(in.expire_after_seconds());
-        }
-        for (const auto& in_tier : in.storage_tiers()) {
-            auto* out_tier = out.AddTiers();
-            out_tier->SetEvictAfterSeconds(in_tier.evict_after_seconds());
-            out_tier->SetStorageName(in_tier.storage_name());
-        }
+        out.SetExpireAfterSeconds(expireAfterSeconds.value_or(in.expire_after_seconds()));
     };
+
+    std::optional<ui32> expireAfterSeconds;
+    if (in.tiers_size()) {
+        for (const auto& inTier : in.tiers()) {
+            auto* outTier = out.AddTiers();
+            outTier->SetEvictAfterSeconds(inTier.evict_after_seconds());
+            switch (inTier.action_case()) {
+                case Ydb::Table::TtlTier::kDelete:
+                    outTier->MutableDelete();
+                    expireAfterSeconds = inTier.evict_after_seconds();
+                    break;
+                case Ydb::Table::TtlTier::kEvictToExternalStorage:
+                    outTier->MutableEvictToExternalStorage()->SetStorageName(inTier.evict_to_external_storage().storage_name());
+                    break;
+                case Ydb::Table::TtlTier::ACTION_NOT_SET:
+                    break;
+            }
+        }
+        if (!expireAfterSeconds) {
+            expireAfterSeconds = std::numeric_limits<uint32_t>::max();
+        }
+    }
 
     switch (in.mode_case()) {
     case Ydb::Table::TtlSettings::kDateTypeColumn:
-        fillCommonFields(out, in.date_type_column());
+        fillCommonFields(out, in.date_type_column(), expireAfterSeconds);
         break;
 
     case Ydb::Table::TtlSettings::kValueSinceUnixEpoch:
-        fillCommonFields(out, in.value_since_unix_epoch());
+        fillCommonFields(out, in.value_since_unix_epoch(), expireAfterSeconds);
 
         #define CASE_UNIT(type) \
             case Ydb::Table::ValueSinceUnixEpochModeSettings::type: \

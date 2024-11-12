@@ -30,10 +30,10 @@ class KMeansTreeSettings;
 class PartitioningSettings;
 class DateTypeColumnModeSettings;
 class TtlSettings;
+class TtlTier;
 class TableIndex;
 class TableIndexDescription;
 class ValueSinceUnixEpochModeSettings;
-class EvictionTier;
 
 } // namespace Table
 } // namespace Ydb
@@ -422,35 +422,44 @@ struct TPartitionStats {
     ui32 LeaderNodeId = 0;
 };
 
-class TEvictionTierSettings {
-public:
-    explicit TEvictionTierSettings(TString storageName, TDuration evictionDelay);
-    explicit TEvictionTierSettings(const Ydb::Table::EvictionTier& tier);
-    void SerializeTo(Ydb::Table::EvictionTier& proto) const;
+struct TTtlDeleteAction {};
 
-    const TString& GetStorageName() const;
+struct TTtlEvictToExternalStorageAction {
+    TString storageName;
+};
+
+class TTtlTierSettings {
+public:
+    using TAction = std::variant<
+        std::monostate,
+        TTtlDeleteAction,
+        TTtlEvictToExternalStorageAction
+    >;
+
+public:
+    explicit TTtlTierSettings(TDuration evictionDelay, const TAction& action);
+    explicit TTtlTierSettings(const Ydb::Table::TtlTier& tier);
+    void SerializeTo(Ydb::Table::TtlTier& proto) const;
+
     TDuration GetEvictionDelay() const;
+    const TAction& GetAction() const;
 
 private:
-    TString StorageName_;
     TDuration EvictionDelay_;
+    TAction Action_;
 };
 
 class TDateTypeColumnModeSettings {
 public:
-    explicit TDateTypeColumnModeSettings(const TString& columnName, const TDuration& expireAfter);
-    explicit TDateTypeColumnModeSettings(const TString& columnName, const std::optional<TDuration>& expireAfter, const TVector<TEvictionTierSettings>& tiers);
+    explicit TDateTypeColumnModeSettings(const TString& columnName, const TDuration& deprecatedExpireAfter = TDuration::Max());
     void SerializeTo(Ydb::Table::DateTypeColumnModeSettings& proto) const;
 
     const TString& GetColumnName() const;
     const TDuration& GetExpireAfter() const;
-    bool HasExpireAfter() const;
-    const TVector<TEvictionTierSettings>& GetTiers() const;
 
 private:
     TString ColumnName_;
-    std::optional<TDuration> ExpireAfter_;
-    TVector<TEvictionTierSettings> Tiers_;
+    TDuration DeprecatedExpireAfter_;
 };
 
 class TValueSinceUnixEpochModeSettings {
@@ -465,15 +474,12 @@ public:
     };
 
 public:
-    explicit TValueSinceUnixEpochModeSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter);
-    explicit TValueSinceUnixEpochModeSettings(const TString& columnName, EUnit columnUnit, const std::optional<TDuration>& expireAfter, const TVector<TEvictionTierSettings>& tiers);
+    explicit TValueSinceUnixEpochModeSettings(const TString& columnName, EUnit columnUnit, const TDuration& deprecatedExpireAfter = TDuration::Max());
     void SerializeTo(Ydb::Table::ValueSinceUnixEpochModeSettings& proto) const;
 
     const TString& GetColumnName() const;
     EUnit GetColumnUnit() const;
     const TDuration& GetExpireAfter() const;
-    bool HasExpireAfter() const;
-    const TVector<TEvictionTierSettings>& GetTiers() const;
 
     static void Out(IOutputStream& o, EUnit unit);
     static TString ToString(EUnit unit);
@@ -482,12 +488,17 @@ public:
 private:
     TString ColumnName_;
     EUnit ColumnUnit_;
-    std::optional<TDuration> ExpireAfter_;
-    TVector<TEvictionTierSettings> Tiers_;
+    TDuration DeprecatedExpireAfter_;
 };
 
 //! Represents ttl settings
 class TTtlSettings {
+private:
+    using TMode = std::variant<
+        TDateTypeColumnModeSettings,
+        TValueSinceUnixEpochModeSettings
+    >;
+
 public:
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
@@ -496,27 +507,35 @@ public:
         ValueSinceUnixEpoch = 1,
     };
 
-    explicit TTtlSettings(const TString& columnName, const std::optional<TDuration>& expireAfter, const TVector<TEvictionTierSettings>& tiers);
+    explicit TTtlSettings(const TString& columnName, const TVector<TTtlTierSettings>& tiers);
     explicit TTtlSettings(const TString& columnName, const TDuration& expireAfter);
-    explicit TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds);
     const TDateTypeColumnModeSettings& GetDateTypeColumn() const;
+    // Deprecated. Use DeserializeFromProto
+    explicit TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds);
 
-    explicit TTtlSettings(const TString& columnName, EUnit columnUnit, const std::optional<TDuration>& expireAfter, const TVector<TEvictionTierSettings>& tiers);
+    explicit TTtlSettings(const TString& columnName, EUnit columnUnit, const TVector<TTtlTierSettings>& tiers);
     explicit TTtlSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter);
-    explicit TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds);
     const TValueSinceUnixEpochModeSettings& GetValueSinceUnixEpoch() const;
+    // Deprecated. Use DeserializeFromProto
+    explicit TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds);
 
+    static std::optional<TTtlSettings> DeserializeFromProto(const Ydb::Table::TtlSettings& proto);
     void SerializeTo(Ydb::Table::TtlSettings& proto) const;
     EMode GetMode() const;
 
     TTtlSettings& SetRunInterval(const TDuration& value);
     const TDuration& GetRunInterval() const;
 
+    const TVector<TTtlTierSettings>& GetTiers() const;
+
 private:
-    std::variant<
-        TDateTypeColumnModeSettings,
-        TValueSinceUnixEpochModeSettings
-    > Mode_;
+    explicit TTtlSettings(TMode mode, ui32 runIntervalSeconds);
+
+    static std::optional<TDuration> GetExpirationDelay(const TVector<TTtlTierSettings>& tiers);
+
+private:
+    TMode Mode_;
+    TVector<TTtlTierSettings> Tiers_;
     TDuration RunInterval_ = TDuration::Zero();
 };
 

@@ -1,5 +1,6 @@
 #include "blob.h"
 #include "type_codecs.h"
+#include "partition_log.h"
 
 #include <util/string/builder.h>
 #include <util/string/escape.h>
@@ -28,12 +29,19 @@ void TBlobIterator::ParseBatch() {
     Count += Header.GetCount();
     Offset += Header.GetCount();
     InternalPartsCount += Header.GetInternalPartsCount();
+    if (!(Count <= Key.GetCount())) {
+        PQ_LOG_D("Count=" << Count <<
+                 ", Key.Count=" << Key.GetCount() <<
+                 ", Key=" << Key.ToString() <<
+                 ", Header=" << Header.ShortDebugString());
+        throw TBlobException{};
+    }
     Y_ABORT_UNLESS(Count <= Key.GetCount(),
-                   "Count %" PRIu32 ", Key.Count %" PRIu32,
-                   Count, Key.GetCount());
+                   "Count %" PRIu32 ", Key.Count %" PRIu32 ", Key: %s, Header: %s",
+                   Count, Key.GetCount(), Key.ToString().data(), Header.ShortDebugString().data());
     Y_ABORT_UNLESS(InternalPartsCount <= Key.GetInternalPartsCount(),
-                   "InternalPartsCount %" PRIu16 ", Key.InternalPartsCount %" PRIu16,
-                   InternalPartsCount, Key.GetInternalPartsCount());
+                   "InternalPartsCount %" PRIu16 ", Key.InternalPartsCount %" PRIu16 ", Header.InternalPartsCount %" PRIu16 ", Key: %s",
+                   InternalPartsCount, Key.GetInternalPartsCount(), Header.GetInternalPartsCount(), Key.ToString().data());
 }
 
 bool TBlobIterator::IsValid()

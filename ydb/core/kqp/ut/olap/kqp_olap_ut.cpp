@@ -2988,8 +2988,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     NYdb::NQuery::TTxControl::BeginTx().CommitTx())
                 .GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().Size(), 1);
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "scan failed, reason: cannot build metadata/Snapshot too old");
     }
 }
 

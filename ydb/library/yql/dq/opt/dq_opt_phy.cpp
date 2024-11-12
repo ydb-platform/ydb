@@ -790,6 +790,10 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
             return node;
         }
     } else {
+        if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+            return TExprBase(ctx.ChangeChild(*node.Raw(), TCoFlatMapBase::idx_Input, std::move(connToPushableStage)));
+        }
+
         TCoLambda lambda = flatmap.Lambda();
 
         if (flatmap.Maybe<TCoFlatMap>()) {
@@ -808,6 +812,11 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
                     .Lambda(ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
                 .Build()
                 .Done();
+        }
+
+        auto pushResult = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
+        if (pushResult) {
+            return pushResult.Cast();
         }
 
         flatmapStage = Build<TDqStage>(ctx, flatmap.Pos())

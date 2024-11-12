@@ -242,6 +242,8 @@ class YdbCluster:
                 for tn in table_nodes:
                     tablet_count = 0
                     for tablet in tn.get("Tablets", []):
+                        if tablet.get("State") != "Green":
+                            errors.append(f'Node {tn.get("SystemState", {}).get("Host")}: {tablet.get("Count")} tablets of type {tablet.get("Type")} in {tablet.get("State")} state')
                         if tablet.get("Type") in {"ColumnShard", "DataShard"}:
                             tablet_count += tablet.get("Count")
                     if min is None or tablet_count < min:

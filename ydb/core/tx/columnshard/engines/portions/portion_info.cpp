@@ -1,5 +1,5 @@
 #include "column_record.h"
-#include "constructor.h"
+#include "constructor_portion.h"
 #include "data_accessor.h"
 #include "portion_info.h"
 
@@ -47,12 +47,11 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
 }
 
 ui64 TPortionInfo::GetMetadataMemorySize() const {
-    return sizeof(TPortionInfo) + Records.size() * (sizeof(TColumnRecord) + 8) + Indexes.size() * sizeof(TIndexChunk) +
-           - sizeof(TPortionMeta) + Meta.GetMetadataMemorySize();
+    return sizeof(TPortionInfo) - sizeof(TPortionMeta) + Meta.GetMetadataMemorySize();
 }
 
 ui64 TPortionInfo::GetTxVolume() const {
-    return 1024 + Records.size() * 256 + Indexes.size() * 256;
+    return 1024;
 }
 
 void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
@@ -82,20 +81,6 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
         if (!parse) {
             return parse;
         }
-    }
-    for (auto&& i : proto.GetRecords()) {
-        auto parse = TColumnRecord::BuildFromProto(i);
-        if (!parse) {
-            return parse;
-        }
-        Records.emplace_back(std::move(parse.DetachResult()));
-    }
-    for (auto&& i : proto.GetIndexes()) {
-        auto parse = TIndexChunk::BuildFromProto(i);
-        if (!parse) {
-            return parse;
-        }
-        Indexes.emplace_back(std::move(parse.DetachResult()));
     }
     return TConclusionStatus::Success();
 }

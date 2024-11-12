@@ -433,25 +433,32 @@ message ColumnMeta {
     }
 }
 
-message EvictionTier {
-    // Name of tiered storage
+message EvictionToExternalStorageSettings {
+    // Name of external data source
     string storage_name = 1;
+}
 
-    uint32 evict_after_seconds = 2;
+message TtlTier {
+    uint32 evict_after_seconds = 1;
+
+    oneof action {
+        google.protobuf.Empty delete = 2;
+        EvictionToExternalStorageSettings evict_to_external_storage = 3;
+    }
 }
 
 message DateTypeColumnModeSettings {
-    // The row will be considered as expired at the moment of time, when the value
+    // The row will be belong to a tier at the moment of time, when the value
     // stored in <column_name> is less than or equal to the current time (in epoch
-    // time format), and <expire_after_seconds> has passed since that moment;
-    // i.e. the expiration threshold is the value of <column_name> plus <expire_after_seconds>.
+    // time format), and <evict_after_seconds> has passed since that moment;
+    // i.e. the eviction threshold is the value of <column_name> plus <evict_after_seconds>.
 
     // The column type must be a date type
     string column_name = 1;
 
-    optional uint32 expire_after_seconds = 2;
-
-    repeated EvictionTier storage_tiers = 3;
+    // Deprecated. Use TtlSettings.tiers instead. If TtlSettings.tiers is not empty,
+    // expire_after_seconds does not take effect
+    uint32 expire_after_seconds = 2;
 }
 
 message ValueSinceUnixEpochModeSettings {
@@ -475,11 +482,9 @@ message ValueSinceUnixEpochModeSettings {
     // Interpretation of the value stored in <column_name>
     Unit column_unit = 2;
 
-    // This option is always interpreted as seconds regardless of the
-    // <column_unit> value.
-    optional uint32 expire_after_seconds = 3;
-
-    repeated EvictionTier storage_tiers = 4;
+    // Deprecated. Use TtlSettings.tiers instead. If TtlSettings.tiers is not empty,
+    // expire_after_seconds does not take effect
+    uint32 expire_after_seconds = 3;
 }
 
 message TtlSettings {
@@ -501,6 +506,8 @@ message TtlSettings {
     // How often to run BRO on the same partition.
     // BRO will not be started more often, but may be started less often.
     uint32 run_interval_seconds = 3;
+
+    repeated TtlTier tiers = 4;
 }
 
 message StorageSettings {

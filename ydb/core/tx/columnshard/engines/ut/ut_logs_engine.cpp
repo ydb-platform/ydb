@@ -432,7 +432,33 @@ bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, u
     return result;
 }
 
+namespace {
+class TTestMetadataAccessorsSubscriber: public NOlap::IDataAccessorRequestsSubscriber {
+private:
+    std::shared_ptr<IMetadataAccessorResultProcessor> Processor;
+    TColumnEngineForLogs& Engine;
+
+    virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
+        Processor->ApplyResult(std::move(result), Engine);
+    }
+
+public:
+    TTestMetadataAccessorsSubscriber(const std::shared_ptr<IMetadataAccessorResultProcessor>& processor, TColumnEngineForLogs& engine)
+        : Processor(processor)
+        , Engine(engine) {
+    }
+};
+
+}
+
 bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<ui64, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
+    engine.StartActualization(pathEviction);
+    std::vector<NOlap::TCSMetadataRequest> requests = engine.CollectMetadataRequests();
+    for (auto&& i : requests) {
+        i.GetRequest()->RegisterSubscriber(std::make_shared<TTestMetadataAccessorsSubscriber>(i.GetProcessor(), engine));
+        engine.FetchDataAccessors(i.GetRequest());
+    }
+
     std::vector<std::shared_ptr<TTTLColumnEngineChanges>> vChanges = engine.StartTtl(pathEviction, EmptyDataLocksManager, 512 * 1024 * 1024);
     AFL_VERIFY(vChanges.size() == 1)("count", vChanges.size());
     auto changes = vChanges.front();

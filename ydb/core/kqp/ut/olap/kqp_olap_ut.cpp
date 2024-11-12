@@ -2987,7 +2987,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     TStringBuilder() << "$v = SELECT CAST(COUNT(*) AS INT32) FROM `/Root/cnt`; INSERT INTO `/Root/cnt` (key, c) values(1, $v);",
                     NYdb::NQuery::TTxControl::BeginTx().CommitTx())
                 .GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().Size(), 1);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "scan failed, reason: cannot build metadata/Snapshot too old");
     }

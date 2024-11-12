@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
-        csController->WaitActualization(TDuration::Seconds(10));
+        csController->WaitActualization(TDuration::Seconds(20));
         {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(

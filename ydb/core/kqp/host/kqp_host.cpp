@@ -1025,7 +1025,8 @@ class TKqpHost : public IKqpHost {
 public:
     struct TCompileExprResult {
         TVector<TExprNode::TPtr> QueryExprs;
-        bool KeepInCache;
+        bool KeepInCache = false;
+        bool NeedToSplit = false;
         TMaybe<TString> CommandTagName;
     };
 
@@ -1221,7 +1222,7 @@ public:
 
 private:
     TCompileExprResult CompileQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, TMaybe<TSqlVersion>& sqlVersion,
-        TKqpTranslationSettingsBuilder& settingsBuilder) const
+        TKqpTranslationSettingsBuilder& settingsBuilder, bool isSplit) const
     {
         TCompileExprResult result;
         std::shared_ptr<NYql::TAstParseResult> queryAst;
@@ -1274,18 +1275,20 @@ private:
 
         YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);
 
-        if (Config->EnableCreateTableAs) {
-            auto [rewriteResults, rewriteIssues] = RewriteExpression(queryExpr, ctx, *TypesCtx, SessionCtx, Cluster);
-            ctx.IssueManager.AddIssues(rewriteIssues);
-            if (!rewriteIssues.Empty()) {
-                return result;
-            }
+        if (Config->EnableCreateTableAs && NeedToSplit(queryExpr, ctx)) {
+            result.NeedToSplit = true;
+            if (isSplit) {
+                auto rewriteResults = RewriteExpression(queryExpr, ctx, *TypesCtx, SessionCtx, Cluster);
+                
+                if (!ctx.IssueManager.GetIssues().Empty()) {
+                    return result;
+                }
 
-            result.QueryExprs = rewriteResults;
-            for (const auto& resultPart : result.QueryExprs) {
-                YQL_CLOG(INFO, ProviderKqp) << "Splitted Compiled query part:\n" << KqpExprToPrettyString(*resultPart, ctx);
+                result.QueryExprs = rewriteResults;
+                for (const auto& resultPart : result.QueryExprs) {
+                    YQL_CLOG(DEBUG, ProviderKqp) << "Splitted Compiled query part:\n" << KqpExprToPrettyString(*resultPart, ctx);
+                }
             }
-
             return result;
         }
 
@@ -1302,7 +1305,7 @@ private:
             .SetSqlAutoCommit(false)
             .SetUsePgParser(settings.UsePgParser)
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
-        auto compileResult = CompileYqlQuery(query, /* isSql */ true, *ExprCtx, sqlVersion, settingsBuilder);
+        auto compileResult = CompileYqlQuery(query, /* isSql */ true, *ExprCtx, sqlVersion, settingsBuilder, /* isSplit */ true);
 
         return TSplitResult{
             .Ctx = std::move(ExprCtxStorage),
@@ -1312,21 +1315,17 @@ private:
     }
 
     TCompileExprResult CompileYqlQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, TMaybe<TSqlVersion>& sqlVersion,
-        TKqpTranslationSettingsBuilder& settingsBuilder) const
+        TKqpTranslationSettingsBuilder& settingsBuilder, bool isSplit = false) const
     {
-        auto compileResult = CompileQuery(query, isSql, ctx, sqlVersion, settingsBuilder);
-        if (!compileResult.QueryExprs) {
+        auto compileResult = CompileQuery(query, isSql, ctx, sqlVersion, settingsBuilder, isSplit);
+        if (!compileResult.QueryExprs || compileResult.NeedToSplit) {
             return compileResult;
         }
 
         if (!isSql) {
             return compileResult;
         }
-
-        // Currently used only for create table as
-        if (compileResult.QueryExprs.size() > 1) {
-            return compileResult;
-        }
+        YQL_ENSURE(compileResult.QueryExprs.size() == 1);
 
         if (TMaybeNode<TCoCommit>(compileResult.QueryExprs.front()) && TCoCommit(compileResult.QueryExprs.front()).DataSink().Maybe<TKiDataSink>()) {
             return compileResult;
@@ -1535,13 +1534,13 @@ private:
                 .SetUsePgParser(settings.UsePgParser)
                 .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
             auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
-            if (compileResult.QueryExprs.empty()) {
-                return nullptr;
-            }
 
-            if (compileResult.QueryExprs.size() > 1) {
+            if (compileResult.NeedToSplit) {
                 return MakeIntrusive<TAsyncPrepareNeedToSplitYqlResult>();
             } else {
+                if (compileResult.QueryExprs.empty()) {
+                    return nullptr;
+                }
                 return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExprs.front().Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
                     query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
             }
@@ -1573,11 +1572,8 @@ private:
         settingsBuilder.SetSqlAutoCommit(false)
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(query, true, ctx, sqlVersion, settingsBuilder);
-        if (compileResult.QueryExprs.empty()) {
-            return nullptr;
-        }
+        YQL_ENSURE(!compileResult.NeedToSplit);
         YQL_ENSURE(compileResult.QueryExprs.size() == 1);
-
 
         return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExprs.front().Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
             query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
@@ -1595,11 +1591,9 @@ private:
         settingsBuilder.SetSqlAutoCommit(false)
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(queryAst, false, ctx, sqlVersion, settingsBuilder);
-        if (compileResult.QueryExprs.empty()) {
-            return nullptr;
-        }
 
         YQL_ENSURE(!sqlVersion);
+        YQL_ENSURE(!compileResult.NeedToSplit);
         YQL_ENSURE(compileResult.QueryExprs.size() == 1);
 
         return MakeIntrusive<TAsyncExecuteKqlResult>(compileResult.QueryExprs.front().Get(), ctx, *DataQueryAstTransformer,
@@ -1623,9 +1617,7 @@ private:
             .SetUsePgParser(settings.UsePgParser)
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
-        if (compileResult.QueryExprs.empty()) {
-            return nullptr;
-        }
+        YQL_ENSURE(!compileResult.NeedToSplit);
         YQL_ENSURE(compileResult.QueryExprs.size() == 1);
 
         (SessionCtx->Query().QueryData)->ParseParameters(parameters);
@@ -1653,9 +1645,7 @@ private:
             .SetUsePgParser(settings.UsePgParser)
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
-        if (compileResult.QueryExprs.empty()) {
-            return nullptr;
-        }
+        YQL_ENSURE(!compileResult.NeedToSplit);
         YQL_ENSURE(compileResult.QueryExprs.size() == 1);
 
         (SessionCtx->Query().QueryData)->ParseParameters(parameters);
@@ -1678,9 +1668,7 @@ private:
         settingsBuilder.SetSqlAutoCommit(true)
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
-        if (compileResult.QueryExprs.empty()) {
-            return nullptr;
-        }
+        YQL_ENSURE(!compileResult.NeedToSplit);
         YQL_ENSURE(compileResult.QueryExprs.size() == 1);
 
         auto transformer = TTransformationPipeline(TypesCtx)
@@ -1707,9 +1695,7 @@ private:
         settingsBuilder.SetSqlAutoCommit(true)
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
-        if (compileResult.QueryExprs.empty()) {
-            return nullptr;
-        }
+        YQL_ENSURE(!compileResult.NeedToSplit);
         YQL_ENSURE(compileResult.QueryExprs.size() == 1);
 
         return MakeIntrusive<TAsyncExplainYqlResult>(compileResult.QueryExprs.front().Get(), SessionCtx, ctx, YqlTransformer,

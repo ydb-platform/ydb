@@ -182,7 +182,7 @@ bool TKqpQueryState::SaveAndCheckSplitResult(TEvKqp::TEvSplitResponse* ev) {
     SplittedWorld = std::move(ev->World);
     SplittedCtx = std::move(ev->Ctx);
     NextSplittedExpr = -1;
-    return true;
+    return SplittedCtx->IssueManager.GetIssues().Empty();
 }
 
 std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {

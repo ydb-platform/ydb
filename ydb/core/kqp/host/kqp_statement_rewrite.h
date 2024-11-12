@@ -7,7 +7,11 @@
 namespace NKikimr {
 namespace NKqp {
 
-std::pair<TVector<NYql::TExprNode::TPtr>, NYql::TIssues> RewriteExpression(
+bool NeedToSplit(
+    const NYql::TExprNode::TPtr& root,
+    NYql::TExprContext& exprCtx);
+
+TVector<NYql::TExprNode::TPtr> RewriteExpression(
     const NYql::TExprNode::TPtr& root,
     NYql::TExprContext& ctx,
     NYql::TTypeAnnotationContext& typeCtx,

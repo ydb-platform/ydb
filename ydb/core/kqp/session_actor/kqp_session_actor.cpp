@@ -627,7 +627,9 @@ public:
 
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
-        QueryState->SaveAndCheckSplitResult(ev->Get());
+        if (!QueryState->SaveAndCheckSplitResult(ev->Get())) {
+            ReplySplitError();
+        }
         OnSuccessSplitRequest();
     }
 
@@ -1916,6 +1918,19 @@ public:
         record->SetConsumedRu(1);
 
         Cleanup(IsFatalError(record->GetYdbStatus()));
+    }
+
+    void ReplySplitError() {
+        QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
+        auto& record = QueryResponse->Record;
+
+        record.SetYdbStatus(::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST);
+        auto& response = *record.MutableResponse();
+        AddQueryIssues(response, QueryState->SplittedCtx->IssueManager.GetIssues());
+
+        FillTxInfo(record.MutableResponse());
+
+        Cleanup(false);
     }
 
     void ReplyProcessError(const TEvKqp::TEvQueryRequest::TPtr& request, Ydb::StatusIds::StatusCode ydbStatus,

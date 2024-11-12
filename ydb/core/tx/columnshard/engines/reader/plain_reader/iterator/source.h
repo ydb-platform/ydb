@@ -75,6 +75,8 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
+    virtual bool NeedAccessorsFetching() const = 0;
+
     bool StartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
         return DoStartFetchingAccessor(sourcePtr, step);
     }
@@ -103,20 +105,18 @@ public:
     void RegisterAllocationGuard(const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard) {
         ResourceGuards.emplace_back(guard);
     }
-
     bool IsSourceInMemory() const {
-        if (!ExclusiveIntervalOnly) {
-            return false;
-        }
         AFL_VERIFY(IsSourceInMemoryFlag);
         return *IsSourceInMemoryFlag;
     }
     void SetSourceInMemory(const bool value) {
         AFL_VERIFY(!IsSourceInMemoryFlag);
         IsSourceInMemoryFlag = value;
-        AFL_VERIFY(StageData);
-        if (!value) {
-            StageData->SetUseFilter(value);
+        if (NeedAccessorsFetching()) {
+            AFL_VERIFY(StageData);
+            if (!value) {
+                StageData->SetUseFilter(value);
+            }
         }
     }
     void SetFirstIntervalId(const ui64 value) {
@@ -322,6 +322,10 @@ private:
     }
 
 public:
+    virtual bool NeedAccessorsFetching() const override {
+        return !StageData  || !StageData->HasPortionAccessor();
+    }
+
     virtual bool DoAddTxConflict() override {
         if (Portion->HasCommitSnapshot() || !Portion->HasInsertWriteId()) {
             GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
@@ -426,6 +430,10 @@ private:
     }
 
 public:
+    virtual bool NeedAccessorsFetching() const override {
+        return false;
+    }
+
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const override {
         THashMap<TChunkAddress, TString> result;
         for (auto&& i : blobsOriginal) {

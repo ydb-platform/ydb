@@ -2362,6 +2362,24 @@ void EnumProc(std::function<void(ui32, const TProcDesc&)> f) {
     }
 }
 
+bool HasProc(const TString& name, EProcKind kind) {
+    const auto& catalog = TCatalog::Instance();
+    auto procIdPtr = catalog.State->ProcByName.FindPtr(to_lower(name));
+    if (!procIdPtr) {
+        return false;
+    }
+
+    for (const auto& id : *procIdPtr) {
+        const auto& d = catalog.State->Procs.FindPtr(id);
+        Y_ENSURE(d);
+        if (d->Kind == kind) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool HasReturnSetProc(const TString& name) {
     const auto& catalog = TCatalog::Instance();
     auto procIdPtr = catalog.State->ProcByName.FindPtr(to_lower(name));

@@ -515,15 +515,26 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
     return out;
 }
 
-void TColumnEngineForLogs::OnTieringModified(
-    const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) {
-    if (!ActualizationStarted) {
-        for (auto&& i : GranulesStorage->GetTables()) {
-            i.second->StartActualizationIndex();
+bool TColumnEngineForLogs::StartActualization(const THashMap<ui64, TTiering>& specialPathEviction) {
+    if (ActualizationStarted) {
+        return false;
+    }
+    for (auto&& i : GranulesStorage->GetTables()) {
+        i.second->StartActualizationIndex();
+    }
+    for (auto&& i : specialPathEviction) {
+        auto g = GetGranuleOptional(i.first);
+        if (g) {
+            g->RefreshTiering(i.second);
         }
     }
-
     ActualizationStarted = true;
+    return true;
+}
+
+void TColumnEngineForLogs::OnTieringModified(
+    const std::shared_ptr<NColumnShard::TTiersManager>& manager, const NColumnShard::TTtl& ttl, const std::optional<ui64> pathId) {
+    StartActualization({});
     AFL_VERIFY(manager);
     THashMap<ui64, TTiering> tierings = manager->GetTiering();
     ttl.AddTtls(tierings);

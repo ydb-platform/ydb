@@ -123,6 +123,7 @@ public:
 public:
     virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) override;
     bool FinishLoading();
+    bool StartActualization(const THashMap<ui64, TTiering>& specialPathEviction);
 
     virtual bool IsOverloadedByMetadata(const ui64 limit) const override {
         return limit < TGranulesStat::GetSumMetadataMemoryPortionsSize();

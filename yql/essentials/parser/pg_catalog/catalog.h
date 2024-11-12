@@ -283,6 +283,7 @@ const TProcDesc& LookupProc(ui32 procId);
 std::variant<const TProcDesc*, const TTypeDesc*> LookupProcWithCasts(const TString& name, const TVector<ui32>& argTypeIds);
 bool HasReturnSetProc(const TString& name);
 void EnumProc(std::function<void(ui32, const TProcDesc&)> f);
+bool HasProc(const TString& name, EProcKind kind);
 
 bool HasType(const TString& name);
 bool HasType(ui32 typeId);

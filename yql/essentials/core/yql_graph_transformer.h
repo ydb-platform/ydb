@@ -236,6 +236,17 @@ void AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExpr
 IGraphTransformer::TStatus AsyncTransformStep(IGraphTransformer& transformer, TExprNode::TPtr& root,
                                             TExprContext& ctx, bool applyAsyncChanges);
 
+template <typename T>
+void HandleFutureException(const NThreading::TFuture<T>& future) {
+    if (future.HasException()) {
+        try {
+            future.TryRethrow();
+        } catch (...) {
+            throw yexception() << "Unexpected future exception: " << CurrentExceptionMessage();
+        }
+    }
+}
+
 class TSyncTransformerBase : public TGraphTransformerBase {
 public:
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {

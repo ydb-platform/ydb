@@ -43,7 +43,8 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
                 max = it->second;
             }
         }
-        auto tieringInfo = Tiering->GetTierToMove(max, now);
+        const bool skipEviction = !NYDBTest::TControllers::GetColumnShardController()->CheckPortionForEvict(portion);
+        auto tieringInfo = Tiering->GetTierToMove(max, now, skipEviction);
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("tiering_info", tieringInfo.DebugString());
         std::optional<i64> d;
         std::set<TString> storagesWrite;
@@ -149,13 +150,7 @@ void TTieringActualizer::DoExtractTasks(
             }
             bool limitEnriched = false;
             for (auto&& p : portions) {
-                auto portion = externalContext.GetPortionVerified(p);
-                if (!address.WriteIs(NBlobOperations::TGlobal::DefaultStorageId) && !address.WriteIs(NTiering::NCommon::DeleteTierName)) {
-                    if (!NYDBTest::TControllers::GetColumnShardController()->CheckPortionForEvict(portion)) {
-                        Counters.SkipEvictionForCompaction->Add(1);
-                        continue;
-                    }
-                }
+                const auto& portion = externalContext.GetPortionVerified(p);
                 auto info = BuildActualizationInfo(*portion, tasksContext.GetActualInstant());
                 AFL_VERIFY(info);
                 auto portionScheme = portion->GetSchema(VersionedIndex);

@@ -566,8 +566,7 @@ template<typename TProto>
 void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
     auto type = literal.Ref().GetTypeAnn();
 
-    // TODO: support pg types
-    YQL_ENSURE(type->GetKind() != ETypeAnnotationKind::Pg, "pg types are not supported");
+    YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::Data, "unexpected type: " << type->GetKind());
 
     auto slot = type->Cast<TDataExprType>()->GetSlot();
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
@@ -655,6 +654,23 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKqpProto::TKqpPhyLite
     FillLiteralProtoImpl(literal, proto);
 }
 
+void FillLiteralProto(const NNodes::TCoPgConst& pgLiteral, NKqpProto::TKqpPhyLiteralValue& proto) {
+    auto type = pgLiteral.Ref().GetTypeAnn();
+    auto actualPgType = type->Cast<TPgExprType>();
+    auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
+
+    auto& protoType = *proto.MutableType();
+    auto& protoValue = *proto.MutableValue();
+
+    protoType.SetKind(NKikimrMiniKQL::ETypeKind::Pg);
+    protoType.MutablePg()->Setoid(actualPgType->GetId());
+
+    TString content = TString(pgLiteral.Value().Value());
+    auto parseResult = NKikimr::NPg::PgNativeBinaryFromNativeText(content, typeDesc);
+
+    protoValue.SetBytes(parseResult.Str.data(), parseResult.Str.size());
+}
+
 bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral) {
     return maybeLiteral.Ptr()->IsCallable() &&
         maybeLiteral.Ptr()->Content() == "PgCast" && maybeLiteral.Ptr()->ChildrenSize() >= 1 &&
@@ -711,8 +727,7 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
 {
     auto type = literal.Ref().GetTypeAnn();
 
-    // TODO: support pg types
-    YQL_ENSURE(type->GetKind() != ETypeAnnotationKind::Pg, "pg types are not supported");
+    YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::Data, "unexpected type: " << type->GetKind());
 
     auto slot = type->Cast<TDataExprType>()->GetSlot();
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;

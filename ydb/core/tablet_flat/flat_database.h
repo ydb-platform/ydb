@@ -193,6 +193,13 @@ public:
 
     void NoMoreReadsForTx();
 
+    /**
+     * Will debug assert when current transaction attempts to read tables that
+     * have not been precharged up to this point. Useful to detect missing
+     * precharges that avoid multiple transaction restarts.
+     */
+    void NoMoreUnprechargedReadsForTx();
+
     TAlter& Alter(); /* Begin DDL ALTER script */
 
     TEpoch TxSnapTable(ui32 table);
@@ -291,10 +298,14 @@ private:
     TTable* Require(ui32 tableId) const noexcept;
     TTable* RequireForUpdate(ui32 tableId) const noexcept;
 
+    void CheckReadAllowed(ui32 table) const noexcept;
+    void CheckPrechargeAllowed(ui32 table, TRawVals minKey, TRawVals maxKey) const noexcept;
+
 private:
     const THolder<TDatabaseImpl> DatabaseImpl;
 
-    bool NoMoreReadsFlag;
+    bool NoMoreReadsFlag = false;
+    bool NoMoreUnprechargedReadsFlag = false;
     IPages* Env = nullptr;
     THolder<TChange> Change;
     TAutoPtr<TAlter> Alter_;
@@ -305,6 +316,7 @@ private:
     TVector<TUpdateOp> ModifiedOps;
 
     mutable TDeque<TPartIter> TempIterators; // Keeps the last result of Select() valid
+    mutable TVector<ui32> PrechargedTables;
 
     TVector<std::function<void()>> OnCommit_;
     TVector<std::function<void()>> OnRollback_;

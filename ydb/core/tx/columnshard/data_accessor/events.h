@@ -1,6 +1,6 @@
 #pragma once
 
-#include "controller.h"
+#include "abstract/collector.h"
 
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
@@ -17,15 +17,19 @@ namespace NKikimr::NOlap::NDataAccessorControl {
 
 class TEvAddPortion: public NActors::TEventLocal<TEvAddPortion, NColumnShard::TEvPrivate::EEv::EvAddPortionDataAccessor> {
 private:
-    TPortionDataAccessor Accessor;
+    std::vector<TPortionDataAccessor> Accessors;
 
 public:
-    TPortionDataAccessor ExtractAccessor() {
-        return std::move(Accessor);
+    std::vector<TPortionDataAccessor> ExtractAccessors() {
+        return std::move(Accessors);
     }
 
-    explicit TEvAddPortion(const TPortionDataAccessor& accessor)
-        : Accessor(accessor) {
+    explicit TEvAddPortion(const TPortionDataAccessor& accessor) {
+        Accessors.emplace_back(accessor);
+    }
+
+    explicit TEvAddPortion(const std::vector<TPortionDataAccessor>& accessors) {
+        Accessors = accessors;
     }
 };
 
@@ -42,14 +46,21 @@ public:
 class TEvRegisterController: public NActors::TEventLocal<TEvRegisterController, NColumnShard::TEvPrivate::EEv::EvRegisterGranuleDataAccessor> {
 private:
     std::unique_ptr<IGranuleDataAccessor> Controller;
+    bool IsUpdateFlag = false;
 
 public:
+    bool IsUpdate() const {
+        return IsUpdateFlag;
+    }
+
     std::unique_ptr<IGranuleDataAccessor> ExtractController() {
         return std::move(Controller);
     }
 
-    explicit TEvRegisterController(std::unique_ptr<IGranuleDataAccessor>&& accessor)
-        : Controller(std::move(accessor)) {
+    explicit TEvRegisterController(std::unique_ptr<IGranuleDataAccessor>&& accessor, const bool isUpdate)
+        : Controller(std::move(accessor))
+        , IsUpdateFlag(isUpdate)
+    {
     }
 };
 
@@ -64,12 +75,27 @@ public:
     }
 };
 
-class TEvAskDataAccessors: public NActors::TEventLocal<TEvAskDataAccessors, NColumnShard::TEvPrivate::EEv::EvAskDataAccessors> {
+class TEvAskTabletDataAccessors: public NActors::TEventLocal<TEvAskTabletDataAccessors, NColumnShard::TEvPrivate::EEv::EvAskTabletDataAccessors> {
+private:
+    using TPortions = THashMap<ui64, TPortionInfo::TConstPtr>;
+    YDB_ACCESSOR_DEF(TPortions, Portions);
+    YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IAccessorCallback>, Callback);
+
+public:
+    explicit TEvAskTabletDataAccessors(
+        const THashMap<ui64, TPortionInfo::TConstPtr>& portions, const std::shared_ptr<NDataAccessorControl::IAccessorCallback>& callback)
+        : Portions(portions)
+        , Callback(callback) {
+    }
+};
+
+class TEvAskServiceDataAccessors
+    : public NActors::TEventLocal<TEvAskServiceDataAccessors, NColumnShard::TEvPrivate::EEv::EvAskServiceDataAccessors> {
 private:
     YDB_READONLY_DEF(std::shared_ptr<TDataAccessorsRequest>, Request);
 
 public:
-    explicit TEvAskDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request)
+    explicit TEvAskServiceDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request)
         : Request(request) {
     }
 };

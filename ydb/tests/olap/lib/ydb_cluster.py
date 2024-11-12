@@ -55,9 +55,9 @@ class YdbCluster:
     @classmethod
     def get_cluster_nodes(cls, path=None):
         try:
-            url = f'{cls._get_service_url()}/viewer/json/nodes?'
+            url = f'{cls._get_service_url()}/viewer/json/nodes?database=/{cls.ydb_database}'
             if path is not None:
-                url += f'path={path}&tablets=true'
+                url += f'&path={path}&tablets=true'
             headers = {}
             # token = os.getenv('OLAP_YDB_OAUTH', None)
             # if token is not None:
@@ -129,17 +129,16 @@ class YdbCluster:
         return cls._ydb_driver
 
     @classmethod
-    def _list_directory_impl(cls, root_path: str, rel_path: str) -> List[ydb.SchemeEntry]:
-        full_path = f'{root_path}/{rel_path}'
-        LOGGER.info(f'list {full_path}')
+    def _list_directory_impl(cls, path) -> List[ydb.SchemeEntry]:
+        LOGGER.info(f'list {path}')
         result = []
-        for child in cls.get_ydb_driver().scheme_client.list_directory(full_path).children:
+        for child in cls.get_ydb_driver().scheme_client.list_directory(path).children:
             if child.name == '.sys':
                 continue
-            child.name = f'{rel_path}/{child.name}'
-            if child.is_directory() or child.is_column_store():
-                result += cls._list_directory_impl(root_path, child.name)
+            child.name = f'{path}/{child.name}'
             result.append(child)
+            if child.is_directory() or child.is_column_store():
+                result += cls._list_directory_impl(child.name)
         return result
 
     @classmethod
@@ -155,7 +154,7 @@ class YdbCluster:
         self_descr = cls._describe_path_impl(full_path)
         if self_descr is not None:
             if self_descr.is_directory():
-                for descr in cls._list_directory_impl(full_path, '/'):
+                for descr in cls._list_directory_impl(full_path):
                     if descr.is_any_table():
                         result.append(descr.name)
             elif self_descr.is_any_table():
@@ -226,9 +225,9 @@ class YdbCluster:
                 errors.append(f'Only {ok_dynnodes_count} from {dynnodes_count} dynnodes are ok: {dynnodes_errors}')
             storage_nodes_count = nodes_by_role['Storage']
             ok_storage_nodes_count = ok_by_role['Storage']
-            if ok_storage_nodes_count < dynnodes_count:
+            if ok_storage_nodes_count < storage_nodes_count:
                 storage_nodes_errors = ','.join(node_errors['Tenant'])
-                errors.append(f'Only {ok_storage_nodes_count} from {storage_nodes_count} storage nodes are ok, but {dynnodes_count} need. {storage_nodes_errors}')
+                errors.append(f'Only {ok_storage_nodes_count} from {storage_nodes_count} storage nodes are ok. {storage_nodes_errors}')
             paths_to_balance = []
             if isinstance(balanced_paths, str):
                 paths_to_balance += cls._get_tables(balanced_paths)
@@ -242,13 +241,18 @@ class YdbCluster:
                 for tn in table_nodes:
                     tablet_count = 0
                     for tablet in tn.get("Tablets", []):
+                        if tablet.get("State") != "Green":
+                            errors.append(f'Node {tn.get("SystemState", {}).get("Host")}: {tablet.get("Count")} tablets of type {tablet.get("Type")} in {tablet.get("State")} state')
                         if tablet.get("Type") in {"ColumnShard", "DataShard"}:
                             tablet_count += tablet.get("Count")
-                    if min is None or tablet_count < min:
-                        min = tablet_count
-                    if max is None or tablet_count > max:
-                        max = tablet_count
-                if min is not None and max - min > 1:
+                    if tablet_count > 0:
+                        if min is None or tablet_count < min:
+                            min = tablet_count
+                        if max is None or tablet_count > max:
+                            max = tablet_count
+                if min is None or max is None:
+                    errors.append(f'Table {p} has no tablets')
+                elif max - min > 1:
                     errors.append(f'Table {p} is not balanced: {min}-{max} shards.')
                 LOGGER.info(f'Table {p} is balanced: {min}-{max} shards.')
 

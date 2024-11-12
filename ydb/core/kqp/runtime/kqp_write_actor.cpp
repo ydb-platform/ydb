@@ -170,12 +170,14 @@ public:
         const bool inconsistentTx,
         const NMiniKQL::TTypeEnvironment& typeEnv,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
         TIntrusivePtr<TKqpCounters> counters,
         NWilson::TTraceId traceId)
         : TypeEnv(typeEnv)
         , Alloc(alloc)
+        , MvccSnapshot(mvccSnapshot)
         , TableId(tableId)
         , TablePath(tablePath)
         , LockTxId(lockTxId)
@@ -812,6 +814,9 @@ public:
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
+            if (MvccSnapshot) {
+                *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
+            }
         }
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite);
@@ -953,6 +958,8 @@ public:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
+    std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
+
     const TTableId TableId;
     const TString TablePath;
 
@@ -1018,6 +1025,9 @@ public:
             Settings.GetInconsistentTx(),
             TypeEnv,
             Alloc,
+            Settings.GetIsOlap()
+                ? std::optional<NKikimrDataEvents::TMvccSnapshot>{Settings.GetMvccSnapshot()}
+                : std::optional<NKikimrDataEvents::TMvccSnapshot>{},
             nullptr,
             TActorId{},
             Counters,
@@ -1205,6 +1215,7 @@ struct TTransactionSettings {
     ui64 LockTxId = 0;
     ui64 LockNodeId = 0;
     bool InconsistentTx = false;
+    NKikimrDataEvents::TMvccSnapshot MvccSnapshot;
 };
 
 struct TWriteSettings {
@@ -1333,6 +1344,7 @@ public:
                     InconsistentTx,
                     TypeEnv,
                     Alloc,
+                    std::nullopt,
                     TxManager,
                     SessionActorId,
                     Counters,

@@ -387,6 +387,7 @@ class TDataShard
             ui64 MemRowCount = 0;
             ui64 MemDataSize = 0;
             ui64 SearchHeight = 0;
+            bool HasSchemaChanges = false;
         };
 
         struct TEvTableStatsError : public TEventLocal<TEvTableStatsError, EvTableStatsError> {
@@ -1632,7 +1633,10 @@ public:
         TableInfos.erase(tableId.LocalPathId);
     }
 
-    void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
+    void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo, ILocksDb* locksDb = nullptr) {
+        if (locksDb) {
+            SysLocks.RemoveSchema(tableId, locksDb);
+        }
         TableInfos[tableId.LocalPathId] = tableInfo;
         SysLocks.UpdateSchema(tableId, tableInfo->KeyColumnTypes);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);
@@ -2723,9 +2727,9 @@ private:
     TControlWrapper MaxTxLagMilliseconds;
     TControlWrapper CanCancelROWithReadSets;
     TControlWrapper PerShardReadSizeLimit;
-    TControlWrapper CpuUsageReportThreshlodPercent;
+    TControlWrapper CpuUsageReportThresholdPercent;
     TControlWrapper CpuUsageReportIntervalSeconds;
-    TControlWrapper HighDataSizeReportThreshlodBytes;
+    TControlWrapper HighDataSizeReportThresholdBytes;
     TControlWrapper HighDataSizeReportIntervalSeconds;
 
     TControlWrapper DataTxProfileLogThresholdMs;
@@ -3296,6 +3300,7 @@ protected:
 
                 ev->Record.MutableTableStats()->SetPartCount(ti.Stats.PartCount);
                 ev->Record.MutableTableStats()->SetSearchHeight(ti.Stats.SearchHeight);
+                ev->Record.MutableTableStats()->SetHasSchemaChanges(ti.Stats.HasSchemaChanges);
                 ev->Record.MutableTableStats()->SetLastFullCompactionTs(ti.Stats.LastFullCompaction.Seconds());
                 ev->Record.MutableTableStats()->SetHasLoanedParts(Executor()->HasLoanedParts());
 

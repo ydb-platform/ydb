@@ -428,6 +428,7 @@ namespace NKikimr {
                 const TActorContext &ctx,
                 ui64 lsn,
                 const TDiskPartVec &rec,
+                const TDiskPartVec& allocated,
                 ESlotDelDbType type)
         {
             ui64 *logPosDelLsn = nullptr;
@@ -446,13 +447,14 @@ namespace NKikimr {
             }
             if (lsn > *logPosDelLsn) {
                 // apply
-                LOG_DEBUG(ctx, BS_HULLHUGE,
-                          VDISKP(VCtx->VDiskLogPrefix,
-                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                "RmHugeBlobs apply: %s",
-                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64
+                    " entryLsn# %" PRIu64 "): " "RmHugeBlobs apply: %s", Guid, lsn, LogPos.EntryPointLsn,
+                    rec.ToString().data()));
                 for (const auto &x : rec) {
                     Heap->RecoveryModeFree(x);
+                }
+                for (const auto& x : allocated) {
+                    Heap->RecoveryModeAllocate(x);
                 }
 
                 *logPosDelLsn = lsn;
@@ -460,11 +462,9 @@ namespace NKikimr {
                 return TRlas(true, false);
             } else {
                 // skip
-                LOG_DEBUG(ctx, BS_HULLHUGE,
-                          VDISKP(VCtx->VDiskLogPrefix,
-                                "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
-                                "RmHugeBlobs skip: %s",
-                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64
+                    " entryLsn# %" PRIu64 "): " "RmHugeBlobs skip: %s", Guid, lsn, LogPos.EntryPointLsn,
+                    rec.ToString().data()));
                 return TRlas(true, true);
             }
         }

@@ -235,12 +235,8 @@ void FillColumns(const TContainer& columns, const TKikimrTableMetadata& tableMet
     }
 }
 
-void FillNothing(TCoNothing expr, NKqpProto::TKqpPhyLiteralValue& value) {
-    auto* typeann = expr.Raw()->GetTypeAnn();
-    YQL_ENSURE(typeann->GetKind() == ETypeAnnotationKind::Optional);
-    typeann = typeann->Cast<TOptionalExprType>()->GetItemType();
-    YQL_ENSURE(typeann->GetKind() == ETypeAnnotationKind::Data);
-    auto slot = typeann->Cast<TDataExprType>()->GetSlot();
+void FillNothingData(const TDataExprType& dataType, NKqpProto::TKqpPhyLiteralValue& value) {
+    auto slot = dataType.GetSlot();
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
 
     YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId) &&
@@ -253,14 +249,41 @@ void FillNothing(TCoNothing expr, NKqpProto::TKqpPhyLiteralValue& value) {
     toFill->MutableData()->SetScheme(typeId);
 
     if (slot == EDataSlot::Decimal) {
-        const auto paramsDataType = typeann->Cast<TDataExprParamsType>();
-        auto precision = FromString<ui8>(paramsDataType->GetParamOne());
-        auto scale = FromString<ui8>(paramsDataType->GetParamTwo());
+        const auto& paramsDataType = *dataType.Cast<TDataExprParamsType>();
+        auto precision = FromString<ui8>(paramsDataType.GetParamOne());
+        auto scale = FromString<ui8>(paramsDataType.GetParamTwo());
         toFill->MutableData()->MutableDecimalParams()->SetPrecision(precision);
         toFill->MutableData()->MutableDecimalParams()->SetScale(scale);
     }
 
     value.MutableValue()->SetNullFlagValue(::google::protobuf::NullValue::NULL_VALUE);
+}
+
+void FillNothingPg(const TPgExprType& pgType, NKqpProto::TKqpPhyLiteralValue& value) {
+    value.MutableType()->SetKind(NKikimrMiniKQL::Pg);
+    value.MutableType()->MutablePg()->Setoid(pgType.GetId());
+
+    value.MutableValue()->SetNullFlagValue(::google::protobuf::NullValue::NULL_VALUE);
+}
+
+void FillNothing(TCoNothing expr, NKqpProto::TKqpPhyLiteralValue& value) {
+    auto* typeann = expr.Raw()->GetTypeAnn();
+    switch (typeann->GetKind()) {
+        case ETypeAnnotationKind::Optional: {
+            typeann = typeann->Cast<TOptionalExprType>()->GetItemType();
+            YQL_ENSURE(
+                typeann->GetKind() == ETypeAnnotationKind::Data,
+                "Unexpected type in Nothing.Optional: " << typeann->GetKind());
+            FillNothingData(*typeann->Cast<TDataExprType>(), value);
+            return;
+        }
+        case ETypeAnnotationKind::Pg: {
+            FillNothingPg(*typeann->Cast<TPgExprType>(), value);
+            return;
+        }
+        default:
+            YQL_ENSURE(false, "Unexpected type in Nothing: " << typeann->GetKind());
+    }
 }
 
 void FillKeyBound(const TVarArgCallable<TExprBase>& bound, NKqpProto::TKqpPhyKeyBound& boundProto) {
@@ -286,6 +309,8 @@ void FillKeyBound(const TVarArgCallable<TExprBase>& bound, NKqpProto::TKqpPhyKey
             paramElementProto.SetElementIndex(FromString<ui32>(key.Cast<TCoNth>().Index().Value()));
         } else if (auto maybeLiteral = key.Maybe<TCoDataCtor>()) {
             FillLiteralProto(maybeLiteral.Cast(), *protoValue.MutableLiteralValue());
+        } else if (auto maybePgLiteral = key.Maybe<TCoPgConst>()) {
+            FillLiteralProto(maybePgLiteral.Cast(), *protoValue.MutableLiteralValue());
         } else if (auto maybeNull = key.Maybe<TCoNothing>()) {
             FillNothing(maybeNull.Cast(), *protoValue.MutableLiteralValue());
         } else {

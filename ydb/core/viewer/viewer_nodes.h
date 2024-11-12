@@ -1625,35 +1625,40 @@ public:
 
     void ProcessResponses() {
         AddEvent("ProcessResponses");
-        if (NodesInfoResponse && NodesInfoResponse->IsDone()) {
-            if (NodesInfoResponse->IsOk()) {
-                bool seenDC = false;
-                bool seenRack = false;
-                for (const auto& ni : NodesInfoResponse->Get()->Nodes) {
-                    TNode& node = NodeData.emplace_back();
-                    node.NodeInfo = ni;
-                    if (ni.Host && !node.SystemState.GetHost()) {
-                        node.SystemState.SetHost(ni.Host);
+        if (NodesInfoResponse) {
+            if (NodesInfoResponse->IsDone()) {
+                if (NodesInfoResponse->IsOk()) {
+                    bool seenDC = false;
+                    bool seenRack = false;
+                    for (const auto& ni : NodesInfoResponse->Get()->Nodes) {
+                        TNode& node = NodeData.emplace_back();
+                        node.NodeInfo = ni;
+                        if (ni.Host && !node.SystemState.GetHost()) {
+                            node.SystemState.SetHost(ni.Host);
+                        }
+                        if (ni.Location.GetDataCenterId() != 0) {
+                            seenDC = true;
+                        }
+                        if (ni.Location.GetRackId() != 0) {
+                            seenRack = true;
+                        }
                     }
-                    if (ni.Location.GetDataCenterId() != 0) {
-                        seenDC = true;
+                    for (TNode& node : NodeData) {
+                        NodeView.emplace_back(&node);
                     }
-                    if (ni.Location.GetRackId() != 0) {
-                        seenRack = true;
-                    }
+                    InvalidateNodes();
+                    FieldsAvailable |= FieldsNodeInfo;
+                    FoundNodes = TotalNodes = NodeView.size();
+                    NoDC = !seenDC;
+                    NoRack = !seenRack;
+                    ApplyEverything();
+                } else {
+                    AddProblem("no-nodes-info");
                 }
-                for (TNode& node : NodeData) {
-                    NodeView.emplace_back(&node);
-                }
-                InvalidateNodes();
-                FieldsAvailable |= FieldsNodeInfo;
-                FoundNodes = TotalNodes = NodeView.size();
-                NoDC = !seenDC;
-                NoRack = !seenRack;
+                NodesInfoResponse.reset();
             } else {
-                AddProblem("no-nodes-info");
+                return; // no further processing until we get node list
             }
-            NodesInfoResponse.reset();
         }
 
         if (NodeStateResponse && NodeStateResponse->IsDone() && TotalNodes > 0) {

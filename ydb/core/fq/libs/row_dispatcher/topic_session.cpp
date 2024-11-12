@@ -34,6 +34,7 @@ struct TTopicSessionMetrics {
         RowsRead = SubGroup->GetCounter("RowsRead", true);
         InFlySubscribe = SubGroup->GetCounter("InFlySubscribe");
         ReconnectRate = SubGroup->GetCounter("ReconnectRate", true);
+        RestartSessionByOffsets = counters->GetCounter("RestartSessionByOffsets", true);
     }
 
     ~TTopicSessionMetrics() {
@@ -45,6 +46,7 @@ struct TTopicSessionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr RowsRead;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RestartSessionByOffsets;
 };
 
 struct TEvPrivate {
@@ -750,6 +752,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         if (ReadSession) {
             if (clientInfo.Settings.HasOffset() && (clientInfo.Settings.GetOffset() <= LastMessageOffset)) {
                 LOG_ROW_DISPATCHER_INFO("New client has less offset (" << clientInfo.Settings.GetOffset() << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
+                Metrics.RestartSessionByOffsets->Inc();
                 StopReadSession();
             }
         }

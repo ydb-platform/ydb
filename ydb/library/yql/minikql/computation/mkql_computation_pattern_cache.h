@@ -56,40 +56,7 @@ struct TPatternCacheEntry {
 
 class TComputationPatternLRUCache {
 public:
-    class TTicket : private TNonCopyable {
-    public:
-        TTicket(const TString& serialized, bool isOwned, const NThreading::TFuture<std::shared_ptr<TPatternCacheEntry>>& future, TComputationPatternLRUCache* cache)
-            : Serialized(serialized)
-            , IsOwned(isOwned)
-            , Future(future)
-            , Cache(cache)
-        {}
-
-        ~TTicket() {
-            if (Cache) {
-                Cache->NotifyMissing(Serialized);
-            }
-        }
-
-        bool HasFuture() const {
-            return !IsOwned;
-        }
-
-        std::shared_ptr<TPatternCacheEntry> GetValueSync() const {
-            Y_ABORT_UNLESS(HasFuture());
-            return Future.GetValueSync();
-        }
-
-        void Close() {
-            Cache = nullptr;
-        }
-
-    private:
-        const TString Serialized;
-        const bool IsOwned;
-        const NThreading::TFuture<std::shared_ptr<TPatternCacheEntry>> Future;
-        TComputationPatternLRUCache* Cache;
-    };
+    using TPatternCacheEntryFuture = NThreading::TFuture<std::shared_ptr<TPatternCacheEntry>>;
 
     struct Config {
         Config(size_t maxSizeBytes, size_t maxCompiledSizeBytes)
@@ -127,11 +94,12 @@ public:
 
     std::shared_ptr<TPatternCacheEntry> Find(const TString& serializedProgram);
 
-    TTicket FindOrSubscribe(const TString& serializedProgram);
+    TPatternCacheEntryFuture FindOrSubscribe(const TString& serializedProgram);
 
     void EmplacePattern(const TString& serializedProgram, std::shared_ptr<TPatternCacheEntry> patternWithEnv);
 
     void NotifyPatternCompiled(const TString& serializedProgram);
+    void NotifyPatternMissing(const TString& serializedProgram);
 
     size_t GetSize() const;
 
@@ -166,21 +134,16 @@ public:
     }
 
 private:
-    void AccessPattern(const TString & serializedProgram, std::shared_ptr<TPatternCacheEntry> & entry);
-
-    void NotifyMissing(const TString& serialized);
+    class TLRUPatternCacheImpl;
 
     static constexpr size_t CacheMaxElementsSize = 10000;
 
-    friend class TTicket;
+    void AccessPattern(const TString & serializedProgram, std::shared_ptr<TPatternCacheEntry> & entry);
 
     mutable std::mutex Mutex;
-    THashMap<TString, TMaybe<TVector<NThreading::TPromise<std::shared_ptr<TPatternCacheEntry>>>>> Notify;
-
-    class TLRUPatternCacheImpl;
-    std::unique_ptr<TLRUPatternCacheImpl> Cache;
-
-    THashMap<TString, std::shared_ptr<TPatternCacheEntry>> PatternsToCompile;
+    THashMap<TString, TVector<NThreading::TPromise<std::shared_ptr<TPatternCacheEntry>>>> Notify; // protected by Mutex
+    std::unique_ptr<TLRUPatternCacheImpl> Cache;                                                  // protected by Mutex
+    THashMap<TString, std::shared_ptr<TPatternCacheEntry>> PatternsToCompile;                     // protected by Mutex
 
     const Config Configuration;
 

@@ -3283,6 +3283,7 @@ protected:
 
             ev->Record.MutableTableStats()->SetPartCount(ti.Stats.PartCount);
             ev->Record.MutableTableStats()->SetSearchHeight(ti.Stats.SearchHeight);
+            ev->Record.MutableTableStats()->SetHasSchemaChanges(ti.Stats.HasSchemaChanges);
             ev->Record.MutableTableStats()->SetLastFullCompactionTs(ti.Stats.LastFullCompaction.Seconds());
             ev->Record.MutableTableStats()->SetHasLoanedParts(Executor()->HasLoanedParts());
 

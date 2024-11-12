@@ -216,7 +216,7 @@ private:
 
     TSchemeEntry Entry_;
     // holds type-specific info
-    std::unique_ptr<Ydb::Scheme::DescribeSchemeObjectResult> Proto_;
+    std::shared_ptr<Ydb::Scheme::DescribeSchemeObjectResult> Proto_;
 };
 
 class TListDirectoryResult : public TDescribePathResult {

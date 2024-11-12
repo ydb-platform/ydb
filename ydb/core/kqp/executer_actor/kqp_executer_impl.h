@@ -951,10 +951,6 @@ protected:
             if (!settings.GetInconsistentTx() && !settings.GetIsOlap()) {
                 ActorIdToProto(BufferActorId, settings.MutableBufferActorId());
             }
-            if (GetSnapshot().IsValid() && settings.GetIsOlap()) {
-                settings.MutableMvccSnapshot()->SetStep(GetSnapshot().Step);
-                settings.MutableMvccSnapshot()->SetTxId(GetSnapshot().TxId);
-            }
             output.SinkSettings.ConstructInPlace();
             output.SinkSettings->PackFrom(settings);
         } else {

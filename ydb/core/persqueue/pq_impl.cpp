@@ -3871,7 +3871,7 @@ void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
 
         tx->AddCmdWrite(request, state);
 
-        ChangedTxs.push_back(txId);
+        ChangedTxs.emplace(tx->Step, txId);
     }
 
     WriteTxs.clear();
@@ -3890,7 +3890,7 @@ void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
 
         auto tx = GetTransaction(ctx, txId);
         if (tx) {
-            ChangedTxs.push_back(txId);
+            ChangedTxs.emplace(tx->Step, txId);
         }
     }
 
@@ -4641,7 +4641,8 @@ void TPersQueue::SendReplies(const TActorContext& ctx)
 
 void TPersQueue::CheckChangedTxStates(const TActorContext& ctx)
 {
-    for (ui64 txId : ChangedTxs) {
+    for (const auto& p : ChangedTxs) {
+        ui64 txId = p.second;
         auto tx = GetTransaction(ctx, txId);
         Y_ABORT_UNLESS(tx,
                        "PQ %" PRIu64 ", TxId %" PRIu64,
@@ -4649,6 +4650,7 @@ void TPersQueue::CheckChangedTxStates(const TActorContext& ctx)
 
         TryExecuteTxs(ctx, *tx);
     }
+
     ChangedTxs.clear();
 }
 

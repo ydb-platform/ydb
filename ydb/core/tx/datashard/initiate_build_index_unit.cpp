@@ -1,5 +1,4 @@
 #include "datashard_impl.h"
-#include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
@@ -54,8 +53,7 @@ public:
         }
 
         Y_ABORT_UNLESS(tableInfo);
-        TDataShardLocksDb locksDb(DataShard, txc);
-        DataShard.AddUserTable(pathId, tableInfo, &locksDb);
+        DataShard.AddUserTable(pathId, tableInfo);
 
         if (tableInfo->NeedSchemaSnapshots()) {
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);

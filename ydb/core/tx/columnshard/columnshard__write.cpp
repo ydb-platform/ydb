@@ -283,9 +283,9 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         writeData.MutableWriteMeta().SetWriteMiddle1StartInstant(TMonotonic::Now());
 
         NOlap::TWritingContext context(TabletID(), SelfId(), snapshotSchema, StoragesManager,
-            Counters.GetIndexationCounters().SplitterCounters, Counters.GetCSCounters().WritingCounters);
+            Counters.GetIndexationCounters().SplitterCounters, Counters.GetCSCounters().WritingCounters, GetLastTxSnapshot());
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(
-            BufferizationWriteActorId, std::move(writeData), GetLastTxSnapshot(), context);
+            BufferizationWriteActorId, std::move(writeData), context);
         NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
     }
 }
@@ -589,9 +589,10 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         pathId, lockId, cookie, granuleShardingVersionId, *mType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
     Y_ABORT_UNLESS(writeOperation);
     writeOperation->SetBehaviour(behaviour);
+    const TSnapshot applyToSnapshot(record.GetMvccSnapshot().GetStep(), record.GetMvccSnapshot().GetTxId());
     NOlap::TWritingContext wContext(
         pathId, SelfId(), schema, StoragesManager, Counters.GetIndexationCounters().SplitterCounters,
-        Counters.GetCSCounters().WritingCounters);
+        Counters.GetCSCounters().WritingCounters, applyToSnapshot);
     arrowData->SetSeparationPoints(GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(pathId)->GetBucketPositions());
     writeOperation->Start(*this, arrowData, source, wContext);
 }

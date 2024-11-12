@@ -94,6 +94,11 @@
             "uri": "file://test.test_GoodForYsonBadForJson_/results.txt"
         }
     ],
+    "test.test[IgnoreCaseFuncs]": [
+        {
+            "uri": "file://test.test_IgnoreCaseFuncs_/results.txt"
+        }
+    ],
     "test.test[ImplicitFromRes]": [
         {
             "uri": "file://test.test_ImplicitFromRes_/results.txt"
@@ -109,14 +114,14 @@
             "uri": "file://test.test_JsonSerializeSkipMapEntity_/results.txt"
         }
     ],
-    "test.test[JsonWithUtf8]": [
-        {
-            "uri": "file://test.test_JsonWithUtf8_/results.txt"
-        }
-    ],
     "test.test[JsonWithNanAsString]": [
         {
             "uri": "file://test.test_JsonWithNanAsString_/results.txt"
+        }
+    ],
+    "test.test[JsonWithUtf8]": [
+        {
+            "uri": "file://test.test_JsonWithUtf8_/results.txt"
         }
     ],
     "test.test[Lists]": [

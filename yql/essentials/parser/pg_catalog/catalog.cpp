@@ -1990,7 +1990,7 @@ struct TCatalog : public IExtensionSqlBuilder {
         State->Types[newDesc.TypeId] = newDesc;
         State->TypeByName[newDesc.Name] = newDesc.TypeId;
         TTypeDesc newArrayDesc = newDesc;
-        newArrayDesc.TypeId += 1; 
+        newArrayDesc.TypeId += 1;
         newArrayDesc.Name = "_" + newArrayDesc.Name;
         newArrayDesc.ElementTypeId = newDesc.TypeId;
         newArrayDesc.ArrayTypeId = newArrayDesc.TypeId;
@@ -2241,7 +2241,7 @@ struct TCatalog : public IExtensionSqlBuilder {
 
     static TCatalog& MutableInstance() {
         return *Singleton<TCatalog>();
-    }    
+    }
 
     struct TState {
         TExtensionsByName ExtensionsByName, ExtensionsByInstallName;
@@ -2525,11 +2525,11 @@ bool CanUseCoercionType(ECoercionCode requiredCoercionLevel, ECoercionCode actua
 
 enum class ECoercionSearchResult
 {
-	None,
-	Func,
-	BinaryCompatible,
-	ArrayCoerce,
-	IOCoerce,
+    None,
+    Func,
+    BinaryCompatible,
+    ArrayCoerce,
+    IOCoerce,
 };
 
 ECoercionSearchResult FindCoercionPath(ui32 fromTypeId, ui32 toTypeId, ECoercionCode coercionType, const TCatalog& catalog) {
@@ -3600,7 +3600,7 @@ const TVector<TMaybe<TString>>* ReadTable(
     const auto& catalog = TCatalog::Instance();
     auto dataPtr = catalog.State->StaticTablesData.FindPtr(tableKey);
     if (!dataPtr) {
-        throw yexception() << "Missing data for table " 
+        throw yexception() << "Missing data for table "
             << tableKey.Schema << "." << tableKey.Name;
     }
 
@@ -3654,7 +3654,7 @@ void LoadSystemFunctions(ISystemFunctionsParser& parser) {
         if (catalog.State->SystemFunctionInit) {
             return;
         }
-        
+
         TString data;
         Y_ENSURE(NResource::FindExact("system_functions.sql", &data));
         TVector<TProcDesc> procs;
@@ -3853,6 +3853,9 @@ TString ExportExtensions(const TMaybe<TSet<ui32>>& filter) {
 
         protoProc->SetIsStrict(desc.IsStrict);
         protoProc->SetLang(desc.Lang);
+        protoProc->SetResultType(desc.ResultType);
+        protoProc->SetReturnSet(desc.ReturnSet);
+        protoProc->SetKind((ui32)desc.Kind);
     }
 
     TVector<TTableInfoKey> extTables;
@@ -4122,6 +4125,9 @@ void ImportExtensions(const TString& exported, bool typesOnly, IExtensionLoader*
             desc.Src = protoProc.GetSrc();
             desc.IsStrict = protoProc.GetIsStrict();
             desc.Lang = protoProc.GetLang();
+            desc.ResultType = protoProc.GetResultType();
+            desc.ReturnSet = protoProc.GetReturnSet();
+            desc.Kind = (EProcKind)protoProc.GetKind();
             for (const auto t : protoProc.GetArgType()) {
                 desc.ArgTypes.push_back(t);
             }

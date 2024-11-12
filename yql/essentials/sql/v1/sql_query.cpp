@@ -1420,7 +1420,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks,
                                  BuildCreateBackupCollection(Ctx.Pos(),
-                                                             BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                             TString(Ctx.GetPrefixPath(context.ServiceId, context.Cluster)),
+                                                             objectId,
                                                              TCreateBackupCollectionParameters {
                                                                 .Settings = std::move(kv),
                                                                 .Database = database,
@@ -1482,7 +1483,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks,
                                  BuildAlterBackupCollection(Ctx.Pos(),
-                                                            BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                            TString(Ctx.GetPrefixPath(context.ServiceId, context.Cluster)),
+                                                            objectId,
                                                             TAlterBackupCollectionParameters {
                                                                 .Settings = std::move(kv),
                                                                 .SettingsToReset = std::move(toReset),
@@ -1510,7 +1512,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             const TString& objectId = Id(node.GetRule_backup_collection2().GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks,
                                  BuildDropBackupCollection(Ctx.Pos(),
-                                                           BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                                           TString(Ctx.GetPrefixPath(context.ServiceId, context.Cluster)),
+                                                           objectId,
                                                            TDropBackupCollectionParameters {
                                                                .MissingOk = false,
                                                            },
@@ -1630,7 +1633,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks,
                                  BuildBackup(
                                      Ctx.Pos(),
-                                     BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                     TString(Ctx.GetPrefixPath(context.ServiceId, context.Cluster)),
+                                     objectId,
                                      TBackupParameters{
                                          .Incremental = incremental,
                                      },
@@ -1662,7 +1666,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             AddStatementToBlocks(blocks,
                                  BuildRestore(
                                      Ctx.Pos(),
-                                     BuildTablePath(Ctx.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                                     TString(Ctx.GetPrefixPath(context.ServiceId, context.Cluster)),
+                                     objectId,
                                      TRestoreParameters{
                                          .At = at,
                                      },
@@ -2022,22 +2027,29 @@ bool TSqlQuery::AlterTableAlterFamily(const TRule_alter_table_alter_column_famil
                 << "' in one alter";
             return false;
         }
-        const TString stringValue(Ctx.Token(value.GetAlt_family_setting_value1().GetToken1()));
-        entry->Data = BuildLiteralSmartString(Ctx, stringValue);
+        if (!StoreString(value, entry->Data, Ctx)) {
+            Ctx.Error() << to_upper(settingName.Name) << " value should be a string literal";
+            return false;
+        }
     } else if (to_lower(settingName.Name) == "compression") {
         if (entry->Compression) {
             Ctx.Error() << "Redefinition of 'compression' setting for column family '" << name.Name
                 << "' in one alter";
             return false;
         }
-        const TString stringValue(Ctx.Token(value.GetAlt_family_setting_value1().GetToken1()));
-        entry->Compression = BuildLiteralSmartString(Ctx, stringValue);
+        if (!StoreString(value, entry->Compression, Ctx)) {
+            Ctx.Error() << to_upper(settingName.Name) << " value should be a string literal";
+            return false;
+        }
     } else if (to_lower(settingName.Name) == "compression_level") {
         if (entry->CompressionLevel) {
             Ctx.Error() << "Redefinition of 'compression_level' setting for column family '" << name.Name << "' in one alter";
             return false;
         }
-        entry->CompressionLevel = LiteralNumber(Ctx, value.GetAlt_family_setting_value2().GetRule_integer1());
+        if (!StoreInt(value, entry->CompressionLevel, Ctx)) {
+            Ctx.Error() << to_upper(settingName.Name) << " value should be an integer";
+            return false;
+        }
     } else {
         Ctx.Error() << "Unknown table setting: " << settingName.Name;
         return false;
@@ -2954,6 +2966,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disabledistinctoverwindow") {
             Ctx.DistinctOverWindow = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableDistinctOverWindow");
+        } else if (normalizedPragma == "seqmode") {
+            Ctx.SeqMode = true;
+            Ctx.IncrementMonCounter("sql_pragma", "SeqMode");
+        } else if (normalizedPragma == "disableseqmode") {
+            Ctx.SeqMode = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableSeqMode");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");
@@ -3302,7 +3320,7 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
         AddStatementToBlocks(blocks, BuildCommitClusters(Ctx.Pos()));
     }
 
-    auto result = BuildQuery(Ctx.Pos(), blocks, true, Ctx.Scoped);
+    auto result = BuildQuery(Ctx.Pos(), blocks, true, Ctx.Scoped, Ctx.SeqMode);
     WarnUnusedNodes();
     return result;
 }
@@ -3372,7 +3390,7 @@ TNodePtr TSqlQuery::Build(const std::vector<::NSQLv1Generated::TRule_sql_stmt_co
         AddStatementToBlocks(blocks, BuildCommitClusters(Ctx.Pos()));
     }
 
-    auto result = BuildQuery(Ctx.Pos(), blocks, true, Ctx.Scoped);
+    auto result = BuildQuery(Ctx.Pos(), blocks, true, Ctx.Scoped, Ctx.SeqMode);
     return result;
 }
 namespace {

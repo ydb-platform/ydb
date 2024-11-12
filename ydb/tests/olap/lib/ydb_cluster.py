@@ -225,9 +225,9 @@ class YdbCluster:
                 errors.append(f'Only {ok_dynnodes_count} from {dynnodes_count} dynnodes are ok: {dynnodes_errors}')
             storage_nodes_count = nodes_by_role['Storage']
             ok_storage_nodes_count = ok_by_role['Storage']
-            if ok_storage_nodes_count < dynnodes_count:
+            if ok_storage_nodes_count < storage_nodes_count:
                 storage_nodes_errors = ','.join(node_errors['Tenant'])
-                errors.append(f'Only {ok_storage_nodes_count} from {storage_nodes_count} storage nodes are ok, but {dynnodes_count} need. {storage_nodes_errors}')
+                errors.append(f'Only {ok_storage_nodes_count} from {storage_nodes_count} storage nodes are ok. {storage_nodes_errors}')
             paths_to_balance = []
             if isinstance(balanced_paths, str):
                 paths_to_balance += cls._get_tables(balanced_paths)

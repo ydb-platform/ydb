@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(SchemeClient) {
 
     Y_UNIT_TEST(ViewQueryText) {
         constexpr const char* QueryText = "select 42";
-        Ydb::Scheme::DescribePathResult expectedResult;
+        Ydb::Scheme::DescribeSchemeObjectResult expectedResult;
         *expectedResult.mutable_view_description()->mutable_query_text() = QueryText;
         TSchemeDummyService schemeService(expectedResult);
 
@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(SchemeClient) {
         TDriver driver(config);
         TSchemeClient client(driver);
 
-        auto result = client.DescribePath("any").ExtractValueSync();
+        auto result = client.DescribeSchemeObject("any").ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
         auto receivedQueryText = result.GetViewDescription().GetQueryText();

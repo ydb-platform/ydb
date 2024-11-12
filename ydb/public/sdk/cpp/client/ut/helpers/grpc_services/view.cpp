@@ -15,7 +15,7 @@ grpc::Status TViewDummyService::DescribeView(
     op->set_status(Ydb::StatusIds::SUCCESS);
 
     Ydb::View::DescribeViewResult describeResult;
-    describeResult.set_query_text(DummyQueryText);
+    describeResult.mutable_description()->set_query_text(DummyQueryText);
     op->mutable_result()->PackFrom(describeResult);
 
     return grpc::Status::OK;

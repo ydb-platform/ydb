@@ -128,11 +128,12 @@ private:
                     for (const auto& child : pathDescription.GetChildren()) {
                         ConvertDirectoryEntry(child, result.add_children(), false);
                     }
-                } else {
+                }
+                if constexpr (std::is_same_v<TResult, Ydb::Scheme::DescribeSchemeObjectResult>) {
                     // fill type-specific description
                     switch (pathDescription.GetSelf().GetPathType()) {
                         case NKikimrSchemeOp::EPathTypeView: {
-                            Ydb::View::ViewDescription& viewDescription = *result.mutable_description();
+                            Ydb::View::ViewDescription& viewDescription = *result.mutable_view_description();
                             *viewDescription.mutable_query_text() = pathDescription.GetViewDescription().GetQueryText();
                             break;
                         }

@@ -5,18 +5,18 @@
 namespace NYdb::NScheme {
 
 class TSchemeDummyService : public Ydb::Scheme::V1::SchemeService::Service {
-    Ydb::Scheme::DescribePathResult DummyPathDescription;
+    Ydb::Scheme::DescribeSchemeObjectResult DummySchemeObjectDescription;
 
 public:
-    TSchemeDummyService(const Ydb::Scheme::DescribePathResult& dummyPathDescription)
-        : DummyPathDescription(dummyPathDescription)
+    TSchemeDummyService(const Ydb::Scheme::DescribeSchemeObjectResult& dummySchemeObjectDescription)
+        : DummySchemeObjectDescription(dummySchemeObjectDescription)
     {
     }
 
-    grpc::Status DescribePath(
+    grpc::Status DescribeSchemeObject(
         grpc::ServerContext* context,
-        const Ydb::Scheme::DescribePathRequest* request,
-        Ydb::Scheme::DescribePathResponse* response) override;
+        const Ydb::Scheme::DescribeSchemeObjectRequest* request,
+        Ydb::Scheme::DescribeSchemeObjectResponse* response) override;
 };
 
 }

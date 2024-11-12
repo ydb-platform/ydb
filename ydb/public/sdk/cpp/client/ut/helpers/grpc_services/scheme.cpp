@@ -2,10 +2,10 @@
 
 namespace NYdb::NScheme {
 
-grpc::Status TSchemeDummyService::DescribePath(
+grpc::Status TSchemeDummyService::DescribeSchemeObject(
     grpc::ServerContext* context,
-    const Ydb::Scheme::DescribePathRequest* request,
-    Ydb::Scheme::DescribePathResponse* response
+    const Ydb::Scheme::DescribeSchemeObjectRequest* request,
+    Ydb::Scheme::DescribeSchemeObjectResponse* response
 ) {
     Y_UNUSED(context);
     Y_UNUSED(request);
@@ -14,7 +14,7 @@ grpc::Status TSchemeDummyService::DescribePath(
     op->set_ready(true);
     op->set_status(Ydb::StatusIds::SUCCESS);
 
-    op->mutable_result()->PackFrom(DummyPathDescription);
+    op->mutable_result()->PackFrom(DummySchemeObjectDescription);
 
     return grpc::Status::OK;
 }

@@ -753,9 +753,9 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 [&, actorId = clientInfo.ReadActorId](ui64 offset, const TString& json){
                     Send(SelfId(), new NFq::TEvPrivate::TEvDataAfterFilteration(offset, json, actorId));
                 },
-                PureCalcProgramFactory->GetFactory({
-                    .EnabledLLVM = source.GetEnabledLLVM()
-                }));
+                PureCalcProgramFactory,
+                {.EnabledLLVM = source.GetEnabledLLVM()}
+            );
         } else {
             ClientsWithoutPredicate.insert(ev->Sender);
         }

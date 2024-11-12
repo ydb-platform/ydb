@@ -7,7 +7,6 @@ SRCS(
 PEERDIR(
     ydb/library/yql/ast
     ydb/library/yql/core/url_lister/interface
-    ydb/library/yql/utils/fetch
 )
 
 END()

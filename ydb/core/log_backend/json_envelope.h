@@ -29,7 +29,8 @@ private:
 private:
     struct TReplace {
         NJson::TJsonValue* Value = nullptr;
-        std::vector<TString> ReplaceSequence; // empty string for placeholder
+        TString Prefix;
+        TString Suffix;
 
         TReplace(NJson::TJsonValue* value)
             : Value(value)
@@ -42,7 +43,7 @@ private:
 private:
     TString TemplateString;
     NJson::TJsonValue Value;
-    std::vector<TReplace> Replaces;
+    TMaybe<TReplace> Replace;
 };
 
 } // namespace NKikimr

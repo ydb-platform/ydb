@@ -19,24 +19,66 @@ namespace NKikimr {
 }
 
 Y_UNIT_TEST_SUITE(JsonEnvelopeTest) {
-    Y_UNIT_TEST(Replace) {
+    Y_UNIT_TEST(Simple) {
+        TJsonEnvelope env1(R"json({
+            "a": "b",
+            "m": "abc%message%def"
+        })json");
+
+        UNIT_ASSERT_JSONS_EQUAL(env1.ApplyJsonEnvelope("msg"), R"json({"a":"b","m":"abcmsgdef"})json");
+        UNIT_ASSERT_JSONS_EQUAL(env1.ApplyJsonEnvelope("xyz"), R"json({"a":"b","m":"abcxyzdef"})json");
+
+
+        TJsonEnvelope env2(R"json({
+            "a": "b",
+            "m": "%message%def"
+        })json");
+
+        UNIT_ASSERT_JSONS_EQUAL(env2.ApplyJsonEnvelope("msg"), R"json({"a":"b","m":"msgdef"})json");
+        UNIT_ASSERT_JSONS_EQUAL(env2.ApplyJsonEnvelope("xyz"), R"json({"a":"b","m":"xyzdef"})json");
+
+
+        TJsonEnvelope env3(R"json({
+            "a": "b",
+            "m": "abc%message%"
+        })json");
+
+        UNIT_ASSERT_JSONS_EQUAL(env3.ApplyJsonEnvelope("msg"), R"json({"a":"b","m":"abcmsg"})json");
+        UNIT_ASSERT_JSONS_EQUAL(env3.ApplyJsonEnvelope("xyz"), R"json({"a":"b","m":"abcxyz"})json");
+    }
+
+    Y_UNIT_TEST(NoReplace) {
         TJsonEnvelope env(R"json({
             "a": "b",
-            "m": "abc%message%def - %message%!",
+            "x": "%y%",
             "subfield": {
                 "s": "% message %",
                 "t": "%Message%",
-                "m": "%message%",
                 "x": 42,
                 "a": [
-                    42,
-                    "42: %message%"
+                    42
                 ]
             }
         })json");
 
-        UNIT_ASSERT_JSONS_EQUAL(env.ApplyJsonEnvelope("msg"), R"json({"a":"b","m":"abcmsgdef - msg!","subfield":{"s":"% message %","t":"%Message%","m":"msg","x":42,"a":[42,"42: msg"]}})json");
-        UNIT_ASSERT_JSONS_EQUAL(env.ApplyJsonEnvelope("xyz"), R"json({"a":"b","m":"abcxyzdef - xyz!","subfield":{"s":"% message %","t":"%Message%","m":"xyz","x":42,"a":[42,"42: xyz"]}})json");
+        UNIT_ASSERT_JSONS_EQUAL(env.ApplyJsonEnvelope("msg"), R"json({"a":"b","x":"%y%","subfield":{"s":"% message %","t":"%Message%","x":42,"a":[42]}})json");
+        UNIT_ASSERT_JSONS_EQUAL(env.ApplyJsonEnvelope("xyz"), R"json({"a":"b","x":"%y%","subfield":{"s":"% message %","t":"%Message%","x":42,"a":[42]}})json");
+    }
+
+    Y_UNIT_TEST(ArrayItem) {
+        TJsonEnvelope env(R"json({
+            "a": "b",
+            "subfield": {
+                "a": [
+                    42,
+                    "%message%",
+                    53
+                ]
+            }
+        })json");
+
+        UNIT_ASSERT_JSONS_EQUAL(env.ApplyJsonEnvelope("msg"), R"json({"a":"b","subfield":{"a":[42,"msg",53]}})json");
+        UNIT_ASSERT_JSONS_EQUAL(env.ApplyJsonEnvelope("xyz"), R"json({"a":"b","subfield":{"a":[42,"xyz",53]}})json");
     }
 
     Y_UNIT_TEST(Escape) {

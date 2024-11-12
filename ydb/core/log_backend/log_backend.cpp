@@ -171,7 +171,8 @@ TAutoPtr<TLogBackend> CreateAuditLogUnifiedAgentBackend(
 }
 
 THolder<TLogBackend> MaybeWrapWithJsonEnvelope(THolder<TLogBackend> logBackend, const TString& jsonEnvelope) {
-    if (jsonEnvelope.empty() || !logBackend) {
+    Y_ASSERT(logBackend);
+    if (jsonEnvelope.empty()) {
         return logBackend;
     }
 
@@ -186,24 +187,24 @@ TMap<NKikimrConfig::TAuditConfig::EFormat, TVector<THolder<TLogBackend>>> Create
     if (runConfig.AppConfig.HasAuditConfig()) {
         const auto& auditConfig = runConfig.AppConfig.GetAuditConfig();
         if (auditConfig.HasStderrBackend()) {
-            auto logBackend = MaybeWrapWithJsonEnvelope(NActors::CreateStderrBackend(), auditConfig.GetStderrBackend().GetLogJsonEnvelope());
+            auto logBackend = NActors::CreateStderrBackend();
             auto format = auditConfig.GetStderrBackend().GetFormat();
-            logBackends[format].push_back(std::move(logBackend));
+            logBackends[format].push_back(MaybeWrapWithJsonEnvelope(std::move(logBackend), auditConfig.GetStderrBackend().GetLogJsonEnvelope()));
         }
 
         if (auditConfig.HasFileBackend()) {
-            auto logBackend = MaybeWrapWithJsonEnvelope(CreateAuditLogFileBackend(runConfig), auditConfig.GetFileBackend().GetLogJsonEnvelope());
+            auto logBackend = CreateAuditLogFileBackend(runConfig);
             if (logBackend) {
                 auto format = auditConfig.GetFileBackend().GetFormat();
-                logBackends[format].push_back(std::move(logBackend));
+                logBackends[format].push_back(MaybeWrapWithJsonEnvelope(std::move(logBackend), auditConfig.GetFileBackend().GetLogJsonEnvelope()));
             }
         }
 
         if (auditConfig.HasUnifiedAgentBackend()) {
-            auto logBackend = MaybeWrapWithJsonEnvelope(CreateAuditLogUnifiedAgentBackend(runConfig, counters), auditConfig.GetUnifiedAgentBackend().GetLogJsonEnvelope());
+            auto logBackend = CreateAuditLogUnifiedAgentBackend(runConfig, counters);
             if (logBackend) {
                 auto format = auditConfig.GetUnifiedAgentBackend().GetFormat();
-                logBackends[format].push_back(std::move(logBackend));
+                logBackends[format].push_back(MaybeWrapWithJsonEnvelope(std::move(logBackend), auditConfig.GetUnifiedAgentBackend().GetLogJsonEnvelope()));
             }
         }
     }

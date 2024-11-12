@@ -12,23 +12,33 @@ void TJsonEnvelope::Parse() {
 }
 
 void TJsonEnvelope::Parse(NJson::TJsonValue* value) {
+    if (Replace) {
+        return;
+    }
+
     switch (value->GetType()) {
     case NJson::JSON_STRING: {
             TReplace replace(value);
             if (replace.Parse(value->GetStringSafe())) {
-                Replaces.emplace_back(std::move(replace));
+                Replace = std::move(replace);
             }
             break;
         }
     case NJson::JSON_ARRAY: {
             for (NJson::TJsonValue& el : value->GetArraySafe()) {
                 Parse(&el);
+                if (Replace) {
+                    break;
+                }
             }
             break;
         }
     case NJson::JSON_MAP: {
             for (auto& [key, el] : value->GetMapSafe()) {
                 Parse(&el);
+                if (Replace) {
+                    break;
+                }
             }
             break;
         }
@@ -42,8 +52,8 @@ TString TJsonEnvelope::ApplyJsonEnvelope(const TStringBuf& message) {
         throw std::runtime_error("Attempt to write non utf-8 string");
     }
 
-    for (TReplace& replace : Replaces) {
-        replace.Apply(message);
+    if (Replace) {
+        Replace->Apply(message);
     }
 
     TStringStream ss;
@@ -59,28 +69,23 @@ bool TJsonEnvelope::TReplace::Parse(const TString& replace) {
     }
 
     if (pos != 0) {
-        ReplaceSequence.emplace_back(replace.substr(0, pos));
+        Prefix = replace.substr(0, pos);
     }
-    while (pos != TString::npos) {
-        ReplaceSequence.emplace_back(); // placeholder
-        if (pos + PLACEHOLDER.size() == replace.size()) {
-            break;
-        }
-        size_t next = replace.find(PLACEHOLDER, pos + PLACEHOLDER.size());
-        ReplaceSequence.emplace_back(replace.substr(pos + PLACEHOLDER.size(), next == TString::npos ? next : next - pos - PLACEHOLDER.size()));
-        pos = next;
+    if (pos + PLACEHOLDER.size() < replace.size()) {
+        Suffix = replace.substr(pos + PLACEHOLDER.size());
     }
     return true;
 }
 
 void TJsonEnvelope::TReplace::Apply(const TStringBuf& message) {
     TString result;
-    for (const TString& replace : ReplaceSequence) {
-        if (replace.empty()) {
-            result += message;
-        } else {
-            result += replace;
-        }
+    result.reserve(Prefix.size() + Suffix.size() + message.size());
+    if (Prefix) {
+        result += Prefix;
+    }
+    result += message;
+    if (Suffix) {
+        result += Suffix;
     }
     *Value = result;
 }

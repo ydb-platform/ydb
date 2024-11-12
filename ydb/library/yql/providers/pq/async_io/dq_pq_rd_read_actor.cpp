@@ -104,7 +104,7 @@ struct TEvPrivate {
 
 class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase {
 
-    const ui64 PrintStatePeriodSec = 60;
+    const ui64 PrintStatePeriodSec = 300;
     const ui64 ProcessStatePeriodSec = 2;
 
     using TDebugOffsets = TMaybe<std::pair<ui64, ui64>>;
@@ -711,10 +711,13 @@ void TDqPqRdReadActor::PrintInternalState() {
     TStringStream str;
     str << "State:\n";
     for (auto& [partitionId, sessionInfo] : Sessions) {
-        str << "   partId " << partitionId << " ";
+        
+        str << "   partId " << partitionId << " status " << static_cast<ui64>(sessionInfo.Status)
+            << " next offset " << sessionInfo.NextOffset << " is waiting " << sessionInfo.IsWaitingRowDispatcherResponse
+            << " has pending data " << sessionInfo.HasPendingData << " ";
         sessionInfo.EventsQueue.PrintInternalState(str);
     }
-    SRC_LOG_D(str.Str());
+    SRC_LOG_I(str.Str());
 }
 
 void TDqPqRdReadActor::Handle(TEvPrivate::TEvProcessState::TPtr&) {

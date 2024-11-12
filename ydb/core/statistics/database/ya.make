@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     database.h
-    database.cpp    
+    database.cpp
 )
 
 PEERDIR(

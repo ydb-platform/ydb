@@ -2968,7 +2968,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(ScanFailedSnapshotTooOld) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableColumnShardConfig()->SetMaxReadStaleness_ms(100);
+        appConfig.MutableColumnShardConfig()->SetMaxReadStaleness_ms(5000);
         auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
         TTestHelper testHelper(settings);
 
@@ -2979,7 +2979,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         };
         cnt.SetName("/Root/cnt").SetPrimaryKey({ "key" }).SetSchema(schema);
         testHelper.CreateTable(cnt);
-
+        Sleep(TDuration::Seconds(10));
         auto client = testHelper.GetKikimr().GetQueryClient();
         auto result =
             client

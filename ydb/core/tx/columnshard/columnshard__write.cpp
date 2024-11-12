@@ -591,7 +591,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     writeOperation->SetBehaviour(behaviour);
     NOlap::TWritingContext wContext(
         pathId, SelfId(), schema, StoragesManager, Counters.GetIndexationCounters().SplitterCounters,
-        Counters.GetCSCounters().WritingCounters, GetCurrentSnapshotForInternalModification());
+        Counters.GetCSCounters().WritingCounters, NOlap::TSnapshot::Max());
     arrowData->SetSeparationPoints(GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(pathId)->GetBucketPositions());
     writeOperation->Start(*this, arrowData, source, wContext);
 }

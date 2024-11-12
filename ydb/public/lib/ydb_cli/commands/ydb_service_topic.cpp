@@ -756,15 +756,9 @@ namespace {
                            });
 
         // TODO(shmel1k@): improve help.
-        config.Opts->AddLongOption('c', "consumer", "Consumer name. Exclusive with --no-consumer")
+        config.Opts->AddLongOption('c', "consumer", "Consumer name. If not set, then you need to specify partitions through --partition-ids to read without consumer")
             .Optional()
             .StoreResult(&Consumer_);
-        config.Opts->AddLongOption("no-consumer", "Read without consumer. You need to explicitly specify partitions to read through --partition-ids. Exclusive with --consumer (-c)")
-            .Optional()
-            .StoreTrue(&ReadWithoutConsumer_)
-            .DefaultValue(true);
-
-        config.Opts->MutuallyExclusive("consumer", "no-consumer");
 
         config.Opts->AddLongOption('f', "file", "File to write data to. In not specified, data is written to the standard output.")
             .Optional()
@@ -871,6 +865,11 @@ namespace {
         if (!IsStreamingFormat(MessagingFormat) && (Limit_.Defined() && (Limit_ <= 0 || Limit_ > 500))) {
             throw TMisuseException() << "OutputFormat " << MessagingFormat << " is not compatible with "
                                      << "limit less and equal '0' or more than '500': '" << *Limit_ << "' was given";
+        }
+
+        // validate partitions ids are specified, if no consumer is provided. no-consumer mode will be used. 
+        if (!Consumer_ && !PartitionIds_) {
+            throw TMisuseException() << "Please specify either --consumer or --partition-ids to read without consumer";
         }
     }
 

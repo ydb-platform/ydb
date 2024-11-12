@@ -301,14 +301,14 @@ Y_UNIT_TEST_SUITE(PgSqlParsingOnly) {
     }
 
     Y_UNIT_TEST(AlterSequenceStmt) {
-        auto res = PgSqlToYql("ALTER SEQUENCE IF EXISTS seq AS integer START WITH 10 INCREMENT BY 2 NO MINVALUE NO MAXVALUE CACHE 3;");
+        auto res = PgSqlToYql("ALTER SEQUENCE IF EXISTS seq AS integer START WITH 10 RESTART WITH 101 INCREMENT BY 2 NO MINVALUE NO MAXVALUE CACHE 3;");
         UNIT_ASSERT_C(res.Root, res.Issues.ToString());
         TString program = R"(
             (
                 (let world (Configure! world (DataSource 'config) 'OrderedColumns))
                 (let world (Write! world (DataSink '"kikimr" '"")
                  (Key '('pgObject (String '"seq") (String 'pgSequence)))
-                 (Void) '('('mode 'alter_if_exists) '('"as" '"int4") '('"start" '10) '('"increment" '2) '('"cache" '3))))
+                 (Void) '('('mode 'alter_if_exists) '('"as" '"int4") '('"start" '10) '('"restart" '101) '('"increment" '2) '('"cache" '3))))
                  (let world (CommitAll! world)) (return world)
             )
         )";

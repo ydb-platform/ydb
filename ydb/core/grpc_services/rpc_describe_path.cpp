@@ -21,6 +21,9 @@ using TEvListDirectoryRequest = TGrpcRequestOperationCall<Ydb::Scheme::ListDirec
 using TEvDescribePathRequest = TGrpcRequestOperationCall<Ydb::Scheme::DescribePathRequest,
     Ydb::Scheme::DescribePathResponse>;
 
+using TEvDescribeSchemeObjectRequest = TGrpcRequestOperationCall<Ydb::Scheme::DescribeSchemeObjectRequest,
+    Ydb::Scheme::DescribeSchemeObjectResponse>;
+
 template <typename TDerived, typename TRequest, typename TResult, bool ListChildren = false>
 class TBaseDescribe : public TRpcSchemeRequestActor<TDerived, TRequest> {
     using TBase = TRpcSchemeRequestActor<TDerived, TRequest>;
@@ -129,7 +132,7 @@ private:
                     // fill type-specific description
                     switch (pathDescription.GetSelf().GetPathType()) {
                         case NKikimrSchemeOp::EPathTypeView: {
-                            Ydb::View::ViewDescription& viewDescription = *result.mutable_view_description();
+                            Ydb::View::ViewDescription& viewDescription = *result.mutable_description();
                             *viewDescription.mutable_query_text() = pathDescription.GetViewDescription().GetQueryText();
                             break;
                         }
@@ -169,6 +172,11 @@ public:
     using TBaseDescribe<TDescribePathRPC, TEvDescribePathRequest, Ydb::Scheme::DescribePathResult>::TBaseDescribe;
 };
 
+class TDescribeSchemeObjectRPC : public TBaseDescribe<TDescribeSchemeObjectRPC, TEvDescribeSchemeObjectRequest, Ydb::Scheme::DescribeSchemeObjectResult> {
+public:
+    using TBaseDescribe<TDescribeSchemeObjectRPC, TEvDescribeSchemeObjectRequest, Ydb::Scheme::DescribeSchemeObjectResult>::TBaseDescribe;
+};
+
 void DoListDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TListDirectoryRPC(p.release()));
 }
@@ -180,6 +188,10 @@ IActor* TEvListDirectoryRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestO
 
 void DoDescribePathRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TDescribePathRPC(p.release()));
+}
+
+void DoDescribeSchemeObjectRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TDescribeSchemeObjectRPC(p.release()));
 }
 
 } // namespace NKikimr

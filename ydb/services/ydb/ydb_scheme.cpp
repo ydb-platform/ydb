@@ -29,6 +29,7 @@ void TGRpcYdbSchemeService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     ADD_REQUEST(RemoveDirectory, DoRemoveDirectoryRequest)
     ADD_REQUEST(ListDirectory, DoListDirectoryRequest)
     ADD_REQUEST(DescribePath, DoDescribePathRequest)
+    ADD_REQUEST(DescribeSchemeObject, DoDescribeSchemeObjectRequest)
     ADD_REQUEST(ModifyPermissions, DoModifyPermissionsRequest)
 #undef ADD_REQUEST
 }

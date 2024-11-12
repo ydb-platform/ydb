@@ -12,6 +12,7 @@ void DoMakeDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityPro
 void DoRemoveDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoListDirectoryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoDescribePathRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoDescribeSchemeObjectRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoModifyPermissionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 
 }

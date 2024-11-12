@@ -1632,10 +1632,7 @@ public:
         TableInfos.erase(tableId.LocalPathId);
     }
 
-    void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo, ILocksDb* locksDb = nullptr) {
-        if (locksDb) {
-            SysLocks.RemoveSchema(tableId, locksDb);
-        }
+    void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
         TableInfos[tableId.LocalPathId] = tableInfo;
         SysLocks.UpdateSchema(tableId, tableInfo->KeyColumnTypes);
         Pipeline.GetDepTracker().UpdateSchema(tableId, *tableInfo);

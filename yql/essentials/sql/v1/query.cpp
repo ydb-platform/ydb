@@ -319,10 +319,10 @@ static INode::TPtr CreateIndexDesc(const TIndexDescription& index, ETableSetting
         node.Q(node.Y(node.Q("dataColumns"), node.Q(dataColumns)))
     );
     if (index.TableSettings.IsSet()) {
-        const auto& tableSettings = node.Y(
+        const auto& tableSettings = node.Q(node.Y(
             node.Q("tableSettings"),
             node.Q(CreateTableSettings(index.TableSettings, parsingMode, node))
-        );
+        ));
         indexNode = node.L(indexNode, tableSettings);
     }
     if (const auto* indexSettingsPtr = std::get_if<TVectorIndexSettings>(&index.IndexSettings)) {

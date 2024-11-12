@@ -592,9 +592,8 @@ Y_UNIT_TEST_SUITE(TOptimizeYqlExpr) {
         auto yqlNativeServices = NFile::TYtFileServices::Make(functionRegistry.Get(), testTables);
         auto ytGateway = CreateYtFileGateway(yqlNativeServices);
         auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
-        auto ytState = MakeIntrusive<TYtState>();
+        auto ytState = MakeIntrusive<TYtState>(typeAnnotationContext.Get());
         ytState->Gateway = ytGateway;
-        ytState->Types = typeAnnotationContext.Get();
 
         InitializeYtGateway(ytGateway, ytState);
         auto randomProvider = CreateDeterministicRandomProvider(1);

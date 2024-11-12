@@ -50,8 +50,10 @@ void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuild
     }
     headers->Set("Access-Control-Allow-Origin", origin);
     headers->Set("Access-Control-Allow-Credentials", "true");
-    headers->Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept");
-    headers->Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
+    headers->Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent");
+    headers->Set("Access-Control-Expose-Headers", "traceresponse,X-Worker-Name");
+    headers->Set("Access-Control-Allow-Methods", "OPTIONS,GET,POST,PUT,DELETE");
+    headers->Set("Allow", "OPTIONS,GET,POST,PUT,DELETE");
 }
 
 TString HmacSHA256(TStringBuf key, TStringBuf data) {

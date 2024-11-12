@@ -25,6 +25,7 @@ class TTTLColumnEngineChanges;
 class TCleanupPortionsColumnEngineChanges;
 class TCleanupTablesColumnEngineChanges;
 class TPortionInfo;
+class TDataAccessorsRequest;
 namespace NDataLocks {
 class TManager;
 }
@@ -238,6 +239,35 @@ public:
     }
 };
 
+class TColumnEngineForLogs;
+class IMetadataAccessorResultProcessor {
+private:
+    virtual void DoApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& engine) = 0;
+
+public:
+    virtual ~IMetadataAccessorResultProcessor() = default;
+
+    void ApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& engine) {
+        return DoApplyResult(std::move(result), engine);
+    }
+
+    IMetadataAccessorResultProcessor() = default;
+};
+
+class TCSMetadataRequest {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<TDataAccessorsRequest>, Request);
+    YDB_READONLY_DEF(std::shared_ptr<IMetadataAccessorResultProcessor>, Processor);
+
+public:
+    TCSMetadataRequest(const std::shared_ptr<TDataAccessorsRequest>& request, const std::shared_ptr<IMetadataAccessorResultProcessor>& processor)
+        : Request(request)
+        , Processor(processor) {
+        AFL_VERIFY(Request);
+        AFL_VERIFY(Processor);
+    }
+};
+
 class IColumnEngine {
 protected:
     virtual void DoRegisterTable(const ui64 pathId) = 0;
@@ -286,6 +316,7 @@ public:
 
     virtual ~IColumnEngine() = default;
 
+    virtual std::vector<TCSMetadataRequest> CollectMetadataRequests() const = 0;
     virtual const TVersionedIndex& GetVersionedIndex() const = 0;
     virtual std::shared_ptr<TVersionedIndex> CopyVersionedIndexPtr() const = 0;
     virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const;

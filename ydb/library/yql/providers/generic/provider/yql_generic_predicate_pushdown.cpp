@@ -97,6 +97,7 @@ namespace NYql {
         }
 
 #undef MATCH_ATOM
+#undef MATCH_ARITHMETICAL
 
 #define EXPR_NODE_TO_COMPARE_TYPE(TExprNodeType, COMPARE_TYPE)       \
     if (!opMatched && compare.Maybe<TExprNodeType>()) {              \
@@ -118,7 +119,7 @@ namespace NYql {
             EXPR_NODE_TO_COMPARE_TYPE(TCoAggrNotEqual, ID);
 
             if (proto->operation() == TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED) {
-                err << "unknown operation: " << compare.Raw()->Content();
+                err << "unknown compare operation: " << compare.Raw()->Content();
                 return false;
             }
             return SerializeExpression(compare.Left(), proto->mutable_left_value(), arg, err) && SerializeExpression(compare.Right(), proto->mutable_right_value(), arg, err);
@@ -181,7 +182,7 @@ namespace NYql {
             } else if (auto maybeAsList = expr.Maybe<TCoAsList>()) {
                 collection = maybeAsList.Cast().Ptr();
             } else {
-                err << "unknown operation: " << expr.Ref().Content();
+                err << "unknown source for in: " << expr.Ref().Content();
                 return false;
             }
 
@@ -191,6 +192,17 @@ namespace NYql {
                 }
             }
             return true;
+        }
+
+        bool SerializeIsNotDistinctFrom(const TExprBase& predicate, TPredicate* predicateProto, const TCoArgument& arg, TStringBuilder& err, bool invert) {
+            if (predicate.Ref().ChildrenSize() != 2) {
+                err << "invalid IsNotDistinctFrom predicate, expected 2 children but got " << predicate.Ref().ChildrenSize();
+                return false;
+            }
+            TPredicate::TComparison* proto = predicateProto->mutable_comparison();
+            proto->set_operation(!invert ? TPredicate::TComparison::IND : TPredicate::TComparison::ID);
+            return SerializeExpression(TExprBase(predicate.Ref().Child(0)), proto->mutable_left_value(), arg, err)
+                && SerializeExpression(TExprBase(predicate.Ref().Child(1)), proto->mutable_right_value(), arg, err);
         }
 
         bool SerializeAnd(const TCoAnd& andExpr, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
@@ -250,6 +262,12 @@ namespace NYql {
             }
             if (auto sqlIn = predicate.Maybe<TCoSqlIn>()) {
                 return SerializeSqlIn(sqlIn.Cast(), proto, arg, err);
+            }
+            if (predicate.Ref().IsCallable("IsNotDistinctFrom")) {
+                return SerializeIsNotDistinctFrom(predicate, proto, arg, err, false);
+            }
+            if (predicate.Ref().IsCallable("IsDistinctFrom")) {
+                return SerializeIsNotDistinctFrom(predicate, proto, arg, err, true);
             }
             if (auto sqlIf = predicate.Maybe<TCoIf>()) {
                 return SerializeSqlIf(sqlIf.Cast(), proto, arg, err, depth);
@@ -339,7 +357,7 @@ namespace NYql {
 
         auto left = FormatExpression(expression.left_value());
         auto right = FormatExpression(expression.right_value());
-        return left + operation + right;
+        return TStringBuilder() << "(" << left << operation << right << ")";
     }
 
     TString FormatNegation(const TPredicate_TNegation& negation) {
@@ -508,14 +526,22 @@ namespace NYql {
 
     TString FormatIn(const TPredicate_TIn& in) {
         auto value = FormatExpression(in.value());
-        TString list;
+        TStringStream list;
         for (const auto& expr : in.set()) {
             if (!list.empty()) {
-                list += ",";
+                list << ", ";
+            } else {
+                list << value << " IN (";
             }
-            list += FormatExpression(expr);
+            list << FormatExpression(expr);
         }
-        return value + " IN (" + list + ")";
+
+        if (list.empty()) {
+            throw yexception() << "failed to format IN statement, no operands";
+        }
+
+        list << ")";
+        return list.Str();
     }
 
     TString FormatPredicate(const TPredicate& predicate, bool topLevel ) {

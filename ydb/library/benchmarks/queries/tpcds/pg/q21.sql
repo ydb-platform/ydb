@@ -21,7 +21,7 @@ select  *
                     and (cast ('2000-03-11' as date) + interval '30' day)::date
    group by w_warehouse_name, i_item_id) x
  where (case when inv_before > 0
-             then inv_after / inv_before
+             then cast(inv_after as double) / inv_before
              else null
              end) between (2.0/3.0)::numeric and (3.0/2.0)::numeric
  order by w_warehouse_name

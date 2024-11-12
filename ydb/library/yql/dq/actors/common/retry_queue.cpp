@@ -174,7 +174,7 @@ void TRetryEventsQueue::PrintInternalState(TStringStream& stream) const {
         return;
     }
     stream << ", NextSeqNo "
-        << NextSeqNo << ", MyConfSeqNo " << MyConfirmedSeqNo << ", SeqNos " << ReceivedEventsSeqNos.size() << ", events size " << Events.size() << "\n";
+        << NextSeqNo << ", MyConfSeqNo " << MyConfirmedSeqNo << ", SeqNos " << ReceivedEventsSeqNos.size() << ", events size " << Events.size() << ", connected " << Connected << "\n";
 }
 
 

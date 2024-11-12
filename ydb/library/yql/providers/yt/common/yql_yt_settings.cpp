@@ -391,6 +391,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, LLVMNodeCountLimit);
     REGISTER_SETTING(*this, SamplingIoBlockSize);
     REGISTER_SETTING(*this, BinaryTmpFolder);
+    REGISTER_SETTING(*this, BinaryCacheFolder);
     REGISTER_SETTING(*this, BinaryExpirationInterval);
     REGISTER_SETTING(*this, FolderInlineDataLimit);
     REGISTER_SETTING(*this, FolderInlineItemsLimit);

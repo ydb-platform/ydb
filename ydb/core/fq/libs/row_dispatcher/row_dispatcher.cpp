@@ -9,8 +9,10 @@
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/public/purecalc/common/interface.h>
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/mon/mon.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/actors_factory.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
@@ -268,6 +270,8 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         TActorId TopicSessionId;
         const TString QueryId;
         ConsumerCounters Counters;
+        bool PendingGetNextBatch = false;
+        bool PendingNewDataArrived = false;
         TopicSessionClientStatistic Stat;
     };
 
@@ -322,10 +326,11 @@ public:
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr&);
     void Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&);
     void Handle(NFq::TEvPrivate::TEvPrintStateToLog::TPtr&);
+    void Handle(const NMon::TEvHttpInfo::TPtr&);
     
     void DeleteConsumer(const ConsumerSessionKey& key);
     void UpdateMetrics();
-    void PrintInternalState();
+    TString GetInternalState();
 
     STRICT_STFUNC(
         StateFunc, {
@@ -350,6 +355,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, Handle);
         hFunc(NFq::TEvPrivate::TEvUpdateMetrics, Handle);
         hFunc(NFq::TEvPrivate::TEvPrintStateToLog, Handle);
+        hFunc(NMon::TEvHttpInfo, Handle);
     })
 };
 
@@ -386,6 +392,12 @@ void TRowDispatcher::Bootstrap() {
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
     Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
 
+    NActors::TMon* mon = NKikimr::AppData()->Mon;
+    if (mon) {
+        ::NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+        mon->RegisterActorPage(actorsMonPage, "row_dispatcher", "Row Dispatcher", false,
+            TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+    }
     NodesTracker.Init(SelfId());
 }
 
@@ -472,7 +484,7 @@ void TRowDispatcher::UpdateMetrics() {
     }
 }
 
-void TRowDispatcher::PrintInternalState() {
+TString TRowDispatcher::GetInternalState() {
     TStringStream str;
     NodesTracker.PrintInternalState(str);
     str << "Statistics:\n";
@@ -485,13 +497,14 @@ void TRowDispatcher::PrintInternalState() {
                 str << "    " << consumer->QueryId << " " << readActorId << " unread rows "
                     << consumer->Stat.UnreadRows << " unread bytes " << consumer->Stat.UnreadBytes << " offset " << consumer->Stat.Offset
                     << " get " << consumer->Counters.GetNextBatch
-                    << " arrived " << consumer->Counters.NewDataArrived << " batch " << consumer->Counters.MessageBatch << " ";
+                    << " arr " << consumer->Counters.NewDataArrived << " btc " << consumer->Counters.MessageBatch 
+                    << " pend get " <<  consumer->PendingGetNextBatch << " pend new " <<  consumer->PendingNewDataArrived << " ";
                 str << " retry queue: ";
                 consumer->EventsQueue.PrintInternalState(str);
             }
         }
     }
-    LOG_ROW_DISPATCHER_DEBUG(str.Str());
+    return str.Str();
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
@@ -576,6 +589,8 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
         LOG_ROW_DISPATCHER_ERROR("TEvGetNextBatch: wrong seq num from " << ev->Sender.ToString() << ", seqNo " << seqNo << ", ignore message");
         return;
     }
+    it->second->PendingNewDataArrived = false;
+    it->second->PendingGetNextBatch = true;
     it->second->Counters.GetNextBatch++;
     Forward(ev, it->second->TopicSessionId);
 }
@@ -595,7 +610,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvStopSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " partitionId " << ev->Get()->Record.GetPartitionId());
-
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
@@ -690,6 +704,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) 
         return;
     }
     LOG_ROW_DISPATCHER_TRACE("Forward TEvNewDataArrived to " << ev->Get()->ReadActorId);
+    it->second->PendingNewDataArrived = true;
     it->second->Counters.NewDataArrived++;
     it->second->EventsQueue.Send(ev->Release().Release());
 }
@@ -704,6 +719,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
     }
     Metrics.RowsSent->Add(ev->Get()->Record.MessagesSize());
     LOG_ROW_DISPATCHER_TRACE("Forward TEvMessageBatch to " << ev->Get()->ReadActorId);
+    it->second->PendingGetNextBatch = false;
     it->second->Counters.MessageBatch++;
     it->second->EventsQueue.Send(ev->Release().Release());
 }
@@ -740,8 +756,20 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&) {
 }
 
 void TRowDispatcher::Handle(NFq::TEvPrivate::TEvPrintStateToLog::TPtr&) {
-    PrintInternalState();
+    LOG_ROW_DISPATCHER_DEBUG(GetInternalState());
     Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
+}
+
+void TRowDispatcher::Handle(const NMon::TEvHttpInfo::TPtr& ev) {
+    TStringStream str;
+    HTML(str) {
+        PRE() {
+            str << "Current state:" << Endl;
+            str << GetInternalState() << Endl;
+            str << Endl;
+        }
+    }
+    Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev) {

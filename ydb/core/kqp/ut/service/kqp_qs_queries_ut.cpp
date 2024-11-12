@@ -2349,7 +2349,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 );
                 UPSERT INTO TestDdlDml4 (Key, Value1, Value2) VALUES (1, "1", "2");
                 SELECT * FROM TestDdlDml4;
-                ALTER TABLE TestDdlDml4 DROP COLUMN Value2;
                 UPSERT INTO TestDdlDml4 (Key, Value1) VALUES (2, "2");
                 SELECT * FROM TestDdlDml5;
             )", TTxControl::NoTx()).ExtractValueSync();

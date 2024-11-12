@@ -15,7 +15,24 @@ namespace NDataShard {
 using namespace NResourceBroker;
 using namespace NTable;
 
-class TTableStatsCoroBuilder : public TActorCoroImpl, private IPages {
+struct TTableStatsCoroBuilderArgs {
+    TActorId ReplyTo;
+    ui64 TabletId;
+    ui64 TableId;
+    TActorId ExecutorId;
+    ui64 IndexSize;
+    TAutoPtr<TSubset> Subset;
+    ui64 MemRowCount;
+    ui64 MemDataSize;
+    ui64 RowCountResolution;
+    ui64 DataSizeResolution;
+    ui32 HistogramBucketsCount;
+    ui64 SearchHeight;
+    bool HasSchemaChanges;
+    TInstant StatsUpdateTime;
+};
+
+class TTableStatsCoroBuilder : public TActorCoroImpl, private IPages, TTableStatsCoroBuilderArgs {
 private:
     using ECode = TDataShard::TEvPrivate::TEvTableStatsError::ECode;
 
@@ -40,26 +57,9 @@ private:
     };
 
 public:
-    TTableStatsCoroBuilder(TActorId replyTo, ui64 tabletId, ui64 tableId, TActorId executorId, ui64 indexSize,
-                            const TAutoPtr<TSubset> subset, ui64 memRowCount, ui64 memDataSize,
-                            ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, 
-                            ui64 searchHeight, bool hasSchemaChanges,
-                            TInstant statsUpdateTime)
+    TTableStatsCoroBuilder(TTableStatsCoroBuilderArgs args)
         : TActorCoroImpl(/* stackSize */ 64_KB, /* allowUnhandledDtor */ true)
-        , ReplyTo(replyTo)
-        , TabletId(tabletId)
-        , TableId(tableId)
-        , ExecutorId(executorId)
-        , IndexSize(indexSize)
-        , StatsUpdateTime(statsUpdateTime)
-        , Subset(subset)
-        , MemRowCount(memRowCount)
-        , MemDataSize(memDataSize)
-        , RowCountResolution(rowCountResolution)
-        , DataSizeResolution(dataSizeResolution)
-        , HistogramBucketsCount(histogramBucketsCount)
-        , SearchHeight(searchHeight)
-        , HasSchemaChanges(hasSchemaChanges)
+        , TTableStatsCoroBuilderArgs(args)
     {}
 
     void Run() override {
@@ -228,20 +228,6 @@ private:
         Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvFinishTask(/* task id */ 1, /* cancelled */ false));
     }
 
-    TActorId ReplyTo;
-    ui64 TabletId;
-    ui64 TableId;
-    TActorId ExecutorId;
-    ui64 IndexSize;
-    TInstant StatsUpdateTime;
-    TAutoPtr<TSubset> Subset;
-    ui64 MemRowCount;
-    ui64 MemDataSize;
-    ui64 RowCountResolution;
-    ui64 DataSizeResolution;
-    ui32 HistogramBucketsCount;
-    ui64 SearchHeight;
-    bool HasSchemaChanges;
     THashMap<const TPart*, THashMap<TPageId, TSharedData>> Pages;
     ui64 PagesSize = 0;
     ui64 CoroutineDeadline;
@@ -560,20 +546,23 @@ public:
                     shadowSubset->ColdParts.end());
             }
 
-            auto builder = new TActorCoro(MakeHolder<TTableStatsCoroBuilder>(ctx.SelfID,
-                Self->TabletID(),
-                tableId,
-                Self->ExecutorID(),
-                indexSize,
-                subsetForStats,
-                memRowCount,
-                memDataSize,
-                rowCountResolution,
-                dataSizeResolution,
-                histogramBucketsCount,
-                searchHeight,
-                hasSchemaChanges,
-                AppData(ctx)->TimeProvider->Now()), NKikimrServices::TActivity::DATASHARD_STATS_BUILDER);
+            auto builder = new TActorCoro(MakeHolder<TTableStatsCoroBuilder>(
+                TTableStatsCoroBuilderArgs{
+                    .ReplyTo = ctx.SelfID,
+                    .TabletId = Self->TabletID(),
+                    .TableId = tableId,
+                    .ExecutorId = Self->ExecutorID(),
+                    .IndexSize = indexSize,
+                    .Subset = subsetForStats,
+                    .MemRowCount = memRowCount,
+                    .MemDataSize = memDataSize,
+                    .RowCountResolution = rowCountResolution,
+                    .DataSizeResolution = dataSizeResolution,
+                    .HistogramBucketsCount = histogramBucketsCount,
+                    .SearchHeight = searchHeight,
+                    .HasSchemaChanges = hasSchemaChanges,
+                    .StatsUpdateTime = AppData(ctx)->TimeProvider->Now()
+                }), NKikimrServices::TActivity::DATASHARD_STATS_BUILDER);
 
             TActorId actorId = ctx.Register(builder, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
             Self->Actors.insert(actorId);

@@ -251,23 +251,12 @@ bool HasOlapTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
     return false;
 }
 
-bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage, const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyTable>& tables) {
+bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage) {
     for (const auto& sink : stage.GetSinks()) {
         if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
             NKikimrKqp::TKqpTableSinkSettings settings;
             YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-
-            const bool isOlapSink = std::any_of(
-                std::begin(tables),
-                std::end(tables),
-                [&](const NKqpProto::TKqpPhyTable& table) {
-                    return table.GetKind() == NKqpProto::EKqpPhyTableKind::TABLE_KIND_OLAP
-                        && google::protobuf::util::MessageDifferencer::Equals(table.GetId(), settings.GetTable());
-            });
-
-            if (isOlapSink) {
-                return true;
-            }
+            return settings.GetIsOlap();
         }
     }
     return false;
@@ -276,7 +265,7 @@ bool HasOlapTableWriteInStage(const NKqpProto::TKqpPhyStage& stage, const google
 bool HasOlapTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
     for (const auto &tx : physicalQuery.GetTransactions()) {
         for (const auto &stage : tx.GetStages()) {
-            if (HasOlapTableWriteInStage(stage, tx.GetTables())) {
+            if (HasOlapTableWriteInStage(stage)) {
                 return true;
             }
         }
@@ -325,18 +314,7 @@ bool HasOltpTableWriteInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
                 if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
-
-                    const bool isOltpSink = std::any_of(
-                        std::begin(tx.GetTables()),
-                        std::end(tx.GetTables()),
-                        [&](const NKqpProto::TKqpPhyTable& table) {
-                            return table.GetKind() == NKqpProto::EKqpPhyTableKind::TABLE_KIND_DS
-                                && google::protobuf::util::MessageDifferencer::Equals(table.GetId(), settings.GetTable());
-                    });
-
-                    if (isOltpSink) {
-                        return true;
-                    }
+                    return !settings.GetIsOlap();
                 }
             }
         }

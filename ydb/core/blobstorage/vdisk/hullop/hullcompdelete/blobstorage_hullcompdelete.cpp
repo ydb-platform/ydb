@@ -12,11 +12,9 @@ namespace NKikimr {
                 TReleaseQueueItem& item = ReleaseQueue.front();
                 if (CurrentSnapshots.empty() || (item.RecordLsn <= CurrentSnapshots.begin()->first)) {
                     // matching record -- commit it to huge hull keeper and throw out of the queue
-                    if (item.WId) {
+                    if (!item.RemovedHugeBlobs.Empty() || !item.AllocatedHugeBlobs.Empty()) {
                         ctx.Send(hugeKeeperId, new TEvHullFreeHugeSlots(std::move(item.RemovedHugeBlobs),
-                            item.RecordLsn, item.Signature, item.WId));
-                    } else {
-                        Y_ABORT_UNLESS(item.RemovedHugeBlobs.Empty());
+                            std::move(item.AllocatedHugeBlobs), item.RecordLsn, item.Signature, item.WId));
                     }
                     if (item.ChunksToForget) {
                         LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(vctx->VDiskLogPrefix,

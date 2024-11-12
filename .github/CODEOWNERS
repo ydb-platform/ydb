@@ -18,6 +18,7 @@
 
 /ydb/library/yql/ @ydb-platform/yql
 /ydb/library/yql/dq @ydb-platform/yql @ydb-platform/qp
+/ydb/library/yql/dq/actors/common @ydb-platform/fq
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq
 /ydb/library/yql/providers/common/db_id_async_resolver @ydb-platform/fq
 /ydb/library/yql/providers/common/pushdown @ydb-platform/fq

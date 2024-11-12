@@ -165,13 +165,19 @@ public:
             input.Ptr()->CopyConstraints(section.Ref());
         } else {
             TMultiConstraintNode::TMapType multiItems;
+            bool allEmpty = true;
             for (ui32 index = 0; index < read.Input().Size(); ++index) {
                 auto section = read.Input().Item(index);
                 if (!section.Ref().GetConstraint<TEmptyConstraintNode>()) {
                     multiItems.push_back(std::make_pair(index, section.Ref().GetConstraintSet()));
+                    allEmpty = false;
                 }
             }
-            input.Ptr()->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems)));
+            if (!multiItems.empty()) {
+                input.Ptr()->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems)));
+            } else if (allEmpty) {
+                input.Ptr()->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
+            }
         }
         return TStatus::Ok;
     }

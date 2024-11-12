@@ -62,6 +62,7 @@ private:
     bool ActualizationStarted = false;
     const NColumnShard::TEngineLogsCounters SignalCounters;
     std::shared_ptr<TGranulesStorage> GranulesStorage;
+    std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::shared_ptr<IStoragesManager> StoragesManager;
 
     std::shared_ptr<NActualizer::TController> ActualizationController;
@@ -126,11 +127,15 @@ public:
 public:
     virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) override;
     bool FinishLoading();
+    bool StartActualization(const THashMap<ui64, TTiering>& specialPathEviction);
 
     virtual bool IsOverloadedByMetadata(const ui64 limit) const override {
         return limit < TGranulesStat::GetSumMetadataMemoryPortionsSize();
     }
 
+    virtual std::vector<TCSMetadataRequest> CollectMetadataRequests() const override {
+        return GranulesStorage->CollectMetadataRequests();
+    }
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TCommittedData>&& dataToIndex) noexcept override;
     ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<ui64>& pathIds,
         const std::optional<ui64> waitingPriority) noexcept override;
@@ -220,7 +225,7 @@ public:
         UpdatePortionStats(*portion, EStatsUpdateType::DEFAULT, &exPortion);
     }
 
-    void AppendPortion(const TPortionInfo::TPtr& portionInfo);
+    void AppendPortion(const TPortionDataAccessor& portionInfo, const bool addAsAccessor = true);
 
     void RemoveSchemaVersion(const ui64 version) override {
         VersionedIndex.RemoveVersion(version);

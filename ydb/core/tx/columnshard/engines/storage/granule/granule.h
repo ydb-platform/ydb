@@ -8,7 +8,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
-#include <ydb/core/tx/columnshard/data_accessor/controller.h>
+#include <ydb/core/tx/columnshard/data_accessor/abstract/manager.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
@@ -122,6 +122,7 @@ private:
     TMonotonic ModificationLastTime = TMonotonic::Now();
     THashMap<ui64, std::shared_ptr<TPortionInfo>> Portions;
     THashMap<TInsertWriteId, std::shared_ptr<TPortionInfo>> InsertedPortions;
+    THashMap<TInsertWriteId, TPortionDataAccessor> InsertedAccessors;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
 
     void RebuildHardMetrics() const;
@@ -135,6 +136,7 @@ private:
     std::shared_ptr<TGranulesStat> Stats;
     std::shared_ptr<IStoragesManager> StoragesManager;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlanner> OptimizerPlanner;
+    std::shared_ptr<NDataAccessorControl::IMetadataMemoryManager> MetadataMemoryManager;
     std::unique_ptr<NActualizer::TGranuleActualizationIndex> ActualizationIndex;
     mutable TInstant NextActualizations = TInstant::Zero();
 
@@ -143,7 +145,7 @@ private:
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
     void OnAfterChangePortion(
-        const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard);
+        const std::shared_ptr<TPortionInfo> portionAfter, NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard, const bool onLoad = false);
     void OnAdditiveSummaryChange() const;
     YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 
@@ -162,17 +164,22 @@ private:
         return it->second;
     }
     bool DataAccessorConstructed = false;
-    bool LoadingFinished = false;
 
 public:
-    std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
-    void FinishLoading(const std::shared_ptr<NLoading::TPortionsLoadContext>& context);
-    bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
+    std::vector<TCSMetadataRequest> CollectMetadataRequests() {
+        return ActualizationIndex->CollectMetadataRequests(Portions);
+    }
 
-    std::unique_ptr<IGranuleDataAccessor> BuildDataAccessor() {
+    std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector, const TVersionedIndex& vIndex);
+    bool TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedIndex);
+    const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& GetDataAccessorsManager() const {
+        return DataAccessorsManager;
+    }
+
+    std::unique_ptr<NDataAccessorControl::IGranuleDataAccessor> BuildDataAccessor() {
         AFL_VERIFY(!DataAccessorConstructed);
         DataAccessorConstructed = true;
-        return std::make_unique<TMemDataAccessor>(PathId);
+        return MetadataMemoryManager->BuildCollector(PathId);
     }
 
     void RefreshTiering(const std::optional<TTiering>& tiering) {
@@ -204,26 +211,11 @@ public:
         OnAfterChangePortion(innerPortion, nullptr);
     }
 
-    void InsertPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion) const {
-        AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
-        TDbWrapper wrapper(txc.DB, nullptr);
-        portion.SaveToDatabase(wrapper, 0, false);
-        DataAccessorsManager->AddPortion(portion);
-    }
-
-    void InsertPortionOnComplete(const std::shared_ptr<TPortionInfo>& portion) {
-        AFL_VERIFY(InsertedPortions.emplace(portion->GetInsertWriteIdVerified(), portion).second);
-    }
+    void InsertPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion) const;
+    void InsertPortionOnComplete(const TPortionDataAccessor& portion, IColumnEngine& engine);
 
     void CommitPortionOnExecute(
-        NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot& snapshot) const {
-        auto it = InsertedPortions.find(insertWriteId);
-        AFL_VERIFY(it != InsertedPortions.end());
-        it->second->SetCommitSnapshot(snapshot);
-        TDbWrapper wrapper(txc.DB, nullptr);
-        it->second->SaveMetaToDatabase(wrapper);
-    }
-
+        NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot& snapshot) const;
     void CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine);
 
     void AbortPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId) const {
@@ -241,7 +233,6 @@ public:
 
     void CommitImmediateOnExecute(
         NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const TPortionDataAccessor& portion) const;
-
     void CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> portion, IColumnEngine& engine);
 
     std::vector<NStorageOptimizer::TTaskDescription> GetOptimizerTasksDescription() const {
@@ -250,6 +241,8 @@ public:
 
     void ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
         std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema);
+    void ResetAccessorsManager(const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& constructor,
+        const NDataAccessorControl::TManagerConstructionContext& context);
 
     void RefreshScheme() {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
@@ -306,8 +299,18 @@ public:
     void OnAfterPortionsLoad() {
         auto g = OptimizerPlanner->StartModificationGuard();
         for (auto&& i : Portions) {
-            OnAfterChangePortion(i.second, &g);
+            OnAfterChangePortion(i.second, &g, true);
         }
+        if (MetadataMemoryManager->NeedPrefetch() && Portions.size()) {
+            auto request = std::make_shared<TDataAccessorsRequest>();
+            for (auto&& p : Portions) {
+                request->AddPortion(p.second);
+            }
+            request->RegisterSubscriber(std::make_shared<TFakeDataAccessorsSubscriber>());
+
+            DataAccessorsManager->AskData(request);
+        }
+        
     }
 
     const TGranuleAdditiveSummary& GetAdditiveSummary() const;
@@ -331,7 +334,7 @@ public:
     void OnCompactionFailed(const TString& reason);
     void OnCompactionFinished();
 
-    void AppendPortion(const TPortionInfo::TPtr& info);
+    void AppendPortion(const TPortionDataAccessor& info, const bool addAsAccessor = true);
 
     TString DebugString() const {
         return TStringBuilder() << "(granule:" << GetPathId() << ";"
@@ -341,7 +344,7 @@ public:
                                 << ")";
     }
 
-    void UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>&& portion);
+    void UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& portion);
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;

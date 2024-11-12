@@ -29,6 +29,24 @@ TConclusionStatus TUpsertOptionsOperation::DoDeserialize(NYql::TObjectSettingsIm
         }
     }
 
+    if (const auto className = features.Extract<TString>("METADATA_MEMORY_MANAGER.CLASS_NAME")) {
+        if (!MetadataManagerConstructor.Initialize(*className)) {
+            return TConclusionStatus::Fail("incorrect class name for metadata manager:" + *className);
+        }
+
+        NJson::TJsonValue jsonData = NJson::JSON_MAP;
+        auto fValue = features.Extract("METADATA_MEMORY_MANAGER.FEATURES");
+        if (fValue) {
+            if (!NJson::ReadJsonFastTree(*fValue, &jsonData)) {
+                return TConclusionStatus::Fail("incorrect json in request METADATA_MEMORY_MANAGER.FEATURES parameter");
+            }
+        }
+        auto result = MetadataManagerConstructor->DeserializeFromJson(jsonData);
+        if (result.IsFail()) {
+            return result;
+        }
+    }
+
     return TConclusionStatus::Success();
 }
 
@@ -39,6 +57,9 @@ void TUpsertOptionsOperation::DoSerializeScheme(NKikimrSchemeOp::TAlterColumnTab
     }
     if (CompactionPlannerConstructor.HasObject()) {
         CompactionPlannerConstructor.SerializeToProto(*schemaData.MutableOptions()->MutableCompactionPlannerConstructor());
+    }
+    if (MetadataManagerConstructor.HasObject()) {
+        MetadataManagerConstructor.SerializeToProto(*schemaData.MutableOptions()->MutableMetadataManagerConstructor());
     }
 }
 

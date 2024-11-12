@@ -560,10 +560,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
             UNIT_ASSERT_STRINGS_EQUAL("true", headers.Get(accessControlAllowCredentials));
 
             UNIT_ASSERT(headers.Has(accessControlAllowHeaders));
-            UNIT_ASSERT_STRINGS_EQUAL("Content-Type,Authorization,Origin,Accept", headers.Get(accessControlAllowHeaders));
+            UNIT_ASSERT_STRINGS_EQUAL("Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent", headers.Get(accessControlAllowHeaders));
 
             UNIT_ASSERT(headers.Has(accessControlAllowMethods));
-            UNIT_ASSERT_STRINGS_EQUAL("OPTIONS, GET, POST", headers.Get(accessControlAllowMethods));
+            UNIT_ASSERT_STRINGS_EQUAL("OPTIONS,GET,POST,PUT,DELETE", headers.Get(accessControlAllowMethods));
         }
 
         bool IsAjaxRequest() const override {

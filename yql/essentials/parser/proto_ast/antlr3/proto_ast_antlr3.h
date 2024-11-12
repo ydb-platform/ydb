@@ -60,6 +60,7 @@ namespace NProtoAST {
             try {
                 Lexer.ReportErrors(&errors);
                 auto src = Lexer.get_tokSource();
+
                 for (;;) {
                     auto token = src->nextToken();
                     auto type = token->getType();
@@ -69,6 +70,7 @@ namespace NProtoAST {
                     last.Content = token->getText();
                     last.Line = token->get_line();
                     last.LinePos = token->get_charPositionInLine();
+
                     onNextToken(std::move(last));
                     if (isEOF) {
                         break;

@@ -9,6 +9,8 @@
 #include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/parser/proto_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
 
+#include <util/string/ascii.h>
+
 #if defined(_tsan_enabled_)
 #include <util/system/mutex.h>
 #endif
@@ -72,6 +74,10 @@ private:
 
 NSQLTranslation::ILexer::TPtr MakeLexer(bool ansi, bool antlr4) {
     return NSQLTranslation::ILexer::TPtr(new TV1Lexer(ansi, antlr4));
+}
+
+bool IsProbablyKeyword(const NSQLTranslation::TParsedToken& token) {
+    return AsciiEqualsIgnoreCase(token.Name, token.Content);
 }
 
 } //  namespace NSQLTranslationV1

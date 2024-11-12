@@ -1,4 +1,5 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/testlib/test_client.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/base/tablet_resolver.h>
@@ -182,7 +183,7 @@ std::unordered_map<ui32, ui32> GetNodeIdToIndexMap(const std::unordered_map<ui32
     return res;
 }
 
-Y_UNIT_TEST_SUITE(StatisticsService) {
+Y_UNIT_TEST_SUITE(AggregateStatistics) {
     Y_UNIT_TEST(ShouldBeCorrectlyAggregateStatisticsFromAllNodes) {
         size_t nodeCount = 4;
         auto runtime = TTestActorRuntime(nodeCount, 1, false);

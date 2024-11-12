@@ -410,6 +410,7 @@ class TDataShard
             ui64 MemRowCount = 0;
             ui64 MemDataSize = 0;
             ui64 SearchHeight = 0;
+            bool HasSchemaChanges = false;
         };
 
         struct TEvTableStatsError : public TEventLocal<TEvTableStatsError, EvTableStatsError> {
@@ -2714,9 +2715,9 @@ private:
     TControlWrapper MaxTxLagMilliseconds;
     TControlWrapper CanCancelROWithReadSets;
     TControlWrapper PerShardReadSizeLimit;
-    TControlWrapper CpuUsageReportThreshlodPercent;
+    TControlWrapper CpuUsageReportThresholdPercent;
     TControlWrapper CpuUsageReportIntervalSeconds;
-    TControlWrapper HighDataSizeReportThreshlodBytes;
+    TControlWrapper HighDataSizeReportThresholdBytes;
     TControlWrapper HighDataSizeReportIntervalSeconds;
 
     TControlWrapper DataTxProfileLogThresholdMs;

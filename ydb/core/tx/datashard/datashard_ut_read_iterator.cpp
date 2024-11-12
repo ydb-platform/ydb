@@ -3630,7 +3630,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             if (Commit)
                  expectedRowCount += writeCount * rowCount;
 
-            ui64 statRowCount = WaitTableStats(*runtime, tabletId, 0, expectedRowCount).GetTableStats().GetRowCount();
+            ui64 statRowCount = WaitTableStats(*runtime, tabletId, [expectedRowCount](const NKikimrTableStats::TTableStats& stats) {
+                return stats.GetRowCount() >= expectedRowCount;
+            }).GetTableStats().GetRowCount();
             UNIT_ASSERT_VALUES_EQUAL(statRowCount, expectedRowCount);
         }
     }

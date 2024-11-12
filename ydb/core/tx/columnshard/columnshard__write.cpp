@@ -589,10 +589,9 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         pathId, lockId, cookie, granuleShardingVersionId, *mType, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
     Y_ABORT_UNLESS(writeOperation);
     writeOperation->SetBehaviour(behaviour);
-    const NOlap::TSnapshot applyToSnapshot(record.GetMvccSnapshot().GetStep(), record.GetMvccSnapshot().GetTxId());
     NOlap::TWritingContext wContext(
         pathId, SelfId(), schema, StoragesManager, Counters.GetIndexationCounters().SplitterCounters,
-        Counters.GetCSCounters().WritingCounters, applyToSnapshot);
+        Counters.GetCSCounters().WritingCounters, GetCurrentSnapshotForInternalModification());
     arrowData->SetSeparationPoints(GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(pathId)->GetBucketPositions());
     writeOperation->Start(*this, arrowData, source, wContext);
 }

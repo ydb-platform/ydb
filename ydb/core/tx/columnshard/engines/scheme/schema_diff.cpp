@@ -77,7 +77,7 @@ TConclusionStatus TSchemaDiffView::DeserializeFromProto(const NKikimrSchemeOp::T
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TSchemaDiffView::SerializeToProto(NKikimrSchemeOp::TColumnTableSchemaDiff& proto) {
+void TSchemaDiffView::SerializeToProto(NKikimrSchemeOp::TColumnTableSchemaDiff& proto) {
     proto.MutableOptions()->CopyFrom(*SchemaOptions);
     proto.SetVersion(Version);
     if (CompressionOptions != nullptr) {
@@ -97,7 +97,6 @@ TConclusionStatus TSchemaDiffView::SerializeToProto(NKikimrSchemeOp::TColumnTabl
             proto.AddUpsertIndexes()->CopyFrom(*index);
         }
     }
-    return TConclusionStatus::Success();
 }
 
 ui64 TSchemaDiffView::GetVersion() const {

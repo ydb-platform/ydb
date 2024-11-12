@@ -50,7 +50,7 @@ public:
     ui64 GetVersion() const;;
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchemaDiff& proto);
-    TConclusionStatus SerializeToProto(NKikimrSchemeOp::TColumnTableSchemaDiff& proto);
+    void SerializeToProto(NKikimrSchemeOp::TColumnTableSchemaDiff& proto);
 };
 
 }   // namespace NKikimr::NOlap

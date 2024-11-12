@@ -8,7 +8,6 @@
 #include "changes/indexation.h"
 #include "changes/ttl.h"
 #include "loading/stages.h"
-#include "portions/constructor.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
@@ -32,6 +31,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const TSchemaInitializationData& schema)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
+    , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
@@ -44,6 +44,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
+    , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
     , TabletId(tabletId)
     , LastPortion(0)
@@ -126,12 +127,16 @@ void TColumnEngineForLogs::UpdatePortionStats(
 }
 
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
+    AFL_VERIFY(DataAccessorsManager);
     bool switchOptimizer = false;
+    bool switchAccessorsManager = false;
     if (!VersionedIndex.IsEmpty()) {
         const NOlap::TIndexInfo& lastIndexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
         Y_ABORT_UNLESS(lastIndexInfo.CheckCompatible(indexInfo));
         switchOptimizer = !indexInfo.GetCompactionPlannerConstructor()->IsEqualTo(lastIndexInfo.GetCompactionPlannerConstructor());
+        switchAccessorsManager = !indexInfo.GetMetadataManagerConstructor()->IsEqualTo(*lastIndexInfo.GetMetadataManagerConstructor());
     }
+
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
     auto* indexInfoActual = VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
     if (isCriticalScheme) {
@@ -143,6 +148,12 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
         }
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();
+        }
+    }
+    if (switchAccessorsManager) {
+        NDataAccessorControl::TManagerConstructionContext context(DataAccessorsManager->GetTabletActorId(), true);
+        for (auto&& i : GranulesStorage->GetTables()) {
+            i.second->ResetAccessorsManager(indexInfoActual->GetMetadataManagerConstructor(), context);
         }
     }
     if (switchOptimizer) {
@@ -213,13 +224,6 @@ std::shared_ptr<ITxReader> TColumnEngineForLogs::BuildLoader(const std::shared_p
 }
 
 bool TColumnEngineForLogs::FinishLoading() {
-    {
-        TMemoryProfileGuard g("TTxInit/LoadColumns/After");
-        for (auto&& i : GranulesStorage->GetTables()) {
-            i.second->OnAfterPortionsLoad();
-        }
-    }
-
     for (const auto& [pathId, spg] : GranulesStorage->GetTables()) {
         for (const auto& [_, portionInfo] : spg->GetPortions()) {
             UpdatePortionStats(*portionInfo, EStatsUpdateType::ADD);
@@ -447,13 +451,13 @@ bool TColumnEngineForLogs::ApplyChangesOnExecute(
     return true;
 }
 
-void TColumnEngineForLogs::AppendPortion(const TPortionInfo::TPtr& portionInfo) {
-    auto granule = GetGranulePtrVerified(portionInfo->GetPathId());
-    AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionId()));
-    UpdatePortionStats(*portionInfo, EStatsUpdateType::ADD);
-    granule->AppendPortion(portionInfo);
-    if (portionInfo->HasRemoveSnapshot()) {
-        AddCleanupPortion(portionInfo);
+void TColumnEngineForLogs::AppendPortion(const TPortionDataAccessor& portionInfo, const bool addAsAccessor) {
+    auto granule = GetGranulePtrVerified(portionInfo.GetPortionInfo().GetPathId());
+    AFL_VERIFY(!granule->GetPortionOptional(portionInfo.GetPortionInfo().GetPortionId()));
+    UpdatePortionStats(portionInfo.GetPortionInfo(), EStatsUpdateType::ADD);
+    granule->AppendPortion(portionInfo, addAsAccessor);
+    if (portionInfo.GetPortionInfo().HasRemoveSnapshot()) {
+        AddCleanupPortion(portionInfo.GetPortionInfoPtr());
     }
 }
 

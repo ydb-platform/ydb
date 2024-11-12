@@ -27,7 +27,7 @@ TConclusionStatus TCommonSession::TryStart(NColumnShard::TColumnShard& shard) {
             if (shard.GetDataLocksManager()->IsLocked(*p.second, { "sharing_session:" + GetSessionId() })) {
                 return TConclusionStatus::Fail("failed to start cursor: portion is locked");
             }
-            portionsByPath[i].emplace_back(p.second);
+//            portionsByPath[i].emplace_back(p.second);
         }
     }
 

@@ -106,6 +106,18 @@ public:
         return DataAccessorsManager;
     }
 
+    std::vector<TCSMetadataRequest> CollectMetadataRequests() {
+        std::vector<TCSMetadataRequest> result;
+        for (auto&& i : Tables) {
+            auto r = i.second->CollectMetadataRequests();
+            if (!r.size()) {
+                continue;
+            }
+            result.insert(result.end(), r.begin(), r.end());
+        }
+        return result;
+    }
+
     TGranulesStorage(const NColumnShard::TEngineLogsCounters counters,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<IStoragesManager>& storagesManager)
@@ -113,6 +125,8 @@ public:
         , DataAccessorsManager(dataAccessorsManager)
         , StoragesManager(storagesManager)
         , Stats(std::make_shared<TGranulesStat>(Counters)) {
+        AFL_VERIFY(DataAccessorsManager);
+        AFL_VERIFY(StoragesManager);
     }
 
     void FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const {
@@ -127,7 +141,6 @@ public:
         const ui64 pathId, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex) {
         auto infoEmplace = Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, *this, counters, versionedIndex));
         AFL_VERIFY(infoEmplace.second);
-        DataAccessorsManager->RegisterController(infoEmplace.first->second->BuildDataAccessor());
         return infoEmplace.first->second;
     }
 

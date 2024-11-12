@@ -15,6 +15,7 @@
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/data_accessor/abstract/constructor.h>
 
 #include <ydb/library/formats/arrow/transformer/abstract.h>
 
@@ -102,6 +103,7 @@ private:
 
     bool SchemeNeedActualization = false;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
+    std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
     bool ExternalGuaranteeExclusivePK = false;
 
     ui64 Version = 0;
@@ -195,7 +197,11 @@ public:
     static std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(
         const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache);
 
-    std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
+    const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& GetCompactionPlannerConstructor() const;
+    const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& GetMetadataManagerConstructor() const {
+        AFL_VERIFY(MetadataManagerConstructor);
+        return MetadataManagerConstructor;
+    }
     bool IsNullableVerifiedByIndex(const ui32 colIndex) const {
         AFL_VERIFY(colIndex < ColumnFeatures.size());
         return ColumnFeatures[colIndex]->GetIsNullable();

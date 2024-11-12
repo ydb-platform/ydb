@@ -100,6 +100,13 @@ bool TriggerTTL(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot s
     return (res.GetStatus() == NKikimrTxColumnShard::SUCCESS);
 }
 
+bool TriggerMetadata(TTestBasicRuntime& runtime, TActorId& sender) {
+    auto event = std::make_unique<TEvPrivate::TEvPeriodicWakeup>();
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
+    runtime.GrabEdgeEvent<TEvPrivate::TEvMetadataAccessorsInfo>(sender, TDuration::Seconds(5));
+    return true;
+}
+
 bool CheckSame(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 expectedSize,
                const std::string& columnName, i64 seconds) {
     UNIT_ASSERT(batch);
@@ -175,7 +182,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     csControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
-    std::vector<ui64> ts = {1600000000, 1620000000};
+    std::vector<ui64> ts = { 1600000000, 1620000000 };
 
     ui32 ttlIncSeconds = 1;
     for (auto& c : ydbSchema) {
@@ -245,7 +252,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     if (internal) {
         TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
     } else {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[0] + ttlIncSeconds, spec.TtlColumn);
+        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), { tableId }, ts[0] + ttlIncSeconds, spec.TtlColumn);
     }
     while (csControllerGuard->GetTTLFinishedCounter().Val() != csControllerGuard->GetTTLStartedCounter().Val()) {
         runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
@@ -622,6 +629,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         if (specs[i].HasTiers() || reboots) {
             csControllerGuard->SetTiersSnapshot(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
         }
+        TriggerMetadata(runtime, sender);
 
         if (eventLoss) {
             if (*eventLoss == i) {
@@ -643,7 +651,6 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                 reader->InitializeScanner();
                 reader->Ack();
             }
-
             // Eviction
             TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, specs[i].TtlColumn);
 

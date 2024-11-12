@@ -16,6 +16,8 @@ class TCompositeReadBlobs;
 class TPortionDataAccessor {
 private:
     TPortionInfo::TConstPtr PortionInfo;
+    std::optional<std::vector<TColumnRecord>> Records;
+    std::optional<std::vector<TIndexChunk>> Indexes;
 
     template <class TChunkInfo>
     static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
@@ -35,10 +37,29 @@ private:
     }
 
     void FullValidation() const;
+    TPortionDataAccessor() = default;
 
 public:
+    ui64 GetMetadataSize() const {
+        return (Records ? (Records->size() * sizeof(TColumnRecord)) : 0) + 
+            (Indexes ? (Indexes->size() * sizeof(TIndexChunk)) : 0);
+    }
+
+    const std::vector<TColumnRecord>& TestGetRecords() const {
+        AFL_VERIFY(Records);
+        return std::move(*Records);
+    }
+    std::vector<TColumnRecord> ExtractRecords() {
+        AFL_VERIFY(Records);
+        return std::move(*Records);
+    }
+    std::vector<TIndexChunk> ExtractIndexes() {
+        AFL_VERIFY(Indexes);
+        return std::move(*Indexes);
+    }
+
     TPortionDataAccessor SwitchPortionInfo(TPortionInfo&& newPortion) const {
-        return TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(newPortion)));
+        return TPortionDataAccessor(std::make_shared<TPortionInfo>(std::move(newPortion)), GetRecordsVerified(), GetIndexesVerified(), true);
     }
 
     template <class TAggregator, class TChunkInfo>
@@ -69,16 +90,45 @@ public:
         }
     }
 
-    explicit TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo)
-        : PortionInfo(portionInfo) {
+    explicit TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo, std::vector<TColumnRecord>&& records,
+        std::vector<TIndexChunk>&& indexes, const bool validate)
+        : PortionInfo(portionInfo)
+        , Records(std::move(records))
+        , Indexes(std::move(indexes)) {
+        if (validate) {
+            FullValidation();
+        }
+    }
+
+    explicit TPortionDataAccessor(const TPortionInfo::TConstPtr& portionInfo, const std::vector<TColumnRecord>& records,
+        const std::vector<TIndexChunk>& indexes, const bool validate)
+        : PortionInfo(portionInfo)
+        , Records(records)
+        , Indexes(indexes) {
+        if (validate) {
+            FullValidation();
+        }
     }
 
     static TConclusion<TPortionDataAccessor> BuildFromProto(
         const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector);
 
+    std::vector<TString> GetIndexInplaceDataVerified(const ui32 indexId) const {
+        if (!Indexes) {
+            return {};
+        }
+        std::vector<TString> result;
+        for (auto&& i : *Indexes) {
+            if (i.GetEntityId() == indexId) {
+                result.emplace_back(i.GetBlobDataVerified());
+            }
+        }
+        return result;
+    }
+
     std::set<ui32> GetColumnIds() const {
         std::set<ui32> result;
-        for (auto&& i : PortionInfo->Records) {
+        for (auto&& i : GetRecordsVerified()) {
             result.emplace(i.GetColumnId());
         }
         return result;
@@ -105,7 +155,7 @@ public:
 
     NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
         NArrow::NSplitter::TSerializationStats result;
-        for (auto&& i : PortionInfo->Records) {
+        for (auto&& i : GetRecordsVerified()) {
             if (schema.GetFieldByColumnIdOptional(i.ColumnId)) {
                 result.AddStat(i.GetSerializationStat(schema.GetFieldByColumnIdVerified(i.ColumnId)->name()));
             }
@@ -140,13 +190,17 @@ public:
         return result;
     }
 
+    static TPortionDataAccessor BuildEmpty() {
+        return TPortionDataAccessor();
+    }
+
     const TColumnRecord* GetRecordPointer(const TChunkAddress& address) const;
 
     bool HasEntityAddress(const TChunkAddress& address) const;
 
     bool HasIndexes(const std::set<ui32>& ids) const {
         auto idsCopy = ids;
-        for (auto&& i : PortionInfo->Indexes) {
+        for (auto&& i : GetIndexesVerified()) {
             idsCopy.erase(i.GetIndexId());
             if (idsCopy.empty()) {
                 return true;
@@ -366,12 +420,18 @@ public:
         }
     };
 
-    const std::vector<TColumnRecord>& GetRecords() const {
-        return PortionInfo->Records;
+    const std::vector<TColumnRecord>& GetRecordsVerified() const {
+        AFL_VERIFY(Records);
+        return *Records;
     }
 
-    const std::vector<TIndexChunk>& GetIndexes() const {
-        return PortionInfo->Indexes;
+    const std::vector<TIndexChunk>& GetIndexesVerified() const {
+        AFL_VERIFY(Indexes);
+        return *Indexes;
+    }
+
+    bool HasIndexes() const {
+        return !!Indexes;
     }
 
     std::vector<TPage> BuildPages() const;

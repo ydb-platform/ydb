@@ -27,9 +27,10 @@ void TGranuleMeta::AppendPortion(const TPortionDataAccessor& info, const bool ad
     AFL_VERIFY(it == Portions.end());
     OnBeforeChangePortion(nullptr);
     it = Portions.emplace(info.GetPortionInfo().GetPortionId(), info.MutablePortionInfoPtr()).first;
-    auto schemaVersionOpt = info->GetSchemaVersionOptional();
+    auto schemaVersionOpt = info.GetPortionInfo().GetSchemaVersionOptional();
     if (schemaVersionOpt.has_value()) {
         VersionCounters->VersionAddRef(*schemaVersionOpt);
+    }
     if (addAsAccessor) {
         DataAccessorsManager->AddPortion(info);
     }

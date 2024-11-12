@@ -259,7 +259,10 @@ class BaseSuiteRunner(object):
         cls.driver = ydb.Driver(ydb.DriverConfig(
             database="/Root",
             endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port)))
-        cls.pool = ydb.SessionPool(cls.driver)
+        cls.legacy_pool = ydb.SessionPool(cls.driver)  # for explain
+        """
+        cls.pool = ydb.QuerySessionPool(cls.driver)
+        """
         cls.driver.wait()
         cls.query_id = itertools.count(start=1)
         cls.files = {}
@@ -268,7 +271,10 @@ class BaseSuiteRunner(object):
 
     @classmethod
     def teardown_class(cls):
+        cls.legacy_pool.stop()
+        """
         cls.pool.stop()
+        """
         cls.driver.stop()
         cls.cluster.stop()
 
@@ -444,18 +450,28 @@ class BaseSuiteRunner(object):
 
     def explain(self, query):
         yql_text = format_yql_statement(query, self.table_path_prefix)
-        return self.pool.retry_operation_sync(lambda s: s.explain(yql_text)).query_plan
+        return self.legacy_pool.retry_operation_sync(lambda s: s.explain(yql_text)).query_plan
 
     def execute_scheme(self, statement_text):
         yql_text = format_yql_statement(statement_text, self.table_path_prefix)
-        self.pool.retry_operation_sync(lambda s: s.execute_scheme(yql_text))
+        self.legacy_pool.retry_operation_sync(lambda s: s.execute_scheme(yql_text))
         yql_text = format_yql_statement(statement_text, self.table_path_prefix_ne)
-        self.pool.retry_operation_sync(lambda s: s.execute_scheme(yql_text))
+        self.legacy_pool.retry_operation_sync(lambda s: s.execute_scheme(yql_text))
+        """
+        yql_text = format_yql_statement(statement_text, self.table_path_prefix)
+        self.pool.execute_with_retries(yql_text)
+        yql_text = format_yql_statement(statement_text, self.table_path_prefix_ne)
+        self.pool.execute_with_retries(yql_text)
+        """
         return None
 
     def execute_query(self, statement_text):
         yql_text = format_yql_statement(statement_text, self.table_path_prefix)
-        result = self.pool.retry_operation_sync(lambda s: s.transaction().execute(yql_text, commit_tx=True))
+        result = self.legacy_pool.retry_operation_sync(lambda s: s.transaction().execute(yql_text, commit_tx=True))
+        """
+        result = self.pool.execute_with_retries(yql_text)
+        """
+
 
         if len(result) == 1:
             scan_query_result = self.execute_scan_query(yql_text)

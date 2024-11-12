@@ -16,6 +16,8 @@
 
 #include <util/string/cast.h>
 
+#include <contrib/libs/xxhash/xxhash.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -485,7 +487,8 @@ public:
         }
 
         auto hash = Hasher(ViewForKeyAndState.data());
-        auto bucketId = hash % SpilledBucketCount;
+        XXH64_hash_t hashed_hash = XXH64(&hash, sizeof(hash), 0);
+        auto bucketId = hashed_hash % SpilledBucketCount;
         auto& bucket = SpilledBuckets[bucketId];
 
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
@@ -592,8 +595,9 @@ private:
             SplitStateSpillingBucket = -1;
         }
         while (const auto keyAndState = static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Extract())) {
-            auto hash = Hasher(keyAndState); //Hasher uses only key for hashing
-            auto bucketId = hash % SpilledBucketCount;
+            auto hash = Hasher(keyAndState);  //Hasher uses only key for hashing
+            XXH64_hash_t hashed_hash = XXH64(&hash, sizeof(hash), 0);
+            auto bucketId = hashed_hash % SpilledBucketCount;
             auto& bucket = SpilledBuckets[bucketId];
 
             bucket.LineCount++;

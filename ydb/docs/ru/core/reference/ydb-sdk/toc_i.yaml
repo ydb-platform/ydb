@@ -11,6 +11,27 @@ items:
     href: topic.md
   - name: Обработка ошибок в API
     href: error_handling.md
+  - name: Статусы завершения
+    href: status-codes.md
+    items:
+    - name: YDB server
+      href: ydb-status-codes.md
+    - name: C++ SDK
+      href: cpp-status-codes.md
+    - name: C# SDK
+      href: c-sharp-status-codes.md
+    - name: Go SDK
+      href: go-status-codes.md
+    - name: Java SDK
+      href: java-status-codes.md
+    - name: NodeJS SDK
+      href: nodejs-status-codes.md
+    - name: PHP SDK
+      href: php-status-codes.md
+    - name: Python SDK
+      href: python-status-codes.md
+    - name: Rust SDK
+      href: rust-status-codes.md
   - name: gRPC API
     items:
     - name: Обзор

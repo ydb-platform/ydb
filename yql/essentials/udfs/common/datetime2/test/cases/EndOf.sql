@@ -32,3 +32,16 @@ into result `Timestamp below minimum`;
 select $format(cast($tsAbove || ',Atlantic/Madeira' as TzTimestamp))
     , $format(DateTime::EndOfMonth(cast($tsAbove || ',Atlantic/Madeira' as TzTimestamp)))
 into result `Timestamp above maximum`;
+
+select
+    $format(DateTime::EndOfYear(`tztimestamp`)),
+    $format(DateTime::EndOfQuarter(`tztimestamp`)),
+    $format(DateTime::EndOfMonth(`tztimestamp`)),
+    $format(DateTime::EndOfWeek(`tztimestamp`)),
+    $format(DateTime::EndOfDay(`tztimestamp`)),
+from (
+    select
+        cast(ftztimestamp as TzTimestamp) as `tztimestamp`
+    from Input
+)
+into result `Other cases`;

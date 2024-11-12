@@ -88,6 +88,7 @@ namespace NActors {
                 auto& buffers = p->Buffers;
                 auto&& bufferReleased = event->Buffer.Release();
                 p->NumBytes += sizeof(*bufferReleased);
+                p->NumBytes += bufferReleased->GetSize();
                 buffers.emplace_back(std::move(bufferReleased));
                 trim = trim || buffers.size() >= TEvFreeItems::MaxEvents || p->NumBytes >= MaxBytesPerMessage;
             }

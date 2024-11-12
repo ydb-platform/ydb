@@ -5,6 +5,8 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/library/actors/interconnect/event_holder_pool.h>
 
+#include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
+
 #include <atomic>
 
 using namespace NActors;
@@ -54,6 +56,48 @@ Y_UNIT_TEST_SUITE(EventHolderPool) {
         UNIT_ASSERT_VALUES_EQUAL(freeQ.size(), 1);
 
         freeQ.clear(); // if we don't this, we may probablty crash due to the order of object destruction
+    }
+
+    struct TMemProfiler {
+        size_t UsedAtStart = 0;
+
+        TMemProfiler()
+            : UsedAtStart(0)
+        {
+            UsedAtStart = GetUsed();
+        }
+
+        size_t GetUsed() {
+            auto properties = tcmalloc::MallocExtension::GetProperties();
+            auto x = properties["generic.bytes_in_use_by_app"];
+            return x.value - UsedAtStart;
+        }
+    };
+
+    Y_UNIT_TEST(MemConsumption) {
+        TDeque<THolder<IEventBase>> freeQ;
+        auto callback = [&](THolder<IEventBase> event) {
+            // Cerr << "callback" << Endl;
+            event.Reset();
+        };
+        auto pool = Setup(std::move(callback));
+
+        std::list<TEventHolder> q;
+
+        TMemProfiler prof;
+
+        Cerr << prof.GetUsed() << Endl;
+
+        for (ui32 i = 0; i < 1'000'000; i++) {
+            pool.Allocate(q);
+            q.back().Event = MakeHolder<TEvents::TEvPoisonPill>();
+            q.back().Buffer = MakeIntrusive<TEventSerializedData>(TString::Uninitialized(512 * 1024), TEventSerializationInfo{});
+            pool.Release(q, q.begin());
+            if (i % 10'000 == 0) {
+                Cerr << prof.GetUsed() << Endl;
+                UNIT_ASSERT_LT(prof.GetUsed(), 2_MB); // 1_MB for MaxDestructorQueueSize + overhead
+            }
+        }
     }
 
 }

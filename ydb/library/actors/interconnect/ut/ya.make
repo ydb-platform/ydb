@@ -21,6 +21,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/mon_alloc
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/library/actors/interconnect/ut/lib

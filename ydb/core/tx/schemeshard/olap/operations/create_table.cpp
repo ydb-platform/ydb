@@ -192,7 +192,7 @@ private:
         }
 
         TOlapSchemaUpdate schemaDiff;
-        if (!schemaDiff.Parse(description.GetSchema(), errors)) {
+        if (!schemaDiff.Parse(description.GetSchema(), errors, AppData()->ColumnShardConfig.GetNullableKeysAllowed())) {
             return false;
         }
 

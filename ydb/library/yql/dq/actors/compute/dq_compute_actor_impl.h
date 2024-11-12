@@ -526,10 +526,8 @@ protected:
                 }
             }
 
-            {
-                // free MKQL memory then destroy TaskRunner and Allocator
-                Free();
-            }
+            // free MKQL memory then destroy TaskRunner and Allocator
+            Free();
         }
 
         if (RuntimeSettings.TerminateHandler) {

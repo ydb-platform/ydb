@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
@@ -151,7 +152,8 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     }
 
     TUserTable::TPtr info = DataShard.AlterUserTable(ctx, txc, alterTableTx);
-    DataShard.AddUserTable(tableId, info);
+    TDataShardLocksDb locksDb(DataShard, txc);
+    DataShard.AddUserTable(tableId, info, &locksDb);
 
     if (info->NeedSchemaSnapshots()) {
         DataShard.AddSchemaSnapshot(tableId, version, op->GetStep(), op->GetTxId(), txc, ctx);

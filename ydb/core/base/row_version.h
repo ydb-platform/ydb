@@ -75,6 +75,7 @@ namespace NKikimr {
             return ++copy;
         }
 
+        static TRowVersion Parse(const NKikimrProto::TRowVersion& proto);
         void Serialize(NKikimrProto::TRowVersion& proto) const;
 
         friend constexpr bool operator==(const TRowVersion& a, const TRowVersion& b) {

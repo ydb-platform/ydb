@@ -94,6 +94,9 @@ public:
         if (requestId) {
             meta.Aux.push_back({"x-request-id", requestId});
         }
+        for (const auto& [k, v] : ev->Get()->Headers) {
+            meta.Aux.push_back({k, v});
+        }
         for (auto [k ,v]: Headers) {
             meta.Aux.push_back({k, v});
         }

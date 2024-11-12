@@ -35,6 +35,7 @@ message TEvCreateImportRequest {
     optional string UserSID = 3;
     optional TCreateImportRequest Request = 4;
     optional string PeerName = 5;
+    optional string SanitizedToken = 6;
 }
 
 message TCreateImportResponse {

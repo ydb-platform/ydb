@@ -2,7 +2,6 @@
 
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/tx_reader/abstract.h>
-#include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineForLogs;

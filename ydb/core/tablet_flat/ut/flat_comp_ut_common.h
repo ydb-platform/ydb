@@ -47,7 +47,7 @@ public:
         return DB.GetScheme();
     }
 
-    TIntrusiveConstPtr<NKikimr::NTable::TRowScheme> RowScheme(ui32 table) override {
+    TIntrusiveConstPtr<NKikimr::NTable::TRowScheme> RowScheme(ui32 table) const override {
         return DB.GetRowScheme(table);
     }
 

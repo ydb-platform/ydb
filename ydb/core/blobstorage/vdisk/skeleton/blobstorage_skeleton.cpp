@@ -29,6 +29,7 @@
 #include <ydb/core/blobstorage/vdisk/query/assimilation.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_recoverylogwriter.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
@@ -77,6 +78,12 @@ namespace NKikimr {
             NKikimrWhiteboard::TVDiskSatisfactionRank satisfactionRank;
             TOverloadHandler::ToWhiteboard(OverloadHandler.get(), satisfactionRank);
             // send a message to Whiteboard
+            // skeleton state
+            const auto state = VDiskMonGroup.VDiskState();
+            // replicated?
+            bool replicated = !ReplMonGroup.ReplUnreplicatedVDisks() && !HasUnreadableBlobs;
+            // out of space
+            const auto outOfSpaceFlags = VCtx->GetOutOfSpaceState().LocalWhiteboardFlag();
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(&satisfactionRank);
             const TInstant now = ctx.Now();
             const TInstant prev = std::exchange(WhiteboardUpdateTimestamp, now);
@@ -96,7 +103,10 @@ namespace NKikimr {
                          SelfId().NodeId(),
                          Config->BaseInfo.PDiskId,
                          Config->BaseInfo.VDiskSlotId,
-                         OverloadHandler ? OverloadHandler->GetIntegralRankPercent() : 0));
+                         OverloadHandler ? OverloadHandler->GetIntegralRankPercent() : 0,
+                         state,
+                         replicated,
+                         outOfSpaceFlags));
             // repeat later
             ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
         }
@@ -195,6 +205,9 @@ namespace NKikimr {
                     Y_ABORT_UNLESS(MinREALHugeBlobInBytes);
                     if (Config->RunRepl) {
                         ctx.Send(Db->ReplID, new TEvMinHugeBlobSizeUpdate(MinREALHugeBlobInBytes));
+                    }
+                    if (Hull) {
+                        Hull->ApplyHugeBlobSize(MinREALHugeBlobInBytes, ctx);
                     }
                     ctx.Send(*SkeletonFrontIDPtr, new TEvMinHugeBlobSizeUpdate(MinREALHugeBlobInBytes));
                 }
@@ -1851,6 +1864,7 @@ namespace NKikimr {
             if (ev->Get()->Status == NKikimrProto::OK) {
                 ApplyHugeBlobSize(Config->MinHugeBlobInBytes);
                 Y_ABORT_UNLESS(MinREALHugeBlobInBytes);
+
                 // handle special case when donor disk starts and finds out that it has been wiped out
                 if (ev->Get()->LsnMngr->GetOriginallyRecoveredLsn() == 0 && Config->BaseInfo.DonorMode) {
                     // send drop donor cmd to NodeWarden
@@ -1929,11 +1943,11 @@ namespace NKikimr {
                     Db->HugeKeeperID);
 
                 // create Hull
-                Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, Db->SkeletonID,
-                        Config->BalancingEnableDelete, std::move(*ev->Get()->Uncond),
-                        ctx.ExecutorThread.ActorSystem, Config->BarrierValidation);
+                Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, HugeBlobCtx, MinREALHugeBlobInBytes,
+                    Db->SkeletonID, Config->BalancingEnableDelete, std::move(*ev->Get()->Uncond),
+                    ctx.ExecutorThread.ActorSystem, Config->BarrierValidation, Db->HugeKeeperID);
                 ActiveActors.Insert(Hull->RunHullServices(Config, HullLogCtx, Db->SyncLogFirstLsnToKeep,
-                        Db->LoggerID, Db->LogCutterID, ctx), ctx, NKikimrServices::BLOBSTORAGE);
+                    Db->LoggerID, Db->LogCutterID, ctx), ctx, NKikimrServices::BLOBSTORAGE);
 
                 // create VDiskCompactionState
                 VDiskCompactionState = std::make_unique<TVDiskCompactionState>(Hull->GetHullDs()->LogoBlobs->LIActor,
@@ -2581,7 +2595,7 @@ namespace NKikimr {
             };
             auto balancingCtx = std::make_shared<TBalancingCtx>(
                 balancingCfg, VCtx, PDiskCtx, HugeBlobCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo, MinREALHugeBlobInBytes);
-            BalancingId = ctx.Register(CreateBalancingActor(balancingCtx));
+            BalancingId = RunInBatchPool(ctx, CreateBalancingActor(balancingCtx));
             ActiveActors.Insert(BalancingId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
@@ -2814,6 +2828,7 @@ namespace NKikimr {
             , SelfVDiskId(GInfo->GetVDiskId(VCtx->ShortSelfVDisk))
             , Arena(std::make_shared<TRopeArena>(&TRopeArenaBackend::Allocate))
             , VDiskMonGroup(VCtx->VDiskCounters, "subsystem", "state")
+            , ReplMonGroup(VCtx->VDiskCounters, "subsystem", "repl")
             , SyncLogIFaceGroup(VCtx->VDiskCounters, "subsystem", "synclog")
             , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(
                 VCtx->VDiskCounters, "subsystem", "interface"))
@@ -2860,6 +2875,7 @@ namespace NKikimr {
         bool LocalDbInitialized = false;
         std::shared_ptr<TRopeArena> Arena;
         NMonGroup::TVDiskStateGroup VDiskMonGroup;
+        NMonGroup::TReplGroup ReplMonGroup;
         NMonGroup::TSyncLogIFaceGroup SyncLogIFaceGroup;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         bool ReplDone = false;

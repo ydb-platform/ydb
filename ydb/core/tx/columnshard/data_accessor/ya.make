@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     actor.cpp
     events.cpp
-    controller.cpp
     request.cpp
     manager.cpp
 )
@@ -11,6 +10,8 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/core/tx/columnshard/engines/portions
+    ydb/core/tx/columnshard/data_accessor/abstract
+    ydb/core/tx/columnshard/data_accessor/local_db
 )
 
 END()

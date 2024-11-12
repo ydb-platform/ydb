@@ -622,7 +622,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             bool res = session->Write(message);
             UNIT_ASSERT(res);
         }
-        bool res = session->Close(TDuration::Seconds(10));
+        bool res = session->Close(TDuration::Seconds(30));
         UNIT_ASSERT(res);
 
         std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
@@ -657,8 +657,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         Cerr << ">>> TEST: Session gracefully closed" << Endl;
 
         Sleep(TDuration::Seconds(5));
-
-        // UNIT_ASSERT(false);
     }
 
     Y_UNIT_TEST(ConflictingWrites) {

@@ -128,6 +128,7 @@ namespace NKikimr {
         double HullCompLevelRateThreshold;
         double HullCompFreeSpaceThreshold;
         ui32 FreshCompMaxInFlightWrites;
+        ui32 FreshCompMaxInFlightReads;
         ui32 HullCompMaxInFlightWrites;
         ui32 HullCompMaxInFlightReads;
         double HullCompReadBatchEfficiencyThreshold;
@@ -220,6 +221,7 @@ namespace NKikimr {
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
         TControlWrapper DefaultHugeGarbagePerMille;
+        TControlWrapper HugeDefragFreeSpaceBorderPerMille;
         bool UseActorSystemTimeInBSQueue = false;
 
         ///////////// BALANCING SETTINGS ////////////////////

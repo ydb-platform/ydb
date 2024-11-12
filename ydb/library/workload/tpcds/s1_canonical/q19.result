@@ -1,4 +1,4 @@
-brand_id,brand,i_manufact_id,i_manufact,ext_price
+brand_id,brand,item.i_manufact_id,item.i_manufact,ext_price
 3001001,amalgexporti #1,358,eingantipri,39779.2
 5002002,importoscholar #2,503,pribaranti,38877.55
 2002001,importoimporto #1,229,n stableable,38849.73

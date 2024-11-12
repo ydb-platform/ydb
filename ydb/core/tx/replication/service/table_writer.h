@@ -8,6 +8,11 @@ namespace NKikimr {
 
 namespace NKikimr::NReplication::NService {
 
-IActor* CreateLocalTableWriter(const TPathId& tablePathId);
+enum class EWriteMode {
+    Simple,
+    Consistent,
+};
+
+IActor* CreateLocalTableWriter(const TPathId& tablePathId, EWriteMode mode = EWriteMode::Simple);
 
 }

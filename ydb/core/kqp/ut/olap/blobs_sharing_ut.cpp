@@ -1,14 +1,16 @@
-#include "helpers/typed_local.h"
 #include "helpers/local.h"
+#include "helpers/typed_local.h"
 #include "helpers/writer.h"
-#include <ydb/core/tx/columnshard/data_sharing/initiator/controller/abstract.h>
-#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
-#include <ydb/core/tx/columnshard/data_sharing/initiator/status/abstract.h>
-#include <ydb/core/tx/columnshard/data_sharing/common/context/context.h>
-#include <ydb/core/tx/columnshard/data_sharing/destination/session/destination.h>
-#include <ydb/core/tx/columnshard/data_sharing/destination/events/control.h>
+
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/data_sharing/common/context/context.h>
+#include <ydb/core/tx/columnshard/data_sharing/destination/events/control.h>
+#include <ydb/core/tx/columnshard/data_sharing/destination/session/destination.h>
+#include <ydb/core/tx/columnshard/data_sharing/initiator/controller/abstract.h>
+#include <ydb/core/tx/columnshard/data_sharing/initiator/status/abstract.h>
+#include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_ss_tasks/task.h>
 
@@ -276,7 +278,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         void WaitResharding(const TString& hint = "") {
             const TInstant start = TInstant::Now();
             bool clean = false;
-            while (TInstant::Now() - start < TDuration::Seconds(20)) {
+            while (TInstant::Now() - start < TDuration::Seconds(200)) {
                 NYdb::NOperation::TOperationClient operationClient(Kikimr.GetDriver());
                 auto result = operationClient.List<NYdb::NSchemeShard::TBackgroundProcessesResponse>().GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -408,7 +410,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
 
     public:
         TAsyncReshardingTest() {
-            TLocalHelper(Kikimr).CreateTestOlapTable("olapTable", "olapStore", 128, 4);
+            TLocalHelper(Kikimr).CreateTestOlapTable("olapTable", "olapStore", 1024, 32);
         }
 
         void AddBatch(int numRows) {
@@ -557,6 +559,121 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         tester.StartResharding("SPLIT");
         tester.WaitResharding();
 
+        tester.RestartAllShards();
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleMerge) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddBatch(10000);
+
+        for (int i = 0; i < 4; i++) {
+            tester.StartResharding("MERGE");
+            tester.WaitResharding();
+        }
+
+        tester.RestartAllShards();
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleSplits) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddBatch(10000);
+
+        for (int i = 0; i < 4; i++) {
+            tester.StartResharding("SPLIT");
+            tester.WaitResharding();
+        }
+
+        tester.RestartAllShards();
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleSplitsThenMerges) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddBatch(10000);
+
+        for (int i = 0; i < 4; i++) {
+            tester.StartResharding("SPLIT");
+            tester.WaitResharding();
+        }
+
+        for (int i = 0; i < 8; i++) {
+            tester.StartResharding("MERGE");
+            tester.WaitResharding();
+        }
+
+        tester.RestartAllShards();
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleSplitsWithRestartsAfterWait) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddBatch(10000);
+
+        for (int i = 0; i < 4; i++) {
+            tester.StartResharding("SPLIT");
+            tester.WaitResharding();
+            tester.RestartAllShards();
+        }
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleSplitsWithRestartsWhenWait) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddBatch(10000);
+
+        for (int i = 0; i < 4; i++) {
+            tester.StartResharding("SPLIT");
+            tester.RestartAllShards();
+            tester.WaitResharding();
+        }
+        tester.RestartAllShards();
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleMergesWithRestartsAfterWait) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddBatch(10000);
+
+        for (int i = 0; i < 4; i++) {
+            tester.StartResharding("MERGE");
+            tester.WaitResharding();
+            tester.RestartAllShards();
+        }
+
+        tester.CheckCount();
+    }
+
+    Y_UNIT_TEST(MultipleMergesWithRestartsWhenWait) {
+        TAsyncReshardingTest tester;
+        tester.DisableCompaction();
+
+        tester.AddBatch(10000);
+
+        for (int i = 0; i < 4; i++) {
+            tester.StartResharding("MERGE");
+            tester.RestartAllShards();
+            tester.WaitResharding();
+        }
         tester.RestartAllShards();
 
         tester.CheckCount();

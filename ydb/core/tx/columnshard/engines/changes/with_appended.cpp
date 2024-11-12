@@ -113,7 +113,7 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
             context.EngineLogs.AddCleanupPortion(i);
         }
         for (auto& portionBuilder : AppendedPortions) {
-            context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult().MutablePortionInfoPtr());
+            context.EngineLogs.AppendPortion(portionBuilder.GetPortionResult());
         }
     }
 }
@@ -121,15 +121,15 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
 void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     AFL_VERIFY(PortionsToRemove.size() + PortionsToMove.size() + AppendedPortions.size());
     for (auto&& i : AppendedPortions) {
-        i.GetPortionConstructor().SetPortionId(context.NextPortionId());
-        i.GetPortionConstructor().MutableMeta().SetCompactionLevel(TargetCompactionLevel.value_or(0));
+        i.GetPortionConstructor().MutablePortionConstructor().SetPortionId(context.NextPortionId());
+        i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(TargetCompactionLevel.value_or(0));
     }
 }
 
 void TChangesWithAppend::DoOnAfterCompile() {
     if (AppendedPortions.size()) {
         for (auto&& i : AppendedPortions) {
-            i.GetPortionConstructor().MutableMeta().SetCompactionLevel(TargetCompactionLevel.value_or(0));
+            i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(TargetCompactionLevel.value_or(0));
             i.FinalizePortionConstructor();
         }
     }

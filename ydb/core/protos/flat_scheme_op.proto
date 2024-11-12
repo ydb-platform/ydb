@@ -545,10 +545,28 @@ message TCompactionPlannerConstructorContainer {
     }
 }
 
+message TMetadataManagerConstructorContainer {
+    optional string ClassName = 1;
+
+    message TInMem {
+    }
+
+    message TLocalDB {
+        optional uint64 MemoryCacheSize = 1 [default = 128000000];
+        optional bool FetchOnStart = 2 [default = false];
+    }
+
+    oneof Implementation {
+        TInMem InMem = 20;
+        TLocalDB LocalDB = 21;
+    }
+}
+
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
     optional bool ExternalGuaranteeExclusivePK = 2 [default = false];
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
+    optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
 }
 
 message TColumnTableSchema {
@@ -588,6 +606,7 @@ message TColumnTableRequestedOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
     optional bool ExternalGuaranteeExclusivePK = 2;
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
+    optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
 }
 
 message TAlterColumnTableSchema {

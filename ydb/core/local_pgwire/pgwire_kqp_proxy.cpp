@@ -273,8 +273,7 @@ protected:
         TBase::Send(EventRequest_->Sender, response.release(), 0, EventRequest_->Cookie);
 
         BLOG_D(this->SelfId() << " Send stream data ack to " << ev->Sender);
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         resp->Record.SetFreeSpace(std::numeric_limits<i64>::max());
         TBase::Send(ev->Sender, resp.Release());
     }

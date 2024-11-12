@@ -55,7 +55,7 @@ message TTableServiceConfig {
 
     message TSpillingServiceConfig {
         message TLocalFileConfig {
-            optional bool Enable = 1 [default = false];
+            optional bool Enable = 1 [default = true];
             optional string Root = 2 [default = ""];
             optional uint64 MaxTotalSize = 3 [default = 21474836480];  // 20 GiB
             optional uint64 MaxFileSize = 4 [default = 5368709120];    // 5 GiB
@@ -309,7 +309,7 @@ message TTableServiceConfig {
 
     optional bool EnableImplicitQueryParameterTypes = 66 [ default = false ];
 
-    optional string EnableSpillingNodes = 67 [ default = "None" ];
+    optional string EnableSpillingNodes = 67 [ default = "All" ];
 
     message TComputeSchedulerSettings {
         optional uint64 AdvanceTimeIntervalUsec = 1 [default = 50000];

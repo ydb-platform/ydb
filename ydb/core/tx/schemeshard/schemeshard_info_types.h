@@ -276,6 +276,8 @@ struct TPartitionStats {
     // True when lent parts to other tablets
     bool HasLoanedData = false;
 
+    bool HasSchemaChanges = false;
+
     // Tablet actor started at
     TInstant StartTime;
 

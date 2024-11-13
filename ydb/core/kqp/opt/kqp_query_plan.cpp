@@ -131,14 +131,20 @@ struct TSerializerCtx {
 };
 
 TString GetExprStr(const TExprBase& scalar, bool quoteStr = true) {
+    TMaybe<TString> literal = Nothing();
     if (auto maybeData = scalar.Maybe<TCoDataCtor>()) {
-        auto literal = TString(maybeData.Cast().Literal());
-        CollapseText(literal, 32);
+        literal = TString(maybeData.Cast().Literal());
+    } else if (auto maybeData = scalar.Maybe<TCoPgConst>()) {
+        literal = TString(maybeData.Cast().Value());
+    }
+
+    if (literal) {
+        CollapseText(*literal, 32);
 
         if (quoteStr) {
-            return TStringBuilder() << '"' << literal << '"';
+            return TStringBuilder() << '"' << *literal << '"';
         } else {
-            return literal;
+            return *literal;
         }
     }
 
@@ -1709,6 +1715,8 @@ private:
                 res = NUuid::UuidBytesToString(literal.Cast().Literal().StringValue());
             } else if (auto literal = key.Maybe<TCoDataCtor>()) {
                 res = literal.Cast().Literal().StringValue();
+            } else if (auto literal = key.Maybe<TCoPgConst>()) {
+                res = literal.Cast().Value().StringValue();
             } else if (auto literal = key.Maybe<TCoNothing>()) {
                 res = TString("null");
             }

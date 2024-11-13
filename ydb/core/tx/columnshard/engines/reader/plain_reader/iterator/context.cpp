@@ -24,7 +24,14 @@ ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_p
 }
 
 std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) {
-    const bool needSnapshots = !source->GetExclusiveIntervalOnly() || ReadMetadata->GetRequestSnapshot() < source->GetRecordSnapshotMax();
+    if (source->NeedAccessorsFetching()) {
+        if (!AskAccumulatorsScript) {
+            AskAccumulatorsScript = std::make_shared<TFetchingScript>(*this);
+            AskAccumulatorsScript->AddStep(std::make_shared<TPortionAccessorFetchingStep>());
+        }
+        AskAccumulatorsScript->AddStep<TDetectInMem>(*FFColumns);
+        return AskAccumulatorsScript;
+    }
     const bool partialUsageByPK = [&]() {
         switch (source->GetUsageClass()) {
             case TPKRangeFilter::EUsageClass::PartialUsage:
@@ -36,7 +43,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
         }
     }();
     const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
-    const bool isWholeExclusiveSource = source->GetExclusiveIntervalOnly();
+    const bool isWholeExclusiveSource = source->GetExclusiveIntervalOnly() && source->IsSourceInMemory();
+    const bool needSnapshots = ReadMetadata->GetRequestSnapshot() < source->GetRecordSnapshotMax() || !isWholeExclusiveSource;
     const bool hasDeletions = source->GetHasDeletions();
     bool needShardingFilter = false;
     if (!!ReadMetadata->GetRequestShardingInfo()) {
@@ -45,21 +53,29 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
             needShardingFilter = true;
         }
     }
-    auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][isWholeExclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]
-                                      [needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0];
-    if (!result) {
-        result = BuildColumnsFetchingPlan(needSnapshots, isWholeExclusiveSource, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions);
-        CacheFetchingScripts[needSnapshots ? 1 : 0][isWholeExclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]
-                            [needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0] = result;
-    }
-    AFL_VERIFY(result);
-    if (*result) {
-        return *result;
-    } else {
-        std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>(*this);
-        result->SetBranchName("FAKE");
-        result->AddStep(std::make_shared<TBuildFakeSpec>(source->GetRecordsCount()));
-        return result;
+    {
+        auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][isWholeExclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0]
+                                                               [useIndexes ? 1 : 0][needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0];
+        if (!result) {
+            TGuard<TMutex> wg(Mutex);
+            result = CacheFetchingScripts[needSnapshots ? 1 : 0][isWholeExclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]
+                                         [needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0];
+            if (!result) {
+                result = BuildColumnsFetchingPlan(
+                    needSnapshots, isWholeExclusiveSource, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions);
+                CacheFetchingScripts[needSnapshots ? 1 : 0][isWholeExclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]
+                                    [needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0] = result;
+            }
+        }
+        AFL_VERIFY(result);
+        if (*result) {
+            return *result;
+        } else {
+            std::shared_ptr<TFetchingScript> result = std::make_shared<TFetchingScript>(*this);
+            result->SetBranchName("FAKE");
+            result->AddStep(std::make_shared<TBuildFakeSpec>(source->GetRecordsCount()));
+            return result;
+        }
     }
 }
 
@@ -124,11 +140,6 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     const bool partialUsageByPredicate = partialUsageByPredicateExt && PredicateColumns->GetColumnsCount();
 
     TColumnsAccumulator acc(MergeColumns, ReadMetadata->GetResultSchema());
-    result->AddStep(std::make_shared<TPortionAccessorFetchingStep>());
-    if (exclusiveSource) {
-        result->AddStep<TDetectInMem>(acc.GetNotFetchedAlready(*FFColumns));
-    }
-
     if (!!IndexChecker && useIndexes && exclusiveSource) {
         result->AddStep(std::make_shared<TIndexBlobsFetchingStep>(std::make_shared<TIndexesSet>(IndexChecker->GetIndexIds())));
         result->AddStep(std::make_shared<TApplyIndexStep>(IndexChecker));

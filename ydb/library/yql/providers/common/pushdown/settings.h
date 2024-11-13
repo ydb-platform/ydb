@@ -27,7 +27,16 @@ struct TSettings {
         TimestampCtor = 1 << 17,
         JustPassthroughOperators = 1 << 18, // if + coalesce + just
         InOperator = 1 << 19, // IN()
-        IsDistinctOperator = 1 << 20 // IS NOT DISTINCT FROM / IS DISTINCT FROM 
+        IsDistinctOperator = 1 << 20, // IS NOT DISTINCT FROM / IS DISTINCT FROM 
+        DivisionExpressions = 1 << 21, // %, / -- NOTE: division by zero is not handled and also pushdown
+
+        // Option which enables partial pushdown for sequence of OR
+        // For example next predicate:
+        // ($A AND $B) OR ($C AND $D)
+        // May be partially pushdowned as:
+        // $A OR $C
+        // In case of unsupported / complicated expressions $B and $D
+        SplitOrOperator = 1 << 22
     };
 
     explicit TSettings(NLog::EComponent logComponent)

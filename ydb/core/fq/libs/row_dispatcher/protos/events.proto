@@ -76,3 +76,7 @@ message TEvSessionError {
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
+message TEvHeartbeat {
+    uint32 PartitionId = 1;
+    optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
+}

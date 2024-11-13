@@ -34,6 +34,7 @@ struct TTopicSessionMetrics {
         RowsRead = SubGroup->GetCounter("RowsRead", true);
         InFlySubscribe = SubGroup->GetCounter("InFlySubscribe");
         ReconnectRate = SubGroup->GetCounter("ReconnectRate", true);
+        RestartSessionByOffsets = counters->GetCounter("RestartSessionByOffsets", true);
     }
 
     ~TTopicSessionMetrics() {
@@ -45,6 +46,7 @@ struct TTopicSessionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr RowsRead;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RestartSessionByOffsets;
 };
 
 struct TEvPrivate {
@@ -142,6 +144,11 @@ private:
         TParserInputType InputType;
     };
 
+    struct TFieldDescription {
+        ui64 IndexInParserSchema = 0;
+        TString Type;
+    };
+
     bool InflightReconnect = false;
     TDuration ReconnectPeriod;
     const TString TopicPath;
@@ -168,9 +175,10 @@ private:
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TTopicSessionMetrics Metrics;
     TParserSchema ParserSchema;
-    THashMap<TString, ui64> FieldsIndexes;
+    THashMap<TString, TFieldDescription> FieldsIndexes;
     NYql::IPqGateway::TPtr PqGateway;
     TMaybe<TString> ConsumerName;
+    ui64 RestartSessionByOffsets = 0;
 
 public:
     explicit TTopicSession(
@@ -683,14 +691,16 @@ void TTopicSession::SendData(TClientsInfo& info) {
 }
 
 void TTopicSession::UpdateFieldsIds(TClientsInfo& info) {
-    for (auto name : info.Settings.GetSource().GetColumns()) {
+    const auto& source = info.Settings.GetSource();
+    for (size_t i = 0; i < source.ColumnsSize(); ++i) {
+        const auto& name = source.GetColumns().Get(i);
         auto it = FieldsIndexes.find(name);
         if (it == FieldsIndexes.end()) {
             auto nextIndex = FieldsIndexes.size();
             info.FieldsIds.push_back(nextIndex);
-            FieldsIndexes[name] = nextIndex;
+            FieldsIndexes[name] = {nextIndex, source.GetColumnTypes().Get(i)};
         } else {
-            info.FieldsIds.push_back(it->second);
+            info.FieldsIds.push_back(it->second.IndexInParserSchema);
         }
     }
 }
@@ -750,6 +760,8 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         if (ReadSession) {
             if (clientInfo.Settings.HasOffset() && (clientInfo.Settings.GetOffset() <= LastMessageOffset)) {
                 LOG_ROW_DISPATCHER_INFO("New client has less offset (" << clientInfo.Settings.GetOffset() << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
+                Metrics.RestartSessionByOffsets->Inc();
+                ++RestartSessionByOffsets;
                 StopReadSession();
             }
         }
@@ -816,7 +828,7 @@ void TTopicSession::UpdateParserSchema(const TParserInputType& inputType) {
     ui64 offset = 0;
     for (const auto& [name, type]: inputType) {
         Y_ENSURE(FieldsIndexes.contains(name));
-        ui64 index = FieldsIndexes[name];
+        ui64 index = FieldsIndexes[name].IndexInParserSchema;
         ParserSchema.FieldsMap[index] = offset++;
     }
     ParserSchema.InputType = inputType;
@@ -917,6 +929,7 @@ void TTopicSession::HandleException(const std::exception& e) {
 void TTopicSession::SendStatistic() {
     TopicSessionStatistic stat;
     stat.Common.UnreadBytes = UnreadBytes;
+    stat.Common.RestartSessionByOffsets = RestartSessionByOffsets;
     stat.SessionKey = TopicSessionParams{Endpoint, Database, TopicPath, PartitionId};
     stat.Clients.reserve(Clients.size());
     for (auto& [readActorId, info] : Clients) {
@@ -944,13 +957,26 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
         SendSessionError(ev->Sender, "Internal error: such a client already exists");
         return false;
     }
-    if (!Config.GetWithoutConsumer()
-        && ConsumerName 
-        && ConsumerName != ev->Get()->Record.GetSource().GetConsumerName()) {
-        LOG_ROW_DISPATCHER_INFO("Different consumer, expected " <<  ConsumerName << ", actual " << ev->Get()->Record.GetSource().GetConsumerName() << ", send error");
+
+    const auto& source = ev->Get()->Record.GetSource();
+    if (!Config.GetWithoutConsumer() && ConsumerName && ConsumerName != source.GetConsumerName()) {
+        LOG_ROW_DISPATCHER_INFO("Different consumer, expected " <<  ConsumerName << ", actual " << source.GetConsumerName() << ", send error");
         SendSessionError(ev->Sender, TStringBuilder() << "Use the same consumer in all queries via RD (current consumer " << ConsumerName << ")");
         return false;
     }
+
+    Y_ENSURE(source.ColumnsSize() == source.ColumnTypesSize());
+    for (size_t i = 0; i < source.ColumnsSize(); ++i) {
+        const auto& name = source.GetColumns().Get(i);
+        const auto& type = source.GetColumnTypes().Get(i);
+        const auto it = FieldsIndexes.find(name);
+        if (it != FieldsIndexes.end() && it->second.Type != type) {
+            LOG_ROW_DISPATCHER_INFO("Different column `" << name << "` type, expected " << it->second.Type << ", actual " << type << ", send error");
+            SendSessionError(ev->Sender, TStringBuilder() << "Use the same column type in all queries via RD, current type for column `" << name << "` is " << it->second.Type << " (requested type is " << type <<")");
+            return false;
+        }
+    }
+
     return true;
 }
 

@@ -57,7 +57,7 @@ void TColumnShard::BecomeBroken(const TActorContext& ctx) {
 void TColumnShard::SwitchToWork(const TActorContext& ctx) {
     {
         const TLogContextGuard gLogging =
-            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
+            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId())("process", "SwitchToWork");
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "SwitchToWork");
 
         for (auto&& i : TablesManager.GetTables()) {
@@ -109,7 +109,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
     DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
-    DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(DataAccessorsControlActorId),
+    DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(DataAccessorsControlActorId, SelfId()),
 
     PrioritizationClientId = NPrioritiesQueue::TCompServiceOperator::RegisterClient();
     Execute(CreateTxInitSchema(), ctx);

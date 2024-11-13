@@ -30,7 +30,15 @@ namespace {
             : NPushdown::TSettings(NLog::EComponent::ProviderGeneric)
         {
             using EFlag = NPushdown::TSettings::EFeatureFlag;
-            Enable(EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 | EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator | EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators);
+            Enable(
+                // Operator features
+                EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 |
+                EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
+                EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | DivisionExpressions |
+
+                // Split features
+                EFlag::SplitOrOperator
+            );
         }
     };
 

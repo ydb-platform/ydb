@@ -18,7 +18,7 @@ struct TEvRetryQueuePrivate {
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvRetry = EvBegin,
-        EvPing,
+        EvHeartbeat,
         EvSessionClosed,        // recipientId does not exist anymore
         EvEnd
     };
@@ -34,8 +34,8 @@ struct TEvRetryQueuePrivate {
         const ui64 EventQueueId;
     };
 
-    struct TEvPing : NActors::TEventLocal<TEvPing, EvPing> {
-        explicit TEvPing(ui64 eventQueueId)
+    struct TEvEvHeartbeat : NActors::TEventLocal<TEvEvHeartbeat, EvHeartbeat> {
+        explicit TEvEvHeartbeat(ui64 eventQueueId)
             : EventQueueId(eventQueueId)
         { }
         const ui64 EventQueueId;
@@ -91,6 +91,7 @@ public:
     template <TProtobufEventWithTransportMeta T>
     void Send(THolder<T> ev, ui64 cookie = 0) {
         if (LocalRecipient) {
+            LastSentDataTime = TInstant::Now();
             NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), cookie));
             return;
         }
@@ -149,7 +150,8 @@ public:
     void HandleNodeDisconnected(ui32 nodeId);
     bool HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void Retry();
-    void Ping();
+    bool Heartbeat();
+
     void Unsubscribe();
     void PrintInternalState(TStringStream& stream) const;
 
@@ -164,7 +166,7 @@ private:
     void RemoveConfirmedEvents(ui64 confirmedSeqNo);
     void SendRetryable(const IRetryableEvent::TPtr& ev);
     void ScheduleRetry();
-    void SchedulePing();
+    void ScheduleHeartbeat();
     void Connect();
 
 private:
@@ -220,11 +222,12 @@ private:
     std::set<ui64> ReceivedEventsSeqNos;
     bool Connected = false;
     bool RetryScheduled = false;
-    bool PingScheduled = false;
+    bool HeartbeatScheduled = false;
     TMaybe<TRetryState> RetryState;
     TTxId TxId;
     bool KeepAlive = false;
     TInstant LastReceivedDataTime = TInstant::Now();
+    TInstant LastSentDataTime = TInstant::Now();
     bool UseConnect = true;
 };
 

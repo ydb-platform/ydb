@@ -469,7 +469,7 @@ class Factory:
                 ),
                 Column(
                     name='col_01_interval',
-                    ydb_type=makeYdbTypeFromTypeID(Type.BOOL),
+                    ydb_type=makeYdbTypeFromTypeID(Type.INTERVAL),
                     data_source_type=DataSourceType(ydb=types_ydb.Interval()),
                 ),
             ),
@@ -557,6 +557,42 @@ class Factory:
             ),
         ]
 
+    def _json_document(self) -> TestCase:
+        schema = Schema(
+            columns=ColumnList(
+                Column(
+                    name='col_00_id',
+                    ydb_type=makeYdbTypeFromTypeID(Type.INT32),
+                    data_source_type=DataSourceType(ydb=types_ydb.Int32().to_non_nullable()),
+                ),
+                Column(
+                    name='col_01_data',
+                    ydb_type=makeYdbTypeFromTypeID(Type.JSON_DOCUMENT),
+                    data_source_type=DataSourceType(ydb=types_ydb.JsonDocument()),
+                ),
+            ),
+        )
+
+        data_out = [
+            ['{"key1": "value1"}'],
+            ['{"key2": "value2"}'],
+        ]
+
+        return [
+            TestCase(
+                name_='json_document',
+                data_in=None,
+                data_out_=data_out,
+                select_where=None,
+                select_what=SelectWhat(SelectWhat.Item(name='col_01_data')),
+                data_source_kind=EDataSourceKind.YDB,
+                pragmas=dict(),
+                protocol=EProtocol.NATIVE,
+                schema=schema,
+                # check_output_schema=True,
+            )
+        ]
+
     def make_test_cases(self) -> Sequence[TestCase]:
         return list(
             itertools.chain(
@@ -567,5 +603,6 @@ class Factory:
                 self._pushdown(),
                 self._unsupported_types(),
                 self._json(),
+                self._json_document(),
             )
         )

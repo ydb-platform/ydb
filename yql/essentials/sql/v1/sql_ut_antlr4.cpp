@@ -2127,17 +2127,25 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(TtlTieringWithOtherActionsParseCorrect) {
         NYql::TAstParseResult res = SqlToYql(
             R"( USE plato;
-                ALTER TABLE tableName SET TTL
+                ALTER TABLE tableName
+                    ADD FAMILY cold (DATA = "rot"),
+                    SET TTL
                         Interval("P1D") TO EXTERNAL DATA SOURCE Tier1,
                         Interval("P2D") TO EXTERNAL DATA SOURCE Tier2,
                         Interval("P30D") DELETE
                     ON CreatedAt,
-                    SET AUTO_PARTITIONING_MAX_PARTITIONS_COUNT 16;)"
+                    ALTER COLUMN payload_v2 SET FAMILY cold,
+                    ALTER FAMILY default SET DATA "ssd"
+                ;)"
         );
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("addColumnFamilies"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("cold"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alterColumnFamilies"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("default"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tiers"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("evictionDelay"));
@@ -2147,8 +2155,6 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("172800000"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("2592000000"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("maxPartitions"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("16"));
             }
         };
 

@@ -158,7 +158,7 @@ private:
     ui32 PartitionId;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
+    IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     NYql::ITopicClient::TPtr TopicClient;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     const i64 BufferSize;
@@ -190,7 +190,7 @@ public:
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-        NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
+        IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const NYql::IPqGateway::TPtr& pqGateway);
 
@@ -281,7 +281,7 @@ TTopicSession::TTopicSession(
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
+    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway)
     : TopicPath(topicPath)
@@ -737,10 +737,11 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             std::forward_as_tuple(ev)).first->second;
         UpdateFieldsIds(clientInfo);
 
-        TString predicate = clientInfo.Settings.GetSource().GetPredicate();
+        const auto& source = clientInfo.Settings.GetSource();
+        TString predicate = source.GetPredicate();
 
         // TODO: remove this when the re-parsing is removed from pq read actor
-        if (predicate.empty() && HasJsonColumns(clientInfo.Settings.GetSource())) {
+        if (predicate.empty() && HasJsonColumns(source)) {
             predicate = "WHERE TRUE";
         }
 
@@ -752,7 +753,9 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 [&, actorId = clientInfo.ReadActorId](ui64 offset, const TString& json){
                     Send(SelfId(), new NFq::TEvPrivate::TEvDataAfterFilteration(offset, json, actorId));
                 },
-                PureCalcProgramFactory);
+                PureCalcProgramFactory,
+                {.EnabledLLVM = source.GetEnabledLLVM()}
+            );
         } else {
             ClientsWithoutPredicate.insert(ev->Sender);
         }
@@ -993,7 +996,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
+    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway) {
     return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, pureCalcProgramFactory, counters, pqGateway));

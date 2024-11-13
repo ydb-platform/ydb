@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     actors_factory.cpp
+    common.cpp
     coordinator.cpp
     json_filter.cpp
     json_parser.cpp

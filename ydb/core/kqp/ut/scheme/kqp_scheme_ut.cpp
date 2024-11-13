@@ -5468,7 +5468,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             WITH (
                 STORE = COLUMN,
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10,
-                TTL = Interval("PT10S") TO EXTERNAL DATA SOURCE tier1 ON Key
+                TTL = Interval("PT10S") TO EXTERNAL DATA SOURCE `/Root/tier1` ON Key
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -5484,7 +5484,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
         auto query2 = TStringBuilder() << R"(
             --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(` SET (TTL = Interval("PT10S") TO EXTERNAL DATA SOURCE tier2 ON Key);)";
+            ALTER TABLE `)" << tableName << R"(` SET (TTL = Interval("PT10S") TO EXTERNAL DATA SOURCE `/Root/tier2` ON Key);)";
         result = session.ExecuteSchemeQuery(query2).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -5495,8 +5495,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
             auto ttl = desc.GetTableDescription().GetTtlSettings();
             UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "tier2");
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(ttl->GetTiers()[0].GetExpression()).GetExpireAfter(), TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "/Root/tier");
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers()[0].GetApplyAfter(), TDuration::Seconds(10));
         }
 
         auto query3 = TStringBuilder() << R"(
@@ -5515,7 +5515,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto query4 = TStringBuilder() << R"(
             --!syntax_v1
-            ALTER TABLE `)" << tableName << R"(` SET (TTL = Interval("PT10S") TO EXTERNAL DATA SOURCE tier1 ON Key);)";
+            ALTER TABLE `)" << tableName << R"(` SET (TTL = Interval("PT10S") TO EXTERNAL DATA SOURCE `/Root/tier1` ON Key);)";
         result = session.ExecuteSchemeQuery(query4).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -5526,8 +5526,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
             auto ttl = desc.GetTableDescription().GetTtlSettings();
             UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "tier1");
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(ttl->GetTiers()[0].GetExpression()).GetExpireAfter(), TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(), "/Root/tier1");
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers()[0].GetApplyAfter(), TDuration::Seconds(10));
         }
 
         auto query5 = TStringBuilder() << R"(
@@ -8441,7 +8441,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        testHelper.SetTiering(tableName, "tier1", "created_at");
+        testHelper.SetTiering(tableName, "/root/tier1", "created_at");
 
         while (csController->GetTieringUpdates().Val() == 0) {
             Cout << "Wait tiering..." << Endl;
@@ -8509,7 +8509,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL(description.GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(), TDuration::Hours(1));
         }
         {
-            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`SET (TTL = Interval(\"PT10S\") TO EXTERNAL DATA SOURCE tier1, Interval(\"PT1H\") DELETE ON created_at);";
+            auto alterQuery = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "`SET (TTL = Interval(\"PT10S\") TO EXTERNAL DATA SOURCE `/Root/tier1`, Interval(\"PT1H\") DELETE ON created_at);";
             auto alterResult = testHelper.GetSession().ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
@@ -8524,8 +8524,8 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 2);
             auto evictTier = ttl->GetTiers()[0];
             UNIT_ASSERT(std::holds_alternative<TTtlEvictToExternalStorageAction>(evictTier.GetAction()));
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(evictTier.GetAction()).GetStorage(), "tier1");
-            UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(evictTier.GetExpression()).GetExpireAfter(), TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TTtlEvictToExternalStorageAction>(evictTier.GetAction()).GetStorage(), "/Root/tier1");
+            UNIT_ASSERT_VALUES_EQUAL(evictTier.GetApplyAfter(), TDuration::Seconds(10));
             auto deleteTier = ttl->GetTiers()[1];
             UNIT_ASSERT(std::holds_alternative<TTtlDeleteAction>(deleteTier.GetAction()));
             UNIT_ASSERT_VALUES_EQUAL(std::get<TDateTypeColumnModeSettings>(deleteTier.GetExpression()).GetExpireAfter(), TDuration::Hours(1));

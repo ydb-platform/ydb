@@ -25,7 +25,7 @@ public:
         , Compression(compression) {
     }
 
-    bool DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto);
+    TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto);
 
     NMetadata::NSecret::TSecretIdOrValue GetAccessKey() const {
         auto accessKey =

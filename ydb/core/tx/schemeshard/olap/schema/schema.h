@@ -27,7 +27,7 @@ namespace NKikimr::NSchemeShard {
         void ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
         void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
         bool Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
-        bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings, IErrorCollector& errors) const;
+        bool ValidateTtlSettings(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings, TSchemeShard* ctx, IErrorCollector& errors) const;
     };
 
     class TOlapStoreSchemaPreset: public TOlapSchema {

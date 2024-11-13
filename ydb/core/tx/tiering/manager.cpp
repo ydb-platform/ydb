@@ -57,12 +57,14 @@ private:
     }
 
     void Handle(NTiers::TEvNotifySchemeObjectUpdated::TPtr& ev) {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_updated")("path", ev->Get()->GetObjectId())("type", "TIERED_STORAGE");
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_updated")("path", ev->Get()->GetObjectId());
         const TString& objectId = ev->Get()->GetObjectId();
         const auto& description = ev->Get()->GetDescription();
         if (description.GetSelf().GetPathType() == NKikimrSchemeOp::EPathTypeExternalDataSource) {
             NTiers::TTierConfig tier;
-            AFL_VERIFY(tier.DeserializeFromProto(description.GetExternalDataSourceDescription()));
+            if (const auto status = tier.DeserializeFromProto(description.GetExternalDataSourceDescription()); status.IsFail()) {
+                AFL_VERIFY(false)("error", status.GetErrorMessage());
+            }
             Owner->UpdateTierConfig(tier, objectId);
         } else {
             AFL_WARN(NKikimrServices::TX_TIERING)("error", "invalid_object_type")("type", static_cast<ui64>(description.GetSelf().GetPathType()))("path", objectId);
@@ -70,14 +72,14 @@ private:
     }
 
     void Handle(NTiers::TEvNotifySchemeObjectDeleted::TPtr& ev) {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_deleted")("name", ev->Get()->GetObjectId())("type", "TIERED_STORAGE");
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("component", "tiering_manager")("event", "object_deleted")("name", ev->Get()->GetObjectId());
     }
 
     void Handle(NTiers::TEvSchemeObjectResolutionFailed::TPtr& ev) {
         const TString objectId = ev->Get()->GetObjectId();
         switch (ev->Get()->GetReason()) {
             case NTiers::TEvSchemeObjectResolutionFailed::NOT_FOUND:
-                AFL_WARN(NKikimrServices::TX_TIERING)("event", "object_not_found")("name", objectId)("type", "TIERING_RULE");
+                AFL_WARN(NKikimrServices::TX_TIERING)("event", "object_not_found")("name", objectId);
                 break;
             case NTiers::TEvSchemeObjectResolutionFailed::LOOKUP_ERROR:
                 ScheduleRetryWatchObjects(std::make_unique<NTiers::TEvWatchSchemeObject>(std::vector<TString>({ objectId })));

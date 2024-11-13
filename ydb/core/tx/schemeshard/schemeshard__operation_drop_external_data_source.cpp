@@ -152,6 +152,10 @@ public:
             result->SetError(NKikimrScheme::StatusSchemeError, "Other entities depend on this data source, please remove them at the beginning: " + externalDataSource->ExternalTableReferences.GetReferences(0).GetPath());
             return result;
         }
+        if (auto tables = context.SS->ColumnTables.GetTablesWithTier(path.PathString()); !tables.empty()) {
+            result->SetError(NKikimrScheme::StatusSchemeError, "Column tables depend on this data source: " + TPath::Init(*tables.begin(), context.SS).PathString());
+            return result;
+        }
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {

@@ -13,27 +13,6 @@ extern "C" {
 
 namespace NKikimr {
 namespace NKqp {
-
-    TString GetConfigProtoWithName(const TString & tierName) {
-        return TStringBuilder() << "Name : \"" << tierName << "\"\n" <<
-        R"(
-            ObjectStorage : {
-                Endpoint: "fake"
-                Bucket: "fake"
-                SecretableAccessKey: {
-                    Value: {
-                        Data: "secretAccessKey"
-                    }
-                }
-                SecretableSecretKey: {
-                    Value: {
-                        Data: "fakeSecret"
-                    }
-                }
-            }
-        )";
-    }
-
     using namespace NYdb;
 
     TTestHelper::TTestHelper(const TKikimrSettings& settings) {
@@ -69,12 +48,13 @@ namespace NKqp {
     }
 
     void TTestHelper::CreateTier(const TString& tierName) {
-        auto result = GetSession().ExecuteSchemeQuery(R"(
+        // auto result = GetSession().ExecuteSchemeQuery(R"(
+        auto result = Kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin")).GetSession().GetValueSync().GetSession().ExecuteSchemeQuery(R"(
             UPSERT OBJECT `accessKey` (TYPE SECRET) WITH (value = `secretAccessKey`);
             UPSERT OBJECT `secretKey` (TYPE SECRET) WITH (value = `fakeSecret`);
             CREATE EXTERNAL DATA SOURCE `)" + tierName + R"(` WITH (
                 SOURCE_TYPE="ObjectStorage",
-                LOCATION="fake/fake",
+                LOCATION="http://fake.fake/fake",
                 AUTH_METHOD="AWS",
                 AWS_ACCESS_KEY_ID_SECRET_NAME="accessKey",
                 AWS_SECRET_ACCESS_KEY_SECRET_NAME="secretKey",

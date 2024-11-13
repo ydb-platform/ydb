@@ -24,7 +24,7 @@ private:
 protected:
     ui32 ShardsCount = 0;
 public:
-    bool Deserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) {
+    bool Deserialize(const NKikimrSchemeOp::TColumnTableDescription& description, TSchemeShard* ctx, IErrorCollector& errors) {
         Name = description.GetName();
         ShardsCount = std::max<ui32>(description.GetColumnShardCount(), 1);
 
@@ -34,7 +34,7 @@ public:
 
         if (description.HasTtlSettings()) {
             TtlSettings = description.GetTtlSettings();
-            if (!GetSchema().ValidateTtlSettings(description.GetTtlSettings(), errors)) {
+            if (!GetSchema().ValidateTtlSettings(description.GetTtlSettings(), ctx, errors)) {
                 return false;
             }
         }
@@ -50,7 +50,7 @@ public:
         }
         FillDefaultSharding(*tableInfo->Description.MutableSharding());
 
-        if (!Deserialize(description, errors)) {
+        if (!Deserialize(description, context.SS, errors)) {
             return nullptr;
         }
         if (tableInfo->Description.GetSharding().HasHashSharding()) {

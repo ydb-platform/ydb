@@ -68,7 +68,7 @@ public:
             UNIT_ASSERT_GT(columnRawBytes, 0);
         }
 
-        TestHelper->SetTiering("/Root/olapStore/olapTable", "tier1", "timestamp");
+        TestHelper->SetTiering("/Root/olapStore/olapTable", "/Root/tier1", "timestamp");
         csController->WaitActualization(TDuration::Seconds(5));
 
         {
@@ -82,7 +82,7 @@ public:
 
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), "tier1");
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), "/Root/tier1");
             UNIT_ASSERT_VALUES_EQUAL_C(GetUint64(rows[0].at("RawBytes")), columnRawBytes,
                 TStringBuilder() << "RawBytes changed after eviction: before=" << columnRawBytes
                                 << " after=" << GetUint64(rows[0].at("RawBytes")));

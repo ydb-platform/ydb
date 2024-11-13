@@ -617,14 +617,14 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         TString originalEndpoint;
         for (auto&& spec : specs[i].Tiers) {
             hasColdEviction = true;
-            if (spec.S3.GetEndpoint() != "fake") {
+            if (spec.S3.GetEndpoint() != "fake.fake") {
                 misconfig = true;
                 // misconfig in export => OK, misconfig after export => ERROR
                 if (i > 1) {
                     expectedReadResult = EExpectedResult::ERROR;
                 }
                 originalEndpoint = spec.S3.GetEndpoint();
-                spec.S3.SetEndpoint("fake");
+                spec.S3.SetEndpoint("fake.fake");
                 tIdxCorrect = tIdx++;
             }
             break;

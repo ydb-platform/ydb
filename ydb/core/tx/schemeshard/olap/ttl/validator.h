@@ -8,7 +8,7 @@ namespace NKikimr::NSchemeShard {
         static bool ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl, const TOlapIndexesDescription& indexes,
             const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns,
             const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns,
-            const THashMap<TString, ui32>& colName2Id,
+            const THashMap<TString, ui32>& colName2Id, TSchemeShard* ctx,
             IErrorCollector& errors);
 
     };

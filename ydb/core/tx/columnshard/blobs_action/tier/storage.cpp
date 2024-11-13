@@ -54,18 +54,21 @@ void TOperator::DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) c
 }
 
 void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* tierManager) {
-    NKikimrSchemeOp::TS3Settings settings;
-    if (tierManager && tierManager->IsReady()) {
-        settings = tierManager->GetS3Settings();
-    } else {
-        settings.SetEndpoint("nowhere");
+    if (!tierManager || !tierManager->IsReady()) {
+        TGuard<TSpinLock> changeLock(ChangeOperatorLock);
+        CurrentS3Settings.reset();
+        ExternalStorageOperator = nullptr;
+        return;
     }
+
+    NKikimrSchemeOp::TS3Settings settings = tierManager->GetS3Settings();
     {
         TGuard<TSpinLock> changeLock(ChangeOperatorLock);
         if (CurrentS3Settings && CurrentS3Settings->SerializeAsString() == settings.SerializeAsString()) {
             return;
         }
     }
+
     auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(settings);
     AFL_VERIFY(extStorageConfig);
     auto extStorageOperator = extStorageConfig->ConstructStorageOperator(false);
@@ -103,12 +106,7 @@ TOperator::TOperator(const TString& storageId, const TActorId& shardActorId, con
 
 void TOperator::DoOnTieringModified(const std::shared_ptr<NColumnShard::ITiersManager>& tiers) {
     auto* tierManager = tiers->GetManagerOptional(TBase::GetStorageId());
-    if (tierManager) {
-        InitNewExternalOperator(tierManager);
-    } else {
-        TGuard<TSpinLock> changeLock(ChangeOperatorLock);
-        ExternalStorageOperator = nullptr;
-    }
+    InitNewExternalOperator(tierManager);
 }
 
 bool TOperator::DoLoad(IBlobManagerDb& dbBlobs) {

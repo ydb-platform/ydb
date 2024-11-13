@@ -1,8 +1,19 @@
 #include "read.h"
 
+#include <ydb/core/tx/columnshard/blob_cache.h>
+
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 void TReadingAction::DoStartReading(THashSet<TBlobRange>&& ranges) {
+    if (!ExternalStorageOperator) {
+        for (const auto& range : ranges) {
+            auto response = std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(range, NKikimrProto::EReplyStatus::ERROR,
+                "storage operator is uninitialized for tier: " + GetStorageId(), false, GetStorageId());
+            TActorContext::AsActorContext().Send(TActorContext::AsActorContext().SelfID, response.release());
+        }
+        return;
+    }
+
     for (auto&& r : ranges) {
         auto awsRequest = Aws::S3::Model::GetObjectRequest()
             .WithKey(r.BlobId.GetLogoBlobId().ToString())

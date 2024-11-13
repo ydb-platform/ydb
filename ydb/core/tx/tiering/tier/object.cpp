@@ -23,23 +23,23 @@ NKikimrSchemeOp::TS3Settings TTierConfig::GetPatchedConfig(
     return config;
 }
 
-bool TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto) {
+TConclusionStatus TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto) {
     if (!proto.GetAuth().HasAws()) {
-        return false;
+        return TConclusionStatus::Fail("AWS auth is not defined for storage tier");
     }
 
     // TODO fix secret owner
     {
         auto makeSecretId = [](const TStringBuf& secret) -> TString {
-            return NMetadata::NSecret::TSecretId("a", secret).SerializeToString();   // ... and here
+            return NMetadata::NSecret::TSecretId("root@builtin", secret).SerializeToString();   // ... here
         };
-        ProtoConfig.SetSecretKey(makeSecretId(proto.GetAuth().GetAws().GetAwsAccessKeyIdSecretName()));
-        ProtoConfig.SetAccessKey(makeSecretId(proto.GetAuth().GetAws().GetAwsSecretAccessKeySecretName()));
+        ProtoConfig.SetAccessKey(makeSecretId(proto.GetAuth().GetAws().GetAwsAccessKeyIdSecretName()));
+        ProtoConfig.SetSecretKey(makeSecretId(proto.GetAuth().GetAws().GetAwsSecretAccessKeySecretName()));
     }
 
     NUri::TUri url;
-    if (url.Parse(proto.GetLocation()) != NUri::TState::EParsed::ParsedOK) {
-        return false;
+    if (url.Parse(proto.GetLocation(), NUri::TFeature::FeaturesAll) != NUri::TState::EParsed::ParsedOK) {
+        return TConclusionStatus::Fail("Cannot parse url: " + proto.GetLocation());
     }
 
     switch (url.GetScheme()) {
@@ -52,7 +52,7 @@ bool TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourc
             ProtoConfig.SetScheme(::NKikimrSchemeOp::TS3Settings_EScheme_HTTPS);
             break;
         default:
-            return false;
+            return TConclusionStatus::Fail("Unknown schema in url");
     }
 
     {
@@ -61,18 +61,16 @@ bool TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourc
 
         TStringBuf host = url.GetHost();
         TStringBuf path = url.GetField(NUri::TField::FieldPath);
-        if (path.StartsWith("/") && path.Size() > 1) {
-            bucket = path.Skip(1);
-            if (bucket.EndsWith("/")) {
-                bucket = bucket.Chop(1);
-            }
-            if (bucket.Contains("/")) {
-                return false;
-            }
+        if (!path.Empty()) {
             endpoint = host;
+            bucket = path;
+            bucket.SkipPrefix("/");
+            if (bucket.Contains("/")) {
+                return TConclusionStatus::Fail(TStringBuilder() << "Not a bucket (contains directories): " << bucket);
+            }
         } else {
             if (!path.TrySplit('.', endpoint, bucket)) {
-                return false;
+                return TConclusionStatus::Fail(TStringBuilder() << "Bucket is not specified in URL: " << path);
             }
         }
 
@@ -80,7 +78,7 @@ bool TTierConfig::DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourc
         ProtoConfig.SetBucket(TString(bucket));
     }
 
-    return true;
+    return TConclusionStatus::Success();
 }
 
 NJson::TJsonValue TTierConfig::SerializeConfigToJson() const {

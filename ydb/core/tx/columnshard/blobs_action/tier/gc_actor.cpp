@@ -8,8 +8,7 @@ void TGarbageCollectionActor::Handle(NWrappers::NExternalStorage::TEvDeleteObjec
     TString errorMessage;
     Y_ABORT_UNLESS(ev->Get()->Key);
     AFL_VERIFY(TLogoBlobID::Parse(logoBlobId, *ev->Get()->Key, errorMessage))("error", errorMessage);
-    BlobIdsToRemove.erase(logoBlobId);
-    CheckFinished();
+    OnDeleteBlobFinished(logoBlobId, ev->Get()->IsSuccess());
 }
 
 void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
@@ -20,6 +19,14 @@ void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
     for (auto&& i : GCTask->GetDraftBlobIds()) {
         BlobIdsToRemove.emplace(i.GetLogoBlobId());
     }
+    TBase::Bootstrap(ctx);
+    Become(&TGarbageCollectionActor::StateWork);
+    if (!GCTask->GetExternalStorageOperator()) {
+        for (auto&& i : BlobIdsToRemove) {
+            OnDeleteBlobFinished(i, false, "storage operator is uninitialized for tier: " + GCTask->GetStorageId());
+        }
+        return;
+    }
     for (auto&& i : BlobIdsToRemove) {
         auto awsRequest = Aws::S3::Model::DeleteObjectRequest().WithKey(i.ToString());
         auto request = std::make_unique<NWrappers::NExternalStorage::TEvDeleteObjectRequest>(awsRequest);
@@ -27,8 +34,6 @@ void TGarbageCollectionActor::Bootstrap(const TActorContext& ctx) {
         TAutoPtr<TEventHandle<NWrappers::NExternalStorage::TEvDeleteObjectRequest>> evPtr((TEventHandle<NWrappers::NExternalStorage::TEvDeleteObjectRequest>*)hRequest.release());
         GCTask->GetExternalStorageOperator()->Execute(evPtr);
     }
-    TBase::Bootstrap(ctx);
-    Become(&TGarbageCollectionActor::StateWork);
 }
 
 void TGarbageCollectionActor::CheckFinished() {
@@ -39,4 +44,12 @@ void TGarbageCollectionActor::CheckFinished() {
     }
 }
 
+void TGarbageCollectionActor::OnDeleteBlobFinished(const TLogoBlobID& blobId, bool success, const TString& errorMessage) {
+    if (success) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_BLOBS_TIER)("actor", "TGarbageCollectionActor")("event", "delete_object_failed")(
+            "reason", errorMessage);
+    }
+    BlobIdsToRemove.erase(blobId);
+    CheckFinished();
+}
 }

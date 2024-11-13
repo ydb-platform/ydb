@@ -1,5 +1,7 @@
 #include "validator.h"
+
 #include <ydb/core/tx/schemeshard/common/validation.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -15,7 +17,7 @@ static inline NScheme::TTypeInfo GetType(const TOlapColumnsDescription::TColumn&
 
 }
 
-bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl, const TOlapIndexesDescription& indexes, const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns, const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns, const THashMap<TString, ui32>& colName2Id, IErrorCollector& errors) {
+bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& ttl, const TOlapIndexesDescription& indexes, const THashMap<ui32, TOlapColumnsDescription::TColumn>& sourceColumns, const THashMap<ui32, TOlapColumnsDescription::TColumn>& alterColumns, const THashMap<TString, ui32>& colName2Id, TSchemeShard* ctx, IErrorCollector& errors) {
     const TString colName = ttl.GetColumnName();
 
     auto it = colName2Id.find(colName);
@@ -95,6 +97,19 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
             errors.AddError("Haven't MAX-index for TTL column and TTL column is not first column in primary key");
             return false;
         }
+    }
+
+    for (const auto& tier : ttl.GetTiers()) {
+        TPath tierPath = TPath::Resolve(tier.GetStorageName(), ctx);
+        if (!tierPath.IsResolved() || tierPath.IsDeleted() || tierPath.IsUnderDeleting()) {
+            errors.AddError("Object not found: " + tier.GetStorageName());
+            return false;
+        }
+        if (!tierPath->IsExternalDataSource()) {
+            errors.AddError("Not an external data source: " + tier.GetStorageName());
+            return false;
+        }
+        // TODO: check that TTierConfig is deserializable from external data source
     }
 
     return true;

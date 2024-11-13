@@ -225,7 +225,7 @@ Y_UNIT_TEST_TWIN(JoinWithSubquery, StreamLookup) {
         );
         SELECT j.lValue AS Value FROM $join AS j INNER JOIN `/Root/Kv` AS kv
             ON j.lKey = kv.Key
-        ORDER BY j.lValue;
+        ORDER BY Value;
     )";
 
     NKikimrConfig::TAppConfig appConfig;

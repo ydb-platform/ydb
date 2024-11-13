@@ -81,9 +81,17 @@ public:
     void Terminate() override
     {
         // TODO(bulatman) What about exceptions?
+        Terminated_ = true;
         for (auto& connection : Connections_) {
             connection->Terminate();
         }
+    }
+
+    bool IsTerminated() const override
+    {
+        return Terminated_ || AnyOf(Connections_, [](const auto& connection) {
+            return connection->IsTerminated();
+        });
     }
 
     //! Returns a YSON-serialized connection config.
@@ -107,6 +115,8 @@ private:
     const NConcurrency::TActionQueuePtr ActionQueue_;
     const TGuid ConnectionId_;
     const TString LoggingTag_;
+
+    std::atomic<bool> Terminated_ = false;
 };
 
 } // namespace

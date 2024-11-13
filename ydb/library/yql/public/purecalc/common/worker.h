@@ -2,14 +2,14 @@
 
 #include <ydb/library/yql/public/purecalc/common/interface.h>
 
-#include <ydb/library/yql/public/udf/udf_value.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/yql_user_data.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
+#include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_user_data.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_visitor.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 
 #include <memory>
 

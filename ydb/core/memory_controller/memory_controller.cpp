@@ -17,10 +17,10 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/memory_pool.h>
-#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
+#include <yql/essentials/public/udf/arrow/memory_pool.h>
 
 namespace NKikimr::NMemory {
 

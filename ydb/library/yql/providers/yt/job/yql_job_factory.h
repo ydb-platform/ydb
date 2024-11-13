@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/library/yql/providers/yt/codec/yt_codec_job.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
 #include <yt/cpp/mapreduce/interface/io.h>
 

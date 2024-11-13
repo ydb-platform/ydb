@@ -1,40 +1,40 @@
 SET(
     UDFS
-    ydb/library/yql/udfs/common/datetime2
-    ydb/library/yql/udfs/common/digest
-    ydb/library/yql/udfs/common/file
-    ydb/library/yql/udfs/common/hyperloglog
-    ydb/library/yql/udfs/common/pire
-    ydb/library/yql/udfs/common/protobuf
-    ydb/library/yql/udfs/common/re2
-    ydb/library/yql/udfs/common/set
-    ydb/library/yql/udfs/common/stat
-    ydb/library/yql/udfs/common/topfreq
-    ydb/library/yql/udfs/common/top
-    ydb/library/yql/udfs/common/string
-    ydb/library/yql/udfs/common/histogram
-    ydb/library/yql/udfs/common/json2
-    ydb/library/yql/udfs/common/yson2
-    ydb/library/yql/udfs/common/math
-    ydb/library/yql/udfs/common/url_base
-    ydb/library/yql/udfs/common/unicode_base
-    ydb/library/yql/udfs/common/streaming
-    ydb/library/yql/udfs/examples/callables
-    ydb/library/yql/udfs/examples/dicts
-    ydb/library/yql/udfs/examples/dummylog
-    ydb/library/yql/udfs/examples/lists
-    ydb/library/yql/udfs/examples/structs
-    ydb/library/yql/udfs/examples/type_inspection
-    ydb/library/yql/udfs/logs/dsv
-    ydb/library/yql/udfs/test/simple
-    ydb/library/yql/udfs/test/test_import
+    yql/essentials/udfs/common/datetime2
+    yql/essentials/udfs/common/digest
+    yql/essentials/udfs/common/file
+    yql/essentials/udfs/common/hyperloglog
+    yql/essentials/udfs/common/pire
+    yql/essentials/udfs/common/protobuf
+    yql/essentials/udfs/common/re2
+    yql/essentials/udfs/common/set
+    yql/essentials/udfs/common/stat
+    yql/essentials/udfs/common/topfreq
+    yql/essentials/udfs/common/top
+    yql/essentials/udfs/common/string
+    yql/essentials/udfs/common/histogram
+    yql/essentials/udfs/common/json2
+    yql/essentials/udfs/common/yson2
+    yql/essentials/udfs/common/math
+    yql/essentials/udfs/common/url_base
+    yql/essentials/udfs/common/unicode_base
+    yql/essentials/udfs/common/streaming
+    yql/essentials/udfs/examples/callables
+    yql/essentials/udfs/examples/dicts
+    yql/essentials/udfs/examples/dummylog
+    yql/essentials/udfs/examples/lists
+    yql/essentials/udfs/examples/structs
+    yql/essentials/udfs/examples/type_inspection
+    yql/essentials/udfs/logs/dsv
+    yql/essentials/udfs/test/simple
+    yql/essentials/udfs/test/test_import
 )
 
 IF (OS_LINUX AND CLANG)
     SET(
         UDFS
         ${UDFS}
-        ydb/library/yql/udfs/common/hyperscan
+        yql/essentials/udfs/common/hyperscan
     )
 ENDIF()
 

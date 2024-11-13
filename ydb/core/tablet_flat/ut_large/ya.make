@@ -18,8 +18,8 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/tablet_flat/test/libs/exec
     ydb/core/tablet_flat/test/libs/table
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg_dummy
 )
 
 END()

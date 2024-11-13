@@ -17,7 +17,7 @@ ENDIF()
 
 DEPENDS(
     ydb/library/yql/tests/common/test_framework/udfs_deps
-    ydb/library/yql/udfs/test/test_import
+    yql/essentials/udfs/test/test_import
     ydb/tests/tools/kqprun
 )
 

@@ -3,10 +3,10 @@
 #include "yql_yt_optimize.h"
 
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
-#include <ydb/library/yql/providers/common/dq/yql_dq_optimization_impl.h>
+#include <yql/essentials/providers/common/dq/yql_dq_optimization_impl.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/utils/log/log.h>
 
 
 namespace NYql {

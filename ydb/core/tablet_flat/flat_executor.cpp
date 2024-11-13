@@ -4293,7 +4293,7 @@ const NTable::TScheme& TExecutor::DatabaseScheme()
     return Scheme();
 }
 
-TIntrusiveConstPtr<NTable::TRowScheme> TExecutor::RowScheme(ui32 table)
+TIntrusiveConstPtr<NTable::TRowScheme> TExecutor::RowScheme(ui32 table) const
 {
     return Database->GetRowScheme(table);
 }
@@ -4332,6 +4332,80 @@ TVector<TIntrusiveConstPtr<NTable::TColdPart>> TExecutor::TableColdParts(ui32 ta
 const NTable::TRowVersionRanges& TExecutor::TableRemovedRowVersions(ui32 table)
 {
     return Database->GetRemovedRowVersions(table);
+}
+
+bool TExecutor::HasSchemaChanges(ui32 table) const {
+    auto *tableInfo = Scheme().GetTableInfo(table);
+    auto rowScheme = RowScheme(table);
+    if (!tableInfo || !rowScheme) {
+        return false;
+    }
+
+    auto subset = Database->Subset(table, NTable::TEpoch::Max(), { } , { });
+    for (const auto& partView : subset->Flatten) {
+        if (HasSchemaChanges(partView, *tableInfo, *rowScheme)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable::TScheme::TTableInfo& tableInfo, const NTable::TRowScheme& rowScheme) const {
+    if (partView.Part->Stat.Rows == 0) {
+        return false;
+    }
+
+    { // Check by key filter existence
+        bool partByKeyFilter = bool(partView->ByKey);
+        bool schemeByKeyFilter = tableInfo.ByKeyFilter;
+        if (partByKeyFilter != schemeByKeyFilter) {
+            return true;
+        }
+    }
+
+    { // Check B-Tree index existence
+        if (AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex() && !partView->IndexPages.HasBTree()) {
+            return true;
+        }
+    }
+
+    { // Check families
+        size_t partFamiliesCount = partView->GroupsCount;
+        size_t schemeFamiliesCount = rowScheme.Families.size();
+        if (partFamiliesCount != schemeFamiliesCount) {
+            return true;
+        }
+
+        for (size_t index : xrange(rowScheme.Families.size())) {
+            auto familyId = rowScheme.Families[index];
+            static const NTable::TScheme::TFamily defaultFamilySettings;
+            const auto& family = tableInfo.Families.ValueRef(familyId, defaultFamilySettings); // Workaround for KIKIMR-17222
+
+            const auto* schemeGroupRoom = tableInfo.Rooms.FindPtr(family.Room);
+            Y_ABORT_UNLESS(schemeGroupRoom, "Cannot find room %" PRIu32 " in table %" PRIu32, family.Room, tableInfo.Id);
+
+            ui32 partGroupChannel = partView.Part->GetGroupChannel(NTable::NPage::TGroupId(index));
+            if (partGroupChannel != schemeGroupRoom->Main) {
+                return true;
+            }
+        }
+    }
+
+    { // Check columns
+        THashMap<NTable::TTag, ui32> partColumnGroups, schemeColumnGroups;
+        for (const auto& column : partView->Scheme->AllColumns) {
+            partColumnGroups[column.Tag] = column.Group;
+        }
+        for (const auto& col : rowScheme.Cols) {
+            schemeColumnGroups[col.Tag] = col.Group;
+        }
+        if (partColumnGroups != schemeColumnGroups) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
@@ -4379,37 +4453,29 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 
     for (size_t group : xrange(rowScheme->Families.size())) {
         auto familyId = rowScheme->Families[group];
-        const auto* family = tableInfo->Families.FindPtr(familyId);
-        if (Y_UNLIKELY(!family)) {
-            // FIXME: workaround for KIKIMR-17222
-            // Column families with default settings may be missing in schema,
-            // so we have to use a static variable as a substitute
-            static const NTable::TScheme::TFamily defaultFamilySettings;
-            family = &defaultFamilySettings;
-        }
-        Y_ABORT_UNLESS(family, "Cannot find family %" PRIu32 " in table %" PRIu32, familyId, table);
+        static const NTable::TScheme::TFamily defaultFamilySettings;
+        const auto& family = tableInfo->Families.ValueRef(familyId, defaultFamilySettings); // Workaround for KIKIMR-17222
 
-        auto roomId = family->Room;
-        auto* room = tableInfo->Rooms.FindPtr(roomId);
-        Y_ABORT_UNLESS(room, "Cannot find room %" PRIu32 " in table %" PRIu32, roomId, table);
+        auto* room = tableInfo->Rooms.FindPtr(family.Room);
+        Y_ABORT_UNLESS(room, "Cannot find room %" PRIu32 " in table %" PRIu32, family.Room, table);
 
         auto& pageGroup = comp->Layout.Groups.at(group);
         auto& writeGroup = comp->Writer.Groups.at(group);
 
-        pageGroup.Codec = family->Codec;
+        pageGroup.Codec = family.Codec;
         pageGroup.PageSize = policy->MinDataPageSize;
         pageGroup.BTreeIndexNodeTargetSize = policy->MinBTreeIndexNodeSize;
         pageGroup.BTreeIndexNodeKeysMin = policy->MinBTreeIndexNodeKeys;
 
-        writeGroup.Cache = Max(family->Cache, cache);
+        writeGroup.Cache = Max(family.Cache, cache);
         writeGroup.MaxBlobSize = NBlockIO::BlockSize;
         writeGroup.Channel = room->Main;
         addChannel(room->Main);
 
         if (group == 0) {
             // Small/Large edges are taken from the leader family
-            comp->Layout.SmallEdge = family->Small;
-            comp->Layout.LargeEdge = family->Large;
+            comp->Layout.SmallEdge = family.Small;
+            comp->Layout.LargeEdge = family.Large;
 
             // Small/Large channels are taken from the leader family
             comp->Writer.BlobsChannels = room->Blobs;

@@ -14,7 +14,7 @@
 
 #include <library/cpp/threading/future/core/future.h>
 #include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/yql/sql/settings/translation_settings.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
 
 namespace NKikimr::NMetadata::NModifications {
 

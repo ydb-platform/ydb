@@ -1,7 +1,7 @@
 #include "yql_mkql_output.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NYql {
 

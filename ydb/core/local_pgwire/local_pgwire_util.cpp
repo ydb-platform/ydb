@@ -1,6 +1,6 @@
 #include "local_pgwire_util.h"
 #include "log_impl.h"
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 namespace NLocalPgWire {
 

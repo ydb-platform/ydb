@@ -1,6 +1,7 @@
 #include "log.h"
 
 #include <yql/essentials/utils/log/proto/logger_config.pb.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
 
 #include <library/cpp/logger/stream.h>
 #include <library/cpp/logger/system.h>
@@ -18,6 +19,7 @@
 
 static TMutex g_InitLoggerMutex;
 static int g_LoggerInitialized = 0;
+
 
 namespace {
 
@@ -53,6 +55,62 @@ private:
     TAtomic& Flag;
     TAtomic Limit;
 };
+
+class TEmergencyLogOutput: public IOutputStream {
+public:
+    TEmergencyLogOutput()
+        : Current_(Buf_)
+        , End_(Y_ARRAY_END(Buf_))
+    {
+    }
+
+    ~TEmergencyLogOutput() {
+    }
+
+private:
+    inline size_t Avail() const noexcept {
+        return End_ - Current_;
+    }
+
+    void DoFlush() override {
+        if (Current_ != Buf_) {
+            NYql::NLog::YqlLogger().Write(TLOG_EMERG, Buf_, Current_ - Buf_);
+            Current_ = Buf_;
+        }
+    }
+
+    void DoWrite(const void* buf, size_t len) override {
+        len = Min(len, Avail());
+        if (len) {
+            char* end = Current_ + len;
+            memcpy(Current_, buf, len);
+            Current_ = end;
+        }
+    }
+
+private:
+    char Buf_[1 << 20];
+    char* Current_;
+    char* const End_;
+
+};
+
+TEmergencyLogOutput EMERGENCY_LOG_OUT;
+
+void LogBacktraceOnSignal(int signum) {
+    if (NYql::NLog::IsYqlLoggerInitialized()) {
+        EMERGENCY_LOG_OUT <<
+#ifdef _win_
+        signum
+#else
+        strsignal(signum)
+#endif
+        << TStringBuf(" (pid=") << GetPID() << TStringBuf("): ");
+        NYql::NBacktrace::KikimrBackTraceFormatImpl(&EMERGENCY_LOG_OUT);
+        EMERGENCY_LOG_OUT.Flush();
+    }
+}
+
 
 // Conversions between NYql::NProto::TLoggingConfig enums and NYql::NLog enums
 
@@ -318,6 +376,7 @@ void InitLogger(const NProto::TLoggingConfig& config, bool startAsDaemon) {
             logger.ResetBackend(std::move(compositeBackend));
         }
     }
+    NYql::NBacktrace::AddAfterFatalCallback([](int signo){ LogBacktraceOnSignal(signo); });
 }
 
 void InitLogger(TAutoPtr<TLogBackend> backend) {
@@ -331,6 +390,7 @@ void InitLogger(TAutoPtr<TLogBackend> backend) {
         levels.fill(ELevel::INFO);
         TLoggerOperator<TYqlLog>::Set(new TYqlLog(backend, levels));
     }
+    NYql::NBacktrace::AddAfterFatalCallback([](int signo){ LogBacktraceOnSignal(signo); });
 }
 
 void InitLogger(IOutputStream* out) {

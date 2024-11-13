@@ -586,7 +586,7 @@ class ScenarioTestHelper:
         if self_descr is not None:
             self_descr.name = path
             if self_descr.is_directory():
-                result = YdbCluster._list_directory_impl(root_path, path)
+                result = YdbCluster.list_directory(root_path, path)
             result.append(self_descr)
         allure.attach('\n'.join([f'{e.name}: {repr(e.type)}' for e in result]), 'result', allure.attachment_type.TEXT)
         return result

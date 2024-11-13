@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/providers/yt/common/yql_yt_settings.h>
 
-#include <ydb/library/yql/core/file_storage/storage.h>
+#include <yql/essentials/core/file_storage/storage.h>
 
 #include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/cpp/mapreduce/interface/fwd.h>

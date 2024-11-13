@@ -23,7 +23,7 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
     ydb/public/sdk/cpp/client/ydb_table
 )
 

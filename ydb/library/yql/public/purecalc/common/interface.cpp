@@ -1,6 +1,6 @@
 #include "interface.h"
 
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <ydb/library/yql/public/purecalc/common/logger_init.h>
 #include <ydb/library/yql/public/purecalc/common/program_factory.h>
 

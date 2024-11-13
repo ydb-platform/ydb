@@ -11,8 +11,8 @@
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/yson/node/node_io.h>
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql {
 

@@ -3,7 +3,7 @@
 
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/library/uuid/uuid.h>
+#include <yql/essentials/types/uuid/uuid.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 namespace NKikimr {

@@ -1,4 +1,5 @@
 #include "row_dispatcher.h"
+#include "common.h"
 #include "coordinator.h"
 
 #include <ydb/library/actors/core/actorid.h>
@@ -224,7 +225,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
     NConfig::TRowDispatcherConfig Config;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
-    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
+    IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     TYqSharedResources::TPtr YqSharedResources;
     TMaybe<TActorId> CoordinatorActorId;
     TSet<TActorId> CoordinatorChangedSubscribers;
@@ -373,7 +374,7 @@ TRowDispatcher::TRowDispatcher(
     const NYql::IPqGateway::TPtr& pqGateway)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
-    , PureCalcProgramFactory(NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions()))
+    , PureCalcProgramFactory(CreatePureCalcProgramFactory())
     , YqSharedResources(yqSharedResources)
     , CredentialsFactory(credentialsFactory)
     , LogPrefix("RowDispatcher: ")
@@ -528,7 +529,7 @@ TString TRowDispatcher::GetInternalState() {
         str << "  " << key.Endpoint << " / " << key.Database << " / " << key.TopicPath << " / " << key.PartitionId;
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
             str << " / " << actorId << "\n";
-            str << "    unread bytes " << sessionInfo.Stat.UnreadBytes << "\n";
+            str << "    unread bytes " << sessionInfo.Stat.UnreadBytes << " restarts by offsets " << sessionInfo.Stat.RestartSessionByOffsets << "\n";
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
                 str << "    " << consumer->QueryId << " " << readActorId << " unread rows "
                     << consumer->Stat.UnreadRows << " unread bytes " << consumer->Stat.UnreadBytes << " offset " << consumer->Stat.Offset

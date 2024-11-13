@@ -3,9 +3,9 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider_impl.h>
 #include <ydb/library/yql/providers/yt/lib/key_filter/yql_key_filter.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
-#include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/core/extract_predicate/extract_predicate.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/set.h>

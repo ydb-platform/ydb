@@ -15,7 +15,7 @@
 
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/library/db_pool/db_pool.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <util/generic/ptr.h>
 #include <util/datetime/base.h>

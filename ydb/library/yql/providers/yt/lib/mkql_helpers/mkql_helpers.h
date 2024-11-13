@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/strbuf.h>

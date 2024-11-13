@@ -1,4 +1,4 @@
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/yson/writer.h>

@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     TVector<YQLHighlight::Color> Apply(YQLHighlight& highlight,
                                        const TStringBuf& queryUtf8) {
         const auto queryUtf32 = UTF8ToUTF32</* robust = */ false>(queryUtf8);
-        TVector<YQLHighlight::Color> colors(queryUtf32.Size(),
+        TVector<YQLHighlight::Color> colors(queryUtf32.size(),
                                             YQLHighlight::Color::DEFAULT);
         highlight.Apply(queryUtf8, colors);
         return colors;

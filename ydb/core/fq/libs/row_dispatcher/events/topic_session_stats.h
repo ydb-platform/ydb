@@ -26,10 +26,12 @@ struct TopicSessionClientStatistic {
 
 struct TopicSessionCommonStatistic {
     ui64 UnreadBytes = 0;   // Current value
+    ui64 RestartSessionByOffsets = 0;
     ui64 ReadBytes = 0;     // Increment
     ui64 ReadEvents = 0;    // Increment
     void Add(const TopicSessionCommonStatistic& stat) {
         UnreadBytes = stat.UnreadBytes;
+        RestartSessionByOffsets = stat.RestartSessionByOffsets;
         ReadBytes += stat.ReadBytes;
         ReadEvents += stat.ReadEvents;
     }

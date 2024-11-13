@@ -29,21 +29,8 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-TopSort",
+                                        "Node Type": "TopSort",
                                         "Operators": [
-                                            {
-                                                "Inputs": [
-                                                    {
-                                                        "InternalOperatorId": 1
-                                                    },
-                                                    {
-                                                        "ExternalPlanNodeId": 5
-                                                    }
-                                                ],
-                                                "Limit": "1001",
-                                                "Name": "TopSort",
-                                                "TopSortBy": ""
-                                            },
                                             {
                                                 "Inputs": [
                                                     {

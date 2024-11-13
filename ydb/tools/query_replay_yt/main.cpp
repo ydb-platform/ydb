@@ -3,7 +3,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>

@@ -406,16 +406,19 @@ def _maven_coords_for_project(unit, project_dir):
     if os.path.exists(pom_path):
         import xml.etree.ElementTree as et
 
-        with open(pom_path, 'rb') as f:
-            root = et.fromstring(f.read())
-        for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
-            artifact = root.find(xpath)
-            if artifact is not None:
-                artifact = artifact.text
-                if a != artifact and a.startswith(artifact):
-                    c = a[len(artifact) :].lstrip('-_')
-                    a = artifact
-                break
+        try:
+            with open(pom_path, 'rb') as f:
+                root = et.fromstring(f.read())
+            for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
+                artifact = root.find(xpath)
+                if artifact is not None:
+                    artifact = artifact.text
+                    if a != artifact and a.startswith(artifact):
+                        c = a[len(artifact) :].lstrip('-_')
+                        a = artifact
+                    break
+        except Exception as e:
+            raise Exception(f"Can't parse {pom_path}: {str(e)}") from None
 
     return '{}:{}:{}:{}'.format(g, a, v, c)
 

@@ -3,7 +3,7 @@
 #include <util/string/printf.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 namespace NKikimr::NScheme {
 

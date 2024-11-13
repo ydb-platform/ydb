@@ -14,17 +14,20 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, StoragesManager);
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TSplitterCounters>, SplitterCounters);
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TWriteCounters>, WritingCounters);
+    YDB_READONLY(TSnapshot, ApplyToSnapshot, TSnapshot::Zero());
 
 public:
     TWritingContext(const ui64 tabletId, const NActors::TActorId& tabletActorId, const std::shared_ptr<ISnapshotSchema>& actualSchema,
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters,
-        const std::shared_ptr<NColumnShard::TWriteCounters>& writingCounters)
+        const std::shared_ptr<NColumnShard::TWriteCounters>& writingCounters, const TSnapshot& applyToSnapshot)
         : TabletId(tabletId)
         , TabletActorId(tabletActorId)
         , ActualSchema(actualSchema)
         , StoragesManager(operators)
         , SplitterCounters(splitterCounters)
-        , WritingCounters(writingCounters) {
+        , WritingCounters(writingCounters)
+        , ApplyToSnapshot(applyToSnapshot)
+    {
     }
 };
 }   // namespace NKikimr::NOlap

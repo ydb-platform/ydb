@@ -13,8 +13,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
-#include <ydb/library/uuid/uuid.h>
-#include <ydb/library/binary_json/write.h>
+#include <yql/essentials/types/uuid/uuid.h>
+#include <yql/essentials/types/binary_json/write.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -9125,8 +9125,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         testHelper.CreateTable(testTable);
         std::string jsonString = R"({"col1": "val1", "obj": {"obj_col2_int": 16}})";
         auto maybeJsonDoc = NBinaryJson::SerializeToBinaryJson(jsonString);
-        Y_ABORT_UNLESS(maybeJsonDoc.IsSuccess());
-        const std::string jsonBin(maybeJsonDoc->Data(), maybeJsonDoc->Size());
+        Y_ABORT_UNLESS(std::holds_alternative<NBinaryJson::TBinaryJson>(maybeJsonDoc));
+        const auto& value = std::get<NBinaryJson::TBinaryJson>(maybeJsonDoc);
+        const std::string jsonBin(value.Data(), value.Size());
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(1).AddNull().Add(jsonString);

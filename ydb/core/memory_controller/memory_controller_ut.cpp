@@ -8,6 +8,7 @@
 namespace NKikimr::NMemory {
 
 using namespace Tests;
+using namespace NSharedCache;
 
 namespace {
 
@@ -332,7 +333,7 @@ Y_UNIT_TEST(SharedCache_ConfigLimit) {
 
     auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
     memoryControllerConfig->SetHardLimitBytes(300_MB);
-    serverSettings.CacheParams.Shared = 100_MB;
+    serverSettings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(100_MB);
 
     auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
     auto& runtime = *server->GetRuntime();

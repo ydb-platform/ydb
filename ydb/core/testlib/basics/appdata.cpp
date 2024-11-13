@@ -22,6 +22,8 @@ namespace NKikimr {
         Mine->IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
 
         Domains = new TDomainsInfo;
+
+        SharedCacheConfig.SetMemoryLimit(32_MB);
     }
 
     NActors::TTestActorRuntime::TEgg TAppPrepare::Unwrap() noexcept
@@ -63,6 +65,7 @@ namespace NKikimr {
         app->AwsCompatibilityConfig = AwsCompatibilityConfig;
         app->S3ProxyResolverConfig = S3ProxyResolverConfig;
         app->GraphConfig = GraphConfig;
+        app->SharedCacheConfig = SharedCacheConfig;
         app->InitFeatureFlags(FeatureFlags);
 
         // This is a special setting active in test runtime only

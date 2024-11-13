@@ -2,7 +2,7 @@
 #include <util/random/mersenne.h>
 #include "shared_cache_clock_pro.h"
 
-namespace NKikimr::NCache {
+namespace NKikimr::NSharedCache {
 
 namespace {
 

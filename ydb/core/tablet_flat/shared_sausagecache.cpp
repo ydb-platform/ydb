@@ -3,6 +3,7 @@
 #include "flat_bio_events.h"
 #include "flat_bio_actor.h"
 #include "util_fmt_logger.h"
+#include <ydb/core/base/counters.h>
 #include <ydb/core/tablet_flat/shared_cache_clock_pro.h>
 #include <ydb/core/tablet_flat/shared_cache_switchable.h>
 #include <ydb/core/tablet_flat/shared_cache_s3fifo.h>
@@ -13,9 +14,11 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/set.h>
 
-namespace NKikimr {
+namespace NKikimr::NSharedCache {
 
-TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters)
+using namespace NTabletFlatExecutor;
+
+TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
     : Counters(counters)
     , FreshBytes(counters->GetCounter("fresh"))
     , StagingBytes(counters->GetCounter("staging"))
@@ -41,12 +44,7 @@ TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ReplacementPolic
     return Counters->GetCounter(TStringBuilder() << "ReplacementPolicySize/" << policy);
 }
 
-}
-
-namespace NKikimr {
-namespace NTabletFlatExecutor {
-
-using namespace NCache;
+namespace {
 
 static bool Satisfies(NLog::EPriority priority = NLog::PRI_DEBUG) {
     if (NLog::TSettings *settings = TlsActivationContext->LoggerSettings())
@@ -313,14 +311,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     TRequestQueue AsyncRequests;
     TRequestQueue ScanRequests;
 
-    THolder<TSharedPageCacheConfig> Config;
+    TSharedCacheConfig Config;
+    TSharedPageCacheCounters Counters;
     TSwitchableCache<TPage, TCompositeCachePageTraits> Cache;
 
     ui64 StatBioReqs = 0;
-    ui64 StatHitPages = 0;
-    ui64 StatHitBytes = 0;
-    ui64 StatMissPages = 0;
-    ui64 StatMissBytes = 0;
     ui64 StatActiveBytes = 0;
     ui64 StatPassiveBytes = 0;
     ui64 StatLoadInFlyBytes = 0;
@@ -333,31 +328,33 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // TODO: pass actual limit to cache config
         // now it will be fixed by ActualizeCacheSizeLimit call
 
-        switch (Config->ReplacementPolicy) {
+        switch (Config.GetReplacementPolicy()) {
             case NKikimrSharedCache::S3FIFO:
                 return MakeHolder<TS3FIFOCache<TPage, TS3FIFOPageTraits>>(1);
             case NKikimrSharedCache::ClockPro:
                 return MakeHolder<TClockProCache<TPage, TClockProPageTraits>>(1);
             case NKikimrSharedCache::ThreeLeveledLRU:
             default: {
-                TCacheCacheConfig cacheCacheConfig(1, Config->Counters->FreshBytes, Config->Counters->StagingBytes, Config->Counters->WarmBytes);
+                TCacheCacheConfig cacheCacheConfig(1, Counters.FreshBytes, Counters.StagingBytes, Counters.WarmBytes);
                 return MakeHolder<TCacheCache<TPage, TCacheCachePageTraits>>(std::move(cacheCacheConfig));
             }
         }
     }
 
     void ActualizeCacheSizeLimit() {
-        ui64 limitBytes = Min(Config->LimitBytes.value_or(Max<ui64>()), MemLimitBytes);
+        ui64 limitBytes = MemLimitBytes;
+        if (Config.HasMemoryLimit()) {
+            limitBytes = Min(limitBytes, Config.GetMemoryLimit());
+            Counters.ConfigLimitBytes->Set(Config.GetMemoryLimit());
+        } else {
+            Counters.ConfigLimitBytes->Set(0);
+        }
 
         // limit of cache depends only on config and mem because passive pages may go in and out arbitrary
         // we may have some passive bytes, so if we fully fill this Cache we may exceed the limit
         // because of that DoGC should be called to ensure limits
         Cache.UpdateLimit(limitBytes);
-
-        if (Config->Counters) {
-            Config->Counters->ConfigLimitBytes->Set(Config->LimitBytes.value_or(0));
-            Config->Counters->ActiveLimitBytes->Set(limitBytes);
-        }
+        Counters.ActiveLimitBytes->Set(limitBytes);
     }
 
     void DoGC() {
@@ -366,11 +363,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         ProcessGCList();
 
         // TODO: get rid of active pages reservation
-        ui64 configActiveReservedBytes = Config->LimitBytes.value_or(0) * Config->ActivePagesReservationPercent / 100;
+        ui64 configActiveReservedBytes = (Config.HasMemoryLimit() ? Config.GetMemoryLimit() : 0)
+            * Config.GetActivePagesReservationPercent() / 100;
 
         THashSet<TCollection*> recheck;
         while (GetStatAllBytes() > MemLimitBytes
-                || GetStatAllBytes() > Config->LimitBytes.value_or(Max<ui64>()) && StatActiveBytes > configActiveReservedBytes) {
+            || GetStatAllBytes() > (Config.HasMemoryLimit() ? Config.GetMemoryLimit() : Max<ui64>()) && StatActiveBytes > configActiveReservedBytes)
+        {
             TIntrusiveList<TPage> pages = Cache.EvictNext();
             if (pages.Empty()) {
                 break;
@@ -398,9 +397,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         auto *msg = ev->Get();
 
         MemLimitBytes = msg->LimitBytes;
-        if (Config->Counters) {
-            Config->Counters->MemLimitBytes->Set(MemLimitBytes);
-        }
+        Counters.MemLimitBytes->Set(MemLimitBytes);
 
         ActualizeCacheSizeLimit();
 
@@ -420,8 +417,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (auto logl = Logger->Log(ELnLev::Info)) {
             logl
                 << "Page collection cache gone, serviced " << StatBioReqs << " reqs"
-                << " hit {" << StatHitPages << " " << StatHitBytes << "b}"
-                << " miss {" << StatMissPages << " " << StatMissBytes << "b}";
+                << " hit {" << Counters.CacheHitPages->Val() << " " << Counters.CacheHitBytes->Val() << "b}"
+                << " miss {" << Counters.CacheMissPages->Val() << " " << Counters.CacheMissBytes->Val() << "b}";
         }
 
         if (auto owner = std::exchange(Owner, { }))
@@ -499,10 +496,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 Y_ABORT_UNLESS(collection.PageMap.emplace(pageId, (page = new TPage(pageId, pageCollection.Page(pageId).Size, &collection))));
             }
 
-            if (Config->Counters) {
-                ++*Config->Counters->RequestedPages;
-                *Config->Counters->RequestedBytes += page->Size;
-            }
+            Counters.RequestedPages->Inc();
+            Counters.RequestedBytes->Add(page->Size);
 
             switch (page->State) {
             case PageStateEvicted:
@@ -512,15 +507,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 AddActivePage(page);
                 [[fallthrough]];
             case PageStateLoaded:
-                StatHitPages += 1;
-                StatHitBytes += page->Size;
+                Counters.CacheHitPages->Inc();
+                Counters.CacheHitBytes->Add(page->Size);
                 readyBlocks.emplace_back(pageId, TSharedPageRef::MakeUsed(page, GCList));
                 if (logsat)
                     pagesToWait.emplace_back(pageId);
-                if (Config->Counters) {
-                    ++*Config->Counters->CacheHitPages;
-                    *Config->Counters->CacheHitBytes += page->Size;
-                }
                 Evict(Cache.Touch(page));
                 break;
             case PageStateNo:
@@ -529,10 +520,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             case PageStateRequested:
             case PageStateRequestedAsync:
             case PageStatePending:
-                if (Config->Counters) {
-                    ++*Config->Counters->CacheMissPages;
-                    *Config->Counters->CacheMissBytes += page->Size;
-                }
+                Counters.CacheMissPages->Inc();
+                Counters.CacheMissBytes->Add(page->Size);
                 readyBlocks.emplace_back(pageId, TSharedPageRef());
                 pendingPages.emplace_back(pageId, reqIdx);
                 break;
@@ -894,9 +883,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         } else {
             TCollection &collection = collectionIt->second;
             for (auto &paged : msg->Blocks) {
-                StatMissPages += 1;
-                StatMissBytes += paged.Data.size();
-
                 Y_ABORT_UNLESS(paged.PageId < collection.PageMap.size());
                 auto* page = collection.PageMap[paged.PageId].Get();
                 if (!page || !page->HasMissingBody())
@@ -1169,42 +1155,42 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    void Handle(TEvSharedPageCache::TEvConfigure::TPtr& ev) {
-        const auto* msg = ev->Get();
+    // void Handle(TEvSharedPageCache::TEvConfigure::TPtr& ev) {
+    //     const auto* msg = ev->Get();
 
-        if (msg->Record.HasMemoryLimit() && msg->Record.GetMemoryLimit() != 0) {
-            Config->LimitBytes = msg->Record.GetMemoryLimit();
-        } else {
-            Config->LimitBytes = {};
-        }
-        ActualizeCacheSizeLimit();
+    //     if (msg->Record.HasMemoryLimit() && msg->Record.GetMemoryLimit() != 0) {
+    //         Config.LimitBytes = msg->Record.GetMemoryLimit();
+    //     } else {
+    //         Config.LimitBytes = {};
+    //     }
+    //     ActualizeCacheSizeLimit();
 
-        if (msg->Record.HasActivePagesReservationPercent()) {
-            Config->ActivePagesReservationPercent = msg->Record.GetActivePagesReservationPercent();
-        }
+    //     if (msg->Record.HasActivePagesReservationPercent()) {
+    //         Config.ActivePagesReservationPercent = msg->Record.GetActivePagesReservationPercent();
+    //     }
 
-        if (msg->Record.GetAsyncQueueInFlyLimit() != 0) {
-            AsyncRequests.Limit = msg->Record.GetAsyncQueueInFlyLimit();
-            RequestFromQueue(AsyncRequests);
-        }
+    //     if (msg->Record.GetAsyncQueueInFlyLimit() != 0) {
+    //         AsyncRequests.Limit = msg->Record.GetAsyncQueueInFlyLimit();
+    //         RequestFromQueue(AsyncRequests);
+    //     }
 
-        if (msg->Record.GetScanQueueInFlyLimit() != 0) {
-            ScanRequests.Limit = msg->Record.GetScanQueueInFlyLimit();
-            RequestFromQueue(ScanRequests);
-        }
+    //     if (msg->Record.GetScanQueueInFlyLimit() != 0) {
+    //         ScanRequests.Limit = msg->Record.GetScanQueueInFlyLimit();
+    //         RequestFromQueue(ScanRequests);
+    //     }
 
-        if (msg->Record.GetReplacementPolicy() != Config->ReplacementPolicy) {
-            if (auto logl = Logger->Log(ELnLev::Info)) {
-                logl << "Replacement policy switch from " << Config->ReplacementPolicy << " to " << msg->Record.GetReplacementPolicy();
-            }
-            Config->ReplacementPolicy = msg->Record.GetReplacementPolicy();
-            Evict(Cache.Switch(CreateCache(), Config->Counters->ReplacementPolicySize(Config->ReplacementPolicy)));
-            DoGC();
-            if (auto logl = Logger->Log(ELnLev::Info)) {
-                logl << "Replacement policy switch to " << Config->ReplacementPolicy << " finished";
-            }
-        }
-    }
+    //     if (msg->Record.GetReplacementPolicy() != Config.ReplacementPolicy) {
+    //         if (auto logl = Logger->Log(ELnLev::Info)) {
+    //             logl << "Replacement policy switch from " << Config.ReplacementPolicy << " to " << msg->Record.GetReplacementPolicy();
+    //         }
+    //         Config.ReplacementPolicy = msg->Record.GetReplacementPolicy();
+    //         Evict(Cache.Switch(CreateCache(), Config.Counters->ReplacementPolicySize(Config.ReplacementPolicy)));
+    //         DoGC();
+    //         if (auto logl = Logger->Log(ELnLev::Info)) {
+    //             logl << "Replacement policy switch to " << Config.ReplacementPolicy << " finished";
+    //         }
+    //     }
+    // }
 
     inline ui64 GetStatAllBytes() const {
         return StatActiveBytes + StatPassiveBytes + StatLoadInFlyBytes;
@@ -1212,66 +1198,57 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     inline void AddActivePage(const TPage* page) {
         StatActiveBytes += sizeof(TPage) + page->Size;
-        if (Config->Counters) {
-            ++*Config->Counters->ActivePages;
-            *Config->Counters->ActiveBytes += sizeof(TPage) + page->Size;
-        }
-    }
-
-    inline void AddPassivePage(const TPage* page) {
-        StatPassiveBytes += sizeof(TPage) + page->Size;
-        if (Config->Counters) {
-            ++*Config->Counters->PassivePages;
-            *Config->Counters->PassiveBytes += sizeof(TPage) + page->Size;
-        }
-    }
-
-    inline void AddInFlyPages(ui64 count, ui64 size) {
-        StatLoadInFlyBytes += size;
-        if (Config->Counters) {
-            *Config->Counters->LoadInFlyPages += count;
-            *Config->Counters->LoadInFlyBytes += size;
-        }
+        Counters.ActivePages->Inc();
+        Counters.ActiveBytes->Add(sizeof(TPage) + page->Size);
     }
 
     inline void RemoveActivePage(const TPage* page) {
         Y_DEBUG_ABORT_UNLESS(StatActiveBytes >= sizeof(TPage) + page->Size);
         StatActiveBytes -= sizeof(TPage) + page->Size;
-        if (Config->Counters) {
-            --*Config->Counters->ActivePages;
-            *Config->Counters->ActiveBytes -= sizeof(TPage) + page->Size;
-        }
+        Counters.ActivePages->Dec();
+        Counters.ActiveBytes->Sub(sizeof(TPage) + page->Size);
+    }
+
+    inline void AddPassivePage(const TPage* page) {
+        StatPassiveBytes += sizeof(TPage) + page->Size;
+        Counters.PassivePages->Inc();
+        Counters.PassiveBytes->Add(sizeof(TPage) + page->Size);
     }
 
     inline void RemovePassivePage(const TPage* page) {
         Y_DEBUG_ABORT_UNLESS(StatPassiveBytes >= sizeof(TPage) + page->Size);
         StatPassiveBytes -= sizeof(TPage) + page->Size;
-        if (Config->Counters) {
-            --*Config->Counters->PassivePages;
-            *Config->Counters->PassiveBytes -= sizeof(TPage) + page->Size;
-        }
+        Counters.PassivePages->Dec();
+        Counters.PassiveBytes->Sub(sizeof(TPage) + page->Size);
+    }
+
+    inline void AddInFlyPages(ui64 count, ui64 size) {
+        StatLoadInFlyBytes += size;
+        Counters.LoadInFlyPages->Add(count);
+        Counters.LoadInFlyBytes->Add(size);
     }
 
     inline void RemoveInFlyPages(ui64 count, ui64 size) {
         Y_ABORT_UNLESS(StatLoadInFlyBytes >= size);
         StatLoadInFlyBytes -= size;
-        if (Config->Counters) {
-            *Config->Counters->LoadInFlyPages -= count;
-            *Config->Counters->LoadInFlyBytes -= size;
-        }
+        Counters.LoadInFlyPages->Sub(count);
+        Counters.LoadInFlyBytes->Sub(size);
     }
 
 public:
-    TSharedPageCache(THolder<TSharedPageCacheConfig> config)
-        : Config(std::move(config))
-        , Cache(1, CreateCache(), Config->Counters->ReplacementPolicySize(Config->ReplacementPolicy))
+    TSharedPageCache(const TSharedCacheConfig& config, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+        : Config(config)
+        , Counters(counters)
+        , Cache(1, CreateCache(), Counters.ReplacementPolicySize(Config.GetReplacementPolicy()))
     {
-        AsyncRequests.Limit = Config->TotalAsyncQueueInFlyLimit;
-        ScanRequests.Limit = Config->TotalScanQueueInFlyLimit;
+        AsyncRequests.Limit = Config.GetAsyncQueueInFlyLimit();
+        ScanRequests.Limit = Config.GetScanQueueInFlyLimit();
     }
 
     void Bootstrap() {
-        MemLimitBytes = Config->LimitBytes.value_or(128_MB); // soon will be updated by MemoryController
+        MemLimitBytes = Config.HasMemoryLimit() 
+            ? Config.GetMemoryLimit()
+            : 128_MB; // soon will be updated by MemoryController
         ActualizeCacheSizeLimit();
         
         Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache));
@@ -1288,7 +1265,7 @@ public:
             hFunc(NSharedCache::TEvInvalidate, Handle);
 
             hFunc(NBlockIO::TEvData, Handle);
-            hFunc(TEvSharedPageCache::TEvConfigure, Handle);
+            // hFunc(TEvSharedPageCache::TEvConfigure, Handle);
             hFunc(TKikimrEvents::TEvWakeup, Wakeup);
             cFunc(TEvents::TSystem::PoisonPill, TakePoison);
 
@@ -1302,10 +1279,14 @@ public:
     }
 };
 
-} // NTabletFlatExecutor
+}
 
-IActor* CreateSharedPageCache(THolder<TSharedPageCacheConfig> config) {
-    return new NTabletFlatExecutor::TSharedPageCache(std::move(config));
+IActor* CreateSharedPageCache(
+    const TSharedCacheConfig& config,
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters
+) {
+    return new TSharedPageCache(config,
+        GetServiceCounters(counters, "tablets")->GetSubgroup("type", "S_CACHE"));
 }
 
 }

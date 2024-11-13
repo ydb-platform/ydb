@@ -155,17 +155,11 @@ namespace NPDisk {
             TActorSetupCmd(CreateGRpcProxyStatus(), TMailboxType::Revolving, 0), nodeIndex);
     }
 
-    void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, NFake::TCaches caches)
+    void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, const NSharedCache::TSharedCacheConfig& config)
     {
-        auto sharedCacheConfig = MakeHolder<TSharedPageCacheConfig>();
-        sharedCacheConfig->LimitBytes = caches.Shared;
-        sharedCacheConfig->TotalAsyncQueueInFlyLimit = caches.AsyncQueue;
-        sharedCacheConfig->TotalScanQueueInFlyLimit = caches.ScanQueue;
-        sharedCacheConfig->Counters = MakeIntrusive<TSharedPageCacheCounters>(runtime.GetDynamicCounters(nodeIndex));
-
-        runtime.AddLocalService(MakeSharedPageCacheId(0),
+        runtime.AddLocalService(NSharedCache::MakeSharedPageCacheId(0),
             TActorSetupCmd(
-                CreateSharedPageCache(std::move(sharedCacheConfig)),
+                NSharedCache::CreateSharedPageCache(config, runtime.GetDynamicCounters(nodeIndex)),
                 TMailboxType::ReadAsFilled,
                 0),
             nodeIndex);
@@ -335,7 +329,7 @@ namespace NPDisk {
     }
 
     void SetupBasicServices(TTestActorRuntime& runtime, TAppPrepare& app, bool mock,
-                            NFake::INode* factory, NFake::TStorage storage, NFake::TCaches caches, bool forceFollowers)
+                            NFake::INode* factory, NFake::TStorage storage, bool forceFollowers)
     {
         runtime.SetDispatchTimeout(storage.UseDisk ? DISK_DISPATCH_TIMEOUT : DEFAULT_DISPATCH_TIMEOUT);
 
@@ -368,7 +362,7 @@ namespace NPDisk {
             SetupTabletResolver(runtime, nodeIndex);
             SetupTabletPipePerNodeCaches(runtime, nodeIndex, forceFollowers);
             SetupResourceBroker(runtime, nodeIndex, app.ResourceBrokerConfig);
-            SetupSharedPageCache(runtime, nodeIndex, caches);
+            SetupSharedPageCache(runtime, nodeIndex, app.SharedCacheConfig);
             SetupBlobCache(runtime, nodeIndex);
             SetupSysViewService(runtime, nodeIndex);
             SetupQuoterService(runtime, nodeIndex);

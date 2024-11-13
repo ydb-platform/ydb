@@ -743,6 +743,9 @@ namespace NKikimr::NYaml {
                     // mirror-3-dc-3-nodes case
                     if (ephemeralConfig.GetStaticErasure() == "mirror-3-dc" && \
                         ephemeralConfig.HostsSize() == 3) {
+                        poolConfig.MutableGeometry()->SetRealmLevelBegin(10);
+                        poolConfig.MutableGeometry()->SetRealmLevelEnd(20);
+                        poolConfig.MutableGeometry()->SetDomainLevelBegin(10);
                         poolConfig.MutableGeometry()->SetDomainLevelEnd(256);
                     }
                 }
@@ -1111,6 +1114,9 @@ namespace NKikimr::NYaml {
             // mirror-3-dc-3-nodes case
             if (ephemeralConfig.GetStaticErasure() == "mirror-3-dc" && \
                 ephemeralConfig.HostsSize() == 3) {
+                autoconfigSettings->MutableGeometry()->SetRealmLevelBegin(10);
+                autoconfigSettings->MutableGeometry()->SetRealmLevelEnd(20);
+                autoconfigSettings->MutableGeometry()->SetDomainLevelBegin(10);
                 autoconfigSettings->MutableGeometry()->SetDomainLevelEnd(256);
             }
         }

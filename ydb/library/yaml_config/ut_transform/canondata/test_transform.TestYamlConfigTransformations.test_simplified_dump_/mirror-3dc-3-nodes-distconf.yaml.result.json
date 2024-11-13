@@ -191,6 +191,9 @@
           "ErasureSpecies":"mirror-3-dc",
           "Geometry":
             {
+              "RealmLevelBegin":10,
+              "RealmLevelEnd":20,
+              "DomainLevelBegin":10,
               "DomainLevelEnd":256
             },
           "PDiskFilter":

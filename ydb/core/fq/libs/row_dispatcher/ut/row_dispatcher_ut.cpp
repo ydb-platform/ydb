@@ -70,7 +70,8 @@ public:
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
    
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
-        Coordinator = Runtime.AllocateEdgeActor();
+        Coordinator1 = Runtime.AllocateEdgeActor();
+        Coordinator2 = Runtime.AllocateEdgeActor();
         EdgeActor = Runtime.AllocateEdgeActor();
         ReadActorId1 = Runtime.AllocateEdgeActor();
         ReadActorId2 = Runtime.AllocateEdgeActor();
@@ -221,7 +222,8 @@ public:
     TActorSystemStub actorSystemStub;
     NActors::TTestActorRuntime Runtime;
     NActors::TActorId RowDispatcher;
-    NActors::TActorId Coordinator;
+    NActors::TActorId Coordinator1;
+    NActors::TActorId Coordinator2;
     NActors::TActorId EdgeActor;
     NActors::TActorId ReadActorId1;
     NActors::TActorId ReadActorId2;
@@ -278,27 +280,29 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
     }
 
     Y_UNIT_TEST_F(CoordinatorSubscribe, TFixture) {
-        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(Coordinator)));
+        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(Coordinator1, 10)));
+        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(Coordinator2, 9)));    // ignore
+
         Runtime.Send(new IEventHandle(RowDispatcher, ReadActorId1, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe));
 
         auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(ReadActorId1);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->CoordinatorActorId == Coordinator);
+        UNIT_ASSERT(eventHolder->Get()->CoordinatorActorId == Coordinator1);
     }
 
     Y_UNIT_TEST_F(CoordinatorSubscribeBeforeCoordinatorChanged, TFixture) {
         Runtime.Send(new IEventHandle(RowDispatcher, ReadActorId1, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe));
         Runtime.Send(new IEventHandle(RowDispatcher, ReadActorId2, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe));
 
-        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(Coordinator)));
+        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(Coordinator1, 0)));
 
         auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(ReadActorId1);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->CoordinatorActorId == Coordinator);
+        UNIT_ASSERT(eventHolder->Get()->CoordinatorActorId == Coordinator1);
 
         eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvCoordinatorChanged>(ReadActorId2);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->CoordinatorActorId == Coordinator);
+        UNIT_ASSERT(eventHolder->Get()->CoordinatorActorId == Coordinator1);
     }
 
     Y_UNIT_TEST_F(TwoClients4Sessions, TFixture) {

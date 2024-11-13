@@ -33,10 +33,12 @@ struct TEvRowDispatcher {
     };
 
     struct TEvCoordinatorChanged : NActors::TEventLocal<TEvCoordinatorChanged, EEv::EvCoordinatorChanged> {
-        TEvCoordinatorChanged(NActors::TActorId coordinatorActorId)
-            : CoordinatorActorId(coordinatorActorId) {
+        TEvCoordinatorChanged(NActors::TActorId coordinatorActorId, ui64 generation)
+            : CoordinatorActorId(coordinatorActorId)
+            , Generation(generation) {
         }
         NActors::TActorId CoordinatorActorId;
+        ui64 Generation = 0;
     };
 
     struct TEvCoordinatorChangesSubscribe : public NActors::TEventLocal<TEvCoordinatorChangesSubscribe, EEv::EvCoordinatorChangesSubscribe> {};

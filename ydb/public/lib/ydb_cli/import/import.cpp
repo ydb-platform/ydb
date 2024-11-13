@@ -109,16 +109,15 @@ void InitCsvParser(TCsvParser& parser,
             headerRow.erase(headerRow.size() - settings.Delimiter_.size());
         }
         parser = TCsvParser(std::move(headerRow), settings.Delimiter_[0], settings.NullValue_, columnTypes);
-        return;
+    } else {
+        TVector<TString> columns;
+        Y_ENSURE_BT(dbTableInfo);
+        for (const auto& column : dbTableInfo->GetColumns()) {
+            columns.push_back(column.Name);
+        }
+        parser = TCsvParser(std::move(columns), settings.Delimiter_[0], settings.NullValue_, columnTypes);
     }
-
-    TVector<TString> columns;
-    Y_ENSURE_BT(dbTableInfo);
-    for (const auto& column : dbTableInfo->GetColumns()) {
-        columns.push_back(column.Name);
-    }
-    parser = TCsvParser(std::move(columns), settings.Delimiter_[0], settings.NullValue_, columnTypes);
-    return;
+    parser.BuildLineType();
 }
 
 FHANDLE GetStdinFileno() {
@@ -426,6 +425,20 @@ TAsyncStatus TImportFileClient::UpsertTValueBuffer(const TString& dbPath, TValue
     return TableClient->RetryOperation(upsert, RetrySettings);
 }
 
+inline
+TAsyncStatus TImportFileClient::UpsertTValueBuffer(const TString& dbPath, TValue&& rows) {
+    auto upsert = [this, dbPath, rows = std::move(rows)]
+            (NYdb::NTable::TTableClient& tableClient) mutable -> TAsyncStatus {
+        NYdb::TValue rowsCopy(rows.GetType(), rows.GetProto());
+        return tableClient.BulkUpsert(dbPath, std::move(rowsCopy), UpsertSettings)
+            .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
+                NYdb::TStatus status = bulkUpsertResult.GetValueSync();
+                return NThreading::MakeFuture(status);
+            });
+    };
+    return TableClient->RetryOperation(upsert, RetrySettings);
+}
+
 TStatus TImportFileClient::UpsertCsv(IInputStream& input,
                                      const TString& dbPath,
                                      const TImportFileSettings& settings,
@@ -450,8 +463,6 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input,
         splitter.ConsumeLine();
     }
 
-    TType lineType = parser.GetColumnsType();
-
     THolder<IThreadPool> pool = CreateThreadPool(settings.Threads_);
 
     ui64 row = settings.SkipRows_ + settings.Header_ + 1;
@@ -464,16 +475,8 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input,
     std::vector<TAsyncStatus> inFlightRequests;
     std::vector<TString> buffer;
 
-    auto upsertCsv = [&](ui64 row, std::vector<TString>&& buffer) {
-        TValueBuilder builder;
-        builder.BeginList();
-        for (auto&& line : buffer) {
-            builder.AddListItem();
-            parser.GetValue(std::move(line), builder, lineType, TCsvParser::TParseMetadata{row, filePath});
-            ++row;
-        }
-        builder.EndList();
-        return UpsertTValueBuffer(dbPath, builder).ExtractValueSync();
+    auto upsertCsvFunc = [&](std::vector<TString>&& buffer, ui64 row) {
+        return UpsertTValueBuffer(dbPath, parser.BuildList(std::move(buffer), filePath, row)).ExtractValueSync();
     };
 
     while (TString line = splitter.ConsumeLine()) {
@@ -507,8 +510,8 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input,
             progressCallback(readBytes, *inputSizeHint);
         }
 
-        auto asyncUpsertCSV = [&upsertCsv, row, buffer = std::move(buffer)]() mutable {
-            return upsertCsv(row, std::move(buffer));
+        auto asyncUpsertCSV = [&upsertCsvFunc, row, buffer = std::move(buffer)]() mutable {
+            return upsertCsvFunc(std::move(buffer), row);
         };
         row += batchRows;
         batchRows = 0;
@@ -524,7 +527,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input,
     }
 
     if (!buffer.empty() && countInput.Counter() > 0) {
-        upsertCsv(row, std::move(buffer));
+        upsertCsvFunc(std::move(buffer), row);
     }
 
     TotalBytesRead += readBytes;
@@ -560,21 +563,12 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath,
     NCsvFormat::TLinesSplitter headerSplitter(headerInput, settings.Delimiter_[0]);
     InitCsvParser(parser, removeLastDelimiter, headerSplitter, settings, &columnTypes, DbTableInfo.get());
 
-    TType lineType = parser.GetColumnsType();
-
     TVector<TAsyncStatus> threadResults(splitter.GetSplitCount());
     THolder<IThreadPool> pool = CreateThreadPool(splitter.GetSplitCount());
     for (size_t threadId = 0; threadId < splitter.GetSplitCount(); ++threadId) {
         auto loadCsv = [&, threadId] () {
-            auto upsertCsv = [&](std::vector<TString>&& buffer) {
-                TValueBuilder builder;
-                builder.BeginList();
-                for (auto&& line : buffer) {
-                    builder.AddListItem();
-                    parser.GetValue(std::move(line), builder, lineType, TCsvParser::TParseMetadata{std::nullopt, filePath});
-                }
-                builder.EndList();
-                return UpsertTValueBuffer(dbPath, builder);
+            auto upsertCsvFunc = [&](std::vector<TString>&& buffer) {
+                return UpsertTValueBuffer(dbPath, parser.BuildList(std::move(buffer), filePath));
             };
             std::vector<TAsyncStatus> inFlightRequests;
             std::vector<TString> buffer;
@@ -612,13 +606,13 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath,
                         return status;
                     }
 
-                    inFlightRequests.push_back(upsertCsv(std::move(buffer)));
+                    inFlightRequests.push_back(upsertCsvFunc(std::move(buffer)));
                     buffer.clear();
                 }
             }
 
             if (!buffer.empty() && splitter.GetChunk(threadId).GetReadCount() != 0) {
-                inFlightRequests.push_back(upsertCsv(std::move(buffer)));
+                inFlightRequests.push_back(upsertCsvFunc(std::move(buffer)));
             }
 
             TotalBytesRead += readBytes;

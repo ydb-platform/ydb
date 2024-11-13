@@ -1,5 +1,6 @@
 #include "csv_parser.h"
 
+#include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/lib/ydb_cli/common/common.h>
 
 #include <library/cpp/string_utils/csv/csv.h>
@@ -177,7 +178,7 @@ public:
         }
     }
 
-    void BuildValue(TStringBuf token) {
+    void BuildValue(const TStringBuf& token) {
         switch (Parser.GetKind()) {
         case TTypeParser::ETypeKind::Primitive: {
             BuildPrimitive(TString(token));
@@ -279,7 +280,7 @@ public:
         throw TCsvParseException() << "Expected bool value: \"true\" or \"false\", received: \"" << token << "\".";
     }
 
-    void EnsureNull(TStringBuf token) const {
+    void EnsureNull(const TStringBuf& token) const {
         if (!NullValue) {
             throw TCsvParseException() << "Expected null value instead of \"" << token << "\", but null value is not set.";
         }
@@ -288,7 +289,7 @@ public:
         }
     }
 
-    TValue Convert(TStringBuf token) {
+    TValue Convert(const TStringBuf& token) {
         BuildValue(token);
         return Builder.Build();
     }
@@ -317,10 +318,10 @@ TCsvParseException FormatError(const std::exception& inputError,
 }
 
 TValue FieldToValue(TTypeParser& parser,
-                    TStringBuf token,
+                    TStringBuf& token,
                     const std::optional<TString>& nullValue,
                     const TCsvParser::TParseMetadata& meta,
-                    TString columnName) {
+                    const TString& columnName) {
     try {
         TCsvToYdbConverter converter(parser, nullValue);
         return converter.Convert(token);
@@ -331,7 +332,7 @@ TValue FieldToValue(TTypeParser& parser,
 
 TStringBuf Consume(NCsvFormat::CsvSplitter& splitter,
                    const TCsvParser::TParseMetadata& meta,
-                   TString columnName) {
+                   const TString& columnName) {
     try {
         return splitter.Consume();
     } catch (std::exception& e) {
@@ -342,12 +343,12 @@ TStringBuf Consume(NCsvFormat::CsvSplitter& splitter,
 }
 
 TCsvParser::TCsvParser(TString&& headerRow, const char delimeter, const std::optional<TString>& nullValue,
-                       const std::map<TString, TType>* paramTypes,
+                       const std::map<TString, TType>* destinationTypes,
                        const std::map<TString, TString>* paramSources) 
     : HeaderRow(std::move(headerRow))
     , Delimeter(delimeter)
     , NullValue(nullValue)
-    , ParamTypes(paramTypes)
+    , DestinationTypes(destinationTypes)
     , ParamSources(paramSources)
 {
     NCsvFormat::CsvSplitter splitter(HeaderRow, Delimeter);
@@ -355,12 +356,12 @@ TCsvParser::TCsvParser(TString&& headerRow, const char delimeter, const std::opt
 }
 
 TCsvParser::TCsvParser(TVector<TString>&& header, const char delimeter, const std::optional<TString>& nullValue,
-                       const std::map<TString, TType>* paramTypes,
+                       const std::map<TString, TType>* destinationTypes,
                        const std::map<TString, TString>* paramSources) 
     : Header(std::move(header))
     , Delimeter(delimeter)
     , NullValue(nullValue)
-    , ParamTypes(paramTypes)
+    , DestinationTypes(destinationTypes)
     , ParamSources(paramSources)
 {
 }
@@ -374,8 +375,8 @@ void TCsvParser::GetParams(TString&& data, TParamsBuilder& builder, const TParse
         }
         TStringBuf token = Consume(splitter, meta, *headerIt);
         TString fullname = "$" + *headerIt;
-        auto paramIt = ParamTypes->find(fullname);
-        if (paramIt == ParamTypes->end()) {
+        auto paramIt = DestinationTypes->find(fullname);
+        if (paramIt == DestinationTypes->end()) {
             ++headerIt;
             continue;
         }
@@ -431,18 +432,68 @@ void TCsvParser::GetValue(TString&& data, TValueBuilder& builder, const TType& t
     builder.EndStruct();
 }
 
-TType TCsvParser::GetColumnsType() const {
+TValue TCsvParser::BuildList(std::vector<TString>&& lines, const TString& filename, std::optional<ui64> row) const {
+    std::vector<THolder<TTypeParser>> columnTypeParsers;
+    columnTypeParsers.reserve(ResultColumnCount);
+    for (const TType* type : ResultLineTypesSorted) {
+        columnTypeParsers.push_back(MakeHolder<TTypeParser>(*type));
+    }
+    Ydb::Value listValue;
+    auto* listItems = listValue.mutable_items();
+    listItems->Reserve(lines.size());
+    for (auto&& line : lines) {
+        std::vector<TStringBuf> fields;
+        NCsvFormat::CsvSplitter splitter(line, Delimeter);
+        TParseMetadata meta {row, filename};
+        auto headerIt = Header.cbegin();
+        auto skipIt = SkipBitMap.begin();
+        do {
+            if (headerIt == Header.cend()) { // SkipBitMap has same size as Header
+                throw FormatError(yexception() << "Header contains less fields than data. Header: \"" << HeaderRow << "\", data: \"" << line << "\"", meta);
+            }
+            if (!*skipIt) {
+                fields.emplace_back(Consume(splitter, meta, *headerIt));
+            }
+            ++headerIt;
+            ++skipIt;
+        } while (splitter.Step());
+        auto* structItems = listItems->Add()->mutable_items();
+        structItems->Reserve(ResultColumnCount);
+        auto typeParserIt = columnTypeParsers.begin();
+        auto fieldIt = fields.begin();
+        auto nameIt = ResultLineNamesSorted.begin();
+        // fields size equals columnTypeParserssize size, no need for second end check
+        for (; typeParserIt != columnTypeParsers.end(); ++typeParserIt, ++fieldIt, ++nameIt) {
+            //typeParser.Reset();
+            *structItems->Add() = FieldToValue(*typeParserIt->Get(), *fieldIt, NullValue, meta, **nameIt).GetProto();
+        }
+        if (row.has_value()) {
+            ++row.value();
+        }
+    }
+    return TValue(ResultListType.value(), std::move(listValue));
+}
+
+void TCsvParser::BuildLineType() {
+    SkipBitMap.reserve(Header.size());
+    ResultColumnCount = 0;
     TTypeBuilder builder;
     builder.BeginStruct();
     for (const auto& colName : Header) {
-        if (ParamTypes->find(colName) != ParamTypes->end()) {
-            builder.AddMember(colName, ParamTypes->at(colName));
+        auto findIt = DestinationTypes->find(colName);
+        if (findIt != DestinationTypes->end()) {
+            builder.AddMember(colName, findIt->second);
+            ResultLineTypesSorted.emplace_back(&findIt->second);
+            ResultLineNamesSorted.emplace_back(&colName);
+            SkipBitMap.push_back(false);
+            ++ResultColumnCount;
         } else {
-            builder.AddMember("__ydb_skip_column_name", TTypeBuilder().Build());
+            SkipBitMap.push_back(true);
         }
     }
     builder.EndStruct();
-    return builder.Build();
+    ResultLineType = builder.Build();
+    ResultListType = TTypeBuilder().List(ResultLineType.value()).Build();
 }
 
 }

@@ -96,6 +96,7 @@ private:
                               const TImportFileSettings& settings);
 
     TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValueBuilder& builder);
+    TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValue&& rows);
 
     TStatus UpsertJson(IInputStream &input, const TString &dbPath, const TImportFileSettings &settings,
                     std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback);

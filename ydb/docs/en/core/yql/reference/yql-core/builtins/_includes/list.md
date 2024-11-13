@@ -228,6 +228,48 @@ SELECT ListTake(list_column, 3) FROM my_table;
 
 {% endif %}
 
+## ListSample and ListSampleN {#listsample}
+
+Returns a sample without replacement from the list. `ListSample` chooses elements independently with the given probability,
+`ListSampleN` chooses a sample of the given size (if the length of the list is less than the sample size, returns the original list).
+If the probability/sample size is NULL, returns the original list.
+Extra argument is used to manipulate randomness, see [documentation for `Random`](./basic/random.md).
+
+
+**Examples**
+```yql
+$list = AsList(1, 2, 3, 4, 5);
+
+SELECT ListSample($list, 0.5);  -- [1, 2, 5]
+SELECT ListSampleN($list, 2);  -- [4, 2]
+```
+
+**Signature**
+```
+ListSample(List<T>, Double?[, T])->List<T>
+ListSample(List<T>?, Double?[, T])->List<T>?
+
+ListSampleN(List<T>, Uint64?[, T])->List<T>
+ListSampleN(List<T>?, Uint64?[, T])->List<T>?
+```
+
+## ListShuffle {#listshuffle}
+
+Returns a shuffled copy of the list. Extra argument is used to manipulate randomness, see [documentation for `Random`](./basic/random.md).
+
+**Examples**
+```yql
+$list = AsList(1, 2, 3, 4, 5);
+
+SELECT ListShuffle($list);  -- [1, 3, 5, 2, 4]
+```
+
+**Signature**
+```
+ListShuffle(List<T>[, T])->List<T>
+ListShuffle(List<T>?[, T])->List<T>?
+```
+
 ## ListIndexOf {#listindexof}
 
 Searches the list for an element with the specified value and returns its index at the first occurrence. Indexes count from 0. If such element is missing, it returns `NULL`.

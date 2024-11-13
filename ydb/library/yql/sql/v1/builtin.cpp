@@ -3295,6 +3295,9 @@ struct TBuiltinFuncData {
             {"forcespreadmembers", { "ForceSpreadMembers", 2, 2}},
             {"listfromtuple", { "ListFromTuple", 1, 1}},
             {"listtotuple", { "ListToTuple", 2, 2}},
+            {"listsample", { "ListSample", 2, 3}},
+            {"listsamplen", { "ListSampleN", 2, 3}},
+            {"listshuffle", { "ListShuffle", 1, 2}},
         };
         return coreFuncs;
     }

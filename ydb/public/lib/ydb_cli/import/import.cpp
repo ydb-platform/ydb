@@ -399,7 +399,10 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
     auto finish = TInstant::Now();
     auto duration = finish - start;
     progressBar.SetProcess(100);
-    Cerr << "Elapsed: " << duration.SecondsFloat() << " sec\n";
+    if (duration.SecondsFloat() > 0) {
+        Cerr << "Elapsed: " << duration.SecondsFloat() << " sec. Total bytes read: " << (ui64)TotalBytesRead << ". Total processing speed: "
+            << (double)TotalBytesRead / duration.SecondsFloat() / 1024 / 1024  << " MB/s." << Endl;
+    }
 
     return MakeStatus(EStatus::SUCCESS);
 }
@@ -518,6 +521,8 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input,
         upsertCsv(row, std::move(buffer));
     }
 
+    TotalBytesRead += readBytes;
+
     return WaitForQueue(0, inFlightRequests);
 }
 
@@ -598,6 +603,8 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath,
             if (!buffer.empty() && splitter.GetChunk(threadId).GetReadCount() != 0) {
                 inFlightRequests.push_back(upsertCsv(std::move(buffer)));
             }
+
+            TotalBytesRead += readBytes;
 
             return WaitForQueue(0, inFlightRequests);
         };

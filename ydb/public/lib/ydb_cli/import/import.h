@@ -78,6 +78,7 @@ private:
     std::unique_ptr<const NTable::TTableDescription> DbTableInfo;
 
     std::atomic<ui64> FilesCount;
+    std::atomic<ui64> TotalBytesRead = 0;
 
     static constexpr ui32 VerboseModeReadSize = 1 << 27; // 100 MB
 

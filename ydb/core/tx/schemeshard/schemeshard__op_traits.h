@@ -1,13 +1,13 @@
 #pragma once
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
 #include <util/generic/string.h>
 #include <util/generic/map.h>
 
 #include <optional>
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-
-namespace NKikimr::NSchemeShard::NGenerated {
+namespace NKikimr::NSchemeShard {
 
 using TTxTransaction = NKikimrSchemeOp::TModifyScheme;
 
@@ -290,4 +290,4 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCol
     constexpr inline static bool CreateDirsFromName = true;
 };
 
-} // namespace NKikimr::NSchemeShard::NGenerated
+} // namespace NKikimr::NSchemeShard

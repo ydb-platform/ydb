@@ -187,8 +187,14 @@ public:
     }
 
     bool ForceAcquireSnapshot() const {
-        const bool forceSnapshot = (ReadOnlyTx && !ImmediateTx && !HasPersistentChannels && !HasOlapTable &&
-                                    (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot));
+        const bool forceSnapshot = (
+            !GetSnapshot().IsValid() &&
+            ReadOnlyTx &&
+            !ImmediateTx &&
+            !HasPersistentChannels &&
+            !HasOlapTable &&
+            (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
+        );
 
         return forceSnapshot;
     }

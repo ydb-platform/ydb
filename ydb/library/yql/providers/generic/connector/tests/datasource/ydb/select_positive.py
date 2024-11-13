@@ -574,8 +574,8 @@ class Factory:
         )
 
         data_out = [
-            b'{\n"key1": "value1"\n}',
-            b'{\n"key2": "value2"\n}'
+            ['{"key1": "value1"}'],
+            ['{"key2": "value2"}'],
         ]
 
         return [

@@ -87,12 +87,12 @@ bool TOlapColumnFamlilyAdd::ParseFromRequest(const NKikimrSchemeOp::TFamilyDescr
     }
 
     Name = columnFamily.GetName();
-    auto serialzier = ConvertFamilyDescriptionToProtoSerializer(columnFamily);
-    if (serialzier.IsFail()) {
-        errors.AddError(serialzier.GetErrorMessage());
+    auto serializer = ConvertFamilyDescriptionToProtoSerializer(columnFamily);
+    if (serializer.IsFail()) {
+        errors.AddError(serializer.GetErrorMessage());
         return false;
     }
-    auto resultBuild = NArrow::NSerialization::TSerializerContainer::BuildFromProto(serialzier.GetResult());
+    auto resultBuild = NArrow::NSerialization::TSerializerContainer::BuildFromProto(serializer.GetResult());
     if (resultBuild.IsFail()) {
         errors.AddError(resultBuild.GetErrorMessage());
         return false;
@@ -103,9 +103,9 @@ bool TOlapColumnFamlilyAdd::ParseFromRequest(const NKikimrSchemeOp::TFamilyDescr
 
 void TOlapColumnFamlilyAdd::ParseFromLocalDB(const NKikimrSchemeOp::TFamilyDescription& columnFamily) {
     Name = columnFamily.GetName();
-    auto serialzier = ConvertFamilyDescriptionToProtoSerializer(columnFamily);
-    Y_VERIFY_S(serialzier.IsSuccess(), serialzier.GetErrorMessage());
-    Y_VERIFY(SerializerContainer.DeserializeFromProto(serialzier.GetResult()));
+    auto serializer = ConvertFamilyDescriptionToProtoSerializer(columnFamily);
+    Y_VERIFY_S(serializer.IsSuccess(), serializer.GetErrorMessage());
+    Y_VERIFY(SerializerContainer.DeserializeFromProto(serializer.GetResult()));
 }
 
 void TOlapColumnFamlilyAdd::Serialize(NKikimrSchemeOp::TFamilyDescription& columnFamily) const {
@@ -135,12 +135,12 @@ bool TOlapColumnFamlilyAdd::ApplyDiff(const TOlapColumnFamlilyDiff& diffColumnFa
     if (codecLevel.has_value()) {
         newColumnFamily->SetColumnCodecLevel(codecLevel.value());
     }
-    auto serialzier = ConvertFamilyDescriptionToProtoSerializer(newColumnFamily.GetResult());
-    if (serialzier.IsFail()) {
-        errors.AddError(serialzier.GetErrorMessage());
+    auto serializer = ConvertFamilyDescriptionToProtoSerializer(newColumnFamily.GetResult());
+    if (serializer.IsFail()) {
+        errors.AddError(serializer.GetErrorMessage());
         return false;
     }
-    auto resultBuild = NArrow::NSerialization::TSerializerContainer::BuildFromProto(serialzier.GetResult());
+    auto resultBuild = NArrow::NSerialization::TSerializerContainer::BuildFromProto(serializer.GetResult());
     if (resultBuild.IsFail()) {
         errors.AddError(resultBuild.GetErrorMessage());
         return false;

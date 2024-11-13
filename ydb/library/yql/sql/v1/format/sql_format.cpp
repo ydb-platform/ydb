@@ -962,6 +962,12 @@ private:
         VisitAllFields(TRule_use_stmt::GetDescriptor(), msg);
     }
 
+    void VisitAlterSequence(const TRule_alter_sequence_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_alter_sequence_stmt::GetDescriptor(), msg);
+    }
+
     void VisitIntoTable(const TRule_into_table_stmt& msg) {
         switch (msg.GetBlock1().Alt_case()) {
         case TRule_into_table_stmt_TBlock1::AltCase::kAlt1:
@@ -2853,6 +2859,7 @@ TStaticData::TStaticData()
         {TRule_drop_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePoolClassifier)},
         {TRule_backup_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBackup)},
         {TRule_restore_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRestore)},
+        {TRule_alter_sequence_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterSequence)},
         })
     , ObfuscatingVisitDispatch({
         {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},

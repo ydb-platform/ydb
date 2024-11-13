@@ -2040,6 +2040,69 @@ TNodePtr BuildAlterUser(TPosition pos, const TString& service, const TDeferredAt
     return new TAlterUser(pos, service, cluster, name, params, scoped);
 }
 
+class TAlterSequence final: public TAstListNode {
+public:
+    TAlterSequence(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TSequenceParameters& params, TScopedStatePtr scoped)
+        : TAstListNode(pos)
+        , Service(service)
+        , Cluster(cluster)
+        , Name(name)
+        , Params(params)
+        , Scoped(scoped)
+    {
+        FakeSource = BuildFakeSource(pos);
+        scoped->UseCluster(service, cluster);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Y_UNUSED(src);
+        auto name = Name.Build();
+
+        TNodePtr cluster = Scoped->WrapCluster(Cluster, ctx);
+
+        if (!name->Init(ctx, FakeSource.Get()) || !cluster->Init(ctx, FakeSource.Get())) {
+            return false;
+        }
+        if (password && !password->Init(ctx, FakeSource.Get())) {
+            return false;
+        }
+
+        auto options = Y(Q(Y(Q("mode"), Q("alterUser"))));
+        if (Params.IsPasswordEncrypted) {
+            options = L(options, Q(Y(Q("passwordEncrypted"))));
+        }
+        if (Params.Password) {
+            options = L(options, Q(Y(Q("password"), password)));
+        } else {
+            options = L(options, Q(Y(Q("nullPassword"))));
+        }
+
+        Add("block", Q(Y(
+            Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Service), cluster)),
+            Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("role"), Y("String", name)))), Y("Void"), Q(options))),
+            Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
+            )));
+
+        return TAstListNode::DoInit(ctx, FakeSource.Get());
+    }
+
+    TPtr DoClone() const final {
+        return {};
+    }
+private:
+    const TString Service;
+    TDeferredAtom Cluster;
+    TDeferredAtom Name;
+    const TSequenceParameters Params;
+
+    TScopedStatePtr Scoped;
+    TSourcePtr FakeSource;
+};
+
+TNodePtr BuildAlterUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TRoleParameters& params, TScopedStatePtr scoped) {
+    return new TAlterUser(pos, service, cluster, name, params, scoped);
+}
+
 class TRenameRole final: public TAstListNode {
 public:
     TRenameRole(TPosition pos, bool isUser, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped)

@@ -1293,6 +1293,12 @@ namespace NSQLTranslationV1 {
         TVector<TDeferredAtom> Roles;
     };
 
+    struct TSequenceParameters {
+        TMaybe<TDeferredAtom> StartValue;
+        TMaybe<TDeferredAtom> RestartValue;
+        TMaybe<TDeferredAtom> Increment;
+    };
+
     struct TTopicConsumerSettings {
         struct TLocalSinkSettings {
             // no special settings

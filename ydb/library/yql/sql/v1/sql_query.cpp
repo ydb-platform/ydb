@@ -1672,6 +1672,63 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                                      context));
             break;
         }
+        case TRule_sql_stmt_core::kAltSqlStmtCore57: {
+            // alter_sequence_stmt: ALTER SEQUENCE sequence_name (START WITH? integer | RESTART WITH? integer | INCREMENT BY? integer);
+            Ctx.BodyPart();
+            auto& node = core.GetAlt_sql_stmt_core57().GetRule_alter_sequence_stmt1();
+
+            Ctx.Token(node.GetToken1());
+            const TPosition pos = Ctx.Pos();
+
+            TString service = Ctx.Scoped->CurrService;
+            TDeferredAtom cluster = Ctx.Scoped->CurrCluster;
+            if (cluster.Empty()) {
+                Error() << "USE statement is missing - no default cluster is selected";
+                return false;
+            }
+            TObjectOperatorContext context(Ctx.Scoped);
+
+            if (node.GetRule_object_ref3().HasBlock1()) {
+                if (!ClusterExpr(node.GetRule_object_ref3().GetBlock1().GetRule_cluster_expr1(),
+                    false, context.ServiceId, context.Cluster)) {
+                    return false;
+                }
+            } 
+
+            TDeferredAtom sequenceName;
+            {
+                bool allowSystemRoles = true;
+                if (!RoleNameClause(node.GetRule_object_ref3(), sequenceName, allowSystemRoles)) {
+                    return false;
+                }
+            }
+
+            TNodePtr stmt;
+            switch (node.GetBlock4().Alt_case()) {
+                case TRule_alter_user_stmt_TBlock4::kAlt1: {
+                    TRoleParameters roleParams;
+                    if (!RoleParameters(node.GetBlock4().GetAlt1().GetRule_create_user_option2(), roleParams)) {
+                        return false;
+                    }
+                    stmt = BuildAlterUser(pos, service, cluster, roleName, roleParams, Ctx.Scoped);
+                    break;
+                }
+                case TRule_alter_user_stmt_TBlock4::kAlt2: {
+                    TDeferredAtom tgtRoleName;
+                    bool allowSystemRoles = false;
+                    if (!RoleNameClause(node.GetBlock4().GetAlt2().GetRule_role_name3(), tgtRoleName, allowSystemRoles)) {
+                        return false;
+                    }
+                    stmt = BuildRenameUser(pos, service, cluster, roleName, tgtRoleName,Ctx.Scoped);
+                    break;
+                }
+                case TRule_alter_user_stmt_TBlock4::ALT_NOT_SET:
+                    Y_ABORT("You should change implementation according to grammar changes");
+            }
+
+            AddStatementToBlocks(blocks, stmt);
+            break;
+        }
         case TRule_sql_stmt_core::ALT_NOT_SET:
             Ctx.IncrementMonCounter("sql_errors", "UnknownStatement" + internalStatementName);
             AltNotImplemented("sql_stmt_core", core);

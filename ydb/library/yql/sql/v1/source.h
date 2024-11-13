@@ -317,4 +317,5 @@ namespace NSQLTranslationV1 {
     void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix = {});
     TDeferredAtom MakeAtomFromExpression(TPosition pos, TContext& ctx, TNodePtr node, const TString& prefix = {});
     TString NormalizeTypeString(const TString& str);
+    TNodePtr BuildAlterSequence(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TSequenceParams& params, TScopedStatePtr scoped);
 }  // namespace NSQLTranslationV1

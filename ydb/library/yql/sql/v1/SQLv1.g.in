@@ -75,6 +75,7 @@ sql_stmt_core:
   | drop_resource_pool_classifier_stmt
   | backup_stmt
   | restore_stmt
+  | alter_sequence_stmt
 ;
 
 expr:
@@ -1047,6 +1048,13 @@ rollback_stmt: ROLLBACK;
 analyze_table: simple_table_ref (LPAREN column_list RPAREN)?;
 analyze_table_list: analyze_table (COMMA analyze_table)* COMMA?;
 analyze_stmt: ANALYZE analyze_table_list;
+
+alter_sequence_stmt: ALTER SEQUENCE (IF EXISTS)? object_ref alter_sequence_action (COMMA alter_sequence_action)*;
+alter_sequence_action:
+  START WITH? integer
+  | RESTART WITH? integer
+  | INCREMENT BY? integer
+;
 
 // Special rules that allow to use certain keywords as identifiers.
 identifier: ID_PLAIN | ID_QUOTED;

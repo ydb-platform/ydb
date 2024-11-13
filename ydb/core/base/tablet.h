@@ -366,6 +366,7 @@ struct TEvTablet {
         const ui32 ConfirmedOnSend;
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
+        THashMap<ui32, float> ApproximateFreeSpaceShareByChannel;
         NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
         NMetrics::TTabletIopsRawValue GroupWrittenOps;
 
@@ -377,6 +378,7 @@ struct TEvTablet {
                 ui32 confirmedOnSend,
                 TVector<ui32>&& yellowMoveChannels,
                 TVector<ui32>&& yellowStopChannels,
+                THashMap<ui32, float>&& approximateFreeSpaceShareByChannel,
                 NMetrics::TTabletThroughputRawValue&& written,
                 NMetrics::TTabletIopsRawValue&& writtenOps)
             : Status(status)
@@ -386,6 +388,7 @@ struct TEvTablet {
             , ConfirmedOnSend(confirmedOnSend)
             , YellowMoveChannels(std::move(yellowMoveChannels))
             , YellowStopChannels(std::move(yellowStopChannels))
+            , ApproximateFreeSpaceShareByChannel(std::move(approximateFreeSpaceShareByChannel))
             , GroupWrittenBytes(std::move(written))
             , GroupWrittenOps(std::move(writtenOps))
         {}

@@ -110,6 +110,7 @@ message TStorageConfig {
     optional TStorageSettings External = 4;
     optional uint32 DataThreshold = 5;
     optional uint32 ExternalThreshold = 6;
+    optional uint32 ExternalChannelsCount = 7 [default = 1];
 }
 
 message TKeyValueStorageConfig {

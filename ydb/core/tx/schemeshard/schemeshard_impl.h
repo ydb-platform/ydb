@@ -489,7 +489,7 @@ public:
     bool ApplyStorageConfig(const TStoragePools& storagePools,
                             const NKikimrSchemeOp::TStorageConfig& storageConfig,
                             TChannelsBindings& channelsBinding,
-                            THashMap<TString, ui32>& reverseBinding,
+                            THashMap<TString, TVector<ui32>>& reverseBinding,
                             TStorageRoom& room,
                             TString& errorMsg);
     bool GetBindingsRooms(const TPathId domainId,

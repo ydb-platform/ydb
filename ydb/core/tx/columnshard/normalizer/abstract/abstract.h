@@ -174,13 +174,10 @@ public:
             return AtomicGet(ActiveTasksCount) > 0;
         }
 
-        void OnResultReady() {
-            AFL_VERIFY(ActiveTasksCount > 0);
-            AtomicDecrement(ActiveTasksCount);
-        }
-
-        i64 GetActiveTasksCount() const {
-            return AtomicGet(ActiveTasksCount);
+        [[nodiscard]] ui64 DecActiveCounters() {
+            const i64 result = AtomicDecrement(ActiveTasksCount);
+            AFL_VERIFY(result >= 0);
+            return result;
         }
 
         std::optional<ENormalizerSequentialId> GetEnumSequentialId() const {

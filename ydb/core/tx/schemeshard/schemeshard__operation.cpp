@@ -1,6 +1,6 @@
 #include "schemeshard__operation.h"
 
-#include "schemeshard__op_traits.h"
+#include "schemeshard__dispatch_op.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_part.h"
@@ -8,7 +8,6 @@
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -851,11 +850,6 @@ bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, T
     Reverse(result.Transactions.begin() + initialSize, result.Transactions.end());
 
     return true;
-}
-
-template <class TFn>
-auto DispatchOp(const TTxTransaction& tx, TFn fn) {
-    return NGenerated::DispatchOp<TSchemeTxTraits, TSchemeTxTraitsFallback, TFn>(tx, std::forward<TFn>(fn));
 }
 
 // # Generates additional MkDirs for transactions

@@ -65,6 +65,10 @@ public:
         } else {
             TenantInfo.reset(new TTenantInfo(ComputeConfig));
             const auto& mapping = Config.GetMapping();
+            for (const auto& scopeToTenant : mapping.GetScopeToTenantName()) {
+                TenantInfo->SubjectMapping[SUBJECT_TYPE_SCOPE].emplace(scopeToTenant.GetKey(), scopeToTenant.GetValue());
+                TenantInfo->TenantMapping.emplace(scopeToTenant.GetValue(), scopeToTenant.GetValue());
+            }
             for (const auto& cloudToTenant : mapping.GetCloudIdToTenantName()) {
                 TenantInfo->SubjectMapping[SUBJECT_TYPE_CLOUD].emplace(cloudToTenant.GetKey(), cloudToTenant.GetValue());
                 TenantInfo->TenantMapping.emplace(cloudToTenant.GetValue(), cloudToTenant.GetValue());

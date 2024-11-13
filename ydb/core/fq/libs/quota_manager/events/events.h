@@ -18,6 +18,7 @@
 namespace NFq {
 
 constexpr auto SUBJECT_TYPE_CLOUD = "cloud";
+constexpr auto SUBJECT_TYPE_SCOPE = "scope";
 
 // Quota per cloud
 constexpr auto QUOTA_ANALYTICS_COUNT_LIMIT    = "yq.analyticsQuery.count";

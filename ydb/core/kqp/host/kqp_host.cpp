@@ -1287,6 +1287,8 @@ private:
                 for (const auto& resultPart : result.QueryExprs) {
                     YQL_CLOG(DEBUG, ProviderKqp) << "Splitted Compiled query part:\n" << KqpExprToPrettyString(*resultPart, ctx);
                 }
+            } else {
+                result.QueryExprs = {queryExpr};
             }
             return result;
         }
@@ -1304,7 +1306,7 @@ private:
             .SetSqlAutoCommit(false)
             .SetUsePgParser(settings.UsePgParser)
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
-        auto compileResult = CompileYqlQuery(query, /* isSql */ true, *ExprCtx, sqlVersion, settingsBuilder, /* isSplit */ true);
+        auto compileResult = CompileQuery(query, /* isSql */ true, *ExprCtx, sqlVersion, settingsBuilder, /* isSplit */ true);
 
         return TSplitResult{
             .Ctx = std::move(ExprCtxStorage),
@@ -1314,9 +1316,9 @@ private:
     }
 
     TCompileExprResult CompileYqlQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, TMaybe<TSqlVersion>& sqlVersion,
-        TKqpTranslationSettingsBuilder& settingsBuilder, bool isSplit = false) const
+        TKqpTranslationSettingsBuilder& settingsBuilder) const
     {
-        auto compileResult = CompileQuery(query, isSql, ctx, sqlVersion, settingsBuilder, isSplit);
+        auto compileResult = CompileQuery(query, isSql, ctx, sqlVersion, settingsBuilder, /* isSplit */ false);
         if (!compileResult.QueryExprs || compileResult.NeedToSplit) {
             return compileResult;
         }

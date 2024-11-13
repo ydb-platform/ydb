@@ -1279,7 +1279,6 @@ private:
             result.NeedToSplit = true;
             if (isSplit) {
                 auto rewriteResults = RewriteExpression(queryExpr, ctx, *TypesCtx, SessionCtx, Cluster);
-                
                 if (!ctx.IssueManager.GetIssues().Empty()) {
                     return result;
                 }

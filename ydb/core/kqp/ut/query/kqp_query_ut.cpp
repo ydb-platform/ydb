@@ -2011,6 +2011,20 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         {
             auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/A` (
+                    PRIMARY KEY (Col1)
+                )
+                WITH (STORE = ROW) AS
+                SELECT 1 AS Col1, 2 As Col2;
+
+                SELECT * FROM `/Root/ColSrc`;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "CTAS statement can't be used with other statements without per-statement mode", result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
                 CREATE TABLE `/Root/RowDst` (
                     PRIMARY KEY (Col1)
                 )

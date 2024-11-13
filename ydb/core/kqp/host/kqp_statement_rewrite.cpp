@@ -155,10 +155,10 @@ namespace {
         if (!prevEval) {
             exprCtx.Step.Repeat(NYql::TExprStep::ExprEval);
         }
-
         if (transformResult != NYql::IGraphTransformer::TStatus::Ok) {
             return std::nullopt;
         }
+
         auto type = insertDataPtr->GetTypeAnn();
         YQL_ENSURE(type);
         type = type->Cast<NYql::TListExprType>()->GetItemType();
@@ -339,7 +339,9 @@ bool NeedToSplit(
     bool needToSplit = false;
 
     VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
-        needToSplit |= IsCreateTableAs(node, exprCtx);
+        if (NYql::NNodes::TCoWrite::Match(node.Get())) {
+            needToSplit |= IsCreateTableAs(node, exprCtx);
+        }
         return !needToSplit;
     });
 
@@ -358,20 +360,22 @@ TVector<NYql::TExprNode::TPtr> RewriteExpression(
     TVector<NYql::TExprNode::TPtr> result;
     VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
         if (NYql::NNodes::TCoWrite::Match(node.Get())) {
-            ++actionsCount;
-            const auto rewriteResult = RewriteCreateTableAs(node, exprCtx, typeCtx, sessionCtx, cluster);
-            if (rewriteResult) {
-                if (!result.empty()) {
-                    exprCtx.AddError(NYql::TIssue(
-                        exprCtx.GetPosition(NYql::NNodes::TExprBase(node).Pos()),
-                        "Several CTAS statement can't be used without per-statement mode."));
-                }
-                result.push_back(rewriteResult->CreateTable);
-                result.push_back(rewriteResult->ReplaceInto);
-                if (rewriteResult->MoveTable) {
-                    result.push_back(rewriteResult->MoveTable);
+            if (IsCreateTableAs(node, exprCtx)) {
+                const auto rewriteResult = RewriteCreateTableAs(node, exprCtx, typeCtx, sessionCtx, cluster);
+                if (rewriteResult) {
+                    if (!result.empty()) {
+                        exprCtx.AddError(NYql::TIssue(
+                            exprCtx.GetPosition(NYql::NNodes::TExprBase(node).Pos()),
+                            "Several CTAS statement can't be used without per-statement mode."));
+                    }
+                    result.push_back(rewriteResult->CreateTable);
+                    result.push_back(rewriteResult->ReplaceInto);
+                    if (rewriteResult->MoveTable) {
+                        result.push_back(rewriteResult->MoveTable);
+                    }
                 }
             }
+            ++actionsCount;
         }
         return true;
     });

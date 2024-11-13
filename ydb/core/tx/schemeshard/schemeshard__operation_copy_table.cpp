@@ -401,7 +401,7 @@ public:
                         .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of copying base table
                 } else {
                     checks
-                        .NotUnderOperation()
+                        // .NotUnderOperation() // FIXME
                         .IsCommonSensePath()
                         .IsLikeDirectory();
                 }
@@ -775,7 +775,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             .NotDeleted()
             .NotUnderDeleting()
             .IsTable()
-            .NotUnderOperation()
+            // .NotUnderOperation()
             .IsCommonSensePath(); //forbid copy impl index tables directly
 
         if (!checks) {

@@ -440,7 +440,7 @@ bool TKikimrKey::Extract(const TExprNode& key) {
         KeyType = Type::PGObject;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
         ObjectType = key.Child(0)->Child(2)->Child(0)->Content();
-    } else if (tagName == "backupCollection") {
+    } else if (tagName == "backupCollection" || tagName == "backup") {
         KeyType = Type::BackupCollection;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
         ExplicitPrefix = key.Child(0)->Child(2)->Child(0)->Content();

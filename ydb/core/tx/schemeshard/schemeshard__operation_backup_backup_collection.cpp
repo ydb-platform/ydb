@@ -42,8 +42,6 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
 
     size_t cutLen = bcPath.GetDomainPathString().size() + 1;
 
-    auto now = ToX509String(TlsActivationContext->AsActorContext().Now());
-
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;
         createCdcStreamOp.SetTableName(item.GetPath());
@@ -55,9 +53,9 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         const auto sPath = TPath::Resolve(item.GetPath(), context.SS);
         NCdc::DoCreateStreamImpl(result, createCdcStreamOp, opId, workingDirPath, sPath, false, false);
 
-       auto& desc = *copyTables.Add();
+        auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.GetPath());
-        desc.SetDstPath(now + "_full/" + item.GetPath().substr(cutLen, item.GetPath().size() - cutLen));
+        desc.SetDstPath(JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName(), tx.GetBackupBackupCollection().GetTargetDir(), item.GetPath().substr(cutLen, item.GetPath().size() - cutLen)}));
         desc.SetOmitIndexes(true);
         desc.SetOmitFollowers(true);
         // desc.SetIsBackup(true);

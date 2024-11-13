@@ -22,14 +22,19 @@ struct TSchemeTxTraitsFallback {
         return false;
     }
 
-    static THashMap<TString, THashSet<TString>> GetRequiredPaths(const TTxTransaction& tx) {
-        Y_UNUSED(tx);
+    static THashMap<TString, THashSet<TString>> GetRequiredPaths(const TTxTransaction& tx, const TOperationContext& context) {
+        Y_UNUSED(tx, context);
         return {};
     }
 
-    constexpr inline static bool CreateDirsFromName = false;
+    static bool Rewrite(TTxTransaction& tx) {
+        Y_UNUSED(tx);
+        return false;
+    }
 
+    constexpr inline static bool CreateDirsFromName = false;
     constexpr inline static bool CreateAdditionalDirs = false;
+    constexpr inline static bool NeedRewrite = false;
 };
 
 template <NKikimrSchemeOp::EOperationType opType>
@@ -288,6 +293,48 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCol
     }
 
     constexpr inline static bool CreateDirsFromName = true;
+};
+
+template <>
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection> : public TSchemeTxTraitsFallback {
+    static THashMap<TString, THashSet<TString>> GetRequiredPaths(const TTxTransaction& tx, const TOperationContext& context) {
+        THashMap<TString, THashSet<TString>> paths;
+
+        const auto& backupOp = tx.GetBackupBackupCollection();
+
+        const auto& targetDir = backupOp.GetTargetDir();
+        const TString& targetPath = JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName()});
+
+        const TPath& bcPath = TPath::Resolve(targetPath, context.SS);
+        const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+
+        auto& collectionPaths = paths[targetPath];
+
+        size_t cutLen = tx.GetWorkingDir().size() + 1;
+        for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+            TString itemName = item.GetPath().substr(cutLen, item.GetPath().size() - cutLen);
+            auto pos = itemName.rfind("/");
+            if (pos != std::string::npos) {
+                itemName.resize(pos);
+                collectionPaths.emplace(JoinPath({targetDir, itemName}));
+            }
+        }
+
+        return paths;
+    }
+
+    static bool Rewrite(TTxTransaction& tx) {
+        auto now = ToX509String(TlsActivationContext->AsActorContext().Now());
+        tx.MutableBackupBackupCollection()->SetTargetDir(now + "_full");
+        return true;
+    }
+
+    constexpr inline static bool CreateAdditionalDirs = true;
+    constexpr inline static bool NeedRewrite = true;
+private:
+    static inline TString ToX509String(const TInstant& datetime) {
+        return datetime.FormatLocalTime("%Y%m%d%H%M%SZ");
+    }
 };
 
 } // namespace NKikimr::NSchemeShard

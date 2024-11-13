@@ -176,6 +176,7 @@ bool TSchemeShard::ProcessOperationParts(
 }
 
 THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request, TOperationContext& context) {
+    using namespace NGenerated;
     THolder<TProposeResponse> response = nullptr;
 
     auto selfId = SelfTabletId();
@@ -211,13 +212,23 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
+    TVector<TTxTransaction> rewrittenTransactions;
+
+    for (auto tx : record.GetTransaction()) {
+        if (DispatchOp(tx, [&](auto traits) { return traits.NeedRewrite && !traits.Rewrite(tx); })) {
+            // TODO: return error
+        }
+
+        rewrittenTransactions.push_back(std::move(tx));
+    }
+
     TVector<TTxTransaction> transactions;
     TVector<TTxTransaction> generatedTransactions;
 
     // # Phase One
     // Generate MkDir transactions based on object name.
 
-    for (const auto& transaction : record.GetTransaction()) {
+    for (const auto& transaction : rewrittenTransactions) {
         auto splitResult = operation->SplitIntoTransactions(transaction, context);
         if (splitResult.Status != NKikimrScheme::StatusSuccess) {
             response.Reset(new TProposeResponse(splitResult.Status, ui64(txId), ui64(selfId)));
@@ -730,7 +741,7 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxOperationReply(TOperati
 
 
 TString JoinPath(const TString& workingDir, const TString& name) {
-    Y_ABORT_UNLESS(!name.StartsWith('/') && !name.EndsWith('/'));
+    Y_ABORT_UNLESS(!name.StartsWith('/') && !name.EndsWith('/'), "%s", name.c_str());
     return TStringBuilder()
                << workingDir
                << (workingDir.EndsWith('/') ? "" : "/")
@@ -957,7 +968,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
 
     // # Generates MkDirs based on transaction-specific requirements
     if (DispatchOp(tx, [&](auto traits) { return traits.CreateAdditionalDirs; })) {
-        for (const auto& [parentPathStr, pathStrs] : DispatchOp(tx, [&](auto traits) { return traits.GetRequiredPaths(tx); })) {
+        for (const auto& [parentPathStr, pathStrs] : DispatchOp(tx, [&](auto traits) { return traits.GetRequiredPaths(tx, context); })) {
             const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
             {
                 TPath::TChecker checks = parentPath.Check();

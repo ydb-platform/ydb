@@ -1981,7 +1981,7 @@ namespace {
     bool FillTierAction(const TRule_ttl_tier_action& from, std::optional<TIdentifier>& storageName, TTranslation& txc) {
         switch (from.GetAltCase()) {
             case TRule_ttl_tier_action::kAltTtlTierAction1:
-                storageName = IdEx(from.GetAlt_ttl_tier_action1().GetRule_an_id2(), txc);
+                storageName = IdEx(from.GetAlt_ttl_tier_action1().GetRule_an_id5(), txc);
                 break;
             case TRule_ttl_tier_action::kAltTtlTierAction2:
                 storageName.reset();

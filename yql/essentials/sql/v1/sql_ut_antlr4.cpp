@@ -2094,7 +2094,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql(
             R"( USE plato;
                 CREATE TABLE tableName (Key Uint32, CreatedAt Uint32, PRIMARY KEY (Key))
-                WITH (TTL = Interval("P1D") TO Tier1, Interval("P2D") TO Tier2, Interval("P30D") DELETE On CreatedAt AS SECONDS);)"
+                WITH (TTL =
+                    Interval("P1D") TO EXTERNAL DATA SOURCE Tier1,
+                    Interval("P2D") TO EXTERNAL DATA SOURCE Tier2,
+                    Interval("P30D") DELETE
+                On CreatedAt AS SECONDS);)"
         );
         UNIT_ASSERT(res.Root);
 
@@ -2111,6 +2115,40 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("2592000000"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("columnUnit"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("seconds"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(TtlTieringWithOtherActionsParseCorrect) {
+        NYql::TAstParseResult res = SqlToYql(
+            R"( USE plato;
+                ALTER TABLE tableName SET TTL
+                        Interval("P1D") TO EXTERNAL DATA SOURCE Tier1,
+                        Interval("P2D") TO EXTERNAL DATA SOURCE Tier2,
+                        Interval("P30D") DELETE
+                    ON CreatedAt,
+                    SET AUTO_PARTITIONING_MAX_PARTITIONS_COUNT 16;)"
+        );
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tiers"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("evictionDelay"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("storageName"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Tier1"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Tier2"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("172800000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("2592000000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("maxPartitions"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("16"));
             }
         };
 

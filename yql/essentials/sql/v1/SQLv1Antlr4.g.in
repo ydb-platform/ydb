@@ -796,7 +796,7 @@ table_setting_value:
 
 ttl_tier_list: expr (ttl_tier_action (COMMA expr ttl_tier_action)*)?;
 ttl_tier_action:
-      TO an_id
+      TO EXTERNAL DATA SOURCE an_id
     | DELETE
 ;
 

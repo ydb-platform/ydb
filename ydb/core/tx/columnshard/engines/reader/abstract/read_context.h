@@ -52,6 +52,7 @@ private:
     const TActorId ResourceSubscribeActorId;
     const TActorId ReadCoordinatorActorId;
     const TComputeShardingPolicy ComputeShardingPolicy;
+    TAtomic AbortFlag = 0;
 
 public:
     template <class T>
@@ -59,6 +60,13 @@ public:
         auto result = dynamic_pointer_cast<const T>(ReadMetadata);
         AFL_VERIFY(result);
         return result;
+    }
+
+    void AbortWithError(const TString& errorMessage) {
+        if (AtomicCas(&AbortFlag, 1, 0)) {
+            NActors::TActivationContext::Send(
+                ScanActorId, std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(TConclusionStatus::Fail(errorMessage)));
+        }
     }
 
     bool IsReverse() const {

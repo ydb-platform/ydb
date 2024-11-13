@@ -237,7 +237,7 @@ protected:
         NColumnShard::TCounterGuard TasksGuard;
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
-
+        virtual void DoOnAllocationImpossible(const TString& errorMessage) override;
     public:
         TFetchingStepAllocation(const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step);
     };

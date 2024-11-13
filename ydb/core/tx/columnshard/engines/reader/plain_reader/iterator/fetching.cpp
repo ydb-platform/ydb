@@ -189,6 +189,14 @@ TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(
     , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard()) {
 }
 
+void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
+    auto sourcePtr = Source.lock();
+    if (sourcePtr) {
+        sourcePtr->GetContext()->GetCommonContext()->AbortWithError(
+            "cannot allocate memory for step " + Step.GetName() + ": '" + errorMessage + "'");
+    }
+}
+
 TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
 

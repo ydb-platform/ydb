@@ -411,7 +411,7 @@ private:
         const bool finished = sink->IsFinished();
         const bool changed = finished || size > 0 || hasCheckpoint;
 
-        Parent->SinkSend(ev->Get()->Index, std::move(batch), std::move(maybeCheckpoint), checkpointSize, size, finished, changed);
+        Parent->SinkSend(ev->Get()->Index, std::move(batch), std::move(maybeCheckpoint), size, checkpointSize, finished, changed);
     }
 
     void OnDqTask(TEvTaskRunnerCreate::TPtr& ev) {

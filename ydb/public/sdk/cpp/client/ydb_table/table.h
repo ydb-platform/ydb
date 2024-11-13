@@ -425,7 +425,11 @@ struct TPartitionStats {
 struct TTtlDeleteAction {};
 
 struct TTtlEvictToExternalStorageAction {
-    TString storageName;
+    TString StorageName;
+};
+
+struct TTtlEvictToColumnFamilyAction {
+    TString FamilyName;
 };
 
 class TTtlTierSettings {

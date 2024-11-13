@@ -2945,13 +2945,16 @@ TTtlTierSettings::TTtlTierSettings(const Ydb::Table::TtlTier& tier)
     : EvictionDelay_(TDuration::Seconds(tier.evict_after_seconds())) {
     switch (tier.action_case()) {
         case Ydb::Table::TtlTier::kDelete:
-        Action_ = TTtlDeleteAction();
-        break;
+            Action_ = TTtlDeleteAction();
+            break;
         case Ydb::Table::TtlTier::kEvictToExternalStorage:
-        Action_ = TTtlEvictToExternalStorageAction(tier.evict_to_external_storage().storage_name());
-        break;
+            Action_ = TTtlEvictToExternalStorageAction(tier.evict_to_external_storage().storage_name());
+            break;
+        case Ydb::Table::TtlTier::kEvictToColumnFamily:
+            Action_ = TTtlEvictToExternalStorageAction(tier.evict_to_column_family().family_name());
+            break;
         case Ydb::Table::TtlTier::ACTION_NOT_SET:
-        break;
+            break;
     }
 }
 
@@ -2962,8 +2965,10 @@ void TTtlTierSettings::SerializeTo(Ydb::Table::TtlTier& proto) const {
         using T = std::decay_t<decltype(action)>;
         if constexpr (std::is_same_v<T, TTtlDeleteAction>) {
             proto.mutable_delete_();
-        } else if constexpr (std::is_same_v<T, TExplicitPartitions>) {
+        } else if constexpr (std::is_same_v<T, TTtlEvictToExternalStorageAction>) {
             proto.mutable_evict_to_external_storage()->set_storage_name(action.StorageName);
+        } else if constexpr (std::is_same_v<T, TTtlEvictToColumnFamilyAction>) {
+            proto.mutable_evict_to_column_family()->set_storage_name(action.FamilyName);
         }
     };
     std::visit(std::move(actionVisitor), Action_);

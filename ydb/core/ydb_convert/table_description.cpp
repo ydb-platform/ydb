@@ -534,6 +534,9 @@ static void AddTtl(TYdbProto& out, const TTtl& inTTL) {
             case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage:
                 outTier->mutable_evict_to_external_storage()->set_storage_name(inTier.GetEvictToExternalStorage().GetStorageName());
                 break;
+            case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToColumnFamily:
+                outTier->mutable_evict_to_column_family()->set_family_name(inTier.GetEvictToColumnFamily().GetFamilyName());
+                break;
             case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::ACTION_NOT_SET:
                 break;
         }

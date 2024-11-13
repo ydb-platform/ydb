@@ -168,8 +168,10 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
     // Find subdomain path id if needed
     if (Self->State == TShardState::Ready) {
         if (Self->SubDomainPathId) {
+            AFL_DEBUG(NKikimrServices::TX_DATASHARD)("event", "start_watching_subdomain");
             Self->StartWatchingSubDomainPathId();
         } else {
+            AFL_DEBUG(NKikimrServices::TX_DATASHARD)("event", "start_find_subdomain");
             Self->StartFindSubDomainPathId();
         }
     }

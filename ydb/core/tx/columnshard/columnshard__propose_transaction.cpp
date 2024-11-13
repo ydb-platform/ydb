@@ -55,6 +55,14 @@ public:
                 AFL_VERIFY(Self->CurrentSchemeShardId == record.GetSchemeShardId());
             }
         }
+        if (txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA) {
+            ui64 subDomainPathId = record.GetSubDomainPathId();
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "propose")("subdomain_id", subDomainPathId);
+            if (subDomainPathId) {
+                Self->PersistSubDomainPathId(record.GetSchemeShardId(), subDomainPathId, txc);
+                Self->StartWatchingSubDomainPathId();
+            }
+        }
         std::optional<TMessageSeqNo> msgSeqNo;
         if (Ev->Get()->Record.HasSeqNo()) {
             TMessageSeqNo seqNo;

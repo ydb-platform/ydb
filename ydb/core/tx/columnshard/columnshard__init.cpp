@@ -107,7 +107,13 @@ void TTxInit::Complete(const TActorContext& ctx) {
     Self->Counters.GetCSCounters().Initialization.OnTxInitFinished(TMonotonic::Now() - StartInstant);
     AFL_VERIFY(!Self->IsTxInitFinished);
     Self->IsTxInitFinished = true;
-    Self->TrySwitchToWork(ctx);
+    Self->SwitchToWork(ctx);
+    NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*Self);
+    if (Self->SubDomainPathId) {
+        Self->StartWatchingSubDomainPathId();
+    } else {
+        Self->StartFindSubDomainPathId();
+    }
 }
 
 class TTxUpdateSchema: public TTransactionBase<TColumnShard> {

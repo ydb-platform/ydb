@@ -12,9 +12,6 @@
 namespace NKikimr {
 namespace NPQ {
 
-struct TBlobException {
-};
-
 struct TPartData {
     ui16 PartNo;
     ui16 TotalParts;
@@ -220,9 +217,6 @@ struct TBatch {
 
     ui32 FindPos(const ui64 offset, const ui16 partNo) const;
 
-    TString ToString() const {
-        return Header.ShortDebugString();
-    }
 };
 
 class TBlobIterator {

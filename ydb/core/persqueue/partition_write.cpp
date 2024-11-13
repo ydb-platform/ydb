@@ -1404,37 +1404,29 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
 }
 
 void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx) {
-    PQ_LOG_D("TPartition::AddNewWriteBlob.");
+    PQ_LOG_T("TPartition::AddNewWriteBlob.");
 
     const auto& key = res.first;
-    PQ_LOG_D("res={" << key.ToString() << ", " << res.second << "}, headCleared=" << headCleared);
-    PQ_LOG_D("EndOffset=" << EndOffset);
 
     TString valueD;
     valueD.reserve(res.second);
     ui32 pp = Head.FindPos(key.GetOffset(), key.GetPartNo());
-    PQ_LOG_D("pp=" << pp);
     if (pp < Max<ui32>() && key.GetOffset() < EndOffset) { //this batch trully contains this offset
         Y_ABORT_UNLESS(pp < Head.GetBatches().size());
         Y_ABORT_UNLESS(Head.GetBatch(pp).GetOffset() == key.GetOffset());
         Y_ABORT_UNLESS(Head.GetBatch(pp).GetPartNo() == key.GetPartNo());
-        PQ_LOG_D("Head.GetBatches().size=" << Head.GetBatches().size());
         for (; pp < Head.GetBatches().size(); ++pp) { //TODO - merge small batches here
             Y_ABORT_UNLESS(Head.GetBatch(pp).Packed);
             auto& batch = Head.GetBatch(pp);
-            PQ_LOG_D("old batch #" << pp << ": " << batch.ToString());
             batch.SerializeTo(valueD);
             PendingWriteTimestamp = std::max(PendingWriteTimestamp, batch.GetEndWriteTimestamp());
         }
     }
-    PQ_LOG_D("valueD.size=" << valueD.size());
     for (auto& b : NewHead.GetBatches()) {
         Y_ABORT_UNLESS(b.Packed);
-        PQ_LOG_D("new batch: " << b.ToString());
         b.SerializeTo(valueD);
         PendingWriteTimestamp = std::max(PendingWriteTimestamp, b.GetEndWriteTimestamp());
     }
-    PQ_LOG_D("valueD.size=" << valueD.size());
 
     Y_ABORT_UNLESS(res.second >= valueD.size());
 
@@ -1462,12 +1454,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
 
     Y_ABORT_UNLESS(res.second == valueD.size() || res.first.IsHead());
 
-    try {
-        TClientBlob::CheckBlob(key, valueD);
-    } catch (const TBlobException &ex) {
-        PQ_LOG_D("TClientBlob::CheckBlob failed. key=" << key.ToString());
-        throw;
-    }
+    TClientBlob::CheckBlob(key, valueD);
 
     auto write = request->Record.AddCmdWrite();
     write->SetKey(key.Data(), key.Size());

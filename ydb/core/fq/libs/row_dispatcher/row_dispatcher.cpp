@@ -1,4 +1,5 @@
 #include "row_dispatcher.h"
+#include "common.h"
 #include "coordinator.h"
 
 #include <ydb/library/actors/core/actorid.h>
@@ -214,7 +215,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
     NConfig::TRowDispatcherConfig Config;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
-    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
+    IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     TYqSharedResources::TPtr YqSharedResources;
     TMaybe<TActorId> CoordinatorActorId;
     TSet<TActorId> CoordinatorChangedSubscribers;
@@ -362,7 +363,7 @@ TRowDispatcher::TRowDispatcher(
     const NYql::IPqGateway::TPtr& pqGateway)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
-    , PureCalcProgramFactory(NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions()))
+    , PureCalcProgramFactory(CreatePureCalcProgramFactory())
     , YqSharedResources(yqSharedResources)
     , CredentialsFactory(credentialsFactory)
     , LogPrefix("RowDispatcher: ")

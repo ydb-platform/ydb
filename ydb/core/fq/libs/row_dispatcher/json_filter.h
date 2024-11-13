@@ -1,7 +1,8 @@
 #pragma once
 
+#include "common.h"
+
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/public/purecalc/common/fwd.h>
 
 namespace NFq {
 
@@ -15,7 +16,8 @@ public:
         const TVector<TString>& types,
         const TString& whereFilter,
         TCallback callback,
-        NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory);
+        IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
+        const IPureCalcProgramFactory::TSettings& factorySettings);
 
     ~TJsonFilter();
 
@@ -32,6 +34,7 @@ std::unique_ptr<TJsonFilter> NewJsonFilter(
     const TVector<TString>& types,
     const TString& whereFilter,
     TJsonFilter::TCallback callback,
-    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory);
+    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
+    const IPureCalcProgramFactory::TSettings& factorySettings);
 
 } // namespace NFq

@@ -211,7 +211,7 @@ public:
 
                 if (const auto& types = State_->Types) {
                     if (const auto& optLLVM = types->OptLLVM) {
-                        srcDesc.SetEnabledLLVM(!optLLVM->Empty() && *optLLVM != "OFF");
+                        srcDesc.SetEnabledLLVM(!optLLVM->empty() && *optLLVM != "OFF");
                     }
                 }
 

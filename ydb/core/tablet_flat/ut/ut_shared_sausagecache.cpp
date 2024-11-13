@@ -1,6 +1,7 @@
 #include "flat_executor_ut_common.h"
 
 #include <util/system/sanitizers.h>
+#include <ydb/core/base/counters.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -106,6 +107,10 @@ struct TTxReadRow : public ITransaction {
     }
 };
 
+THolder<TSharedPageCacheCounters> GetSharedPageCounters(TMyEnvBase& env) {
+    return MakeHolder<TSharedPageCacheCounters>(GetServiceCounters(env->GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
+};
+
 void LogCounters(TIntrusivePtr<TSharedPageCacheCounters> counters) {
     Cerr << "Counters: Active:" << counters->ActiveBytes->Val() << "/" << counters->ActiveLimitBytes->Val() 
         << ", Passive:" << counters->PassiveBytes->Val() 
@@ -138,7 +143,7 @@ void SwitchPolicy(TMyEnvBase& env, NKikimrSharedCache::TReplacementPolicy policy
 
 Y_UNIT_TEST(Limits) {
     TMyEnvBase env;
-    auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+    auto counters = GetSharedPageCounters(env);
 
     bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
     ui32 passiveBytes = bTreeIndex ? 131 : 7772;
@@ -203,7 +208,7 @@ Y_UNIT_TEST(Limits) {
 
 Y_UNIT_TEST(ThreeLeveledLRU) {
     TMyEnvBase env;
-    auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+    auto counters = GetSharedPageCounters(env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
@@ -301,7 +306,7 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
 
 Y_UNIT_TEST(S3FIFO) {
     TMyEnvBase env;
-    auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+    auto counters = GetSharedPageCounters(env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
@@ -399,7 +404,7 @@ Y_UNIT_TEST(S3FIFO) {
 
 Y_UNIT_TEST(ClockPro) {
     TMyEnvBase env;
-    auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+    auto counters = GetSharedPageCounters(env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
@@ -511,7 +516,7 @@ Y_UNIT_TEST(ClockPro) {
 
 Y_UNIT_TEST(ReplacementPolicySwitch) {
     TMyEnvBase env;
-    auto counters = MakeIntrusive<TSharedPageCacheCounters>(env->GetDynamicCounters());
+    auto counters = GetSharedPageCounters(env);
 
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });

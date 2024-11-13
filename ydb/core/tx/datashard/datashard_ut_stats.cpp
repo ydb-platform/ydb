@@ -373,7 +373,7 @@ Y_UNIT_TEST_SUITE(DataShardStats) {
         }
 
         // each batch ~70KB, ~700KB in total
-        auto counters = MakeIntrusive<TSharedPageCacheCounters>(runtime.GetDynamicCounters());
+        auto counters = MakeHolder<TSharedPageCacheCounters>(GetServiceCounters(runtime.GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"))
         Cerr << "ActiveBytes = " << counters->ActiveBytes->Val() << " PassiveBytes = " << counters->PassiveBytes->Val() << Endl;
         UNIT_ASSERT_LE(counters->ActiveBytes->Val(), 800*1024); // one index
     }

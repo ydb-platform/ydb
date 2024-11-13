@@ -78,8 +78,8 @@ private:
                 nodeIndex);
         }
 
-        SharedPageCacheCounters = MakeIntrusive<TSharedPageCacheCounters>(Runtime->GetDynamicCounters());
-        MemoryControllerCounters = GetServiceCounters(Runtime->GetDynamicCounters(), "utils")->FindSubgroup("component", "memory_controller");
+        SharedPageCacheCounters = MakeHolder<TSharedPageCacheCounters>(GetServiceCounters(Runtime->GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
+        MemoryControllerCounters = GetServiceCounters(Runtime->GetDynamicCounters(), "utils")->GetSubgroup("component", "memory_controller");
 
         Runtime->SetLogPriority(NKikimrServices::MEMORY_CONTROLLER, NLog::PRI_TRACE);
         Runtime->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_TRACE);
@@ -90,7 +90,7 @@ private:
     TIntrusivePtr<TProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 
 public:
-    TIntrusivePtr<TSharedPageCacheCounters> SharedPageCacheCounters;
+    THolder<TSharedPageCacheCounters> SharedPageCacheCounters;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> MemoryControllerCounters;
     TProcessMemoryInfo* ProcessMemoryInfo;
 };

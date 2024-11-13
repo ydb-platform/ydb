@@ -202,6 +202,9 @@ namespace Tests {
         if (Settings->AppConfig->HasResourceBrokerConfig()) {
             app.ResourceBrokerConfig = Settings->AppConfig->GetResourceBrokerConfig();
         }
+        if (Settings->AppConfig->HasSharedCacheConfig()) {
+            app.SharedCacheConfig = Settings->AppConfig->GetSharedCacheConfig();
+        }
 
         if (!Settings->UseRealThreads)
             Runtime->SetRegistrationObserverFunc([](TTestActorRuntimeBase& runtime, const TActorId&, const TActorId& actorId) {

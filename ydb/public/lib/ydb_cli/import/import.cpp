@@ -1,5 +1,6 @@
 #include "import.h"
 
+#include <util/stream/format.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -77,6 +78,10 @@ TStatus WaitForQueue(const size_t maxQueueSize, std::vector<TAsyncStatus>& inFli
     }
 
     return MakeStatus();
+}
+
+TString PrettifyBytes(double bytes) {
+    return ToString(HumanReadableSize(bytes, SF_BYTES));
 }
 
 void InitCsvParser(TCsvParser& parser,
@@ -400,8 +405,8 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
     auto duration = finish - start;
     progressBar.SetProcess(100);
     if (duration.SecondsFloat() > 0) {
-        Cerr << "Elapsed: " << duration.SecondsFloat() << " sec. Total bytes read: " << (ui64)TotalBytesRead << ". Total processing speed: "
-            << (double)TotalBytesRead / duration.SecondsFloat() / 1024 / 1024  << " MB/s." << Endl;
+        std::cerr << "Elapsed: " << std::setprecision(3) << duration.SecondsFloat() << " sec. Total read size: " << PrettifyBytes(TotalBytesRead) << ". Total processing speed: "
+            << PrettifyBytes((double)TotalBytesRead / duration.SecondsFloat())  << "/s." << std::endl;
     }
 
     return MakeStatus(EStatus::SUCCESS);
@@ -435,6 +440,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input,
 
     auto columnTypes = GetColumnTypes();
     ValidateTValueUpsertTable();
+    TInstant fileStartTime = TInstant::Now();
 
     TCsvParser parser;
     bool removeLastDelimiter = false;
@@ -490,7 +496,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input,
 
         if (readBytes >= nextBorder && settings.Verbose_) {
             nextBorder += VerboseModeStepSize;
-            Cerr << "Processed " << 1.0 * readBytes / (1 << 20) << "Mb and " << row + batchRows << " records" << Endl;
+            Cerr << "Processed " << PrettifyBytes(readBytes) << " and " << row + batchRows << " records" << Endl;
         }
 
         if (batchBytes < settings.BytesPerRequest_) {
@@ -523,7 +529,18 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input,
 
     TotalBytesRead += readBytes;
 
-    return WaitForQueue(0, inFlightRequests);
+    auto waitResult = WaitForQueue(0, inFlightRequests);
+    if (settings.Verbose_) {
+        std::stringstream str;
+        double fileProcessingTimeSeconds = (TInstant::Now() - fileStartTime).SecondsFloat();
+        str << std::endl << "File " << filePath << " of " << PrettifyBytes(readBytes)
+            << " processed in " << std::setprecision(3) << fileProcessingTimeSeconds << " sec";
+        if (fileProcessingTimeSeconds > 0) {
+            str << ", " << PrettifyBytes((double)readBytes / fileProcessingTimeSeconds)  << "/s" << std::endl;
+        }
+        std::cerr << str.str();
+    }
+    return waitResult;
 }
 
 TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath,
@@ -585,7 +602,7 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath,
                 if (readBytes >= nextBorder && settings.Verbose_) {
                     nextBorder += VerboseModeStepSize;
                     TStringBuilder builder;
-                    builder << "Processed " << 1.0 * readBytes / (1 << 20) << "Mb and " << idx << " records" << Endl;
+                    builder << "Processed " << PrettifyBytes(readBytes) << " and " << idx << " records" << Endl;
                     Cerr << builder;
                 }
                 if (batchBytes >= settings.BytesPerRequest_) {

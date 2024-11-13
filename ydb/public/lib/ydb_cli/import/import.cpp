@@ -485,7 +485,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input,
 
         buffer.push_back(line);
 
-        if (readBytes >= nextBorder && RetrySettings.Verbose_) {
+        if (readBytes >= nextBorder && settings.Verbose_) {
             nextBorder += VerboseModeReadSize;
             Cerr << "Processed " << 1.0 * readBytes / (1 << 20) << "Mb and " << row + batchRows << " records" << Endl;
         }
@@ -577,7 +577,7 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath,
                 }
                 buffer.push_back(line);
                 ++idx;
-                if (readBytes >= nextBorder && RetrySettings.Verbose_) {
+                if (readBytes >= nextBorder && settings.Verbose_) {
                     nextBorder += VerboseModeReadSize;
                     TStringBuilder builder;
                     builder << "Processed " << 1.0 * readBytes / (1 << 20) << "Mb and " << idx << " records" << Endl;

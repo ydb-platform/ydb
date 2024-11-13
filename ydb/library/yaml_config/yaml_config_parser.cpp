@@ -19,6 +19,16 @@
 
 #include <util/generic/string.h>
 
+template <>
+NKikimrBlobStorage::EPDiskType
+NKikimrConfig::TExtendedHostConfigDrive::TransformTypeToTypeForTHostConfigDrive<const TString, NKikimrBlobStorage::EPDiskType>(const TString* const in) {
+    NKikimrBlobStorage::EPDiskType res{};
+    if (!in || TryFromString(*in, res)) {
+        return res;
+    }
+    Y_ENSURE_BT(false, "Unknown EPDiskType enum value: " << *in);
+}
+
 namespace NKikimr::NYaml {
 
     template<typename T>
@@ -695,49 +705,14 @@ namespace NKikimr::NYaml {
         TMaybe<TString> defaultDiskTypeLower;
         TMaybe<NKikimrBlobStorage::EPDiskType> dtEnum;
 
-        const NKikimrConfig::TBlobStorageConfig::TAutoconfigSettings *autoconf = nullptr;
-        if (config.HasBlobStorageConfig()) {
-            if (const auto& bsConfig = config.GetBlobStorageConfig(); bsConfig.HasAutoconfigSettings()) {
-                autoconf = &bsConfig.GetAutoconfigSettings();
-            }
-        }
-
         if (ephemeralConfig.HasErasure()) {
             erasureName = ephemeralConfig.GetErasure();
-        } else if (autoconf && autoconf->HasErasureSpecies()) {
-            erasureName = autoconf->GetErasureSpecies();
         }
 
         if (ephemeralConfig.HasDefaultDiskType()) {
             defaultDiskType = ephemeralConfig.GetDefaultDiskType();
             Y_ENSURE_BT(NKikimrBlobStorage::EPDiskType_Parse(*defaultDiskType, &dtEnum.ConstructInPlace()),
                 "incorrect enum: " << defaultDiskType);
-        } else if (autoconf) {
-            THashSet<TMaybe<NKikimrBlobStorage::EPDiskType>> options;
-            bool error = false;
-
-            if (autoconf->HasPDiskType()) {
-                options.insert(autoconf->GetPDiskType());
-            }
-
-            for (const auto& filter : autoconf->GetPDiskFilter()) {
-                TMaybe<NKikimrBlobStorage::EPDiskType> type;
-                for (const auto& prop : filter.GetProperty()) {
-                    if (prop.HasType()) {
-                        if (type) { // two Type values in single filter
-                            error = true;
-                        } else {
-                            type = prop.GetType();
-                        }
-                    }
-                }
-                options.insert(type);
-            }
-
-            if (options.size() == 1 && !error) {
-                dtEnum = *options.begin();
-                defaultDiskType = NKikimrBlobStorage::EPDiskType_Name(*dtEnum);
-            }
         }
 
         if (defaultDiskType) {
@@ -763,6 +738,15 @@ namespace NKikimr::NYaml {
                 auto& filter = *poolConfig.AddPDiskFilter();
                 auto& prop = *filter.AddProperty();
                 prop.SetType(*dtEnum);
+
+                if (!poolConfig.HasGeometry()) {
+                    // mirror-3-dc-3-nodes case
+                    if (ephemeralConfig.GetStaticErasure() == "mirror-3-dc" && \
+                        ephemeralConfig.HostsSize() == 3) {
+                        poolConfig.MutableGeometry()->SetDomainLevelEnd(256);
+                    }
+                }
+
             }
         } else {
             auto& domainsConfig = *config.MutableDomainsConfig();
@@ -1103,18 +1087,33 @@ namespace NKikimr::NYaml {
     }
 
     void PrepareBlobStorageConfig(NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
-        if (!config.HasBlobStorageConfig()) {
-            return;
-        }
         auto* bsConfig = config.MutableBlobStorageConfig();
 
-        if (!bsConfig->HasAutoconfigSettings()) {
+        if (bsConfig && bsConfig->HasServiceSet()) {  // no autoconfig
             return;
         }
-        auto* autoconfigSettings = bsConfig->MutableAutoconfigSettings();
 
+        bsConfig->MutableServiceSet()->AddAvailabilityDomains(1);
+
+        auto* autoconfigSettings = bsConfig->MutableAutoconfigSettings();
         autoconfigSettings->ClearDefineHostConfig();
         autoconfigSettings->ClearDefineBox();
+
+        if (!autoconfigSettings->HasErasureSpecies()) {
+            autoconfigSettings->SetErasureSpecies(ephemeralConfig.GetStaticErasure());
+        }
+        if (!autoconfigSettings->PDiskFilterSize()) {
+            const TString defaultDiskType(ephemeralConfig.GetDefaultDiskType());
+            auto pdiskType = NKikimrConfig::TExtendedHostConfigDrive::TransformTypeToTypeForTHostConfigDrive<const TString, NKikimrBlobStorage::EPDiskType>(&defaultDiskType);
+            autoconfigSettings->AddPDiskFilter()->AddProperty()->SetType(pdiskType);
+        }
+        if (!autoconfigSettings->HasGeometry()) {
+            // mirror-3-dc-3-nodes case
+            if (ephemeralConfig.GetStaticErasure() == "mirror-3-dc" && \
+                ephemeralConfig.HostsSize() == 3) {
+                autoconfigSettings->MutableGeometry()->SetDomainLevelEnd(256);
+            }
+        }
 
         bool hostConfigIdAssigned = false;
         bool hostConfigIdProvided = false;
@@ -1462,13 +1461,3 @@ namespace NKikimr::NYaml {
     }
 
 } // NKikimr::NYaml
-
-template <>
-NKikimrBlobStorage::EPDiskType
-NKikimrConfig::TExtendedHostConfigDrive::TransformTypeToTypeForTHostConfigDrive<const TString, NKikimrBlobStorage::EPDiskType>(const TString* const in) {
-    NKikimrBlobStorage::EPDiskType res{};
-    if (!in || TryFromString(*in, res)) {
-        return res;
-    }
-    Y_ENSURE_BT(false, "Unknown EPDiskType enum value: " << *in);
-}

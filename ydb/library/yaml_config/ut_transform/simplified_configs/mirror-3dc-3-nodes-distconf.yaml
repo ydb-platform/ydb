@@ -1,0 +1,36 @@
+# YDB configuration options and their values
+# are described in documentaion https://ydb.tech/en/docs/deploy/configuration/config
+
+# erasure is the parameter that
+# describes the fault tolerance mode of the
+# cluster. See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
+erasure: mirror-3-dc
+host_configs: # the list of available host configurations in the cluster.
+- host_config_id: 1
+  drive:
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_01    # path of the first disk in the host configration.
+    type: SSD                                       # kind of the disk: available kinds are SSD, NVME, HDD
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
+    type: SSD
+  - path: /dev/disk/by-partlabel/ydb_disk_ssd_03
+    type: SSD
+hosts:
+- host: ydb-node-zone-a.local       # storage node DNS name
+  host_config_id: 1                 # numeric host configuration template identifier
+  location:                         # this parameter describes where host is located.
+    data_center: 'zone-a'           # string representing the datacenter / availability zone where the host is located
+- host: ydb-node-zone-b.local
+  host_config_id: 1
+  location:
+    data_center: 'zone-b'
+- host: ydb-node-zone-c.local
+  host_config_id: 1
+  location:
+    data_center: 'zone-c'
+tls:
+  cert: "/opt/ydb/certs/node.crt"
+  key: "/opt/ydb/certs/node.key"
+  ca: "/opt/ydb/certs/ca.crt"
+grpc_config:
+  services_enabled:
+  - legacy

@@ -601,12 +601,14 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr&
 
         for (auto partitionId : p.GetPartitionId()) {
             SRC_LOG_D("   partitionId:" << partitionId);
-            if (!Sessions.contains(partitionId)) { // TODO// TODO
-                Sessions.emplace(
-                    std::piecewise_construct,
-                    std::forward_as_tuple(partitionId),
-                    std::forward_as_tuple(TxId, SelfId(), rowDispatcherActorId, partitionId, partitionId, ++NextGeneration));
+            if (Sessions.contains(partitionId)) {
+                Stop("Internal error: session already exists");
+                return;
             }
+            Sessions.emplace(
+                std::piecewise_construct,
+                std::forward_as_tuple(partitionId),
+                std::forward_as_tuple(TxId, SelfId(), rowDispatcherActorId, partitionId, partitionId, ++NextGeneration));
         }
     }
     ProcessState();

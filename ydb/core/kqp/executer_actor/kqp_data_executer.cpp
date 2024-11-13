@@ -191,6 +191,7 @@ public:
 
     bool ForceAcquireSnapshot() const {
         const bool forceSnapshot = (
+            !GetSnapshot().IsValid() &&
             ReadOnlyTx &&
             !ImmediateTx &&
             !HasPersistentChannels &&

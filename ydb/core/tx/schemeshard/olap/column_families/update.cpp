@@ -16,7 +16,7 @@ NKikimr::TConclusion<NKikimrSchemeOp::TOlapColumn::TSerializer> ConvertFamilyDes
     }
     auto codec = NArrow::CompressionFromProto(familyDescription.GetColumnCodec());
     if (!codec.has_value()) {
-        return NKikimr::TConclusionStatus::Fail(TStringBuilder() << "family `" << familyDescription.GetName() << "`: unknow codec");
+        return NKikimr::TConclusionStatus::Fail(TStringBuilder() << "family `" << familyDescription.GetName() << "`: unknown codec");
     }
     if (familyDescription.HasColumnCodecLevel() && !NArrow::SupportsCompressionLevel(codec.value())) {
         return NKikimr::TConclusionStatus::Fail(TStringBuilder() << "family `" << familyDescription.GetName() << "`: codec `"
@@ -59,7 +59,7 @@ NKikimr::TConclusion<NKikimrSchemeOp::TFamilyDescription> ConvertSerializerConta
             result.SetColumnCodecLevel(level.value());
         }
     } else {
-        return NKikimr::TConclusionStatus::Fail("convert TSerializerContainer to TFamilyDescription: Unknow value in field `ClassName`");
+        return NKikimr::TConclusionStatus::Fail("convert TSerializerContainer to TFamilyDescription: Unknown value in field `ClassName`");
     }
     return result;
 }

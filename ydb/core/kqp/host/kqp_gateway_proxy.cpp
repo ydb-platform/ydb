@@ -393,7 +393,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
     for (const auto& family : metadata.ColumnFamilies) {
         if (family.Data.Defined()) {
             code = Ydb::StatusIds::BAD_REQUEST;
-            error = "Field `DATA` is not supported for OLAP tables";
+            error = TStringBuilder() << "Field `DATA` is not supported for OLAP tables in column family '" << family.Name << "'";
             return false;
         }
         auto columnFamilyIt = columnFamiliesByName.find(family.Name);
@@ -460,7 +460,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
                 auto columnFamilyIdIt = columnFamiliesByName.find(columnFamilyName);
                 if (columnFamilyIdIt.IsEnd()) {
                     code = Ydb::StatusIds::BAD_REQUEST;
-                    error = TStringBuilder() << " Unknow column family `" << columnFamilyName << "` for column `" << columnDesc.GetName() << "`";
+                    error = TStringBuilder() << "Unknown column family `" << columnFamilyName << "` for column `" << columnDesc.GetName() << "`";
                     return false;
                 }
                 columnFamilyId = columnFamilyIdIt->second;
@@ -2037,7 +2037,7 @@ public:
 
             if (!settings.ColumnFamilies.empty()) {
                 IKqpGateway::TGenericResult errResult;
-                errResult.AddIssue(NYql::TIssue("TableStore is not support Column Family"));
+                errResult.AddIssue(NYql::TIssue("TableStore does not support column families"));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
                 return MakeFuture(std::move(errResult));
             }

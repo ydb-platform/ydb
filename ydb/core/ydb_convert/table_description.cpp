@@ -789,7 +789,7 @@ bool FillColumnFamily(
     to->SetName(from.name());
     if (from.has_data()) {
         status = Ydb::StatusIds::BAD_REQUEST;
-        error = "Field `DATA` is not supported for OLAP tables";
+        error = TStringBuilder() << "Field `DATA` is not supported for OLAP tables in column family '" << from.name() << "'";
         return false;
     }
     switch (from.compression()) {

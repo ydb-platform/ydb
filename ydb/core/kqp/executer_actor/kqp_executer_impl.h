@@ -1066,10 +1066,19 @@ protected:
                 if (lhs.Ranges->GetRightBorder().first->GetCells().empty() || rhs.Ranges->GetRightBorder().first->GetCells().empty()) {
                     return !lhs.Ranges->GetRightBorder().first->GetCells().empty();
                 }
-                return CompareTypedCellVectors(
+
+                const size_t size = std::min(lhs.Ranges->GetRightBorder().first->GetCells().size(), rhs.Ranges->GetRightBorder().first->GetCells().size());
+                YQL_ENSURE(size <= keyTypes.size());
+                int result = CompareTypedCellVectors(
                     lhs.Ranges->GetRightBorder().first->GetCells().data(),
                     rhs.Ranges->GetRightBorder().first->GetCells().data(),
-                    keyTypes.data(), keyTypes.size()) < 0;
+                    keyTypes.data(), size);
+
+                if (result != 0) {
+                    return result < 0;
+                }
+
+                return lhs.Ranges->GetRightBorder().first->GetCells().size() > rhs.Ranges->GetRightBorder().first->GetCells().size();
             });
 
         // One shard (ranges set) can be assigned only to one task. Otherwise, we can break some optimizations like removing unnecessary shuffle.

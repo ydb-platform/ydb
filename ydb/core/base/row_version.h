@@ -3,6 +3,10 @@
 #include <util/system/types.h>
 #include <util/generic/ylimits.h>
 
+namespace NKikimrProto {
+    class TRowVersion;
+}
+
 namespace NKikimr {
 
     /**
@@ -70,6 +74,9 @@ namespace NKikimr {
             TRowVersion copy = *this;
             return ++copy;
         }
+
+        static TRowVersion Parse(const NKikimrProto::TRowVersion& proto);
+        void Serialize(NKikimrProto::TRowVersion& proto) const;
 
         friend constexpr bool operator==(const TRowVersion& a, const TRowVersion& b) {
             return a.Step == b.Step && a.TxId == b.TxId;

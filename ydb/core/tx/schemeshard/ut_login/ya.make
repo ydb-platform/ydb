@@ -19,7 +19,8 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
     ydb/library/login
-    ydb/library/yql/public/udf/service/exception_policy
+    ydb/library/testlib/service_mocks/ldap_mock
+    yql/essentials/public/udf/service/exception_policy
 )
 
 YQL_LAST_ABI_VERSION()

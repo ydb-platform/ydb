@@ -3,10 +3,10 @@
 #include <algorithm>
 #include <queue>
 
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/public/udf/udf_value.h>
 
 #include <util/generic/bitops.h>
 #include <util/generic/buffer.h>
@@ -236,7 +236,7 @@ TTupleLayoutFallback<TTraits>::TTupleLayoutFallback(
 
     size_t fixed_cols_left =
         KeyColumnsFixedNum +
-        std::accumulate(PayloadColumns.begin(), PayloadColumns.end(), size_t(0),
+        std::accumulate(PayloadColumns.begin(), PayloadColumns.end(), 0ul,
                         [](size_t prev, const auto &col) {
                             return prev +
                                    (col.SizeType == EColumnSizeType::Fixed);
@@ -291,13 +291,13 @@ TTupleLayoutFallback<TTraits>::TTupleLayoutFallback(
                     next_cols.pop();
                 }
 
-                simd_desc.InnerLoopIters = std::min<size_t>(
-                    kSIMDMaxInnerLoopSize,
+                simd_desc.InnerLoopIters = std::min(
+                    size_t(kSIMDMaxInnerLoopSize),
                     (TSimd<ui8>::SIZE / col_max_size) /
-                        std::max<size_t>(1, TSimd<ui8>::SIZE / TotalRowSize));
+                        std::max(size_t(1u), size_t(TSimd<ui8>::SIZE / TotalRowSize)));
 
                 const auto tuples_per_register =
-                    std::max<size_t>(1, TSimd<ui8>::SIZE / TotalRowSize);
+                    std::max(1u, TSimd<ui8>::SIZE / TotalRowSize);
 
                 for (ui8 col_ind = 0; col_ind != simd_desc.Cols; ++col_ind) {
                     const auto &col_desc = col_descs[col_ind];
@@ -637,7 +637,7 @@ void TTupleLayoutFallback<TTraits>::Pack(
     }
 
     for (size_t row_ind = 0; row_ind < count; row_ind += BlockRows_) {
-        const size_t cur_block_size = std::min<size_t>(count - row_ind, BlockRows_);
+        const size_t cur_block_size = std::min(count - row_ind, BlockRows_);
         size_t cols_past = 0;
 
         for (const auto &simd_block : SIMDBlock_) {
@@ -671,7 +671,7 @@ void TTupleLayoutFallback<TTraits>::Pack(
 
         for (ui32 cols_ind = 0; cols_ind < Columns.size(); cols_ind += 8) {
             const ui8 *bitmasks[8];
-            const size_t cols = std::min<size_t>(8, Columns.size() - cols_ind);
+            const size_t cols = std::min<size_t>(8ul, Columns.size() - cols_ind);
             for (size_t ind = 0; ind != cols; ++ind) {
                 const auto &col = Columns[cols_ind + ind];
                 bitmasks[ind] = isValidBitmask[col.OriginalIndex] + start / 8;
@@ -689,7 +689,7 @@ void TTupleLayoutFallback<TTraits>::Pack(
             };
 
             const size_t first_full_byte =
-                std::min<size_t>((8 - start) & 7, cur_block_size);
+                std::min<size_t>((8ul - start) & 7, cur_block_size);
             size_t block_row_ind = 0;
 
             const auto simple_mask_transpose = [&](const size_t until) {
@@ -816,7 +816,7 @@ void TTupleLayoutFallback<TTraits>::Unpack(
     }
 
     for (size_t row_ind = 0; row_ind < count; row_ind += BlockRows_) {
-        const size_t cur_block_size = std::min<size_t>(count - row_ind, BlockRows_);
+        const size_t cur_block_size = std::min(count - row_ind, BlockRows_);
         size_t cols_past = 0;
 
         for (const auto &simd_block : SIMDBlock_) {
@@ -850,7 +850,7 @@ void TTupleLayoutFallback<TTraits>::Unpack(
 
         for (ui32 cols_ind = 0; cols_ind < Columns.size(); cols_ind += 8) {
             ui8 *bitmasks[8];
-            const size_t cols = std::min<size_t>(8, Columns.size() - cols_ind);
+            const size_t cols = std::min<size_t>(8ul, Columns.size() - cols_ind);
             for (size_t ind = 0; ind != cols; ++ind) {
                 const auto &col = Columns[cols_ind + ind];
                 bitmasks[ind] = isValidBitmask[col.OriginalIndex] + start / 8;
@@ -867,7 +867,7 @@ void TTupleLayoutFallback<TTraits>::Unpack(
             };
 
             const size_t first_full_byte =
-                std::min<size_t>((8 - start) & 7, cur_block_size);
+                std::min<size_t>((8ul - start) & 7, cur_block_size);
             size_t block_row_ind = 0;
 
             const auto simple_mask_transpose = [&](const size_t until) {

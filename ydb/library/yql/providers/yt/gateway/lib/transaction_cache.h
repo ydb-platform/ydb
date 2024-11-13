@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/providers/yt/common/yql_yt_settings.h>
 
-#include <ydb/library/yql/core/file_storage/storage.h>
+#include <yql/essentials/core/file_storage/storage.h>
 
 #include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/cpp/mapreduce/interface/fwd.h>
@@ -119,6 +119,7 @@ public:
         void UpdateColumnarStat(NYT::TRichYPath ytPath, const NYT::TTableColumnarStatistics& columnStat, bool extended = false);
 
         std::pair<TString, NYT::TTransactionId> GetBinarySnapshot(TString remoteTmpFolder, const TString& md5, const TString& localPath, TDuration expirationInterval);
+        TMaybe<std::pair<TString, NYT::TTransactionId>> GetBinarySnapshotFromCache(TString binaryCacheFolder, const TString& md5, const TString& fileName);
 
         void CreateDefaultTmpFolder();
 

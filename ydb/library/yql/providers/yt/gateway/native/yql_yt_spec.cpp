@@ -1,8 +1,8 @@
 #include "yql_yt_spec.h"
 
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
@@ -558,14 +558,7 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
         }
     }
 
-    const TString binTmpFolder = settings->BinaryTmpFolder.Get().GetOrElse(TString());
-    if (!localRun && binTmpFolder) {
-        const TDuration binExpiration = settings->BinaryExpirationInterval.Get().GetOrElse(TDuration());
-        TTransactionCache::TEntry::TPtr entry = execCtx.GetOrCreateEntry(settings);
-        TString bin = mrJobBin.empty() ? GetPersistentExecPath() : mrJobBin;
-        const auto binSize = TFileStat(bin).Size;
-        YQL_ENSURE(binSize != 0);
-
+    if (!localRun) {
         if (mrJobBin.empty()) {
             mrJobBinMd5 = GetPersistentExecPathMd5();
         } else if (!mrJobBinMd5) {
@@ -576,10 +569,33 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
                 mrJobBinMd5 = MD5::File(mrJobBin);
             }
         }
+    }
 
-        auto mrJobSnapshot = entry->GetBinarySnapshot(binTmpFolder, *mrJobBinMd5, bin, binExpiration);
-        spec.JobBinaryCypressPath(mrJobSnapshot.first, mrJobSnapshot.second);
+    const TString binTmpFolder = settings->BinaryTmpFolder.Get().GetOrElse(TString());
+    const TString binCacheFolder = settings->BinaryCacheFolder.Get().GetOrElse(TString());
+    if (!localRun && (binTmpFolder || binCacheFolder)) {
+        TString bin = mrJobBin.empty() ? GetPersistentExecPath() : mrJobBin;
+        const auto binSize = TFileStat(bin).Size;
+        YQL_ENSURE(binSize != 0);
         fileMemUsage += binSize;
+        TTransactionCache::TEntry::TPtr entry = execCtx.GetOrCreateEntry(settings);
+        bool useBinCache = false;
+        if (binCacheFolder) {
+            if (auto snapshot = entry->GetBinarySnapshotFromCache(binCacheFolder, *mrJobBinMd5, "mrjob")) {
+                spec.JobBinaryCypressPath(snapshot->first, snapshot->second);
+                useBinCache = true;
+            }
+        }
+        if (!useBinCache) {
+            if (binTmpFolder) {
+                const TDuration binExpiration = settings->BinaryExpirationInterval.Get().GetOrElse(TDuration());
+                auto mrJobSnapshot = entry->GetBinarySnapshot(binTmpFolder, *mrJobBinMd5, bin, binExpiration);
+                spec.JobBinaryCypressPath(mrJobSnapshot.first, mrJobSnapshot.second);
+            } else if (!mrJobBin.empty()) {
+                spec.JobBinaryLocalPath(mrJobBin, mrJobBinMd5);
+            }
+
+        }
     }
     else if (!mrJobBin.empty()) {
         const auto binSize = TFileStat(mrJobBin).Size;

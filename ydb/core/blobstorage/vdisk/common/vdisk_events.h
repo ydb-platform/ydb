@@ -3073,6 +3073,15 @@ namespace NKikimr {
             TLogoBlobID BlobId; // for HugeBlob/InplaceBlob
             ui64 SstId; // for IndexRecord
             ui32 Level; // for IndexRecord
+
+            TString ToString() const {
+                return TStringBuilder() << "{Location# " << Location.ToString()
+                    << " Database# " << (int)Database
+                    << " RecordType# " << (int)RecordType
+                    << " BlobId# " << BlobId.ToString()
+                    << " SstId# " << SstId
+                    << " Level# " << Level << '}';
+            }
         };
 
         std::vector<TLayoutRecord> Layout;

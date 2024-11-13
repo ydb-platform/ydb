@@ -9,7 +9,7 @@
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 

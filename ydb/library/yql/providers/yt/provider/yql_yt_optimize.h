@@ -5,9 +5,9 @@
 
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>

@@ -1,4 +1,4 @@
-item_id,sr_item_qty,sr_dev,cr_item_qty,cr_dev,wr_item_qty,wr_dev,average
+sr_items.item_id,sr_item_qty,sr_dev,cr_item_qty,cr_dev,wr_item_qty,wr_dev,average
 AAAAAAAAANECAAAA,34,18.579235,9,4.91803279,18,9.83606557,20.3333333
 AAAAAAAACAOBAAAA,27,11.6883117,38,16.4502165,12,5.19480519,25.6666667
 AAAAAAAACBNDAAAA,38,11.6207951,52,15.9021407,19,5.81039755,36.3333333

@@ -1,7 +1,7 @@
 #include "read_attributes_utils.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <library/cpp/testing/gmock_in_unittest/gmock.h>
 

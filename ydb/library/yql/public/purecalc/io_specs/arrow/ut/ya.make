@@ -5,7 +5,7 @@ SIZE(MEDIUM)
 TIMEOUT(300)
 
 PEERDIR(
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
     ydb/library/yql/public/purecalc
     ydb/library/yql/public/purecalc/io_specs/arrow
     ydb/library/yql/public/purecalc/ut/lib

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <util/generic/strbuf.h>
 #include <util/generic/vector.h>

@@ -2,11 +2,11 @@
 
 #include "yql_yt_provider.h"
 
-#include <ydb/library/yql/providers/common/transform/yql_visit.h>
-#include <ydb/library/yql/providers/common/transform/yql_exec.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
+#include <yql/essentials/providers/common/transform/yql_exec.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 
 #include <util/generic/ptr.h>

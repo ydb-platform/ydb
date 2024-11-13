@@ -3,9 +3,9 @@
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 

@@ -204,17 +204,16 @@ public:
         std::optional<NCompression::ECodec> bodyCodecId;
         NCompression::ECodec attachmentCodecId;
         if (requestHeader.has_request_codec()) {
-            int intCodecId = requestHeader.request_codec();
-            NCompression::ECodec codecId;
-            if (!TryEnumCast(intCodecId, &codecId)) {
+            auto codecId = TryCheckedEnumCast<NCompression::ECodec>(requestHeader.request_codec());
+            if (!codecId) {
                 underlyingContext->Reply(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Request codec %v is not supported",
-                    intCodecId));
+                    requestHeader.request_codec()));
                 return false;
             }
-            bodyCodecId = codecId;
-            attachmentCodecId = codecId;
+            bodyCodecId = *codecId;
+            attachmentCodecId = *codecId;
         } else {
             bodyCodecId = std::nullopt;
             attachmentCodecId = NCompression::ECodec::None;
@@ -342,13 +341,12 @@ protected:
         underlyingContext->SetResponseBodySerializedWithCompression();
 
         if (requestHeader.has_response_format()) {
-            int intFormat = requestHeader.response_format();
-            EMessageFormat format;
-            if (!TryEnumCast(intFormat, &format)) {
+            auto format = TryCheckedEnumCast<EMessageFormat>(requestHeader.response_format());
+            if (!format) {
                 THROW_ERROR_EXCEPTION(
                     EErrorCode::ProtocolError,
                     "Message format %v is not supported",
-                    intFormat);
+                    requestHeader.response_format());
             }
 
             NYson::TYsonString formatOptionsYson;
@@ -356,10 +354,10 @@ protected:
                 formatOptionsYson = NYson::TYsonString(requestHeader.response_format_options());
             }
 
-            if (format != EMessageFormat::Protobuf) {
+            if (*format != EMessageFormat::Protobuf) {
                 serializedBody = ConvertMessageToFormat(
                     serializedBody,
-                    format,
+                    *format,
                     NYson::ReflectProtobufMessageType<TResponseMessage>(),
                     formatOptionsYson);
             }
@@ -666,11 +664,12 @@ protected:
         TMethodDescriptor SetHandleMethodError(bool value) const;
     };
 
-    struct TErrorCodeCounter
+    class TErrorCodeCounters
     {
-        explicit TErrorCodeCounter(NProfiling::TProfiler profiler);
+    public:
+        explicit TErrorCodeCounters(NProfiling::TProfiler profiler);
 
-        void Increment(TErrorCode code);
+        NProfiling::TCounter* GetCounter(TErrorCode code);
 
     private:
         const NProfiling::TProfiler Profiler_;
@@ -726,7 +725,7 @@ protected:
         NProfiling::TCounter ResponseMessageAttachmentSizeCounter;
 
         //! Counts the number of errors, per error code.
-        TErrorCodeCounter ErrorCodeCounter;
+        TErrorCodeCounters ErrorCodeCounters;
     };
 
     using TMethodPerformanceCountersPtr = TIntrusivePtr<TMethodPerformanceCounters>;
@@ -764,7 +763,7 @@ protected:
 
         NProfiling::TCounter RequestQueueSizeLimitErrorCounter;
         NProfiling::TCounter RequestQueueByteSizeLimitErrorCounter;
-        NProfiling::TCounter UnauthenticatedRequestsCounter;
+        NProfiling::TCounter UnauthenticatedRequestCounter;
 
         std::atomic<NLogging::ELogLevel> LogLevel = {};
         std::atomic<TDuration> LoggingSuppressionTimeout = {};
@@ -772,13 +771,24 @@ protected:
         using TNonowningPerformanceCountersKey = std::tuple<TStringBuf, TRequestQueue*>;
         using TOwningPerformanceCountersKey = std::tuple<TString, TRequestQueue*>;
         using TPerformanceCountersKeyHash = THash<TNonowningPerformanceCountersKey>;
-        struct TPerformanceCountersKeyEquals;
+
+        struct TPerformanceCountersKeyEquals
+        {
+            bool operator()(
+                const TNonowningPerformanceCountersKey& lhs,
+                const TNonowningPerformanceCountersKey& rhs) const;
+            bool operator()(
+                const TOwningPerformanceCountersKey& lhs,
+                const TNonowningPerformanceCountersKey& rhs) const;
+        };
+
         using TPerformanceCountersMap = NConcurrency::TSyncMap<
             TOwningPerformanceCountersKey,
             TMethodPerformanceCountersPtr,
             TPerformanceCountersKeyHash,
             TPerformanceCountersKeyEquals
         >;
+
         TPerformanceCountersMap PerformanceCountersMap;
         TMethodPerformanceCountersPtr BasePerformanceCounters;
         TMethodPerformanceCountersPtr RootPerformanceCounters;
@@ -798,16 +808,9 @@ protected:
         : public TRefCounted
     {
     public:
-        explicit TPerformanceCounters(const NProfiling::TProfiler& profiler)
-            : Profiler_(profiler.WithHot().WithSparse())
-        { }
+        explicit TPerformanceCounters(const NProfiling::TProfiler& profiler);
 
-        void IncrementRequestsPerUserAgent(TStringBuf userAgent)
-        {
-            RequestsPerUserAgent_.FindOrInsert(userAgent, [&] {
-                return Profiler_.WithRequiredTag("user_agent", TString(userAgent)).Counter("/user_agent");
-            }).first->Increment();
-        }
+        NProfiling::TCounter* GetRequestsPerUserAgentCounter(TStringBuf userAgent);
 
     private:
         const NProfiling::TProfiler Profiler_;
@@ -855,10 +858,10 @@ protected:
 
     //! Returns a (non-owning!) pointer to TRuntimeMethodInfo for a given method's name
     //! or |nullptr| if no such method is registered.
-    TRuntimeMethodInfo* FindMethodInfo(const TString& method);
+    TRuntimeMethodInfo* FindMethodInfo(TStringBuf method);
 
     //! Similar to #FindMethodInfo but throws if no method is found.
-    TRuntimeMethodInfo* GetMethodInfoOrThrow(const TString& method);
+    TRuntimeMethodInfo* GetMethodInfoOrThrow(TStringBuf method);
 
     //! Returns the default invoker passed during construction.
     const IInvokerPtr& GetDefaultInvoker() const;
@@ -905,12 +908,9 @@ protected:
     virtual std::optional<TError> GetThrottledError(const NProto::TRequestHeader& requestHeader);
 
 protected:
-    void ReplyError(
-        TError error,
-        const NProto::TRequestHeader& header,
-        const NYT::NBus::IBusPtr& replyBus);
-
-    virtual void OnMethodError(const TError& error, const TString& method);
+    virtual void OnMethodError(
+        const TError& error,
+        const TString& method);
 
 private:
     friend class TRequestQueue;
@@ -996,17 +996,24 @@ private:
     THashMap<TString, TDiscoverRequestSet> DiscoverRequestsByPayload_;
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, DiscoverRequestsByPayloadLock_);
 
-    TPerformanceCountersPtr PerformanceCounters_;
+    const TPerformanceCountersPtr PerformanceCounters_;
+    const TMethodPerformanceCountersPtr UnknownMethodPerformanceCounters_;
 
-    struct TAcceptedRequest
+    struct TIncomingRequest
     {
+        TInstant ArriveInstant;
         TRequestId RequestId;
         NYT::NBus::IBusPtr ReplyBus;
-        TRuntimeMethodInfo* RuntimeInfo;
+        TRuntimeMethodInfo* RuntimeInfo = nullptr;
         NTracing::TTraceContextPtr TraceContext;
         std::unique_ptr<NRpc::NProto::TRequestHeader> Header;
+        TStringBuf UserAgent;
+        TStringBuf Method;
+        TStringBuf User;
+        TStringBuf UserTag;
         TSharedRefArray Message;
-        TRequestQueue* RequestQueue;
+        TRequestQueue* RequestQueue = nullptr;
+        TMethodPerformanceCounters* MethodPerformanceCounters = nullptr;
         std::optional<TError> ThrottledError;
         TMemoryUsageTrackerGuard MemoryGuard;
         IMemoryUsageTrackerPtr MemoryUsageTracker;
@@ -1021,19 +1028,18 @@ private:
     void OnRequestTimeout(TRequestId requestId, ERequestProcessingStage stage, bool aborted);
     void OnReplyBusTerminated(const NYT::TWeakPtr<NYT::NBus::IBus>& busWeak, const TError& error);
 
+    void DoHandleRequest(TIncomingRequest&& incomingRequest);
+    void ReplyError(TError error, TIncomingRequest&& incomingRequest);
     void OnRequestAuthenticated(
         const NProfiling::TWallTimer& timer,
-        TAcceptedRequest&& acceptedRequest,
+        TIncomingRequest&& incomingRequest,
         const TErrorOr<TAuthenticationResult>& authResultOrError);
-    bool IsAuthenticationNeeded(const TAcceptedRequest& acceptedRequest);
-    void HandleAuthenticatedRequest(TAcceptedRequest&& acceptedRequest);
+    bool IsAuthenticationNeeded(const TIncomingRequest& incomingRequest);
+    void HandleAuthenticatedRequest(TIncomingRequest&& incomingRequest);
 
     TRequestQueue* GetRequestQueue(
         TRuntimeMethodInfo* runtimeInfo,
         const NRpc::NProto::TRequestHeader& requestHeader);
-    void RegisterRequestQueue(
-        TRuntimeMethodInfo* runtimeInfo,
-        TRequestQueue* requestQueue);
     void ConfigureRequestQueue(
         TRuntimeMethodInfo* runtimeInfo,
         TRequestQueue* requestQueue,
@@ -1056,14 +1062,14 @@ private:
     std::vector<TStreamingPayload> GetAndErasePendingPayloads(TRequestId requestId);
     void OnPendingPayloadsLeaseExpired(TRequestId requestId);
 
+    TMethodPerformanceCountersPtr CreateUnknownMethodPerformanceCounters();
     TMethodPerformanceCountersPtr CreateMethodPerformanceCounters(
         TRuntimeMethodInfo* runtimeInfo,
         const TRuntimeMethodInfo::TNonowningPerformanceCountersKey& key);
     TMethodPerformanceCounters* GetMethodPerformanceCounters(
-        TRuntimeMethodInfo* runtimeInfo,
-        const TRuntimeMethodInfo::TNonowningPerformanceCountersKey& key);
-
+        const TIncomingRequest& incomingRequest);
     TPerformanceCounters* GetPerformanceCounters();
+    void ProfileRequest(TIncomingRequest* incomingRequest);
 
     void SetActive();
     void ValidateInactive();

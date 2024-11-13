@@ -2,7 +2,7 @@
 
 -- NB: Subquerys
 -- start query 1 in stream 0 using template query90.tpl and seed 2031708268
-select  cast(amc as decimal(15,4))/cast(pmc as decimal(15,4)) am_pm_ratio
+select  $todecimal(amc,15,4)/$todecimal(pmc,15,4) am_pm_ratio
  from ( select count(*) amc
        from {{web_sales}} as web_sales
        cross join {{household_demographics}} as household_demographics

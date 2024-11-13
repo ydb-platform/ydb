@@ -10,8 +10,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <library/cpp/json/json_reader.h>
 

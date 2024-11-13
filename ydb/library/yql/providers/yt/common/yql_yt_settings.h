@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/config/yql_dispatch.h>
-#include <ydb/library/yql/providers/common/config/yql_setting.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/providers/common/config/yql_dispatch.h>
+#include <yql/essentials/providers/common/config/yql_setting.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <library/cpp/string_utils/parse_size/parse_size.h>
 
@@ -101,6 +101,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TString, false> DefaultCluster;
     NCommon::TConfSetting<TString, false> StaticPool;
     NCommon::TConfSetting<TString, false> BinaryTmpFolder;
+    NCommon::TConfSetting<TString, false> BinaryCacheFolder;
     NCommon::TConfSetting<TDuration, false> BinaryExpirationInterval;
     NCommon::TConfSetting<bool, false> IgnoreTypeV3;
     NCommon::TConfSetting<bool, false> _UseMultisetAttributes;
@@ -275,7 +276,6 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> JoinCommonUseMapMultiOut;
     NCommon::TConfSetting<bool, false> UseAggPhases;
     NCommon::TConfSetting<bool, false> UsePartitionsByKeysForFinalAgg;
-    NCommon::TConfSetting<bool, false> _EnableWriteReorder;
     NCommon::TConfSetting<double, false> MaxCpuUsageToFuseMultiOuts;
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseMultiOuts;
     NCommon::TConfSetting<ui64, false> ApplyStoredConstraints;

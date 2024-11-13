@@ -9,7 +9,7 @@ from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.common.types import Erasure
 import ydb.tests.library.common.cms as cms
 
-from ydb.tests.library.harness.kikimr_http_client import SwaggerClient
+from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness.kikimr_runner import KiKiMR

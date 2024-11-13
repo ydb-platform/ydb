@@ -6,7 +6,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/events.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <library/cpp/threading/future/future.h>
 

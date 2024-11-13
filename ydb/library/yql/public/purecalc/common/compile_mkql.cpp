@@ -1,8 +1,8 @@
 #include "compile_mkql.h"
 
-#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
-#include <ydb/library/yql/core/yql_user_data_storage.h>
+#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/core/yql_user_data_storage.h>
 #include <ydb/library/yql/public/purecalc/common/names.h>
 
 #include <util/stream/file.h>

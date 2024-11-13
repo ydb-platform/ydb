@@ -6,7 +6,7 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, LogComponent, LogPrefix() << stream)

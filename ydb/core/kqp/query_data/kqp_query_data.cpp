@@ -4,9 +4,9 @@
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 

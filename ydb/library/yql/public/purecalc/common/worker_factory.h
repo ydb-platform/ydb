@@ -5,10 +5,10 @@
 #include "processor_mode.h"
 
 #include <util/generic/ptr.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/yql_user_data.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_user_data.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <utility>
 
 namespace NYql {

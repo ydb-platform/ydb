@@ -1,6 +1,9 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/public/purecalc/common/fwd.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/public/udf/udf_value.h>
 
 namespace NFq {
 
@@ -13,7 +16,8 @@ public:
         const TVector<TString>& columns,
         const TVector<TString>& types,
         const TString& whereFilter,
-        TCallback callback);
+        TCallback callback,
+        NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory);
 
     ~TJsonFilter();
 
@@ -29,6 +33,7 @@ std::unique_ptr<TJsonFilter> NewJsonFilter(
     const TVector<TString>& columns,
     const TVector<TString>& types,
     const TString& whereFilter,
-    TJsonFilter::TCallback callback);
+    TJsonFilter::TCallback callback,
+    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory);
 
 } // namespace NFq

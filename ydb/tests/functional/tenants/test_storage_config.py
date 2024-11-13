@@ -129,7 +129,9 @@ def case_0():
                 Rooms={
                     0: {'Main': 1,
                         'Outer': 1,
-                        'Blobs': 1}
+                        'Blobs': 1,
+                        'ExternalBlobs': [1]
+                        }
                 }
             )
         )
@@ -165,7 +167,8 @@ def case_11():
                 Rooms={
                     0: {'Main': 1,
                         'Outer': 1,
-                        'Blobs': 2}
+                        'Blobs': 2,
+                        'ExternalBlobs': [2]}
                 }
             )
         )
@@ -201,7 +204,8 @@ def case_1():
                 Rooms={
                     0: {'Main': 1,
                         'Outer': 1,
-                        'Blobs': 1}
+                        'Blobs': 1,
+                        'ExternalBlobs': [1]}
                 }
             )
         )
@@ -239,7 +243,8 @@ def case_12():
                     0: {
                         'Main': 2,
                         'Outer': 2,
-                        'Blobs': 2
+                        'Blobs': 2,
+                        'ExternalBlobs': [2]
                     }
                 }
             )
@@ -274,7 +279,8 @@ def case_2():
                 Rooms={
                     0: {'Main': 1,
                         'Outer': 1,
-                        'Blobs': 1}
+                        'Blobs': 1,
+                        'ExternalBlobs': [1]}
                 }
             )
         )
@@ -308,7 +314,8 @@ def case_3():
                 Rooms={
                     0: {'Main': 1,
                         'Outer': 1,
-                        'Blobs': 1}
+                        'Blobs': 1,
+                        'ExternalBlobs': [1]}
                 }
             )
         )
@@ -345,7 +352,8 @@ def case_4():
                 Rooms={
                     0: {'Main': 1,
                         'Outer': 1,
-                        'Blobs': 1}
+                        'Blobs': 1,
+                        'ExternalBlobs': [1]}
                 }
             )
         )
@@ -382,7 +390,8 @@ def case_5():
                 Rooms={
                     0: {'Main': 2,
                         'Outer': 2,
-                        'Blobs': 3}
+                        'Blobs': 3,
+                        'ExternalBlobs': [3]}
                 }
             )
         )
@@ -419,7 +428,8 @@ def case_6():
                 Rooms={
                     0: {'Main': 2,
                         'Outer': 2,
-                        'Blobs': 2}
+                        'Blobs': 2,
+                        'ExternalBlobs': [2]}
                 }
             )
         )
@@ -456,7 +466,8 @@ def case_7():
                 Rooms={
                     0: {'Main': 2,
                         'Outer': 2,
-                        'Blobs': 2}
+                        'Blobs': 2,
+                        'ExternalBlobs': [2]}
                 }
             )
         )
@@ -492,7 +503,8 @@ def case_8():
                 Rooms={
                     0: {'Main': 2,
                         'Outer': 2,
-                        'Blobs': 2}
+                        'Blobs': 2,
+                        'ExternalBlobs': [2]}
                 }
             )
         )
@@ -529,7 +541,8 @@ def case_9():
                 Rooms={
                     0: {'Main': 1,
                         'Outer': 1,
-                        'Blobs': 1}
+                        'Blobs': 1,
+                        'ExternalBlobs': [1]}
                 }
             )
         )
@@ -566,7 +579,8 @@ def case_10():
                 Rooms={
                     0: {'Main': 1,
                         'Outer': 1,
-                        'Blobs': 1}
+                        'Blobs': 1,
+                        'ExternalBlobs': [1]}
                 }
             )
         )

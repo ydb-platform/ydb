@@ -39,6 +39,7 @@ namespace NKikimr {
         HullCompLevelRateThreshold = 1.0;
         HullCompFreeSpaceThreshold = 2.0;
         FreshCompMaxInFlightWrites = 10;
+        FreshCompMaxInFlightReads = 10; // when moving huge blobs
         HullCompMaxInFlightWrites = 10;
         HullCompMaxInFlightReads = 20;
         HullCompReadBatchEfficiencyThreshold = 0.5;  // don't issue reads if there are more gaps than the useful data

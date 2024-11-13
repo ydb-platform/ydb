@@ -168,4 +168,18 @@ set -ex
     COMMIT;
   '
 
+# YQ-3494
+/ydb -p ${PROFILE} yql -s "
+    CREATE TABLE json_document (
+        col_00_id INT32 NOT NULL,
+        col_01_data JsonDocument NOT NULL,
+        PRIMARY KEY (col_00_id)
+    );
+    COMMIT;
+    INSERT INTO json_document (col_00_id, col_01_data) VALUES
+      (1, JsonDocument('{\"key1\": \"value1\"}')),
+      (2, JsonDocument('{\"key2\": \"value2\"}'));
+    COMMIT;
+" 
+
 echo $(date +"%T.%6N") "SUCCESS"

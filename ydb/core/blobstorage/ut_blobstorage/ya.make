@@ -64,6 +64,7 @@ RECURSE_FOR_TESTS(
     ut_blob_depot_fat
     ut_donor
     ut_group_reconfiguration
+    ut_huge
     ut_read_only_vdisk
     ut_osiris
     ut_replication

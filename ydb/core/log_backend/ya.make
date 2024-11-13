@@ -9,6 +9,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/unified_agent_client
+    library/cpp/messagebus/monitoring
     ydb/core/base
 )
 

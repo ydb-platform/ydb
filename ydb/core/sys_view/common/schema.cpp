@@ -1,7 +1,7 @@
 #include "schema.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
 
 namespace NKikimr {
 namespace NSysView {

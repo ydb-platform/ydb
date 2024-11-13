@@ -14,7 +14,7 @@ import yatest.common
 project_path = yatest.common.context.project_path
 SOURCE_PATH = yql_utils.yql_source_path((project_path + '/cases').replace('\\', '/'))
 DATA_PATH = yatest.common.output_path('cases')
-ASTDIFF_PATH = yql_utils.yql_binary_path(os.getenv('YQL_ASTDIFF_PATH') or 'ydb/library/yql/tools/astdiff/astdiff')
+ASTDIFF_PATH = yql_utils.yql_binary_path(os.getenv('YQL_ASTDIFF_PATH') or 'yql/essentials/tools/astdiff/astdiff')
 
 
 def pytest_generate_tests(metafunc):

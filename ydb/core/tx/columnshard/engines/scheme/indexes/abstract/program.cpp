@@ -1,6 +1,6 @@
 #include "program.h"
 #include "composite.h"
-#include <ydb/library/yql/core/arrow_kernels/request/request.h>
+#include <yql/essentials/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NOlap::NIndexes::NRequest {
 

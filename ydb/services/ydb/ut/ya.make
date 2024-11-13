@@ -43,8 +43,8 @@ PEERDIR(
     ydb/core/grpc_services/base
     ydb/core/testlib
     ydb/core/security
-    ydb/library/yql/minikql/dom
-    ydb/library/yql/minikql/jsonpath
+    yql/essentials/minikql/dom
+    yql/essentials/minikql/jsonpath
     ydb/library/testlib/service_mocks/ldap_mock
     ydb/public/lib/experimental
     ydb/public/lib/json_value

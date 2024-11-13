@@ -35,8 +35,8 @@ import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/tenant_pool.proto";
 import "ydb/core/protos/tenant_slot_broker.proto";
 import "ydb/library/actors/protos/interconnect.proto";
-import "ydb/library/yql/core/file_storage/proto/file_storage.proto";
-import "ydb/library/yql/providers/common/proto/gateways_config.proto";
+import "yql/essentials/core/file_storage/proto/file_storage.proto";
+import "yql/essentials/providers/common/proto/gateways_config.proto";
 
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
@@ -1362,6 +1362,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 300 }];
+        optional uint64 HugeDefragFreeSpaceBorderPerMille = 13 [(ControlOptions) = {
+            Description: "Huge garbage threshold = DefaultHugeGarbagePerMille * min((free space share) / (this param), 1)",
+            MinValue: 1,
+            MaxValue: 1000,
+            DefaultValue: 260 }];
     }
 
     message TTabletControls {

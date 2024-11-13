@@ -6,6 +6,7 @@ message TEvSendDataFromSource {
     optional NActorsProto.TActorId SourceActorId = 1;
     optional string SharingId = 2;
     repeated TPathIdData DataByPathId = 3;
+    repeated NKikimrTxColumnShard.TSchemaPresetVersionInfo SchemeHistory = 4;
 }
 
 message TEvAckDataToSource {

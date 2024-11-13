@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_join.h>
+#include <yql/essentials/core/yql_join.h>
 
 #include <ydb/library/yql/providers/yt/opt/yql_yt_join.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>

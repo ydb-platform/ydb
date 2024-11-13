@@ -1,6 +1,6 @@
 #pragma once
 #include "base_with_blobs.h"
-#include "constructor.h"
+#include "constructor_accessor.h"
 #include "data_accessor.h"
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
@@ -72,11 +72,12 @@ public:
     };
 
 private:
-    std::optional<TPortionInfoConstructor> PortionConstructor;
+    std::optional<TPortionAccessorConstructor> PortionConstructor;
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
 
-    explicit TWritePortionInfoWithBlobsConstructor(TPortionInfoConstructor&& portionConstructor)
+    explicit TWritePortionInfoWithBlobsConstructor(TPortionAccessorConstructor&& portionConstructor)
         : PortionConstructor(std::move(portionConstructor)) {
+        AFL_VERIFY(!PortionConstructor->HaveBlobsData());
     }
 
     TBlobInfo::TBuilder StartBlob(const std::shared_ptr<IBlobsStorageOperator>& bOperator) {
@@ -93,7 +94,7 @@ public:
         const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators);
 
     static TWritePortionInfoWithBlobsConstructor BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
-        const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, TPortionInfoConstructor&& constructor,
+        const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, TPortionAccessorConstructor&& constructor,
         const std::shared_ptr<IStoragesManager>& operators);
 
     std::vector<TBlobInfo>& GetBlobs() {
@@ -104,7 +105,7 @@ public:
         return TStringBuilder() << "blobs_count=" << Blobs.size() << ";";
     }
 
-    TPortionInfoConstructor& GetPortionConstructor() {
+    TPortionAccessorConstructor& GetPortionConstructor() {
         AFL_VERIFY(!!PortionConstructor);
         return *PortionConstructor;
     }
@@ -144,7 +145,7 @@ public:
     };
 
 private:
-    std::optional<TPortionInfoConstructor> PortionConstructor;
+    std::optional<TPortionAccessorConstructor> PortionConstructor;
     std::optional<TPortionDataAccessor> PortionResult;
     YDB_READONLY_DEF(std::vector<TBlobInfo>, Blobs);
 
@@ -179,15 +180,15 @@ public:
         return *PortionResult;
     }
 
-    TPortionInfoConstructor& GetPortionConstructor() {
+    TPortionAccessorConstructor& GetPortionConstructor() {
         AFL_VERIFY(!!PortionConstructor);
         AFL_VERIFY(!PortionResult);
         return *PortionConstructor;
     }
 
-    std::shared_ptr<TPortionInfoConstructor> DetachPortionConstructor() {
+    std::shared_ptr<TPortionAccessorConstructor> DetachPortionConstructor() {
         AFL_VERIFY(PortionConstructor);
-        return std::make_shared<TPortionInfoConstructor>(std::move(*PortionConstructor));
+        return std::make_shared<TPortionAccessorConstructor>(std::move(*PortionConstructor));
     }
 };
 

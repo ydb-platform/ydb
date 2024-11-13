@@ -24,8 +24,8 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/kqp/workload_service/ut/common
     ydb/core/tx/columnshard/hooks/testing
-    ydb/library/yql/sql/pg
-    ydb/library/yql/parser/pg_wrapper
+    yql/essentials/sql/pg
+    yql/essentials/parser/pg_wrapper
 )
 
 YQL_LAST_ABI_VERSION()

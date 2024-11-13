@@ -2,7 +2,7 @@
 #include <ydb/library/yql/public/purecalc/purecalc.h>
 #include <ydb/library/yql/public/purecalc/io_specs/mkql/spec.h>
 
-#include <ydb/library/yql/core/user_data/yql_user_data.h>
+#include <yql/essentials/core/user_data/yql_user_data.h>
 
 #include <util/stream/file.h>
 #include <util/datetime/base.h>

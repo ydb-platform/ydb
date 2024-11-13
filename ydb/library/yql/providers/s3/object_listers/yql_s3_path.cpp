@@ -1,7 +1,7 @@
 #include "yql_s3_path.h"
 
 #include <ydb/library/yql/providers/s3/object_listers/yql_s3_list.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <contrib/libs/re2/re2/re2.h>
 

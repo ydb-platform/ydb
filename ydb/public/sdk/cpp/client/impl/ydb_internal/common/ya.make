@@ -9,7 +9,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/grpc/client
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
 )
 
 END()

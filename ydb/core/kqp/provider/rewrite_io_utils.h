@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 namespace NYql {
 

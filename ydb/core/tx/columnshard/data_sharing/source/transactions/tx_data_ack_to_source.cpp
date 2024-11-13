@@ -30,6 +30,8 @@ bool TTxDataAckToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc
 }
 
 void TTxDataAckToSource::DoComplete(const TActorContext& /*ctx*/) {
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("TTxDataAckToSource::DoComplete", "1");
+
     Session->ActualizeDestination(*Self, Self->GetDataLocksManager());
 }
 

@@ -169,10 +169,6 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     if (!commitTx)
         return true;
 
-    if (HasOlapTableWriteInTx(physicalQuery) || HasOlapTableReadInTx(physicalQuery)) {
-        return true;
-    }
-
     size_t readPhases = 0;
     bool hasEffects = false;
     bool hasSourceRead = false;

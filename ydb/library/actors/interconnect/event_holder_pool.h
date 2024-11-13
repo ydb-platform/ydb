@@ -26,10 +26,12 @@ namespace NActors {
             const auto& counter = common->DestructorQueueSize;
             const auto& max = common->MaxDestructorQueueSize;
             if (counter && (TAtomicBase)(counter->fetch_add(NumBytes) + NumBytes) > max) {
+                Cerr << "deallocate in thread " << counter->load() << Endl;
                 counter->fetch_sub(NumBytes);
                 return false;
             }
             Counter = counter;
+            Cerr << "deallocate in dealloc queue" << Endl;
             return true;
         }
     };
@@ -37,16 +39,16 @@ namespace NActors {
     class TEventHolderPool {
         using TDestroyCallback = std::function<void(THolder<IEventBase>)>;
 
-        static constexpr size_t MaxFreeQueueItems = 32;
-        static constexpr size_t FreeQueueTrimThreshold = MaxFreeQueueItems * 2;
-        static constexpr ui64 MaxBytesPerMessage = 10 * 1024 * 1024;
-
         TIntrusivePtr<TInterconnectProxyCommon> Common;
         std::list<TEventHolder> Cache;
         THolder<TEvFreeItems> PendingFreeEvent;
         TDestroyCallback DestroyCallback;
 
     public:
+        static constexpr size_t MaxFreeQueueItems = 32;
+        static constexpr size_t FreeQueueTrimThreshold = MaxFreeQueueItems * 2;
+        static constexpr ui64 MaxBytesPerMessage = 10 * 1024 * 1024;
+
         TEventHolderPool(TIntrusivePtr<TInterconnectProxyCommon> common,
                 TDestroyCallback destroyCallback)
             : Common(std::move(common))
@@ -88,7 +90,6 @@ namespace NActors {
                 auto& buffers = p->Buffers;
                 auto&& bufferReleased = event->Buffer.Release();
                 p->NumBytes += sizeof(*bufferReleased);
-                p->NumBytes += bufferReleased->GetSize();
                 buffers.emplace_back(std::move(bufferReleased));
                 trim = trim || buffers.size() >= TEvFreeItems::MaxEvents || p->NumBytes >= MaxBytesPerMessage;
             }

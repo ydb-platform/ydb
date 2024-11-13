@@ -84,6 +84,7 @@ namespace NKikimr {
             bool replicated = !ReplMonGroup.ReplUnreplicatedVDisks() && !HasUnreadableBlobs;
             // out of space
             const auto outOfSpaceFlags = VCtx->GetOutOfSpaceState().LocalWhiteboardFlag();
+            const auto whiteboardOosParams = VCtx->GetOutOfSpaceState().WhiteboardOosParams();
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(&satisfactionRank);
             const TInstant now = ctx.Now();
             const TInstant prev = std::exchange(WhiteboardUpdateTimestamp, now);
@@ -106,7 +107,8 @@ namespace NKikimr {
                          OverloadHandler ? OverloadHandler->GetIntegralRankPercent() : 0,
                          state,
                          replicated,
-                         outOfSpaceFlags));
+                         outOfSpaceFlags,
+                         whiteboardOosParams));
             // repeat later
             ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
         }

@@ -222,6 +222,7 @@ struct TEvWhiteboard{
 
         explicit TEvVDiskStateUpdate(NKikimrWhiteboard::EVDiskState state,
                                      NKikimrWhiteboard::EFlag diskSpace,
+                                     NKikimrWhiteboard::TOosParams oosParams,
                                      bool replicated,
                                      bool unreplicatedPhantoms,
                                      bool unreplicatedNonPhantoms,
@@ -230,6 +231,7 @@ struct TEvWhiteboard{
                                      bool hasUnreadableBlobs) {
             Record.SetVDiskState(state);
             Record.SetDiskSpace(diskSpace);
+            Record.MutableOosParams()->CopyFrom(oosParams);
             Record.SetReplicated(replicated);
             Record.SetUnreplicatedPhantoms(unreplicatedPhantoms);
             Record.SetUnreplicatedNonPhantoms(unreplicatedNonPhantoms);

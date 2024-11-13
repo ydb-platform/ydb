@@ -193,6 +193,7 @@ message TVDiskStateInfo {
     optional EVDiskState VDiskState = 11 [(DefaultField) = true];
     // Disk space flags
     optional EFlag DiskSpace = 12 [(DefaultField) = true];
+    optional TOosParams OosParams = 32 [(DefaultField) = true];
     // Compaction satisfaction rank
     optional TVDiskSatisfactionRank SatisfactionRank = 13 [(DefaultField) = true];
     // Is VDisk replicated? (i.e. contains all blobs it must have)
@@ -217,7 +218,6 @@ message TVDiskStateInfo {
     optional bool DonorMode = 26 [(DefaultField) = true];
     optional fixed64 InstanceGuid = 27 [(DefaultField) = true]; // VDisk actor instance guid
     repeated NKikimrBlobStorage.TVSlotId Donors = 29 [(DefaultField) = true];
-
     // VDisk (Skeleton) Front Queue Status
     optional EFlag FrontQueues = 18 [(DefaultField) = true];
 

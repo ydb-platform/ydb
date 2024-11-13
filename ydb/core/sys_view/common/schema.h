@@ -259,6 +259,11 @@ struct Schema : NIceDb::Schema {
         struct Replicated : Column<16, NScheme::NTypeIds::Bool> {};
         struct DiskSpace : Column<17, NScheme::NTypeIds::Utf8> {};
         struct State : Column <18, NScheme::NTypeIds::Utf8> {};
+        struct LocalDiskState : Column<19, NScheme::NTypeIds::Utf8> {};
+        struct LocalChunkState : Column<20, NScheme::NTypeIds::Utf8> {};
+        struct LocalLogState : Column<21, NScheme::NTypeIds::Utf8> {};
+        struct GlobalGroupState : Column<22, NScheme::NTypeIds::Utf8> {};
+        struct GlobalWhiteboardFlag : Column<23, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<NodeId, PDiskId, VSlotId>;
         using TColumns = TableColumns<
@@ -276,7 +281,12 @@ struct Schema : NIceDb::Schema {
             Kind,
             FailRealm,
             Replicated,
-            DiskSpace>;
+            DiskSpace,
+            LocalDiskState,
+            LocalChunkState,
+            LocalLogState,
+            GlobalGroupState,
+            GlobalWhiteboardFlag>;
     };
 
     struct Groups : Table<6> {

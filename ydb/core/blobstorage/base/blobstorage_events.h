@@ -7,6 +7,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
+#include <ydb/core/protos/whiteboard_disk_states.pb.h>
 
 namespace NKikimrBlobStorage {
     class TStorageConfig;
@@ -22,7 +23,7 @@ namespace NKikimr {
 
         TEvControllerUpdateDiskStatus(const TVDiskID& vDiskId, ui32 nodeId, ui32 pdiskId, ui32 vslotId,
                 std::optional<ui32> satisfactionRankPercent, NKikimrWhiteboard::EVDiskState state, bool replicated,
-                NKikimrWhiteboard::EFlag diskSpace) {
+                NKikimrWhiteboard::EFlag diskSpace, const NKikimrWhiteboard::TOosParams& whiteboardOosParams) {
             NKikimrBlobStorage::TVDiskMetrics* metric = Record.AddVDisksMetrics();
             VDiskIDFromVDiskID(vDiskId, metric->MutableVDiskId());
             if (satisfactionRankPercent) {
@@ -35,6 +36,7 @@ namespace NKikimr {
             p->SetNodeId(nodeId);
             p->SetPDiskId(pdiskId);
             p->SetVSlotId(vslotId);
+            metric->MutableOosParams()->CopyFrom(whiteboardOosParams);
         }
     };
 

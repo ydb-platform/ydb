@@ -16,7 +16,7 @@ lambda_stmt:
   | import_stmt
 ;
 
-sql_stmt: (EXPLAIN (Q U E R Y PLAN)?)? sql_stmt_core;
+sql_stmt: (EXPLAIN (QUERY PLAN)?)? sql_stmt_core;
 
 sql_stmt_core:
     pragma_stmt
@@ -1393,7 +1393,7 @@ keyword_as_compat:
   // | PRESORT
   | PRIMARY
   | PRIVILEGES
-//  | QUERY
+  | QUERY
   | QUEUE
   | RAISE
 //  | READ
@@ -1611,7 +1611,7 @@ keyword_compat: (
   | PRESORT
   | PRIMARY
   | PRIVILEGES
-//  | QUERY
+  | QUERY
   | QUEUE
   | RAISE
 //  | READ
@@ -1968,7 +1968,7 @@ PRESORT: P R E S O R T;
 PRIMARY: P R I M A R Y;
 PRIVILEGES: P R I V I L E G E S;
 PROCESS: P R O C E S S;
-//QUERY: Q U E R Y;
+QUERY: Q U E R Y;
 QUEUE: Q U E U E;
 RAISE: R A I S E;
 RANGE: R A N G E;

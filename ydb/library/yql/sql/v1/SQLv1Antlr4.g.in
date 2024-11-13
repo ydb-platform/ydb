@@ -1392,7 +1392,7 @@ keyword_as_compat:
   // | PRESORT
   | PRIMARY
   | PRIVILEGES
-//  | QUERY
+  | QUERY
   | QUEUE
   | RAISE
 //  | READ
@@ -1610,7 +1610,7 @@ keyword_compat: (
   | PRESORT
   | PRIMARY
   | PRIVILEGES
-//  | QUERY
+  | QUERY
   | QUEUE
   | RAISE
 //  | READ

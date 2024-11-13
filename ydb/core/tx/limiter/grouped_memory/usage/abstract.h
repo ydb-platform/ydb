@@ -127,6 +127,7 @@ public:
 
     [[nodiscard]] TConclusionStatus Allocate(const ui64 volume) {
         if (HardLimit < Usage.Val() + volume) {
+            Counters->OnCannotAllocate();
             return TConclusionStatus::Fail(TStringBuilder() << "limit:" << HardLimit << ";val:" << Usage.Val() << ";delta=" << volume << ";");
         }
         Waiting.Sub(volume);

@@ -48,12 +48,15 @@ public:
         AFL_TRACE(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated")("allocation_id", Identifier)("stage", Stage->GetName());
         AFL_VERIFY(Allocation)("status", GetAllocationStatus())("volume", AllocatedVolume)("id", Identifier)("stage", Stage->GetName())(
             "allocation_internal_group_id", AllocationInternalGroupId);
+        if (!Stage->Allocate(AllocatedVolume)) {
+            AllocationFailed = true;
+            Allocation->OnAllocationImpossible();
+            return false;
+        }
         const bool result = Allocation->OnAllocated(
             std::make_shared<TAllocationGuard>(ProcessId, ScopeId, Allocation->GetIdentifier(), ownerId, Allocation->GetMemory()), Allocation);
-        if (result) {
-            Stage->Allocate(AllocatedVolume);
-        } else {
-            Stage->Free(AllocatedVolume, false);
+        if (!result) {
+            Stage->Free(AllocatedVolume, true);
             AllocationFailed = true;
         }
         Allocation = nullptr;

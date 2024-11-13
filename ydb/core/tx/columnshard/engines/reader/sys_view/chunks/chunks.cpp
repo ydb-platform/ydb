@@ -195,7 +195,8 @@ TStatsIterator::TFetchingAccessorAllocation::TFetchingAccessorAllocation(
     , AccessorsManager(context->GetDataAccessorsManager())
     , Request(request)
     , WaitingCountersGuard(context->GetCounters().GetFetcherAcessorsGuard())
-    , OwnerId(context->GetScanActorId()) {
+    , OwnerId(context->GetScanActorId())
+    , Context(context) {
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSysView::NChunks

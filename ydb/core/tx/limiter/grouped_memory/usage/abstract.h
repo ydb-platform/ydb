@@ -94,6 +94,7 @@ public:
 class TStageFeatures {
 private:
     YDB_READONLY_DEF(TString, Name);
+    YDB_READONLY(ui64, HardLimit, 0);
     YDB_READONLY(ui64, Limit, 0);
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Usage);
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Waiting);
@@ -114,15 +115,19 @@ public:
         return Usage.Val() + Waiting.Val();
     }
 
-    TStageFeatures(
-        const TString& name, const ui64 limit, const std::shared_ptr<TStageFeatures>& owner, const std::shared_ptr<TStageCounters>& counters)
+    TStageFeatures(const TString& name, const ui64 limit, const ui64 hardLimit, const std::shared_ptr<TStageFeatures>& owner,
+        const std::shared_ptr<TStageCounters>& counters)
         : Name(name)
         , Limit(limit)
+        , HardLimit(hardLimit)
         , Owner(owner)
         , Counters(counters) {
     }
 
-    void Allocate(const ui64 volume) {
+    [[nodiscard]] bool Allocate(const ui64 volume) {
+        if (HardLimit < Usage.Val() + volume) {
+            return false;
+        }
         Waiting.Sub(volume);
         Usage.Add(volume);
         if (Counters) {
@@ -130,8 +135,12 @@ public:
             Counters->Sub(volume, false);
         }
         if (Owner) {
-            Owner->Allocate(volume);
+            if (!Owner->Allocate(volume)) {
+                Free(volume, true);
+                return false;
+            }
         }
+        return true;
     }
 
     void Free(const ui64 volume, const bool allocated) {
@@ -199,6 +208,7 @@ private:
     YDB_READONLY(ui64, Identifier, Counter.Inc());
     YDB_READONLY(ui64, Memory, 0);
     bool Allocated = false;
+    virtual void DoOnAllocationImpossible() = 0;
     virtual bool DoOnAllocated(
         std::shared_ptr<TAllocationGuard>&& guard, const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) = 0;
 
@@ -214,6 +224,10 @@ public:
 
     bool IsAllocated() const {
         return Allocated;
+    }
+
+    void OnAllocationImpossible() {
+        DoOnAllocationImpossible();
     }
 
     [[nodiscard]] bool OnAllocated(

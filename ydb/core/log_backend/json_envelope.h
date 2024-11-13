@@ -4,11 +4,29 @@
 
 #include <util/generic/string.h>
 
+#include <optional>
+#include <variant>
 #include <vector>
 
 namespace NKikimr {
 
 class TJsonEnvelope {
+    struct TReplace {
+        using TPathComponent = std::variant<size_t, TString>; // field or index
+        std::vector<TPathComponent> Path;
+        // replace
+        TString Prefix;
+        TString Suffix;
+
+        TReplace(std::vector<TPathComponent> path, TString prefix, TString suffix)
+            : Path(std::move(path))
+            , Prefix(std::move(prefix))
+            , Suffix(std::move(suffix))
+        {}
+
+        void Apply(NJson::TJsonValue* value, const TStringBuf& message) const;
+    };
+
 public:
     explicit TJsonEnvelope(const TString& templateString)
         : TemplateString(templateString)
@@ -20,30 +38,17 @@ public:
     TJsonEnvelope(const TJsonEnvelope&) = delete;
     TJsonEnvelope(TJsonEnvelope&&) = delete;
 
-    TString ApplyJsonEnvelope(const TStringBuf& message);
+    TString ApplyJsonEnvelope(const TStringBuf& message) const;
 
 private:
     void Parse();
-    void Parse(NJson::TJsonValue* value);
-
-private:
-    struct TReplace {
-        NJson::TJsonValue* Value = nullptr;
-        TString Prefix;
-        TString Suffix;
-
-        TReplace(NJson::TJsonValue* value)
-            : Value(value)
-        {}
-
-        bool Parse(const TString& replace);
-        void Apply(const TStringBuf& message);
-    };
+    bool Parse(const NJson::TJsonValue& value, std::vector<TReplace::TPathComponent>& path);
+    std::optional<std::pair<TString, TString>> Parse(const TString& stringValue); // returns prefix/suffix pair for replace
 
 private:
     TString TemplateString;
     NJson::TJsonValue Value;
-    TMaybe<TReplace> Replace;
+    std::optional<TReplace> Replace;
 };
 
 } // namespace NKikimr

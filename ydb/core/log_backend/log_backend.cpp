@@ -15,11 +15,8 @@ public:
     {}
 
     void WriteData(const TLogRecord& rec) override {
-        TString data;
         TLogRecord record = rec;
-        with_lock (Mutex) {
-            data = JsonEnvelope.ApplyJsonEnvelope(TStringBuf(record.Data, record.Len));
-        }
+        TString data = JsonEnvelope.ApplyJsonEnvelope(TStringBuf(record.Data, record.Len));
         record.Data = data.data();
         record.Len = data.size();
         LogBackend->WriteData(record);
@@ -42,9 +39,8 @@ public:
     }
 
 private:
-    TJsonEnvelope JsonEnvelope;
-    THolder<TLogBackend> LogBackend;
-    TMutex Mutex;
+    const TJsonEnvelope JsonEnvelope;
+    const THolder<TLogBackend> LogBackend;
 };
 
 TAutoPtr<TLogBackend> CreateLogBackendWithUnifiedAgent(

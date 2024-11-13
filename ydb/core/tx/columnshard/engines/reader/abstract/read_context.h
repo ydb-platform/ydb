@@ -64,7 +64,8 @@ public:
 
     void AbortWithError(const TString& errorMessage) {
         if (AtomicCas(&AbortFlag, 1, 0)) {
-            NActors::TActivationContext::Send(ScanActorId, std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(errorMessage));
+            NActors::TActivationContext::Send(
+                ScanActorId, std::make_unique<NColumnShard::TEvPrivate::TEvTaskProcessedResult>(TConclusionStatus::Fail(errorMessage)));
         }
     }
 

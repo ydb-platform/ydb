@@ -48,9 +48,10 @@ public:
         AFL_TRACE(NKikimrServices::GROUPED_MEMORY_LIMITER)("event", "allocated")("allocation_id", Identifier)("stage", Stage->GetName());
         AFL_VERIFY(Allocation)("status", GetAllocationStatus())("volume", AllocatedVolume)("id", Identifier)("stage", Stage->GetName())(
             "allocation_internal_group_id", AllocationInternalGroupId);
-        if (!Stage->Allocate(AllocatedVolume)) {
+        auto allocationResult = Stage->Allocate(AllocatedVolume);
+        if (allocationResult.IsFail()) {
             AllocationFailed = true;
-            Allocation->OnAllocationImpossible();
+            Allocation->OnAllocationImpossible(allocationResult.GetErrorMessage());
             return false;
         }
         const bool result = Allocation->OnAllocated(

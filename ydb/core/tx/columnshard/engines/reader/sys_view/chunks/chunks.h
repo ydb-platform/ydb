@@ -117,9 +117,7 @@ private:
             AccessorsManager->AskData(std::move(Request));
             return true;
         }
-        virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
-            Context->AbortWithError("cannot allocate memory for take accessors info: " + errorMessage);
-        }
+        virtual void DoOnAllocationImpossible(const TString& errorMessage) override;
 
         virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
             if (result.HasErrors()) {

@@ -199,4 +199,8 @@ TStatsIterator::TFetchingAccessorAllocation::TFetchingAccessorAllocation(
     , Context(context) {
 }
 
+void TStatsIterator::TFetchingAccessorAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
+    Context->AbortWithError("cannot allocate memory for take accessors info: " + errorMessage);
+}
+
 }   // namespace NKikimr::NOlap::NReader::NSysView::NChunks

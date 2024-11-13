@@ -21,8 +21,8 @@ private:
     static void Register(const TConfig& serviceConfig, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
         Singleton<TSelf>()->Counters = std::make_shared<TCounters>(counters, TMemoryLimiterPolicy::Name);
         Singleton<TSelf>()->ServiceConfig = serviceConfig;
-        Singleton<TSelf>()->DefaultStageFeatures = std::make_shared<TStageFeatures>(
-            "GLOBAL", serviceConfig.GetMemoryLimit(), nullptr, Singleton<TSelf>()->Counters->BuildStageCounters("general"));
+        Singleton<TSelf>()->DefaultStageFeatures = std::make_shared<TStageFeatures>("GLOBAL", serviceConfig.GetMemoryLimit(),
+            serviceConfig.GetHardMemoryLimit(), nullptr, Singleton<TSelf>()->Counters->BuildStageCounters("general"));
     }
     static const TString& GetMemoryLimiterName() {
         Y_ABORT_UNLESS(TMemoryLimiterPolicy::Name.size() == 4);

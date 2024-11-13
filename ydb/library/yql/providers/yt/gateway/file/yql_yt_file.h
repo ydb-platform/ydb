@@ -3,7 +3,7 @@
 #include "yql_yt_file_services.h"
 
 #include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/string.h>

@@ -5,7 +5,7 @@
 #include <ydb/core/testlib/cs_helper.h>
 
 extern "C" {
-#include <ydb/library/yql/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
+#include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>
 }
 
 namespace NKikimr {

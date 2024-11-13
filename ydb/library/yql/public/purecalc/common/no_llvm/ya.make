@@ -4,14 +4,14 @@ INCLUDE(../ya.make.inc)
 
 PEERDIR(
     ydb/library/yql/providers/yt/codec/codegen/no_llvm
-    ydb/library/yql/providers/config
-    ydb/library/yql/minikql/computation/no_llvm
-    ydb/library/yql/minikql/invoke_builtins/no_llvm
-    ydb/library/yql/minikql/comp_nodes/no_llvm
-    ydb/library/yql/minikql/codegen/no_llvm
-    ydb/library/yql/parser/pg_wrapper
-    ydb/library/yql/parser/pg_wrapper/interface
-    ydb/library/yql/sql/pg
+    yql/essentials/providers/config
+    yql/essentials/minikql/computation/no_llvm
+    yql/essentials/minikql/invoke_builtins/no_llvm
+    yql/essentials/minikql/comp_nodes/no_llvm
+    yql/essentials/minikql/codegen/no_llvm
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/sql/pg
 )
 
 END()

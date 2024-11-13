@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/library/yql/utils/log/log_component.h>
+#include <yql/essentials/utils/log/log_component.h>
 
 #include <util/system/types.h>
 

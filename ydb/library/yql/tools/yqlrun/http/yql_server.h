@@ -5,10 +5,10 @@
 #include "yql_servlet.h"
 #include "yql_functions_servlet.h"
 
-#include <ydb/library/yql/core/facade/yql_facade.h>
-#include <ydb/library/yql/core/yql_csv.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/core/facade/yql_facade.h>
+#include <yql/essentials/core/yql_csv.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 
 #include <util/stream/file.h>
 #include <util/system/user.h>

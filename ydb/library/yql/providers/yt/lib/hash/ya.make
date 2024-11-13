@@ -7,11 +7,11 @@ SRCS(
 
 PEERDIR(
     contrib/libs/openssl
-    ydb/library/yql/ast
-    ydb/library/yql/utils
-    ydb/library/yql/utils/log
-    ydb/library/yql/core
-    ydb/library/yql/core/expr_nodes
+    yql/essentials/ast
+    yql/essentials/utils
+    yql/essentials/utils/log
+    yql/essentials/core
+    yql/essentials/core/expr_nodes
 )
 
 END()

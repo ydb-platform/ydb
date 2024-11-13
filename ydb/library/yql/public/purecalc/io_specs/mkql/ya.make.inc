@@ -10,8 +10,8 @@ PEERDIR(
     ydb/library/yql/providers/yt/codec
     ydb/library/yql/providers/yt/common
     ydb/library/yql/providers/yt/lib/mkql_helpers
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/schema/mkql
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/schema/mkql
 )
 
 

@@ -17,6 +17,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
@@ -37,9 +38,9 @@
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -298,7 +299,7 @@ protected:
             auto& batch = batches.front();
 
             batch.Proto = std::move(*computeData.Proto.MutableChannelData()->MutableData());
-            batch.Payload = std::move(computeData.Payload);
+            batch.Payload = NYql::MakeChunkedBuffer(std::move(computeData.Payload));
 
             if (!trailingResults) {
                 TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
@@ -333,7 +334,7 @@ protected:
         NYql::NDq::TDqSerializedBatch batch;
         batch.Proto = std::move(*record.MutableChannelData()->MutableData());
         if (batch.Proto.HasPayloadId()) {
-            batch.Payload = ev->Get()->GetPayload(batch.Proto.GetPayloadId());
+            batch.Payload = NYql::MakeChunkedBuffer(ev->Get()->GetPayload(batch.Proto.GetPayloadId()));
         }
 
         YQL_ENSURE(channel.DstTask == 0);

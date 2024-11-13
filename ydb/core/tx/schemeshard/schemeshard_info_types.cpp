@@ -13,7 +13,7 @@
 #include <ydb/core/util/pb.h>
 #include <ydb/core/protos/config.pb.h>
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 
 #include <util/generic/algorithm.h>
 

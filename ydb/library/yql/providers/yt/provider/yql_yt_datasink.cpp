@@ -8,17 +8,17 @@
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
 #include <ydb/library/yql/providers/yt/lib/schema/schema.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/transform/yql_lazy_init.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/transform/yql_lazy_init.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/yson/node/node_io.h>
 

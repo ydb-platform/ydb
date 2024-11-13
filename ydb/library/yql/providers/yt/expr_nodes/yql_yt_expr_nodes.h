@@ -1,9 +1,9 @@
 #pragma once
 
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.gen.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
 namespace NYql {
 namespace NNodes {

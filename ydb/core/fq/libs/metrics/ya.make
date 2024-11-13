@@ -7,7 +7,7 @@ SRCS(
 PEERDIR(
     library/cpp/monlib/dynamic_counters
     ydb/library/yql/dq/actors/protos
-    ydb/library/yql/public/issue
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

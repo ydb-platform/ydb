@@ -7,8 +7,8 @@
 #include <ydb/library/actors/core/executor_pool_io.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>

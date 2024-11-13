@@ -4,8 +4,8 @@
 #include <util/system/mem_info.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
 
 #include <ydb/library/actors/core/log.h>
 

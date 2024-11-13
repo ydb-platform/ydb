@@ -3,10 +3,10 @@
 #include "yql_yt_join_impl.h"
 
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
-#include <ydb/library/yql/providers/common/transform/yql_visit.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/core/yql_expr_constraint.h>
-#include <ydb/library/yql/ast/yql_constraint.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/core/yql_expr_constraint.h>
+#include <yql/essentials/ast/yql_constraint.h>
 
 #include <util/generic/xrange.h>
 

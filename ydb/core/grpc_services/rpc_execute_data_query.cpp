@@ -16,7 +16,7 @@
 
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr {
 namespace NGRpcService {

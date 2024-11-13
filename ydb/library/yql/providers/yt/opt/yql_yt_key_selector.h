@@ -2,8 +2,8 @@
 
 #include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/ast/yql_constraint.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_constraint.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/string.h>

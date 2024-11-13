@@ -2,10 +2,10 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
-#include <ydb/library/yql/minikql/mkql_node_printer.h>
-#include <ydb/library/yql/minikql/mkql_opt_literal.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_visitor.h>
+#include <yql/essentials/minikql/mkql_node_printer.h>
+#include <yql/essentials/minikql/mkql_opt_literal.h>
 
 #include <array>
 

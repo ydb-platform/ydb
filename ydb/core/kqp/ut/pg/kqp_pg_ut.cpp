@@ -5,9 +5,9 @@
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
 #include <util/system/env.h>
 

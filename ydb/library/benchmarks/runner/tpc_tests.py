@@ -21,10 +21,10 @@ class Runner:
     }
 
     UDFS = [
-        "ydb/library/yql/udfs/common/set",
-        "ydb/library/yql/udfs/common/url_base",
-        "ydb/library/yql/udfs/common/datetime2",
-        "ydb/library/yql/udfs/common/re2"
+        "yql/essentials/udfs/common/set",
+        "yql/essentials/udfs/common/url_base",
+        "yql/essentials/udfs/common/datetime2",
+        "yql/essentials/udfs/common/re2"
     ]
 
     def __init__(self):

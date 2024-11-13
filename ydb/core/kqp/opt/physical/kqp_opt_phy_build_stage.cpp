@@ -10,7 +10,7 @@
 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
 

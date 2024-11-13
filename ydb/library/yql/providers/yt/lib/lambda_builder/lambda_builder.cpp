@@ -1,10 +1,10 @@
 #include "lambda_builder.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/minikql/mkql_opt_literal.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_opt_literal.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 
 #include <util/generic/strbuf.h>
 #include <util/system/env.h>

@@ -9,7 +9,7 @@
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/actor_helpers.h>
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 #include <ydb/library/yql/public/purecalc/common/interface.h>
 
 #include <library/cpp/testing/unittest/registar.h>

@@ -164,13 +164,13 @@ PEERDIR(
     ydb/library/login/protos
     ydb/library/mkql_proto/protos
     ydb/public/api/protos
-    ydb/library/yql/core/file_storage/proto
-    ydb/library/yql/core/issue/protos
+    yql/essentials/core/file_storage/proto
+    yql/essentials/core/issue/protos
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/proto
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/public/issue/protos
-    ydb/library/yql/public/types
+    yql/essentials/providers/common/proto
+    yql/essentials/public/issue/protos
+    yql/essentials/public/types
     ydb/library/services
     ydb/library/ydb_issue/proto
     ydb/core/tx/columnshard/engines/scheme/defaults/protos

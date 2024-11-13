@@ -10,8 +10,8 @@
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 
-#include <ydb/library/yql/utils/range_walker.h>
-#include <ydb/library/yql/utils/bind_in_range.h>
+#include <yql/essentials/utils/range_walker.h>
+#include <yql/essentials/utils/network/bind_in_range.h>
 
 #include <library/cpp/messagebus/network.h>
 

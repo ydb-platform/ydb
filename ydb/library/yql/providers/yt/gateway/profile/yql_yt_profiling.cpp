@@ -1,6 +1,6 @@
 #include "yql_yt_profiling.h"
 
-#include <ydb/library/yql/utils/log/profile.h>
+#include <yql/essentials/utils/log/profile.h>
 
 #include <util/generic/ptr.h>
 

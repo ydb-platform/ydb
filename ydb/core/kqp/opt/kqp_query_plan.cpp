@@ -6,19 +6,19 @@
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/public/lib/value/value.h>
 
-#include <ydb/library/yql/ast/yql_ast_escaping.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/ast/yql_ast_escaping.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/utils/utf8.h>
+#include <yql/essentials/utils/utf8.h>
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
@@ -33,7 +33,7 @@
 #include <unordered_map>
 #include <regex>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr {
 namespace NKqp {

@@ -8,24 +8,24 @@
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
-#include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
-#include <ydb/library/yql/core/services/yql_plan.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
-#include <ydb/library/yql/providers/config/yql_config_provider.h>
-#include <ydb/library/yql/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <yql/essentials/core/yql_opt_proposed_by_data.h>
+#include <yql/essentials/core/services/yql_plan.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/providers/result/provider/yql_result_provider.h>
+#include <yql/essentials/providers/config/yql_config_provider.h>
+#include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
-#include <ydb/library/yql/providers/pg/provider/yql_pg_provider_impl.h>
+#include <yql/essentials/providers/pg/provider/yql_pg_provider_impl.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/random_provider/random_provider.h>

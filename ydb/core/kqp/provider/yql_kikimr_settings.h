@@ -1,11 +1,11 @@
 #pragma once
 
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/providers/common/config/yql_dispatch.h>
-#include <ydb/library/yql/providers/common/config/yql_setting.h>
-#include <ydb/library/yql/sql/settings/translation_settings.h>
+#include <yql/essentials/providers/common/config/yql_dispatch.h>
+#include <yql/essentials/providers/common/config/yql_setting.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
 #include <ydb/core/protos/feature_flags.pb.h>
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 namespace NKikimrConfig {
     enum TTableServiceConfig_EIndexAutoChooseMode : int;

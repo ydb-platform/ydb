@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/core/user_data/yql_user_data.h>
-#include <ydb/library/yql/core/file_storage/defs/downloader.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <yql/essentials/core/user_data/yql_user_data.h>
+#include <yql/essentials/core/file_storage/defs/downloader.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
 
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
 

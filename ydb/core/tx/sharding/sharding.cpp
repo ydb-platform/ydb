@@ -1,6 +1,6 @@
 #include "sharding.h"
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/core/tx/columnshard/common/protos/snapshot.pb.h>
 #include <util/string/join.h>
 #include "hash_intervals.h"

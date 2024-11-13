@@ -3,7 +3,7 @@
 #include "knn-defines.h"
 #include "knn-serializer.h"
 
-#include <ydb/library/yql/public/udf/udf_helpers.h>
+#include <yql/essentials/public/udf/udf_helpers.h>
 
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>

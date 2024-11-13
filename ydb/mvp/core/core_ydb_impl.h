@@ -20,8 +20,8 @@
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue_manager.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_manager.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include "appdata.h"
 #include "merger.h"

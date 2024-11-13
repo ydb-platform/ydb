@@ -1,3 +1,5 @@
+IF (NOT OPENSOURCE)
+
 UNITTEST_FOR(ydb/library/yql/providers/yt/provider)
 
 SIZE(SMALL)
@@ -14,24 +16,26 @@ PEERDIR(
     ydb/library/yql/providers/yt/gateway/file
     ydb/library/yql/providers/yt/codec/codegen
     ydb/library/yql/providers/yt/comp_nodes/llvm14
-    ydb/library/yql/core/ut_common
-    ydb/library/yql/ast
-    ydb/library/yql/public/udf/service/terminate_policy
-    ydb/library/yql/core/services
-    ydb/library/yql/core
-    ydb/library/yql/providers/common/gateway
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/providers/common/config
-    ydb/library/yql/providers/config
+    yql/essentials/core/ut_common
+    yql/essentials/ast
+    yql/essentials/public/udf/service/terminate_policy
+    yql/essentials/core/services
+    yql/essentials/core
+    yql/essentials/providers/common/gateway
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/config
+    yql/essentials/providers/config
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/provider
-    ydb/library/yql/providers/result/provider
-    ydb/library/yql/sql
-    ydb/library/yql/minikql/invoke_builtins/llvm14
-    ydb/library/yql/minikql/comp_nodes/llvm14
-    ydb/library/yql/sql/pg
+    yql/essentials/providers/result/provider
+    yql/essentials/sql
+    yql/essentials/minikql/invoke_builtins/llvm14
+    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/sql/pg
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
+
+ENDIF()

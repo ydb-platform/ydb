@@ -1,6 +1,6 @@
 #include "yql_mkql_file_input_state.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <util/system/fs.h>
 

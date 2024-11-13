@@ -1,11 +1,11 @@
-#include <ydb/library/yql/providers/common/schema/parser/yql_type_parser.h>
-#include <ydb/library/yql/public/udf/udf_version.h>
+#include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
+#include <yql/essentials/public/udf/udf_version.h>
 #include <ydb/library/yql/public/purecalc/purecalc.h>
 #include <ydb/library/yql/public/purecalc/io_specs/mkql/spec.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_terminator.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_terminator.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/common/util.h>

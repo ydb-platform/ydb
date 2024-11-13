@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 #include <ydb/core/fq/libs/config/protos/common.pb.h>
 

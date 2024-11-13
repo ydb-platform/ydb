@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/core/file_storage/defs/downloader.h>
+#include <yql/essentials/core/file_storage/defs/downloader.h>
 
 namespace NYql {
 

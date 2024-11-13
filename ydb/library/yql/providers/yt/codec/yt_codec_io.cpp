@@ -1,26 +1,26 @@
 #include "yt_codec_io.h"
 
-#include <ydb/library/yql/public/result_format/yql_restricted_yson.h>
-#include <ydb/library/yql/public/udf/arrow/args_dechunker.h>
+#include <yql/essentials/public/udf/arrow/args_dechunker.h>
 #include <ydb/library/yql/providers/common/codec/arrow/yql_codec_buf_input_stream.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/providers/yt/codec/yt_arrow_converter.h>
+#include <yql/essentials/public/result_format/yql_restricted_yson.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <exception>
 #ifndef MKQL_DISABLE_CODEGEN
 #include <ydb/library/yql/providers/yt/codec/codegen/yt_codec_cg.h>
 #endif
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_stats_registry.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/swap_bytes.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
-#include <ydb/library/yql/public/udf/arrow/memory_pool.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_stats_registry.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/swap_bytes.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/public/decimal/yql_decimal_serialize.h>
+#include <yql/essentials/public/udf/arrow/memory_pool.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/detail.h>

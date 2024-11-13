@@ -3,8 +3,8 @@
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/scheme_types/scheme_types_defs.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/algorithm.h>

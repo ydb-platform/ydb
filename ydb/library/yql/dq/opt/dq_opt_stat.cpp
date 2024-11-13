@@ -1,9 +1,9 @@
 #include "dq_opt_stat.h"
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_cost_function.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_cost_function.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 
 namespace NYql::NDq {

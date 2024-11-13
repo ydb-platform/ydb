@@ -1,12 +1,3 @@
-IF (YQL_PACKAGED)
-    PACKAGE()
-
-    FROM_SANDBOX(
-        FILE 7319896345 OUT_NOAUTO libdigest_udf.so
-    )
-
-    END()
-ELSE()
 YQL_UDF_CONTRIB(digest_udf)
 
     YQL_ABI_VERSION(
@@ -34,8 +25,6 @@ YQL_UDF_CONTRIB(digest_udf)
     ADDINCL(contrib/libs/highwayhash)
 
     END()
-
-ENDIF()
 
 RECURSE_FOR_TESTS(
     test

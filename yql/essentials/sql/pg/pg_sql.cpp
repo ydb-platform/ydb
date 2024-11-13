@@ -2946,6 +2946,10 @@ public:
                                 NodeNotImplemented(defElem->arg);
                                 return nullptr;
                         }
+                    } else {
+                        if (nameElem == "restart") {
+                            options.emplace_back(QL(QAX(nameElem), QA(TString())));
+                        }
                     }
                     break;
                 }

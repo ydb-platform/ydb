@@ -61,6 +61,7 @@ IF (OPENSOURCE_PROJECT != "yt")
         failure_injector
         fetch
         log
+        memory_profiling
         network
         signals
         sys

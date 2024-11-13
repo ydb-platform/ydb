@@ -1,9 +1,3 @@
-IF (YQL_PACKAGED)
-    PACKAGE()
-        FROM_SANDBOX(FILE 7319903255 OUT_NOAUTO libre2_udf.so
-        )
-    END()
-ELSE ()
 YQL_UDF_CONTRIB(re2_udf)
     
     YQL_ABI_VERSION(
@@ -22,8 +16,6 @@ YQL_UDF_CONTRIB(re2_udf)
     )
     
     END()
-ENDIF ()
-
 
 RECURSE_FOR_TESTS(
     test

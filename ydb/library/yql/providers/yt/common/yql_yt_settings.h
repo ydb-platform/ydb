@@ -101,6 +101,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TString, false> DefaultCluster;
     NCommon::TConfSetting<TString, false> StaticPool;
     NCommon::TConfSetting<TString, false> BinaryTmpFolder;
+    NCommon::TConfSetting<TString, false> BinaryCacheFolder;
     NCommon::TConfSetting<TDuration, false> BinaryExpirationInterval;
     NCommon::TConfSetting<bool, false> IgnoreTypeV3;
     NCommon::TConfSetting<bool, false> _UseMultisetAttributes;
@@ -250,7 +251,7 @@ struct TYtSettings {
     NCommon::TConfSetting<NSize::TSize, false> TableContentMinAvgChunkSize;
     NCommon::TConfSetting<ui32, false> TableContentMaxInputTables;
     NCommon::TConfSetting<ui32, false> TableContentMaxChunksForNativeDelivery;
-    NCommon::TConfSetting<bool, false> TableContentLocalExecution;
+    NCommon::TConfSetting<NSize::TSize, false> TableContentLocalExecution;
     NCommon::TConfSetting<bool, false> UseTypeV2;
     NCommon::TConfSetting<bool, false> UseNativeYtTypes;
     NCommon::TConfSetting<bool, false> UseNativeDescSort;
@@ -275,7 +276,6 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> JoinCommonUseMapMultiOut;
     NCommon::TConfSetting<bool, false> UseAggPhases;
     NCommon::TConfSetting<bool, false> UsePartitionsByKeysForFinalAgg;
-    NCommon::TConfSetting<bool, false> _EnableWriteReorder;
     NCommon::TConfSetting<double, false> MaxCpuUsageToFuseMultiOuts;
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseMultiOuts;
     NCommon::TConfSetting<ui64, false> ApplyStoredConstraints;

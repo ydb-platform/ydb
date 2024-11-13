@@ -203,7 +203,6 @@ struct TEvStatistics {
         Ydb::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
         bool Success = true;
-        ui64 Cookie = 0;
         std::optional<TString> Data;
     };
 

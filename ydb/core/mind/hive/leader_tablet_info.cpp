@@ -201,8 +201,11 @@ TActorId TLeaderTabletInfo::SetLockedToActor(const TActorId& actor, const TDurat
 }
 
 void TLeaderTabletInfo::AcquireAllocationUnits() {
-    for (ui32 channel = 0; channel < TabletStorageInfo->Channels.size(); ++channel) {
-        AcquireAllocationUnit(channel);
+    for (const auto& channel : TabletStorageInfo->Channels) {
+        if (!channel.History.empty()) {
+            TStoragePoolInfo& storagePool = Hive.GetStoragePool(channel.StoragePool);
+            storagePool.AcquireAllocationUnit(this, channel.Channel, channel.History.back().GroupID);
+        }
     }
 }
 

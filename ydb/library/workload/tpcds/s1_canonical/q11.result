@@ -1,4 +1,4 @@
-customer_id,customer_first_name,customer_last_name,c
+t_s_secyear.customer_id,t_s_secyear.customer_first_name,t_s_secyear.customer_last_name,t_s_secyear.customer_preferred_cust_flag
 AAAAAAAAAFGBBAAA,Howard,Major,Y
 AAAAAAAAAMGDAAAA,Kenneth,Harlan,Y
 AAAAAAAAAOPFBAAA,Jerry,Fields,Y

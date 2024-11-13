@@ -23,7 +23,7 @@ TMaybe<bool> TYtPhysicalOptProposalTransformer::CanFuseLambdas(const TCoLambda& 
 
     TExprNode::TPtr updatedBody = innerLambda.Body().Ptr();
     if (maxJobMemoryLimit) {
-        auto status = UpdateTableContentMemoryUsage(innerLambda.Body().Ptr(), updatedBody, State_, ctx);
+        auto status = UpdateTableContentMemoryUsage(innerLambda.Body().Ptr(), updatedBody, State_, ctx, false);
         if (status.Level != TStatus::Ok) {
             return {};
         }
@@ -36,7 +36,7 @@ TMaybe<bool> TYtPhysicalOptProposalTransformer::CanFuseLambdas(const TCoLambda& 
 
     updatedBody = outerLambda.Body().Ptr();
     if (maxJobMemoryLimit) {
-        auto status = UpdateTableContentMemoryUsage(outerLambda.Body().Ptr(), updatedBody, State_, ctx);
+        auto status = UpdateTableContentMemoryUsage(outerLambda.Body().Ptr(), updatedBody, State_, ctx, false);
         if (status.Level != TStatus::Ok) {
             return {};
         }

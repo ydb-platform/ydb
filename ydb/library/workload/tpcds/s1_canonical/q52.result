@@ -1,4 +1,4 @@
-d_year,brand_id,brand,ext_price
+dt.d_year,brand_id,brand,ext_price
 2000,2001002,amalgimporto #2,133668.2
 2000,1003001,exportiamalg #1,85038.62
 2000,3002002,importoexporti #2,79104.47

@@ -189,6 +189,13 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
     } else {
         CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
     }
+    if (optionsProto.HasMetadataManagerConstructor()) {
+        auto container =
+            NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(optionsProto.GetMetadataManagerConstructor());
+        MetadataManagerConstructor = container.DetachResult().GetObjectPtrVerified();
+    } else {
+        MetadataManagerConstructor = NDataAccessorControl::IManagerConstructor::BuildDefault();
+    }
 }
 
 bool TIndexInfo::DeserializeDefaultCompressionFromProto(const NKikimrSchemeOp::TCompressionOptions& compressionProto) {
@@ -388,7 +395,7 @@ NSplitter::TEntityGroups TIndexInfo::GetEntityGroupsByStorageId(const TString& s
     return groups;
 }
 
-std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> TIndexInfo::GetCompactionPlannerConstructor() const {
+const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& TIndexInfo::GetCompactionPlannerConstructor() const {
     AFL_VERIFY(!!CompactionPlannerConstructor);
     return CompactionPlannerConstructor;
 }
@@ -598,6 +605,7 @@ void TIndexInfo::Validate() const {
 TIndexInfo TIndexInfo::BuildDefault() {
     TIndexInfo result;
     result.CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
+    result.MetadataManagerConstructor = NDataAccessorControl::IManagerConstructor::BuildDefault();
     return result;
 }
 

@@ -189,6 +189,7 @@ public:
     }
 
     TBlobRange RestoreRange(const TUnifiedBlobId& blobId) const;
+    bool CheckBlob(const TUnifiedBlobId& blobId) const;
 };
 
 struct TBlobRange {
@@ -267,16 +268,7 @@ struct TBlobRange {
         return Size == BlobId.BlobSize();
     }
 
-    explicit TBlobRange(const TUnifiedBlobId& blobId = TUnifiedBlobId(), ui32 offset = 0, ui32 size = 0)
-        : BlobId(blobId)
-        , Offset(offset)
-        , Size(size)
-    {
-        if (Size > 0) {
-            Y_ABORT_UNLESS(Offset < BlobId.BlobSize());
-            Y_ABORT_UNLESS(Offset + Size <= BlobId.BlobSize());
-        }
-    }
+    explicit TBlobRange(const TUnifiedBlobId& blobId = TUnifiedBlobId(), ui32 offset = 0, ui32 size = 0);
 
     static TBlobRange FromBlobId(const TUnifiedBlobId& blobId) {
         return TBlobRange(blobId, 0, blobId.BlobSize());

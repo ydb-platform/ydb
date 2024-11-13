@@ -28,3 +28,4 @@ $scale_factor = 1;
 
 $round = ($x,$y) -> {return $x;};
 $upscale = ($x) -> { return cast($x as decimal(35,9)); };
+$todecimal = ($x, $p, $s) -> { return cast(cast($x as string?) as decimal($p,$s)); };

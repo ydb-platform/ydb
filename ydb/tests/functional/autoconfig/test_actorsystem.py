@@ -3,7 +3,7 @@
 import sys
 
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 
 
@@ -17,7 +17,7 @@ def make_test_for_specific_actor_system(node_type, cpu_count):
                 "use_auto_config": True
             }
             configuration = KikimrConfigGenerator(overrided_actor_system_config=actor_system_config)
-            cls.kikimr_cluster = kikimr_cluster_factory(configuration)
+            cls.kikimr_cluster = KiKiMR(configuration)
             cls.kikimr_cluster.start()
 
         @classmethod

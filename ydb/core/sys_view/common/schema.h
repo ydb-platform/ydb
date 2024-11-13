@@ -217,6 +217,7 @@ struct Schema : NIceDb::Schema {
         struct ExpectedSlotCount : Column<15, NScheme::NTypeIds::Uint32> {};
         struct NumActiveSlots : Column<16, NScheme::NTypeIds::Uint32> {};
         struct DecommitStatus : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct State : Column<18, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<NodeId, PDiskId>;
         using TColumns = TableColumns<
@@ -232,6 +233,7 @@ struct Schema : NIceDb::Schema {
             AvailableSize,
             TotalSize,
             Status,
+            State,
             StatusChangeTimestamp,
             ExpectedSlotCount,
             NumActiveSlots,
@@ -254,6 +256,9 @@ struct Schema : NIceDb::Schema {
         //struct StopFactor : Column<13, NScheme::NTypeIds::Double> {};
         struct Kind : Column<14, NScheme::NTypeIds::Utf8> {};
         struct FailRealm : Column<15, NScheme::NTypeIds::Uint32> {};
+        struct Replicated : Column<16, NScheme::NTypeIds::Bool> {};
+        struct DiskSpace : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct State : Column <18, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<NodeId, PDiskId, VSlotId>;
         using TColumns = TableColumns<
@@ -267,8 +272,11 @@ struct Schema : NIceDb::Schema {
             AllocatedSize,
             AvailableSize,
             Status,
+            State,
             Kind,
-            FailRealm>;
+            FailRealm,
+            Replicated,
+            DiskSpace>;
     };
 
     struct Groups : Table<6> {

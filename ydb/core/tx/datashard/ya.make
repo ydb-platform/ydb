@@ -308,6 +308,7 @@ RECURSE_FOR_TESTS(
     ut_column_stats
     ut_compaction
     ut_erase_rows
+    ut_external_blobs
     ut_followers
     ut_incremental_backup
     ut_incremental_restore_scan

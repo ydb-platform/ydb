@@ -46,6 +46,7 @@ class TpcdsSuiteBase(LoadSuiteBase):
 
 class TestTpcds1(TpcdsSuiteBase):
     scale: int = 1
+    check_canonical: bool = True
     tables_size: dict[str, int] = {
         'call_center': 6,
         'catalog_page': 11718,

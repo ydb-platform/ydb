@@ -3,10 +3,10 @@
 -- TODO this commit should be reverted upon proper fix for https://github.com/ydb-platform/ydb/issues/7565
 -- NB: Subquerys
 -- start query 1 in stream 0 using template query18.tpl and seed 1978355063
-select  item.i_item_id,
-        customer_address.ca_country,
-        customer_address.ca_state,
-        customer_address.ca_county,
+select  item.i_item_id i_item_id,
+        customer_address.ca_country ca_country,
+        customer_address.ca_state ca_state,
+        customer_address.ca_county ca_county,
         avg( cast(cs_quantity as float)) agg1,
         avg( cast(cs_list_price as float)) agg2,
         avg( cast(cs_coupon_amt as float)) agg3,
@@ -34,10 +34,10 @@ select  item.i_item_id,
        ca_state in ('MS','IN','ND'
                    ,'OK','NM','VA','MS')
  group by rollup (item.i_item_id, customer_address.ca_country, customer_address.ca_state, customer_address.ca_county)
- order by customer_address.ca_country,
-        customer_address.ca_state,
-        customer_address.ca_county,
-	item.i_item_id, agg6
+ order by ca_country,
+        ca_state,
+        ca_county,
+	i_item_id, agg6
  limit 100;
 
 -- end query 1 in stream 0 using template query18.tpl

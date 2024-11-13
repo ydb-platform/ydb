@@ -71,11 +71,13 @@ TGatewayTransformer::TGatewayTransformer(const TExecContextBase& execCtx, TYtSet
     }
 }
 
-TCallableVisitFunc TGatewayTransformer::operator()(TInternName name) {
+TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
+    auto name = internName.Str();
+    const bool small = name.SkipPrefix("Small");
     if (name == TYtTableContent::CallableName()) {
 
         *TableContentFlag_ = true;
-        *RemoteExecutionFlag_ = *RemoteExecutionFlag_ || !Settings_->TableContentLocalExecution.Get().GetOrElse(DEFAULT_TABLE_CONTENT_LOCAL_EXEC);
+        *RemoteExecutionFlag_ = *RemoteExecutionFlag_ || !small;
 
         if (EPhase::Content == Phase_ || EPhase::All == Phase_) {
             return [&](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
@@ -442,23 +444,43 @@ void TGatewayTransformer::ApplyUserJobSpec(NYT::TUserJobSpec& spec, bool localRu
         spec.AddLocalFile(file.first, opts);
     }
     const TString binTmpFolder = Settings_->BinaryTmpFolder.Get().GetOrElse(TString());
-    if (localRun || !binTmpFolder) {
-        for (auto& file: *DeferredUdfFiles_) {
-            TAddLocalFileOptions opts;
-            if (!fakeChecksum && file.second.Hash) {
-                opts.MD5CheckSum(file.second.Hash);
+    const TString binCacheFolder = Settings_->BinaryCacheFolder.Get().GetOrElse(TString());
+    if (!localRun && binCacheFolder) {
+        auto udfFiles = std::move(*DeferredUdfFiles_);
+        TTransactionCache::TEntry::TPtr entry = GetEntry();
+        for (auto& file: udfFiles) {
+            YQL_ENSURE(!file.second.Hash.Empty());
+            if (auto snapshot = entry->GetBinarySnapshotFromCache(binCacheFolder, file.second.Hash, file.first)) {
+                spec.AddFile(TRichYPath(snapshot->first).TransactionId(snapshot->second)
+                                                        .FileName(TFsPath(file.first)
+                                                        .GetName())
+                                                        .Executable(true)
+                                                        .BypassArtifactCache(file.second.BypassArtifactCache));
+            } else {
+                DeferredUdfFiles_->push_back(file);
             }
-            YQL_ENSURE(TFileStat(file.first).Size != 0);
-            opts.BypassArtifactCache(file.second.BypassArtifactCache);
-            spec.AddLocalFile(file.first, opts);
         }
-    } else {
-        const TDuration binExpiration = Settings_->BinaryExpirationInterval.Get().GetOrElse(TDuration());
-        auto entry = GetEntry();
-        for (auto& file: *DeferredUdfFiles_) {
-            YQL_ENSURE(TFileStat(file.first).Size != 0);
-            auto snapshot = entry->GetBinarySnapshot(binTmpFolder, file.second.Hash, file.first, binExpiration);
-            spec.AddFile(TRichYPath(snapshot.first).TransactionId(snapshot.second).FileName(TFsPath(file.first).GetName()).Executable(true).BypassArtifactCache(file.second.BypassArtifactCache));
+    }
+    if (!DeferredUdfFiles_->empty()) {
+        if (localRun || !binTmpFolder) {
+            for (auto& file: *DeferredUdfFiles_) {
+                TAddLocalFileOptions opts;
+                if (!fakeChecksum && file.second.Hash) {
+                    opts.MD5CheckSum(file.second.Hash);
+                }
+                YQL_ENSURE(TFileStat(file.first).Size != 0);
+                opts.BypassArtifactCache(file.second.BypassArtifactCache);
+                spec.AddLocalFile(file.first, opts);
+            }
+        } else {
+            const TDuration binExpiration = Settings_->BinaryExpirationInterval.Get().GetOrElse(TDuration());
+            auto entry = GetEntry();
+            for (auto& file: *DeferredUdfFiles_) {
+                YQL_ENSURE(TFileStat(file.first).Size != 0);
+                YQL_ENSURE(!file.second.Hash.Empty());
+                auto snapshot = entry->GetBinarySnapshot(binTmpFolder, file.second.Hash, file.first, binExpiration);
+                spec.AddFile(TRichYPath(snapshot.first).TransactionId(snapshot.second).FileName(TFsPath(file.first).GetName()).Executable(true).BypassArtifactCache(file.second.BypassArtifactCache));
+            }
         }
     }
     RemoteFiles_->clear();

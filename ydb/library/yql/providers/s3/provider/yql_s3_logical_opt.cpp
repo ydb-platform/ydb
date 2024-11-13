@@ -286,7 +286,7 @@ public:
             }
         }
         NPushdown::TPredicateNode predicateToPush;
-        predicateToPush.SetPredicates(pushable, ctx, pos);
+        predicateToPush.SetPredicates(pushable, ctx, pos, predicateTree.Op);
         return predicateToPush;
     }
 

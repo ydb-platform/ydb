@@ -34,11 +34,8 @@ std::shared_ptr<TColumnEngineChanges> TOptimizerPlanner::DoGetOptimizationTask(
     TSaverContext saverContext(StoragesManager);
     std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> result;
     //    if (level->GetLevelId() == 0) {
-    std::vector<TPortionDataAccessor> accessors;
-    for (auto&& i : data.GetRepackPortions(level->GetLevelId())) {
-        accessors.emplace_back(i);
-    }
-    result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, accessors, saverContext);
+    result =
+        std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
     //    } else {
     //        result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(
     //            granule, data.GetRepackPortions(level->GetLevelId()), saverContext);
@@ -53,8 +50,8 @@ std::shared_ptr<TColumnEngineChanges> TOptimizerPlanner::DoGetOptimizationTask(
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(
         "level", level->GetLevelId())("target", data.GetTargetCompactionLevel())("data", data.DebugString());
     result->SetCheckPoints(std::move(positions));
-    for (auto&& i : result->SwitchedPortions) {
-        AFL_VERIFY(!locksManager->IsLocked(i.GetPortionInfo()));
+    for (auto&& i : result->GetSwitchedPortions()) {
+        AFL_VERIFY(!locksManager->IsLocked(i));
     }
     return result;
 }

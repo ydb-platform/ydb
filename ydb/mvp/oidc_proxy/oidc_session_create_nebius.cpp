@@ -1,6 +1,8 @@
 #include <ydb/library/actors/http/http.h>
+#include <ydb/library/security/util.h>
 #include "openid_connect.h"
 #include "oidc_session_create_nebius.h"
+#include <library/cpp/string_utils/base64/base64.h>
 
 namespace NMVP {
 namespace NOIDC {
@@ -33,8 +35,12 @@ void THandlerSessionCreateNebius::RequestSessionToken(const TString& code, const
 }
 
 void THandlerSessionCreateNebius::ProcessSessionToken(const TString& sessionToken, const NActors::TActorContext& ctx) {
+    TString sessionCookieName = CreateNameSessionCookie(Settings.ClientId);
+    TString sessionCookieValue = Base64Encode(sessionToken);
+    LOG_DEBUG_S(ctx, EService::MVP, "Set session cookie: (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
+
     NHttp::THeadersBuilder responseHeaders;
-    responseHeaders.Set("Set-Cookie", CreateSecureCookie(Settings.ClientId, sessionToken));
+    responseHeaders.Set("Set-Cookie", CreateSecureCookie(sessionCookieName, sessionCookieValue));
     responseHeaders.Set("Location", Context.GetRequestedAddress());
     NHttp::THttpOutgoingResponsePtr httpResponse;
     httpResponse = Request->CreateResponse("302", "Cookie set", responseHeaders);

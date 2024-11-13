@@ -4,6 +4,9 @@
 #include "flat_bio_actor.h"
 #include "util_fmt_logger.h"
 #include <ydb/core/base/counters.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/tablet_flat/shared_cache_clock_pro.h>
 #include <ydb/core/tablet_flat/shared_cache_switchable.h>
 #include <ydb/core/tablet_flat/shared_cache_s3fifo.h>
@@ -1155,42 +1158,49 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    // void Handle(TEvSharedPageCache::TEvConfigure::TPtr& ev) {
-    //     const auto* msg = ev->Get();
+    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->Record;
 
-    //     if (msg->Record.HasMemoryLimit() && msg->Record.GetMemoryLimit() != 0) {
-    //         Config.LimitBytes = msg->Record.GetMemoryLimit();
-    //     } else {
-    //         Config.LimitBytes = {};
-    //     }
-    //     ActualizeCacheSizeLimit();
+        if (auto logl = Logger->Log(ELnLev::Debug)) {
+            logl << "Config updated " << record.GetConfig().ShortDebugString();
+        }
+        
+        auto currentReplacementPolicy = Config.GetReplacementPolicy();
 
-    //     if (msg->Record.HasActivePagesReservationPercent()) {
-    //         Config.ActivePagesReservationPercent = msg->Record.GetActivePagesReservationPercent();
-    //     }
+        {
+            auto* appData = AppData(ctx);
+            NKikimrSharedCache::TSharedCacheConfig config;
+            if (record.GetConfig().HasBootstrapConfig()) {
+                if (record.GetConfig().GetBootstrapConfig().HasSharedCacheConfig()) {
+                    config.MergeFrom(record.GetConfig().GetBootstrapConfig().GetSharedCacheConfig());
+                }
+            } else if (appData->BootstrapConfig.HasSharedCacheConfig()) {
+                config.MergeFrom(appData->BootstrapConfig.GetSharedCacheConfig());
+            }
+            if (record.GetConfig().HasSharedCacheConfig()) {
+                config.MergeFrom(record.GetConfig().GetSharedCacheConfig());
+            } else {
+                config.MergeFrom(appData->SharedCacheConfig);
+            }
+            Config.Swap(&config);
+        }
 
-    //     if (msg->Record.GetAsyncQueueInFlyLimit() != 0) {
-    //         AsyncRequests.Limit = msg->Record.GetAsyncQueueInFlyLimit();
-    //         RequestFromQueue(AsyncRequests);
-    //     }
+        ActualizeCacheSizeLimit();
 
-    //     if (msg->Record.GetScanQueueInFlyLimit() != 0) {
-    //         ScanRequests.Limit = msg->Record.GetScanQueueInFlyLimit();
-    //         RequestFromQueue(ScanRequests);
-    //     }
+        AsyncRequests.Limit = Config.GetAsyncQueueInFlyLimit();
+        ScanRequests.Limit = Config.GetScanQueueInFlyLimit();
 
-    //     if (msg->Record.GetReplacementPolicy() != Config.ReplacementPolicy) {
-    //         if (auto logl = Logger->Log(ELnLev::Info)) {
-    //             logl << "Replacement policy switch from " << Config.ReplacementPolicy << " to " << msg->Record.GetReplacementPolicy();
-    //         }
-    //         Config.ReplacementPolicy = msg->Record.GetReplacementPolicy();
-    //         Evict(Cache.Switch(CreateCache(), Config.Counters->ReplacementPolicySize(Config.ReplacementPolicy)));
-    //         DoGC();
-    //         if (auto logl = Logger->Log(ELnLev::Info)) {
-    //             logl << "Replacement policy switch to " << Config.ReplacementPolicy << " finished";
-    //         }
-    //     }
-    // }
+        if (currentReplacementPolicy != Config.GetReplacementPolicy()) {
+            if (auto logl = Logger->Log(ELnLev::Info)) {
+                logl << "Replacement policy switch from " << currentReplacementPolicy << " to " << Config.GetReplacementPolicy();
+            }
+            Evict(Cache.Switch(CreateCache(), Counters.ReplacementPolicySize(Config.GetReplacementPolicy())));
+            DoGC();
+            if (auto logl = Logger->Log(ELnLev::Info)) {
+                logl << "Replacement policy switch from " << currentReplacementPolicy << " to " << Config.GetReplacementPolicy();
+            }
+        }
+    }
 
     inline ui64 GetStatAllBytes() const {
         return StatActiveBytes + StatPassiveBytes + StatLoadInFlyBytes;
@@ -1253,6 +1263,10 @@ public:
         
         Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::SharedCache));
 
+        Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+            new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
+                NKikimrConsole::TConfigItem::BootstrapConfigItem, NKikimrConsole::TConfigItem::SharedCacheConfigItem}));
+
         Become(&TThis::StateFunc);
     }
 
@@ -1265,7 +1279,7 @@ public:
             hFunc(NSharedCache::TEvInvalidate, Handle);
 
             hFunc(NBlockIO::TEvData, Handle);
-            // hFunc(TEvSharedPageCache::TEvConfigure, Handle);
+            HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
             hFunc(TKikimrEvents::TEvWakeup, Wakeup);
             cFunc(TEvents::TSystem::PoisonPill, TakePoison);
 

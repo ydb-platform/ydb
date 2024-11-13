@@ -2,9 +2,11 @@
 
 #include <util/system/sanitizers.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/cms/console/console.h>
 
-namespace NKikimr {
-namespace NTabletFlatExecutor {
+namespace NKikimr::NSharedCache {
+
+using namespace NTabletFlatExecutor;
 
 Y_UNIT_TEST_SUITE(TSharedPageCache) {
 
@@ -111,7 +113,7 @@ THolder<TSharedPageCacheCounters> GetSharedPageCounters(TMyEnvBase& env) {
     return MakeHolder<TSharedPageCacheCounters>(GetServiceCounters(env->GetDynamicCounters(), "tablets")->GetSubgroup("type", "S_CACHE"));
 };
 
-void LogCounters(TIntrusivePtr<TSharedPageCacheCounters> counters) {
+void LogCounters(THolder<TSharedPageCacheCounters>& counters) {
     Cerr << "Counters: Active:" << counters->ActiveBytes->Val() << "/" << counters->ActiveLimitBytes->Val() 
         << ", Passive:" << counters->PassiveBytes->Val() 
         << ", MemLimit:" << counters->MemLimitBytes->Val()
@@ -134,11 +136,14 @@ void RestartAndClearCache(TMyEnvBase& env) {
 }
 
 void SwitchPolicy(TMyEnvBase& env, NKikimrSharedCache::TReplacementPolicy policy) {
-    auto configure = MakeHolder<TEvSharedPageCache::TEvConfigure>();
-    configure->Record.SetReplacementPolicy(policy);
-    configure->Record.SetMemoryLimit(8_MB);
-    env->Send(MakeSharedPageCacheId(), TActorId{}, configure.Release());
-    WaitEvent(env, TEvSharedPageCache::EvConfigure);
+    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+
+    auto config = request->Record.MutableConfig()->MutableSharedCacheConfig();
+    config->SetReplacementPolicy(policy);
+    config->SetMemoryLimit(8_MB);
+    
+    env->Send(MakeSharedPageCacheId(), TActorId{}, request.Release());
+    WaitEvent(env, NConsole::TEvConsole::EvConfigNotificationRequest);
 }
 
 Y_UNIT_TEST(Limits) {
@@ -563,7 +568,6 @@ Y_UNIT_TEST(ReplacementPolicySwitch) {
     UNIT_ASSERT_VALUES_EQUAL(counters->ReplacementPolicySize(NKikimrSharedCache::ThreeLeveledLRU)->Val(), 0);
 }
 
-} // Y_UNIT_TEST_SUITE(TSharedPageCache)
+}
 
-} // namespace NTabletFlatExecutor
-} // namespace NKikimr
+}

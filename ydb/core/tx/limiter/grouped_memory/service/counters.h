@@ -10,6 +10,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunks;
     NMonitoring::TDynamicCounters::TCounterPtr WaitingBytes;
     NMonitoring::TDynamicCounters::TCounterPtr WaitingChunks;
+    NMonitoring::TDynamicCounters::TCounterPtr AllocationFailCount;
 
 public:
     TStageCounters(const TCommonCountersOwner& owner, const TString& name)
@@ -17,7 +18,12 @@ public:
         , AllocatedBytes(TBase::GetValue("Allocated/Bytes"))
         , AllocatedChunks(TBase::GetValue("Allocated/Count"))
         , WaitingBytes(TBase::GetValue("Waiting/Bytes"))
-        , WaitingChunks(TBase::GetValue("Waiting/Count")) {
+        , WaitingChunks(TBase::GetValue("Waiting/Count"))
+        , AllocationFailCount(TBase::GetValue("AllocationFails/Count")) {
+    }
+
+    void OnCannotAllocate() {
+        AllocationFailCount->Add(1);
     }
 
     void Add(const ui64 volume, const bool allocated) {

@@ -73,7 +73,7 @@ void WriteLog(const TString& log, const TVector<THolder<TLogBackend>>& logBacken
                 log.length()
             ));
         } catch (const yexception& e) {
-            LOG_W("WriteLog: unable to write audit log (error: " << e.what() << ")");
+            LOG_E("WriteLog: unable to write audit log (error: " << e.what() << ")");
         }
     }
 }

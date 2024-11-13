@@ -1372,16 +1372,19 @@ message TAuditConfig {
 
     message TStderrBackend {
         optional EFormat Format = 1 [default = JSON];
+        optional string LogJsonEnvelope = 2; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
     }
 
     message TFileBackend {
         optional EFormat Format = 1 [default = JSON];
         optional string FilePath = 2;
+        optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
     }
 
     message TUnifiedAgentBackend {
         optional EFormat Format = 1 [default = JSON];
         optional string LogName = 2;
+        optional string LogJsonEnvelope = 3; // Json template with text field containing %message% placeholder. For example {"my_enveloped_message": "%message%"}. %message% will be replaced with real audit log message
     }
 
     optional TStderrBackend StderrBackend = 1;

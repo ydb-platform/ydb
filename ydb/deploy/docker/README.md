@@ -2,7 +2,7 @@
 
 ## Base image
 
-Base layer is official `ubuntu:20.04` docker image with packages:
+Base layer is official `ubuntu:focal` docker image with packages:
 - libcap2-bin (for setcap to binaries)
 - ca-certificates (for working with CA bundle)
 

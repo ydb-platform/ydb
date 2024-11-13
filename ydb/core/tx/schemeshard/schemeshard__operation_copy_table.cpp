@@ -401,9 +401,13 @@ public:
                         .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of copying base table
                 } else {
                     checks
-                        // .NotUnderOperation() // FIXME
                         .IsCommonSensePath()
                         .IsLikeDirectory();
+
+                    // implicitly consider as part of consistent operation if we have peer op
+                    if (!Transaction.HasCreateCdcStream()) {
+                        checks.NotUnderOperation();
+                    }
                 }
             }
 
@@ -775,8 +779,12 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             .NotDeleted()
             .NotUnderDeleting()
             .IsTable()
-            // .NotUnderOperation()
             .IsCommonSensePath(); //forbid copy impl index tables directly
+
+        // implicitly consider as part of consistent operation if we have peer op
+        if (!cdcPeerOp) {
+            checks.NotUnderOperation();
+        }
 
         if (!checks) {
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};

@@ -18,6 +18,8 @@ namespace {
     }
 
     static constexpr TDuration AvgBatch = TDuration::MicroSeconds(100);
+
+    static constexpr double MinCapacity = 1e-9;
 }
 
 namespace NKikimr {
@@ -390,14 +392,6 @@ public:
 
 class TResourcesWeightCalculator : public IObservable {
 public:
-    TResourcesWeightCalculator(TObservableUpdater* updater, TMaybe<TDuration> throttleRecalculation)
-        : Updater(updater)
-        , ThrottleRecalculation(throttleRecalculation)
-    {
-        Y_UNUSED(Updater);
-        Y_UNUSED(throttleRecalculation);
-    }
-
     void Register(IResourcesWeightLimitValue* entry) {
         AddDependency(entry);
         ReportEnabled(entry);
@@ -452,8 +446,6 @@ public:
 
 private:
     TIntrusiveList<IResourcesWeightLimitValue, TResourceWeightIntrusiveListTag> Entries;
-    TObservableUpdater* Updater;
-    TMaybe<TDuration> ThrottleRecalculation;
 
     TVector<std::pair<double, IResourcesWeightLimitValue*>> SortBuffer;
 };
@@ -522,7 +514,6 @@ public:
         TMonotonic LastNowRecalc;
         bool Disabled = false;
         i64 EntitiesWeight = 0;
-        double MaxDeviation = 0;
         double MaxLimitDeviation = 0;
 
         ssize_t TrackedBefore = 0;
@@ -620,6 +611,9 @@ public:
         if (limit > tracked) {
             return {};
         } else {
+            if (current.get()->Capacity < MinCapacity) {
+                return MaxDelay;
+            }
             return Min(MaxDelay, ToDuration(/*Coeff * */(tracked - limit +
                         Max<i64>(0, group->DelayedSumBatches.load()) + BatchTime.MicroSeconds() +
                         ActivationPenalty.MicroSeconds() * (group->DelayedCount.load() + 1) +
@@ -664,7 +658,7 @@ struct TComputeScheduler::TImpl {
     TObservableUpdater WeightsUpdater;
     TParameter<double> SumCores{&WeightsUpdater, 1};
 
-    TResourcesWeightCalculator ResourceWeightsCalculator{&WeightsUpdater, {}};
+    TResourcesWeightCalculator ResourceWeightsCalculator;
 
     enum : ui32 {
         TotalShare = 1,
@@ -766,7 +760,6 @@ void TComputeScheduler::TImpl::AdvanceTime(TMonotonic now, TSchedulerEntity::TGr
     if (Counters) {
         record->InitCounters(Counters);
     }
-    WeightsUpdater.UpdateAll();
     record->MutableStats.Next()->Capacity = record->Share->GetValue();
     auto& v = record->MutableStats;
     {
@@ -783,8 +776,6 @@ void TComputeScheduler::TImpl::AdvanceTime(TMonotonic now, TSchedulerEntity::TGr
             Max<ssize_t>(
                 tracked - FromDuration(ForgetInteval) * group.get()->Capacity, 
                 Min<ssize_t>(group.get()->Limit(now) - group.get()->MaxLimitDeviation, tracked));
-
-        v.Next()->MaxDeviation = (FromDuration(SmoothPeriod) * v.Next()->Capacity) / v.Next()->Capacity;
 
         //if (group.get()->EntitiesWeight > 0) {
         //    delta = FromDuration(now - group.get()->LastNowRecalc) * group.get()->Capacity / group.get()->EntitiesWeight;
@@ -804,6 +795,7 @@ void TComputeScheduler::TImpl::AdvanceTime(TMonotonic now, TSchedulerEntity::TGr
 }
 
 void TComputeScheduler::AdvanceTime(TMonotonic now) {
+    Impl->WeightsUpdater.UpdateAll();
     for (size_t i = 0; i < Impl->Records.size(); ++i) {
         Impl->AdvanceTime(now, Impl->Records[i].get());
     }
@@ -818,8 +810,10 @@ void TComputeScheduler::Deregister(TSchedulerEntityHandle& self, TMonotonic now)
     for (auto group : (*self).Groups) {
         auto* next = group->MutableStats.Next();
         next->EntitiesWeight -= (*self).Weight;
-        auto* param = Impl->WeightsUpdater.FindOrAddParameter<i64>({group->Name, TImpl::TasksCount}, 0);
-        param->Add(-1);
+        auto* param = Impl->WeightsUpdater.FindValue<TParameter<i64>>({group->Name, TImpl::TasksCount});
+        if (param) {
+            param->Add(-1);
+        }
         Impl->AdvanceTime(now, group);
     }
 }

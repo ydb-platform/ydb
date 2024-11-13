@@ -129,16 +129,17 @@ class YdbCluster:
         return cls._ydb_driver
 
     @classmethod
-    def _list_directory_impl(cls, path) -> List[ydb.SchemeEntry]:
+    def list_directory(cls, root_path: str, rel_path: str) -> List[ydb.SchemeEntry]:
+        path = f'{root_path}/{rel_path}' if root_path else rel_path
         LOGGER.info(f'list {path}')
         result = []
         for child in cls.get_ydb_driver().scheme_client.list_directory(path).children:
             if child.name == '.sys':
                 continue
-            child.name = f'{path}/{child.name}'
+            child.name = f'{rel_path}/{child.name}'
             result.append(child)
             if child.is_directory() or child.is_column_store():
-                result += cls._list_directory_impl(child.name)
+                result += cls.list_directory(root_path, child.name)
         return result
 
     @classmethod
@@ -154,7 +155,7 @@ class YdbCluster:
         self_descr = cls._describe_path_impl(full_path)
         if self_descr is not None:
             if self_descr.is_directory():
-                for descr in cls._list_directory_impl(full_path):
+                for descr in cls.list_directory('', full_path):
                     if descr.is_any_table():
                         result.append(descr.name)
             elif self_descr.is_any_table():

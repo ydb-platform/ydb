@@ -56,7 +56,7 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 5
+                                                        "ExternalPlanNodeId": 4
                                                     }
                                                 ],
                                                 "Name": "Filter",

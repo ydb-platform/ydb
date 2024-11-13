@@ -16,6 +16,8 @@
 
 #include <util/string/cast.h>
 
+#include <contrib/libs/xxhash/xxhash.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -485,7 +487,8 @@ public:
         }
 
         auto hash = Hasher(ViewForKeyAndState.data());
-        auto bucketId = hash % SpilledBucketCount;
+        XXH64_hash_t hashed_hash = XXH64(&hash, sizeof(hash), 0);
+        auto bucketId = hashed_hash % SpilledBucketCount;
         auto& bucket = SpilledBuckets[bucketId];
 
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
@@ -592,8 +595,9 @@ private:
             SplitStateSpillingBucket = -1;
         }
         while (const auto keyAndState = static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Extract())) {
-            auto hash = Hasher(keyAndState); //Hasher uses only key for hashing
-            auto bucketId = hash % SpilledBucketCount;
+            auto hash = Hasher(keyAndState);  //Hasher uses only key for hashing
+            XXH64_hash_t hashed_hash = XXH64(&hash, sizeof(hash), 0);
+            auto bucketId = hashed_hash % SpilledBucketCount;
             auto& bucket = SpilledBuckets[bucketId];
 
             bucket.LineCount++;
@@ -842,6 +846,12 @@ private:
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
+                std::sort(SpilledBuckets.begin(), SpilledBuckets.end(), [](const TSpilledBucket& lhs, const TSpilledBucket& rhs) {
+                    bool lhs_in_memory = lhs.BucketState == TSpilledBucket::EBucketState::InMemory;
+                    bool rhs_in_memory = rhs.BucketState == TSpilledBucket::EBucketState::InMemory;
+                    return lhs_in_memory > rhs_in_memory;
+                });
+
                 YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");

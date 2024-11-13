@@ -1,11 +1,11 @@
 #pragma once
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
 #include <util/generic/string.h>
 #include <util/generic/map.h>
 
 #include <optional>
-
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr::NSchemeShard {
 

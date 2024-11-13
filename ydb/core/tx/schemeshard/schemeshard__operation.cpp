@@ -1,11 +1,10 @@
 #include "schemeshard__operation.h"
-#include "schemeshard__operation_part.h"
 
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_side_effects.h"
-
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
@@ -793,6 +792,7 @@ bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, T
 
     while (path != parentPath) {
         if (createdPaths.contains(path.PathString())) {
+            path.Rise();
             continue;
         }
 

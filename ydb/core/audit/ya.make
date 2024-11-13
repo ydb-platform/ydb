@@ -13,8 +13,4 @@ PEERDIR(
     ydb/core/base
 )
 
-RESOURCE(
-    ydb/core/kqp/kqp_default_settings.txt kqp_default_settings.txt
-)
-
 END()

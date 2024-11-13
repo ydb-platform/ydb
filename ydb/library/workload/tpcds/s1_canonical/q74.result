@@ -1,4 +1,4 @@
-customer_id,customer_first_name,customer_last_name
+t_s_secyear.customer_id,t_s_secyear.customer_first_name,t_s_secyear.customer_last_name
 AAAAAAAAAMGDAAAA,Kenneth,Harlan
 AAAAAAAAANFAAAAA,Philip,Banks
 AAAAAAAAAOPFBAAA,Jerry,Fields
@@ -27,7 +27,7 @@ AAAAAAAAFACEAAAA,Priscilla,Miller
 AAAAAAAAFBAHAAAA,Michael,Williams
 AAAAAAAAFGIGAAAA,Eduardo,Miller
 AAAAAAAAFGPGAAAA,Albert,Wadsworth
-AAAAAAAAFHACBAAA,%,%
+AAAAAAAAFHACBAAA,,
 AAAAAAAAFJHFAAAA,Larissa,Roy
 AAAAAAAAFMHIAAAA,Emilio,Darling
 AAAAAAAAFOGIAAAA,Michelle,Greene
@@ -80,7 +80,7 @@ AAAAAAAAOBADBAAA,Elizabeth,Burnham
 AAAAAAAAOCAJAAAA,Jenna,Staton
 AAAAAAAAOCDJAAAA,Nina,Sanchez
 AAAAAAAAOCICAAAA,Zachary,Pennington
-AAAAAAAAOCLBBAAA,%,%
+AAAAAAAAOCLBBAAA,,
 AAAAAAAAOFLCAAAA,James,Taylor
 AAAAAAAAOPDLAAAA,Ann,Pence
 AAAAAAAAPDFBAAAA,Terrance,Banks

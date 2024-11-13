@@ -2,6 +2,8 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/topic_session.h>
 
+#include <ydb/library/yql/public/purecalc/common/interface.h>
+
 namespace NFq::NRowDispatcher {
 
 
@@ -17,6 +19,7 @@ struct TActorFactory : public IActorFactory {
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const NYql::IPqGateway::TPtr& pqGateway) const override {
 
@@ -29,6 +32,7 @@ struct TActorFactory : public IActorFactory {
             partitionId,
             std::move(driver),
             credentialsProviderFactory,
+            pureCalcProgramFactory,
             counters,
             pqGateway
         );

@@ -2580,38 +2580,22 @@ private:
         TTableInfoResult& result)
     {
         TVector<NYT::TNode> attributes(tables.size());
+        TVector<TMaybe<NYT::TNode>> linkAttributes(tables.size());
+        std::atomic<bool> linksPresent = false;
         {
             auto batchGet = tx->CreateBatchRequest();
             TVector<TFuture<void>> batchRes(Reserve(idxs.size()));
             for (auto& idx: idxs) {
-                batchRes.push_back(batchGet->Get(idx.second + "/@").Apply([&attributes, idx] (const TFuture<NYT::TNode>& res) {
-                    attributes[idx.first] = res.GetValue();
-                }));
-            }
-            batchGet->ExecuteBatch();
-            WaitExceptionOrAll(batchRes).GetValue();
-        }
-        {
-            auto batchGet = tx->CreateBatchRequest();
-            TVector<TFuture<void>> batchRes;
-            auto getOpts = TGetOptions()
-                .AttributeFilter(TAttributeFilter()
-                    .AddAttribute("type")
-                    .AddAttribute(TString{QB2Premapper})
-                    .AddAttribute(TString{YqlRowSpecAttribute})
-                );
-            for (auto& idx: idxs) {
-                batchRes.push_back(batchGet->Get(tables[idx.first].Table() + "&/@", getOpts).Apply([idx, &attributes](const TFuture<NYT::TNode>& f) {
+                batchRes.push_back(batchGet->Get(tables[idx.first].Table() + "&/@").Apply(
+                     [&attributes, &linkAttributes, &linksPresent, idx] (const TFuture<NYT::TNode>& res) {
                     try {
-                        NYT::TNode attrs = f.GetValue();
-                        if (GetTypeFromAttributes(attrs, false) == "link") {
-                            // override some attributes by the link ones
-                            if (attrs.HasKey(QB2Premapper)) {
-                                attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
-                            }
-                            if (attrs.HasKey(YqlRowSpecAttribute)) {
-                                attributes[idx.first][YqlRowSpecAttribute] = attrs[YqlRowSpecAttribute];
-                            }
+                        NYT::TNode attrs = res.GetValue();
+                        auto type = GetTypeFromAttributes(attrs, false);
+                        if (type == "link") {
+                            linkAttributes[idx.first] = attrs;
+                            linksPresent.store(true);
+                        } else {
+                            attributes[idx.first] = attrs;
                         }
                     } catch (const TErrorResponse& e) {
                         // Yt returns NoSuchTransaction as inner issue for ResolveError
@@ -2625,7 +2609,30 @@ private:
             batchGet->ExecuteBatch();
             WaitExceptionOrAll(batchRes).GetValue();
         }
-
+        if (linksPresent.load()) {
+            auto batchGet = tx->CreateBatchRequest();
+            TVector<TFuture<void>> batchRes;
+            for (auto& idx : idxs) {
+                if (!linkAttributes[idx.first]) {
+                    continue;
+                }
+                const auto& linkAttr = *linkAttributes[idx.first];
+                batchRes.push_back(batchGet->Get(idx.second + "/@").Apply(
+                     [idx, &linkAttr, &attributes](const TFuture<NYT::TNode>& f) {
+                    NYT::TNode attrs = f.GetValue();
+                    attributes[idx.first] = attrs;
+                    // override some attributes by the link ones
+                    if (linkAttr.HasKey(QB2Premapper)) {
+                        attributes[idx.first][QB2Premapper] = linkAttr[QB2Premapper];
+                    }
+                    if (linkAttr.HasKey(YqlRowSpecAttribute)) {
+                        attributes[idx.first][YqlRowSpecAttribute] = linkAttr[YqlRowSpecAttribute];
+                    }
+                }));
+            }
+            batchGet->ExecuteBatch();
+            WaitExceptionOrAll(batchRes).GetValue();
+        }
         auto batchGet = tx->CreateBatchRequest();
         TVector<TFuture<void>> batchRes;
 

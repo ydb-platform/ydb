@@ -1,4 +1,4 @@
-i_item_id,s_,g_state,agg1,agg2,agg3,agg4
+item.i_item_id,store.s_state,g_state,agg1,agg2,agg3,agg4
 ,,1,51.0575881,75.6595856,194.407904,38.2563735
 AAAAAAAAAAABAAAA,,1,46,114.72,0,32.12
 AAAAAAAAAAABAAAA,TN,0,46,114.72,0,32.12

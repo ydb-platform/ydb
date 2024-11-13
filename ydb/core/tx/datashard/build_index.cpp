@@ -626,7 +626,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
                                                        record.GetColumnBuildSettings(),
                                                        userTable,
                                                        limits),
-                                  ev->Cookie,
+                                  0,
                                   scanOpts);
 
     TScanRecord recCard = {scanId, seqNo};

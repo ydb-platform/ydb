@@ -86,8 +86,7 @@ public:
             SendNotification<TEvQueryRunner::TEvExecutionStarted>();
         }
 
-        auto response = std::make_unique<TEvKqpExecuter::TEvStreamDataAck>();
-        response->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        auto response = std::make_unique<TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         response->Record.SetFreeSpace(std::numeric_limits<i64>::max());
 
         auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();

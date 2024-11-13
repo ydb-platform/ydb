@@ -1,9 +1,12 @@
 #include "column_engine.h"
-#include "portions/portion_info.h"
-#include <ydb/core/base/appdata.h>
-#include <util/system/info.h>
 
+#include "portions/portion_info.h"
+
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/columnshard/data_accessor/request.h>
+
+#include <util/system/info.h>
 
 namespace NKikimr::NOlap {
 
@@ -17,12 +20,20 @@ ui64 IColumnEngine::GetMetadataLimit() {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("total", MemoryTotal);
         return MemoryTotal * 0.3;
     } else if (AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().HasAbsoluteValue()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("value", AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetAbsoluteValue());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
+            "value", AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetAbsoluteValue());
         return AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetAbsoluteValue();
     } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("total", MemoryTotal)("kff", AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetTotalRatio());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("total", MemoryTotal)(
+            "kff", AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetTotalRatio());
         return MemoryTotal * AppDataVerified().ColumnShardConfig.GetIndexMetadataMemoryLimit().GetTotalRatio();
     }
+}
+
+void IColumnEngine::FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const {
+    AFL_VERIFY(!!request);
+    AFL_VERIFY(!request->IsEmpty());
+    DoFetchDataAccessors(request);
 }
 
 TSelectInfo::TStats TSelectInfo::Stats() const {
@@ -49,4 +60,4 @@ void TSelectInfo::DebugStream(IOutputStream& out) {
     }
 }
 
-}
+}   // namespace NKikimr::NOlap

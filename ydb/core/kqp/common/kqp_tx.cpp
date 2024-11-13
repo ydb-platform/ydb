@@ -171,7 +171,6 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
     size_t readPhases = 0;
     bool hasEffects = false;
-    bool hasSourceRead = false;
     bool hasStreamLookup = false;
     bool hasSinkWrite = false;
 
@@ -191,7 +190,6 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         }
 
         for (const auto &stage : tx.GetStages()) {
-            hasSourceRead |= !stage.GetSources().empty();
             hasSinkWrite |= !stage.GetSinks().empty();
 
             for (const auto &input : stage.GetInputs()) {
@@ -211,9 +209,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         return true;
     }
 
-    if ((hasSourceRead || hasStreamLookup) && hasSinkWrite) {
-        return true;
-    }
+    YQL_ENSURE(!hasSinkWrite || hasEffects);
 
     // We don't want snapshot when there are effects at the moment,
     // because it hurts performance when there are multiple single-shard

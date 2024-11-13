@@ -34,7 +34,7 @@ namespace {
                 // Operator features
                 EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 |
                 EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
-                EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators |
+                EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | DivisionExpressions |
 
                 // Split features
                 EFlag::SplitOrOperator

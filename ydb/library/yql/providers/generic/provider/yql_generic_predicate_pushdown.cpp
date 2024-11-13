@@ -86,6 +86,8 @@ namespace NYql {
             MATCH_ARITHMETICAL(Sub, SUB);
             MATCH_ARITHMETICAL(Add, ADD);
             MATCH_ARITHMETICAL(Mul, MUL);
+            MATCH_ARITHMETICAL(Div, DIV);
+            MATCH_ARITHMETICAL(Mod, MOD);
 
             if (auto maybeNull = expression.Maybe<TCoNull>()) {
                 proto->mutable_null();
@@ -341,6 +343,12 @@ namespace NYql {
                 break;
             case TExpression_TArithmeticalExpression::SUB:
                 operation = " - ";
+                break;
+            case TExpression_TArithmeticalExpression::DIV:
+                operation = " / ";
+                break;
+            case TExpression_TArithmeticalExpression::MOD:
+                operation = " % ";
                 break;
             case TExpression_TArithmeticalExpression::BIT_AND:
                 operation = " & ";

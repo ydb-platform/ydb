@@ -1398,13 +1398,12 @@ bool TTable::RemoveRowVersions(const TRowVersion& lower, const TRowVersion& uppe
 
 TCompactionStats TTable::GetCompactionStats() const
 {
-    TCompactionStats stats;
-    stats.MemRowCount = GetMemRowCount();
-    stats.MemDataSize = GetMemSize();
-    stats.MemDataWaste = GetMemWaste();
-    stats.PartCount = Flatten.size() + ColdParts.size();
-
-    return stats;
+    return {
+        .PartCount = Flatten.size() + ColdParts.size(),
+        .MemRowCount = GetMemRowCount(),
+        .MemDataSize = GetMemSize(),
+        .MemDataWaste = GetMemWaste(),
+    };
 }
 
 void TTable::SetTableObserver(TIntrusivePtr<ITableObserver> ptr) noexcept

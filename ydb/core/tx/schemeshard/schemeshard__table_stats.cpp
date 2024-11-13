@@ -206,6 +206,7 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const TActorContext& ctx,
     newStats.FullCompactionTs = tableStats.GetLastFullCompactionTs();
     newStats.MemDataSize = tableStats.GetInMemSize();
     newStats.StartTime = TInstant::MilliSeconds(rec.GetStartTime());
+    newStats.HasSchemaChanges = tableStats.GetHasSchemaChanges();
     newStats.HasLoanedData = tableStats.GetHasLoanedParts();
     for (ui64 tabletId : rec.GetUserTablePartOwners()) {
         newStats.PartOwners.insert(TTabletId(tabletId));

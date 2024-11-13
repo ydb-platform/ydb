@@ -126,22 +126,22 @@ FHANDLE GetStdinFileno() {
 
 class TMaxInflightGetter {
 public:
-    TMaxInflightGetter(ui64 totalMaxInFlight, std::atomic<ui64>& filesCount)
+    TMaxInflightGetter(ui64 totalMaxInFlight, std::atomic<ui64>& currentFileCount)
         : TotalMaxInFlight(totalMaxInFlight)
-        , FilesCount(filesCount) {
+        , CurrentFileCount(currentFileCount) {
     }
 
     ~TMaxInflightGetter() {
-        --FilesCount;
+        --CurrentFileCount;
     }
 
     ui64 GetCurrentMaxInflight() const {
-        return (TotalMaxInFlight - 1) / FilesCount + 1; // round up
+        return (TotalMaxInFlight - 1) / CurrentFileCount + 1; // round up
     }
 
 private:
     ui64 TotalMaxInFlight;
-    std::atomic<ui64>& FilesCount;
+    std::atomic<ui64>& CurrentFileCount;
 };
 
 class TCsvFileReader {
@@ -269,13 +269,13 @@ TImportFileClient::TImportFileClient(const TDriver& driver, const TClientCommand
 }
 
 TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TString& dbPath, const TImportFileSettings& settings) {
-    FilesCount = filePaths.size();
+    CurrentFileCount = filePaths.size();
     if (settings.Format_ == EDataFormat::Tsv && settings.Delimiter_ != "\t") {
         return MakeStatus(EStatus::BAD_REQUEST,
             TStringBuilder() << "Illegal delimiter for TSV format, only tab is allowed");
     }
 
-    auto resultStatus = TableClient->RetryOperationSync(
+    auto describeStatus = TableClient->RetryOperationSync(
         [this, dbPath](NTable::TSession session) {
             auto result = session.DescribeTable(dbPath).ExtractValueSync();
             if (result.IsSuccess()) {
@@ -284,16 +284,16 @@ TStatus TImportFileClient::Import(const TVector<TString>& filePaths, const TStri
             return result;
         }, NTable::TRetryOperationSettings{RetrySettings}.MaxRetries(10));
 
-    if (!resultStatus.IsSuccess()) {
+    if (!describeStatus.IsSuccess()) {
         /// TODO: Remove this after server fix: https://github.com/ydb-platform/ydb/issues/7791
-        if (resultStatus.GetStatus() == EStatus::SCHEME_ERROR) {
+        if (describeStatus.GetStatus() == EStatus::SCHEME_ERROR) {
             auto describePathResult = NDump::DescribePath(*SchemeClient, dbPath);
             if (describePathResult.GetStatus() != EStatus::SUCCESS) {
                 return MakeStatus(EStatus::SCHEME_ERROR,
                     TStringBuilder() << describePathResult.GetIssues().ToString() << dbPath);
             }
         }
-        return resultStatus;
+        return describeStatus;
     }
 
     UpsertSettings
@@ -428,7 +428,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input,
                                      std::optional<ui64> inputSizeHint,
                                      ProgressCallbackFunc & progressCallback) {
 
-    TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
+    TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, CurrentFileCount);
 
     TCountingInput countInput(&input);
     NCsvFormat::TLinesSplitter splitter(countInput);
@@ -450,7 +450,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input,
 
     ui64 row = settings.SkipRows_ + settings.Header_ + 1;
     ui64 batchRows = 0;
-    ui64 nextBorder = VerboseModeReadSize;
+    ui64 nextBorder = VerboseModeStepSize;
     ui64 batchBytes = 0;
     ui64 readBytes = 0;
 
@@ -489,7 +489,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input,
         buffer.push_back(line);
 
         if (readBytes >= nextBorder && settings.Verbose_) {
-            nextBorder += VerboseModeReadSize;
+            nextBorder += VerboseModeStepSize;
             Cerr << "Processed " << 1.0 * readBytes / (1 << 20) << "Mb and " << row + batchRows << " records" << Endl;
         }
 
@@ -530,7 +530,7 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath,
                                              const TString& dbPath,
                                              const TImportFileSettings& settings) {
 
-    TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
+    TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, CurrentFileCount);
     TString headerRow;
     TCsvFileReader splitter(filePath, settings, headerRow, inFlightGetter);
 
@@ -564,7 +564,7 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath,
             ui32 idx = settings.SkipRows_;
             ui64 readBytes = 0;
             ui64 batchBytes = 0;
-            ui64 nextBorder = VerboseModeReadSize;
+            ui64 nextBorder = VerboseModeStepSize;
             TAsyncStatus status;
             TString line;
             while (splitter.GetChunk(threadId).ConsumeLine(line)) {
@@ -583,7 +583,7 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath,
                 buffer.push_back(line);
                 ++idx;
                 if (readBytes >= nextBorder && settings.Verbose_) {
-                    nextBorder += VerboseModeReadSize;
+                    nextBorder += VerboseModeStepSize;
                     TStringBuilder builder;
                     builder << "Processed " << 1.0 * readBytes / (1 << 20) << "Mb and " << idx << " records" << Endl;
                     Cerr << builder;
@@ -624,7 +624,7 @@ TStatus TImportFileClient::UpsertJson(IInputStream& input, const TString& dbPath
     const TType tableType = GetTableType();
     ValidateTValueUpsertTable();
 
-    TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, FilesCount);
+    TMaxInflightGetter inFlightGetter(settings.MaxInFlightRequests_, CurrentFileCount);
     THolder<IThreadPool> pool = CreateThreadPool(settings.Threads_);
 
     ui64 readBytes = 0;

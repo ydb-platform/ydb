@@ -77,10 +77,10 @@ private:
 
     std::unique_ptr<const NTable::TTableDescription> DbTableInfo;
 
-    std::atomic<ui64> FilesCount;
+    std::atomic<ui64> CurrentFileCount;
     std::atomic<ui64> TotalBytesRead = 0;
 
-    static constexpr ui32 VerboseModeReadSize = 1 << 27; // 100 MB
+    static constexpr ui32 VerboseModeStepSize = 1 << 27; // 128 MB
 
     using ProgressCallbackFunc = std::function<void (ui64, ui64)>;
 

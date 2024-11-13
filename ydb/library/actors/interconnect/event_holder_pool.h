@@ -26,12 +26,10 @@ namespace NActors {
             const auto& counter = common->DestructorQueueSize;
             const auto& max = common->MaxDestructorQueueSize;
             if (counter && (TAtomicBase)(counter->fetch_add(NumBytes) + NumBytes) > max) {
-                Cerr << "deallocate in thread " << counter->load() << Endl;
                 counter->fetch_sub(NumBytes);
                 return false;
             }
             Counter = counter;
-            Cerr << "deallocate in dealloc queue" << Endl;
             return true;
         }
     };

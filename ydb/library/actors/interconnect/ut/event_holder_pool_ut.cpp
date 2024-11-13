@@ -11,13 +11,11 @@
 
 using namespace NActors;
 
-const size_t MaxDestructorQueueSize = 1024 * 1024;
-
 template<typename T>
 TEventHolderPool Setup(T&& callback) {
     auto common = MakeIntrusive<TInterconnectProxyCommon>();
     common->DestructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>();
-    common->MaxDestructorQueueSize = MaxDestructorQueueSize;
+    common->MaxDestructorQueueSize = 1024 * 1024;
     return TEventHolderPool(common, callback);
 }
 
@@ -60,14 +58,6 @@ Y_UNIT_TEST_SUITE(EventHolderPool) {
         freeQ.clear(); // if we don't this, we may probablty crash due to the order of object destruction
     }
 
-    struct TEvBlobLarge : TEvents::TEvBlob {
-        char Data[4096];
-
-        TEvBlobLarge(TString data)
-            : TEvents::TEvBlob(std::move(data))
-        {}
-    };
-
     struct TMemProfiler {
         size_t UsedAtStart = 0;
 
@@ -84,7 +74,7 @@ Y_UNIT_TEST_SUITE(EventHolderPool) {
         }
     };
 
-    Y_UNIT_TEST(MemConsumptionSmall) {
+    void MemComsumption(size_t repeats, size_t buffSize) {
         TDeque<THolder<IEventBase>> freeQ;
         auto callback = [&](THolder<IEventBase> event) {
             freeQ.push_back(std::move(event));
@@ -94,74 +84,33 @@ Y_UNIT_TEST_SUITE(EventHolderPool) {
         std::list<TEventHolder> q;
         TMemProfiler prof;
 
-        const ui32 repeats = 500'000;
-
         for (ui32 i = 0; i < repeats; i++) {
             TEventHolder& event = pool.Allocate(q);
-            TString data = TString::Uninitialized(10);
-            auto holder = MakeHolder<IEventHandle>(TActorId{}, TActorId{},  new TEvBlobLarge(data));
+            TString data = TString::Uninitialized(buffSize);
+            auto holder = MakeHolder<IEventHandle>(TActorId{}, TActorId{},  new TEvents::TEvBlob(data));
             event.Fill(*holder);
 
             pool.Release(q, q.begin());
-
-            if (i % (repeats / 100) == 0) {
-                Cerr << prof.GetUsed() << Endl;
-            }
+            UNIT_ASSERT_LT_C(prof.GetUsed(), TEventHolderPool::MaxBytesPerMessage * 2, prof.GetUsed());
         }
-        Cerr << prof.GetUsed() << Endl;
-        UNIT_ASSERT_LT(prof.GetUsed(), 2 * std::max(TEventHolderPool::MaxBytesPerMessage, MaxDestructorQueueSize));
-        Cerr << "------------------------\n";
 
         for (ui32 i = 0; i < repeats; i++) {
             TEventHolder& event = pool.Allocate(q);
-            TString data = TString::Uninitialized(10);
+            TString data = TString::Uninitialized(buffSize);
             auto holder = MakeHolder<IEventHandle>(TActorId{}, TActorId{},  new TEvents::TEvBlob(data));
             event.Fill(*holder);
         }
         for (ui32 i = 0; i < repeats; i++) {
             pool.Release(q, q.begin());
-            if (i % (repeats / 50) == 0) {
-                Cerr << prof.GetUsed() << Endl;
-            }
         }
-        Cerr << prof.GetUsed() << Endl;
-        UNIT_ASSERT_LT(prof.GetUsed(), 2 * std::max(TEventHolderPool::MaxBytesPerMessage, MaxDestructorQueueSize));
+        UNIT_ASSERT_LT_C(prof.GetUsed(), TEventHolderPool::MaxBytesPerMessage * 2, prof.GetUsed());
+    }
+
+    Y_UNIT_TEST(MemConsumptionSmall) {
+        MemComsumption(100'000, 4);
     }
 
     Y_UNIT_TEST(MemConsumptionLarge) {
-        TDeque<THolder<IEventBase>> freeQ;
-        auto callback = [&](THolder<IEventBase> event) {
-            freeQ.push_back(std::move(event));
-        };
-        auto pool = Setup(std::move(callback));
-
-        std::list<TEventHolder> q;
-        TMemProfiler prof;
-
-        const ui32 repeats = 10'000;
-
-        for (ui32 i = 0; i < repeats; i++) {
-            TEventHolder& event = pool.Allocate(q);
-            TString data = TString::Uninitialized(1024 * 1024);
-            auto holder = MakeHolder<IEventHandle>(TActorId{}, TActorId{},  new TEvents::TEvBlob(data));
-            event.Fill(*holder);
-
-            pool.Release(q, q.begin());
-            UNIT_ASSERT_LT(prof.GetUsed(), TEventHolderPool::MaxBytesPerMessage * 2);
-        }
-        Cerr << "------\n";
-
-        for (ui32 i = 0; i < repeats; i++) {
-            TEventHolder& event = pool.Allocate(q);
-            TString data = TString::Uninitialized(1024 * 1024);
-            auto holder = MakeHolder<IEventHandle>(TActorId{}, TActorId{},  new TEvents::TEvBlob(data));
-            event.Fill(*holder);
-        }
-        for (ui32 i = 0; i < repeats; i++) {
-            pool.Release(q, q.begin());
-        }
-
-        Cerr << prof.GetUsed() << Endl;
-        UNIT_ASSERT_LT(prof.GetUsed(), 1_MB); // 1_MB for possible overhead
+        MemComsumption(10'000, 1024*1024);
     }
 }

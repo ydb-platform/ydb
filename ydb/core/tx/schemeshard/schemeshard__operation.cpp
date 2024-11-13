@@ -1,9 +1,10 @@
 #include "schemeshard__operation.h"
 #include "schemeshard__operation_part.h"
 
-#include "schemeshard__operation_side_effects.h"
-#include "schemeshard__operation_memory_changes.h"
+#include "schemeshard__op_traits.h"
 #include "schemeshard__operation_db_changes.h"
+#include "schemeshard__operation_memory_changes.h"
+#include "schemeshard__operation_side_effects.h"
 
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
@@ -852,10 +853,13 @@ bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, T
     return true;
 }
 
+template <class TFn>
+auto DispatchOp(const TTxTransaction& tx, TFn fn) {
+    return NGenerated::DispatchOp<TSchemeTxTraits, TSchemeTxTraitsFallback, TFn>(tx, std::forward<TFn>(fn));
+}
+
 // # Generates additional MkDirs for transactions
 TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context) {
-    using namespace NGenerated;
-
     TSplitTransactionsResult result;
     THashSet<TString> createdPaths;
 

@@ -326,6 +326,8 @@ public:
     void DeleteConsumer(const ConsumerSessionKey& key);
     void UpdateMetrics();
     TString GetInternalState();
+    template <class TEventPtr>
+    bool CheckSession(TAtomicSharedPtr<ConsumerInfo>& consumer, const TEventPtr& ev);
 
     STRICT_STFUNC(
         StateFunc, {
@@ -515,11 +517,16 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it != Consumers.end()) {
-        LOG_ROW_DISPATCHER_ERROR("Consumer already exists, ignore StartSession");
-        return;
+        if (ev->Cookie <= it->second->Generation) {
+            LOG_ROW_DISPATCHER_WARN("Consumer already exists, ignore StartSession");
+            return;
+        }
+        LOG_ROW_DISPATCHER_WARN("Consumer already exists, new consumer with new generation (" << ev->Cookie << ", current " 
+            << it->second->Generation << "), remove old consumer, sender " << ev->Sender << ", topicPath " 
+            << ev->Get()->Record.GetSource().GetTopicPath() <<" partitionId " << ev->Get()->Record.GetPartitionId() << " cookie " << ev->Cookie);
+        DeleteConsumer(key);
     }
     const auto& source = ev->Get()->Record.GetSource();
-
     TActorId sessionActorId;
     TopicSessionKey topicKey{source.GetEndpoint(), source.GetDatabase(), source.GetTopicPath(), ev->Get()->Record.GetPartitionId()};
     TopicSessionInfo& topicSessionInfo = TopicSessions[topicKey];
@@ -529,10 +536,8 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto consumerInfo = MakeAtomicShared<ConsumerInfo>(ev->Sender, SelfId(), NextEventQueueId++, ev->Get()->Record, TActorId(), NodesTracker.GetNodeConnected(ev->Sender.NodeId()), ev->Cookie);
     Consumers[key] = consumerInfo;
     ConsumersByEventQueueId[consumerInfo->EventQueueId] = consumerInfo;
-    if (!consumerInfo->EventsQueue.OnEventReceived(ev)) {
-        const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
-        const ui64 seqNo = meta.GetSeqNo();
-        LOG_ROW_DISPATCHER_ERROR("TEvStartSession: wrong seq num from " << ev->Sender.ToString() << ", seqNo " << seqNo << ", ignore message");
+    if (!CheckSession(consumerInfo, ev)) {
+        return;
     }
 
     if (topicSessionInfo.Sessions.empty()) {
@@ -579,10 +584,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
         LOG_ROW_DISPATCHER_WARN("Ignore TEvGetNextBatch, no such session");
         return;
     }
-    if (!it->second->EventsQueue.OnEventReceived(ev)) {
-        const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
-        const ui64 seqNo = meta.GetSeqNo();
-        LOG_ROW_DISPATCHER_ERROR("TEvGetNextBatch: wrong seq num from " << ev->Sender.ToString() << ", seqNo " << seqNo << ", ignore message");
+    if (!CheckSession(it->second, ev)) {
         return;
     }
     it->second->PendingNewDataArrived = false;
@@ -600,7 +602,21 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
         LOG_ROW_DISPATCHER_WARN("Wrong consumer, sender " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId());
         return;
     }
-    it->second->EventsQueue.OnEventReceived(ev);
+    CheckSession(it->second, ev);
+}
+
+template <class TEventPtr>
+bool TRowDispatcher::CheckSession(TAtomicSharedPtr<ConsumerInfo>& consumer, const TEventPtr& ev) {
+    if (ev->Cookie != consumer->Generation) {
+        LOG_ROW_DISPATCHER_WARN("Wrong message generation (" << typeid(TEventPtr).name()  << "), sender " << ev->Sender << " cookie " << ev->Cookie << ", session generation " << consumer->Generation);
+        return false;
+    }
+    if (!consumer->EventsQueue.OnEventReceived(ev)) {
+        const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
+        LOG_ROW_DISPATCHER_WARN("Wrong seq num ignore message (" << typeid(TEventPtr).name() << ") seqNo " << meta.GetSeqNo() << " from " << ev->Sender.ToString());
+        return false;
+    }
+    return true;
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
@@ -612,11 +628,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
         LOG_ROW_DISPATCHER_WARN("Wrong consumer, sender " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId());
         return;
     }
-    if (!it->second->EventsQueue.OnEventReceived(ev)) {
-        const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
-        const ui64 seqNo = meta.GetSeqNo();
-
-        LOG_ROW_DISPATCHER_ERROR("TEvStopSession: wrong seq num from " << ev->Sender.ToString() << ", seqNo " << seqNo << ", ignore message");
+    if (!CheckSession(it->second, ev)) {
         return;
     }
     DeleteConsumer(key);

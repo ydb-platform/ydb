@@ -744,7 +744,7 @@ void TDqPqRdReadActor::TrySendGetNextBatch(SessionInfo& sessionInfo) {
 template <class TEventPtr>
 bool TDqPqRdReadActor::CheckSession(SessionInfo& session, const TEventPtr& ev, ui64 partitionId) {
     if (ev->Cookie != session.Generation) {
-        SRC_LOG_W("Wrong connection id, sender " << ev->Sender << " cookie " << ev->Cookie << ", connection id " << session.Generation << ", send TEvStopSession");
+        SRC_LOG_W("Wrong message generation (" << typeid(TEventPtr).name()  << "), sender " << ev->Sender << " cookie " << ev->Cookie << ", session generation " << session.Generation << ", send TEvStopSession");
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
         *event->Record.MutableSource() = SourceParams;
         event->Record.SetPartitionId(partitionId);
@@ -753,7 +753,7 @@ bool TDqPqRdReadActor::CheckSession(SessionInfo& session, const TEventPtr& ev, u
     }
     if (!session.EventsQueue.OnEventReceived(ev)) {
         const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
-        SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
+        SRC_LOG_W("Wrong seq num ignore message (" << typeid(TEventPtr).name() << ") seqNo " << meta.GetSeqNo() << " from " << ev->Sender.ToString());
         return false;
     }
     return true;

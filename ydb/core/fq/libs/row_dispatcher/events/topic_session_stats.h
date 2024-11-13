@@ -8,15 +8,19 @@ namespace NFq {
 struct TopicSessionClientStatistic {
     NActors::TActorId ReadActorId;
     ui32 PartitionId = 0;
-    i64 UnreadRows = 0;     // Current value
-    i64 UnreadBytes = 0;    // Current value
-    ui64 Offset = 0;        // Current value
-    ui64 ReadBytes = 0;     // Increment / filtered
+    i64 UnreadRows = 0;         // Current value
+    i64 UnreadBytes = 0;        // Current value
+    ui64 Offset = 0;            // Current value
+    ui64 ReadBytes = 0;         // Increment / filtered
+    bool IsWaiting = false;     // Current value
+    i64 ReadLagMessages = 0;    // Current value
     void Add(const TopicSessionClientStatistic& stat) {
         UnreadRows = stat.UnreadRows;
         UnreadBytes = stat.UnreadBytes;
         Offset = stat.Offset;
         ReadBytes += stat.ReadBytes;
+        IsWaiting = stat.IsWaiting;
+        ReadLagMessages = stat.ReadLagMessages;
     }
 };
 

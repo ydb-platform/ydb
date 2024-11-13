@@ -542,7 +542,7 @@ void TDqPqRdReadActor::Handle(const NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& e
 
     auto sessionIt = Sessions.find(ev->Get()->Record.GetPartitionId());
     if (sessionIt == Sessions.end()) {
-        SRC_LOG_W("Ignore TEvMessageBatch from " << ev->Sender << ", seqNo " << meta.GetSeqNo() 
+        SRC_LOG_W("Ignore TEvHeartbeat from " << ev->Sender << ", seqNo " << meta.GetSeqNo() 
             << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << ", PartitionId " << ev->Get()->Record.GetPartitionId());
         return;
     }

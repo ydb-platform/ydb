@@ -76,6 +76,8 @@ struct TQueryStat {
     NYql::TCounters::TEntry UnreadRows;
     NYql::TCounters::TEntry UnreadBytes;
     NYql::TCounters::TEntry ReadBytes;
+    NYql::TCounters::TEntry ReadLagMessages;
+    bool IsWaiting = false;
 };
 
 ui64 UpdateMetricsPeriodSec = 60;
@@ -482,6 +484,8 @@ void TRowDispatcher::UpdateMetrics() {
                 stat.UnreadRows.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadRows));
                 stat.UnreadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadBytes));
                 stat.ReadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.ReadBytes));
+                stat.ReadLagMessages.Add(NYql::TCounters::TEntry(consumer->Stat.ReadLagMessages));
+                stat.IsWaiting = stat.IsWaiting || consumer->Stat.IsWaiting;
             }
         }
     }
@@ -505,16 +509,19 @@ TString TRowDispatcher::GetInternalState() {
         if (!secs) {
             return;
         }
-        str << " avg " << entry.Sum / secs << " max " << entry.Max / secs << " min " << entry.Min / secs << "\n";
+        str << " avg " << entry.Sum / secs << " max " << entry.Max / secs << " min " << entry.Min / secs;
     };
 
     str << "DataRate";
     printDataRate(AggrStats.ReadBytes);
+    str << "\n";
 
     str << "Queries:\n";
     for (const auto& [queryId, stat]: AggrStats.LastQueryStats) {
         str << "  " << queryId << " max unread " << stat.UnreadBytes.Max << " data rate";
         printDataRate(stat.ReadBytes);
+        str << " waiting " << stat.IsWaiting << " avg read lag " << stat.stat.ReadLagMessages.Avg;
+        str << "\n";
     }
     str << "TopicSessions:\n";
     for (auto& [key, sessionsInfo] : TopicSessions) {
@@ -527,7 +534,8 @@ TString TRowDispatcher::GetInternalState() {
                     << consumer->Stat.UnreadRows << " unread bytes " << consumer->Stat.UnreadBytes << " offset " << consumer->Stat.Offset
                     << " get " << consumer->Counters.GetNextBatch
                     << " arr " << consumer->Counters.NewDataArrived << " btc " << consumer->Counters.MessageBatch 
-                    << " pend get " <<  consumer->PendingGetNextBatch << " pend new " <<  consumer->PendingNewDataArrived << " ";
+                    << " pend get " <<  consumer->PendingGetNextBatch << " pend new " <<  consumer->PendingNewDataArrived 
+                    << " waiting " <<  consumer->Stat.IsWaiting << " read lag " << consumer->Stat.ReadLagMessages << " ";
                 str << " retry queue: ";
                 consumer->EventsQueue.PrintInternalState(str);
             }
@@ -630,7 +638,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_WARN("Wrong consumer, sender " << ev->Sender << ", part id " << ev->Cookie);
+        LOG_ROW_DISPATCHER_WARN("Wrong consumer, sender " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId());
         return;
     }
     it->second->EventsQueue.OnEventReceived(ev);

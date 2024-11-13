@@ -10,7 +10,7 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/yql/utils/signals/utils.h>
+#include <yql/essentials/utils/signals/utils.h>
 
 
 namespace NKikimr::NKqp {

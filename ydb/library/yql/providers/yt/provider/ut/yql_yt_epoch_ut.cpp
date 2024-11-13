@@ -1,22 +1,22 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
-#include <ydb/library/yql/core/ut_common/yql_ut_common.h>
+#include <yql/essentials/core/ut_common/yql_ut_common.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/config/yql_setting.h>
-#include <ydb/library/yql/providers/common/config/yql_dispatch.h>
-#include <ydb/library/yql/providers/config/yql_config_provider.h>
-#include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/config/yql_setting.h>
+#include <yql/essentials/providers/common/config/yql_dispatch.h>
+#include <yql/essentials/providers/config/yql_config_provider.h>
+#include <yql/essentials/providers/result/provider/yql_result_provider.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_state.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasink.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/sql/sql.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/sql/sql.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/cast.h>

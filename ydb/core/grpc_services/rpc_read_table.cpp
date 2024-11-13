@@ -7,10 +7,10 @@
 #include "local_rate_limiter.h"
 #include "service_table.h"
 
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>

@@ -1,6 +1,6 @@
 #include "grpc_service.h"
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/executer_actor.h>
@@ -17,9 +17,9 @@
 
 //#include <yql/tools/yqlworker/dq/worker_manager/benchmark.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <ydb/library/grpc/server/grpc_counters.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>

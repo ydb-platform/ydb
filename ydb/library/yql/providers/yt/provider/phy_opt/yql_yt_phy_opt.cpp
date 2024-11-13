@@ -1,16 +1,15 @@
 
 #include "yql_yt_phy_opt.h"
 
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 #include <ydb/library/yql/providers/stat/expr_nodes/yql_stat_expr_nodes.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 
 namespace NYql {
 
 using namespace NNodes;
-using namespace NDq;
 using namespace NPrivate;
 
 TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::TPtr state)

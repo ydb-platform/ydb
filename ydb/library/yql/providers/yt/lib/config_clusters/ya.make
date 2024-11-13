@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/providers/common/proto
+    yql/essentials/providers/common/proto
 )
 
 END()

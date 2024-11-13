@@ -1,0 +1,32 @@
+From 3c6e8fb894b57e6195081de57aa4462e7a9eef8a Mon Sep 17 00:00:00 2001
+From: Yuriy Chernyshov <thegeorg@yandex-team.com>
+Date: Tue, 5 Nov 2024 12:42:23 +0100
+Subject: [PATCH] Workaround the lack of ssize_t type under Windows
+
+As [MSDN says](https://learn.microsoft.com/en-us/windows/win32/winprog/windows-data-types):
+
+```
+A signed version of SIZE_T.
+This type is declared in BaseTsd.h as follows:
+typedef LONG_PTR SSIZE_T;
+```
+---
+ lib/includes/nghttp2/nghttp2.h | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/lib/includes/nghttp2/nghttp2.h b/lib/includes/nghttp2/nghttp2.h
+index 2ef49b8d68..ed1978aa04 100644
+--- a/lib/includes/nghttp2/nghttp2.h
++++ b/lib/includes/nghttp2/nghttp2.h
+@@ -55,6 +55,11 @@ extern "C" {
+ 
+ #include <nghttp2/nghttp2ver.h>
+ 
++#if defined(_MSC_VER)
++#  include <basetsd.h>
++   typedef SSIZE_T ssize_t;
++#endif
++
+ #ifdef NGHTTP2_STATICLIB
+ #  define NGHTTP2_EXTERN
+ #elif defined(WIN32) ||                                                        \

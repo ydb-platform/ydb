@@ -6,8 +6,6 @@
 
 #include <yt/yt/core/logging/public.h>
 
-#include <yt/yt/core/misc/tagged_interface.h>
-
 #include <yt/yt/library/profiling/public.h>
 #include <yt/yt/library/profiling/tag.h>
 
@@ -83,23 +81,11 @@ IInvokerPtr CreateFixedPriorityInvoker(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBoundedConcurrencyInvokerTag;
 //! Creates an invoker that executes all callbacks in the
 //! context of #underlyingInvoker allowing up to #maxConcurrentInvocations
 //! outstanding requests to the latter.
-TTaggedInterface<IInvoker, TBoundedConcurrencyInvokerTag> CreateBoundedConcurrencyInvoker(
+IBoundedConcurrencyInvokerPtr CreateBoundedConcurrencyInvoker(
     IInvokerPtr underlyingInvoker,
-    int maxConcurrentInvocations);
-
-//! Updates invoker's max concurrent invocations value.
-//!
-//! Does nothing, if the value stays the same.
-//! If the value increases, pending closures are invoked until #maxConcurrentInvocations is reached.
-//! If the value decreases, value is scheduled to be changed, but only changes once
-//! number of outstanding requests is less or equal to #maxConcurrentInvocations, and
-//! then the value actually changes.
-void SetMaxConcurrentInvocations(
-    TTaggedInterface<IInvoker, TBoundedConcurrencyInvokerTag> invoker,
     int maxConcurrentInvocations);
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -17,6 +17,5 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/mailbox.h>
 #include <ydb/library/actors/core/mon.h>
-#include <library/cpp/containers/intrusive_rb_tree/rb_tree.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <google/protobuf/message.h>

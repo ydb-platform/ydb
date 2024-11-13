@@ -37,6 +37,12 @@ public:
     [[noreturn]]
     static void Abort(int code) noexcept;
 
+    //! A typed version of #Abort.
+    template <class E>
+        requires std::is_enum_v<E>
+    [[noreturn]]
+    static void Abort(E exitCode) noexcept;
+
 protected:
     NLastGetopt::TOpts Opts_;
     TString Argv0_;
@@ -135,3 +141,7 @@ void ConfigureAllocator(const TAllocatorOptions& options = {});
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
+
+#define PROGRAM_INL_H_
+#include "program-inl.h"
+#undef PROGRAM_INL_H_

@@ -28,6 +28,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxSyncLogChunksInFlightHDD(10, 1, 1024)
     , MaxSyncLogChunksInFlightSSD(10, 1, 1024)
     , DefaultHugeGarbagePerMille(300, 1, 1000)
+    , HugeDefragFreeSpaceBorderPerMille(260, 1, 1000)
     , MaxCommonLogChunksHDD(200, 1, 1'000'000)
     , MaxCommonLogChunksSSD(200, 1, 1'000'000)
     , CostMetricsParametersByMedia({
@@ -325,6 +326,7 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightHDD, "VDiskControls.MaxSyncLogChunksInFlightHDD");
         icb->RegisterSharedControl(MaxSyncLogChunksInFlightSSD, "VDiskControls.MaxSyncLogChunksInFlightSSD");
         icb->RegisterSharedControl(DefaultHugeGarbagePerMille, "VDiskControls.DefaultHugeGarbagePerMille");
+        icb->RegisterSharedControl(HugeDefragFreeSpaceBorderPerMille, "VDiskControls.HugeDefragFreeSpaceBorderPerMille");
         icb->RegisterSharedControl(MaxCommonLogChunksHDD, "PDiskControls.MaxCommonLogChunksHDD");
         icb->RegisterSharedControl(MaxCommonLogChunksSSD, "PDiskControls.MaxCommonLogChunksSSD");
 

@@ -11,6 +11,7 @@ struct TEvGrpcProtoRequest : NActors::TEventLocal<TEv, TEventType> {
     TProtoMessage Request;
     TString Token;
     TString RequestId;
+    std::unordered_map<TString, TString> Headers;
 };
 
 template <typename TEv, ui32 TEventType, typename TProtoMessage>

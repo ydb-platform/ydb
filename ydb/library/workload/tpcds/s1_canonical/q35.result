@@ -1,4 +1,4 @@
-ca,c,c,cd_dep_count,cnt1,min(cd_dep_count),max(cd_dep_count),avg(cd_dep_count),cd_dep_employed_count,cnt2,min(cd_dep_employed_count),max(cd_dep_employed_count),avg(cd_dep_employed_count),cd_dep_college_count,cnt3,min(cd_dep_college_count),max(cd_dep_college_count),avg(cd_dep_college_count)
+ca.ca_state,customer_demographics.cd_gender,customer_demographics.cd_marital_status,customer_demographics.cd_dep_count,cnt1,a1,x1,s1,customer_demographics.cd_dep_employed_count,cnt2,a2,x2,s2,customer_demographics.cd_dep_college_count,cnt3,a3,x3,s3
 ,F,D,0,1,0,0,0,1,1,1,1,1,2,1,2,2,2
 ,F,D,0,1,0,0,0,3,1,3,3,3,0,1,0,0,0
 ,F,D,0,1,0,0,0,5,1,5,5,5,0,1,0,0,0

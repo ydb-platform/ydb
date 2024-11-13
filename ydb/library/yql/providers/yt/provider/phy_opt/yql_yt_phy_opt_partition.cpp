@@ -5,8 +5,8 @@
 #include <ydb/library/yql/providers/yt/opt/yql_yt_key_selector.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NYql {
 

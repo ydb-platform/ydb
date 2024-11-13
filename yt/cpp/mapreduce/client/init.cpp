@@ -17,6 +17,9 @@
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 
+#include <yt/yt/core/logging/log_manager.h>
+#include <yt/yt/core/logging/config.h>
+
 #include <library/cpp/sighandler/async_signals_handler.h>
 
 #include <util/folder/dirut.h>
@@ -148,6 +151,21 @@ static void ElevateInitStatus(const EInitStatus newStatus) {
     NDetail::GetInitStatus() = Max(NDetail::GetInitStatus(), newStatus);
 }
 
+NLogging::ELogLevel ToCoreLogLevel(ILogger::ELevel level)
+{
+    switch (level) {
+    case ILogger::FATAL:
+        return NLogging::ELogLevel::Fatal;
+    case ILogger::ERROR:
+        return NLogging::ELogLevel::Error;
+    case ILogger::INFO:
+        return NLogging::ELogLevel::Info;
+    case ILogger::DEBUG:
+        return NLogging::ELogLevel::Debug;
+    }
+    Y_ABORT();
+}
+
 void CommonInitialize(int argc, const char** argv)
 {
     auto logLevelStr = to_lower(TConfig::Get()->LogLevel);
@@ -159,7 +177,15 @@ void CommonInitialize(int argc, const char** argv)
     }
 
     auto logPath = TConfig::Get()->LogPath;
-    auto logger = logPath.empty() ? CreateStdErrLogger(logLevel) : CreateFileLogger(logLevel, logPath);
+    ILoggerPtr logger;
+    if (logPath.empty()) {
+        logger = CreateStdErrLogger(logLevel);
+    } else {
+        logger = CreateFileLogger(logLevel, logPath);
+
+        auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateLogFile(logPath, ToCoreLogLevel(logLevel));
+        NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
+    }
     SetLogger(logger);
 
     TProcessState::Get()->SetCommandLine(argc, argv);
@@ -240,12 +266,23 @@ void ExecJob(int argc, const char** argv, const TInitializeOptions& options)
     Y_UNREACHABLE();
 }
 
+void EnsureInitialized()
+{
+    if (GetInitStatus() == EInitStatus::NotInitialized) {
+        JoblessInitialize();
+    }
+}
+
 } // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static TMutex InitializeLock;
+
 void JoblessInitialize(const TInitializeOptions& options)
 {
+    auto g = Guard(InitializeLock);
+
     static const char* fakeArgv[] = {"unknown..."};
     NDetail::CommonInitialize(1, fakeArgv);
     NDetail::NonJobInitialize(options);
@@ -254,12 +291,15 @@ void JoblessInitialize(const TInitializeOptions& options)
 
 void Initialize(int argc, const char* argv[], const TInitializeOptions& options)
 {
+    auto g = Guard(InitializeLock);
+
     NDetail::CommonInitialize(argc, argv);
 
     NDetail::ElevateInitStatus(NDetail::EInitStatus::FullInitialization);
 
     const bool isInsideJob = !GetEnv("YT_JOB_ID").empty();
     if (isInsideJob) {
+        g.Release();
         NDetail::ExecJob(argc, argv, options);
     } else {
         NDetail::NonJobInitialize(options);

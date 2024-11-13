@@ -185,12 +185,14 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
 
         Parser->AddMessages({
             GetMessage(42, R"({"a1": "hello1", "nested": {"key": "value"}})"),
-            GetMessage(43, R"({"a1": "hello2", "nested": ["key1", "key2"]})")
+            GetMessage(43, R"({"a1": "hello2", "nested": ["key1", "key2"]})"),
+            GetMessage(43, R"({"a1": "hello3", "nested": "some string"})"),
+            GetMessage(43, R"({"a1": "hello4", "nested": 123456})")
         });
 
         const auto& result = Parser->Parse();
         ResultNumberValues = result.front().size();
-        UNIT_ASSERT_VALUES_EQUAL(2, ResultNumberValues);
+        UNIT_ASSERT_VALUES_EQUAL(4, ResultNumberValues);
 
         UNIT_ASSERT_VALUES_EQUAL(2, result.size());
         UNIT_ASSERT_VALUES_EQUAL("{\"key\": \"value\"}", TString(result[0][0].AsStringRef()));
@@ -198,6 +200,12 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
 
         UNIT_ASSERT_VALUES_EQUAL("[\"key1\", \"key2\"]", TString(result[0][1].AsStringRef()));
         UNIT_ASSERT_VALUES_EQUAL("hello2", TString(result[1][1].AsStringRef()));
+
+        UNIT_ASSERT_VALUES_EQUAL("\"some string\"", TString(result[0][2].AsStringRef()));
+        UNIT_ASSERT_VALUES_EQUAL("hello3", TString(result[1][2].AsStringRef()));
+
+        UNIT_ASSERT_VALUES_EQUAL("123456", TString(result[0][3].AsStringRef()));
+        UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
     }
 
     Y_UNIT_TEST_F(SimpleBooleans, TFixture) {

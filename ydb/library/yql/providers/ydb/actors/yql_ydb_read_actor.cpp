@@ -1,7 +1,7 @@
 #include "yql_ydb_read_actor.h"
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/yql/providers/ydb/proto/range.pb.h>
 
 #include <ydb/library/actors/core/actorsystem.h>

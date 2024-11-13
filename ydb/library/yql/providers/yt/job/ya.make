@@ -17,18 +17,18 @@ PEERDIR(
     library/cpp/yson/node
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/library/user_job_statistics
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/public/udf
-    ydb/library/yql/utils
-    ydb/library/yql/utils/backtrace
-    ydb/library/yql/parser/pg_catalog
-    ydb/library/yql/parser/pg_wrapper/interface
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/comp_nodes
-    ydb/library/yql/providers/common/mkql
-    ydb/library/yql/providers/common/schema/mkql
-    ydb/library/yql/providers/common/schema/parser
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/public/udf
+    yql/essentials/utils
+    yql/essentials/utils/backtrace
+    yql/essentials/parser/pg_catalog
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/comp_nodes
+    yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/schema/mkql
+    yql/essentials/providers/common/schema/parser
     ydb/library/yql/providers/yt/codec
     ydb/library/yql/providers/yt/common
     ydb/library/yql/providers/yt/comp_nodes

@@ -1,14 +1,14 @@
 #include "yql_ydb_provider_impl.h"
 
 #include <ydb/library/yql/providers/ydb/expr_nodes/yql_ydb_expr_nodes.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 namespace NYql {
 

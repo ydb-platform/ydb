@@ -3,9 +3,9 @@
 
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 
 #include <unordered_set>
 

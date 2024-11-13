@@ -64,7 +64,6 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class THugeBlobCtx {
     public:
-        // this value is multiply of AppendBlockSize and is calculated from Config->MinHugeBlobSize
         const std::shared_ptr<const THugeSlotsMap> HugeSlotsMap;
         const bool AddHeader;
 

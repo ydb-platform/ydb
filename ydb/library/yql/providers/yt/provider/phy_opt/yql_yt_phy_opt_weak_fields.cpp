@@ -3,7 +3,7 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 #include <util/generic/xrange.h>
 

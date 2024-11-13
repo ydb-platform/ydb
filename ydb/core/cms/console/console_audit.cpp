@@ -8,6 +8,7 @@ namespace NKikimr::NConsole {
 void AuditLogReplaceConfigTransaction(
     const TString& peer,
     const TString& userSID,
+    const TString& sanitizedToken,
     const TString& oldConfig,
     const TString& newConfig,
     const TString& reason,
@@ -23,6 +24,7 @@ void AuditLogReplaceConfigTransaction(
         AUDIT_PART("component", COMPONENT_NAME)
         AUDIT_PART("remote_address", (!peerName.empty() ? peerName : EMPTY_VALUE))
         AUDIT_PART("subject", (!userSID.empty() ? userSID : EMPTY_VALUE))
+        AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EMPTY_VALUE))
         AUDIT_PART("status", TString(success ? "SUCCESS" : "ERROR"))
         AUDIT_PART("reason", reason, !reason.empty())
         AUDIT_PART("operation", TString("REPLACE DYNCONFIG"))

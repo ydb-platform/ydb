@@ -2,8 +2,8 @@
 
 #include <library/cpp/yson/node/node_io.h>
 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 
 namespace {
     using namespace NYql;

@@ -133,6 +133,8 @@ public:
 
     NYTree::IYPathServicePtr GetSensorService();
 
+    const TSolomonRegistryPtr& GetRegistry() const;
+
 private:
     const TSolomonExporterConfigPtr Config_;
     const TSolomonRegistryPtr Registry_;

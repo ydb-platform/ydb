@@ -1,6 +1,6 @@
 #include "yql_codec_buf_input_stream.h"
 
-#include <ydb/library/yql/public/udf/arrow/defs.h>
+#include <yql/essentials/public/udf/arrow/util.h>
 
 #include <arrow/buffer.h>
 #include <arrow/buffer.h>

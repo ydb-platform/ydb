@@ -7,9 +7,9 @@
 #include <ydb/core/protos/ydb_result_set_old.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/dynumber/dynumber.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 //#include <ydb/library/actors/interconnect/interconnect.h>
 
 //#include <util/generic/cast.h>

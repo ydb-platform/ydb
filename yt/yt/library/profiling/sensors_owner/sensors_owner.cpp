@@ -180,11 +180,6 @@ void TSensorsOwner::Increment(const std::string& name, i64 delta) const
     GetCounter(name).Increment(delta);
 }
 
-void TSensorsOwner::Inc(const std::string& name, i64 delta) const
-{
-    Increment(name, delta);
-}
-
 TIntrusivePtr<TSensorsOwner::TState> TSensorsOwner::GetDefaultState()
 {
     static auto state = New<TState>(TProfiler());

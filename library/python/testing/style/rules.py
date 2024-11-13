@@ -34,7 +34,7 @@ def _content_skip_reason(path, data):
         '# DO_NOT_STYLE',
         '// DO_NOT_STYLE',
         'THIS SOFTWARE',
-        'WITHOUT WARRANTY',
+        'WITHOUT WARRANT',  # WARRANTY, WARRANTIES
     ]:
         if substr in data:
             return "file '{}' contains '{}'".format(path, substr)

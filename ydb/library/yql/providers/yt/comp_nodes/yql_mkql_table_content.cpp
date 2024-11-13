@@ -2,11 +2,11 @@
 #include "yql_mkql_file_input_state.h"
 #include "yql_mkql_file_list.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/defs.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/defs.h>
 
-#include <ydb/library/yql/public/udf/udf_value.h>
+#include <yql/essentials/public/udf/udf_value.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/string.h>

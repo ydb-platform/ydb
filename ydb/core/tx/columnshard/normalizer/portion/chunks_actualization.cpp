@@ -46,7 +46,7 @@ public:
             ui64 indexRawBytes = 0;
             ui32 columnBlobBytes = 0;
             ui32 indexBlobBytes = 0;
-            
+
             for (auto&& c : i.GetRecords()) {
                 columnRawBytes += c.GetMetaProto().GetRawBytes();
                 columnBlobBytes += c.GetBlobRange().GetSize();

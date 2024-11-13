@@ -19,6 +19,8 @@
 #include <util/system/hp_timer.h>
 #include <util/system/mutex.h>
 
+#include <cstdlib>
+
 #include "device_test_tool.h"
 
 #if defined(_tsan_enabled_)
@@ -219,8 +221,20 @@ public:
         DetectFileParameters(Cfg.Path, DeviceSizeBytes, isBlockDevice);
 
         NPDisk::EIoResult res = IoContext->Setup(MaxEvents, Cfg.DoLockFile);
-        Y_VERIFY_S(res == NPDisk::EIoResult::Ok, "Error initializing IoContext, error# " << res
-                << "; path# " << Cfg.Path.Quote());
+        if (res != NPDisk::EIoResult::Ok) {
+            if (res == NPDisk::EIoResult::FileLockError) {
+                // find out the reason of the lock error
+                TString lsofCommand = "lsof " + Cfg.Path;
+                int returnCode = system(lsofCommand.c_str());
+                if (returnCode == 0) {
+                    Y_FAIL_S("File is locked by another process, see lsof output above");
+                } else {
+                    Y_FAIL_S("Error in IoContext->Setup, error# " << res);
+                }
+            }
+            Y_VERIFY_S(res == NPDisk::EIoResult::Ok, "Error initializing IoContext, error# " << res
+                    << "; path# " << Cfg.Path.Quote());
+        }
 
         THolder<TFileHandle> file(new TFileHandle(Cfg.Path.c_str(), OpenExisting | RdWr | DirectAligned | Sync));
 

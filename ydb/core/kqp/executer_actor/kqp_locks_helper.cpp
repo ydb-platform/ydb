@@ -1,7 +1,7 @@
 #include "kqp_locks_helper.h"
 
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <ydb/core/protos/data_events.pb.h>
 

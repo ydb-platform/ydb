@@ -618,7 +618,7 @@ def get_default_mount_point_config_content():
             Library: true
         }
     ''' % (
-        escape_backslash(yql_source_path('ydb/library/yql/mount/lib'))
+        escape_backslash(yql_source_path('yql/essentials/mount/lib'))
     )
 
 
@@ -703,6 +703,7 @@ udfs_lock = Lock()
 
 
 def get_udfs_path(extra_paths=None):
+    essentials_udfs_build_path = yatest.common.build_path('yql/essentials/udfs')
     udfs_build_path = yatest.common.build_path('yql/udfs')
     ydb_udfs_build_path = yatest.common.build_path('ydb/library/yql/udfs')
     contrib_ydb_udfs_build_path = yatest.common.build_path('contrib/ydb/library/yql/udfs')
@@ -729,7 +730,17 @@ def get_udfs_path(extra_paths=None):
         if not os.path.isdir(merged_udfs_path):
             os.mkdir(merged_udfs_path)
 
-        udfs_paths = [udfs_project_path, ydb_udfs_project_path, udfs_bin_path, udfs_build_path, ydb_udfs_build_path, contrib_ydb_udfs_build_path, rthub_udfs_build_path, kwyt_udfs_build_path]
+        udfs_paths = [
+            udfs_project_path,
+            ydb_udfs_project_path,
+            udfs_bin_path,
+            essentials_udfs_build_path,
+            udfs_build_path,
+            ydb_udfs_build_path,
+            contrib_ydb_udfs_build_path,
+            rthub_udfs_build_path,
+            kwyt_udfs_build_path
+        ]
         if extra_paths is not None:
             udfs_paths += extra_paths
 

@@ -2669,6 +2669,7 @@ TFuture<TGetFlowViewResult> TClient::GetFlowView(
 TFuture<TShuffleHandlePtr> TClient::StartShuffle(
     const TString& account,
     int partitionCount,
+    TTransactionId parentTransactionId,
     const TStartShuffleOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
@@ -2678,24 +2679,11 @@ TFuture<TShuffleHandlePtr> TClient::StartShuffle(
 
     req->set_account(account);
     req->set_partition_count(partitionCount);
+    ToProto(req->mutable_parent_transaction_id(), parentTransactionId);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
         return ConvertTo<TShuffleHandlePtr>(TYsonString(rsp->shuffle_handle()));
     }));
-}
-
-TFuture<void> TClient::FinishShuffle(
-    const TShuffleHandlePtr& shuffleHandle,
-    const TFinishShuffleOptions& options)
-{
-    auto proxy = CreateApiServiceProxy();
-
-    auto req = proxy.FinishShuffle();
-    SetTimeoutOptions(*req, options);
-
-    req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
-
-    return req->Invoke().AsVoid();
 }
 
 TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(

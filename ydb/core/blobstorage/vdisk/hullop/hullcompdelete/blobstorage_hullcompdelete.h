@@ -55,14 +55,16 @@ namespace NKikimr {
         struct TReleaseQueueItem {
             ui64 RecordLsn;
             TDiskPartVec RemovedHugeBlobs;
+            TDiskPartVec AllocatedHugeBlobs;
             TVector<TChunkIdx> ChunksToForget;
             TLogSignature Signature;
             ui64 WId;
 
-            TReleaseQueueItem(ui64 recordLsn, TDiskPartVec&& removedHugeBlobs, TVector<TChunkIdx> chunksToForget,
-                    TLogSignature signature, ui64 wId)
+            TReleaseQueueItem(ui64 recordLsn, TDiskPartVec&& removedHugeBlobs, TDiskPartVec&& allocatedHugeBlobs,
+                    TVector<TChunkIdx> chunksToForget, TLogSignature signature, ui64 wId)
                 : RecordLsn(recordLsn)
                 , RemovedHugeBlobs(std::move(removedHugeBlobs))
+                , AllocatedHugeBlobs(std::move(allocatedHugeBlobs))
                 , ChunksToForget(std::move(chunksToForget))
                 , Signature(signature)
                 , WId(wId)
@@ -89,17 +91,21 @@ namespace NKikimr {
 
         // this function is called every time when compaction is about to commit new entrypoint containing at least
         // one removed huge blob; recordLsn is allocated LSN of this entrypoint
-        void Update(ui64 recordLsn, TDiskPartVec&& removedHugeBlobs, TVector<TChunkIdx> chunksToForget, TLogSignature signature,
-                ui64 wId, const TActorContext& ctx, const TActorId& hugeKeeperId, const TActorId& skeletonId,
-                const TPDiskCtxPtr& pdiskCtx, const TVDiskContextPtr& vctx) {
+        void Update(ui64 recordLsn, TDiskPartVec&& removedHugeBlobs, TDiskPartVec&& allocatedHugeBlobs,
+                TVector<TChunkIdx> chunksToForget, TLogSignature signature, ui64 wId, const TActorContext& ctx,
+                const TActorId& hugeKeeperId, const TActorId& skeletonId, const TPDiskCtxPtr& pdiskCtx,
+                const TVDiskContextPtr& vctx) {
             Y_ABORT_UNLESS(recordLsn > LastDeletionLsn);
             LastDeletionLsn = recordLsn;
             LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, vctx->VDiskLogPrefix
-                << "TDelayedCompactionDeleter: Update recordLsn# " << recordLsn << " removedHugeBlobs.size# "
-                << removedHugeBlobs.Size() << " CurrentSnapshots.size# " << CurrentSnapshots.size()
+                << "TDelayedCompactionDeleter: Update recordLsn# " << recordLsn
+                << " removedHugeBlobs.size# " << removedHugeBlobs.Size()
+                << " allocatedHugeBlobs.size# " << allocatedHugeBlobs.Size()
+                << " CurrentSnapshots.size# " << CurrentSnapshots.size()
                 << " CurrentSnapshots.front# " << (CurrentSnapshots.empty() ? 0 : CurrentSnapshots.begin()->first)
                 << " CurrentSnapshots.back# " << (CurrentSnapshots.empty() ? 0 : (--CurrentSnapshots.end())->first));
-            ReleaseQueue.emplace_back(recordLsn, std::move(removedHugeBlobs), std::move(chunksToForget), signature, wId);
+            ReleaseQueue.emplace_back(recordLsn, std::move(removedHugeBlobs), std::move(allocatedHugeBlobs),
+                std::move(chunksToForget), signature, wId);
             ProcessReleaseQueue(ctx, hugeKeeperId, skeletonId, pdiskCtx, vctx);
         }
 

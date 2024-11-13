@@ -11,10 +11,10 @@ PEERDIR(
     library/cpp/string_utils/parse_size
     library/cpp/yson/node
     yt/cpp/mapreduce/interface
-    ydb/library/yql/ast
-    ydb/library/yql/utils/log
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/config
+    yql/essentials/ast
+    yql/essentials/utils/log
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/config
 )
 
 YQL_LAST_ABI_VERSION()

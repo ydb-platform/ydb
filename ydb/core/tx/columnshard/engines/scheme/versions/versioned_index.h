@@ -91,8 +91,18 @@ public:
             }
         }
         Y_ABORT_UNLESS(!Snapshots.empty());
-//        Y_ABORT_UNLESS(version.IsZero());
         return Snapshots.begin()->second;
+    }
+
+    ISnapshotSchema::TPtr GetLastSchemaBeforeOrEqualSnapshotOptional(const ui64 version) const {
+        ISnapshotSchema::TPtr res = nullptr;
+        for (auto it = SnapshotByVersion.rbegin(); it != SnapshotByVersion.rend(); ++it) {
+            if (it->first <= version) {
+                res = it->second;
+                break;
+            }
+        }
+        return res;
     }
 
     ISnapshotSchema::TPtr GetLastSchema() const {

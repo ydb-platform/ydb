@@ -2,13 +2,13 @@
 
 #include "interface.h"
 
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/yql_user_data.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_user_data.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <util/generic/function.h>
 #include <util/generic/ptr.h>

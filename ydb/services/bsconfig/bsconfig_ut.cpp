@@ -27,17 +27,6 @@
 
 namespace NKikimr::NGRpcService {
 
-
-TString WrapYaml(const TString& yaml) {
-    auto doc = NKikimr::NFyaml::TDocument::Parse(yaml);
-
-    TStringStream out;
-    out << (doc.HasExplicitDocumentStart() ? "" : "---\n")
-        << doc << (yaml[yaml.size() - 1] != '\n' ? "\n" : "");
-
-    return out.Str();
-}
-
 struct TKikimrTestSettings {
     static constexpr bool SSL = false;
     static constexpr bool AUTH = false;
@@ -155,6 +144,13 @@ private:
 
 using TKikimrWithGrpcAndRootSchema = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestSettings>;
 
+TString NormalizeYaml(const TString& yaml) {
+    TStringStream normalized;
+    auto doc = NKikimr::NFyaml::TDocument::Parse(yaml);
+    normalized << doc;
+    return normalized.Str();
+}
+
 Y_UNIT_TEST_SUITE(BSConfigGRPCService) {
 
     template <typename TCtx>
@@ -179,7 +175,7 @@ Y_UNIT_TEST_SUITE(BSConfigGRPCService) {
         response.operation().result().UnpackTo(&result);
     }
 
-    void FetchStorageConfig(auto &channel) {
+    TString FetchStorageConfig(auto &channel) {
         std::unique_ptr<Ydb::BSConfig::V1::BSConfigService::Stub> stub;
         stub = Ydb::BSConfig::V1::BSConfigService::NewStub(channel);
         Ydb::BSConfig::FetchStorageConfigRequest request;
@@ -190,9 +186,10 @@ Y_UNIT_TEST_SUITE(BSConfigGRPCService) {
         stub->FetchStorageConfig(&fetchStorageConfigCtx, request, &response);
         UNIT_ASSERT_CHECK_STATUS(response.operation(), Ydb::StatusIds::SUCCESS);
         response.operation().result().UnpackTo(&result);
-        auto yamlConfig = result.yaml_config();
-        Cerr << "yamlConfig: " << Endl;
-        Cerr << WrapYaml(yamlConfig) << Endl;
+        auto yamlConfig = NormalizeYaml(result.yaml_config());
+        Cerr << "Fetched yaml config: " << Endl;
+        Cerr << yamlConfig << Endl;
+        return yamlConfig;
     }   
 
     Y_UNIT_TEST(ReplaceStorageConfig) {
@@ -223,7 +220,8 @@ Y_UNIT_TEST_SUITE(BSConfigGRPCService) {
           host_config_id: 2
         )";
         ReplaceStorageConfig(channel, yamlConfig);
-        FetchStorageConfig(channel);
+        TString yamlConfigFetched = FetchStorageConfig(channel);
+        UNIT_ASSERT_EQUAL(NormalizeYaml(yamlConfig), NormalizeYaml(yamlConfigFetched));
     }
     Y_UNIT_TEST(FetchStorageConfig) {
         TKikimrWithGrpcAndRootSchema server;

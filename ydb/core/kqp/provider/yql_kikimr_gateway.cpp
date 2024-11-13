@@ -1,11 +1,11 @@
 #include "yql_kikimr_gateway.h"
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>

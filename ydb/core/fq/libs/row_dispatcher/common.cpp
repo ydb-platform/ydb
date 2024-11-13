@@ -10,22 +10,26 @@ namespace {
 
 class TPureCalcProgramFactory : public IPureCalcProgramFactory {
 public:
-    NYql::NPureCalc::IProgramFactoryPtr GetFactory(const TSettings& settings) override {
-        TGuard<TMutex> guard(FactoriesMutex);
+    TPureCalcProgramFactory() {
+        CreateFactory({.EnabledLLVM = false});
+        CreateFactory({.EnabledLLVM = true});
+    }
 
+    NYql::NPureCalc::IProgramFactoryPtr GetFactory(const TSettings& settings) const override {
         const auto it = ProgramFactories.find(settings);
-        if (it != ProgramFactories.end()) {
-            return it->second;
-        }
-
-        return ProgramFactories.insert({settings, NYql::NPureCalc::MakeProgramFactory(
-            NYql::NPureCalc::TProgramFactoryOptions()
-                .SetLLVMSettings(settings.EnabledLLVM ? "ON" : "OFF")
-        )}).first->second;
+        Y_ENSURE(it != ProgramFactories.end());
+        return it->second;
     }
 
 private:
-    TMutex FactoriesMutex;
+    void CreateFactory(const TSettings& settings) {
+        ProgramFactories.insert({settings, NYql::NPureCalc::MakeProgramFactory(
+            NYql::NPureCalc::TProgramFactoryOptions()
+                .SetLLVMSettings(settings.EnabledLLVM ? "ON" : "OFF")
+        )});
+    }
+
+private:
     std::map<TSettings, NYql::NPureCalc::IProgramFactoryPtr> ProgramFactories;
 };
 

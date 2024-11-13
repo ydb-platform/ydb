@@ -209,7 +209,6 @@ public:
                 srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
                 srcDesc.SetDatabaseId(clusterDesc->DatabaseId);
 
-                srcDesc.SetEnabledLLVM(false);
                 if (const auto& types = State_->Types) {
                     if (const auto& optLLVM = types->OptLLVM) {
                         srcDesc.SetEnabledLLVM(!optLLVM->Empty() && *optLLVM != "OFF");

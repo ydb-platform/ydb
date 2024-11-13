@@ -17,7 +17,7 @@ public:
     };
 
 public:
-    virtual NYql::NPureCalc::IProgramFactoryPtr GetFactory(const TSettings& settings) = 0;
+    virtual NYql::NPureCalc::IProgramFactoryPtr GetFactory(const TSettings& settings) const = 0;
 };
 
 IPureCalcProgramFactory::TPtr CreatePureCalcProgramFactory();

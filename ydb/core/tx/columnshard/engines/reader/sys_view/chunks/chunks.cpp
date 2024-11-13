@@ -195,7 +195,12 @@ TStatsIterator::TFetchingAccessorAllocation::TFetchingAccessorAllocation(
     , AccessorsManager(context->GetDataAccessorsManager())
     , Request(request)
     , WaitingCountersGuard(context->GetCounters().GetFetcherAcessorsGuard())
-    , OwnerId(context->GetScanActorId()) {
+    , OwnerId(context->GetScanActorId())
+    , Context(context) {
+}
+
+void TStatsIterator::TFetchingAccessorAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
+    Context->AbortWithError("cannot allocate memory for take accessors info: " + errorMessage);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSysView::NChunks

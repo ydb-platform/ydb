@@ -1970,23 +1970,23 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
             msg->WaitPreviousWriteSpan.End();
         }
         switch (std::visit(visitor, front.Event)) {
-        case EProcessResult::Continue:
-            MoveUserActOrTxToCommitState();
-            FirstEvent = false;
-            break;
-        case EProcessResult::ContinueDrop:
-            UserActionAndTransactionEvents.pop_front();
-            break;
-        case EProcessResult::Break:
-            MoveUserActOrTxToCommitState();
-            BatchingState = ETxBatchingState::Finishing;
-            FirstEvent = false;
-            break;
-        case EProcessResult::Blocked:
-            BatchingState = ETxBatchingState::Executing;
-            return;
-        case EProcessResult::NotReady:
-            return;
+            case EProcessResult::Continue:
+                MoveUserActOrTxToCommitState();
+                FirstEvent = false;
+                break;
+            case EProcessResult::ContinueDrop:
+                UserActionAndTransactionEvents.pop_front();
+                break;
+            case EProcessResult::Break:
+                MoveUserActOrTxToCommitState();
+                BatchingState = ETxBatchingState::Finishing;
+                FirstEvent = false;
+                break;
+            case EProcessResult::Blocked:
+                BatchingState = ETxBatchingState::Executing;
+                return;
+            case EProcessResult::NotReady:
+                return;
         }
         CurrentBatchSize += 1;
     }
@@ -2327,42 +2327,48 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             break;
         }
 
-        bool isAffectedConsumer = AffectedUsers.contains(consumer);
+        bool isAffectedConsumer = AffectedUsers.contains(consumer); // savnik check
         TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
 
-        if (operation.GetBegin() > operation.GetEnd()) {
-            PQ_LOG_D("Partition " << Partition <<
-                        " Consumer '" << consumer << "'" <<
-                        " Bad request (invalid range) " <<
-                        " Begin " << operation.GetBegin() <<
-                        " End " << operation.GetEnd());
-            ok = false;
-        } else if (userInfo.Offset != (i64)operation.GetBegin()) {
-            PQ_LOG_D("Partition " << Partition <<
-                        " Consumer '" << consumer << "'" <<
-                        " Bad request (gap) " <<
-                        " Offset " << userInfo.Offset <<
-                        " Begin " << operation.GetBegin());
-            ok = false;
-        } else if (operation.GetEnd() > EndOffset) {
-            PQ_LOG_D("Partition " << Partition <<
-                        " Consumer '" << consumer << "'" <<
-                        " Bad request (behind the last offset) " <<
-                        " EndOffset " << EndOffset <<
-                        " End " << operation.GetEnd());
-            ok = false;
-        }
-
-        if (!ok) {
-            if (!isAffectedConsumer) {
-                AffectedUsers.erase(consumer);
+        if (operation.HasOnlyCheckCommitedToFinish() && operation.GetOnlyCheckCommitedToFinish()) {
+            if (static_cast<ui64>(userInfo.Offset) != EndOffset) { // savnik что если откатят коммит пока выполняется транзакция
+               ok = false;
             }
-            break;
+        } else {
+            if (!operation.GetForceCommit() && operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) { // savnik check default
+                PQ_LOG_D("Partition " << Partition <<
+                            " Consumer '" << consumer << "'" <<
+                            " Bad request (invalid range) " <<
+                            " Begin " << operation.GetCommitOffsetsBegin() <<
+                            " End " << operation.GetCommitOffsetsEnd());
+                ok = false;
+            } else if (!operation.GetForceCommit() && userInfo.Offset != (i64)operation.GetCommitOffsetsBegin()) {
+                PQ_LOG_D("Partition " << Partition <<
+                            " Consumer '" << consumer << "'" <<
+                            " Bad request (gap) " <<
+                            " Offset " << userInfo.Offset <<
+                            " Begin " << operation.GetCommitOffsetsBegin());
+                ok = false;
+            } else if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > EndOffset) {
+                PQ_LOG_D("Partition " << Partition <<
+                            " Consumer '" << consumer << "'" <<
+                            " Bad request (behind the last offset) " <<
+                            " EndOffset " << EndOffset <<
+                            " End " << operation.GetCommitOffsetsEnd());
+                ok = false;
+            }
+
+            if (!ok) {
+                if (!isAffectedConsumer) {
+                    AffectedUsers.erase(consumer);
+                }
+                break;
+            }
+            consumers.insert(consumer);
         }
-        consumers.insert(consumer);
     }
     if (ok) {
-        TxAffectedConsumers.insert(consumers.begin(), consumers.end());
+        TxAffectedConsumers.insert(consumers.begin(), consumers.end()); // savnik check
     }
     predicate = ok;
     return EProcessResult::Continue;
@@ -2513,10 +2519,27 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
         for (auto& operation : t->Tx->Operations) {
             TUserInfoBase& userInfo = GetOrCreatePendingUser(operation.GetConsumer());
 
-            Y_ABORT_UNLESS(userInfo.Offset == (i64)operation.GetBegin());
+            if (!operation.HasForceCommit() || !operation.GetForceCommit()) { // savnik check default
+                Y_ABORT_UNLESS(userInfo.Offset == (i64)operation.GetCommitOffsetsBegin());
+            }
 
-            userInfo.Offset = operation.GetEnd();
+            if (operation.GetCommitOffsetsEnd() < StartOffset) {
+                userInfo.Offset = StartOffset;
+            } else if (operation.GetCommitOffsetsEnd() > EndOffset) {
+                userInfo.Offset = EndOffset;
+            } else {
+                userInfo.Offset = operation.GetCommitOffsetsEnd();
+            }
+
+            if (operation.GetKillReadSession()) { // savnik check default
+                userInfo.Session = "";
+                userInfo.PartitionSessionId = 0;
+                userInfo.Generation = 0;
+                userInfo.Step = 0; // savnik check need drop this
+                userInfo.PipeClient = {};
+            }
         }
+
         CommitWriteOperations(*t);
         ChangePlanStepAndTxId(t->Tx->Step, t->Tx->TxId);
         ScheduleReplyCommitDone(t->Tx->Step, t->Tx->TxId);
@@ -2782,12 +2805,12 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
     Y_ABORT_UNLESS(tx.HasData());
     THashSet<TString> consumers;
     for (auto& operation : tx.GetData().GetOperations()) {
-        if (!operation.HasBegin() || !operation.HasEnd() || !operation.HasConsumer()) {
+        if (!operation.HasCommitOffsetsBegin() || !operation.HasCommitOffsetsEnd() || !operation.HasConsumer()) {
             continue; //Write operation - handled separately via WriteInfo
         }
 
-        Y_ABORT_UNLESS(operation.GetBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetBegin());
-        Y_ABORT_UNLESS(operation.GetEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetEnd());
+        Y_ABORT_UNLESS(operation.GetCommitOffsetsBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetCommitOffsetsBegin());
+        Y_ABORT_UNLESS(operation.GetCommitOffsetsEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetCommitOffsetsEnd());
 
         const TString& user = operation.GetConsumer();
         if (TxAffectedConsumers.contains(user)) {
@@ -2800,7 +2823,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
                                  "the consumer has been deleted");
             return EProcessResult::ContinueDrop;
         }
-        if (operation.GetBegin() > operation.GetEnd()) {
+        if (operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
             ScheduleReplyPropose(tx,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -2831,12 +2854,12 @@ void TPartition::ExecImmediateTx(TTransaction& t)
         return;
     }
     for (const auto& operation : record.GetData().GetOperations()) {
-        if (!operation.HasBegin() || !operation.HasEnd() || !operation.HasConsumer()) {
+        if (!operation.HasCommitOffsetsBegin() || !operation.HasCommitOffsetsEnd() || !operation.HasConsumer()) {
             continue; //Write operation - handled separately via WriteInfo
         }
 
-        Y_ABORT_UNLESS(operation.GetBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetBegin());
-        Y_ABORT_UNLESS(operation.GetEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetEnd());
+        Y_ABORT_UNLESS(operation.GetCommitOffsetsBegin() <= (ui64)Max<i64>(), "Unexpected begin offset: %" PRIu64, operation.GetCommitOffsetsBegin());
+        Y_ABORT_UNLESS(operation.GetCommitOffsetsEnd() <= (ui64)Max<i64>(), "Unexpected end offset: %" PRIu64, operation.GetCommitOffsetsEnd());
 
         const TString& user = operation.GetConsumer();
         if (!PendingUsersInfo.contains(user) && AffectedUsers.contains(user)) {
@@ -2848,7 +2871,7 @@ void TPartition::ExecImmediateTx(TTransaction& t)
         }
         TUserInfoBase& userInfo = GetOrCreatePendingUser(user);
 
-        if (operation.GetBegin() > operation.GetEnd()) {
+        if (operation.GetCommitOffsetsBegin() > operation.GetCommitOffsetsEnd()) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -2856,7 +2879,7 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             return;
         }
 
-        if (userInfo.Offset != (i64)operation.GetBegin()) {
+        if (userInfo.Offset != (i64)operation.GetCommitOffsetsBegin()) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::ABORTED,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -2864,14 +2887,14 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             return;
         }
 
-        if (operation.GetEnd() > EndOffset) {
+        if (operation.GetCommitOffsetsEnd() > EndOffset) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
                                  "incorrect offset range (commit to the future)");
             return;
         }
-        userInfo.Offset = operation.GetEnd();
+        userInfo.Offset = operation.GetCommitOffsetsEnd();
     }
     CommitWriteOperations(t);
 
@@ -3105,7 +3128,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 
     bool setSession = act.Type == TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION;
     bool dropSession = act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION;
-    bool strictCommitOffset = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.SessionId.empty());
+    bool commitNotFromReadSession = (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && act.SessionId.empty());
 
     if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE) {
         userInfo.ReadRuleGeneration = 0;
@@ -3150,7 +3173,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             userInfo.Step = step;
             userInfo.PipeClient = act.PipeClient;
             userInfo.PartitionSessionId = act.PartitionSessionId;
-        } else if ((dropSession && act.PipeClient == userInfo.PipeClient) || strictCommitOffset) {
+        } else if ((dropSession && act.PipeClient == userInfo.PipeClient) || commitNotFromReadSession) {
             userInfo.Session = "";
             userInfo.PartitionSessionId = 0;
             userInfo.Generation = 0;

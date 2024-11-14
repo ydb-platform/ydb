@@ -2131,6 +2131,7 @@ private:
         TTopicTabletTxs topicTxs;
         TDatashardTxs datashardTxs;
         TEvWriteTxs evWriteTxs;
+
         if (!TxManager) {
             BuildDatashardTxs(datashardTasks, datashardTxs, evWriteTxs, topicTxs);
         }

@@ -77,7 +77,7 @@ void TDistributedTransaction::InitPartitions(const google::protobuf::RepeatedPtr
     Partitions.clear();
 
     for (auto& o : operations) {
-        if (!o.HasBegin()) {
+        if (!o.HasCommitOffsetsBegin()) {
             HasWriteOperations = true;
         }
 

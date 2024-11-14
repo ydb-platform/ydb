@@ -811,11 +811,14 @@ struct TEvPQ {
         {
         }
 
-        void AddOperation(TString consumer, ui64 begin, ui64 end) {
+        void AddOperation(TString consumer, ui64 begin, ui64 end, bool forceCommit = false, bool killReadSession = false, bool onlyCheckCommitedToFinish = false) {
             NKikimrPQ::TPartitionOperation operation;
-            operation.SetBegin(begin);
-            operation.SetEnd(end);
+            operation.SetCommitOffsetsBegin(begin);
+            operation.SetCommitOffsetsEnd(end);
             operation.SetConsumer(std::move(consumer));
+            operation.SetForceCommit(forceCommit);
+            operation.SetKillReadSession(killReadSession);
+            operation.SetOnlyCheckCommitedToFinish(onlyCheckCommitedToFinish);
 
             Operations.push_back(std::move(operation));
         }

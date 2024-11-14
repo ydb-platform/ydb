@@ -71,9 +71,9 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
     };
 
     auto getLastSchema = [&](const ui64 schemaVersion)->NKikimrTxColumnShard::TSchemaPresetVersionInfo {
-        auto iter = Self->VersionCounters->GetVersionToKey().find(schemaVersion);
-        AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
-        return getSchemaPresetInfo(iter->second.back());
+        auto foundKeys = Self->VersionCounters->GetVersionToKey().find(schemaVersion);
+        AFL_VERIFY(foundKeys != Self->VersionCounters->GetVersionToKey().end());
+        return getSchemaPresetInfo(foundKeys->second.back());
     };
 
     auto tryGetSchemas = [&](const std::pair<ui64, ui64>& prevNext, NKikimrTxColumnShard::TSchemaPresetVersionInfo& pinfo, NKikimrTxColumnShard::TSchemaPresetVersionInfo& ninfo)->const std::vector<NOlap::TVersionCounters::TSchemaKey>* {
@@ -82,13 +82,13 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
             return nullptr;
         }
 
-        auto nextIter = Self->VersionCounters->GetVersionToKey().find(prevNext.second);
-        AFL_VERIFY(nextIter != Self->VersionCounters->GetVersionToKey().end());
-        ninfo = getSchemaPresetInfo(*nextIter->second.cbegin());
+        auto foundNextKeys = Self->VersionCounters->GetVersionToKey().find(prevNext.second);
+        AFL_VERIFY(foundNextKeys != Self->VersionCounters->GetVersionToKey().end());
+        ninfo = getSchemaPresetInfo(*foundNextKeys->second.cbegin());
         if (!ninfo.has_schema()) {
             return nullptr;
         }
-        return &nextIter->second;
+        return &foundNextKeys->second;
     };
 
     auto updateDiffsBySchemasDiff = [&](const NOlap::TVersionCounters::TSchemaKey& key, const NKikimrTxColumnShard::TSchemaPresetVersionInfo& pinfo, const NKikimrTxColumnShard::TSchemaPresetVersionInfo& ninfo) {
@@ -130,27 +130,27 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
         AFL_VERIFY((firstSchema.has_value() && lastSchema.has_value()) || (diffProtos.size() > 0));
         NOlap::TSchemaDiffView newDiff;
         if (firstSchema.has_value() && lastSchema.has_value()) {
-            newDiff.DeserializeFromProto(NOlap::TSchemaDiffView::MakeSchemasDiff(*firstSchema, *lastSchema));
+            AFL_VERIFY(newDiff.DeserializeFromProto(NOlap::TSchemaDiffView::MakeSchemasDiff(*firstSchema, *lastSchema)).IsSuccess());
         }
         for (const auto& diffProto: diffProtos) {
             NOlap::TSchemaDiffView diff;
-            diff.DeserializeFromProto(diffProto);
+            AFL_VERIFY(diff.DeserializeFromProto(diffProto).IsSuccess());
             newDiff.AddNext(diff);
         }
         NKikimrSchemeOp::TColumnTableSchemaDiff newDiffProto;
         newDiff.SerializeToProto(newDiffProto);
-        auto iter = Self->VersionCounters->GetVersionToKey().find(nextSchemaVersion);
-        AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
-        updateDiff(*iter->second.cbegin(), [&](NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
+        auto foundNextKeys = Self->VersionCounters->GetVersionToKey().find(nextSchemaVersion);
+        AFL_VERIFY(foundNextKeys != Self->VersionCounters->GetVersionToKey().end());
+        updateDiff(*foundNextKeys->second.cbegin(), [&](NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Updating diff in version from db")("vesion", nextSchemaVersion)("base version", prevSchemaVersion)("tablet_id", Self->TabletID());
             *info.MutableDiff() = newDiffProto;
         });
     };
 
     auto recalcDiff = [&](const ui64 prevSchemaVersion, const ui64 nextSchemaVersion) {
-        auto iter = Self->VersionCounters->GetVersionToKey().find(prevSchemaVersion);
-        AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
-        auto& key = *iter->second.cbegin();
+        auto foundPrevKeys = Self->VersionCounters->GetVersionToKey().find(prevSchemaVersion);
+        AFL_VERIFY(foundPrevKeys != Self->VersionCounters->GetVersionToKey().end());
+        auto& key = foundPrevKeys->second.back();
         auto rowset = table.GreaterOrEqual(key.GetId(), key.GetPlanStep(), key.GetTxId()).Select();
         recalcDiffByRowset(rowset, prevSchemaVersion, nextSchemaVersion);
     };
@@ -164,11 +164,11 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
     for (const auto& prevNext: prevNextSchemaVersions) {
         AFL_VERIFY(prevNext.second != 0);
         if (prevNext.first == 0) {
-            auto iter = Self->VersionCounters->GetVersionToKey().find(prevNext.second);
-            AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
-            NKikimrTxColumnShard::TSchemaPresetVersionInfo info = getSchemaPresetInfo(*iter->second.cbegin());
+            auto foundNextKeys = Self->VersionCounters->GetVersionToKey().find(prevNext.second);
+            AFL_VERIFY(foundNextKeys != Self->VersionCounters->GetVersionToKey().end());
+            NKikimrTxColumnShard::TSchemaPresetVersionInfo info = getSchemaPresetInfo(*foundNextKeys->second.cbegin());
             if (info.has_schema()) {
-                clearDiff(*iter->second.cbegin(), info);
+                clearDiff(*foundNextKeys->second.cbegin(), info);
             } else {
                 recalcDiffNoPrev(prevNext.second);
             }
@@ -185,9 +185,9 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
     }
 
     for (const ui64 version: VersionsToRemove) {
-        auto iter = Self->VersionCounters->GetVersionToKey().find(version);
-        AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
-        for (const NOlap::TVersionCounters::TSchemaKey& key: iter->second) {
+        auto foundKeysToRemove = Self->VersionCounters->GetVersionToKey().find(version);
+        AFL_VERIFY(foundKeysToRemove != Self->VersionCounters->GetVersionToKey().end());
+        for (const NOlap::TVersionCounters::TSchemaKey& key: foundKeysToRemove->second) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing schema version from db")("vesion", version)("tablet_id", Self->TabletID());
             table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Delete();
         }

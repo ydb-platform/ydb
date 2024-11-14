@@ -963,6 +963,7 @@ void TTopicSession::SendStatisticToRowDispatcher() {
     stat.Common.RestartSessionByOffsets = RestartSessionByOffsets;
     stat.Common.ReadBytes = SessionStats.Bytes;
     stat.Common.ReadEvents = SessionStats.Events;
+    stat.Common.LastReadedOffset = LastMessageOffset;
     SessionStats.Clear();
 
     stat.SessionKey = TopicSessionParams{Endpoint, Database, TopicPath, PartitionId};

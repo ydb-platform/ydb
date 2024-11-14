@@ -22,6 +22,9 @@ struct TopicSessionClientStatistic {
         IsWaiting = stat.IsWaiting;
         ReadLagMessages = stat.ReadLagMessages;
     }
+    void Clear() {
+        ReadBytes = 0;
+    }
 };
 
 struct TopicSessionCommonStatistic {
@@ -29,11 +32,17 @@ struct TopicSessionCommonStatistic {
     ui64 RestartSessionByOffsets = 0;
     ui64 ReadBytes = 0;     // Increment
     ui64 ReadEvents = 0;    // Increment
+    ui64 LastReadedOffset = 0;
     void Add(const TopicSessionCommonStatistic& stat) {
         UnreadBytes = stat.UnreadBytes;
         RestartSessionByOffsets = stat.RestartSessionByOffsets;
         ReadBytes += stat.ReadBytes;
         ReadEvents += stat.ReadEvents;
+        LastReadedOffset = stat.LastReadedOffset;
+    }
+    void Clear() {
+        ReadBytes = 0;
+        ReadEvents = 0;
     }
 };
 

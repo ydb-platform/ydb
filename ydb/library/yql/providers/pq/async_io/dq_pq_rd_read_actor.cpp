@@ -474,6 +474,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
         return;
     }
     auto& sessionInfo = sessionIt->second;
+    IngressStats.Bytes += ev->Get()->Record.GetReadBytes();
 
     if (!sessionInfo.EventsQueue.OnEventReceived(ev)) {
         SRC_LOG_W("Wrong seq num ignore message, seqNo " << meta.GetSeqNo());
@@ -667,8 +668,6 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     }
     activeBatch.UsedSpace = bytes;
     ReadyBufferSizeBytes += bytes;
-    IngressStats.Bytes += bytes;
-    IngressStats.Chunks++;
     activeBatch.NextOffset = ev->Get()->Record.GetNextMessageOffset();
     Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
 }

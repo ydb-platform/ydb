@@ -1024,7 +1024,7 @@ private:
 class TKqpHost : public IKqpHost {
 public:
     struct TCompileExprResult {
-        TVector<TExprNode::TPtr> QueryExprs;
+        TExprNode::TPtr QueryExpr;
         bool KeepInCache = false;
         bool NeedToSplit = false;
         TMaybe<TString> CommandTagName;
@@ -1276,7 +1276,7 @@ private:
         YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);
 
         result.NeedToSplit = Config->EnableCreateTableAs && NeedToSplit(queryExpr, ctx);
-        result.QueryExprs = {queryExpr};
+        result.QueryExpr = queryExpr;
         return result;
     }
 
@@ -1291,9 +1291,8 @@ private:
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileQuery(query, /* isSql */ true, *ExprCtx, sqlVersion, settingsBuilder);
         YQL_ENSURE(compileResult.NeedToSplit);
-        YQL_ENSURE(compileResult.QueryExprs.size() == 1);
 
-        auto rewriteResults = RewriteExpression(compileResult.QueryExprs.front(), *ExprCtx, *TypesCtx, SessionCtx, Cluster);
+        auto rewriteResults = RewriteExpression(compileResult.QueryExpr, *ExprCtx, *TypesCtx, SessionCtx, Cluster);
         for (const auto& resultPart : rewriteResults) {
             YQL_CLOG(DEBUG, ProviderKqp) << "Splitted query part: " << KqpExprToPrettyString(*resultPart, *ExprCtx);
         }
@@ -1309,21 +1308,20 @@ private:
         TKqpTranslationSettingsBuilder& settingsBuilder) const
     {
         auto compileResult = CompileQuery(query, isSql, ctx, sqlVersion, settingsBuilder);
-        if (!compileResult.QueryExprs || compileResult.NeedToSplit) {
+        if (!compileResult.QueryExpr || compileResult.NeedToSplit) {
             return compileResult;
         }
 
         if (!isSql) {
             return compileResult;
         }
-        YQL_ENSURE(compileResult.QueryExprs.size() == 1);
 
-        if (TMaybeNode<TCoCommit>(compileResult.QueryExprs.front()) && TCoCommit(compileResult.QueryExprs.front()).DataSink().Maybe<TKiDataSink>()) {
+        if (TMaybeNode<TCoCommit>(compileResult.QueryExpr) && TCoCommit(compileResult.QueryExpr).DataSink().Maybe<TKiDataSink>()) {
             return compileResult;
         }
 
-        compileResult.QueryExprs = {Build<TCoCommit>(ctx, compileResult.QueryExprs.front()->Pos())
-            .World(compileResult.QueryExprs.front())
+        compileResult.QueryExpr = {Build<TCoCommit>(ctx, compileResult.QueryExpr->Pos())
+            .World(compileResult.QueryExpr)
             .DataSink<TKiDataSink>()
                 .Category().Build(KikimrProviderName)
                 .Cluster().Build(Cluster)
@@ -1388,12 +1386,11 @@ private:
             .SetUsePgParser(settings.UsePgParser)
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(query, isSql, ctx, sqlVersion, settingsBuilder);
-        if (compileResult.QueryExprs.empty()) {
+        if (!compileResult.QueryExpr) {
             return nullptr;
         }
-        YQL_ENSURE(compileResult.QueryExprs.size() == 1);
 
-        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExprs.front().Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
+        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
@@ -1449,12 +1446,11 @@ private:
         settingsBuilder.SetSqlAutoCommit(false)
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
-        if (compileResult.QueryExprs.empty()) {
+        if (!compileResult.QueryExpr) {
             return nullptr;
         }
-        YQL_ENSURE(compileResult.QueryExprs.size() == 1);
 
-        return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExprs.front().Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+        return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
             query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
@@ -1478,14 +1474,12 @@ private:
         settingsBuilder.SetSqlAutoCommit(false)
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(queryAst, false, ctx, sqlVersion, settingsBuilder);
-        if (compileResult.QueryExprs.empty()) {
+        if (!compileResult.QueryExpr) {
             return nullptr;
         }
-
-        YQL_ENSURE(compileResult.QueryExprs.size() == 1);
         YQL_ENSURE(!sqlVersion);
 
-        return MakeIntrusive<TAsyncExecuteKqlResult>(compileResult.QueryExprs.front().Get(), ctx, *DataQueryAstTransformer,
+        return MakeIntrusive<TAsyncExecuteKqlResult>(compileResult.QueryExpr.Get(), ctx, *DataQueryAstTransformer,
             SessionCtx, *ExecuteCtx, DataProvidersFinalizer);
     }
 
@@ -1529,10 +1523,10 @@ private:
             if (compileResult.NeedToSplit) {
                 return MakeIntrusive<TAsyncPrepareNeedToSplitYqlResult>();
             } else {
-                if (compileResult.QueryExprs.empty()) {
+                if (!compileResult.QueryExpr) {
                     return nullptr;
                 }
-                return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExprs.front().Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+                return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
                     query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
             }
         } else {
@@ -1564,9 +1558,11 @@ private:
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(query, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);
-        YQL_ENSURE(compileResult.QueryExprs.size() == 1);
+        if (!compileResult.QueryExpr) {
+            return nullptr;
+        }
 
-        return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExprs.front().Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
+        return MakeIntrusive<TAsyncPrepareYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, SessionCtx->QueryPtr(),
             query.Text, sqlVersion, TransformCtx, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
@@ -1585,9 +1581,11 @@ private:
 
         YQL_ENSURE(!sqlVersion);
         YQL_ENSURE(!compileResult.NeedToSplit);
-        YQL_ENSURE(compileResult.QueryExprs.size() == 1);
+        if (!compileResult.QueryExpr) {
+            return nullptr;
+        }
 
-        return MakeIntrusive<TAsyncExecuteKqlResult>(compileResult.QueryExprs.front().Get(), ctx, *DataQueryAstTransformer,
+        return MakeIntrusive<TAsyncExecuteKqlResult>(compileResult.QueryExpr.Get(), ctx, *DataQueryAstTransformer,
             SessionCtx, *ExecuteCtx, DataProvidersFinalizer);
     }
 
@@ -1609,11 +1607,13 @@ private:
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);
-        YQL_ENSURE(compileResult.QueryExprs.size() == 1);
+        if (!compileResult.QueryExpr) {
+            return nullptr;
+        }
 
         (SessionCtx->Query().QueryData)->ParseParameters(parameters);
 
-        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExprs.front().Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
+        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
@@ -1637,11 +1637,13 @@ private:
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);
-        YQL_ENSURE(compileResult.QueryExprs.size() == 1);
+        if (!compileResult.QueryExpr) {
+            return nullptr;
+        }
 
         (SessionCtx->Query().QueryData)->ParseParameters(parameters);
 
-        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExprs.front().Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
+        return MakeIntrusive<TAsyncExecuteYqlResult>(compileResult.QueryExpr.Get(), ctx, *YqlTransformer, Cluster, SessionCtx,
             *ResultProviderConfig, *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
@@ -1660,7 +1662,9 @@ private:
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);
-        YQL_ENSURE(compileResult.QueryExprs.size() == 1);
+        if (!compileResult.QueryExpr) {
+            return nullptr;
+        }
 
         auto transformer = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()
@@ -1670,7 +1674,7 @@ private:
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
             .Build(false);
 
-        return MakeIntrusive<TAsyncValidateYqlResult>(compileResult.QueryExprs.front().Get(), SessionCtx, ctx, transformer, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
+        return MakeIntrusive<TAsyncValidateYqlResult>(compileResult.QueryExpr.Get(), SessionCtx, ctx, transformer, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer);
     }
 
     IAsyncQueryResultPtr ExplainYqlScriptInternal(const TKqpQueryRef& script, TExprContext& ctx) {
@@ -1687,9 +1691,11 @@ private:
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);
-        YQL_ENSURE(compileResult.QueryExprs.size() == 1);
+        if (!compileResult.QueryExpr) {
+            return nullptr;
+        }
 
-        return MakeIntrusive<TAsyncExplainYqlResult>(compileResult.QueryExprs.front().Get(), SessionCtx, ctx, YqlTransformer,
+        return MakeIntrusive<TAsyncExplainYqlResult>(compileResult.QueryExpr.Get(), SessionCtx, ctx, YqlTransformer,
             *PlanBuilder, sqlVersion, compileResult.KeepInCache, compileResult.CommandTagName, DataProvidersFinalizer, true /* UseDqExplain */);
     }
 

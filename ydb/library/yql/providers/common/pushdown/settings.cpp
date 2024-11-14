@@ -10,8 +10,16 @@ void TSettings::Enable(ui64 flagsMask, bool set) {
     }
 }
 
+void TSettings::EnableUdf(const TString& udfName) {
+    EnabledUdfs.insert(udfName);
+}
+
 bool TSettings::IsEnabled(EFeatureFlag flagMask) const {
     return (FeatureFlags & flagMask) != 0;
+}
+
+bool TSettings::IsEnabledUdf(const TString& udfName) const {
+    return EnabledUdfs.contains(udfName);
 }
 
 } // namespace NYql::NPushdown

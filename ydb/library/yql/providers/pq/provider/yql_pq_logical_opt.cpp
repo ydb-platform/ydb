@@ -34,11 +34,12 @@ namespace {
                 // Operator features
                 EFlag::ExpressionAsPredicate | EFlag::ArithmeticalExpressions | EFlag::ImplicitConversionToInt64 |
                 EFlag::StringTypes | EFlag::LikeOperator | EFlag::DoNotCheckCompareArgumentsTypes | EFlag::InOperator |
-                EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | DivisionExpressions | EFlag::RegexpOperator |
+                EFlag::IsDistinctOperator | EFlag::JustPassthroughOperators | DivisionExpressions |
 
                 // Split features
                 EFlag::SplitOrOperator
             );
+            EnableUdf("Re2.Grep");  // For REGEXP pushdown
         }
     };
 

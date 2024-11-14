@@ -876,6 +876,18 @@ public:
     void SetEnableTopicAutopartitioningForReplication(bool value);
     void ClearEnableTopicAutopartitioningForReplication();
 
+    // Feature flag EnableDriveSerialsDiscovery
+    bool HasEnableDriveSerialsDiscovery() const;
+    bool GetEnableDriveSerialsDiscovery() const;
+    void SetEnableDriveSerialsDiscovery(bool value);
+    void ClearEnableDriveSerialsDiscovery();
+
+    // Feature flag EnableSeparateDiskSpaceQuotas
+    bool HasEnableSeparateDiskSpaceQuotas() const;
+    bool GetEnableSeparateDiskSpaceQuotas() const;
+    void SetEnableSeparateDiskSpaceQuotas(bool value);
+    void ClearEnableSeparateDiskSpaceQuotas();
+
 
 private:
     static std::tuple<ui64, ui64> BitsFromProto_slot0(const NKikimrConfig::TFeatureFlags& flags);

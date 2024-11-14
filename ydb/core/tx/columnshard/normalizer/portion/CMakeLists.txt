@@ -54,6 +54,7 @@ target_sources(columnshard-normalizer-portion.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/chunks_actualization.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/restore_portion_from_chunks.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/restore_v1_chunks.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/restore_v2_chunks.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/snapshot_from_chunks.cpp
 )
 

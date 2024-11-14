@@ -656,6 +656,14 @@ std::tuple<ui64, ui64> TRuntimeFeatureFlags::BitsFromProto_slot4(const NKikimrCo
         bits |= flags.GetEnableTopicAutopartitioningForReplication() ? 12582912ULL : 4194304ULL;
         mask |= 12582912ULL;
     }
+    if (flags.HasEnableDriveSerialsDiscovery()) {
+        bits |= flags.GetEnableDriveSerialsDiscovery() ? 50331648ULL : 16777216ULL;
+        mask |= 50331648ULL;
+    }
+    if (flags.HasEnableSeparateDiskSpaceQuotas()) {
+        bits |= flags.GetEnableSeparateDiskSpaceQuotas() ? 201326592ULL : 67108864ULL;
+        mask |= 201326592ULL;
+    }
     return { bits, mask };
 }
 
@@ -679,9 +687,9 @@ void TRuntimeFeatureFlags::Update_slot4(ui64 bits, ui64 mask) {
 TRuntimeFeatureFlags::TRuntimeFeatureFlags()
     : slot0_{ 2495709609129058474ULL }
     , slot1_{ 9989170925560005258ULL }
-    , slot2_{ 9811100758805318176ULL }
+    , slot2_{ 9847129555824282144ULL }
     , slot3_{ 9799843793041096738ULL }
-    , slot4_{ 136ULL }
+    , slot4_{ 2099336ULL }
 {}
 
 TRuntimeFeatureFlags::TRuntimeFeatureFlags(const TRuntimeFeatureFlags& flags)
@@ -714,9 +722,9 @@ TRuntimeFeatureFlags& TRuntimeFeatureFlags::operator=(const TRuntimeFeatureFlags
 TRuntimeFeatureFlags::TRuntimeFeatureFlags(const NKikimrConfig::TFeatureFlags& flags)
     : slot0_{ FromProto_slot0(flags, 2495709609129058474ULL) }
     , slot1_{ FromProto_slot1(flags, 9989170925560005258ULL) }
-    , slot2_{ FromProto_slot2(flags, 9811100758805318176ULL) }
+    , slot2_{ FromProto_slot2(flags, 9847129555824282144ULL) }
     , slot3_{ FromProto_slot3(flags, 9799843793041096738ULL) }
-    , slot4_{ FromProto_slot4(flags, 136ULL) }
+    , slot4_{ FromProto_slot4(flags, 2099336ULL) }
 {}
 
 TRuntimeFeatureFlags& TRuntimeFeatureFlags::operator=(const NKikimrConfig::TFeatureFlags& flags) {
@@ -727,9 +735,9 @@ TRuntimeFeatureFlags& TRuntimeFeatureFlags::operator=(const NKikimrConfig::TFeat
 void TRuntimeFeatureFlags::CopyFrom(const NKikimrConfig::TFeatureFlags& flags) {
     ui64 slot0 = FromProto_slot0(flags, 2495709609129058474ULL);
     ui64 slot1 = FromProto_slot1(flags, 9989170925560005258ULL);
-    ui64 slot2 = FromProto_slot2(flags, 9811100758805318176ULL);
+    ui64 slot2 = FromProto_slot2(flags, 9847129555824282144ULL);
     ui64 slot3 = FromProto_slot3(flags, 9799843793041096738ULL);
-    ui64 slot4 = FromProto_slot4(flags, 136ULL);
+    ui64 slot4 = FromProto_slot4(flags, 2099336ULL);
     slot0_.store(slot0, std::memory_order_relaxed);
     slot1_.store(slot1, std::memory_order_relaxed);
     slot2_.store(slot2, std::memory_order_relaxed);
@@ -753,14 +761,14 @@ void TRuntimeFeatureFlags::MergeFrom(const NKikimrConfig::TFeatureFlags& flags) 
 void TRuntimeFeatureFlags::CopyRuntimeFrom(const NKikimrConfig::TFeatureFlags& flags) {
     ui64 slot0 = FromProto_slot0(flags, 2495709609129058474ULL);
     ui64 slot1 = FromProto_slot1(flags, 9989170925560005258ULL);
-    ui64 slot2 = FromProto_slot2(flags, 9811100758805318176ULL);
+    ui64 slot2 = FromProto_slot2(flags, 9847129555824282144ULL);
     ui64 slot3 = FromProto_slot3(flags, 9799843793041096738ULL);
-    ui64 slot4 = FromProto_slot4(flags, 136ULL);
+    ui64 slot4 = FromProto_slot4(flags, 2099336ULL);
     Update_slot0(slot0 & 18445896347022524415ULL, 18445896347022524415ULL);
     Update_slot1(slot1 & 18446744073709536255ULL, 18446744073709536255ULL);
     Update_slot2(slot2 & 18216849385675816959ULL, 18216849385675816959ULL);
     Update_slot3(slot3 & 18446744073457893375ULL, 18446744073457893375ULL);
-    Update_slot4(slot4 & 16777215ULL, 16777215ULL);
+    Update_slot4(slot4 & 268435455ULL, 268435455ULL);
 }
 
 TRuntimeFeatureFlags::operator NKikimrConfig::TFeatureFlags() const {
@@ -1189,6 +1197,12 @@ TRuntimeFeatureFlags::operator NKikimrConfig::TFeatureFlags() const {
     }
     if (slot4 & 4194304ULL) {
         flags.SetEnableTopicAutopartitioningForReplication(bool(slot4 & 8388608ULL));
+    }
+    if (slot4 & 16777216ULL) {
+        flags.SetEnableDriveSerialsDiscovery(bool(slot4 & 33554432ULL));
+    }
+    if (slot4 & 67108864ULL) {
+        flags.SetEnableSeparateDiskSpaceQuotas(bool(slot4 & 134217728ULL));
     }
     return flags;
 }
@@ -2663,7 +2677,7 @@ void TRuntimeFeatureFlags::SetEnableTempTables(bool value) {
 }
 
 void TRuntimeFeatureFlags::ClearEnableTempTables() {
-    Update_slot2(0ULL, 54043195528445952ULL);
+    Update_slot2(36028797018963968ULL, 54043195528445952ULL);
 }
 
 bool TRuntimeFeatureFlags::HasSuppressCompatibilityCheck() const {
@@ -3335,7 +3349,7 @@ void TRuntimeFeatureFlags::SetEnableParameterizedDecimal(bool value) {
 }
 
 void TRuntimeFeatureFlags::ClearEnableParameterizedDecimal() {
-    Update_slot4(0ULL, 3072ULL);
+    Update_slot4(2048ULL, 3072ULL);
 }
 
 bool TRuntimeFeatureFlags::HasEnableImmediateWritingOnBulkUpsert() const {
@@ -3415,7 +3429,7 @@ void TRuntimeFeatureFlags::SetEnableFollowerStats(bool value) {
 }
 
 void TRuntimeFeatureFlags::ClearEnableFollowerStats() {
-    Update_slot4(0ULL, 3145728ULL);
+    Update_slot4(2097152ULL, 3145728ULL);
 }
 
 bool TRuntimeFeatureFlags::HasEnableTopicAutopartitioningForReplication() const {
@@ -3432,6 +3446,38 @@ void TRuntimeFeatureFlags::SetEnableTopicAutopartitioningForReplication(bool val
 
 void TRuntimeFeatureFlags::ClearEnableTopicAutopartitioningForReplication() {
     Update_slot4(0ULL, 12582912ULL);
+}
+
+bool TRuntimeFeatureFlags::HasEnableDriveSerialsDiscovery() const {
+    return slot4_.load(std::memory_order_relaxed) & 16777216ULL;
+}
+
+bool TRuntimeFeatureFlags::GetEnableDriveSerialsDiscovery() const {
+    return slot4_.load(std::memory_order_relaxed) & 33554432ULL;
+}
+
+void TRuntimeFeatureFlags::SetEnableDriveSerialsDiscovery(bool value) {
+    Update_slot4(value ? 50331648ULL : 16777216ULL, 50331648ULL);
+}
+
+void TRuntimeFeatureFlags::ClearEnableDriveSerialsDiscovery() {
+    Update_slot4(0ULL, 50331648ULL);
+}
+
+bool TRuntimeFeatureFlags::HasEnableSeparateDiskSpaceQuotas() const {
+    return slot4_.load(std::memory_order_relaxed) & 67108864ULL;
+}
+
+bool TRuntimeFeatureFlags::GetEnableSeparateDiskSpaceQuotas() const {
+    return slot4_.load(std::memory_order_relaxed) & 134217728ULL;
+}
+
+void TRuntimeFeatureFlags::SetEnableSeparateDiskSpaceQuotas(bool value) {
+    Update_slot4(value ? 201326592ULL : 67108864ULL, 201326592ULL);
+}
+
+void TRuntimeFeatureFlags::ClearEnableSeparateDiskSpaceQuotas() {
+    Update_slot4(0ULL, 201326592ULL);
 }
 
 

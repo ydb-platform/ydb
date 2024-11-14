@@ -47,6 +47,7 @@ struct TSensorWrapper
 using TCounterWrapper = TSensorWrapper<TCounter>::template TImpl<&TProfiler::Counter>;
 using TGaugeWrapper = TSensorWrapper<TGauge>::template TImpl<&TProfiler::Gauge>;
 using TTimeGaugeWrapper = TSensorWrapper<TTimeGauge>::template TImpl<&TProfiler::TimeGauge>;
+using TTimerWrapper = TSensorWrapper<TEventTimer>::template TImpl<&TProfiler::Timer>;
 
 template <typename... Args>
 using TTimeHistogramWrapper = typename TSensorWrapper<TEventTimer, Args...>::template TImpl<&TProfiler::TimeHistogram>;
@@ -153,6 +154,11 @@ const TGauge& TSensorsOwner::GetGauge(const std::string& name) const
 const TTimeGauge& TSensorsOwner::GetTimeGauge(const std::string& name) const
 {
     return Get<TTimeGaugeWrapper>(name).Sensor;
+}
+
+const TEventTimer& TSensorsOwner::GetTimer(const std::string& name) const
+{
+    return Get<TTimerWrapper>(name).Sensor;
 }
 
 const TEventTimer& TSensorsOwner::GetTimeHistogram(const std::string& name, std::vector<TDuration> bounds) const

@@ -287,4 +287,13 @@ TConclusion<THashMap<ui64, std::map<NOlap::TSnapshot, TGranuleShardingInfo>>> TD
     return result;
 }
 
+void TDbWrapper::WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto) {
+    NIceDb::TNiceDb db(Database);
+    using IndexColumnsV2 = NColumnShard::Schema::IndexColumnsV2;
+    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
+    db.Table<IndexColumnsV2>()
+        .Key(portion.GetPathId(), portion.GetPortionId())
+        .Update(NIceDb::TUpdate<IndexColumnsV2::Metadata>(proto.SerializeAsString()));
+}
+
 }   // namespace NKikimr::NOlap

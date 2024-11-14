@@ -69,7 +69,6 @@ bool TGranuleFinishAccessorsLoading::DoExecute(NTabletFlatExecutor::TTransaction
 bool TGranuleFinishCommonLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
     AFL_VERIFY(!Started);
     Started = true;
-    TMemoryProfileGuard g("TTxInit/LoadColumns/After");
     Self->OnAfterPortionsLoad();
     return true;
 }

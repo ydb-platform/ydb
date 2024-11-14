@@ -48,6 +48,7 @@ public:
     void Bootstrap();
 
     STFUNC(StateWait) {
+        const NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("self_id", SelfId())("tablet_id", TabletId)("parent", Parent);
         switch (ev->GetTypeRewrite()) {
             cFunc(NActors::TEvents::TEvPoison::EventType, StartStopping);
             hFunc(TEvRegisterController, Handle);

@@ -20,7 +20,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     const ::Ydb::Operations::OperationParams* operationParams,
     const TQueryRequestSettings& querySettings,
     const TString& poolId,
-    bool collectFullDiagnostics)
+    std::optional<bool> collectFullDiagnostics)
     : RequestCtx(ctx)
     , RequestActorId(requestActorId)
     , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))

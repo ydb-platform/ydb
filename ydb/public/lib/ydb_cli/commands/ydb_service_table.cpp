@@ -558,7 +558,7 @@ namespace {
         NQuery::TExecuteQuerySettings>;
 
     template <typename TClient>
-    auto GetSettings(const TString& collectStatsMode, const bool basicStats, std::optional<TDuration> timeout) {
+    auto GetSettings(const TString& collectStatsMode, const bool basicStats, std::optional<TDuration> timeout, bool collectFullDiagnostics) {
         if constexpr (std::is_same_v<TClient, NTable::TTableClient>) {
             const auto defaultStatsMode = basicStats
                 ? NTable::ECollectQueryStatsMode::Basic
@@ -568,7 +568,7 @@ namespace {
             if (timeout.has_value()) {
                 settings.ClientTimeout(*timeout);
             }
-            if (CollectFullDiagnostics) {
+            if (collectFullDiagnostics) {
                 settings.CollectFullDiagnostics(true);
             }
             return settings;
@@ -581,7 +581,7 @@ namespace {
             if (timeout.has_value()) {
                 settings.ClientTimeout(*timeout);
             }
-            if (CollectFullDiagnostics) {
+            if (collectFullDiagnostics) {
                 settings.CollectFullDiagnostics(true);
             }
             return settings;
@@ -651,7 +651,7 @@ namespace {
         }
         Y_UNREACHABLE();
     }
-    
+
     template <typename TQueryPart>
     const NQuery::TExecStats& GetStats(const TQueryPart& part) {
         if constexpr (std::is_same_v<TQueryPart, NTable::TScanQueryPart>) {
@@ -690,7 +690,7 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
     if (OperationTimeout) {
         optTimeout = TDuration::MilliSeconds(FromString<ui64>(OperationTimeout));
     }
-    const auto settings = GetSettings<TClient>(CollectStatsMode, BasicStats, optTimeout);
+    const auto settings = GetSettings<TClient>(CollectStatsMode, BasicStats, optTimeout, CollectFullDiagnostics);
 
     TAsyncPartIterator<TClient> asyncResult;
     SetInterruptHandlers();
@@ -748,6 +748,7 @@ template <typename TIterator>
 bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
     TMaybe<TString> stats;
     std::optional<std::string> fullStats;
+    TString diagnostics;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
@@ -770,7 +771,7 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
                 }
             }
 
-            if ()
+            diagnostics = streamPart.GetDiagnostics();
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
@@ -788,7 +789,7 @@ bool TCommandExecuteQuery::PrintQueryResponse(TIterator& result) {
     if (CollectFullDiagnostics)
     {
         TFileOutput file(TStringBuilder() << "diagnostics_" << TGUID::Create().AsGuidString() << ".txt");
-        file << result.GetDiagnostics();
+        file << diagnostics;
     }
 
     PrintFlameGraph(fullStats);
@@ -1053,7 +1054,7 @@ void TCommandReadTable::Config(TConfig& config) {
         .NoArgument().SetFlag(&FromExclusive);
     config.Opts->AddLongOption("to-exclusive", "Don't include the right border element into response")
         .NoArgument().SetFlag(&ToExclusive);
-    
+
     AddLegacyJsonInputFormats(config);
 
     AddOutputFormats(config, {

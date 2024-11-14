@@ -127,28 +127,30 @@ private:
             lambdaNdx = OutLambdaNdx;
         }
 
+        bool emptyInput = false;
         const auto filter = NYql::HasSetting(op.Settings().Ref(), EYtSettingType::Ordered) ?
             [](const std::string_view& name) { return TEmptyConstraintNode::Name() == name || TUniqueConstraintNode::Name() == name || TDistinctConstraintNode::Name() == name || TSortedConstraintNode::Name() == name; }:
             [](const std::string_view& name) { return TEmptyConstraintNode::Name() == name || TUniqueConstraintNode::Name() == name || TDistinctConstraintNode::Name() == name; };
         TConstraintNode::TListType argConstraints;
         if (op.Input().Size() > 1) {
             TMultiConstraintNode::TMapType multiItems;
-            bool allEmpty = true;
+            emptyInput = true;
             for (ui32 index = 0; index < op.Input().Size(); ++index) {
                 auto section = op.Input().Item(index);
                 if (!section.Ref().GetConstraint<TEmptyConstraintNode>()) {
                     multiItems.push_back(std::make_pair(index, section.Ref().GetConstraintSet()));
                     multiItems.back().second.FilterConstraints(filter);
-                    allEmpty = false;
+                    emptyInput = false;
                 }
             }
             if (!multiItems.empty()) {
                 argConstraints.push_back(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems)));
-            } else if (allEmpty) {
+            } else if (emptyInput) {
                 argConstraints.push_back(ctx.MakeConstraint<TEmptyConstraintNode>());
             }
         } else {
             auto set = op.Input().Item(0).Ref().GetConstraintSet();
+            emptyInput = nullptr != set.GetConstraint<TEmptyConstraintNode>();
             set.FilterConstraints(filter);
             argConstraints = set.GetAllConstraints();
             if (singleLambda) {
@@ -196,10 +198,8 @@ private:
         }
 
         SetResultConstraint(input, *input->Child(OutLambdaNdx), op.Output(), ctx);
-        if (op.Input().Size() == 1) {
-            if (auto empty = op.Input().Item(0).Ref().GetConstraint<TEmptyConstraintNode>()) {
-                input->AddConstraint(empty);
-            }
+        if (emptyInput) {
+            input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
         }
 
         return TStatus::Ok;

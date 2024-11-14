@@ -948,6 +948,10 @@ private:
             if (auto setting = NYql::GetSetting(GetOutputOp(out.Cast()).Output().Item(FromString<ui32>(out.Cast().OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
                 inputColGroupSpec = setting->Tail().Content();
             }
+        } else if (auto outTable = path.Table().Maybe<TYtOutTable>()) {
+            if (auto setting = NYql::GetSetting(outTable.Cast().Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                inputColGroupSpec = setting->Tail().Content();
+            }
         }
 
         if (outGroup != inputColGroupSpec) {

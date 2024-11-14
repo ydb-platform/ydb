@@ -153,7 +153,7 @@ class YdbCliHelper:
 
         @staticmethod
         def _get_nodes_info() -> dict[str, dict[str, int]]:
-            nodes, _ = YdbCluster.get_cluster_nodes()
+            nodes = YdbCluster.get_cluster_nodes(db_only=True)
             return {
                 n['SystemState']['Host']: {
                     'start_time': int(int(n['SystemState'].get('StartTime', time() * 1000)) / 1000)

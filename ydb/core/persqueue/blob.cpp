@@ -1,6 +1,8 @@
 #include "blob.h"
 #include "type_codecs.h"
 
+#include "y_abort_unless_ex.h"
+
 #include <util/string/builder.h>
 #include <util/string/escape.h>
 #include <util/system/unaligned_mem.h>
@@ -831,7 +833,14 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 off
     , NeedCompactHead(needCompactHead)
     , MaxBlobSize(maxBlobSize)
 {
-    Y_ABORT_UNLESS(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0); // if head not cleared, then NewHead is going after Head
+    Y_ABORT_UNLESS_EX(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0,
+                      "NewHead.Offset=%" PRIu64 ", Head.NextOffset=%" PRIu64 ", NewHead.PartNo=%" PRIu16 ", headCleared=%d, needCompactHead=%d, Head.PackedSize=%" PRIu32,
+                      NewHead.Offset,
+                      Head.GetNextOffset(),
+                      NewHead.PartNo,
+                      static_cast<int>(headCleared),
+                      static_cast<int>(needCompactHead),
+                      Head.PackedSize); // if head not cleared, then NewHead is going after Head
     if (!headCleared) {
         HeadSize = Head.PackedSize + NewHead.PackedSize;
         InternalPartsCount = Head.GetInternalPartsCount() + NewHead.GetInternalPartsCount();

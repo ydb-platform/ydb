@@ -2176,6 +2176,11 @@ void TPartition::CommitWriteOperations(TTransaction& t)
     PQ_LOG_D("Head=" << Head << ", NewHead=" << NewHead);
 
     if (!t.WriteInfo->BodyKeys.empty()) {
+        PQ_LOG_D("huge blobs");
+
+        PQ_LOG_D("new TPartitionedBlob: " <<
+                 "NewHead=" << NewHead <<
+                 ", Head=" << Head);
         PartitionedBlob = TPartitionedBlob(Partition,
                                            NewHead.Offset,
                                            "", // SourceId
@@ -2215,12 +2220,16 @@ void TPartition::CommitWriteOperations(TTransaction& t)
     }
 
     if (!t.WriteInfo->BlobsFromHead.empty()) {
+        PQ_LOG_D("small blobs");
+
         auto& first = t.WriteInfo->BlobsFromHead.front();
         NewHead.PartNo = first.GetPartNo();
 
-        Parameters->CurOffset = NewHead.Offset;
         Parameters->HeadCleared = !t.WriteInfo->BodyKeys.empty();
 
+        PQ_LOG_D("new TPartitionedBlob: " <<
+                 "NewHead=" << NewHead <<
+                 ", Head=" << Head);
         PartitionedBlob = TPartitionedBlob(Partition,
                                            NewHead.Offset,
                                            first.SourceId,

@@ -1,6 +1,7 @@
 #include "kqp_topics.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/persqueue/utils.h>
 #include <ydb/library/actors/core/log.h>
 
@@ -29,18 +30,37 @@ bool TConsumerOperations::IsValid() const
     return Offsets_.GetNumIntervals() == 1;
 }
 
-std::pair<ui64, ui64> TConsumerOperations::GetRange() const
+std::pair<ui64, ui64> TConsumerOperations::GetOffsetsCommitRange() const
 {
     Y_ABORT_UNLESS(IsValid());
 
     return {Offsets_.Min(), Offsets_.Max()};
 }
 
-void TConsumerOperations::AddOperation(const TString& consumer, const Ydb::Topic::OffsetsRange& range)
+bool TConsumerOperations::GetForceCommit() const
+{
+    return ForceCommit_;
+}
+
+bool TConsumerOperations::GetKillReadSession() const
+{
+    return KillReadSession_;
+}
+
+bool TConsumerOperations::GetOnlyCheckCommitedToFinish() const
+{
+    return OnlyCheckCommitedToFinish_;
+}
+
+void TConsumerOperations::AddOperation(const TString& consumer,
+                                       const NKikimrKqp::TTopicOperationsRequest_TopicOffsets_PartitionOffsets_OffsetsRange& range,
+                                       bool forceCommit,
+                                       bool killReadSession,
+                                       bool onlyCheckCommitedToFinish)
 {
     Y_ABORT_UNLESS(Consumer_.Empty() || Consumer_ == consumer);
 
-    AddOperationImpl(consumer, range.start(), range.end());
+    AddOperationImpl(consumer, range.start(), range.end(), forceCommit, killReadSession, onlyCheckCommitedToFinish);
 }
 
 void TConsumerOperations::Merge(const TConsumerOperations& rhs)
@@ -49,12 +69,16 @@ void TConsumerOperations::Merge(const TConsumerOperations& rhs)
     Y_ABORT_UNLESS(Consumer_.Empty() || Consumer_ == rhs.Consumer_);
 
     for (auto& range : rhs.Offsets_) {
-        AddOperationImpl(*rhs.Consumer_, range.first, range.second);
+        AddOperationImpl(*rhs.Consumer_, range.first, range.second, rhs.GetForceCommit(), rhs.GetKillReadSession(), rhs.GetOnlyCheckCommitedToFinish());
     }
 }
 
 void TConsumerOperations::AddOperationImpl(const TString& consumer,
-                                           ui64 begin, ui64 end)
+                                           ui64 begin,
+                                           ui64 end,
+                                           bool forceCommit,
+                                           bool killReadSession,
+                                           bool onlyCheckCommitedToFinish)
 {
     if (Offsets_.Intersects(begin, end)) {
         ythrow TOffsetsRangeIntersectExpection() << "offset ranges intersect";
@@ -65,6 +89,10 @@ void TConsumerOperations::AddOperationImpl(const TString& consumer,
     }
 
     Offsets_.InsertInterval(begin, end);
+
+    ForceCommit_ = forceCommit;
+    KillReadSession_ = killReadSession;
+    OnlyCheckCommitedToFinish_ = onlyCheckCommitedToFinish;
 }
 
 //
@@ -76,9 +104,13 @@ bool TTopicPartitionOperations::IsValid() const
                        [](auto& x) { return x.second.IsValid(); });
 }
 
-void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partition,
+void TTopicPartitionOperations::AddOperation(const TString& topic,
+                                             ui32 partition,
                                              const TString& consumer,
-                                             const Ydb::Topic::OffsetsRange& range)
+                                             const NKikimrKqp::TTopicOperationsRequest_TopicOffsets_PartitionOffsets_OffsetsRange& range,
+                                             bool forceCommit,
+                                             bool killReadSession,
+                                             bool onlyCheckCommitedToFinish)
 {
     Y_ABORT_UNLESS(Topic_.Empty() || Topic_ == topic);
     Y_ABORT_UNLESS(Partition_.Empty() || Partition_ == partition);
@@ -88,7 +120,7 @@ void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partitio
         Partition_ = partition;
     }
 
-    Operations_[consumer].AddOperation(consumer, range);
+    Operations_[consumer].AddOperation(consumer, range, forceCommit, killReadSession, onlyCheckCommitedToFinish);
 }
 
 void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partition,
@@ -117,11 +149,14 @@ void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
     for (auto& [consumer, operations] : Operations_) {
         NKikimrPQ::TPartitionOperation* o = t.tx.MutableOperations()->Add();
         o->SetPartitionId(*Partition_);
-        auto [begin, end] = operations.GetRange();
-        o->SetBegin(begin);
-        o->SetEnd(end);
+        auto [begin, end] = operations.GetOffsetsCommitRange();
+        o->SetCommitOffsetsBegin(begin);
+        o->SetCommitOffsetsEnd(end);
         o->SetConsumer(consumer);
         o->SetPath(*Topic_);
+        o->SetKillReadSession(operations.GetKillReadSession());
+        o->SetForceCommit(operations.GetForceCommit());
+        o->SetOnlyCheckCommitedToFinish(operations.GetOnlyCheckCommitedToFinish());
     }
 
     if (HasWriteOperations_) {
@@ -256,14 +291,23 @@ bool TTopicOperations::TabletHasReadOperations(ui64 tabletId) const
     return false;
 }
 
-void TTopicOperations::AddOperation(const TString& topic, ui32 partition,
+void TTopicOperations::AddOperation(const TString& topic,
+                                    ui32 partition,
                                     const TString& consumer,
-                                    const Ydb::Topic::OffsetsRange& range)
+                                    const NKikimrKqp::TTopicOperationsRequest_TopicOffsets_PartitionOffsets_OffsetsRange& range,
+                                    bool forceCommit,
+                                    bool killReadSession,
+                                    bool onlyCheckCommitedToFinish
+                                    )
 {
     TTopicPartition key{topic, partition};
-    Operations_[key].AddOperation(topic, partition,
+    Operations_[key].AddOperation(topic,
+                                  partition,
                                   consumer,
-                                  range);
+                                  range,
+                                  forceCommit,
+                                  killReadSession,
+                                  onlyCheckCommitedToFinish);
     HasReadOperations_ = true;
 }
 

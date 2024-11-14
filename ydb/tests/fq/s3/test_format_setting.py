@@ -358,7 +358,7 @@ Pear;15;33'''
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         weightType = ydb.Column(name="Weight", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
-        
+
         format_setting = {"data.date.format": format}
         storage_binding_name = unique_prefix + "my_binding"
         client.create_object_storage_binding(
@@ -378,7 +378,7 @@ Pear;15;33'''
         fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
         priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
         weightType = ydb.Column(name="Weight", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
-        
+
         format_setting = {"data.date.format": format}
         storage_binding_name = unique_prefix + "insert_my_binding"
         client.create_object_storage_binding(

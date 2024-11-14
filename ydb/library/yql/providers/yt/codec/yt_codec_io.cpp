@@ -1491,12 +1491,7 @@ public:
 
     bool ReadNext() {
         if (!StreamReader_) {
-            // Deal with empty input
-            auto streamReaderResult = arrow::ipc::RecordBatchStreamReader::Open(InputStream_.get());
-            if (!streamReaderResult.ok() && InputStream_->EOSReached()) {
-                return false;
-            }
-            StreamReader_ = ARROW_RESULT(streamReaderResult);
+            StreamReader_ = ARROW_RESULT(arrow::ipc::RecordBatchStreamReader::Open(InputStream_.get()));
 
             auto oldTableIndex = TableIndex_;
             if (!IgnoreStreamTableIndex) {

@@ -1278,6 +1278,7 @@ public:
         TBlobGroupSelector selector(Self->Info());
         bool reask = false;
         for (auto&& i : PortionsByPath) {
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "TTxAskPortionChunks::Execute")("size", i.second.size())("path_id", i.first);
             for (auto&& p : i.second) {
                 {
                     auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
@@ -1298,6 +1299,7 @@ public:
         }
 
         for (auto&& i : PortionsByPath) {
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "TTxAskPortionChunks::Execute")("stage", "processing")("size", i.second.size())("path_id", i.first);
             while (i.second.size()) {
                 auto p = i.second.back();
                 std::vector<NOlap::TColumnChunkLoadContextV1> records;
@@ -1329,8 +1331,11 @@ public:
                 FetchedAccessors.emplace_back(NOlap::TPortionAccessorConstructor::BuildForLoading(p, std::move(records), std::move(indexes)));
                 i.second.pop_back();
             }
+            AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "TTxAskPortionChunks::Execute")("stage", "finished")("size", i.second.size())(
+                "path_id", i.first);
         }
 
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "TTxAskPortionChunks::Execute")("stage", "finished");
         FetchCallback->OnAccessorsFetched(std::move(FetchedAccessors));
         return true;
     }
@@ -1447,7 +1452,9 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvTieringModified, Handle);
         HFunc(TEvPrivate::TEvNormalizerResult, Handle);
+        HFunc(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors, Handle);
         default:
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "unexpected event in enqueue");
             return NTabletFlatExecutor::TTabletExecutedFlat::Enqueue(ev);
     }
 }

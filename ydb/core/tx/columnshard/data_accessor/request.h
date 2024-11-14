@@ -117,6 +117,12 @@ private:
     THashMap<ui64, TPortionDataAccessor> PortionAccessors;
 
 public:
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "portions_count=" << Portions.size();
+        return sb;
+    }
+
     TPathFetchingState(const ui64 pathId)
         : PathId(pathId) {
     }
@@ -191,6 +197,15 @@ private:
     }
 
 public:
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "request_id=" << RequestId << ";";
+        for (auto&& i : PathIdStatus) {
+            sb << i.first << "={" << i.second.DebugString() << "};";
+        }
+        return sb;
+    }
+
     TDataAccessorsRequest() = default;
 
     bool HasSubscriber() const {

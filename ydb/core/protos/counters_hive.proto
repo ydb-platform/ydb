@@ -31,6 +31,7 @@ enum ESimpleCounters {
     COUNTER_STORAGE_SCATTER = 21 [(CounterOpts) = {Name: "StorageScatter"}];
     COUNTER_TABLETS_STARTING = 22 [(CounterOpts) = {Name: "TabletsStarting"}];
     COUNTER_PINGQUEUE_SIZE = 23 [(CounterOpts) = {Name: "PingQueueSize"}];
+    COUNTER_NODES_DOWN = 24 [(CounterOpts) = {Name: "NodesDown"}];
 }
 
 enum ECumulativeCounters {

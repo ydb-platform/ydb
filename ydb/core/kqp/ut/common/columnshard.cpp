@@ -229,7 +229,7 @@ namespace NKqp {
     TString TTestHelper::TColumnFamily::BuildQuery() const {
         TStringBuilder str;
         str << "FAMILY " << FamilyName << " (";
-        if (!Data.Empty()) {
+        if (!Data.empty()) {
             str << "DATA=\"" << Data << "\", ";
         }
         str << Compression.BuildQuery() << ")";
@@ -270,8 +270,8 @@ namespace NKqp {
         default:
             str << NScheme::GetTypeName(TypeInfo.GetTypeId());
         }
-        if (!ColumnFamilyName.Empty()) {
-            str << " FAMILY " << ColumnFamilyName;
+        if (!ColumnFamilyName.empty()) {
+        str << " FAMILY " << ColumnFamilyName;
         }
         if (!NullableFlag) {
             str << " NOT NULL";

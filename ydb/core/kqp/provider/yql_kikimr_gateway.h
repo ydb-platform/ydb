@@ -224,8 +224,6 @@ struct TTtlSettings {
     struct TTier {
         TDuration EvictionDelay;
         TString StorageName;
-
-        void SerializeToProto(Ydb::Table::EvictionTier& proto) const;
     };
 
     TString ColumnName;

@@ -92,11 +92,6 @@ TFuture<IKikimrGateway::TGenericResult> IKikimrGateway::CreatePath(const TString
     return pathPromise.GetFuture();
 }
 
-void TTtlSettings::TTier::SerializeToProto(Ydb::Table::EvictionTier& proto) const {
-    proto.set_storage_name(StorageName);
-    proto.set_evict_after_seconds(EvictionDelay.Seconds());
-}
-
 bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSettings& settings, TString& error) {
     using namespace NNodes;
 
@@ -322,22 +317,22 @@ void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::T
     if (!settings.ColumnUnit) {
         auto& opts = *proto.mutable_date_type_column();
         opts.set_column_name(settings.ColumnName);
-        if (settings.ExpireAfter) {
-            opts.set_expire_after_seconds(settings.ExpireAfter->Seconds());
-        }
-        for (const auto& tier : settings.Tiers) {
-            tier.SerializeToProto(*opts.add_storage_tiers());
-        }
+        opts.set_expire_after_seconds(settings.ExpireAfter ? settings.ExpireAfter->Seconds() : std::numeric_limits<uint32_t>::max());
     } else {
         auto& opts = *proto.mutable_value_since_unix_epoch();
         opts.set_column_name(settings.ColumnName);
         opts.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(*settings.ColumnUnit));
-        if (settings.ExpireAfter) {
-            opts.set_expire_after_seconds(settings.ExpireAfter->Seconds());
-        }
-        for (const auto& tier : settings.Tiers) {
-            tier.SerializeToProto(*opts.add_storage_tiers());
-        }
+        opts.set_expire_after_seconds(settings.ExpireAfter ? settings.ExpireAfter->Seconds() : std::numeric_limits<uint32_t>::max());
+    }
+    if (settings.ExpireAfter) {
+        auto* deleteTier = proto.add_tiers();
+        deleteTier->set_evict_after_seconds(settings.ExpireAfter->Seconds());
+        deleteTier->mutable_delete_();
+    }
+    for (const auto& tier : settings.Tiers) {
+        auto* tierProto = proto.add_tiers();
+        tierProto->set_evict_after_seconds(tier.EvictionDelay.Seconds());
+        tierProto->mutable_evict_to_external_storage()->set_storage_name(tier.StorageName);
     }
 }
 

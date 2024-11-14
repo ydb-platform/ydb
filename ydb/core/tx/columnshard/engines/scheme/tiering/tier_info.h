@@ -226,20 +226,29 @@ public:
         const TString ttlColumnName = serialized.GetColumnName();
         const ui32 unitsInSecond = TTierInfo::GetUnitsInSecond(serialized.GetColumnUnit());
 
-        if (serialized.HasExpireAfterSeconds()) {
+        if (!serialized.TiersSize()) {
+            // legacy schema
             if (!Add(TTierInfo::MakeTtl(TDuration::Seconds(serialized.GetExpireAfterSeconds()), ttlColumnName, unitsInSecond))) {
                 return TConclusionStatus::Fail("Invalid ttl settings");
             }
         }
         for (const auto& tier : serialized.GetTiers()) {
-            if (!tier.HasStorageName()) {
-                return TConclusionStatus::Fail("Missing tier name in tier description");
-            }
             if (!tier.HasEvictAfterSeconds()) {
                 return TConclusionStatus::Fail("Missing eviction delay in tier description");
             }
-            if (!Add(std::make_shared<TTierInfo>(
-                    tier.GetStorageName(), TDuration::Seconds(tier.GetEvictAfterSeconds()), ttlColumnName, unitsInSecond))) {
+            std::shared_ptr<TTierInfo> tierInfo;
+            switch (tier.GetActionCase()) {
+                case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
+                    tierInfo = TTierInfo::MakeTtl(TDuration::Seconds(tier.GetEvictAfterSeconds()), ttlColumnName, unitsInSecond);
+                    break;
+                case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
+                    tierInfo = std::make_shared<TTierInfo>(tier.GetEvictToExternalStorage().GetStorageName(),
+                        TDuration::Seconds(tier.GetEvictAfterSeconds()), ttlColumnName, unitsInSecond);
+                    break;
+                case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
+                    return TConclusionStatus::Fail("No action in tier");
+            }
+            if (!Add(tierInfo)) {
                 return TConclusionStatus::Fail("Invalid tier settings");
             }
         }
@@ -262,7 +271,14 @@ public:
     static THashSet<TString> GetUsedTiers(const TProto& ttlSettings) {
         THashSet<TString> usedTiers;
         for (const auto& tier : ttlSettings.GetTiers()) {
-            usedTiers.emplace(tier.GetStorageName());
+            switch (tier.GetActionCase()) {
+                case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
+                    usedTiers.emplace(tier.GetEvictToExternalStorage().GetStorageName());
+                    break;
+                case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
+                case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
+                    break;
+            }
         }
         return usedTiers;
     }

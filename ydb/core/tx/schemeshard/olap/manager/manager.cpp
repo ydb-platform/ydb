@@ -4,7 +4,18 @@ namespace NKikimr::NSchemeShard {
 
 void TTablesStorage::OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr object) {
     for (const auto& tier : object->Description.GetTtlSettings().GetEnabled().GetTiers()) {
-        AFL_VERIFY(PathsByTier[tier.GetStorageName()].emplace(pathId).second);
+        std::optional<TString> usedExternalStorage;
+        switch (tier.GetActionCase()) {
+            case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
+                usedExternalStorage = tier.GetEvictToExternalStorage().GetStorageName();
+                break;
+            case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
+            case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
+                break;
+        }
+        if (usedExternalStorage) {
+            AFL_VERIFY(PathsByTier[*usedExternalStorage].emplace(pathId).second);
+        }
     }
     for (auto&& s : object->GetColumnShards()) {
         AFL_VERIFY(TablesByShard[s].AddId(pathId));
@@ -13,11 +24,22 @@ void TTablesStorage::OnAddObject(const TPathId& pathId, TColumnTableInfo::TPtr o
 
 void TTablesStorage::OnRemoveObject(const TPathId& pathId, TColumnTableInfo::TPtr object) {
     for (const auto& tier : object->Description.GetTtlSettings().GetEnabled().GetTiers()) {
-        auto findTier = PathsByTier.find(tier.GetStorageName());
-        AFL_VERIFY(findTier);
-        AFL_VERIFY(findTier->second.erase(pathId));
-        if (findTier->second.empty()) {
-            PathsByTier.erase(findTier);
+        std::optional<TString> usedExternalStorage;
+        switch (tier.GetActionCase()) {
+            case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
+                usedExternalStorage = tier.GetEvictToExternalStorage().GetStorageName();
+                break;
+            case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
+            case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
+                break;
+        }
+        if (usedExternalStorage) {
+            auto findTier = PathsByTier.find(*usedExternalStorage);
+            AFL_VERIFY(findTier);
+            AFL_VERIFY(findTier->second.erase(pathId));
+            if (findTier->second.empty()) {
+                PathsByTier.erase(findTier);
+            }
         }
     }
     for (auto&& s : object->GetColumnShards()) {

@@ -507,13 +507,13 @@ private:
 
                 if (tableDescription.HasTtlSettings() && tableDescription.GetTtlSettings().HasEnabled()) {
                     const auto& inTTL = tableDescription.GetTtlSettings().GetEnabled();
+                    FillTiersSettings(*describeLogTableResult.mutable_ttl_settings()->mutable_tiers(), inTTL.GetTiers());
 
                     switch (inTTL.GetColumnUnit()) {
                     case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {
                         auto& outTTL = *describeLogTableResult.mutable_ttl_settings()->mutable_date_type_column();
                         outTTL.set_column_name(inTTL.GetColumnName());
                         outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
-                        FillTiersSettings(*outTTL.mutable_storage_tiers(), inTTL.GetTiers());
                         break;
                     }
 
@@ -525,7 +525,6 @@ private:
                         outTTL.set_column_name(inTTL.GetColumnName());
                         outTTL.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(inTTL.GetColumnUnit()));
                         outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
-                        FillTiersSettings(*outTTL.mutable_storage_tiers(), inTTL.GetTiers());
                         break;
                     }
 
@@ -556,11 +555,20 @@ private:
         }
     }
 
-    static void FillTiersSettings(NProtoBuf::RepeatedPtrField<Ydb::Table::EvictionTier>& out, const NProtoBuf::RepeatedPtrField<NKikimrSchemeOp::TTTLSettings_TTier>& in) {
+    static void FillTiersSettings(NProtoBuf::RepeatedPtrField<Ydb::Table::TtlTier>& out, const NProtoBuf::RepeatedPtrField<NKikimrSchemeOp::TTTLSettings_TTier>& in) {
         for (const auto& inTier : in) {
             auto* outTier = out.Add();
-            outTier->set_storage_name(inTier.GetStorageName());
             outTier->set_evict_after_seconds(inTier.GetEvictAfterSeconds());
+            switch (inTier.GetActionCase()) {
+                case NKikimrSchemeOp::TTTLSettings_TTier::kDelete:
+                    outTier->mutable_delete_();
+                    break;
+                case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
+                    outTier->mutable_evict_to_external_storage()->set_storage_name(inTier.GetEvictToExternalStorage().GetStorageName());
+                    break;
+                case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
+                    break;
+            }
         }
     }
 

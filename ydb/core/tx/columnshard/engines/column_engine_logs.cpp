@@ -125,14 +125,6 @@ void TColumnEngineForLogs::UpdatePortionStats(
     }
 }
 
-void TColumnEngineForLogs::StartActualization() {
-    AFL_VERIFY(!ActualizationStarted);
-    for (auto&& i : GranulesStorage->GetTables()) {
-        i.second->StartActualizationIndex();
-    }
-    ActualizationStarted = true;
-}
-
 void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& indexInfo) {
     AFL_VERIFY(DataAccessorsManager);
     bool switchOptimizer = false;
@@ -147,9 +139,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, TInd
     const bool isCriticalScheme = indexInfo.GetSchemeNeedActualization();
     auto* indexInfoActual = VersionedIndex.AddIndex(snapshot, std::move(indexInfo));
     if (isCriticalScheme) {
-        if (!ActualizationStarted) {
-            StartActualization();
-        }
+        StartActualization({});
         for (auto&& i : GranulesStorage->GetTables()) {
             i.second->RefreshScheme();
         }

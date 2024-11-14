@@ -74,7 +74,7 @@ NYT::TNode MakeOutputSchema() {
 struct TInputType {
     const TVector<ui64>& Offsets;
     const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& Values;
-    const ui64 RowsOffset;  // ofset of first value
+    const ui64 RowsOffset;  // offset of first value
     const ui64 NumberRows;
 
     ui64 GetOffset(ui64 rowId) const {

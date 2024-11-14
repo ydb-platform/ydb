@@ -316,7 +316,7 @@ message TContinuation {
 
 // ---------- Filters ----------
 
-// Expression with value
+// Expression with value (any type expression)
 // Can be a column, a constant or a result of, for example,
 // some arithmetical operation
 message TExpression {
@@ -338,6 +338,18 @@ message TExpression {
         TExpression right_value = 3;
     }
 
+    // "COALESCE($expression_1, $expression_2, ..., $expression_n)"
+    message TCoalesce {
+        repeated TExpression operands = 1;
+    }
+
+    // "IF($predicate, $then_expression, $else_expression)"
+    message TIf {
+        TPredicate predicate = 1;
+        TExpression then_expression = 2;
+        TExpression else_expression = 3;
+    }
+
     message TNull {
     }
 
@@ -350,10 +362,14 @@ message TExpression {
         TArithmeticalExpression arithmetical_expression = 3;
 
         TNull null = 4;
+
+        TCoalesce coalesce = 5;
+
+        TIf if = 6;
     }
 }
 
-// Predicate
+// Predicate (exactly bool expression)
 message TPredicate {
     // NOT
     message TNegation {
@@ -432,6 +448,12 @@ message TPredicate {
         TExpression right_value = 3;
     }
 
+    // "$column REGEXP $pattern"
+    message TRegexp {
+        TExpression value = 1;
+        TExpression pattern = 2;
+    }
+
     oneof payload {
         TNegation negation = 1;
         TConjunction conjunction = 2;
@@ -444,6 +466,7 @@ message TPredicate {
         TBoolExpression bool_expression = 9;
         TCoalesce coalesce = 10;
         TIf if = 11;
+        TRegexp regexp = 12;
     }
 }
 

@@ -1,8 +1,9 @@
+#include <library/cpp/malloc/api/malloc.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/interconnect/interconnect_common.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/library/actors/interconnect/event_holder_pool.h>
 
 #include <contrib/libs/tcmalloc/tcmalloc/malloc_extension.h>
@@ -61,10 +62,15 @@ Y_UNIT_TEST_SUITE(EventHolderPool) {
     struct TMemProfiler {
         size_t UsedAtStart = 0;
 
+
         TMemProfiler()
             : UsedAtStart(0)
         {
             UsedAtStart = GetUsed();
+
+            const auto &info = NMalloc::MallocInfo();
+            bool tcmallocIsUsed = TStringBuf(info.Name).StartsWith("tc");
+            UNIT_ASSERT(tcmallocIsUsed);
         }
 
         size_t GetUsed() {

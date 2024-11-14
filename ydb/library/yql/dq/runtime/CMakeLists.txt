@@ -35,9 +35,9 @@ target_link_libraries(yql-dq-runtime PUBLIC
   libs-apache-arrow
   ydb-library-yverify_stream
   ydb-library-mkql_proto
-  yql-minikql-comp_nodes
+  essentials-minikql-comp_nodes
   parser-pg_wrapper-interface
-  yql-public-udf
+  essentials-public-udf
   dq-actors-protos
   yql-dq-common
   yql-dq-expr_nodes

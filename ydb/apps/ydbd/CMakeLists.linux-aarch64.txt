@@ -33,8 +33,8 @@ target_link_libraries(ydbd PUBLIC
   ydb-library-keys
   ydb-library-pdisk_io
   ydb-library-security
-  yql-parser-pg_wrapper
-  yql-sql-pg
+  essentials-parser-pg_wrapper
+  essentials-sql-pg
   clickhouse_client_udf
   compress_udf
   datetime_udf

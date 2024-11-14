@@ -23,7 +23,8 @@ target_link_libraries(providers-dq-local_gateway PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-utils
+  yql-essentials-utils
+  essentials-utils-network
   dq-actors-compute
   dq-actors-spilling
   providers-dq-provider

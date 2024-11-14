@@ -23,8 +23,8 @@ target_link_libraries(yql-utils-actors PUBLIC
   yutil
   library-actors-core
   common-token_accessor-client
-  yql-public-types
-  yql-public-udf
+  essentials-public-types
+  essentials-public-udf
   providers-solomon-proto
 )
 

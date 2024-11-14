@@ -13,15 +13,11 @@
 # changes in this file.
 
 add_subdirectory(dq)
-add_subdirectory(core)
-add_subdirectory(public)
 add_subdirectory(providers)
-add_subdirectory(protos)
-add_subdirectory(minikql)
+add_subdirectory(public)
 add_subdirectory(utils)
-add_subdirectory(parser)
-add_subdirectory(ast)
-add_subdirectory(sql)
 add_subdirectory(udfs)
 add_subdirectory(yt)
+add_subdirectory(core)
 add_subdirectory(tools)
+add_subdirectory(minikql)

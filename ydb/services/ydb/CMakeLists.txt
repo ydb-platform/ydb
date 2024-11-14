@@ -40,7 +40,7 @@ target_link_libraries(ydb-services-ydb PUBLIC
   api-grpc
   api-grpc-draft
   api-protos
-  yql-public-types
+  essentials-public-types
   contrib-libs-openssl
 )
 

@@ -12,77 +12,9 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(fetch)
-add_subdirectory(log)
-add_subdirectory(rope)
-add_subdirectory(backtrace)
-add_subdirectory(failure_injector)
 add_subdirectory(actors)
 add_subdirectory(actor_log)
-add_subdirectory(threading)
 add_subdirectory(plan)
-add_subdirectory(test_http_server)
 add_subdirectory(bindings)
 add_subdirectory(actor_system)
-add_subdirectory(sys)
-add_subdirectory(ut)
-add_subdirectory(signals)
 add_subdirectory(simd)
-
-add_library(library-yql-utils)
-
-
-target_link_libraries(library-yql-utils PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  core-issue-protos
-  cpp-digest-md5
-  library-cpp-messagebus
-  cpp-string_utils-quote
-  cpp-threading-future
-  cpp-deprecated-atomic
-  contrib-libs-miniselect
-)
-
-target_sources(library-yql-utils PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/bind_in_range.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/debug_info.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/exceptions.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/future_action.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/hash.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/limiting_allocator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/line_split.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/md5_stream.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/method_index.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/multi_resource_lock.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/parse_double.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/proc_alive.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/rand_guid.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/retry.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/sort.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/swap_bytes.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/url_builder.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/utf8.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/yql_panic.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/yql_paths.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/bind_in_range.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/cast.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/debug_info.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/exceptions.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/future_action.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/hash.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/md5_stream.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/method_index.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/multi_resource_lock.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/parse_double.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/proc_alive.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/rand_guid.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/resetable_setting.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/retry.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/sort.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/swap_bytes.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/yql_panic.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/utils/yql_paths.h
-)
-

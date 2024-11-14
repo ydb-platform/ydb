@@ -34,9 +34,9 @@ target_link_libraries(providers-s3-object_listers PUBLIC
   cpp-xml-document
   providers-common-http_gateway
   providers-s3-credentials
-  library-yql-utils
+  yql-essentials-utils
   yql-utils-actor_log
-  yql-utils-threading
+  essentials-utils-threading
 )
 
 target_sources(providers-s3-object_listers PRIVATE

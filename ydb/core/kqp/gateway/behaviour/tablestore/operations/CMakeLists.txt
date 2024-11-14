@@ -26,6 +26,7 @@ target_link_libraries(behaviour-tablestore-operations PUBLIC
   services-metadata-manager
   formats-arrow-serializer
   storage-optimizer-abstract
+  columnshard-data_accessor-abstract
   kqp-gateway-utils
   ydb-core-protos
 )
@@ -50,6 +51,7 @@ target_link_libraries(behaviour-tablestore-operations.global PUBLIC
   services-metadata-manager
   formats-arrow-serializer
   storage-optimizer-abstract
+  columnshard-data_accessor-abstract
   kqp-gateway-utils
   ydb-core-protos
 )

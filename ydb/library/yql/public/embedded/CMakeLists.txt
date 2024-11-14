@@ -32,28 +32,28 @@ target_link_libraries(yql-public-embedded PUBLIC
   cpp-yson-node
   cpp-mapreduce-client
   cpp-mapreduce-common
-  library-yql-ast
-  yql-sql-pg
-  yql-core-facade
-  yql-core-file_storage
+  yql-essentials-ast
+  essentials-sql-pg
+  essentials-core-facade
+  essentials-core-file_storage
   core-file_storage-defs
   core-file_storage-proto
   core-file_storage-http_download
   core-services-mounts
-  yql-core-user_data
-  library-yql-minikql
+  essentials-core-user_data
+  yql-essentials-minikql
   minikql-invoke_builtins-llvm14
   minikql-comp_nodes-llvm14
   minikql-computation-llvm14
-  library-yql-protos
+  yql-essentials-protos
   udf-service-exception_policy
-  yql-utils-backtrace
-  yql-utils-log
-  yql-parser-pg_wrapper
+  essentials-utils-backtrace
+  essentials-utils-log
+  essentials-parser-pg_wrapper
   providers-common-proto
   providers-common-udf_resolve
-  yql-core-url_preprocessing
-  yql-core-url_lister
+  essentials-core-url_preprocessing
+  essentials-core-url_lister
   yt-gateway-native
   yt-lib-log
   yt-lib-yt_download
@@ -62,7 +62,7 @@ target_link_libraries(yql-public-embedded PUBLIC
   yt-codec-codegen
   yt-comp_nodes-llvm14
   parser-pg_wrapper-interface
-  yql-parser-pg_catalog
+  essentials-parser-pg_catalog
 )
 
 target_sources(yql-public-embedded PRIVATE

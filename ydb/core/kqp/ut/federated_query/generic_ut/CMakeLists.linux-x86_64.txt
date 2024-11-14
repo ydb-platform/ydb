@@ -36,7 +36,7 @@ target_link_libraries(ydb-core-kqp-ut-federated_query-generic_ut PUBLIC
   ut-federated_query-common
   connector-libcpp-ut_helpers
   providers-s3-actors
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
 )
 
 target_allocator(ydb-core-kqp-ut-federated_query-generic_ut

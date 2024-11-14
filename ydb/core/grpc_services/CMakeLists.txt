@@ -64,13 +64,14 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
   ydb-core-security
   core-security-ldap_auth_provider
   ydb-library-aclib
-  ydb-library-binary_json
-  ydb-library-dynumber
+  essentials-types-binary_json
+  essentials-types-dynumber
   ydb-library-mkql_proto
   library-persqueue-topic_parser
+  ydb-library-yaml_config
   parser-pg_wrapper-interface
-  yql-public-types
-  yql-public-issue
+  essentials-public-types
+  essentials-public-issue
   ydb-library-services
   api-grpc-draft
   api-protos
@@ -83,6 +84,7 @@ target_link_libraries(ydb-core-grpc_services PUBLIC
 target_sources(ydb-core-grpc_services PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/audit_log.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/audit_dml_operations.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/audit_logins.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/grpc_endpoint_publish_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/grpc_helper.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/grpc_mon.cpp
@@ -96,6 +98,7 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_alter_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_backup.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_begin_transaction.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_bsconfig.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_calls.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_cancel_operation.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_cms.cpp

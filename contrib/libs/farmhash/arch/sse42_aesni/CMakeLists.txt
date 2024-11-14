@@ -16,8 +16,6 @@ add_library(farmhash-arch-sse42_aesni)
 
 
 target_compile_options(farmhash-arch-sse42_aesni PRIVATE
-  -msse4.2
-  -maes
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 

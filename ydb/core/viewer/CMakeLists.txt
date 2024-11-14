@@ -334,6 +334,7 @@ resources(ydb-core-viewer.global
   viewer/api/swagger-ui-bundle.js
   viewer/api/swagger-ui.css
   viewer/api/swagger-ui-standalone-preset.js
+  OPTS
 )
 option(YDB_EMBEDDED_UI_DEV_SNAPSHOT "Use latest dev version of embedded UI git repo" Off)
 include(${CMAKE_CURRENT_SOURCE_DIR}/recursive_resources.cmake)

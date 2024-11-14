@@ -27,9 +27,9 @@ target_link_libraries(mrjob PUBLIC
   cpp-mapreduce-client
   udf-service-terminate_policy
   providers-common-gateway
-  yql-utils-backtrace
-  yql-parser-pg_wrapper
-  yql-sql-pg
+  essentials-utils-backtrace
+  essentials-parser-pg_wrapper
+  essentials-sql-pg
   providers-yt-job
   yt-codec-codegen
   yt-comp_nodes-llvm14

@@ -33,7 +33,7 @@ target_link_libraries(ydb-core-http_proxy PUBLIC
   ydb-core-protos
   core-grpc_services-local_rpc
   ydb-core-security
-  yql-public-issue
+  essentials-public-issue
   library-http_proxy-authorization
   library-http_proxy-error
   library-ycloud-api

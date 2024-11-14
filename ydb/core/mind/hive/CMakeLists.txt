@@ -69,6 +69,7 @@ target_sources(core-mind-hive PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__delete_tablet.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__delete_tablet_result.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__disconnect_node.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__generate_data_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__init_scheme.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__kill_node.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/mind/hive/tx__load_everything.cpp

@@ -24,7 +24,7 @@ target_link_libraries(kqp-opt-logical PUBLIC
   contrib-libs-cxxsupp
   yutil
   core-kqp-common
-  yql-core-extract_predicate
+  essentials-core-extract_predicate
   yql-dq-common
   yql-dq-opt
 )

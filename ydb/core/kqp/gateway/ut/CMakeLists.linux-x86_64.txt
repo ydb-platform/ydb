@@ -27,14 +27,14 @@ target_link_libraries(ydb-core-kqp-gateway-ut PUBLIC
   cpp-testing-gtest
   cpp-testing-gtest_main
   core-kqp-gateway
-  yql-parser-pg_wrapper
+  essentials-parser-pg_wrapper
   udf-service-stub
   ydb-services-kesus
   ydb-services-ydb
   ydb-services-persqueue_cluster_discovery
   minikql-comp_nodes-llvm14
   ydb-services-metadata
-  yql-sql-pg
+  essentials-sql-pg
 )
 
 target_allocator(ydb-core-kqp-gateway-ut

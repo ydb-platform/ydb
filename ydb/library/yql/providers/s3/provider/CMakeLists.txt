@@ -32,12 +32,12 @@ target_link_libraries(providers-s3-provider PUBLIC
   library-cpp-retry
   library-cpp-time_provider
   cpp-xml-document
-  library-yql-ast
-  library-yql-core
-  yql-core-type_ann
+  yql-essentials-ast
+  yql-essentials-core
+  essentials-core-type_ann
   yql-dq-expr_nodes
-  yql-dq-integration
-  yql-minikql-comp_nodes
+  essentials-core-dq_integration
+  essentials-minikql-comp_nodes
   providers-common-config
   providers-common-dq
   providers-common-http_gateway
@@ -60,8 +60,8 @@ target_link_libraries(providers-s3-provider PUBLIC
   providers-s3-proto
   providers-s3-range_helpers
   providers-s3-statistics
-  library-yql-utils
-  yql-utils-threading
+  yql-essentials-utils
+  essentials-utils-threading
 )
 
 target_sources(providers-s3-provider PRIVATE

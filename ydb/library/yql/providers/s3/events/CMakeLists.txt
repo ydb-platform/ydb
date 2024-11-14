@@ -33,11 +33,10 @@ target_link_libraries(providers-s3-events PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-base
-  core-kqp-common
   dq-actors-protos
   providers-s3-proto
   providers-common-http_gateway
-  yql-public-issue
+  essentials-public-issue
   clickhouse_client_udf
 )
 

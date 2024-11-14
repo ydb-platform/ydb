@@ -26,23 +26,24 @@ target_link_libraries(core-kqp-runtime PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
+  cpp-threading-hot_swap
   ydb-core-actorlib_impl
   ydb-core-base
   ydb-core-engine
   core-engine-minikql
   ydb-core-formats
   core-kqp-common
+  kqp-common-buffer
   ydb-core-protos
   ydb-core-scheme
   ydb-core-ydb_convert
-  minikql-computation-llvm14
-  yql-minikql-comp_nodes
-  library-yql-utils
   dq-actors-protos
   dq-actors-spilling
   yql-dq-common
   yql-dq-runtime
-  cpp-threading-hot_swap
+  minikql-computation-llvm14
+  essentials-minikql-comp_nodes
+  yql-essentials-utils
 )
 
 target_sources(core-kqp-runtime PRIVATE

@@ -20,7 +20,7 @@ target_link_libraries(impl-ydb_internal-common PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-grpc-client
-  yql-public-issue
+  essentials-public-issue
 )
 
 target_sources(impl-ydb_internal-common PRIVATE

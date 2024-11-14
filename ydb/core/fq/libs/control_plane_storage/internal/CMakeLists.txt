@@ -43,8 +43,8 @@ target_link_libraries(libs-control_plane_storage-internal PUBLIC
   ydb-core-mon
   ydb-library-protobuf_printer
   ydb-library-security
-  yql-public-issue
-  library-yql-utils
+  essentials-public-issue
+  yql-essentials-utils
   public-lib-fq
   cpp-client-ydb_scheme
   cpp-client-ydb_value

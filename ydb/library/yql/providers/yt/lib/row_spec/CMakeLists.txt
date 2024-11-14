@@ -24,11 +24,11 @@ target_link_libraries(yt-lib-row_spec PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-yson-node
-  library-yql-ast
-  yql-core-expr_nodes_gen
-  library-yql-core
-  yql-core-expr_nodes
-  yql-core-issue
+  yql-essentials-ast
+  essentials-core-expr_nodes_gen
+  yql-essentials-core
+  essentials-core-expr_nodes
+  essentials-core-issue
   providers-common-codec
   providers-common-provider
   providers-common-schema

@@ -23,9 +23,9 @@ target_link_libraries(providers-clickhouse-actors PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-minikql-computation
+  essentials-minikql-computation
   common-token_accessor-client
-  yql-public-types
+  essentials-public-types
   dq-actors-compute
   providers-clickhouse-proto
   providers-common-http_gateway

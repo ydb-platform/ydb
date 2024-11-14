@@ -21,7 +21,8 @@ target_link_libraries(yt-lib-log PUBLIC
   yutil
   yt-lib-init_yt_api
   mapreduce-interface-logging
-  yql-utils-log
+  essentials-utils-log
+  essentials-utils-backtrace
 )
 
 target_sources(yt-lib-log PRIVATE

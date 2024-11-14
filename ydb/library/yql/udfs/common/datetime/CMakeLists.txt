@@ -25,7 +25,7 @@ target_link_libraries(datetime_udf INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-public-udf
+  essentials-public-udf
   public-udf-support
   library-cpp-timezone_conversion
   util-draft
@@ -46,7 +46,7 @@ target_link_libraries(datetime_udf.global PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-public-udf
+  essentials-public-udf
   public-udf-support
   library-cpp-timezone_conversion
   util-draft

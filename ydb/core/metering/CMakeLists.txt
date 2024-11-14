@@ -19,13 +19,6 @@ get_built_tool_path(
   enum_parser
 )
 
-get_built_tool_path(
-  TOOL_rescompiler_bin
-  TOOL_rescompiler_dependency
-  tools/rescompiler/bin
-  rescompiler
-)
-
 add_subdirectory(ut)
 
 add_library(ydb-core-metering)
@@ -40,7 +33,6 @@ target_link_libraries(ydb-core-metering PUBLIC
   library-cpp-json
   library-cpp-logger
   ydb-core-base
-  library-cpp-resource
 )
 
 target_sources(ydb-core-metering PRIVATE
@@ -57,33 +49,4 @@ generate_enum_serilization(ydb-core-metering
   ${PROJECT_SOURCE_DIR}/ydb/core/metering/bill_record.h
   INCLUDE_HEADERS
   ydb/core/metering/bill_record.h
-)
-
-add_global_library_for(ydb-core-metering.global
-  ydb-core-metering)
-
-
-target_link_libraries(ydb-core-metering.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  library-actors-core
-  library-cpp-json
-  library-cpp-logger
-  ydb-core-base
-  library-cpp-resource
-)
-
-target_sources(ydb-core-metering.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/core/metering/da10233abc65c3f178c7da0ce0d7a4ea.cpp
-)
-
-
-resources(ydb-core-metering.global
-  ${PROJECT_BINARY_DIR}/ydb/core/metering/da10233abc65c3f178c7da0ce0d7a4ea.cpp
-  INPUTS
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/kqp_default_settings.txt
-  KEYS
-  kqp_default_settings.txt
 )

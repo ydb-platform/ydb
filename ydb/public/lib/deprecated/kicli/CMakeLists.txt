@@ -31,8 +31,8 @@ target_link_libraries(lib-deprecated-kicli PUBLIC
   lib-deprecated-client
   public-lib-scheme_types
   public-lib-value
-  yql-public-decimal
-  yql-public-issue
+  essentials-public-decimal
+  essentials-public-issue
 )
 
 target_sources(lib-deprecated-kicli PRIVATE

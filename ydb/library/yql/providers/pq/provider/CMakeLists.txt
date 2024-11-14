@@ -27,13 +27,13 @@ target_link_libraries(providers-pq-provider PUBLIC
   yutil
   library-cpp-random_provider
   library-cpp-time_provider
-  library-yql-ast
-  library-yql-core
-  yql-core-type_ann
+  yql-essentials-ast
+  yql-essentials-core
+  essentials-core-type_ann
   yql-dq-expr_nodes
-  yql-dq-integration
+  essentials-core-dq_integration
   yql-dq-opt
-  yql-minikql-comp_nodes
+  essentials-minikql-comp_nodes
   providers-common-config
   providers-common-db_id_async_resolver
   providers-common-dq
@@ -51,7 +51,7 @@ target_link_libraries(providers-pq-provider PUBLIC
   providers-pq-expr_nodes
   providers-pq-proto
   providers-result-expr_nodes
-  yql-public-udf
+  essentials-public-udf
   cpp-client-ydb_driver
 )
 

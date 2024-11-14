@@ -30,14 +30,14 @@ target_link_libraries(providers-dq-actors PUBLIC
   library-actors-core
   library-cpp-yson
   ydb-library-mkql_proto
-  yql-core-services
+  essentials-core-services
   core-services-mounts
-  yql-core-user_data
-  library-yql-core
+  essentials-core-user_data
+  yql-essentials-core
   yql-utils-actors
   yql-utils-actor_log
-  yql-utils-backtrace
-  yql-utils-log
+  essentials-utils-backtrace
+  essentials-utils-log
   api-protos
   public-lib-yson_value
   yql-dq-common
@@ -45,7 +45,7 @@ target_link_libraries(providers-dq-actors PUBLIC
   yql-dq-runtime
   yql-dq-tasks
   dq-actors-compute
-  yql-utils-failure_injector
+  essentials-utils-failure_injector
   providers-common-metrics
   dq-actors-events
   dq-api-grpc

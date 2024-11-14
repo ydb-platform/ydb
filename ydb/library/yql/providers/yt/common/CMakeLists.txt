@@ -34,8 +34,8 @@ target_link_libraries(providers-yt-common PUBLIC
   cpp-string_utils-parse_size
   cpp-yson-node
   cpp-mapreduce-interface
-  library-yql-ast
-  yql-utils-log
+  yql-essentials-ast
+  essentials-utils-log
   providers-common-codec
   providers-common-config
   tools-enum_parser-enum_serialization_runtime

@@ -23,7 +23,7 @@ target_link_libraries(libs-audit-events PUBLIC
   library-actors-interconnect
   fq-libs-checkpointing_common
   libs-control_plane_storage-events
-  yql-public-issue
+  essentials-public-issue
   api-protos
 )
 

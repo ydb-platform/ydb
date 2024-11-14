@@ -23,7 +23,7 @@ target_link_libraries(providers-pq-common PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-public-types
+  essentials-public-types
 )
 
 target_sources(providers-pq-common PRIVATE

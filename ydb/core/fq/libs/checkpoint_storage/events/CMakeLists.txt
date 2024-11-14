@@ -24,7 +24,7 @@ target_link_libraries(libs-checkpoint_storage-events PUBLIC
   fq-libs-checkpointing_common
   fq-libs-events
   libs-checkpoint_storage-proto
-  yql-public-issue
+  essentials-public-issue
 )
 
 target_sources(libs-checkpoint_storage-events PRIVATE

@@ -23,7 +23,7 @@ target_link_libraries(providers-function-provider PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-dq-integration
+  essentials-core-dq_integration
   common-token_accessor-client
   providers-common-dq
   providers-common-provider
@@ -32,8 +32,8 @@ target_link_libraries(providers-function-provider PUBLIC
   providers-function-common
   providers-function-gateway
   providers-function-proto
-  library-yql-core
-  yql-core-expr_nodes
+  yql-essentials-core
+  essentials-core-expr_nodes
   yql-dq-expr_nodes
   yql-dq-opt
 )

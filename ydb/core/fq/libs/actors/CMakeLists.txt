@@ -59,11 +59,11 @@ target_link_libraries(fq-libs-actors PUBLIC
   ydb-core-util
   ydb-library-mkql_proto
   ydb-library-security
-  library-yql-ast
-  yql-core-facade
+  yql-essentials-ast
+  essentials-core-facade
   core-services-mounts
-  dq-integration-transform
-  yql-minikql-comp_nodes
+  core-dq_integration-transform
+  essentials-minikql-comp_nodes
   providers-common-codec
   providers-common-comp_nodes
   providers-common-db_id_async_resolver
@@ -86,10 +86,10 @@ target_link_libraries(fq-libs-actors PUBLIC
   providers-pq-task_meta
   providers-s3-actors_factory
   providers-s3-provider
-  yql-public-issue
+  essentials-public-issue
   public-issue-protos
-  yql-sql-settings
-  library-yql-utils
+  essentials-sql-settings
+  yql-essentials-utils
   yql-utils-actor_log
   api-protos
   public-lib-fq

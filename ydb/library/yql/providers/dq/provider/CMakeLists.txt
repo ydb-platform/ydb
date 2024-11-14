@@ -34,13 +34,13 @@ target_link_libraries(providers-dq-provider PUBLIC
   library-cpp-yson
   public-lib-yson_value
   cpp-client-ydb_driver
-  library-yql-ast
-  library-yql-core
-  yql-core-issue
-  yql-utils-backtrace
-  yql-utils-failure_injector
-  yql-dq-integration
-  dq-integration-transform
+  yql-essentials-ast
+  yql-essentials-core
+  essentials-core-issue
+  essentials-utils-backtrace
+  essentials-utils-failure_injector
+  essentials-core-dq_integration
+  core-dq_integration-transform
   yql-dq-transform
   yql-dq-tasks
   yql-dq-type_ann
@@ -59,8 +59,8 @@ target_link_libraries(providers-dq-provider PUBLIC
   providers-dq-planner
   providers-dq-actors
   providers-result-expr_nodes
-  library-yql-minikql
-  yql-public-issue
+  yql-essentials-minikql
+  essentials-public-issue
 )
 
 target_sources(providers-dq-provider PRIVATE

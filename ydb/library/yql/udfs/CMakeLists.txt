@@ -13,6 +13,3 @@
 # changes in this file.
 
 add_subdirectory(common)
-add_subdirectory(logs)
-add_subdirectory(examples)
-add_subdirectory(test)

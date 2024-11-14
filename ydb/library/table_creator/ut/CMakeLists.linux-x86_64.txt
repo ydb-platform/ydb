@@ -33,7 +33,7 @@ target_link_libraries(ydb-library-table_creator-ut PUBLIC
   cpp-testing-unittest
   core-testlib-default
   udf-service-exception_policy
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
   cpp-client-ydb_driver
 )
 

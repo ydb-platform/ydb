@@ -23,7 +23,7 @@ target_link_libraries(client-ydb_types-status PUBLIC
   impl-ydb_internal-plain_status
   cpp-client-ydb_types
   client-ydb_types-fatal_error_handlers
-  yql-public-issue
+  essentials-public-issue
 )
 
 target_sources(client-ydb_types-status PRIVATE

@@ -23,9 +23,9 @@ target_link_libraries(providers-dq-planner PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-core-services
-  yql-minikql-comp_nodes
-  yql-dq-integration
+  essentials-core-services
+  essentials-minikql-comp_nodes
+  essentials-core-dq_integration
   yql-dq-opt
   yql-dq-type_ann
   yql-dq-tasks

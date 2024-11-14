@@ -41,7 +41,9 @@ target_sources(columnshard-engines-portions PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/base_with_blobs.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/read_with_blobs.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/write_with_blobs.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/constructor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/constructors.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/constructor_portion.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/constructor_accessor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/constructor_meta.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/meta.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/portions/common.cpp

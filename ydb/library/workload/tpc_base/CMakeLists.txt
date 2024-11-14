@@ -79,4 +79,5 @@ resources(library-workload-tpc_base.global
   KEYS
   consts.yql
   consts_decimal.yql
+  OPTS
 )

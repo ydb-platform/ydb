@@ -25,7 +25,7 @@ target_link_libraries(kikimr_backup PUBLIC
   library-cpp-logger
   cpp-regex-pcre
   cpp-string_utils-quote
-  ydb-library-dynumber
+  essentials-types-dynumber
   api-protos
   common
   ydb_cli-dump-util

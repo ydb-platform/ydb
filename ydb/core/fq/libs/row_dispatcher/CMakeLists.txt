@@ -30,12 +30,13 @@ target_link_libraries(fq-libs-row_dispatcher PUBLIC
   yutil
   contrib-libs-fmt
   contrib-libs-simdjson
+  ydb-core-base
   libs-actors-logging
   libs-config-protos
-  fq-libs-control_plane_storage
   libs-row_dispatcher-events
   fq-libs-shared_resources
   fq-libs-ydb
+  ydb-core-mon
   library-actors-core
   ydb-library-security
   dq-actors-common
@@ -49,6 +50,7 @@ target_link_libraries(fq-libs-row_dispatcher PUBLIC
 
 target_sources(fq-libs-row_dispatcher PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/actors_factory.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/coordinator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/json_filter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/row_dispatcher/json_parser.cpp

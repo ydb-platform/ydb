@@ -31,31 +31,31 @@ target_link_libraries(yql-yt-native PUBLIC
   cpp-mapreduce-common
   yt-yt-client
   yt-library-program
-  library-yql-ast
-  yql-sql-pg
-  yql-parser-pg_wrapper
-  yql-core-facade
-  yql-core-file_storage
+  yql-essentials-ast
+  essentials-sql-pg
+  essentials-parser-pg_wrapper
+  essentials-core-facade
+  essentials-core-file_storage
   core-file_storage-proto
   core-file_storage-http_download
-  yql-core-progress_merger
+  essentials-core-progress_merger
   core-services-mounts
-  yql-core-user_data
-  library-yql-minikql
+  essentials-core-user_data
+  yql-essentials-minikql
   minikql-invoke_builtins-llvm14
   minikql-comp_nodes-llvm14
-  library-yql-protos
+  yql-essentials-protos
   udf-service-exception_policy
-  yql-utils-backtrace
-  yql-utils-log
+  essentials-utils-backtrace
+  essentials-utils-log
   utils-log-proto
   providers-common-proto
   providers-common-codec
   providers-common-udf_resolve
   providers-solomon-gateway
   providers-solomon-provider
-  library-yql-core
-  yql-core-url_preprocessing
+  yql-essentials-core
+  essentials-core-url_preprocessing
   yql-dq-comp_nodes
   dq-actors-yt
   providers-dq-global_worker_manager
@@ -108,31 +108,31 @@ target_link_libraries(yql-yt-native.global PUBLIC
   cpp-mapreduce-common
   yt-yt-client
   yt-library-program
-  library-yql-ast
-  yql-sql-pg
-  yql-parser-pg_wrapper
-  yql-core-facade
-  yql-core-file_storage
+  yql-essentials-ast
+  essentials-sql-pg
+  essentials-parser-pg_wrapper
+  essentials-core-facade
+  essentials-core-file_storage
   core-file_storage-proto
   core-file_storage-http_download
-  yql-core-progress_merger
+  essentials-core-progress_merger
   core-services-mounts
-  yql-core-user_data
-  library-yql-minikql
+  essentials-core-user_data
+  yql-essentials-minikql
   minikql-invoke_builtins-llvm14
   minikql-comp_nodes-llvm14
-  library-yql-protos
+  yql-essentials-protos
   udf-service-exception_policy
-  yql-utils-backtrace
-  yql-utils-log
+  essentials-utils-backtrace
+  essentials-utils-log
   utils-log-proto
   providers-common-proto
   providers-common-codec
   providers-common-udf_resolve
   providers-solomon-gateway
   providers-solomon-provider
-  library-yql-core
-  yql-core-url_preprocessing
+  yql-essentials-core
+  essentials-core-url_preprocessing
   yql-dq-comp_nodes
   dq-actors-yt
   providers-dq-global_worker_manager

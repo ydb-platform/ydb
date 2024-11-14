@@ -40,8 +40,8 @@ target_link_libraries(ydb-services-ydb-ut PUBLIC
   core-grpc_services-base
   ydb-core-testlib
   ydb-core-security
-  yql-minikql-dom
-  yql-minikql-jsonpath
+  essentials-minikql-dom
+  essentials-minikql-jsonpath
   testlib-service_mocks-ldap_mock
   public-lib-experimental
   public-lib-json_value

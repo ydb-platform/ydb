@@ -25,7 +25,7 @@ target_link_libraries(client-ydb_types-credentials PUBLIC
   ydb-library-login
   api-grpc
   client-ydb_types-status
-  yql-public-issue
+  essentials-public-issue
 )
 
 target_sources(client-ydb_types-credentials PRIVATE

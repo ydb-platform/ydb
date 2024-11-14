@@ -20,11 +20,11 @@ target_link_libraries(yt-lib-hash PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-openssl
-  library-yql-ast
-  library-yql-utils
-  yql-utils-log
-  library-yql-core
-  yql-core-expr_nodes
+  yql-essentials-ast
+  yql-essentials-utils
+  essentials-utils-log
+  yql-essentials-core
+  essentials-core-expr_nodes
 )
 
 target_sources(yt-lib-hash PRIVATE

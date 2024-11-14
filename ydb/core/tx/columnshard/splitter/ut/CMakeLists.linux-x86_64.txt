@@ -40,19 +40,20 @@ target_link_libraries(ydb-core-tx-columnshard-splitter-ut PUBLIC
   tx-columnshard-blobs_action
   tx-columnshard-data_sharing
   core-kqp-common
-  yql-parser-pg_wrapper
-  yql-public-udf
+  essentials-parser-pg_wrapper
+  essentials-public-udf
   ydb-core-persqueue
   core-kqp-session_actor
   core-tx-tx_proxy
   engines-storage-chunks
   storage-indexes-max
   storage-indexes-count_min_sketch
+  tx-columnshard-data_accessor
   ydb-core-tx
   ydb-core-mind
   minikql-comp_nodes-llvm14
   udf-service-exception_policy
-  yql-sql-pg
+  essentials-sql-pg
   ydb-services-kesus
   ydb-services-persqueue_cluster_discovery
   ydb-services-ydb

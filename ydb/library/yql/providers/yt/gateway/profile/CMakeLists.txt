@@ -23,7 +23,7 @@ target_link_libraries(yt-gateway-profile PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-utils-log
+  essentials-utils-log
   providers-yt-provider
 )
 

@@ -25,13 +25,13 @@ target_link_libraries(providers-dq-runtime PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-minikql-invoke_builtins
-  library-yql-utils
-  yql-utils-log
-  yql-utils-backtrace
-  yql-core-expr_nodes
+  essentials-minikql-invoke_builtins
+  yql-essentials-utils
+  essentials-utils-log
+  essentials-utils-backtrace
+  essentials-core-expr_nodes
   yql-dq-common
-  dq-integration-transform
+  core-dq_integration-transform
   yql-dq-runtime
   providers-common-proto
   providers-common-provider
@@ -40,7 +40,7 @@ target_link_libraries(providers-dq-runtime PUBLIC
   providers-dq-counters
   providers-dq-task_runner
   parser-pg_wrapper-interface
-  yql-parser-pg_catalog
+  essentials-parser-pg_catalog
 )
 
 target_sources(providers-dq-runtime PRIVATE

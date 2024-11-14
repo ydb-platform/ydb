@@ -20,6 +20,6 @@ target_link_libraries(core-testlib-default INTERFACE
   contrib-libs-cxxsupp
   yutil
   ydb-core-testlib
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
 )
 

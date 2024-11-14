@@ -26,7 +26,7 @@ target_link_libraries(fq-libs-pretty_printers PUBLIC
   contrib-libs-protobuf
   libs-graph_params-proto
   ydb-library-protobuf_printer
-  library-yql-minikql
+  yql-essentials-minikql
   dq-api-protos
 )
 

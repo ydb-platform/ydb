@@ -35,11 +35,11 @@ target_link_libraries(fq-libs-events PUBLIC
   libs-graph_params-proto
   fq-libs-protos
   libs-row_dispatcher-protos
-  yql-core-facade
+  essentials-core-facade
   providers-common-db_id_async_resolver
   providers-dq-provider
   providers-pq-proto
-  yql-public-issue
+  essentials-public-issue
   api-protos
   cpp-client-ydb_table
 )

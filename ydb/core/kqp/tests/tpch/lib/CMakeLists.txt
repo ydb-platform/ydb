@@ -121,4 +121,5 @@ resources(tests-tpch-lib.global
   20.sql
   21.sql
   22.sql
+  OPTS
 )

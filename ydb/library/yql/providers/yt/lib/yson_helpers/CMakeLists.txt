@@ -21,8 +21,8 @@ target_link_libraries(yt-lib-yson_helpers PUBLIC
   yutil
   library-cpp-yson
   cpp-yson-node
-  library-yql-utils
-  yql-utils-log
+  yql-essentials-utils
+  essentials-utils-log
   providers-yt-common
 )
 

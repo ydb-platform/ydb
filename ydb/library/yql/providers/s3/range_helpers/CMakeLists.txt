@@ -27,7 +27,7 @@ target_link_libraries(providers-s3-range_helpers PUBLIC
   yutil
   providers-common-provider
   providers-s3-proto
-  library-yql-utils
+  yql-essentials-utils
   cpp-protobuf-util
 )
 

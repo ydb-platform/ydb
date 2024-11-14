@@ -27,7 +27,7 @@ target_link_libraries(dq-actors-yt PUBLIC
   library-grpc-client
   cpp-mapreduce-interface
   providers-dq-config
-  yql-core-issue
+  essentials-core-issue
   providers-common-metrics
   dq-api-grpc
   dq-api-protos

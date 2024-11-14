@@ -30,8 +30,7 @@ target_link_libraries(yql-dq-common PUBLIC
   library-actors-util
   library-mkql_proto-protos
   yql-dq-proto
-  library-yql-utils
-  yql-utils-rope
+  yql-essentials-utils
   tools-enum_parser-enum_serialization_runtime
 )
 
@@ -39,7 +38,9 @@ target_sources(yql-dq-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/common/dq_common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/common/dq_value.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/common/dq_serialized_batch.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/common/rope_over_buffer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/common/dq_resource_quoter.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/common/rope_over_buffer.h
 )
 
 

@@ -28,13 +28,13 @@ target_link_libraries(providers-pq-async_io PUBLIC
   fq-libs-row_dispatcher
   library-actors-log_backend
   dq-actors-compute
-  yql-minikql-computation
+  essentials-minikql-computation
   common-token_accessor-client
   dq-api-protos
   providers-pq-common
   providers-pq-proto
-  yql-public-types
-  yql-utils-log
+  essentials-public-types
+  essentials-utils-log
   cpp-client-ydb_driver
   cpp-client-ydb_topic
   client-ydb_types-credentials

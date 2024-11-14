@@ -22,6 +22,7 @@ get_built_tool_path(
 add_subdirectory(olap)
 add_subdirectory(common)
 add_subdirectory(backup)
+add_subdirectory(generated)
 add_subdirectory(ut_helpers)
 add_subdirectory(ut_auditsettings)
 add_subdirectory(ut_background_cleaning)
@@ -119,6 +120,7 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   core-tx-datashard
   tx-schemeshard-backup
   tx-schemeshard-common
+  tx-schemeshard-generated
   tx-schemeshard-olap
   core-tx-scheme_board
   core-tx-tx_allocator_client
@@ -130,7 +132,7 @@ target_link_libraries(core-tx-schemeshard PUBLIC
   ydb-library-login
   library-login-protos
   ydb-library-protobuf_printer
-  library-yql-minikql
+  yql-essentials-minikql
   providers-common-proto
   ydb-services-bg_tasks
   columnshard-bg_tasks-manager

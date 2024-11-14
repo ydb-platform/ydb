@@ -31,13 +31,13 @@ target_link_libraries(providers-dq-common PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-string_utils-parse_size
-  library-yql-minikql
-  library-yql-sql
-  library-yql-utils
-  yql-utils-log
+  yql-essentials-minikql
+  yql-essentials-sql
+  yql-essentials-utils
+  essentials-utils-log
   yql-dq-actors
   yql-dq-proto
-  yql-dq-integration
+  essentials-core-dq_integration
   tools-enum_parser-enum_serialization_runtime
 )
 

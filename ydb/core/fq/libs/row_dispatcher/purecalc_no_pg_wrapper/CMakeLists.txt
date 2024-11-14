@@ -34,14 +34,14 @@ target_link_libraries(libs-row_dispatcher-purecalc_no_pg_wrapper PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-ast
-  yql-core-services
+  yql-essentials-ast
+  essentials-core-services
   core-services-mounts
-  yql-core-user_data
-  yql-utils-backtrace
-  yql-utils-log
-  library-yql-core
-  yql-core-type_ann
+  essentials-core-user_data
+  essentials-utils-backtrace
+  essentials-utils-log
+  yql-essentials-core
+  essentials-core-type_ann
   providers-common-codec
   providers-common-comp_nodes
   providers-common-mkql

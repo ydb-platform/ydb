@@ -68,8 +68,8 @@ target_link_libraries(ydb-core-tablet_flat PUBLIC
   ydb-core-tablet
   core-tablet_flat-protos
   ydb-core-util
-  ydb-library-binary_json
-  ydb-library-dynumber
+  essentials-types-binary_json
+  essentials-types-dynumber
   library-mkql_proto-protos
 )
 

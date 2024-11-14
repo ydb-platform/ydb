@@ -12,8 +12,6 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
 add_library(yt-gateway-native)
 
 
@@ -35,15 +33,15 @@ target_link_libraries(yt-gateway-native PUBLIC
   cpp-yson-node
   cpp-mapreduce-common
   cpp-mapreduce-interface
-  library-yql-ast
-  yql-core-file_storage
-  yql-minikql-comp_nodes
-  library-yql-utils
-  yql-utils-log
-  yql-utils-threading
-  library-yql-core
-  yql-core-expr_nodes
-  yql-core-issue
+  yql-essentials-ast
+  essentials-core-file_storage
+  essentials-minikql-comp_nodes
+  yql-essentials-utils
+  essentials-utils-log
+  essentials-utils-threading
+  yql-essentials-core
+  essentials-core-expr_nodes
+  essentials-core-issue
   providers-common-codec
   providers-common-comp_nodes
   providers-common-mkql

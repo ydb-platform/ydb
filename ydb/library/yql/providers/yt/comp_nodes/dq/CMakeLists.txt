@@ -28,18 +28,18 @@ target_link_libraries(yt-comp_nodes-dq PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-minikql
+  yql-essentials-minikql
   minikql-computation-llvm14
   providers-yt-comp_nodes
   providers-yt-codec
   providers-common-codec
-  yql-utils-failure_injector
+  essentials-utils-failure_injector
   cpp-mapreduce-interface
   cpp-mapreduce-common
   cpp-yson-node
   yt-yt-core
   public-udf-arrow
-  yql-public-udf
+  essentials-public-udf
   libs-apache-arrow
   contrib-libs-flatbuffers
   yt-yt-client

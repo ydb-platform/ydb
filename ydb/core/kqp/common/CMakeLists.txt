@@ -23,6 +23,7 @@ add_subdirectory(events)
 add_subdirectory(shutdown)
 add_subdirectory(compilation)
 add_subdirectory(simple)
+add_subdirectory(buffer)
 
 add_library(core-kqp-common)
 
@@ -47,11 +48,11 @@ target_link_libraries(core-kqp-common PUBLIC
   core-tx-sharding
   yql-dq-expr_nodes
   ydb-library-aclib
-  yql-core-issue
-  yql-core-services
+  essentials-core-issue
+  essentials-core-services
   yql-dq-actors
   yql-dq-common
-  yql-dq-integration
+  essentials-core-dq_integration
   parser-pg_wrapper-interface
   public-lib-operation_id
   lib-operation_id-protos
@@ -67,6 +68,7 @@ target_sources(core-kqp-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_ru_calc.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_script_executions.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_timeouts.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_tx_manager.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_tx.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_types.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/common/kqp_user_request_context.cpp

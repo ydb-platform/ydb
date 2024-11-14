@@ -25,11 +25,11 @@ target_link_libraries(yql-dq-opt PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-ast
-  library-yql-core
+  yql-essentials-ast
+  yql-essentials-core
   yql-dq-common
   yql-dq-expr_nodes
-  yql-dq-integration
+  essentials-core-dq_integration
   yql-dq-proto
   yql-dq-type_ann
   providers-dq-expr_nodes

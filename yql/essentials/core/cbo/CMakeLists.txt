@@ -12,30 +12,31 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(clickhouse)
-add_subdirectory(hyperscan)
-add_subdirectory(compress_base)
-add_subdirectory(datetime)
-add_subdirectory(datetime2)
-add_subdirectory(digest)
-add_subdirectory(histogram)
-add_subdirectory(hyperloglog)
-add_subdirectory(ip_base)
-add_subdirectory(knn)
-add_subdirectory(json)
-add_subdirectory(json2)
-add_subdirectory(math)
-add_subdirectory(pire)
-add_subdirectory(re2)
-add_subdirectory(set)
-add_subdirectory(stat)
-add_subdirectory(string)
-add_subdirectory(top)
-add_subdirectory(topfreq)
-add_subdirectory(unicode_base)
-add_subdirectory(url_base)
-add_subdirectory(yson2)
-add_subdirectory(file)
-add_subdirectory(protobuf)
-add_subdirectory(roaring)
-add_subdirectory(streaming)
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
+
+add_library(essentials-core-cbo)
+
+
+target_link_libraries(essentials-core-cbo PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  tools-enum_parser-enum_serialization_runtime
+)
+
+target_sources(essentials-core-cbo PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/cbo/cbo_optimizer_new.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/cbo/cbo_hints.cpp
+)
+
+
+generate_enum_serilization(essentials-core-cbo
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/cbo/cbo_optimizer_new.h
+  INCLUDE_HEADERS
+  yql/essentials/core/cbo/cbo_optimizer_new.h
+)

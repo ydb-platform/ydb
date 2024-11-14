@@ -30,8 +30,7 @@ target_link_libraries(libs-compute-common PUBLIC
   fq-libs-db_id_async_resolver_impl
   fq-libs-grpc
   fq-libs-shared_resources
-  yql-public-issue
-  public-issue-protos
+  essentials-public-issue
   providers-common-http_gateway
   providers-dq-provider
   api-service-protos

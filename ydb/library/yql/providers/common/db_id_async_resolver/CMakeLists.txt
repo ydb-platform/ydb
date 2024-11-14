@@ -32,7 +32,7 @@ target_link_libraries(providers-common-db_id_async_resolver PUBLIC
   yutil
   cpp-threading-future
   connector-api-common
-  yql-public-issue
+  essentials-public-issue
   tools-enum_parser-enum_serialization_runtime
 )
 

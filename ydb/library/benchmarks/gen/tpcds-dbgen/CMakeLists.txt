@@ -839,4 +839,5 @@ resources(benchmarks-gen-tpcds-dbgen.global
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/gen/tpcds-dbgen/tpcds.idx
   KEYS
   tpcds.idx
+  OPTS
 )

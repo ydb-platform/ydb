@@ -21,14 +21,14 @@ target_compile_options(yt-comp_nodes-no_llvm PRIVATE
 )
 
 target_include_directories(yt-comp_nodes-no_llvm PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/codegen/llvm_stub
+  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/codegen/llvm_stub
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/computation
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/computation
 )
 
 target_include_directories(yt-comp_nodes-no_llvm PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/invoke_builtins
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/invoke_builtins
+  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/invoke_builtins
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/comp_nodes
 )
 
@@ -37,9 +37,9 @@ target_link_libraries(yt-comp_nodes-no_llvm PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-streams-brotli
-  library-yql-minikql
-  yql-public-udf
-  library-yql-utils
+  yql-essentials-minikql
+  essentials-public-udf
+  yql-essentials-utils
   providers-common-codec
   providers-common-mkql
   providers-yt-codec
@@ -56,13 +56,13 @@ target_sources(yt-comp_nodes-no_llvm PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_table_content.cpp
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_table.cpp
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql_mkql_ungrouping_list.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/computation/mkql_llvm_base.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen_llvm.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_impl.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/computation/mkql_computation_node_codegen.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/computation/mkql_llvm_base.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/computation/mkql_block_impl_codegen.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/invoke_builtins/mkql_builtins_codegen.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/invoke_builtins/mkql_builtins_codegen_llvm.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/invoke_builtins/mkql_builtins_impl.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h
 )
 
 
@@ -107,36 +107,36 @@ copy_file(
 )
 
 copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h.txt
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h
+  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node_codegen.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/computation/mkql_computation_node_codegen.h
 )
 
 copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_llvm_base.h.txt
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/computation/mkql_llvm_base.h
+  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_llvm_base.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/computation/mkql_llvm_base.h
 )
 
 copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h.txt
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/computation/mkql_block_impl_codegen.h
+  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_block_impl_codegen.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/computation/mkql_block_impl_codegen.h
 )
 
 copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen.h.txt
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen.h
+  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_codegen.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/invoke_builtins/mkql_builtins_codegen.h
 )
 
 copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen_llvm.h.txt
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen_llvm.h
+  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_codegen_llvm.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/invoke_builtins/mkql_builtins_codegen_llvm.h
 )
 
 copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_impl.h.txt
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_impl.h
+  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_impl.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/invoke_builtins/mkql_builtins_impl.h
 )
 
 copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h.txt
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h
+  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h.txt
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/comp_nodes/no_llvm/yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h
 )

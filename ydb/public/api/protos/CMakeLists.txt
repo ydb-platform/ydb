@@ -96,6 +96,7 @@ target_proto_messages(api-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_topic.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_value.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_keyvalue.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/protos/ydb_bsconfig.proto
 )
 
 target_sources(api-protos PRIVATE
@@ -139,6 +140,7 @@ target_sources(api-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_topic.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_value.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_keyvalue.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/protos/ydb_bsconfig.pb.h
 )
 
 

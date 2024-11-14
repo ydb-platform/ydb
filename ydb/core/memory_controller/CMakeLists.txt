@@ -28,7 +28,7 @@ target_link_libraries(ydb-core-memory_controller PUBLIC
   ydb-core-base
   library-actors-core
   ydb-library-services
-  library-yql-minikql
+  yql-essentials-minikql
   core-cms-console
   ydb-core-mon_alloc
   ydb-core-node_whiteboard

@@ -21,13 +21,13 @@ target_link_libraries(yql-public-fastcheck PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-ast
+  yql-essentials-ast
   core-services-mounts
-  yql-core-user_data
+  essentials-core-user_data
   udf-service-exception_policy
-  library-yql-sql
-  yql-sql-pg
-  yql-parser-pg_wrapper
+  yql-essentials-sql
+  essentials-sql-pg
+  essentials-parser-pg_wrapper
   providers-common-provider
 )
 

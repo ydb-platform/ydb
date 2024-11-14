@@ -25,7 +25,7 @@ target_link_libraries(kqp-common-compilation PUBLIC
   yutil
   core-kqp-query_data
   kqp-common-simple
-  yql-public-issue
+  essentials-public-issue
 )
 
 target_sources(kqp-common-compilation PRIVATE

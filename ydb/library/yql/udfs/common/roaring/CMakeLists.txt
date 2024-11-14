@@ -25,7 +25,7 @@ target_link_libraries(roaring INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-public-udf
+  essentials-public-udf
   public-udf-support
   contrib-libs-croaring
 )
@@ -45,7 +45,7 @@ target_link_libraries(roaring.global PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-public-udf
+  essentials-public-udf
   public-udf-support
   contrib-libs-croaring
 )

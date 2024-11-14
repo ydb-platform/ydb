@@ -31,7 +31,7 @@ target_link_libraries(core-grpc_services-base INTERFACE
   ydb-core-jaeger_tracing
   api-protos
   cpp-client-resources
-  yql-public-issue
+  essentials-public-issue
 )
 
 target_sources(core-grpc_services-base INTERFACE

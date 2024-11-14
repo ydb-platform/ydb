@@ -34,7 +34,7 @@ target_link_libraries(cpp-client-ydb_types PUBLIC
   yutil
   contrib-libs-protobuf
   library-grpc-client
-  yql-public-issue
+  essentials-public-issue
   tools-enum_parser-enum_serialization_runtime
 )
 

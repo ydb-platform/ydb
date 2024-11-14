@@ -20,9 +20,9 @@ target_link_libraries(yt-lib-yt_download PUBLIC
   contrib-libs-cxxsupp
   yutil
   yt-lib-init_yt_api
-  yql-core-file_storage
-  yql-utils-log
-  library-yql-utils
+  essentials-core-file_storage
+  essentials-utils-log
+  yql-essentials-utils
   library-cpp-cgiparam
   cpp-digest-md5
 )

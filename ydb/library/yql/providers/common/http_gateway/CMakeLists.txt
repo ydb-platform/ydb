@@ -33,9 +33,9 @@ target_link_libraries(providers-common-http_gateway PUBLIC
   library-actors-prof
   library-actors-protos
   providers-common-proto
-  yql-public-issue
-  library-yql-utils
-  yql-utils-log
+  essentials-public-issue
+  yql-essentials-utils
+  essentials-utils-log
 )
 
 target_sources(providers-common-http_gateway PRIVATE

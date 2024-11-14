@@ -33,6 +33,7 @@ target_link_libraries(columnshard-data_sharing-protos PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  ydb-core-protos
   columnshard-engines-protos
   columnshard-common-protos
   library-actors-protos

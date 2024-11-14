@@ -33,8 +33,8 @@ target_link_libraries(ydb-core-kqp-ut-scheme PUBLIC
   kqp-ut-common
   workload_service-ut-common
   columnshard-hooks-testing
-  yql-sql-pg
-  yql-parser-pg_wrapper
+  essentials-sql-pg
+  essentials-parser-pg_wrapper
 )
 
 target_allocator(ydb-core-kqp-ut-scheme

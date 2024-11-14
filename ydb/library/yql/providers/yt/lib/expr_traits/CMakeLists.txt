@@ -23,11 +23,11 @@ target_link_libraries(yt-lib-expr_traits PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-ast
-  yql-minikql-computation
-  yql-utils-log
-  library-yql-core
-  yql-core-expr_nodes
+  yql-essentials-ast
+  essentials-minikql-computation
+  essentials-utils-log
+  yql-essentials-core
+  essentials-core-expr_nodes
   providers-common-provider
   providers-yt-common
   providers-yt-expr_nodes

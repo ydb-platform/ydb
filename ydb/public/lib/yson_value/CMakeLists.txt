@@ -23,7 +23,7 @@ target_link_libraries(public-lib-yson_value PUBLIC
   cpp-yson-node
   cpp-client-ydb_result
   cpp-client-ydb_value
-  ydb-library-uuid
+  essentials-types-uuid
 )
 
 target_sources(public-lib-yson_value PRIVATE

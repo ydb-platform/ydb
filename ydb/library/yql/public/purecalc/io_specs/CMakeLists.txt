@@ -12,7 +12,7 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(mkql)
-add_subdirectory(arrow)
 add_subdirectory(protobuf)
 add_subdirectory(protobuf_raw)
+add_subdirectory(mkql)
+add_subdirectory(arrow)

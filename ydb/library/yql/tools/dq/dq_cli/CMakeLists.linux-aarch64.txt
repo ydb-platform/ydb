@@ -23,7 +23,7 @@ target_link_libraries(dq_cli PUBLIC
   library-grpc-client
   cpp-protobuf-util
   cpp-threading-future
-  library-yql-utils
+  yql-essentials-utils
   api-protos
   public-lib-yson_value
   dq-api-grpc

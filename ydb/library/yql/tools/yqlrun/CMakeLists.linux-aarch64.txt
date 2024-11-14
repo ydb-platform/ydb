@@ -29,18 +29,18 @@ target_link_libraries(yqlrun PUBLIC
   library-cpp-getopt
   library-cpp-yson
   library-cpp-svnversion
-  yql-sql-pg
-  yql-core-facade
-  yql-core-file_storage
+  essentials-sql-pg
+  essentials-core-facade
+  essentials-core-file_storage
   core-file_storage-proto
   core-file_storage-http_download
-  yql-core-pg_ext
+  essentials-core-pg_ext
   core-services-mounts
   minikql-comp_nodes-llvm14
-  library-yql-protos
+  yql-essentials-protos
   udf-service-exception_policy
-  yql-utils-backtrace
-  library-yql-core
+  essentials-utils-backtrace
+  yql-essentials-core
   sql-v1-format
   providers-common-codec
   providers-common-comp_nodes
@@ -51,10 +51,10 @@ target_link_libraries(yqlrun PUBLIC
   yt-gateway-file
   yt-codec-codegen
   yt-comp_nodes-llvm14
-  yql-core-url_preprocessing
+  essentials-core-url_preprocessing
   tools-yqlrun-http
-  yql-parser-pg_wrapper
-  yql-public-result_format
+  essentials-parser-pg_wrapper
+  essentials-public-result_format
 )
 
 target_allocator(yqlrun

@@ -24,10 +24,10 @@ target_link_libraries(providers-ydb-actors PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-scheme
-  yql-minikql-computation
+  essentials-minikql-computation
   common-token_accessor-client
-  yql-public-types
-  yql-utils-log
+  essentials-public-types
+  essentials-utils-log
   public-lib-experimental
   cpp-client-ydb_driver
   dq-actors-compute

@@ -25,9 +25,9 @@ target_link_libraries(core-tx-sharding PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-minikql
-  library-yql-utils
-  yql-public-udf
+  yql-essentials-minikql
+  yql-essentials-utils
+  essentials-public-udf
   formats-arrow-hash
   schemeshard-olap-schema
   tx-columnshard-common
@@ -56,9 +56,9 @@ target_link_libraries(core-tx-sharding.global PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-minikql
-  library-yql-utils
-  yql-public-udf
+  yql-essentials-minikql
+  yql-essentials-utils
+  essentials-public-udf
   formats-arrow-hash
   schemeshard-olap-schema
   tx-columnshard-common

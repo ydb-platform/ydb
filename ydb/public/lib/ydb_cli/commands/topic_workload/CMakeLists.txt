@@ -21,7 +21,7 @@ target_link_libraries(topic_workload PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-public-issue
+  essentials-public-issue
   public-issue-protos
   api-grpc
   api-protos

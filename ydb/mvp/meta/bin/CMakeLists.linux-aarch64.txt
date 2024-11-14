@@ -25,6 +25,7 @@ target_link_libraries(mvp_meta PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-mvp-meta
+  library-cpp-getopt
 )
 
 target_allocator(mvp_meta

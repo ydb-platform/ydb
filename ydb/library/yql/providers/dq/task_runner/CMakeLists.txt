@@ -26,13 +26,13 @@ target_link_libraries(providers-dq-task_runner PUBLIC
   library-cpp-svnversion
   cpp-threading-task_scheduler
   cpp-yson-node
-  dq-integration-transform
-  yql-minikql-invoke_builtins
-  library-yql-protos
-  library-yql-utils
-  yql-utils-backtrace
-  yql-utils-log
-  yql-utils-rope
+  core-dq_integration-transform
+  essentials-minikql-invoke_builtins
+  yql-essentials-protos
+  yql-essentials-utils
+  essentials-utils-backtrace
+  essentials-utils-log
+  yql-dq-common
   yql-dq-proto
   yql-dq-runtime
   providers-common-proto

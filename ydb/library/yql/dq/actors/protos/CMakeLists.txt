@@ -38,7 +38,7 @@ target_link_libraries(dq-actors-protos PUBLIC
   core-issue-protos
   yql-dq-proto
   public-issue-protos
-  yql-public-types
+  essentials-public-types
   contrib-libs-protobuf
 )
 

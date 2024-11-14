@@ -35,8 +35,8 @@ target_link_libraries(ydb-library-yql-providers-solomon-async_io-ut PUBLIC
   minikql-computation-llvm14
   minikql-comp_nodes-llvm14
   udf-service-exception_policy
-  library-yql-sql
-  yql-sql-pg_dummy
+  yql-essentials-sql
+  essentials-sql-pg_dummy
   providers-common-comp_nodes
   providers-common-ut_helpers
 )

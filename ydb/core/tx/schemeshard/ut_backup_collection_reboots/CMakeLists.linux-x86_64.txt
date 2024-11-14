@@ -31,7 +31,7 @@ target_link_libraries(tx-schemeshard-ut_backup_collection_reboots PUBLIC
   cpp-testing-unittest_main
   core-tx-schemeshard
   tx-schemeshard-ut_helpers
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
 )
 
 target_allocator(tx-schemeshard-ut_backup_collection_reboots

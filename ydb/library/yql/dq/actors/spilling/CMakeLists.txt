@@ -29,7 +29,7 @@ target_link_libraries(dq-actors-spilling PUBLIC
   yql-dq-common
   yql-dq-actors
   yql-dq-runtime
-  library-yql-utils
+  yql-essentials-utils
   library-actors-core
   library-actors-util
   cpp-monlib-dynamic_counters

@@ -77,4 +77,5 @@ resources(cpp-messagebus-www.global
   KEYS
   /messagebus.js
   /bus-ico.png
+  OPTS
 )

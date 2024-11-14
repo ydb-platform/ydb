@@ -23,10 +23,10 @@ target_link_libraries(yt-lib-key_filter PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-core-expr_nodes
-  library-yql-core
-  library-yql-utils
-  library-yql-ast
+  essentials-core-expr_nodes
+  yql-essentials-core
+  yql-essentials-utils
+  yql-essentials-ast
 )
 
 target_sources(yt-lib-key_filter PRIVATE

@@ -117,6 +117,7 @@ resources(ydb-core-http_proxy-ut-inside_ydb_ut
   KEYS
   internal_counters.json
   proxy_counters.json
+  OPTS
 )
 
 vcs_info(ydb-core-http_proxy-ut-inside_ydb_ut)

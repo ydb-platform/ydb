@@ -24,7 +24,7 @@ target_link_libraries(spilling-storage-file_storage PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-utils-log
+  essentials-utils-log
 )
 
 target_sources(spilling-storage-file_storage PRIVATE

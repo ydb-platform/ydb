@@ -454,4 +454,5 @@ resources(ydb-core-cms.global
   cms/ui/sentinel_state.js
   cms/ui/nanotable.js
   cms/ui/sentinel.css
+  OPTS
 )

@@ -48,6 +48,7 @@ target_sources(ydb-library-yaml_config-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/console_dumper_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/yaml_config_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/yaml_config_parser_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/yaml_config_proto2yaml_ut.cpp
 )
 
 

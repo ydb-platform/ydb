@@ -32,7 +32,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_cdc_stream_reboots PUBLIC
   core-tx-schemeshard
   tx-schemeshard-ut_helpers
   core-persqueue-writer
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
 )
 
 target_allocator(ydb-core-tx-schemeshard-ut_cdc_stream_reboots

@@ -12,11 +12,7 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(issue)
-add_subdirectory(types)
-add_subdirectory(udf)
-add_subdirectory(decimal)
-add_subdirectory(result_format)
+add_subdirectory(ydb_issue)
 add_subdirectory(embedded)
 add_subdirectory(fastcheck)
 add_subdirectory(purecalc)

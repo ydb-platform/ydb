@@ -23,11 +23,11 @@ target_link_libraries(yql-dq-tasks PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-core
+  yql-essentials-core
   yql-dq-expr_nodes
   yql-dq-proto
   yql-dq-type_ann
-  library-yql-ast
+  yql-essentials-ast
 )
 
 target_sources(yql-dq-tasks PRIVATE

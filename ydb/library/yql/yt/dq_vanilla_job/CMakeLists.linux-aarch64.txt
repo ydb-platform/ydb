@@ -26,17 +26,17 @@ target_link_libraries(dq_vanilla_job PUBLIC
   library-cpp-svnversion
   cpp-yt-mlock
   yql-dq-comp_nodes
-  dq-integration-transform
+  core-dq_integration-transform
   yql-dq-transform
   providers-common-comp_nodes
   yt-codec-codegen
   yt-comp_nodes-llvm14
-  yql-utils-backtrace
+  essentials-utils-backtrace
   yt-comp_nodes-dq
   providers-yt-mkql_dq
   tools-dq-worker_job
-  yql-sql-pg
-  yql-parser-pg_wrapper
+  essentials-sql-pg
+  essentials-parser-pg_wrapper
 )
 
 target_allocator(dq_vanilla_job

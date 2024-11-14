@@ -25,7 +25,7 @@ target_link_libraries(providers-dq-global_worker_manager PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-utils-failure_injector
+  essentials-utils-failure_injector
   providers-common-config
   providers-common-gateway
   providers-common-metrics

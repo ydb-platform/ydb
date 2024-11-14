@@ -157,6 +157,7 @@ resources(ydb-core-tablet_flat-ut
   KEYS
   abi/002_full_part.pages
   abi/008_basics_db.redo
+  OPTS
 )
 
 vcs_info(ydb-core-tablet_flat-ut)

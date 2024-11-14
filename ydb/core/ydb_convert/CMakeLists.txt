@@ -28,15 +28,15 @@ target_link_libraries(ydb-core-ydb_convert PUBLIC
   ydb-core-base
   ydb-core-engine
   formats-arrow-switch
-  library-yql-core
+  yql-essentials-core
   ydb-core-protos
   ydb-core-scheme
   ydb-core-util
-  ydb-library-binary_json
-  ydb-library-dynumber
+  essentials-types-binary_json
+  essentials-types-dynumber
   library-mkql_proto-protos
-  yql-minikql-dom
-  yql-public-udf
+  essentials-minikql-dom
+  essentials-public-udf
   api-protos
 )
 

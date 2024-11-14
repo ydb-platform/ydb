@@ -29,7 +29,7 @@ target_link_libraries(services-metadata-manager PUBLIC
   ydb-library-accessor
   library-actors-core
   ydb-library-table_creator
-  yql-sql-settings
+  essentials-sql-settings
   api-protos
   ydb-core-protos
   services-bg_tasks-abstract

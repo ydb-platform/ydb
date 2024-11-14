@@ -27,5 +27,6 @@ target_sources(data_sharing-source-transactions PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/source/transactions/tx_data_ack_to_source.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/source/transactions/tx_finish_ack_to_source.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/source/transactions/tx_write_source_cursor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/source/transactions/tx_start_source_cursor.cpp
 )
 

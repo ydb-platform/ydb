@@ -23,6 +23,7 @@ target_link_libraries(columnshard-blobs_action-abstract PUBLIC
   libs-apache-arrow
   ydb-core-tablet_flat
   tx-tiering-abstract
+  columnshard-hooks-abstract
   columnshard-blobs_action-common
   columnshard-data_sharing-protos
   columnshard-blobs_action-events

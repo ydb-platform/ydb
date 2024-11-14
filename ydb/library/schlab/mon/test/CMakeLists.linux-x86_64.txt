@@ -61,6 +61,7 @@ resources(mon-test
   ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/static/schviz-test0.json
   KEYS
   schlab/schviz-test0.json
+  OPTS
 )
 
 vcs_info(mon-test)

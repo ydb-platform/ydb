@@ -30,10 +30,10 @@ target_link_libraries(ydb-library-yql-utils-plan-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   yql-utils-plan
-  library-yql-ast
+  yql-essentials-ast
   providers-common-provider
   udf-service-stub
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
 )
 
 target_allocator(ydb-library-yql-utils-plan-ut

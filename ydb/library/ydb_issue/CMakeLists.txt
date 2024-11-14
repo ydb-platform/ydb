@@ -29,6 +29,7 @@ target_link_libraries(ydb-library-ydb_issue PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-ydb_issue-proto
+  yql-public-ydb_issue
   library-cpp-resource
 )
 
@@ -47,6 +48,7 @@ target_link_libraries(ydb-library-ydb_issue.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-ydb_issue-proto
+  yql-public-ydb_issue
   library-cpp-resource
 )
 
@@ -61,4 +63,5 @@ resources(ydb-library-ydb_issue.global
   ${PROJECT_SOURCE_DIR}/ydb/library/ydb_issue/ydb_issue.txt
   KEYS
   ydb_issue.txt
+  OPTS
 )

@@ -72,4 +72,5 @@ resources(service-pages-resources.global
   static/fonts/glyphicons-halflings-regular.woff
   static/js/bootstrap.min.js
   static/js/jquery.min.js
+  OPTS
 )

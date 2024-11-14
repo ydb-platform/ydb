@@ -24,7 +24,7 @@ target_link_libraries(dq-actors-input_transforms PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-actors-core
-  library-yql-minikql
+  yql-essentials-minikql
   dq-actors-compute
 )
 

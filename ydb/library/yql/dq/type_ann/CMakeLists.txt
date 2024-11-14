@@ -30,9 +30,9 @@ target_link_libraries(yql-dq-type_ann PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-ast
-  library-yql-core
-  yql-core-type_ann
+  yql-essentials-ast
+  yql-essentials-core
+  essentials-core-type_ann
   yql-dq-expr_nodes
   yql-dq-proto
   providers-common-provider

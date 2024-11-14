@@ -40,15 +40,15 @@ target_link_libraries(core-kqp-provider PUBLIC
   core-kqp-query_data
   ydb-library-aclib
   library-aclib-protos
-  ydb-library-binary_json
-  ydb-library-dynumber
-  yql-core-services
-  library-yql-minikql
-  yql-public-decimal
+  essentials-types-binary_json
+  essentials-types-dynumber
+  essentials-core-services
+  yql-essentials-minikql
+  essentials-public-decimal
   public-lib-scheme_types
   cpp-client-ydb_topic
-  yql-core-expr_nodes
-  yql-core-peephole_opt
+  essentials-core-expr_nodes
+  essentials-core-peephole_opt
   parser-pg_wrapper-interface
   providers-common-codec
   providers-common-config
@@ -60,10 +60,10 @@ target_link_libraries(core-kqp-provider PUBLIC
   providers-pg-expr_nodes
   providers-result-expr_nodes
   providers-result-provider
-  library-yql-sql
+  yql-essentials-sql
   library-ydb_issue-proto
-  yql-public-issue
-  yql-utils-log
+  essentials-public-issue
+  essentials-utils-log
   tools-enum_parser-enum_serialization_runtime
 )
 
@@ -88,9 +88,6 @@ target_sources(core-kqp-provider PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.gen.h
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.gen.h
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.h
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_gateway.h
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_provider.h
@@ -107,13 +104,13 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.defs.inl.h
   DEPENDS
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.json
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/gen/__main__.py
   COMMAND
   Python3::Interpreter
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/gen/__main__.py
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.json
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.gen.h
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h

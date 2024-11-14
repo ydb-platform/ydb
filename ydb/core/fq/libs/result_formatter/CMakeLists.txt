@@ -28,9 +28,9 @@ target_link_libraries(fq-libs-result_formatter PUBLIC
   library-cpp-json
   cpp-json-yson
   ydb-library-mkql_proto
-  library-yql-ast
-  yql-minikql-computation
-  yql-public-udf
+  yql-essentials-ast
+  essentials-minikql-computation
+  essentials-public-udf
   api-protos
   cpp-client-ydb_proto
   cpp-client-ydb_result

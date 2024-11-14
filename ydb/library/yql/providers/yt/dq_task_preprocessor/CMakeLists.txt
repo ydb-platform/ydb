@@ -27,11 +27,11 @@ target_link_libraries(providers-yt-dq_task_preprocessor PUBLIC
   cpp-yson-node
   cpp-mapreduce-common
   cpp-mapreduce-interface
-  library-yql-utils
-  yql-utils-log
-  yql-utils-failure_injector
-  library-yql-minikql
-  yql-minikql-computation
+  yql-essentials-utils
+  essentials-utils-log
+  essentials-utils-failure_injector
+  yql-essentials-minikql
+  essentials-minikql-computation
   providers-common-codec
   providers-dq-interface
   providers-yt-codec

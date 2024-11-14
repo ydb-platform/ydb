@@ -29,11 +29,11 @@ target_link_libraries(providers-yt-job PUBLIC
   cpp-yson-node
   cpp-mapreduce-interface
   mapreduce-library-user_job_statistics
-  yql-minikql-comp_nodes
-  yql-public-udf
-  library-yql-utils
-  yql-utils-backtrace
-  yql-parser-pg_catalog
+  essentials-minikql-comp_nodes
+  essentials-public-udf
+  yql-essentials-utils
+  essentials-utils-backtrace
+  essentials-parser-pg_catalog
   parser-pg_wrapper-interface
   providers-common-provider
   providers-common-codec

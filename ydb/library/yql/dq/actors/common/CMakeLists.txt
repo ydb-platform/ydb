@@ -27,7 +27,7 @@ target_link_libraries(dq-actors-common PUBLIC
   yutil
   library-actors-core
   dq-actors-protos
-  yql-public-issue
+  essentials-public-issue
 )
 
 target_sources(dq-actors-common PRIVATE

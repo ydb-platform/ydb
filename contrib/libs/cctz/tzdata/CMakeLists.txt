@@ -1249,4 +1249,5 @@ resources(libs-cctz-tzdata.global
   /cctz/tzdata/W-SU
   /cctz/tzdata/WET
   /cctz/tzdata/Zulu
+  OPTS
 )

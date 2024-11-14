@@ -23,6 +23,7 @@ target_link_libraries(client-ydb_types-operation PUBLIC
   cpp-threading-future
   public-lib-operation_id
   cpp-client-ydb_types
+  api-protos
 )
 
 target_sources(client-ydb_types-operation PRIVATE

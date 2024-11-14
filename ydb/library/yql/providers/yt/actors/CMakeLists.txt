@@ -25,13 +25,13 @@ target_link_libraries(providers-yt-actors PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-minikql
-  yql-minikql-computation
+  yql-essentials-minikql
+  essentials-minikql-computation
   providers-common-provider
   providers-yt-proto
   yt-gateway-file
   dq-actors-compute
-  yql-public-types
+  essentials-public-types
 )
 
 target_sources(providers-yt-actors PRIVATE

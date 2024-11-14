@@ -28,6 +28,7 @@ target_link_libraries(ydb-core-scheme PUBLIC
   cpp-containers-bitseq
   cpp-deprecated-enum_codegen
   library-cpp-yson
+  api-protos
   core-scheme-protos
   ydb-core-scheme_types
   ydb-library-aclib

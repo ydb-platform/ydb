@@ -22,7 +22,7 @@ target_link_libraries(yql-utils-actor_system PUBLIC
   library-actors-core
   ydb-library-services
   providers-common-metrics
-  library-yql-utils
+  yql-essentials-utils
 )
 
 target_sources(yql-utils-actor_system PRIVATE

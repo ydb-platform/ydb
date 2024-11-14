@@ -26,7 +26,7 @@ target_link_libraries(providers-ydb-comp_nodes PUBLIC
   ydb-core-scheme
   library-mkql_proto-protos
   dq-actors-protos
-  yql-minikql-computation
+  essentials-minikql-computation
   providers-common-structured_token
   providers-ydb-proto
   public-lib-experimental

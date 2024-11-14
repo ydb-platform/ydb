@@ -23,15 +23,14 @@ target_link_libraries(yt-lib-graph_reorder PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-ast
-  yql-utils-log
-  library-yql-core
-  yql-core-expr_nodes
+  yql-essentials-ast
+  essentials-utils-log
+  yql-essentials-core
+  essentials-core-expr_nodes
   providers-common-provider
 )
 
 target_sources(yt-lib-graph_reorder PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/lib/graph_reorder/yql_graph_reorder.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/lib/graph_reorder/yql_graph_reorder_old.cpp
 )
 

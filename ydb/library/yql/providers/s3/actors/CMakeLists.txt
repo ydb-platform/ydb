@@ -44,7 +44,7 @@ target_link_libraries(providers-s3-actors PUBLIC
   ydb-core-base
   fq-libs-events
   dq-actors-compute
-  yql-minikql-computation
+  essentials-minikql-computation
   providers-common-arrow
   common-arrow-interface
   providers-common-http_gateway
@@ -59,10 +59,10 @@ target_link_libraries(providers-s3-actors PUBLIC
   providers-s3-object_listers
   providers-s3-proto
   providers-s3-range_helpers
-  yql-public-issue
-  yql-public-types
+  essentials-public-issue
+  essentials-public-types
   clickhouse_client_udf
-  library-yql-utils
+  yql-essentials-utils
   providers-s3-serializations
 )
 

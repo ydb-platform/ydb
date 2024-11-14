@@ -19,7 +19,7 @@ target_link_libraries(public-lib-scheme_types PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-public-types
+  essentials-public-types
 )
 
 target_sources(public-lib-scheme_types PRIVATE

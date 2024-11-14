@@ -29,7 +29,7 @@ target_link_libraries(worker_node PUBLIC
   dq-actors-compute
   dq-actors-spilling
   yql-dq-comp_nodes
-  dq-integration-transform
+  core-dq_integration-transform
   yql-dq-transform
   minikql-comp_nodes-llvm14
   providers-clickhouse-actors
@@ -46,19 +46,20 @@ target_link_libraries(worker_node PUBLIC
   providers-ydb-actors
   providers-ydb-comp_nodes
   udf-service-exception_policy
-  library-yql-utils
-  yql-utils-log
+  yql-essentials-utils
+  essentials-utils-log
   utils-log-proto
-  yql-utils-failure_injector
-  yql-utils-backtrace
+  essentials-utils-failure_injector
+  essentials-utils-backtrace
+  essentials-utils-network
   yt-comp_nodes-dq
   yt-comp_nodes-llvm14
   yt-codec-codegen
   providers-yt-mkql_dq
   dq-actors-yt
   providers-dq-global_worker_manager
-  yql-sql-pg
-  yql-parser-pg_wrapper
+  essentials-sql-pg
+  essentials-parser-pg_wrapper
 )
 
 target_allocator(worker_node

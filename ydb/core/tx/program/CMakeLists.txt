@@ -27,7 +27,7 @@ target_link_libraries(core-tx-program PUBLIC
   ydb-core-protos
   library-formats-arrow-protos
   ydb-core-tablet_flat
-  yql-minikql-comp_nodes
+  essentials-minikql-comp_nodes
   core-arrow_kernels-registry
 )
 

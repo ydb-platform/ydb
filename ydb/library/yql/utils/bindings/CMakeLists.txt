@@ -24,8 +24,8 @@ target_link_libraries(yql-utils-bindings PUBLIC
   library-cpp-json
   cpp-json-yson
   library-cpp-yson
-  yql-sql-settings
-  library-yql-utils
+  essentials-sql-settings
+  yql-essentials-utils
 )
 
 target_sources(yql-utils-bindings PRIVATE

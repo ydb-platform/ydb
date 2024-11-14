@@ -39,8 +39,8 @@ target_link_libraries(ydb-services-ydb-table_split_ut PUBLIC
   core-testlib-default
   core-grpc_services-base
   ydb-core-testlib
-  yql-minikql-dom
-  yql-minikql-jsonpath
+  essentials-minikql-dom
+  essentials-minikql-jsonpath
   public-lib-experimental
   public-lib-json_value
   public-lib-yson_value

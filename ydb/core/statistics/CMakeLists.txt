@@ -26,7 +26,7 @@ target_link_libraries(ydb-core-statistics INTERFACE
   yutil
   library-actors-core
   ydb-library-query_actor
-  ydb-library-minsketch
+  essentials-core-minsketch
   ydb-core-protos
   ydb-core-scheme
 )

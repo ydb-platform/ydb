@@ -21,8 +21,8 @@ target_link_libraries(yt-lib-schema PUBLIC
   yutil
   cpp-yson-node
   cpp-mapreduce-interface
-  library-yql-utils
-  yql-utils-log
+  yql-essentials-utils
+  essentials-utils-log
   providers-common-codec
   common-schema-expr
   providers-yt-common

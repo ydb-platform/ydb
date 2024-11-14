@@ -34,10 +34,10 @@ target_link_libraries(yt-codec-codegen PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-resource
-  ydb-library-binary_json
+  essentials-types-binary_json
   minikql-computation-llvm14
   parser-pg_wrapper-interface
-  library-yql-utils
+  yql-essentials-utils
   minikql-codegen-llvm14
 )
 
@@ -60,10 +60,10 @@ target_link_libraries(yt-codec-codegen.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-resource
-  ydb-library-binary_json
+  essentials-types-binary_json
   minikql-computation-llvm14
   parser-pg_wrapper-interface
-  library-yql-utils
+  yql-essentials-utils
   minikql-codegen-llvm14
 )
 
@@ -112,4 +112,5 @@ resources(yt-codec-codegen.global
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_optimized.bc
   KEYS
   /llvm_bc/YtCodecFuncs
+  OPTS
 )

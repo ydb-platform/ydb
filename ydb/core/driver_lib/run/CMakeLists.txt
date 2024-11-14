@@ -150,6 +150,7 @@ target_link_libraries(run PUBLIC
   lib-deprecated-client
   ydb-services-auth
   ydb-services-backup
+  ydb-services-bsconfig
   ydb-services-cms
   ydb-services-dynamic_config
   ydb-services-datastreams

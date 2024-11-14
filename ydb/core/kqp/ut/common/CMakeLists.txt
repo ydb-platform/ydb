@@ -27,9 +27,9 @@ target_link_libraries(kqp-ut-common PUBLIC
   core-kqp-federated_query
   ydb-core-testlib
   providers-s3-actors_factory
-  yql-public-udf
+  essentials-public-udf
   string_udf
-  yql-utils-backtrace
+  essentials-utils-backtrace
   public-lib-yson_value
   tx-columnshard-test_helper
   cpp-client-draft

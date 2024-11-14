@@ -31,8 +31,8 @@ target_link_libraries(ydb-core-kqp-ut-yql PUBLIC
   cpp-testing-unittest_main
   ydb-core-kqp
   kqp-ut-common
-  yql-sql-pg
-  yql-parser-pg_wrapper
+  essentials-sql-pg
+  essentials-parser-pg_wrapper
 )
 
 target_allocator(ydb-core-kqp-ut-yql

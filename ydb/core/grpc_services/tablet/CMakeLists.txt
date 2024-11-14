@@ -30,8 +30,8 @@ target_link_libraries(core-grpc_services-tablet PUBLIC
   core-grpc_services-base
   ydb-core-protos
   ydb-library-mkql_proto
-  library-yql-minikql
-  yql-minikql-computation
+  yql-essentials-minikql
+  essentials-minikql-computation
   api-protos
   cpp-protobuf-json
 )

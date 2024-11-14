@@ -34,6 +34,7 @@ add_subdirectory(ut_change_exchange)
 add_subdirectory(ut_column_stats)
 add_subdirectory(ut_compaction)
 add_subdirectory(ut_erase_rows)
+add_subdirectory(ut_external_blobs)
 add_subdirectory(ut_followers)
 add_subdirectory(ut_incremental_backup)
 add_subdirectory(ut_incremental_restore_scan)
@@ -112,15 +113,15 @@ target_link_libraries(core-tx-datashard PUBLIC
   ydb-core-wrappers
   ydb-core-ydb_convert
   ydb-library-aclib
-  ydb-library-binary_json
-  ydb-library-dynumber
-  ydb-library-minsketch
+  essentials-types-binary_json
+  essentials-types-dynumber
+  essentials-core-minsketch
   parser-pg_wrapper-interface
   api-protos
   dq-actors-compute
   services-lib-sharding
   ydb-library-chunks_limiter
-  ydb-library-uuid
+  essentials-types-uuid
 )
 
 target_sources(core-tx-datashard PRIVATE
@@ -452,15 +453,15 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   ydb-core-wrappers
   ydb-core-ydb_convert
   ydb-library-aclib
-  ydb-library-binary_json
-  ydb-library-dynumber
-  ydb-library-minsketch
+  essentials-types-binary_json
+  essentials-types-dynumber
+  essentials-core-minsketch
   parser-pg_wrapper-interface
   api-protos
   dq-actors-compute
   services-lib-sharding
   ydb-library-chunks_limiter
-  ydb-library-uuid
+  essentials-types-uuid
 )
 
 target_sources(core-tx-datashard.global PRIVATE
@@ -474,4 +475,5 @@ resources(core-tx-datashard.global
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/ui/index.html
   KEYS
   datashard/index.html
+  OPTS
 )

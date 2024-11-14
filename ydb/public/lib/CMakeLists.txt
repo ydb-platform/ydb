@@ -14,9 +14,9 @@
 
 add_subdirectory(validation)
 add_subdirectory(protobuf)
-add_subdirectory(scheme_types)
 add_subdirectory(jwt)
 add_subdirectory(operation_id)
+add_subdirectory(scheme_types)
 add_subdirectory(yson_value)
 add_subdirectory(base)
 add_subdirectory(deprecated)

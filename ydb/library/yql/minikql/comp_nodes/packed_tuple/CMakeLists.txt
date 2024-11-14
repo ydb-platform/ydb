@@ -29,10 +29,10 @@ target_link_libraries(minikql-comp_nodes-packed_tuple PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
-  ydb-library-binary_json
-  library-yql-minikql
-  library-yql-utils
-  yql-utils-log
+  essentials-types-binary_json
+  yql-essentials-minikql
+  yql-essentials-utils
+  essentials-utils-log
   cpp-digest-crc32c
 )
 

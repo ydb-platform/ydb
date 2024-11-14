@@ -134,4 +134,5 @@ resources(cpp-lwtrace-mon.global
   lwtrace/mon/static/js/jquery.treegrid.bootstrap3.js
   lwtrace/mon/static/js/jquery.treegrid.min.js
   lwtrace/mon/static/js/jquery.url.min.js
+  OPTS
 )

@@ -12,20 +12,4 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(llvm14)
-add_subdirectory(no_llvm)
 add_subdirectory(packed_tuple)
-
-add_library(yql-minikql-comp_nodes INTERFACE)
-
-
-target_compile_options(yql-minikql-comp_nodes INTERFACE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(yql-minikql-comp_nodes INTERFACE
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-)
-

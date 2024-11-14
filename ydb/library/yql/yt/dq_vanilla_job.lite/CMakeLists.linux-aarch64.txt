@@ -27,9 +27,9 @@ target_link_libraries(dq_vanilla_job.lite PUBLIC
   cpp-mapreduce-client
   minikql-comp_nodes-llvm14
   udf-service-terminate_policy
-  yql-utils-backtrace
+  essentials-utils-backtrace
   yql-dq-comp_nodes
-  dq-integration-transform
+  core-dq_integration-transform
   yql-dq-transform
   yql-dq-runtime
   providers-common-comp_nodes
@@ -39,8 +39,8 @@ target_link_libraries(dq_vanilla_job.lite PUBLIC
   providers-yt-mkql_dq
   yt-codec-codegen
   yt-comp_nodes-llvm14
-  yql-sql-pg
-  yql-parser-pg_wrapper
+  essentials-sql-pg
+  essentials-parser-pg_wrapper
 )
 
 target_allocator(dq_vanilla_job.lite

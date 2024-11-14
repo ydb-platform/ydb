@@ -30,9 +30,9 @@ target_link_libraries(ydb-core-external_sources-hive_metastore-ut PUBLIC
   ydb-core-testlib
   core-testlib-actors
   core-testlib-basics
-  yql-minikql-comp_nodes
+  essentials-minikql-comp_nodes
   minikql-comp_nodes-llvm14
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
 )
 
 target_allocator(ydb-core-external_sources-hive_metastore-ut

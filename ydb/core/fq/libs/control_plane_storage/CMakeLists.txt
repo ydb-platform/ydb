@@ -47,7 +47,7 @@ target_link_libraries(fq-libs-control_plane_storage PUBLIC
   ydb-library-db_pool
   ydb-library-security
   providers-s3-path_generator
-  yql-public-issue
+  essentials-public-issue
   api-protos
   cpp-client-ydb_scheme
   cpp-client-ydb_table

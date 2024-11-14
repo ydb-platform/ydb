@@ -37,11 +37,11 @@ target_link_libraries(fq-libs-mock PUBLIC
   libs-shared_resources-interface
   ydb-core-protos
   ydb-library-mkql_proto
-  library-yql-ast
-  yql-core-facade
+  yql-essentials-ast
+  essentials-core-facade
   core-services-mounts
-  dq-integration-transform
-  yql-minikql-comp_nodes
+  core-dq_integration-transform
+  essentials-minikql-comp_nodes
   providers-clickhouse-provider
   providers-common-codec
   providers-common-comp_nodes
@@ -51,9 +51,9 @@ target_link_libraries(fq-libs-mock PUBLIC
   providers-dq-provider
   dq-worker_manager-interface
   providers-ydb-provider
-  yql-public-issue
+  essentials-public-issue
   public-issue-protos
-  yql-sql-settings
+  essentials-sql-settings
   api-protos
   cpp-client-ydb_table
 )

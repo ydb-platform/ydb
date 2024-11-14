@@ -23,7 +23,7 @@ target_link_libraries(providers-dq-interface PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-public-udf
+  essentials-public-udf
 )
 
 target_sources(providers-dq-interface PRIVATE

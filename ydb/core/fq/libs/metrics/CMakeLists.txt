@@ -27,7 +27,7 @@ target_link_libraries(fq-libs-metrics PUBLIC
   yutil
   cpp-monlib-dynamic_counters
   dq-actors-protos
-  yql-public-issue
+  essentials-public-issue
 )
 
 target_sources(fq-libs-metrics PRIVATE

@@ -27,14 +27,14 @@ target_link_libraries(providers-ydb-provider PUBLIC
   library-cpp-time_provider
   cpp-yson-node
   fq-libs-common
-  library-yql-ast
-  yql-minikql-comp_nodes
+  yql-essentials-ast
+  essentials-minikql-comp_nodes
   providers-common-structured_token
   common-token_accessor-client
-  library-yql-core
-  yql-core-type_ann
+  yql-essentials-core
+  essentials-core-type_ann
   yql-dq-expr_nodes
-  yql-dq-integration
+  essentials-core-dq_integration
   providers-common-config
   providers-common-db_id_async_resolver
   providers-common-dq

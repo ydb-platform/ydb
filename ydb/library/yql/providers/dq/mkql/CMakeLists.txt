@@ -23,13 +23,15 @@ target_link_libraries(providers-dq-mkql PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-core
-  yql-dq-integration
+  yql-essentials-core
+  essentials-core-dq_integration
   providers-common-mkql
   providers-dq-expr_nodes
+  yql-dq-expr_nodes
 )
 
 target_sources(providers-dq-mkql PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/mkql/dqs_mkql_compiler.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/mkql/parser.cpp
 )
 

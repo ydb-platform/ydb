@@ -56,4 +56,5 @@ resources(service-pages-tablesorter.global
   KEYS
   jquery.tablesorter.css
   jquery.tablesorter.js
+  OPTS
 )

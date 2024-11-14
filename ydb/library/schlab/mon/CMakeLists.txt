@@ -85,4 +85,5 @@ resources(library-schlab-mon.global
   schlab/js/schviz.js
   schlab/js/scharm-test0.js
   schlab/scharm.html
+  OPTS
 )

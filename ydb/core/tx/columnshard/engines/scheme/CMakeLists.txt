@@ -14,8 +14,8 @@
 
 add_subdirectory(defaults)
 add_subdirectory(indexes)
-add_subdirectory(versions)
 add_subdirectory(abstract)
+add_subdirectory(versions)
 add_subdirectory(tiering)
 add_subdirectory(column)
 
@@ -52,5 +52,6 @@ target_sources(columnshard-engines-scheme PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/column_features.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/schema_diff.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/objects_cache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/schema_version.cpp
 )
 

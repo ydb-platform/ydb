@@ -55,7 +55,7 @@ target_link_libraries(clickhouse_client_udf INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-public-udf
+  essentials-public-udf
   public-udf-support
   contrib-libs-cctz
   restricted-boost-multi_index
@@ -74,8 +74,8 @@ target_link_libraries(clickhouse_client_udf INTERFACE
   libs-apache-orc
   libs-apache-avro
   cpp-sanitizer-include
-  yql-minikql-dom
-  library-yql-utils
+  essentials-minikql-dom
+  yql-essentials-utils
 )
 
 
@@ -123,7 +123,7 @@ target_link_libraries(clickhouse_client_udf.global PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-public-udf
+  essentials-public-udf
   public-udf-support
   contrib-libs-cctz
   restricted-boost-multi_index
@@ -142,8 +142,8 @@ target_link_libraries(clickhouse_client_udf.global PUBLIC
   libs-apache-orc
   libs-apache-avro
   cpp-sanitizer-include
-  yql-minikql-dom
-  library-yql-utils
+  essentials-minikql-dom
+  yql-essentials-utils
 )
 
 target_sources(clickhouse_client_udf.global PRIVATE

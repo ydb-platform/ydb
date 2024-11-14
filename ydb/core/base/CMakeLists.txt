@@ -55,7 +55,7 @@ target_link_libraries(ydb-core-base PUBLIC
   library-pretty_types_print-protobuf
   ydb-library-ydb_issue
   api-protos-out
-  library-yql-minikql
+  yql-essentials-minikql
   cpp-deprecated-atomic
   library-cpp-dwarf_backtrace
   tools-enum_parser-enum_serialization_runtime

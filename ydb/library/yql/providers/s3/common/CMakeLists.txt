@@ -34,10 +34,9 @@ target_link_libraries(providers-s3-common PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  core-kqp-common
   providers-common-http_gateway
   providers-s3-events
-  yql-public-issue
+  essentials-public-issue
   public-issue-protos
 )
 

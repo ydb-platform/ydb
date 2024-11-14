@@ -12,14 +12,11 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(common)
 add_subdirectory(generic)
 add_subdirectory(s3)
-add_subdirectory(result)
 add_subdirectory(dq)
-add_subdirectory(pg)
 add_subdirectory(pq)
-add_subdirectory(config)
+add_subdirectory(common)
 add_subdirectory(solomon)
 add_subdirectory(yt)
 add_subdirectory(stat)

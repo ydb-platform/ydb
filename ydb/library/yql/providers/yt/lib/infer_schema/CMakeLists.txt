@@ -21,9 +21,9 @@ target_link_libraries(yt-lib-infer_schema PUBLIC
   yutil
   cpp-yson-node
   cpp-mapreduce-interface
-  yql-public-issue
-  yql-utils-log
-  yql-core-issue
+  essentials-public-issue
+  essentials-utils-log
+  essentials-core-issue
   yt-yt-client
   yt-lib-yt_rpc_helpers
 )

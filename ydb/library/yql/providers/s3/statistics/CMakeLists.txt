@@ -23,7 +23,7 @@ target_link_libraries(providers-s3-statistics PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-core
+  yql-essentials-core
   providers-dq-expr_nodes
   providers-s3-expr_nodes
 )

@@ -12,7 +12,7 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut_http)
+add_subdirectory(ut_aggregation)
 
 add_executable(ydb-core-statistics-service-ut)
 
@@ -55,7 +55,8 @@ target_link_options(ydb-core-statistics-service-ut PRIVATE
 
 target_sources(ydb-core-statistics-service-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/statistics/service/ut/ut_basic_statistics.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/service/ut/ut_service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/service/ut/ut_column_statistics.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/service/ut/ut_http_request.cpp
 )
 
 

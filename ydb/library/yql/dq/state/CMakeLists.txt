@@ -21,7 +21,7 @@ target_link_libraries(yql-dq-state PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-public-issue
+  essentials-public-issue
   core-issue-protos
   yql-dq-proto
   providers-pq-proto

@@ -28,7 +28,7 @@ target_link_libraries(engines-changes-abstract PUBLIC
   yutil
   columnshard-counters-common
   ydb-core-tablet_flat
-  yql-core-expr_nodes
+  essentials-core-expr_nodes
   tx-columnshard-blobs_action
   tools-enum_parser-enum_serialization_runtime
 )

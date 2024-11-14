@@ -31,9 +31,9 @@ target_link_libraries(providers-solomon-async_io PUBLIC
   common-token_accessor-client
   providers-solomon-proto
   providers-solomon-scheme
-  yql-public-types
-  yql-public-udf
-  yql-utils-log
+  essentials-public-types
+  essentials-public-udf
+  essentials-utils-log
 )
 
 target_sources(providers-solomon-async_io PRIVATE

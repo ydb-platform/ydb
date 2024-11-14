@@ -28,11 +28,11 @@ target_link_libraries(core-kqp-query_compiler PUBLIC
   ydb-core-protos
   ydb-library-mkql_proto
   core-arrow_kernels-request
-  yql-dq-integration
+  essentials-core-dq_integration
   yql-dq-opt
   yql-dq-type_ann
   yql-dq-tasks
-  library-yql-minikql
+  yql-essentials-minikql
   providers-common-mkql
   providers-dq-common
   providers-s3-expr_nodes

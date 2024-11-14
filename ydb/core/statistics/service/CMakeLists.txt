@@ -31,7 +31,7 @@ target_link_libraries(core-statistics-service PUBLIC
   ydb-core-tablet
   ydb-core-tablet_flat
   core-statistics-database
-  ydb-library-minsketch
+  essentials-core-minsketch
 )
 
 target_sources(core-statistics-service PRIVATE

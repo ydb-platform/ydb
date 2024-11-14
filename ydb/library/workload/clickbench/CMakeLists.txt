@@ -158,4 +158,5 @@ resources(library-workload-clickbench.global
   click_bench_canonical/q40.result
   click_bench_canonical/q41.result
   click_bench_canonical/q42.result
+  OPTS
 )

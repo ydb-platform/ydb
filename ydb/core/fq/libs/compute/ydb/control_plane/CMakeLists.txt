@@ -24,21 +24,24 @@ target_link_libraries(compute-ydb-control_plane PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-json
-  library-actors-core
-  library-actors-protos
-  library-grpc-actor_client
   compute-ydb-synchronization_service
   libs-control_plane_storage-proto
   libs-quota_manager-proto
   kqp-workload_service-common
   ydb-core-protos
+  library-actors-core
+  library-actors-protos
   library-db_pool-protos
-  yql-public-issue
-  library-yql-utils
+  library-grpc-actor_client
+  essentials-public-issue
+  yql-essentials-utils
   yql-utils-actors
   api-grpc
   api-grpc-draft
   lib-operation_id-protos
+  cpp-client-resources
+  cpp-client-ydb_operation
+  cpp-client-ydb_query
 )
 
 target_sources(compute-ydb-control_plane PRIVATE

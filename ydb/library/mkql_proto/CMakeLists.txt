@@ -27,8 +27,8 @@ target_link_libraries(ydb-library-mkql_proto PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-mkql_proto-protos
-  yql-minikql-computation
-  yql-parser-pg_catalog
+  essentials-minikql-computation
+  essentials-parser-pg_catalog
   providers-common-codec
   api-protos
 )

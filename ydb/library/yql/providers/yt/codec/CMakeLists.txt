@@ -32,10 +32,10 @@ target_link_libraries(providers-yt-codec PUBLIC
   cpp-mapreduce-interface
   cpp-mapreduce-io
   libs-apache-arrow
-  library-yql-minikql
-  yql-public-udf
-  library-yql-utils
-  yql-public-result_format
+  yql-essentials-minikql
+  essentials-public-udf
+  yql-essentials-utils
+  essentials-public-result_format
   public-udf-arrow
   providers-common-codec
   common-codec-arrow

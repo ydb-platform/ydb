@@ -35,9 +35,9 @@ target_link_libraries(dq-actors-compute PUBLIC
   yql-dq-proto
   yql-dq-runtime
   yql-dq-tasks
-  library-yql-minikql
-  yql-minikql-comp_nodes
-  yql-public-issue
+  yql-essentials-minikql
+  essentials-minikql-comp_nodes
+  essentials-public-issue
   core-quoter-public
 )
 

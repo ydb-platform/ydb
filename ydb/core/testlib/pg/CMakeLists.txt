@@ -20,7 +20,7 @@ target_link_libraries(core-testlib-pg INTERFACE
   contrib-libs-cxxsupp
   yutil
   ydb-core-testlib
-  yql-sql-pg
-  yql-parser-pg_wrapper
+  essentials-sql-pg
+  essentials-parser-pg_wrapper
 )
 

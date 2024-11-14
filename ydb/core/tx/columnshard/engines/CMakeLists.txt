@@ -23,10 +23,11 @@ add_subdirectory(scheme)
 add_subdirectory(protos)
 add_subdirectory(storage)
 add_subdirectory(changes)
+add_subdirectory(portions)
 add_subdirectory(reader)
 add_subdirectory(predicate)
 add_subdirectory(insert_table)
-add_subdirectory(portions)
+add_subdirectory(loading)
 add_subdirectory(writer)
 add_subdirectory(ut)
 
@@ -56,6 +57,7 @@ target_link_libraries(tx-columnshard-engines PUBLIC
   columnshard-engines-changes
   columnshard-engines-portions
   columnshard-engines-protos
+  columnshard-engines-loading
   core-tx-program
   tx-columnshard-common
   udf-service-exception_policy
@@ -64,11 +66,8 @@ target_link_libraries(tx-columnshard-engines PUBLIC
 target_sources(tx-columnshard-engines PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_engine_logs.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_engine.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/column_features.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/db_wrapper.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/index_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/filter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/tier_info.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/defs.cpp
 )
 

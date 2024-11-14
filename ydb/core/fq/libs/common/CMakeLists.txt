@@ -37,7 +37,7 @@ target_link_libraries(fq-libs-common PUBLIC
   libs-control_plane_storage-events
   fq-libs-events
   providers-common-structured_token
-  yql-public-issue
+  essentials-public-issue
   api-protos
 )
 

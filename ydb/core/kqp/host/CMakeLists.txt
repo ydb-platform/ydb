@@ -30,14 +30,14 @@ target_link_libraries(core-kqp-host PUBLIC
   core-kqp-opt
   core-kqp-provider
   tx-long_tx_service-public
-  yql-core-services
-  yql-minikql-invoke_builtins
-  library-yql-sql
-  library-yql-core
+  essentials-core-services
+  essentials-minikql-invoke_builtins
+  yql-essentials-sql
+  yql-essentials-core
   providers-common-codec
   providers-common-http_gateway
   providers-common-udf_resolve
-  yql-providers-config
+  essentials-providers-config
   providers-generic-provider
   providers-pg-provider
   providers-result-provider

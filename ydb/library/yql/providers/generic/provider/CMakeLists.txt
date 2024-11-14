@@ -31,12 +31,12 @@ target_link_libraries(providers-generic-provider PUBLIC
   library-cpp-time_provider
   fq-libs-common
   fq-libs-result_formatter
-  library-yql-ast
-  library-yql-core
-  yql-core-type_ann
+  yql-essentials-ast
+  yql-essentials-core
+  essentials-core-type_ann
   yql-dq-expr_nodes
-  yql-dq-integration
-  yql-minikql-comp_nodes
+  essentials-core-dq_integration
+  essentials-minikql-comp_nodes
   providers-common-config
   providers-common-db_id_async_resolver
   providers-common-dq

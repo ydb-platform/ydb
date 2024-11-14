@@ -23,7 +23,7 @@ target_link_libraries(yt-lib-skiff PUBLIC
   providers-yt-common
   providers-common-codec
   common-schema-skiff
-  library-yql-utils
+  yql-essentials-utils
 )
 
 target_sources(yt-lib-skiff PRIVATE

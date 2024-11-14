@@ -44,7 +44,7 @@ target_link_libraries(ydb-core-public_http PUBLIC
   ydb-core-protos
   core-public_http-protos
   core-viewer-json
-  yql-public-issue
+  essentials-public-issue
   cpp-client-ydb_types
 )
 
@@ -83,7 +83,7 @@ target_link_libraries(ydb-core-public_http.global PUBLIC
   ydb-core-protos
   core-public_http-protos
   core-viewer-json
-  yql-public-issue
+  essentials-public-issue
   cpp-client-ydb_types
 )
 
@@ -98,4 +98,5 @@ resources(ydb-core-public_http.global
   ${PROJECT_SOURCE_DIR}/ydb/core/public_http/openapi/openapi.yaml
   KEYS
   resources/openapi.yaml
+  OPTS
 )

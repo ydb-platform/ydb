@@ -77,7 +77,7 @@ target_link_libraries(ydb-core-protos PUBLIC
   yql-dq-proto
   providers-common-proto
   public-issue-protos
-  yql-public-types
+  essentials-public-types
   ydb-library-services
   library-ydb_issue-proto
   scheme-defaults-protos
@@ -224,6 +224,8 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/tx_proxy.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/tx_scheme.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/tx_sequenceshard.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/protos/whiteboard_disk_states.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/protos/whiteboard_flags.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/ydb_result_set_old.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/ydb_table_impl.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/yql_translation_settings.proto
@@ -638,6 +640,12 @@ target_sources(ydb-core-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/protos/tx_sequenceshard.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/tx_sequenceshard.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/tx_sequenceshard.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/whiteboard_disk_states.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/whiteboard_disk_states.deps.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/whiteboard_disk_states.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/whiteboard_flags.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/whiteboard_flags.deps.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/whiteboard_flags.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/ydb_result_set_old.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/ydb_result_set_old.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/ydb_result_set_old.grpc.pb.h

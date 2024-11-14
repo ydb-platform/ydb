@@ -21,15 +21,12 @@ target_link_libraries(providers-generic-expr_nodes PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  yql-core-expr_nodes
+  essentials-core-expr_nodes
   providers-common-provider
 )
 
 target_sources(providers-generic-expr_nodes PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.gen.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.decl.inl.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.defs.inl.h
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.gen.h
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.decl.inl.h
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.defs.inl.h
@@ -45,13 +42,13 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.decl.inl.h
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.defs.inl.h
   DEPENDS
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.json
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/gen/__main__.py
   COMMAND
   Python3::Interpreter
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/gen/__main__.py
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.json
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.gen.h
   ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.decl.inl.h

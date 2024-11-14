@@ -31,9 +31,9 @@ target_link_libraries(core-client-minikql_compile PUBLIC
   ydb-core-engine
   core-kqp-provider
   ydb-core-scheme
-  library-yql-ast
-  library-yql-core
-  library-yql-minikql
+  yql-essentials-ast
+  yql-essentials-core
+  yql-essentials-minikql
   providers-common-mkql
 )
 

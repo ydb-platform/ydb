@@ -32,7 +32,7 @@ target_link_libraries(ydb-library-yql-dq-actors-common-ut PUBLIC
   cpp-testing-unittest
   core-testlib-actors
   ydb-core-testlib
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
 )
 
 target_allocator(ydb-library-yql-dq-actors-common-ut

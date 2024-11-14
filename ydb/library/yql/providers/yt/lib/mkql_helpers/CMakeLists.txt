@@ -23,10 +23,10 @@ target_link_libraries(yt-lib-mkql_helpers PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-minikql
-  library-yql-core
-  library-yql-ast
-  library-yql-utils
+  yql-essentials-minikql
+  yql-essentials-core
+  yql-essentials-ast
+  yql-essentials-utils
 )
 
 target_sources(yt-lib-mkql_helpers PRIVATE

@@ -12,17 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(astdiff)
 add_subdirectory(dqrun)
 add_subdirectory(mrjob)
 add_subdirectory(mrrun)
-add_subdirectory(pg_catalog_dump)
-add_subdirectory(pgrun)
-add_subdirectory(purebench)
-add_subdirectory(sql2yql)
-add_subdirectory(sql_formatter)
-add_subdirectory(udf_dep_stub)
-add_subdirectory(udf_probe)
-add_subdirectory(udf_resolver)
 add_subdirectory(yqlrun)
 add_subdirectory(dq)

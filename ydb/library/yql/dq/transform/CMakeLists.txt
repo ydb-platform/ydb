@@ -24,9 +24,9 @@ target_link_libraries(yql-dq-transform PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-actors-core
-  dq-integration-transform
-  yql-minikql-computation
-  library-yql-utils
+  core-dq_integration-transform
+  essentials-minikql-computation
+  yql-essentials-utils
 )
 
 target_sources(yql-dq-transform PRIVATE

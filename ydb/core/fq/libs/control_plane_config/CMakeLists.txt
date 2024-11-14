@@ -40,7 +40,7 @@ target_link_libraries(fq-libs-control_plane_config PUBLIC
   ydb-library-db_pool
   ydb-library-security
   ydb-library-protobuf_printer
-  yql-public-issue
+  essentials-public-issue
   cpp-client-ydb_scheme
   cpp-client-ydb_value
 )

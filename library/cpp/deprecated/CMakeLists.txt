@@ -14,6 +14,6 @@
 
 add_subdirectory(atomic)
 add_subdirectory(enum_codegen)
-add_subdirectory(accessors)
 add_subdirectory(split)
 add_subdirectory(kmp)
+add_subdirectory(accessors)

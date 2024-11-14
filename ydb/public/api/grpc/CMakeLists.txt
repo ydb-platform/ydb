@@ -54,6 +54,7 @@ target_link_libraries(api-grpc PUBLIC
 
 target_proto_messages(api-grpc PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/ydb_federation_discovery_v1.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/ydb_bsconfig_v1.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/ydb_auth_v1.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/ydb_cms_v1.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/ydb_coordination_v1.proto
@@ -74,6 +75,8 @@ target_proto_messages(api-grpc PRIVATE
 target_sources(api-grpc PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/ydb_federation_discovery_v1.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/ydb_federation_discovery_v1.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/ydb_bsconfig_v1.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/ydb_bsconfig_v1.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/ydb_auth_v1.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/ydb_cms_v1.pb.h

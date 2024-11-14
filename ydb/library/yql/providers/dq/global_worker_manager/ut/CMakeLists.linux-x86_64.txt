@@ -32,16 +32,16 @@ target_link_libraries(yql-providers-dq-global_worker_manager-ut PUBLIC
   providers-dq-global_worker_manager
   library-actors-testlib
   udf-service-stub
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
   dq-actors-yt
   providers-dq-actors
   dq-actors-compute
   minikql-computation-llvm14
   minikql-comp_nodes-llvm14
-  dq-integration-transform
+  core-dq_integration-transform
   yql-dq-comp_nodes
   providers-common-comp_nodes
-  yql-minikql-comp_nodes
+  essentials-minikql-comp_nodes
   yql-dq-transform
   providers-dq-task_runner
 )

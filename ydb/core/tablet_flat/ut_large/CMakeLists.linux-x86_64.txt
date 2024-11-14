@@ -30,7 +30,7 @@ target_link_libraries(ydb-core-tablet_flat-ut_large PUBLIC
   test-libs-exec
   test-libs-table
   udf-service-exception_policy
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
 )
 
 target_allocator(ydb-core-tablet_flat-ut_large

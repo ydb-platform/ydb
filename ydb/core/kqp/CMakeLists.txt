@@ -89,9 +89,9 @@ target_link_libraries(ydb-core-kqp INTERFACE
   ydb-core-ydb_convert
   ydb-library-aclib
   core-services-mounts
-  yql-public-issue
+  essentials-public-issue
   yql-utils-actor_log
-  yql-utils-log
+  essentials-utils-log
   api-protos
   public-lib-base
   public-lib-operation_id
@@ -145,9 +145,9 @@ target_link_libraries(ydb-core-kqp.global PUBLIC
   ydb-core-ydb_convert
   ydb-library-aclib
   core-services-mounts
-  yql-public-issue
+  essentials-public-issue
   yql-utils-actor_log
-  yql-utils-log
+  essentials-utils-log
   api-protos
   public-lib-base
   public-lib-operation_id
@@ -165,4 +165,5 @@ resources(ydb-core-kqp.global
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/kqp_default_settings.txt
   KEYS
   kqp_default_settings.txt
+  OPTS
 )

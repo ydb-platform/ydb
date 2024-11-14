@@ -19,8 +19,6 @@ get_built_tool_path(
   enum_parser
 )
 
-add_subdirectory(ut)
-
 add_library(providers-yt-provider)
 
 
@@ -36,25 +34,25 @@ target_link_libraries(providers-yt-provider PUBLIC
   library-cpp-disjoint_sets
   cpp-mapreduce-common
   cpp-mapreduce-interface
-  library-yql-ast
-  yql-core-extract_predicate
-  yql-public-udf
+  yql-essentials-ast
+  essentials-core-extract_predicate
+  essentials-public-udf
   public-udf-tz
-  library-yql-sql
-  library-yql-utils
-  yql-utils-log
-  library-yql-core
-  yql-core-expr_nodes
-  yql-core-issue
+  yql-essentials-sql
+  yql-essentials-utils
+  essentials-utils-log
+  yql-essentials-core
+  essentials-core-expr_nodes
+  essentials-core-issue
   core-issue-protos
-  yql-core-peephole_opt
-  yql-core-type_ann
-  yql-core-file_storage
+  essentials-core-peephole_opt
+  essentials-core-type_ann
+  essentials-core-file_storage
   core-url_lister-interface
-  yql-dq-integration
+  essentials-core-dq_integration
   yql-dq-opt
   yql-dq-type_ann
-  library-yql-minikql
+  yql-essentials-minikql
   providers-common-codec
   providers-common-config
   providers-common-dq

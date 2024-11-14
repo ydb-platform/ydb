@@ -32,8 +32,8 @@ target_link_libraries(ydb-library-yql-providers-yt-codec-codegen-ut PUBLIC
   yt-codec-codegen
   minikql-computation-llvm14
   udf-service-exception_policy
-  library-yql-sql
-  yql-sql-pg_dummy
+  yql-essentials-sql
+  essentials-sql-pg_dummy
   providers-yt-codec
 )
 

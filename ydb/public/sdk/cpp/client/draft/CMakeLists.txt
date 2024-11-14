@@ -29,7 +29,7 @@ target_link_libraries(cpp-client-draft PUBLIC
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime
-  yql-public-issue
+  essentials-public-issue
   api-grpc-draft
   cpp-client-ydb_table
   client-ydb_types-operation

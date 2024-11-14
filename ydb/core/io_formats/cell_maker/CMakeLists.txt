@@ -25,12 +25,12 @@ target_link_libraries(core-io_formats-cell_maker PUBLIC
   yutil
   ydb-core-scheme
   ydb-core-scheme_types
-  ydb-library-binary_json
-  ydb-library-dynumber
-  yql-minikql-dom
-  yql-public-decimal
-  yql-public-udf
-  library-yql-utils
+  essentials-types-binary_json
+  essentials-types-dynumber
+  essentials-minikql-dom
+  essentials-public-decimal
+  essentials-public-udf
+  yql-essentials-utils
   contrib-libs-double-conversion
   library-cpp-json
   cpp-json-yson

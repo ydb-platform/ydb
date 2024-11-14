@@ -42,7 +42,7 @@ target_link_libraries(tx-schemeshard-ut_helpers PUBLIC
   core-tx-tx_allocator
   core-tx-tx_proxy
   public-lib-scheme_types
-  yql-public-issue
+  essentials-public-issue
   cpp-client-ydb_driver
   cpp-client-ydb_table
 )

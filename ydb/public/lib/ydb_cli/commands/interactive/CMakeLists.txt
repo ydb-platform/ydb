@@ -22,9 +22,12 @@ target_link_libraries(ydb_cli-commands-interactive PUBLIC
   contrib-libs-cxxsupp
   yutil
   restricted-patched-replxx
-  yql-parser-lexer_common
+  essentials-parser-lexer_common
   sql-v1-lexer
-  library-yql-utils
+  essentials-sql-settings
+  yql-essentials-utils
+  contrib-libs-antlr4_cpp_runtime
+  proto_ast-gen-v1_antlr4
   common
 )
 

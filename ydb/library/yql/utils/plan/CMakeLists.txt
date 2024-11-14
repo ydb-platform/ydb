@@ -21,8 +21,8 @@ target_link_libraries(yql-utils-plan PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-yql-ast
-  yql-core-expr_nodes
+  yql-essentials-ast
+  essentials-core-expr_nodes
 )
 
 target_sources(yql-utils-plan PRIVATE

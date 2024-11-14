@@ -31,7 +31,7 @@ target_link_libraries(providers-dq-service PUBLIC
   grpc-server-actors
   library-cpp-svnversion
   cpp-threading-future
-  library-yql-sql
+  yql-essentials-sql
   api-protos
   providers-common-metrics
   providers-dq-actors

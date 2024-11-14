@@ -30,12 +30,12 @@ target_link_libraries(yt-gateway-lib PUBLIC
   cpp-mapreduce-client
   cpp-mapreduce-common
   cpp-mapreduce-interface
-  yql-core-file_storage
-  yql-public-issue
-  library-yql-utils
-  yql-utils-log
-  yql-utils-threading
-  yql-core-type_ann
+  essentials-core-file_storage
+  essentials-public-issue
+  yql-essentials-utils
+  essentials-utils-log
+  essentials-utils-threading
+  essentials-core-type_ann
   providers-common-codec
   providers-common-gateway
   providers-yt-provider

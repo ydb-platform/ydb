@@ -535,7 +535,6 @@ namespace NActors {
             XdcSocket->Shutdown(SHUT_RDWR);
             XdcSocket.Reset();
         }
-        UpdateState(EState::Idle);
         SendUpdateToWhiteboard(true, false);
     }
 
@@ -1046,7 +1045,6 @@ namespace NActors {
                 .ReportClockSkew = reportClockSkew,
                 .PingTimeUs = ReceiveContext->PingRTT_us,
                 .ScopeId = Params.PeerScopeId,
-                .Utilization = Utilized,
                 .ConnectTime = LastHandshakeDone.MilliSeconds(),
                 .BytesWrittenToSocket = BytesWrittenToSocket,
             });

@@ -1413,5 +1413,9 @@
       "CA":"/opt/ydb/certs/ca.crt",
       "Cert":"/opt/ydb/certs/node.crt",
       "Key":"/opt/ydb/certs/node.key"
+    },
+  "AuthConfig":
+    {
+      "PathToRootCA":"/opt/ydb/certs/ca.crt"
     }
 }

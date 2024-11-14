@@ -10,6 +10,7 @@
 #include <ydb/core/base/blobstorage_pdisk_category.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/erasure/erasure.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/tablet.pb.h>
@@ -518,6 +519,13 @@ namespace NKikimr::NYaml {
             securityConfig->AddDefaultAccess("+(CD|CT|WA|AS|RS):DDL-ADMINS"); // CreateDirectory | CreateTable | WriteAttributes | AlterSchema | RemoveSchema
             securityConfig->AddDefaultAccess("+(GAR):ACCESS-ADMINS"); // GrantAccessRights
             securityConfig->AddDefaultAccess("+(CDB|DDB):DATABASE-ADMINS"); // CreateDatabase | DropDatabase
+        }
+    }
+
+    void PrepareAuthConfig(NKikimrConfig::TAppConfig& config, const NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        if (ephemeralConfig.HasTls()) {
+            auto* authConfig = config.MutableAuthConfig();
+            authConfig->SetPathToRootCA(ephemeralConfig.GetTls().GetCA());
         }
     }
 
@@ -1386,6 +1394,7 @@ namespace NKikimr::NYaml {
         PrepareIcConfig(config, ephemeralConfig);
         PrepareGrpcConfig(config, ephemeralConfig);
         PrepareSecurityConfig(ctx, config, relaxed);
+        PrepareAuthConfig(config, ephemeralConfig);
         PrepareActorSystemConfig(config);
         PrepareLogConfig(config);
     }

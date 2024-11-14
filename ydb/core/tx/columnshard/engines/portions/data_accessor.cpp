@@ -533,7 +533,7 @@ void TPortionDataAccessor::FullValidation() const {
             blobIdxs.emplace(bRange->GetBlobIdxVerified());
         }
     }
-    AFL_VERIFY(blobIdxs.size());
+    AFL_VERIFY(blobIdxs.size())("portion_info", PortionInfo->DebugString());
     AFL_VERIFY(PortionInfo->GetBlobIdsCount() == blobIdxs.size());
     AFL_VERIFY(PortionInfo->GetBlobIdsCount() == *blobIdxs.rbegin() + 1);
 }

@@ -1279,9 +1279,17 @@ public:
         bool reask = false;
         for (auto&& i : PortionsByPath) {
             for (auto&& p : i.second) {
-                auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV1>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
-                if (!rowset.IsReady()) {
-                    reask = true;
+                {
+                    auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV1>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
+                    if (!rowset.IsReady()) {
+                        reask = true;
+                    }
+                }
+                {
+                    auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
+                    if (!rowset.IsReady()) {
+                        reask = true;
+                    }
                 }
             }
         }

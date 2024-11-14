@@ -1,4 +1,28 @@
 {
+    "test_format_setting.TestS3.test_date_simple_insert[v1-date/simple/test.csv-csv_with_names]": {
+        "uri": "file://test_format_setting.TestS3.test_date_simple_insert_v1-date_simple_test.csv-csv_with_names_/date_simple_test.csv"
+    },
+    "test_format_setting.TestS3.test_date_simple_insert[v1-date/simple/test.json-json_each_row]": {
+        "uri": "file://test_format_setting.TestS3.test_date_simple_insert_v1-date_simple_test.json-json_each_row_/date_simple_test.json"
+    },
+    "test_format_setting.TestS3.test_date_simple_insert[v1-date/simple/test.parquet-parquet]": {
+        "uri": "file://test_format_setting.TestS3.test_date_simple_insert_v1-date_simple_test.parquet-parquet_/date_simple_test.parquet"
+    },
+    "test_format_setting.TestS3.test_date_simple_insert[v1-date/simple/test.tsv-tsv_with_names]": {
+        "uri": "file://test_format_setting.TestS3.test_date_simple_insert_v1-date_simple_test.tsv-tsv_with_names_/date_simple_test.tsv"
+    },
+    "test_format_setting.TestS3.test_date_simple_insert[v2-date/simple/test.csv-csv_with_names]": {
+        "uri": "file://test_format_setting.TestS3.test_date_simple_insert_v2-date_simple_test.csv-csv_with_names_/date_simple_test.csv"
+    },
+    "test_format_setting.TestS3.test_date_simple_insert[v2-date/simple/test.json-json_each_row]": {
+        "uri": "file://test_format_setting.TestS3.test_date_simple_insert_v2-date_simple_test.json-json_each_row_/date_simple_test.json"
+    },
+    "test_format_setting.TestS3.test_date_simple_insert[v2-date/simple/test.parquet-parquet]": {
+        "uri": "file://test_format_setting.TestS3.test_date_simple_insert_v2-date_simple_test.parquet-parquet_/date_simple_test.parquet"
+    },
+    "test_format_setting.TestS3.test_date_simple_insert[v2-date/simple/test.tsv-tsv_with_names]": {
+        "uri": "file://test_format_setting.TestS3.test_date_simple_insert_v2-date_simple_test.tsv-tsv_with_names_/date_simple_test.tsv"
+    },
     "test_format_setting.TestS3.test_date_time_simple_format_insert[v1-common/simple_format/test.csv-csv_with_names]": {
         "uri": "file://test_format_setting.TestS3.test_date_time_simple_format_insert_v1-common_simple_format_test.csv-csv_with_names_/date_time_format_common_simple_format_test.csv"
     },

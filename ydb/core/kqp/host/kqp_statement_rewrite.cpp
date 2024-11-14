@@ -386,6 +386,10 @@ TVector<NYql::TExprNode::TPtr> RewriteExpression(
             "CTAS statement can't be used with other statements without per-statement mode."));
     }
 
+    if (!exprCtx.IssueManager.GetIssues().Empty()) {
+        return {};
+    }
+
     if (result.empty()) {
         result.push_back(root);
     }

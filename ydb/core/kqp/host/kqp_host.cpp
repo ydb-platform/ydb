@@ -1222,7 +1222,7 @@ public:
 
 private:
     TCompileExprResult CompileQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, TMaybe<TSqlVersion>& sqlVersion,
-        TKqpTranslationSettingsBuilder& settingsBuilder, bool isSplit) const
+        TKqpTranslationSettingsBuilder& settingsBuilder) const
     {
         TCompileExprResult result;
         std::shared_ptr<NYql::TAstParseResult> queryAst;
@@ -1275,24 +1275,7 @@ private:
 
         YQL_CLOG(INFO, ProviderKqp) << "Compiled query:\n" << KqpExprToPrettyString(*queryExpr, ctx);
 
-        if (Config->EnableCreateTableAs && NeedToSplit(queryExpr, ctx)) {
-            result.NeedToSplit = true;
-            if (isSplit) {
-                auto rewriteResults = RewriteExpression(queryExpr, ctx, *TypesCtx, SessionCtx, Cluster);
-                if (!ctx.IssueManager.GetIssues().Empty()) {
-                    return result;
-                }
-
-                result.QueryExprs = rewriteResults;
-                for (const auto& resultPart : result.QueryExprs) {
-                    YQL_CLOG(DEBUG, ProviderKqp) << "Splitted Compiled query part:\n" << KqpExprToPrettyString(*resultPart, ctx);
-                }
-            } else {
-                result.QueryExprs = {queryExpr};
-            }
-            return result;
-        }
-
+        result.NeedToSplit = Config->EnableCreateTableAs && NeedToSplit(queryExpr, ctx);
         result.QueryExprs = {queryExpr};
         return result;
     }
@@ -1306,11 +1289,18 @@ private:
             .SetSqlAutoCommit(false)
             .SetUsePgParser(settings.UsePgParser)
             .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
-        auto compileResult = CompileQuery(query, /* isSql */ true, *ExprCtx, sqlVersion, settingsBuilder, /* isSplit */ true);
+        auto compileResult = CompileQuery(query, /* isSql */ true, *ExprCtx, sqlVersion, settingsBuilder);
+        YQL_ENSURE(compileResult.NeedToSplit);
+        YQL_ENSURE(compileResult.QueryExprs.size() == 1);
+
+        auto rewriteResults = RewriteExpression(compileResult.QueryExprs.front(), *ExprCtx, *TypesCtx, SessionCtx, Cluster);
+        for (const auto& resultPart : rewriteResults) {
+            YQL_CLOG(DEBUG, ProviderKqp) << "Splitted query part: " << KqpExprToPrettyString(*resultPart, *ExprCtx);
+        }
 
         return TSplitResult{
             .Ctx = std::move(ExprCtxStorage),
-            .Exprs = std::move(compileResult.QueryExprs),
+            .Exprs = std::move(rewriteResults),
             .World = std::move(FakeWorld),
         };
     }
@@ -1318,7 +1308,7 @@ private:
     TCompileExprResult CompileYqlQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, TMaybe<TSqlVersion>& sqlVersion,
         TKqpTranslationSettingsBuilder& settingsBuilder) const
     {
-        auto compileResult = CompileQuery(query, isSql, ctx, sqlVersion, settingsBuilder, /* isSplit */ false);
+        auto compileResult = CompileQuery(query, isSql, ctx, sqlVersion, settingsBuilder);
         if (!compileResult.QueryExprs || compileResult.NeedToSplit) {
             return compileResult;
         }

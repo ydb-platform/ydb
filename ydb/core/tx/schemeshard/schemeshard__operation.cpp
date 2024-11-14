@@ -216,7 +216,9 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
 
     for (auto tx : record.GetTransaction()) {
         if (DispatchOp(tx, [&](auto traits) { return traits.NeedRewrite && !traits.Rewrite(tx); })) {
-            // TODO: return error
+            response.Reset(new TProposeResponse(NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId)));
+            response->SetError(NKikimrScheme::StatusPreconditionFailed, "Invalid schema rewrite rule.");
+            return std::move(response);
         }
 
         rewrittenTransactions.push_back(std::move(tx));

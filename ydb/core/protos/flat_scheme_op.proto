@@ -225,16 +225,11 @@ message TTTLSettings {
         optional string StorageName = 1;
     }
 
-    message TEvictionToColumnFamilySettings {
-        optional string FamilyName = 1;
-    }
-
     message TTier {
         optional uint32 EvictAfterSeconds = 1;
         oneof Action {
             google.protobuf.Empty Delete = 2;
             TEvictionToExternalStorageSettings EvictToExternalStorage = 3;
-            TEvictionToColumnFamilySettings EvictToColumnFamily = 4;
         }
     }
 

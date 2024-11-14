@@ -449,7 +449,6 @@ message TtlTier {
     oneof action {
         google.protobuf.Empty delete = 2;
         EvictionToExternalStorageSettings evict_to_external_storage = 3;
-        EvictionToFamilySettings evict_to_column_family = 3;
     }
 }
 

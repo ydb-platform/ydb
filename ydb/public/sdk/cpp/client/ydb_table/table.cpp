@@ -25,6 +25,7 @@
 
 #include <library/cpp/cache/cache.h>
 
+#include <util/generic/overloaded.h>
 #include <util/generic/map.h>
 #include <util/random/random.h>
 #include <util/string/join.h>
@@ -2950,9 +2951,6 @@ TTtlTierSettings::TTtlTierSettings(const Ydb::Table::TtlTier& tier)
         case Ydb::Table::TtlTier::kEvictToExternalStorage:
             Action_ = TTtlEvictToExternalStorageAction(tier.evict_to_external_storage().storage_name());
             break;
-        case Ydb::Table::TtlTier::kEvictToColumnFamily:
-            Action_ = TTtlEvictToExternalStorageAction(tier.evict_to_column_family().family_name());
-            break;
         case Ydb::Table::TtlTier::ACTION_NOT_SET:
             break;
     }
@@ -2961,17 +2959,14 @@ TTtlTierSettings::TTtlTierSettings(const Ydb::Table::TtlTier& tier)
 void TTtlTierSettings::SerializeTo(Ydb::Table::TtlTier& proto) const {
     proto.set_evict_after_seconds(EvictionDelay_.Seconds());
 
-    auto actionVisitor = [proto](auto&& action) mutable {
-        using T = std::decay_t<decltype(action)>;
-        if constexpr (std::is_same_v<T, TTtlDeleteAction>) {
-            proto.mutable_delete_();
-        } else if constexpr (std::is_same_v<T, TTtlEvictToExternalStorageAction>) {
-            proto.mutable_evict_to_external_storage()->set_storage_name(action.StorageName);
-        } else if constexpr (std::is_same_v<T, TTtlEvictToColumnFamilyAction>) {
-            proto.mutable_evict_to_column_family()->set_storage_name(action.FamilyName);
-        }
-    };
-    std::visit(std::move(actionVisitor), Action_);
+    std::visit(TOverloaded{
+            [&proto](const TTtlDeleteAction&) { proto.mutable_delete_(); },
+            [&proto](const TTtlEvictToExternalStorageAction& action) {
+                proto.mutable_evict_to_external_storage()->set_storage_name(action.StorageName);
+            },
+            [](const std::monostate) {},
+        },
+        Action_);
 }
 
 TDuration TTtlTierSettings::GetEvictionDelay() const {

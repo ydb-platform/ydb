@@ -428,10 +428,6 @@ struct TTtlEvictToExternalStorageAction {
     TString StorageName;
 };
 
-struct TTtlEvictToColumnFamilyAction {
-    TString FamilyName;
-};
-
 class TTtlTierSettings {
 public:
     using TAction = std::variant<

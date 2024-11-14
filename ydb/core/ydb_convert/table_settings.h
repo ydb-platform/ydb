@@ -46,9 +46,6 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
                 case Ydb::Table::TtlTier::kEvictToExternalStorage:
                     outTier->MutableEvictToExternalStorage()->SetStorageName(inTier.evict_to_external_storage().storage_name());
                     break;
-                case Ydb::Table::TtlTier::kEvictToColumnFamily:
-                    outTier->MutableEvictToColumnFamily()->SetFamilyName(inTier.evict_to_column_family().family_name());
-                    break;
                 case Ydb::Table::TtlTier::ACTION_NOT_SET:
                     break;
             }

@@ -142,7 +142,7 @@ class ConnectionParams:
 
         self.parse_token(args.token_file)
         self.domain = 1
-        self.verbose = args.verbose
+        self.verbose = args.verbose or args.debug
         self.debug = args.debug
         self.quiet = args.quiet
         self.http_timeout = args.http_timeout

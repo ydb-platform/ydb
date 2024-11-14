@@ -34,6 +34,7 @@ enum ESimpleCounters {
     COUNTER_NODES_RECOMMENDED = 24 [(CounterOpts) = {Name: "NodesRecommended"}];
     COUNTER_NODES_RECOMMENDED_DRY_RUN = 25 [(CounterOpts) = {Name: "NodesRecommendedDryRun"}];
     COUNTER_AVG_CPU_UTILIZATION = 26 [(CounterOpts) = {Name: "AvgCPUUtilization"}];
+    COUNTER_NODES_DOWN = 27 [(CounterOpts) = {Name: "NodesDown"}];
 }
 
 enum ECumulativeCounters {

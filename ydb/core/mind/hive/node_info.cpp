@@ -360,6 +360,7 @@ void TNodeInfo::SendReconnect(const TActorId& local) {
 }
 
 void TNodeInfo::SetDown(bool down) {
+    Hive.UpdateCounterNodesDown(static_cast<i64>(down) - static_cast<i64>(Down));
     Down = down;
     if (Down) {
         Hive.ObjectDistributions.RemoveNode(*this);

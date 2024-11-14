@@ -28,7 +28,7 @@
 # FILE_IGNORE - ignore file (do nothing)
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
-IGNORE_FILES icudt75_dat.rodata
+IGNORE_FILES icudt76_dat.rodata
 
 KEEP     Unicode              0285f1da3a441f34fd441c30fe7aa87e
 BELONGS ya.make
@@ -42,6 +42,29 @@ BELONGS ya.make
     Files with this license:
         include/unicode/uvernum.h [50:50]
 
+KEEP     Unicode              110d3101a4390964af6105c359edb37e
+BELONGS ya.make
+    License text:
+             License & terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 55.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        APIChangeReport.html [4:4]
+
+KEEP     BSD-3-Clause         14fa598c20c2900706910e0a6b8704e5
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 28.10
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [369:375]
+
 SKIP     LicenseRef-scancode-unknown-spdx 17426ea1b7c606d27ef8c4f7591d2725
 BELONGS ya.make
     License text:
@@ -54,16 +77,29 @@ BELONGS ya.make
     Files with this license:
         LICENSE [41:41]
 
-KEEP     Unicode-Icu-58       19cd5e78db8e620aeea9e9bd8f63af61
+KEEP     ICU                  1e6c63b854b364495cdae9a0f0dd4f31
+BELONGS ya.make
+    License text:
+        ICU License - ICU 1.8.1 to ICU 57.1
+        COPYRIGHT AND PERMISSION NOTICE
+    Scancode info:
+        Original SPDX id: ICU
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, https://spdx.org/licenses/ICU
+    Files with this license:
+        LICENSE [53:55]
+
+SKIP     NAIST-2003           2424a1fc169740d8fa11e54ba47b829a
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
-        Original SPDX id: LicenseRef-scancode-unicode-icu-58
-        Score           : 96.72
+        Original SPDX id: NAIST-2003
+        Score           : 100.00
         Match type      : TEXT
-        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode-icu-58.LICENSE, https://www.open-xchange.com/fileadmin/user_upload/images/portfolio/license/ICU_License.pdf
+        Links           : https://spdx.org/licenses/NAIST-2003
     Files with this license:
-        LICENSE [13:432]
+        LICENSE [224:290]
 
 SKIP     LicenseRef-scancode-free-unknown 307c3678c9fc74a4c1a81c1c54faa1b4
 BELONGS ya.make
@@ -75,19 +111,30 @@ BELONGS ya.make
         Match type      : INTRO
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
     Files with this license:
-        i18n/messageformat2_parser.cpp [375:375]
+        i18n/messageformat2_parser.cpp [338:338]
+
+KEEP     MIT                  399584035c417b91040964779555dfac
+BELONGS ya.make
+    License text:
+        MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [440:440]
 
 KEEP     Unicode              4c6205d2789acc5f0eaf022758f1caaf
 BELONGS ya.make
     License text:
-             License & terms of use: http://www.unicode.org/copyright.html
+        // License & terms of use: http://www.unicode.org/copyright.html
     Scancode info:
         Original SPDX id: LicenseRef-scancode-unicode
         Score           : 55.00
         Match type      : REFERENCE
         Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
     Files with this license:
-        APIChangeReport.html [4:4]
         i18n/utmscale.cpp [2:2]
 
 SKIP     NTP                  506238eb9775d9863634676b046cf513
@@ -99,7 +146,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_.28no_advertising_without_permission.29, https://spdx.org/licenses/NTP
     Files with this license:
-        LICENSE [506:514]
+        LICENSE [534:542]
 
 KEEP     Unicode              51f39f17d54765b21f1fa3cec7a5e6a9
 BELONGS ya.make
@@ -113,17 +160,16 @@ BELONGS ya.make
     Files with this license:
         license.html [14:14]
 
-KEEP     Unicode              565f38e2de6f835d90f982ee97962301
+KEEP     MIT                  54575e81a786e9aa7d98337ec2e1ebb0
 BELONGS ya.make
-    License text:
-                License &amp; terms of use: http://www.unicode.org/copyright.html
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
-        Original SPDX id: LicenseRef-scancode-unicode
-        Score           : 55.00
-        Match type      : REFERENCE
-        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        APIChangeReport.html [1626:1626]
+        LICENSE [444:460]
 
 KEEP     Unicode              5878933f57b4a51e1a476204a3d5dd26
 BELONGS ya.make
@@ -1150,6 +1196,40 @@ BELONGS ya.make
     Files with this license:
         license.html [11:11]
 
+KEEP     BSD-3-Clause         7d06a43b6e52b86b42463f4b0edf59f4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [183:209]
+
+KEEP     Unicode              82f4c9f53f2419878d32098c415360dc
+BELONGS ya.make
+    License text:
+                License &amp; terms of use: http://www.unicode.org/copyright.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 55.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        APIChangeReport.html [1175:1175]
+
+KEEP     BSD-3-Clause         8324f1990c82a65667a0b4767115a5fa
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [150:175]
+
 KEEP     Unicode              85bddd3f2e4ea40e68200158e49af16d
 BELONGS ya.make
     License text:
@@ -1161,6 +1241,35 @@ BELONGS ya.make
         Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
     Files with this license:
         icu4c.css [4:4]
+
+KEEP     Unicode              88a28f9208b91e774958ad1ca00a359c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 90.19
+        Match type      : TEXT
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        LICENSE [13:39]
+
+SKIP     GPL-3.0-or-later AND LicenseRef-scancode-autoconf-simple-exception 8ff1db0ebdcd914b6d4c35c1539fefbf
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: GPL-3.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+    Files with this license:
+        LICENSE [502:520]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-autoconf-simple-exception
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob;f=config.guess;h=a7448442748cc6f98a066d2d1051fad3b043761a;hb=HEAD, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/autoconf-simple-exception.LICENSE
+    Files with this license:
+        LICENSE [502:520]
 
 KEEP     ICU                  91a085270fc1d48dfebdc6a3d48f02ae
 BELONGS ya.make
@@ -1184,14 +1293,14 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.gnu.org/licenses/old-licenses/gpl-2.0-standalone.html, https://spdx.org/licenses/GPL-2.0-or-later
     Files with this license:
-        LICENSE [443:462]
+        LICENSE [471:490]
     Scancode info:
         Original SPDX id: LicenseRef-scancode-autoconf-simple-exception-2.0
         Score           : 100.00
         Match type      : NOTICE
         Links           : https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob;f=config.guess;h=a7448442748cc6f98a066d2d1051fad3b043761a;hb=HEAD, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/autoconf-simple-exception-2.0.LICENSE
     Files with this license:
-        LICENSE [443:462]
+        LICENSE [471:490]
 
 KEEP     Unicode              97ae9be094ac18e768c99daabb0a51f3
 BELONGS ya.make
@@ -1204,6 +1313,52 @@ BELONGS ya.make
         Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
     Files with this license:
         readme.html [8:8]
+
+KEEP     ICU                  98811e05c84f8fbcdfe1e50edea7f80e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ICU
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, https://spdx.org/licenses/ICU
+    Files with this license:
+        LICENSE [60:86]
+
+KEEP     BSD-2-Clause         a1f7b82bf00bd77b34d242b9ce9a17a7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        LICENSE [313:333]
+
+KEEP     Public-Domain        b6459f851b20a51ad49d0fa7b53009d4
+BELONGS ya.make
+    License text:
+          ICU uses the public domain data and code derived from Time Zone
+        Database for its time zone support. The ownership of the TZ database
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        LICENSE [382:383]
+
+KEEP     BSD-3-Clause         b9d405f527cf9e69808df67a0d5250f7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [408:432]
 
 KEEP     Custom-punycode      bd57aec5790d5e2d75543b49589d1e8e
 BELONGS ya.make
@@ -1270,24 +1425,66 @@ BELONGS ya.make
         i18n/decNumber.h [8:9]
         i18n/decNumberLocal.h [8:9]
 
-SKIP     GPL-3.0-or-later AND LicenseRef-scancode-autoconf-simple-exception e854f8ec7ac55368ae5086c861e5f1aa
+KEEP     BSD-3-Clause         d77fafb2d6fd816773f531a09c9a3be2
 BELONGS ya.make
-    # icu4j only
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
-        Original SPDX id: GPL-3.0-or-later
+        Original SPDX id: BSD-3-Clause
         Score           : 100.00
         Match type      : NOTICE
-        Links           : http://www.gnu.org/licenses/gpl-3.0-standalone.html, https://spdx.org/licenses/GPL-3.0-or-later
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        LICENSE [474:492]
+        LICENSE [92:97]
+
+KEEP     Public-Domain        df2bc8dc262115ebbb828fdb29e6f95e
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
     Scancode info:
-        Original SPDX id: LicenseRef-scancode-autoconf-simple-exception
+        Original SPDX id: LicenseRef-scancode-public-domain
         Score           : 100.00
-        Match type      : NOTICE
-        Links           : https://git.savannah.gnu.org/gitweb/?p=config.git;a=blob;f=config.guess;h=a7448442748cc6f98a066d2d1051fad3b043761a;hb=HEAD, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/autoconf-simple-exception.LICENSE
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        LICENSE [474:492]
+        LICENSE [387:401]
+
+KEEP     BSD-3-Clause         ec3329a454335b21cdaf87fb70c0e0a0
+BELONGS ya.make
+    License text:
+         \#  * Libtabe (Chinese)
+         \#    - https://sourceforge.net/project/?group_id=1519
+         \#    - Its license terms and conditions are shown below.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [135:137]
+
+KEEP     BSD-3-Clause         ed5db4de7c7d252513717a44353021e1
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [102:127]
+
+SKIP     NAIST-2003           f5bb6486b127439f59ff918b6dfc2d86
+BELONGS ya.make
+    License text:
+         \#  * IPADIC (Japanese)
+         \#    - http://chasen.aist-nara.ac.jp/chasen/distribution.html
+         \#    - Its license terms and conditions are shown below.
+    Scancode info:
+        Original SPDX id: NAIST-2003
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://spdx.org/licenses/NAIST-2003
+    Files with this license:
+        LICENSE [139:141]
 
 KEEP     BSD-3-Clause         f903ceb778f6db21bac728e4622abbd4
 BELONGS ya.make

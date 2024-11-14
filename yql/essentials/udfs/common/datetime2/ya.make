@@ -1,10 +1,3 @@
-IF (YQL_PACKAGED)
-    PACKAGE()
-
-    FROM_SANDBOX(FILE 7319895543 OUT_NOAUTO libdatetime2_udf.so)
-
-    END()
-ELSE()
 YQL_UDF_CONTRIB(datetime2_udf)
     YQL_ABI_VERSION(
         2
@@ -22,7 +15,6 @@ YQL_UDF_CONTRIB(datetime2_udf)
         yql/essentials/public/udf/tz
     )
     END()
-ENDIF()
 
 RECURSE_FOR_TESTS(
     test

@@ -103,31 +103,6 @@ static int wait_nr(int nr)
 	return 0;
 }
 
-static unsigned long long mtime_since(const struct timeval *s,
-				      const struct timeval *e)
-{
-	long long sec, usec;
-
-	sec = e->tv_sec - s->tv_sec;
-	usec = (e->tv_usec - s->tv_usec);
-	if (sec > 0 && usec < 0) {
-		sec--;
-		usec += 1000000;
-	}
-
-	sec *= 1000;
-	usec /= 1000;
-	return sec + usec;
-}
-
-static unsigned long long mtime_since_now(struct timeval *tv)
-{
-	struct timeval end;
-
-	gettimeofday(&end, NULL);
-	return mtime_since(tv, &end);
-}
-
 static int test_reuse(int argc, char *argv[], int split, int async)
 {
 	struct thread_data data;
@@ -163,6 +138,8 @@ static int test_reuse(int argc, char *argv[], int split, int async)
 	if (do_unlink)
 		unlink(fname1);
 	if (fd1 < 0) {
+		if (errno == EPERM || errno == EACCES)
+			return T_EXIT_SKIP;
 		perror("open fname1");
 		goto err;
 	}
@@ -212,7 +189,6 @@ static int test_reuse(int argc, char *argv[], int split, int async)
 err:
 	io_uring_queue_exit(&ring);
 	return 1;
-
 }
 
 int main(int argc, char *argv[])
@@ -226,6 +202,8 @@ int main(int argc, char *argv[])
 		async = (i & 2) != 0;
 
 		ret = test_reuse(argc, argv, split, async);
+		if (ret == T_EXIT_SKIP)
+			continue;
 		if (ret) {
 			fprintf(stderr, "test_reuse %d %d failed\n", split, async);
 			return ret;

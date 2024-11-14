@@ -1,9 +1,3 @@
-IF (YQL_PACKAGED)
-    PACKAGE()
-        FROM_SANDBOX(FILE 7319908881 OUT_NOAUTO libyson2_udf.so
-        )
-    END()
-ELSE ()
 YQL_UDF_CONTRIB(yson2_udf)
     
     YQL_ABI_VERSION(
@@ -23,8 +17,6 @@ YQL_UDF_CONTRIB(yson2_udf)
     )
     
     END()
-ENDIF ()
-
 
 RECURSE_FOR_TESTS(
     test

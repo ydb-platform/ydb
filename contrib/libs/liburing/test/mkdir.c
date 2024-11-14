@@ -98,6 +98,12 @@ int main(int argc, char *argv[])
 		goto err1;
 	}
 
+	ret = do_mkdirat(&ring, (const char *) (uintptr_t) 0x1234);
+	if (ret != -EFAULT) {
+		fprintf(stderr, "do_mkdirat bad address: %d\n", ret);
+		goto err1;
+	}
+
 	unlinkat(AT_FDCWD, fn, AT_REMOVEDIR);
 	io_uring_queue_exit(&ring);
 	return T_EXIT_PASS;

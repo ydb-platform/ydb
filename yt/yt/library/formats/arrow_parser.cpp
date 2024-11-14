@@ -40,6 +40,28 @@ void ThrowOnError(const arrow::Status& status)
     }
 }
 
+template <class TUnderlyingValueType>
+TStringBuf SerializeDecimalBinary(const TStringBuf& value, int precision, char* buffer, size_t bufferLength)
+{
+    // NB: Arrow wire representation of Decimal128 is little-endian and (obviously) 128 bit,
+    // while YT in-memory representation of Decimal is big-endian, variadic-length of either 32 bit, 64 bit or 128 bit,
+    // and MSB-flipped to ensure lexical sorting order.
+    // Representation of Decimal256 is similar, but the upper limit for a length is 256 bit.
+    TUnderlyingValueType decimalValue;
+    YT_VERIFY(value.size() == sizeof(decimalValue));
+    std::memcpy(&decimalValue, value.data(), value.size());
+
+    TStringBuf decimalBinary;
+    if constexpr (std::is_same_v<TUnderlyingValueType, TDecimal::TValue128>) {
+        decimalBinary = TDecimal::WriteBinary128Variadic(precision, decimalValue, buffer, bufferLength);
+    } else if constexpr (std::is_same_v<TUnderlyingValueType, TDecimal::TValue256>) {
+        decimalBinary = TDecimal::WriteBinary256Variadic(precision, decimalValue, buffer, bufferLength);
+    } else {
+        static_assert(std::is_same_v<TUnderlyingValueType, TDecimal::TValue256>, "Unexpected decimal type");
+    }
+    return decimalBinary;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TArraySimpleVisitor
@@ -291,28 +313,12 @@ private:
     }
 
     template <class TUnderlyingValueType>
-    TUnversionedValue MakeDecimalBinaryValue(const TStringBuf& value, i64 columnId, int precision)
+    TUnversionedValue MakeDecimalBinaryValue(const TStringBuf& arrowValue, i64 columnId, int precision)
     {
-        // NB: Arrow wire representation of Decimal128 is little-endian and (obviously) 128 bit,
-        // while YT in-memory representation of Decimal is big-endian, variadic-length of either 32 bit, 64 bit or 128 bit,
-        // and MSB-flipped to ensure lexical sorting order.
-        // Representation of Decimal256 is similar, but only 256 bits.
-        TUnderlyingValueType decimalValue;
-        YT_VERIFY(value.size() == sizeof(decimalValue));
-        std::memcpy(&decimalValue, value.data(), value.size());
-
-        const auto maxByteCount = sizeof(decimalValue);
+        const auto maxByteCount = sizeof(TUnderlyingValueType);
         char* buffer = BufferForStringLikeValues_->Preallocate(maxByteCount);
-        TStringBuf decimalBinary;
-        if constexpr (std::is_same_v<TUnderlyingValueType, TDecimal::TValue128>) {
-            decimalBinary = TDecimal::WriteBinary128Variadic(precision, decimalValue, buffer, maxByteCount);
-        } else if constexpr (std::is_same_v<TUnderlyingValueType, TDecimal::TValue256>) {
-            decimalBinary = TDecimal::WriteBinary256(precision, decimalValue, buffer, maxByteCount);
-        } else {
-            static_assert(std::is_same_v<TUnderlyingValueType, TDecimal::TValue256>, "Unexpected decimal type");
-        }
+        auto decimalBinary = SerializeDecimalBinary<TUnderlyingValueType>(arrowValue, precision, buffer, maxByteCount);
         BufferForStringLikeValues_->Advance(decimalBinary.size());
-
         return MakeUnversionedStringValue(decimalBinary, columnId);
     }
 };
@@ -456,6 +462,20 @@ public:
         return ParseStruct();
     }
 
+    arrow::Status Visit(const arrow::Decimal128Type& type) override
+    {
+        return ParseStringLikeArray<arrow::Decimal128Array>([&] (const TStringBuf& value) {
+            WriteDecimalBinary<TDecimal::TValue128>(value, type.precision());
+        });
+    }
+
+    arrow::Status Visit(const arrow::Decimal256Type& type) override
+    {
+        return ParseStringLikeArray<arrow::Decimal256Array>([&] (const TStringBuf& value) {
+            WriteDecimalBinary<TDecimal::TValue256>(value, type.precision());
+        });
+    }
+
 private:
     const int RowIndex_;
 
@@ -506,12 +526,20 @@ private:
     template <typename ArrayType>
     arrow::Status ParseStringLikeArray()
     {
+        return ParseStringLikeArray<ArrayType>([&] (const TStringBuf& value) {
+            Writer_->WriteBinaryString(value);
+        });
+    }
+
+    template <typename ArrayType>
+    arrow::Status ParseStringLikeArray(auto writeStringValue)
+    {
         auto array = std::static_pointer_cast<ArrayType>(Array_);
         if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
             auto element = array->GetView(RowIndex_);
-            Writer_->WriteBinaryString(TStringBuf(element.data(), element.size()));
+            writeStringValue(TStringBuf(element.data(), element.size()));
         }
         return arrow::Status::OK();
     }
@@ -609,6 +637,15 @@ private:
             Writer_->WriteEndList();
         }
         return arrow::Status::OK();
+    }
+
+    template <class TUnderlyingType>
+    void WriteDecimalBinary(TStringBuf arrowValue, int precision)
+    {
+        const auto maxByteCount = sizeof(TUnderlyingType);
+        char buffer[maxByteCount];
+        auto decimalBinary = SerializeDecimalBinary<TUnderlyingType>(arrowValue, precision, buffer, maxByteCount);
+        Writer_->WriteBinaryString(decimalBinary);
     }
 };
 

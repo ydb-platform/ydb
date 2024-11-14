@@ -50,8 +50,8 @@ ui64 TPortionInfo::GetMetadataMemorySize() const {
     return sizeof(TPortionInfo) - sizeof(TPortionMeta) + Meta.GetMetadataMemorySize();
 }
 
-ui64 TPortionInfo::GetTxVolume() const {
-    return 1024;
+ui64 TPortionInfo::GetApproxChunksCount(const ui32 schemaColumnsCount) const {
+    return schemaColumnsCount * 256 * (GetRecordsCount() / 10000 + 1);
 }
 
 void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {

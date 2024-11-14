@@ -96,6 +96,7 @@ private:
     const std::shared_ptr<IAccessorCallback> AccessorCallback;
 
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "ask_data")("request", request->DebugString());
         for (auto&& i : request->GetPathIds()) {
             auto it = Managers.find(i);
             if (it == Managers.end()) {

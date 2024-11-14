@@ -56,7 +56,8 @@ struct Schema : NIceDb::Schema {
         RepairsTableId,
         NormalizersTableId,
         NormalizerEventsTableId,
-        ColumnsV1TableId
+        ColumnsV1TableId,
+        ColumnsV2TableId
     };
 
     enum class ETierTables: ui32 {
@@ -569,6 +570,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, PortionId, SSColumnId, ChunkIdx, Metadata, BlobIdx, Offset, Size>;
     };
 
+    struct IndexColumnsV2: Table<ColumnsV2TableId> {
+        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PortionId: Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Metadata: Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<PathId, PortionId>;
+        using TColumns = TableColumns<PathId, PortionId, Metadata>;
+    };
+
     using TTables = SchemaTables<
         Value,
         TxInfo,
@@ -607,7 +617,8 @@ struct Schema : NIceDb::Schema {
         TxDependencies,
         TxStates,
         TxEvents,
-        IndexColumnsV1
+        IndexColumnsV1,
+        IndexColumnsV2
         >;
 
     //
@@ -997,6 +1008,33 @@ private:
     YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexColumnMeta, MetaProto);
 
 public:
+    TPortionAddress GetPortionAddress() const {
+        return TPortionAddress(PathId, PortionId);
+    }
+
+    template <class TSource>
+    static void BuildFromDBV2(const TSource& rowset, std::vector<TColumnChunkLoadContextV1>& records) {
+        const ui64 pathId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>();
+        const ui64 portionId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>();
+        const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
+        NKikimrTxColumnShard::TIndexPortionAccessor metaProto;
+        AFL_VERIFY(metaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
+        for (auto&& i : metaProto.GetChunks()) {
+            TColumnChunkLoadContextV1 result(pathId, portionId, TChunkAddress(i.GetSSColumnId(), i.GetChunkIdx()), 
+                TBlobRangeLink16::BuildFromProto(i.GetBlobRangeLink()).DetachResult(), i.GetChunkMetadata());
+            records.emplace_back(std::move(result));
+        }
+    }
+
+    NKikimrTxColumnShard::TColumnChunkInfo SerializeToDBProto() const {
+        NKikimrTxColumnShard::TColumnChunkInfo proto;
+        proto.SetSSColumnId(Address.GetColumnId());
+        proto.SetChunkIdx(Address.GetChunkIdx());
+        *proto.MutableChunkMetadata() = MetaProto;
+        *proto.MutableBlobRangeLink() = BlobRange.SerializeToProto();
+        return proto;
+    }
+
     TFullChunkAddress GetFullChunkAddress() const {
         return TFullChunkAddress(PathId, PortionId, Address.GetEntityId(), Address.GetChunkIdx());
     }

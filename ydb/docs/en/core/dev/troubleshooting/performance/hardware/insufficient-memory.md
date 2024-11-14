@@ -4,6 +4,12 @@ If [swap](https://en.wikipedia.org/wiki/Memory_paging#Unix_and_Unix-like_systems
 
 If swap is enabled, insufficient memory may cause the database to rely heavily on disk I/O, which is significantly slower than accessing data directly from memory.
 
+{% note warning %}
+
+If {{ ydb-short-name }} nodes are running on servers with swap enabled, disable it. {{ ydb-short-name }} is a distributed system, so if a node restarts due to lack of memory, the client will simply connect to another node and continue accessing data as if nothing happened. Swap would allow the query to continue on the same node but with degraded performance from increased disk I/O, which is generally less desirable.
+
+{% endnote %}
+
 Even though the reasons and mechanics of performance degradation due to insufficient memory might differ, the symptoms of increased latencies during query execution and data retrieval are similar in all cases.
 
 Additionally, which components within the  {{ ydb-short-name }} process consume memory may also be significant.
@@ -46,6 +52,7 @@ Consider the following solutions for addressing insufficient memory:
 
 - If the load on {{ ydb-short-name }} has increased due to new usage patterns or increased query rate, try optimizing the application to reduce the load on {{ ydb-short-name }} or add more {{ ydb-short-name }} nodes.
 
-- If the load on {{ ydb-short-name }} has not changed but nodes are still restarting, consider adding more {{ ydb-short-name }} nodes or raising the hard memory limit for the nodes.
+- If the load on {{ ydb-short-name }} has not changed but nodes are still restarting, consider adding more {{ ydb-short-name }} nodes or raising the hard memory limit for the nodes. For more information about memory management in {{ ydb-short-name }}, see [{#T}](../../../../reference/configuration/index.md#memory-controller).
 
-Additionally, if {{ ydb-short-name }} nodes are running on servers with swap enabled, disable it. {{ ydb-short-name }} is a distributed system, so if a node restarts due to lack of memory, the client will simply connect to another node and continue accessing data as if nothing happened. Swap would allow the query to continue on the same node but with degraded performance from increased disk I/O, which is generally less desirable.
+
+

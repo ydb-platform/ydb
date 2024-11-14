@@ -31,7 +31,7 @@ Database performance issues can be classified into several categories based on t
 
 - **[Server hardware issues](infrastructure/hardware.md)**. Malfunctioning CPU, memory modules, and network cards, until replaced, significantly impact database performance or lead to the unavailability of the affected server.
 
-### Insufficient resources
+### Insufficient resource issues
 
 These issues refer to situations when the workload demands more physical resources — such as CPU, memory, disk space, and network bandwidth — than allocated to a database. In some cases, suboptimal allocation of resources, for example misconfigured [control groups (cgroups)](https://en.wikipedia.org/wiki/Cgroups) or [actor system pools](../../../concepts/glossary.md#actor-system-pool), may also result in insufficient resources for {{ ydb-short-name }} and increase query latencies even though physical hardware resources are still available on the database server.
 

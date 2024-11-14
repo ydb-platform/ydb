@@ -1,25 +1,25 @@
 items:
-  - name: Infrastructure issues
+  - name: Infrastructure
     include:
       mode: link
       path: infrastructure/toc_p.yaml
-  - name: Reaching resource limits
+  - name: Insufficient resources
     include:
       mode: link
       path: hardware/toc_p.yaml
-  - name: OS issues
+  - name: OS
     include:
       mode: link
       path: system/toc_p.yaml
-  - name: YDB configuration issues
+  - name: YDB configuration
     include:
       mode: link
       path: ydb/toc_p.yaml
-  - name: Schema design issues
+  - name: Schema design
     include:
       mode: link
       path: schemas/toc_p.yaml
-  - name: Client application issues
+  - name: Client application
     include:
       mode: link
       path: queries/toc_p.yaml

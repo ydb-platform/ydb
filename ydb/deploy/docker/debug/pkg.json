@@ -3,7 +3,7 @@
     "name": "ydb",
     "maintainer": "ydb <ydb@yandex-team.ru>",
     "description": "Package with opensource YDB for Kubernetes with debug symbols",
-    "version": "dbg-{branch}.{revision}"
+    "version": "debug-{branch}.{revision}"
   },
   "params": {
     "docker_build_network": "host",
@@ -12,7 +12,7 @@
     "docker_target": "debug"
   },
   "include": [
-    "ydb/deploy/docker/minidump/pkg.json"
+    "ydb/deploy/docker/breakpad/pkg.json"
   ],
   "data": []
 }

@@ -732,7 +732,7 @@ namespace NKikimr::NYaml {
             ephemeralConfig.SetStaticErasure(*erasureName);
         }
 
-        if (!config.HasDomainsConfig()) {
+        if (!config.HasDomainsConfig() || !config.GetDomainsConfig().DomainSize()) {
             auto& domainsConfig = *config.MutableDomainsConfig();
             auto& domain = *domainsConfig.AddDomain();
             domain.SetName("Root");
@@ -1248,53 +1248,51 @@ namespace NKikimr::NYaml {
         Y_ENSURE_BT(config.HasDomainsConfig());
         auto* domainsConfig = config.MutableDomainsConfig();
 
-        Y_ENSURE_BT(domainsConfig->DomainSize() <= 1);
+        Y_ENSURE_BT(domainsConfig->DomainSize() == 1);
 
         if (!domainsConfig->HiveConfigSize()) {
             auto* hiveConfig = domainsConfig->AddHiveConfig();
             hiveConfig->SetHive(72057594037968897);
         }
 
-        if (domainsConfig->DomainSize() == 1) {
-            for (auto& domain : *domainsConfig->MutableDomain()) {
-                Y_ENSURE_BT(domain.HasName());
+        for (auto& domain : *domainsConfig->MutableDomain()) {
+            Y_ENSURE_BT(domain.HasName());
 
-                if (domain.HasDomainId()) {
-                    Y_ENSURE_BT(domain.GetDomainId() == 1);
-                } else {
-                    domain.SetDomainId(1);
+            if (domain.HasDomainId()) {
+                Y_ENSURE_BT(domain.GetDomainId() == 1);
+            } else {
+                domain.SetDomainId(1);
+            }
+
+            if (!domain.HasSchemeRoot()) {
+                domain.SetSchemeRoot(72057594046678944);
+            }
+
+            if (!domain.HasPlanResolution()) {
+                domain.SetPlanResolution(10);
+            }
+
+            const auto& exps = EXPLICIT_TABLETS;
+            const auto* descriptor = domain.GetDescriptor();
+            const auto* reflection = domain.GetReflection();
+            std::vector<const NProtoBuf::FieldDescriptor *> fields;
+            reflection->ListFields(domain, &fields);
+            std::map<TString, const NProtoBuf::FieldDescriptor *> fieldsByName;
+            for (auto* field : fields) {
+                fieldsByName[field->name()] = field;
+            }
+            for (const auto& [field, type] : exps) {
+                if (relaxed && fieldsByName.contains(field)) {
+                    continue;
                 }
+                Y_ENSURE_BT(!fieldsByName.contains(field));
 
-                if (!domain.HasSchemeRoot()) {
-                    domain.SetSchemeRoot(72057594046678944);
-                }
-
-                if (!domain.HasPlanResolution()) {
-                    domain.SetPlanResolution(10);
-                }
-
-                const auto& exps = EXPLICIT_TABLETS;
-                const auto* descriptor = domain.GetDescriptor();
-                const auto* reflection = domain.GetReflection();
-                std::vector<const NProtoBuf::FieldDescriptor *> fields;
-                reflection->ListFields(domain, &fields);
-                std::map<TString, const NProtoBuf::FieldDescriptor *> fieldsByName;
-                for (auto* field : fields) {
-                    fieldsByName[field->name()] = field;
-                }
-                for (const auto& [field, type] : exps) {
-                    if (relaxed && fieldsByName.contains(field)) {
-                        continue;
-                    }
-                    Y_ENSURE_BT(!fieldsByName.contains(field));
-
-                    for (const auto& tablet : GetTabletIdsFor(ephemeralConfig, type)) {
-                        Y_ENSURE_BT(tablet.HasInfo() && tablet.GetInfo().HasTabletID());
-                        if (auto* fieldDescriptor = descriptor->FindFieldByName(field)) {
-                            reflection->AddUInt64(&domain, fieldDescriptor, tablet.GetInfo().GetTabletID());
-                        } else {
-                            Y_ENSURE_BT(false, "unknown explicit tablet type " << field);
-                        }
+                for (const auto& tablet : GetTabletIdsFor(ephemeralConfig, type)) {
+                    Y_ENSURE_BT(tablet.HasInfo() && tablet.GetInfo().HasTabletID());
+                    if (auto* fieldDescriptor = descriptor->FindFieldByName(field)) {
+                        reflection->AddUInt64(&domain, fieldDescriptor, tablet.GetInfo().GetTabletID());
+                    } else {
+                        Y_ENSURE_BT(false, "unknown explicit tablet type " << field);
                     }
                 }
             }

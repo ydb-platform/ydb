@@ -433,6 +433,67 @@ public:
     }
 };
 
+class TAsyncSplitQueryResult : public IKikimrAsyncResult<IKqpHost::TSplitResult> {
+public:
+    using TResult = IKqpHost::TSplitResult;
+
+    TAsyncSplitQueryResult(
+        NYql::TExprNode::TPtr expr,
+        NYql::TExprContext& exprCtx,
+        THolder<TExprContext> exprCtxStorage,
+        TExprNode::TPtr fakeWorld,
+        TIntrusivePtr<TTypeAnnotationContext> typesCtx,
+        TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+        const TString& cluster)
+            : Expr(expr)
+            , ExprCtx(exprCtx)
+            , ExprCtxStorage(std::move(exprCtxStorage))
+            , FakeWorld(fakeWorld)
+            , TypesCtx(std::move(typesCtx))
+            , SessionCtx(std::move(sessionCtx))
+            , Cluster(cluster) {
+    }
+
+    bool HasResult() const override {
+        return true;
+    }
+
+    TResult GetResult() override {
+        auto prepareData = PrepareRewrite(Expr, ExprCtx, *TypesCtx, SessionCtx, Cluster);
+        if (!prepareData) {
+            return TResult{
+                .Ctx = std::move(ExprCtxStorage),
+                .Exprs = {},
+                .World = std::move(FakeWorld),
+            };
+        }
+
+        auto rewriteResults = RewriteExpression(Expr, ExprCtx, SessionCtx, prepareData);
+        for (const auto& resultPart : rewriteResults) {
+            YQL_CLOG(DEBUG, ProviderKqp) << "Splitted query part: " << KqpExprToPrettyString(*resultPart, ExprCtx);
+        }
+
+        return TResult{
+            .Ctx = std::move(ExprCtxStorage),
+            .Exprs = std::move(rewriteResults),
+            .World = std::move(FakeWorld),
+        };
+    }
+
+    NThreading::TFuture<bool> Continue() override {
+        return NThreading::MakeFuture<bool>(true);
+    }
+
+private:
+    NYql::TExprNode::TPtr Expr;
+    NYql::TExprContext& ExprCtx;
+    THolder<TExprContext> ExprCtxStorage;
+    TExprNode::TPtr FakeWorld;
+    TIntrusivePtr<TTypeAnnotationContext> TypesCtx;
+    TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    TString Cluster;
+};
+
 class TFailExpressionEvaluation : public TSyncTransformerBase {
 public:
     TFailExpressionEvaluation(EKikimrQueryType queryType)
@@ -1220,6 +1281,13 @@ public:
             });
     }
 
+    IAsyncSplitcResultPtr SplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
+        return CheckedProcess<IKqpHost::TSplitResult>(*ExprCtx,
+            [this, &query, settings] (TExprContext& ctx) mutable {
+                return SplitQueryInternal(query, settings, ctx);
+            });
+    }
+
 private:
     TCompileExprResult CompileQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, TMaybe<TSqlVersion>& sqlVersion,
         TKqpTranslationSettingsBuilder& settingsBuilder) const
@@ -1278,47 +1346,6 @@ private:
         result.NeedToSplit = Config->EnableCreateTableAs && NeedToSplit(queryExpr, ctx);
         result.QueryExpr = queryExpr;
         return result;
-    }
-
-    TSplitPrepare PrepareSplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
-        SetupYqlTransformer(EKikimrQueryType::Query);
-        auto sqlVersion = SetupQueryParameters(settings, EKikimrQueryType::Query);
-
-        TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
-        settingsBuilder
-            .SetSqlAutoCommit(false)
-            .SetUsePgParser(settings.UsePgParser)
-            .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
-        auto compileResult = CompileQuery(query, /* isSql */ true, *ExprCtx, sqlVersion, settingsBuilder);
-        YQL_ENSURE(compileResult.NeedToSplit);
-
-        auto prepareData = PrepareRewrite(compileResult.QueryExpr, *ExprCtx, *TypesCtx, SessionCtx, Cluster);
-
-        return TSplitPrepare{
-            .Expr = compileResult.QueryExpr,
-            .PrepareExpr = prepareData,
-        };
-    }
-
-    TSplitResult SplitQuery(const TSplitPrepare& prepare) override {
-        if (!prepare.PrepareExpr) {
-            return TSplitResult{
-                .Ctx = std::move(ExprCtxStorage),
-                .Exprs = {},
-                .World = std::move(FakeWorld),
-            };
-        }
-
-        auto rewriteResults = RewriteExpression(prepare.Expr, *ExprCtx, SessionCtx, prepare.PrepareExpr);
-        for (const auto& resultPart : rewriteResults) {
-            YQL_CLOG(DEBUG, ProviderKqp) << "Splitted query part: " << KqpExprToPrettyString(*resultPart, *ExprCtx);
-        }
-
-        return TSplitResult{
-            .Ctx = std::move(ExprCtxStorage),
-            .Exprs = std::move(rewriteResults),
-            .World = std::move(FakeWorld),
-        };
     }
 
     TCompileExprResult CompileYqlQuery(const TKqpQueryRef& query, bool isSql, TExprContext& ctx, TMaybe<TSqlVersion>& sqlVersion,
@@ -1550,6 +1577,31 @@ private:
             return MakeIntrusive<TAsyncPrepareYqlResult>(expr, ctx, *YqlTransformer, SessionCtx->QueryPtr(),
                 query.Text, sqlVersion, TransformCtx, false, Nothing(), DataProvidersFinalizer);
         }
+    }
+
+    IAsyncSplitcResultPtr SplitQueryInternal(const TKqpQueryRef& query, const TPrepareSettings& settings, TExprContext& ctx) {
+        SetupYqlTransformer(EKikimrQueryType::Query);
+        auto sqlVersion = SetupQueryParameters(settings, EKikimrQueryType::Query);
+
+        TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(), Cluster, query.Text, SessionCtx->Config().BindingsMode, GUCSettings);
+        settingsBuilder
+            .SetSqlAutoCommit(false)
+            .SetUsePgParser(settings.UsePgParser)
+            .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
+        auto compileResult = CompileQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
+        YQL_ENSURE(compileResult.NeedToSplit);
+        if (!compileResult.QueryExpr) {
+            return nullptr;
+        }
+
+        return MakeIntrusive<TAsyncSplitQueryResult>(
+            compileResult.QueryExpr,
+            ctx,
+            std::move(ExprCtxStorage),
+            std::move(FakeWorld),
+            TypesCtx,
+            SessionCtx,
+            Cluster);
     }
 
     IAsyncQueryResultPtr PrepareScanQueryInternal(const TKqpQueryRef& query, bool isSql, TExprContext& ctx,

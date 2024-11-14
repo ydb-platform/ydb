@@ -107,20 +107,16 @@ public:
         const NActors::TActorId& target, const TExecScriptSettings& settings) = 0;
 
     /* Split */
-    struct TSplitPrepare {
-        NYql::TExprNode::TPtr Expr;
-        NYql::TExprNode::TPtr PrepareExpr;
-    };
-
-    virtual TSplitPrepare PrepareSplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
-
-    struct TSplitResult {
+    struct TSplitResult : public NYql::NCommon::TOperationResult {
         THolder<NYql::TExprContext> Ctx;
         TVector<NYql::TExprNode::TPtr> Exprs;
         NYql::TExprNode::TPtr World;
     };
 
-    virtual TSplitResult SplitQuery(const TSplitPrepare& prepare) = 0;
+    using IAsyncSplitResult = NYql::IKikimrAsyncResult<TSplitResult>;
+    using IAsyncSplitcResultPtr = TIntrusivePtr<IAsyncSplitResult>;
+
+    virtual IAsyncSplitcResultPtr SplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) = 0;
 };
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,

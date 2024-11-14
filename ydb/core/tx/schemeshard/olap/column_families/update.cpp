@@ -47,7 +47,7 @@ NKikimr::TConclusion<NKikimrSchemeOp::TOlapColumn::TSerializer> ConvertFamilyDes
 NKikimr::TConclusion<NKikimrSchemeOp::TFamilyDescription> ConvertSerializerContainerToFamilyDescription(
     const NArrow::NSerialization::TSerializerContainer& serializer) {
     NKikimrSchemeOp::TFamilyDescription result;
-    if (serializer->GetClassName().Empty()) {
+    if (serializer->GetClassName().empty()) {
         return NKikimr::TConclusionStatus::Fail("convert TSerializerContainer to TFamilyDescription: field `ClassName` is empty");
     }
     if (serializer.GetClassName() == NArrow::NSerialization::TNativeSerializer::GetClassNameStatic()) {

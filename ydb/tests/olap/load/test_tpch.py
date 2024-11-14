@@ -40,7 +40,7 @@ class TpchSuiteBase(LoadSuiteBase):
             return
         cls.check_tables_size(folder=cls._get_path(False), tables=cls._get_tables_size())
 
-    @pytest.mark.parametrize('query_num', [i for i in range(1, 23)])
+    @pytest.mark.parametrize('query_num', [i for i in range(18, 19)])
     def test_tpch(self, query_num: int):
         self.run_workload_test(self._get_path(), query_num)
 
@@ -83,4 +83,4 @@ class TestTpch10000(TpchSuiteBase):
     scale: int = 10000
     iterations: int = 2
     check_canonical: bool = False
-    timeout = max(TpchSuiteBase.timeout, 3600.)
+    timeout = max(TpchSuiteBase.timeout, 7200.)

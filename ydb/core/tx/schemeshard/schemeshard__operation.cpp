@@ -212,6 +212,8 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
+    //
+
     TVector<TTxTransaction> rewrittenTransactions;
 
     // # Phase Zero
@@ -227,6 +229,8 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
 
         rewrittenTransactions.push_back(std::move(tx));
     }
+
+    //
 
     TVector<TTxTransaction> transactions;
     TVector<TTxTransaction> generatedTransactions;
@@ -277,6 +281,8 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             return std::move(response);
         }
     }
+
+    //
 
     return std::move(response);
 }

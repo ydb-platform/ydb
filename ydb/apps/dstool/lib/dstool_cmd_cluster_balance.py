@@ -519,10 +519,10 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
 
 def balance_iteration(args, strategy, iteration_number):
     if strategy.calculate_extra_info():
-        common.print_if_verbose(args, "Failed to calculate extra info", file=sys.stdout)
+        common.print_status(args, success=False, error_reason='Failed to calculate extra info')
         return False
     if strategy.verify_cluster_state():
-        common.print_if_verbose(args, "Cluster state is not valid", file=sys.stdout)
+        common.print_status(args, success=False, error_reason='Cluster state is not valid')
         return False
     if strategy.check_waiting_conditions():
         common.print_if_verbose(args, "Waiting for cluster state to become ready", file=sys.stdout)

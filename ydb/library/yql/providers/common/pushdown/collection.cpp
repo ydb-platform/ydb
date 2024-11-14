@@ -325,18 +325,18 @@ std::vector<TExprBase> GetComparisonNodes(const TExprBase& node) {
     return res;
 }
 
-bool IsMemberColumn(const TCoMember& member, const TExprNode* lambdaArg) {
-    return member.Struct().Raw() == lambdaArg;
+bool IsMemberColumn(const TCoMember& member, const TExprBase& lambdaArg) {
+    return member.Struct().Raw() == lambdaArg.Raw();
 }
 
-bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
+bool IsMemberColumn(const TExprBase& node, const TExprBase& lambdaArg) {
     if (auto member = node.Maybe<TCoMember>()) {
         return IsMemberColumn(member.Cast(), lambdaArg);
     }
     return false;
 }
 
-bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprBase& lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     if (auto maybeSafeCast = node.Maybe<TCoSafeCast>()) {
         return IsSupportedCast(maybeSafeCast.Cast(), settings);
     } else if (auto maybeData = node.Maybe<TCoDataCtor>()) {
@@ -391,7 +391,7 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
     return false;
 }
 
-bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& input, const TSettings& settings) {
+bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExprBase& lambdaArg, const TExprBase& input, const TSettings& settings) {
     const TTypeAnnotationNode* inputType = input.Ptr()->GetTypeAnn();
     switch (inputType->GetKind()) {
         case ETypeAnnotationKind::Flow:
@@ -438,7 +438,7 @@ bool CheckComparisonParametersForPushdown(const TCoCompare& compare, const TExpr
     return true;
 }
 
-bool CompareCanBePushed(const TCoCompare& compare, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+bool CompareCanBePushed(const TCoCompare& compare, const TExprBase& lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     if (!IsSupportedPredicate(compare, settings)) {
         return false;
     }
@@ -450,7 +450,7 @@ bool CompareCanBePushed(const TCoCompare& compare, const TExprNode* lambdaArg, c
     return true;
 }
 
-bool SqlInCanBePushed(const TCoSqlIn& sqlIn, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+bool SqlInCanBePushed(const TCoSqlIn& sqlIn, const TExprBase& lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     const TExprBase& expr = sqlIn.Collection();
     const TExprBase& lookup = sqlIn.Lookup();
 
@@ -482,7 +482,7 @@ bool SqlInCanBePushed(const TCoSqlIn& sqlIn, const TExprNode* lambdaArg, const T
     return true;
 }
 
-bool IsDistinctCanBePushed(const TExprBase& predicate, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+bool IsDistinctCanBePushed(const TExprBase& predicate, const TExprBase& lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     if (predicate.Ref().ChildrenSize() != 2 ) {
         return false;
     }
@@ -499,7 +499,7 @@ bool IsDistinctCanBePushed(const TExprBase& predicate, const TExprNode* lambdaAr
     return true;
 }
 
-bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprBase& lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     /*
      * There are three ways of comparison in following format:
      *
@@ -543,7 +543,7 @@ bool SafeCastCanBePushed(const TCoFlatMap& flatmap, const TExprNode* lambdaArg, 
     return true;
 }
 
-bool JsonExistsCanBePushed(const TCoJsonExists& jsonExists, const TExprNode* lambdaArg) {
+bool JsonExistsCanBePushed(const TCoJsonExists& jsonExists, const TExprBase& lambdaArg) {
     auto maybeMember = jsonExists.Json().Maybe<TCoMember>();
     if (!maybeMember || !jsonExists.JsonPath().Maybe<TCoUtf8>()) {
         // Currently we support only simple columns in pushdown
@@ -555,7 +555,7 @@ bool JsonExistsCanBePushed(const TCoJsonExists& jsonExists, const TExprNode* lam
     return true;
 }
 
-bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprBase& lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     if (!coalesce.Value().Maybe<TCoBool>()) {
         return false;
     }
@@ -573,11 +573,11 @@ bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg
     return false;
 }
 
-bool ExistsCanBePushed(const TCoExists& exists, const TExprNode* lambdaArg) {
+bool ExistsCanBePushed(const TCoExists& exists, const TExprBase& lambdaArg) {
     return IsMemberColumn(exists.Optional(), lambdaArg);
 }
 
-bool UdfCanBePushed(const TCoUdf& udf, const TExprNode::TListType& children, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+bool UdfCanBePushed(const TCoUdf& udf, const TExprNode::TListType& children, const TExprBase& lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     const TString udfName(udf.MethodName());
     if (!settings.IsEnabledUdf(udfName)) {
         return false;
@@ -616,7 +616,7 @@ bool UdfCanBePushed(const TCoUdf& udf, const TExprNode::TListType& children, con
     return false;
 }
 
-bool ApplyCanBePushed(const TCoApply& apply, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+bool ApplyCanBePushed(const TCoApply& apply, const TExprBase& lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     // Check callable
     if (auto udf = apply.Callable().Maybe<TCoUdf>()) {
         if (!UdfCanBePushed(udf.Cast(), apply.Ref().ChildrenList(), lambdaArg, lambdaBody, settings)) {
@@ -633,7 +633,7 @@ bool ApplyCanBePushed(const TCoApply& apply, const TExprNode* lambdaArg, const T
     return true;
 }
 
-void CollectChildrenPredicates(const TExprNode& opNode, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+void CollectChildrenPredicates(const TExprNode& opNode, TPredicateNode& predicateTree, const TExprBase& lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     predicateTree.Children.reserve(opNode.ChildrenSize());
     predicateTree.CanBePushed = true;
     for (const auto& childNodePtr: opNode.Children()) {
@@ -648,13 +648,13 @@ void CollectChildrenPredicates(const TExprNode& opNode, TPredicateNode& predicat
     }
 }
 
-void CollectExpressionPredicate(TPredicateNode& predicateTree, const TCoMember& member, const TExprNode* lambdaArg) {
+void CollectExpressionPredicate(TPredicateNode& predicateTree, const TCoMember& member, const TExprBase& lambdaArg) {
     predicateTree.CanBePushed = IsMemberColumn(member, lambdaArg);
 }
 
 } // anonymous namespace end
 
-void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+void CollectPredicates(const TExprBase& predicate, TPredicateNode& predicateTree, const TExprBase& lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     if (predicate.Maybe<TCoCoalesce>()) {
         if (settings.IsEnabled(TSettings::EFeatureFlag::JustPassthroughOperators))
             CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, lambdaBody, settings);

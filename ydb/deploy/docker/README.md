@@ -26,7 +26,7 @@ Extend base image with:
 Image with minimal requirements to launch ydbd in container
 
 ```bash
-ya package --docker ydb/deploy/docker/pkg.json
+ya package --docker ydb/deploy/docker/release/pkg.json
 ```
 
 Used base image and included:

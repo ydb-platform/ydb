@@ -12,7 +12,7 @@
     "docker_target": "breakpad"
   },
   "include": [
-    "ydb/deploy/docker/pkg.json"
+    "ydb/deploy/docker/release/pkg.json"
   ],
   "data": [
     {

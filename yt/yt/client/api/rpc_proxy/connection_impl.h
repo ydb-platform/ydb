@@ -9,11 +9,11 @@
 #include <yt/yt/core/rpc/public.h>
 
 // TODO(prime@): Create HTTP endpoint for discovery that works without authentication.
-#include <library/cpp/yt/threading/atomic_object.h>
-
 #include <yt/yt/core/service_discovery/public.h>
 
 #include <yt/yt/core/logging/log.h>
+
+#include <library/cpp/yt/threading/atomic_object.h>
 
 namespace NYT::NApi::NRpcProxy {
 
@@ -76,7 +76,7 @@ private:
     NConcurrency::TPeriodicExecutorPtr UpdateProxyListExecutor_;
 
     // TODO(prime@): Create HTTP endpoint for discovery that works without authentication.
-    TAtomicObject<TString> DiscoveryToken_;
+    NThreading::TAtomicObject<TString> DiscoveryToken_;
 
     NServiceDiscovery::IServiceDiscoveryPtr ServiceDiscovery_;
 

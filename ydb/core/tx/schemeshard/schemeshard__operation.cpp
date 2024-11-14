@@ -214,6 +214,10 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
 
     TVector<TTxTransaction> rewrittenTransactions;
 
+    // # Phase Zero
+    // Rewrites transactions.
+    // It may fill or clear particular fields based on some runtime SS state.
+
     for (auto tx : record.GetTransaction()) {
         if (DispatchOp(tx, [&](auto traits) { return traits.NeedRewrite && !traits.Rewrite(tx); })) {
             response.Reset(new TProposeResponse(NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId)));

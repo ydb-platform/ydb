@@ -1280,7 +1280,7 @@ private:
         return result;
     }
 
-    TSplitResult SplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
+    TSplitPrepare PrepareSplitQuery(const TKqpQueryRef& query, const TPrepareSettings& settings) override {
         SetupYqlTransformer(EKikimrQueryType::Query);
         auto sqlVersion = SetupQueryParameters(settings, EKikimrQueryType::Query);
 
@@ -1293,7 +1293,15 @@ private:
         YQL_ENSURE(compileResult.NeedToSplit);
 
         auto prepareData = PrepareRewrite(compileResult.QueryExpr, *ExprCtx, *TypesCtx, SessionCtx, Cluster);
-        if (!prepareData) {
+
+        return TSplitPrepare{
+            .Expr = compileResult.QueryExpr,
+            .PrepareExpr = prepareData,
+        };
+    }
+
+    TSplitResult SplitQuery(const TSplitPrepare& prepare) override {
+        if (!prepare.PrepareExpr) {
             return TSplitResult{
                 .Ctx = std::move(ExprCtxStorage),
                 .Exprs = {},
@@ -1301,7 +1309,7 @@ private:
             };
         }
 
-        auto rewriteResults = RewriteExpression(compileResult.QueryExpr, *ExprCtx, SessionCtx, prepareData);
+        auto rewriteResults = RewriteExpression(prepare.Expr, *ExprCtx, SessionCtx, prepare.PrepareExpr);
         for (const auto& resultPart : rewriteResults) {
             YQL_CLOG(DEBUG, ProviderKqp) << "Splitted query part: " << KqpExprToPrettyString(*resultPart, *ExprCtx);
         }

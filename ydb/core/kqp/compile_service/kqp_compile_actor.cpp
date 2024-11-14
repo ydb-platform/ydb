@@ -175,7 +175,8 @@ private:
 
     void StartSplitting(const TActorContext &ctx) {
         const auto prepareSettings = PrepareCompilationSettings(ctx);
-        auto result = KqpHost->SplitQuery(QueryRef, prepareSettings);
+        auto prepare = KqpHost->PrepareSplitQuery(QueryRef, prepareSettings);
+        auto result = KqpHost->SplitQuery(prepare);
 
         Become(&TKqpCompileActor::CompileState);
         ReplySplitResult(ctx, std::move(result));

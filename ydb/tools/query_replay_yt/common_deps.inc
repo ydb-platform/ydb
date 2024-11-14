@@ -87,6 +87,6 @@ SET(YDB_REPLAY_PEERDIRS
     yql/essentials/udfs/common/unicode_base
     yql/essentials/udfs/common/url_base
     yql/essentials/udfs/common/yson2
-    ydb/library/yql/udfs/logs/dsv
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/udfs/logs/dsv
+    yql/essentials/sql/pg_dummy
 )

@@ -6,6 +6,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/buffer.h>
 #include <util/generic/intrlist.h>
+#include <ydb/library/security/util.h>
 #include "http_config.h"
 
 // TODO(xenoxeno): hide in implementation
@@ -208,40 +209,57 @@ protected:
 public:
     TString GetObfuscatedData() const {
         THeaders headers(HeaderType::Headers);
-        TStringBuf authorization(headers["Authorization"]);
-        TStringBuf cookie(headers["Cookie"]);
-        TStringBuf set_cookie(headers["Set-Cookie"]);
-        TStringBuf x_ydb_auth_ticket(headers["x-ydb-auth-ticket"]);
-        TStringBuf x_yacloud_subjecttoken(headers["x-yacloud-subjecttoken"]);
+        TStringBuf authorizationHeader(headers["Authorization"]);
+        TStringBuf cookieHeader(headers["Cookie"]);
+        TStringBuf setCookieHeader(headers["Set-Cookie"]);
+        TStringBuf xYdbAuthTicketHeader(headers["x-ydb-auth-ticket"]);
+        TStringBuf xYacloudSubjecttokenHeader(headers["x-yacloud-subjecttoken"]);
         TString data(GetRawData());
-        if (!authorization.empty()) {
-            auto pos = data.find(authorization);
+        if (!authorizationHeader.empty()) {
+            auto pos = data.find(authorizationHeader);
             if (pos != TString::npos) {
-                data.replace(pos, authorization.size(), TString("<obfuscated>"));
+                data.replace(pos, authorizationHeader.size(), TString("<obfuscated>"));
             }
         }
-        if (!cookie.empty()) {
-            auto pos = data.find(cookie);
+        if (!cookieHeader.empty()) {
+            TStringBuf cookieParser(cookieHeader);
+            TStringBuilder obfuscated;
+            for (TStringBuf param = cookieParser.NextTok(';'); !param.empty(); param = cookieParser.NextTok(';')) {
+                param.SkipPrefix(" ");
+                TStringBuf name = param.NextTok('=');
+                if (!obfuscated.empty()) {
+                    obfuscated << ' ';
+                }
+                obfuscated << name << '=' << NKikimr::MaskTicket(param) << ';';
+            }
+            auto pos = data.find(cookieHeader);
             if (pos != TString::npos) {
-                data.replace(pos, cookie.size(), TString("<obfuscated>"));
+                data.replace(pos, cookieHeader.size(), obfuscated);
             }
         }
-        if (!set_cookie.empty()) {
-            auto pos = data.find(set_cookie);
-            if (pos != TString::npos) {
-                data.replace(pos, set_cookie.size(), TString("<obfuscated>"));
+        if (!setCookieHeader.empty()) {
+            TStringBuf cookieParser(setCookieHeader);
+            TStringBuf name = cookieParser.NextTok('=');
+            TStringBuf value = cookieParser.NextTok(';');
+            if (!name.empty()) {
+                TStringBuilder obfuscated;
+                obfuscated << name << '=' << NKikimr::MaskTicket(value) << ';' << cookieParser;
+                auto pos = data.find(setCookieHeader);
+                if (pos != TString::npos) {
+                    data.replace(pos, setCookieHeader.size(), obfuscated);
+                }
             }
         }
-        if (!x_ydb_auth_ticket.empty()) {
-            auto pos = data.find(x_ydb_auth_ticket);
+        if (!xYdbAuthTicketHeader.empty()) {
+            auto pos = data.find(xYdbAuthTicketHeader);
             if (pos != TString::npos) {
-                data.replace(pos, x_ydb_auth_ticket.size(), TString("<obfuscated>"));
+                data.replace(pos, xYdbAuthTicketHeader.size(), TString("<obfuscated>"));
             }
         }
-        if (!x_yacloud_subjecttoken.empty()) {
-            auto pos = data.find(x_yacloud_subjecttoken);
+        if (!xYacloudSubjecttokenHeader.empty()) {
+            auto pos = data.find(xYacloudSubjecttokenHeader);
             if (pos != TString::npos) {
-                data.replace(pos, x_yacloud_subjecttoken.size(), TString("<obfuscated>"));
+                data.replace(pos, xYacloudSubjecttokenHeader.size(), TString("<obfuscated>"));
             }
         }
         return data;

@@ -24,6 +24,7 @@ PEERDIR(
     contrib/libs/zlib
     ydb/library/actors/core
     ydb/library/actors/interconnect
+    ydb/library/security
     library/cpp/dns
     library/cpp/monlib/metrics
     library/cpp/string_utils/quote

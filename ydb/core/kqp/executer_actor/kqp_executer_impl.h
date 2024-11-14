@@ -991,14 +991,12 @@ protected:
         }
 
         std::sort(std::begin(shardsRanges), std::end(shardsRanges), [&](const TShardRangesWithShardId& lhs, const TShardRangesWithShardId& rhs) {
-                // Special case for infinity
-                if (lhs.Ranges->GetRightBorder().first->GetCells().empty() || rhs.Ranges->GetRightBorder().first->GetCells().empty()) {
-                    return !lhs.Ranges->GetRightBorder().first->GetCells().empty();
-                }
-                return CompareTypedCellVectors(
-                    lhs.Ranges->GetRightBorder().first->GetCells().data(),
-                    rhs.Ranges->GetRightBorder().first->GetCells().data(),
-                    keyTypes.data(), keyTypes.size()) < 0;
+                return CompareBorders<false, false>(
+                    lhs.Ranges->GetRightBorder().first->GetCells(),
+                    rhs.Ranges->GetRightBorder().first->GetCells(),
+                    lhs.Ranges->GetRightBorder().second,
+                    rhs.Ranges->GetRightBorder().second,
+                    keyTypes) < 0;
             });
 
         // One shard (ranges set) can be assigned only to one task. Otherwise, we can break some optimizations like removing unnecessary shuffle.

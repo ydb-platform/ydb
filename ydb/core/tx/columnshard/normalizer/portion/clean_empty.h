@@ -2,12 +2,12 @@
 
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 
-namespace NKikimr::NOlap {
+namespace NKikimr::NOlap::NSyncChunksWithPortions {
 
 class TCleanEmptyPortionsNormalizer : public TNormalizationController::INormalizerComponent {
 
     static TString ClassName() {
-        return ToString(ENormalizerSequentialId::EmptyPortionsCleaner);
+        return "EmptyPortionsCleaner";
     }
     static inline auto Registrator = INormalizerComponent::TFactory::TRegistrator<TCleanEmptyPortionsNormalizer>(ClassName());
 public:
@@ -15,7 +15,7 @@ public:
     {}
 
     std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
-        return ENormalizerSequentialId::EmptyPortionsCleaner;
+        return std::nullopt;
     }
 
     TString GetClassName() const override {

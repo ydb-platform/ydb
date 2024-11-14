@@ -1452,8 +1452,9 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvTieringModified, Handle);
         HFunc(TEvPrivate::TEvNormalizerResult, Handle);
-        HFunc(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors, Handle);
+//        HFunc(NOlap::NDataAccessorControl::TEvAskTabletDataAccessors, Handle);
         default:
+            AFL_VERIFY(false);
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "unexpected event in enqueue");
             return NTabletFlatExecutor::TTabletExecutedFlat::Enqueue(ev);
     }

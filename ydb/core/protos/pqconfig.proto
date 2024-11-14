@@ -952,11 +952,14 @@ message TYdsShardIterator {
 
 message TPartitionOperation {
     optional uint32 PartitionId = 1;
-    optional uint64 Begin = 2;
-    optional uint64 End = 3;
+    optional uint64 CommitOffsetsBegin = 2;
+    optional uint64 CommitOffsetsEnd = 3;
     optional string Consumer = 4;
     optional string Path = 5; // topic path
     optional uint32 SupportivePartition = 6;
+    optional bool ForceCommit = 7;
+    optional bool KillReadSession = 8;
+    optional bool OnlyCheckCommitedToFinish = 9;
 };
 
 message TWriteId {

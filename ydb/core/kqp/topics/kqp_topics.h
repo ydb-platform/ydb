@@ -4,6 +4,7 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
+#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -26,20 +27,36 @@ class TConsumerOperations {
 public:
     bool IsValid() const;
 
-    std::pair<ui64, ui64> GetRange() const;
+    std::pair<ui64, ui64> GetOffsetsCommitRange() const;
 
-    ui64 GetBegin() const;
-    ui64 GetEnd() const;
+    ui64 GetOffsetCommitBegin() const;
+    ui64 GetOffsetCommitEnd() const;
 
-    void AddOperation(const TString& consumer, const Ydb::Topic::OffsetsRange& range);
+    bool GetForceCommit() const;
+    bool GetKillReadSession() const;
+    bool GetOnlyCheckCommitedToFinish() const;
+
+    void AddOperation(const TString& consumer,
+                      const NKikimrKqp::TTopicOperationsRequest_TopicOffsets_PartitionOffsets_OffsetsRange& range,
+                      bool forceCommit = false,
+                      bool killReadSession = false,
+                      bool onlyCheckCommitedToFinish = false);
+
     void Merge(const TConsumerOperations& rhs);
 
 private:
     void AddOperationImpl(const TString& consumer,
-                          ui64 begin, ui64 end);
+                          ui64 begin,
+                          ui64 end,
+                          bool forceCommit = false,
+                          bool killReadSession = false,
+                          bool onlyCheckCommitedToFinish = false);
 
     TMaybe<TString> Consumer_;
     TDisjointIntervalTree<ui64> Offsets_;
+    bool ForceCommit_ = false;
+    bool KillReadSession_ = false;
+    bool OnlyCheckCommitedToFinish_ = false;
 };
 
 struct TTopicOperationTransaction {
@@ -53,9 +70,13 @@ class TTopicPartitionOperations {
 public:
     bool IsValid() const;
 
-    void AddOperation(const TString& topic, ui32 partition,
+    void AddOperation(const TString& topic,
+                      ui32 partition,
                       const TString& consumer,
-                      const Ydb::Topic::OffsetsRange& range);
+                      const NKikimrKqp::TTopicOperationsRequest_TopicOffsets_PartitionOffsets_OffsetsRange& range,
+                      bool forceCommit = false,
+                      bool killReadSession = false,
+                      bool onlyCheckCommitedToFinish = false);
     void AddOperation(const TString& topic, ui32 partition,
                       TMaybe<ui32> supportivePartition);
 
@@ -108,7 +129,10 @@ public:
 
     void AddOperation(const TString& topic, ui32 partition,
                       const TString& consumer,
-                      const Ydb::Topic::OffsetsRange& range);
+                      const NKikimrKqp::TTopicOperationsRequest_TopicOffsets_PartitionOffsets_OffsetsRange& range,
+                      bool forceCommit,
+                      bool killReadSession,
+                      bool onlyCheckCommitedToFinish);
     void AddOperation(const TString& topic, ui32 partition,
                       TMaybe<ui32> supportivePartition);
 

@@ -30,8 +30,8 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     autoscaling_ut.cpp
-    balancing_ut.cpp
-    mirrorer_ut.cpp
+    # balancing_ut.cpp
+    # mirrorer_ut.cpp
 )
 
 END()

@@ -8,19 +8,21 @@ class TVersionCounters {
 public:
     class TSchemaKey {
     private:
+        YDB_READONLY_DEF(ui32, Id);
         YDB_READONLY_DEF(ui64, PlanStep);
         YDB_READONLY_DEF(ui64, TxId);
-        YDB_READONLY_DEF(ui32, Id);
 
     public:
         TSchemaKey() = default;
 
         TSchemaKey(const ui32 id, const ui64 planStep, const ui64 txId)
-            : PlanStep(planStep)
+            : Id(id)
+            , PlanStep(planStep)
             , TxId(txId)
-            , Id(id)
         {
         }
+
+        constexpr auto operator<=>(const TSchemaKey&) const noexcept = default;
     };
 
     using TVersionToKey = THashMap<ui64, std::vector<TSchemaKey>>;

@@ -309,6 +309,7 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
         }
         auto& key = VersionCounters->GetVersionToKey()[versionInfo.GetSchema().GetVersion()];
         key.emplace_back(presetId, version.GetPlanStep(), version.GetTxId());
+        AFL_VERIFY((key.size() == 1) || (key[key.size() - 2] < key.back()));
     }
 }
 

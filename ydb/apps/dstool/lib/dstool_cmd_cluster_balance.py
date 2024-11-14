@@ -33,7 +33,7 @@ def add_options(p):
     common.add_group_ids_option(g)
     p.add_argument('--max-donors-per-pdisk', type=int, default=0, help='Limit number of donors per pdisk')
     p.add_argument('--allow-same-node', action='store_true', help='Allow to relocate vdisks from one group to the same node')
-    p.add_argument('--waiting-time', type=int, default=Constants.WAITING_TIME, help='Time to wait between iterations')
+    p.add_argument('--waiting-time', type=int, default=Constants.WAITING_TIME, help='Time to wait when there are no vdisks to reassign')
     p.add_argument('--time-between-reassignings', type=int, default=Constants.TIME_BERWEEN_REASSIGNINGS, help='Time to wait between reassignings')
     common.add_basic_format_options(p)
 

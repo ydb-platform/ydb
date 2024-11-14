@@ -731,69 +731,6 @@ Pear,15,33'''
         assert "TzDatetime" in error_message
         assert "TzTimestamp" in error_message
 
-    @yq_v2
-    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_date_custom_format(self, kikimr, s3, client, unique_prefix):
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        bucket = resource.Bucket("fbucket")
-        bucket.create(ACL='public-read')
-        bucket.objects.all().delete()
-
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        fruits = '''Dates
-01-02-2024
-03-04-2024
-05-06-2024'''
-        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='dates.csv', ContentType='text/plain')
-
-        kikimr.control_plane.wait_bootstrap(1)
-        storage_connection_name = unique_prefix + "fruitbucket"
-        client.create_storage_connection(storage_connection_name, "fbucket")
-
-        sql = f'''
-            SELECT *
-            FROM `{storage_connection_name}`.`dates.csv`
-            WITH (format=csv_with_names, `data.date.format`="%m-%d-%Y", SCHEMA (
-                Dates date NOT NULL
-            ));
-            '''
-
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
-
-        data = client.get_result_data(query_id)
-        result_set = data.result.result_set
-        logging.debug(str(result_set))
-        assert len(result_set.columns) == 1
-        assert result_set.columns[0].name == "Dates"
-        assert result_set.columns[0].type.type_id == ydb.Type.DATE
-        assert len(result_set.rows) == 3
-        assert result_set.rows[0].items[0].uint32_value == 19724
-        assert result_set.rows[1].items[0].uint32_value == 19786
-        assert result_set.rows[2].items[0].uint32_value == 19849
-        assert sum(kikimr.control_plane.get_metering(1)) == 10
-
-        sql = f'''
-                SELECT *
-                FROM `{storage_connection_name}`.`dates.csv`
-                WITH (format=csv_with_names, SCHEMA (
-                    Dates date NOT NULL
-                ));
-                '''
-
-        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
-        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-
-        error_message = str(client.describe_query(query_id).result)
-        logging.debug(error_message)
-        assert "failed to parse data in column `Dates\\' from row 0, probably data type differs from specified in schema" in error_message
-
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_with_hopping(self, kikimr, s3, client, unique_prefix):

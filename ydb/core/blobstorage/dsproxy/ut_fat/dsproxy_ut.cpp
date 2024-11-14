@@ -4208,15 +4208,11 @@ public:
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
         TControlWrapper enablePutBatching(args.EnablePutBatching, false, true);
         TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
-        TControlWrapper slowDiskThreshold(DefaultSlowDiskThreshold * 1000, 1, 1000000);
-        TControlWrapper predictedDelayMultiplier(DefaultPredictedDelayMultiplier * 1000, 1, 1000000);
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(bsInfo), false,
                 dsProxyNodeMon, TIntrusivePtr(storagePoolCounters),
                 TBlobStorageProxyParameters{
                     .EnablePutBatching = enablePutBatching,
                     .EnableVPatch = enableVPatch,
-                    .SlowDiskThreshold = slowDiskThreshold,
-                    .PredictedDelayMultiplier = predictedDelayMultiplier,
                 }
             )
         };

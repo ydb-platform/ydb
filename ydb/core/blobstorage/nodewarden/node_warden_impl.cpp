@@ -3,7 +3,7 @@
 #include "node_warden_impl.h"
 
 #include <google/protobuf/util/message_differencer.h>
-#include <ydb/core/blobstorage/base/immediate_control_default_values.h>
+#include <ydb/core/blobstorage/common/immediate_control_defaults.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>

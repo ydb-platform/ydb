@@ -12,9 +12,9 @@
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/blobstorage/base/batched_vec.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/blobstorage/base/immediate_control_default_values.h>
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
+#include <ydb/core/blobstorage/common/immediate_control_defaults.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/core/base/appdata_fwd.h>
@@ -508,15 +508,30 @@ IActor* CreateBlobStorageGroupAssimilateRequest(TBlobStorageGroupAssimilateParam
 
 IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon);
 
+struct TBlobStorageProxyControlWrappers {
+    TMemorizableControlWrapper EnablePutBatching;
+    TMemorizableControlWrapper EnableVPatch;
+
+    TMemorizableControlWrapper LongRequestThresholdMs = LongRequestThresholdDefaultControl;
+
+#define DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(prefix)              \
+    TMemorizableControlWrapper prefix = prefix##DefaultControl;         \
+    TMemorizableControlWrapper prefix##HDD = prefix##DefaultControl;    \
+    TMemorizableControlWrapper prefix##SSD = prefix##DefaultControl
+
+    // Acceleration parameters
+    DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(SlowDiskThreshold);
+    DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(PredictedDelayMultiplier);
+    DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(MaxNumOfSlowDisks);
+
+#undef DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS
+
+};
+
 struct TBlobStorageProxyParameters {
     bool UseActorSystemTimeInBSQueue = false;
 
-    const TControlWrapper& EnablePutBatching;
-    const TControlWrapper& EnableVPatch;
-    const TControlWrapper& SlowDiskThreshold;
-    const TControlWrapper& PredictedDelayMultiplier;
-    const TControlWrapper& LongRequestThresholdMs = TControlWrapper(DefaultLongRequestThreshold.MilliSeconds(), 1, 1'000'000);
-    const TControlWrapper& MaxNumOfSlowDisks = TControlWrapper(DefaultMaxNumOfSlowDisks, 1, 2);
+    TBlobStorageProxyControlWrappers Controls;
 };
 
 IActor* CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>&& info,

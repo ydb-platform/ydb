@@ -70,14 +70,14 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
         table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Update(NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(serialized));
     };
 
-    auto getFirstSchema = [&](const ui64 schemaVersion)->NKikimrTxColumnShard::TSchemaPresetVersionInfo {
+    auto getLastSchema = [&](const ui64 schemaVersion)->NKikimrTxColumnShard::TSchemaPresetVersionInfo {
         auto iter = Self->VersionCounters->GetVersionToKey().find(schemaVersion);
         AFL_VERIFY(iter != Self->VersionCounters->GetVersionToKey().end());
-        return getSchemaPresetInfo(*iter->second.cbegin());
+        return getSchemaPresetInfo(iter->second.back());
     };
 
     auto tryGetSchemas = [&](const std::pair<ui64, ui64>& prevNext, NKikimrTxColumnShard::TSchemaPresetVersionInfo& pinfo, NKikimrTxColumnShard::TSchemaPresetVersionInfo& ninfo)->const std::vector<NOlap::TVersionCounters::TSchemaKey>* {
-        pinfo = getFirstSchema(prevNext.first);
+        pinfo = getLastSchema(prevNext.first);
         if (!pinfo.has_schema()) {
             return nullptr;
         }

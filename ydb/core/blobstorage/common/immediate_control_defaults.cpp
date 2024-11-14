@@ -9,7 +9,7 @@ TControlWrapper PredictedDelayMultiplierDefaultControl =
         TControlWrapper(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000);
 
 TControlWrapper MaxNumOfSlowDisksDefaultControl =
-        TControlWrapper(std::round(DefaultMaxNumOfSlowDisks * 1000), 1, 2);
+        TControlWrapper(DefaultMaxNumOfSlowDisks, 1, 2);
         
 TControlWrapper LongRequestThresholdDefaultControl =
         TControlWrapper(DefaultLongRequestThreshold.MilliSeconds(), 1, 1'000'000);

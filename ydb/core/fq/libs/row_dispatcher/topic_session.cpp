@@ -639,7 +639,7 @@ void TTopicSession::DoFiltering(ui64 rowsOffset, ui64 numberRows, const TVector<
     for (auto& [actorId, info] : Clients) {
         try {
             if (info.Filter) {
-                info.Filter->Push(offsets, RebuildJson(info, parsedValues));
+                info.Filter->Push(offsets, RebuildJson(info, parsedValues), rowsOffset, numberRows);
             }
         } catch (const std::exception& e) {
             FatalError(e.what(), &info.Filter, false);

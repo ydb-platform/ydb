@@ -23,7 +23,7 @@ PEERDIR(
     yql/essentials/public/result_format
     yql/essentials/public/udf/arrow
     yql/essentials/providers/common/codec
-    ydb/library/yql/providers/common/codec/arrow
+    yql/essentials/providers/common/codec/arrow
     yql/essentials/providers/common/schema/mkql
     yql/essentials/providers/common/schema/parser
     ydb/library/yql/providers/yt/common

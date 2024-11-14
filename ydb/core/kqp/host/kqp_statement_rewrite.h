@@ -11,12 +11,18 @@ bool NeedToSplit(
     const NYql::TExprNode::TPtr& root,
     NYql::TExprContext& exprCtx);
 
-TVector<NYql::TExprNode::TPtr> RewriteExpression(
+NYql::TExprNode::TPtr PrepareRewrite(
     const NYql::TExprNode::TPtr& root,
-    NYql::TExprContext& ctx,
+    NYql::TExprContext& exprCtx,
     NYql::TTypeAnnotationContext& typeCtx,
     const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
     const TString& cluster);
+
+TVector<NYql::TExprNode::TPtr> RewriteExpression(
+    const NYql::TExprNode::TPtr& root,
+    NYql::TExprContext& ctx,
+    const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
+    NYql::TExprNode::TPtr insertDataPtr);
 
 }
 }

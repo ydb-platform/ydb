@@ -629,6 +629,7 @@ public:
         TTimerGuard timer(this);
         if (!QueryState->SaveAndCheckSplitResult(ev->Get())) {
             ReplySplitError();
+            return;
         }
         OnSuccessSplitRequest();
     }
@@ -1927,6 +1928,12 @@ public:
         record.SetYdbStatus(::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST);
         auto& response = *record.MutableResponse();
         AddQueryIssues(response, QueryState->SplittedCtx->IssueManager.GetIssues());
+
+        auto txId = TTxId();
+        if (auto ctx = Transactions.ReleaseTransaction(txId)) {
+            ctx->Invalidate();
+            Transactions.AddToBeAborted(std::move(ctx));
+        }
 
         FillTxInfo(record.MutableResponse());
 

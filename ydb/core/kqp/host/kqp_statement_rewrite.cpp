@@ -93,16 +93,71 @@ namespace {
         return true;
     }
 
-    std::optional<TCreateTableAsResult> RewriteCreateTableAs(
+    NYql::TExprNode::TPtr PrepareCreateTableAs(
             NYql::TExprNode::TPtr root,
             NYql::TExprContext& exprCtx,
             NYql::TTypeAnnotationContext& typeCtx,
             const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
             const TString& cluster) {
-        if (!IsCreateTableAs(root, exprCtx)) {
-            return std::nullopt;
+        NYql::NNodes::TExprBase expr(root);
+        auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
+        YQL_ENSURE(maybeWrite);
+        auto write = maybeWrite.Cast();
+
+        YQL_ENSURE(write.DataSink().FreeArgs().Count() > 1
+            && write.DataSink().Category() == "kikimr"
+            && write.DataSink().FreeArgs().Get(1).Cast<NYql::NNodes::TCoAtom>() == "db");
+
+        auto writeArgs = write.FreeArgs();
+        YQL_ENSURE(writeArgs.Count() > 4);
+
+        auto maybeKey = writeArgs.Get(2).Maybe<NYql::NNodes::TCoKey>();
+        YQL_ENSURE(maybeKey);
+
+        auto key = maybeKey.Cast();
+        YQL_ENSURE(key.ArgCount() != 0);
+
+        YQL_ENSURE(key.Ptr()->Child(0)->Child(0)->Content() == "tablescheme");
+
+        auto tableNameNode = key.Ptr()->Child(0)->Child(1)->Child(0);
+        const TString tableName(tableNameNode->Content());
+
+        auto maybeList = writeArgs.Get(4).Maybe<NYql::NNodes::TExprList>();
+        YQL_ENSURE(maybeList);
+        auto settings = NYql::NCommon::ParseWriteTableSettings(maybeList.Cast(), exprCtx);
+        YQL_ENSURE(settings.Mode);
+
+        auto mode = settings.Mode.Cast();
+        YQL_ENSURE(mode == "create" || mode == "create_if_not_exists" || mode == "create_or_replace");
+
+        const auto& insertData = writeArgs.Get(3);
+        YQL_ENSURE(insertData.Ptr()->Content() != "Void");
+
+        auto prevEval = exprCtx.Step.IsDone(NYql::TExprStep::ExprEval);
+        exprCtx.Step.Done(NYql::TExprStep::ExprEval);
+        auto typeTransformer = NYql::TTransformationPipeline(&typeCtx)
+            .AddServiceTransformers()
+            .AddPreTypeAnnotation()
+            .AddIOAnnotation()
+            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
+            .Build(false);
+
+        auto insertDataPtr = insertData.Ptr();
+        const auto transformResult = NYql::SyncTransform(*typeTransformer, insertDataPtr, exprCtx);
+        if (!prevEval) {
+            exprCtx.Step.Repeat(NYql::TExprStep::ExprEval);
         }
-        
+        if (transformResult != NYql::IGraphTransformer::TStatus::Ok) {
+            return nullptr;
+        }
+        return insertDataPtr;
+    }
+
+    std::optional<TCreateTableAsResult> RewriteCreateTableAs(
+            NYql::TExprNode::TPtr root,
+            NYql::TExprContext& exprCtx,
+            const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
+            NYql::TExprNode::TPtr insertDataPtr) {
         NYql::NNodes::TExprBase expr(root);
         auto maybeWrite = expr.Maybe<NYql::NNodes::TCoWrite>();
         YQL_ENSURE(maybeWrite);
@@ -140,24 +195,6 @@ namespace {
         const bool isOlap = IsOlap(settings.TableSettings);
 
         const auto pos = insertData.Ref().Pos();
-
-        auto prevEval = exprCtx.Step.IsDone(NYql::TExprStep::ExprEval);
-        exprCtx.Step.Done(NYql::TExprStep::ExprEval);
-        auto typeTransformer = NYql::TTransformationPipeline(&typeCtx)
-            .AddServiceTransformers()
-            .AddPreTypeAnnotation()
-            .AddIOAnnotation()
-            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
-            .Build(false);
-
-        auto insertDataPtr = insertData.Ptr();
-        const auto transformResult = NYql::SyncTransform(*typeTransformer, insertDataPtr, exprCtx);
-        if (!prevEval) {
-            exprCtx.Step.Repeat(NYql::TExprStep::ExprEval);
-        }
-        if (transformResult != NYql::IGraphTransformer::TStatus::Ok) {
-            return std::nullopt;
-        }
 
         auto type = insertDataPtr->GetTypeAnn();
         YQL_ENSURE(type);
@@ -348,7 +385,7 @@ bool NeedToSplit(
     return needToSplit;
 }
 
-TVector<NYql::TExprNode::TPtr> RewriteExpression(
+NYql::TExprNode::TPtr PrepareRewrite(
         const NYql::TExprNode::TPtr& root,
         NYql::TExprContext& exprCtx,
         NYql::TTypeAnnotationContext& typeCtx,
@@ -357,17 +394,49 @@ TVector<NYql::TExprNode::TPtr> RewriteExpression(
     // CREATE TABLE AS statement can be used only with perstatement execution.
     // Thus we assume that there is only one such statement.
     ui64 actionsCount = 0;
+    NYql::TExprNode::TPtr result = nullptr;
+    VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
+        if (NYql::NNodes::TCoWrite::Match(node.Get())) {
+            if (IsCreateTableAs(node, exprCtx)) {
+                if (result) {
+                    exprCtx.AddError(NYql::TIssue(
+                        exprCtx.GetPosition(NYql::NNodes::TExprBase(node).Pos()),
+                        "Several CTAS statement can't be used without per-statement mode."));
+                } else {
+                    result = PrepareCreateTableAs(node, exprCtx, typeCtx, sessionCtx, cluster);
+                }
+            }
+            ++actionsCount;
+        }
+        return actionsCount <= 1;
+    });
+
+    if (exprCtx.IssueManager.GetIssues().Empty() && actionsCount > 1) {
+        exprCtx.AddError(NYql::TIssue(
+            exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
+            "CTAS statement can't be used with other statements without per-statement mode."));
+    }
+
+    if (!exprCtx.IssueManager.GetIssues().Empty()) {
+        return nullptr;
+    }
+
+    return result;
+}
+
+TVector<NYql::TExprNode::TPtr> RewriteExpression(
+        const NYql::TExprNode::TPtr& root,
+        NYql::TExprContext& exprCtx,
+        const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
+        NYql::TExprNode::TPtr insertDataPtr) {
+    YQL_ENSURE(insertDataPtr);
+
     TVector<NYql::TExprNode::TPtr> result;
     VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
         if (NYql::NNodes::TCoWrite::Match(node.Get())) {
             if (IsCreateTableAs(node, exprCtx)) {
-                const auto rewriteResult = RewriteCreateTableAs(node, exprCtx, typeCtx, sessionCtx, cluster);
+                const auto rewriteResult = RewriteCreateTableAs(node, exprCtx, sessionCtx, insertDataPtr);
                 if (rewriteResult) {
-                    if (!result.empty()) {
-                        exprCtx.AddError(NYql::TIssue(
-                            exprCtx.GetPosition(NYql::NNodes::TExprBase(node).Pos()),
-                            "Several CTAS statement can't be used without per-statement mode."));
-                    }
                     result.push_back(rewriteResult->CreateTable);
                     result.push_back(rewriteResult->ReplaceInto);
                     if (rewriteResult->MoveTable) {
@@ -375,16 +444,9 @@ TVector<NYql::TExprNode::TPtr> RewriteExpression(
                     }
                 }
             }
-            ++actionsCount;
         }
         return true;
     });
-
-    if (!result.empty() && actionsCount > 1) {
-        exprCtx.AddError(NYql::TIssue(
-            exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
-            "CTAS statement can't be used with other statements without per-statement mode."));
-    }
 
     if (!exprCtx.IssueManager.GetIssues().Empty()) {
         return {};

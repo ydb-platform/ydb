@@ -1292,7 +1292,16 @@ private:
         auto compileResult = CompileQuery(query, /* isSql */ true, *ExprCtx, sqlVersion, settingsBuilder);
         YQL_ENSURE(compileResult.NeedToSplit);
 
-        auto rewriteResults = RewriteExpression(compileResult.QueryExpr, *ExprCtx, *TypesCtx, SessionCtx, Cluster);
+        auto prepareData = PrepareRewrite(compileResult.QueryExpr, *ExprCtx, *TypesCtx, SessionCtx, Cluster);
+        if (!prepareData) {
+            return TSplitResult{
+                .Ctx = std::move(ExprCtxStorage),
+                .Exprs = {},
+                .World = std::move(FakeWorld),
+            };
+        }
+
+        auto rewriteResults = RewriteExpression(compileResult.QueryExpr, *ExprCtx, SessionCtx, prepareData);
         for (const auto& resultPart : rewriteResults) {
             YQL_CLOG(DEBUG, ProviderKqp) << "Splitted query part: " << KqpExprToPrettyString(*resultPart, *ExprCtx);
         }

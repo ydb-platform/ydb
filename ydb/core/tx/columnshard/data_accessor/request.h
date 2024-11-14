@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
@@ -61,7 +62,7 @@ public:
     }
 };
 
-class IDataAccessorRequestsSubscriber {
+class IDataAccessorRequestsSubscriber: public NColumnShard::TMonitoringObjectsCounter<IDataAccessorRequestsSubscriber> {
 private:
     THashSet<ui64> RequestIds;
 
@@ -95,7 +96,6 @@ public:
 class TFakeDataAccessorsSubscriber: public IDataAccessorRequestsSubscriber {
 private:
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& /*result*/) override {
-
     }
 };
 
@@ -161,7 +161,7 @@ public:
     }
 };
 
-class TDataAccessorsRequest {
+class TDataAccessorsRequest: public NColumnShard::TMonitoringObjectsCounter<TDataAccessorsRequest> {
 private:
     static inline TAtomicCounter Counter = 0;
     ui32 FetchStage = 0;

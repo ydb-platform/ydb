@@ -1,5 +1,5 @@
 #include "normalizer.h"
-#include "restore_v1_chunks.h"
+#include "restore_v2_chunks.h"
 
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
@@ -14,6 +14,18 @@ private:
     std::vector<TColumnChunkLoadContextV1> Chunks;
 
 public:
+    const TPortionAddress& GetPortionAddress() const {
+        return PortionAddress;
+    }
+
+    ui64 GetPathId() const {
+        return PortionAddress.GetPathId();
+    }
+
+    ui64 GetPortionId() const {
+        return PortionAddress.GetPortionId();
+    }
+
     void AddChunk(const TColumnChunkLoadContextV1& chunk) {
         Chunks.emplace_back(chunk);
     }
@@ -22,9 +34,10 @@ public:
         const auto pred = [](const TColumnChunkLoadContextV1& l, const TColumnChunkLoadContextV1& r) {
             return l.GetAddress() < r.GetAddress();
         };
-        std::sort(Chunks.begin(), Chunks.end(), pred);
+        auto chunks = Chunks;
+        std::sort(chunks.begin(), chunks.end(), pred);
         NKikimrTxColumnShard::TIndexPortionAccessor result;
-        for (auto&& c : Chunks) {
+        for (auto&& c : chunks) {
             *result.AddChunks() = c.SerializeToDBProto();
         }
         return result;
@@ -116,7 +129,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     }
     AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
     THashSet<TPortionAddress> readyPortions;
-    THashMap<TPortionAddress, std::vector<TColumnChunkLoadContextV1>> buildPortions;
+    THashMap<TPortionAddress, TV2BuildTask> buildPortions;
     {
         auto rowset = db.Table<Schema::IndexColumnsV2>().Select();
         if (!rowset.IsReady()) {
@@ -140,7 +153,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
 
         while (!rowset.EndOfSet()) {
             TColumnChunkLoadContextV1 chunk(rowset);
-            if (!readyPortions.contains(chunk.GetPortionId())) {
+            if (!readyPortions.contains(chunk.GetPortionAddress())) {
                 auto it = buildPortions.find(chunk.GetPortionAddress());
                 if (it == buildPortions.end()) {
                     it = buildPortions.emplace(chunk.GetPortionAddress(), TV2BuildTask(chunk.GetPortionAddress())).first;
@@ -154,6 +167,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         }
     }
 
+    std::vector<INormalizerTask::TPtr> tasks;
     {
         std::vector<TV2BuildTask> package;
         for (auto&& [portionAddress, portionInfos] : buildPortions) {

@@ -125,7 +125,7 @@ public:
         NKikimrTxColumnShard::TColumnChunkInfo result;
         result.SetSSColumnId(GetEntityId());
         result.SetChunkIdx(GetChunkIdx());
-        result.SetMetadata(Meta.SerializeToProto());
+        *result.MutableChunkMetadata() = Meta.SerializeToProto();
         *result.MutableBlobRangeLink() = BlobRange.SerializeToProto();
         return result;
     }

@@ -187,6 +187,7 @@ public:
     }
 
 private:
+    bool NormalizerFinished = false;
     NOlap::INormalizerChanges::TPtr Changes;
 };
 
@@ -198,7 +199,8 @@ bool TTxApplyNormalizer::Execute(TTransactionContext& txc, const TActorContext&)
         return false;
     }
 
-    if (Self->NormalizerController.GetNormalizer()->DecActiveCounters() == 1) {
+    if (Self->NormalizerController.GetNormalizer()->DecActiveCounters() == 0) {
+        NormalizerFinished = true;
         NIceDb::TNiceDb db(txc.DB);
         Self->NormalizerController.OnNormalizerFinished(db);
     }
@@ -212,7 +214,7 @@ void TTxApplyNormalizer::Complete(const TActorContext& ctx) {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "apply_normalizer_changes")(
         "details", Self->NormalizerController.DebugString())("size", Changes->GetSize());
     Changes->ApplyOnComplete(Self->NormalizerController);
-    if (Self->NormalizerController.GetNormalizer()->HasActiveTasks()) {
+    if (!NormalizerFinished) {
         return;
     }
 

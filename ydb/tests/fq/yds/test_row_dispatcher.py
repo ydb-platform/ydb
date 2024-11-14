@@ -374,9 +374,9 @@ class TestPqRowDispatcher(TestYdsBase):
         filter = ' COALESCE(event = "event2", data = "hello2", TRUE)'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE COALESCE(`event` = \\"event2\\", `data` = \\"hello2\\", TRUE)')
         filter = " event ?? '' REGEXP @@e.*e.*t2@@"
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE COALESCE(`event`, "") REGEXP "e.*e.*t2"')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE COALESCE(`event`, \\"\\") REGEXP \\"e.*e.*t2\\"')
         filter = " event ?? '' REGEXP data ?? '' OR time = 102"
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (COALESCE(`event`, "") REGEXP COALESCE(`data`, "") OR `time` = 102)')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (COALESCE(`event`, \\"\\") REGEXP COALESCE(`data`, \\"\\") OR `time` = 102)')
 
     @yq_v1
     def test_filter_missing_fields(self, kikimr, client):

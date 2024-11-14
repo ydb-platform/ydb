@@ -41,6 +41,11 @@ using namespace NKMeans;
 // Which UPLOAD* will be used depends on that will client of this scan request (see UploadState)
 //
 // NTable::IScan::Seek used to switch from current state to the next one.
+
+// If less than 1% of vectors are reassigned to new clusters we want to stop
+// TODO(mbkkt) 1% is choosed by common sense and should be adjusted in future
+static constexpr double MinVectorsNeedsReassigned = 0.01;
+
 class TLocalKMeansScanBase: public TActor<TLocalKMeansScanBase>, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::TEvLocalKMeansRequest;
@@ -77,6 +82,7 @@ protected:
 
     std::vector<TProbability> MaxRows;
     std::vector<TString> Clusters;
+    std::vector<ui64> Counts;
 
     // Upload
     std::shared_ptr<NTxProxy::TUploadTypes> TargetTypes;
@@ -385,8 +391,7 @@ public:
         }
 
         Y_ASSERT(State == EState::KMEANS);
-        RecomputeClusters(Round >= MaxRounds);
-        if (Round >= MaxRounds) {
+        if (RecomputeClusters()) {
             lead = std::move(Lead);
             lead.SetTags(UploadScan);
 
@@ -436,6 +441,7 @@ private:
             Clusters.resize(K);
         }
         Y_ASSERT(Clusters.size() == K);
+        Counts.resize(K, 0);
         AggregatedClusters.resize(K);
         for (auto& aggregate : AggregatedClusters) {
             aggregate.Cluster.resize(this->Dimensions, 0);
@@ -456,25 +462,54 @@ private:
         ++aggregate.Count;
     }
 
-    void RecomputeClusters(bool last)
+    bool RecomputeClusters()
     {
-        auto r = Clusters.begin();
-        auto w = r;
-        for (auto& aggregate : AggregatedClusters) {
+        Y_ASSERT(K >= 1);
+        ui64 count = 0;
+        ui64 countDiff = 0;
+        for (size_t i = 0; auto& aggregate : AggregatedClusters) {
+            count += aggregate.Count;
+
+            auto& c = Counts[i];
+            countDiff += c > aggregate.Count ? c - aggregate.Count : aggregate.Count - c;
+            c = aggregate.Count;
+
             if (aggregate.Count != 0) {
-                auto& cluster = *r;
-                this->Fill(cluster, aggregate.Cluster.data(), aggregate.Count);
-                if (w != r) {
-                    Y_ASSERT(w < r);
-                    *w = std::move(*r);
-                }
-                ++w;
-            } else if (!last) {
+                this->Fill(Clusters[i], aggregate.Cluster.data(), aggregate.Count);
+                Y_ASSERT(aggregate.Count == 0);
+            }
+            ++i;
+        }
+        Y_ASSERT(count >= K);
+        if (K == 1) {
+            return true;
+        }
+
+        // on all rounds except first every vector is accounted twice
+        Y_ASSERT(Round == 1 || countDiff % 2 == 0);
+        countDiff /= 2;
+        Y_ASSERT(countDiff <= count);
+
+        bool last = Round >= MaxRounds;
+        if (!last && Round > 1) {
+            const auto changes = static_cast<double>(countDiff) / static_cast<double>(count);
+            last = changes < MinVectorsNeedsReassigned;
+        }
+        if (!last) {
+            return false;
+        }
+
+        size_t w = 0;
+        for (size_t r = 0; r < Counts.size(); ++r) {
+            if (Counts[r] != 0) {
+                Counts[w] = Counts[r];
+                Clusters[w] = std::move(Clusters[r]);
                 ++w;
             }
-            ++r;
         }
-        Clusters.erase(w, Clusters.end());
+        Counts.erase(Counts.begin() + w, Counts.end());
+        Clusters.erase(Clusters.begin() + w, Clusters.end());
+        return true;
     }
 
     EScan FeedSample(const TRow& row) noexcept

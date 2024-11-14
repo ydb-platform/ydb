@@ -29,7 +29,6 @@ struct TSettings {
         InOperator = 1 << 19, // IN()
         IsDistinctOperator = 1 << 20, // IS NOT DISTINCT FROM / IS DISTINCT FROM 
         DivisionExpressions = 1 << 21, // %, / -- NOTE: division by zero is not handled and also pushdown
-        RegexpOperator = 1 << 22, // REGEXP
 
         // Option which enables partial pushdown for sequence of OR
         // For example next predicate:
@@ -37,7 +36,8 @@ struct TSettings {
         // May be partially pushdowned as:
         // $A OR $C
         // In case of unsupported / complicated expressions $B and $D
-        SplitOrOperator = 1 << 23
+        SplitOrOperator = 1 << 22,
+        RegexpOperator = 1 << 23, // REGEXP
     };
 
     explicit TSettings(NLog::EComponent logComponent)

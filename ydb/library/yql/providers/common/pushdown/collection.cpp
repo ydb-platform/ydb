@@ -577,7 +577,7 @@ bool ExistsCanBePushed(const TCoExists& exists, const TExprNode* lambdaArg) {
     return IsMemberColumn(exists.Optional(), lambdaArg);
 }
 
-bool UdfCanBePushed(const TCoUdf& udf, const TExprNode::TListType children, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
+bool UdfCanBePushed(const TCoUdf& udf, const TExprNode::TListType& children, const TExprNode* lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     if (settings.IsEnabled(TSettings::EFeatureFlag::RegexpOperator) && TStringBuf(udf.MethodName()) == "Re2.Grep"sv) {
         if (children.size() != 2) {
             // Expected exactly one argument
@@ -592,7 +592,7 @@ bool UdfCanBePushed(const TCoUdf& udf, const TExprNode::TListType children, cons
 
         const auto& maybeRunConfig = udf.RunConfigValue();
         if (!maybeRunConfig) {
-            // Expected non empty predicate
+            // Expected non empty run config
             return false;
         }
         const auto& runConfig = maybeRunConfig.Cast().Ref();

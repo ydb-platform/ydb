@@ -8,15 +8,15 @@ description = 'Move vdisks out from overpopulated pdisks.'
 
 
 class Constants:
-    WAITING_TIME = 60
-    TIME_BETWEEN_ITERATIONS = 5
+    WAITING_TIME = 15
+    TIME_BERWEEN_REASSIGNINGS = 0
     
     @classmethod
     def apply_args(cls, args):
         if args.waiting_time:
             cls.WAITING_TIME = args.waiting_time
-        if args.time_between_iterations:
-            cls.TIME_BETWEEN_ITERATIONS = args.time_between_iterations
+        if args.time_between_reassignings:
+            cls.TIME_BERWEEN_REASSIGNINGS = args.time_between_reassignings
 
 
 def add_options(p):
@@ -34,7 +34,7 @@ def add_options(p):
     p.add_argument('--max-donors-per-pdisk', type=int, default=0, help='Limit number of donors per pdisk')
     p.add_argument('--allow-same-node', action='store_true', help='Allow to relocate vdisks from one group to the same node')
     p.add_argument('--waiting-time', type=int, default=Constants.WAITING_TIME, help='Time to wait between iterations')
-    p.add_argument('--time-between-iterations', type=int, default=Constants.TIME_BETWEEN_ITERATIONS, help='Time to wait between iterations')
+    p.add_argument('--time-between-reassignings', type=int, default=Constants.TIME_BERWEEN_REASSIGNINGS, help='Time to wait between reassignings')
     common.add_basic_format_options(p)
 
 
@@ -566,8 +566,8 @@ def balance_iteration(args, strategy, iteration_number):
     if not was_sent:
         common.print_if_not_quiet(args, 'No relocation requests were successful, waiting..', sys.stdout)
         time.sleep(Constants.WAITING_TIME)
-    else:
-        time.sleep(Constants.TIME_BETWEEN_ITERATIONS)
+    elif Constants.TIME_BERWEEN_REASSIGNINGS > 0:
+        time.sleep(Constants.TIME_BERWEEN_REASSIGNINGS)
     return None
 
 

@@ -59,7 +59,7 @@ public:
     }
 
     void MakeParser(TVector<TString> columns) {
-        MakeParser(columns, TVector<TString>(columns.size(), "[DataType; String]"), [](ui64, ui64, const TVector<TVector<NYql::NUdf::TUnboxedValue>>&) {});
+        MakeParser(columns, TVector<TString>(columns.size(), "[DataType; String]"));
     }
 
     void PushToParser(ui64 offset, const TString& data) {

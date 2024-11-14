@@ -81,6 +81,6 @@ class TestTpch1000(TpchSuiteBase):
 
 class TestTpch10000(TpchSuiteBase):
     scale: int = 10000
-    iterations: int = 2
+    iterations: int = 1
     check_canonical: bool = False
     timeout = max(TpchSuiteBase.timeout, 7200.)

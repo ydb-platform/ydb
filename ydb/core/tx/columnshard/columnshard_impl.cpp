@@ -1280,7 +1280,7 @@ public:
         for (auto&& i : PortionsByPath) {
             for (auto&& p : i.second) {
                 {
-                    auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV1>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
+                    auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
                     if (!rowset.IsReady()) {
                         reask = true;
                     }
@@ -1303,12 +1303,12 @@ public:
                 std::vector<NOlap::TColumnChunkLoadContextV1> records;
                 std::vector<NOlap::TIndexChunkLoadContext> indexes;
                 {
-                    auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV1>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
+                    auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
                     if (!rowset.IsReady()) {
                         return false;
                     }
                     while (!rowset.EndOfSet()) {
-                        records.emplace_back(NOlap::TColumnChunkLoadContextV1(rowset));
+                        NOlap::TColumnChunkLoadContextV1::BuildFromDBV2(rowset, records);
                         if (!rowset.Next()) {
                             return false;
                         }

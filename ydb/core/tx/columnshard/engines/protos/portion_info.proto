@@ -35,3 +35,14 @@ message TIndexColumnMeta {
     optional NKikimrSSA.TProgram.TConstant MaxValue = 4;
     optional TIndexPortionMeta PortionMeta = 5[deprecated = true]; // First PK column could contain portion info
 }
+
+message TColumnChunkInfo {
+    optional uint32 SSColumnId = 1;
+    optional uint32 ChunkIdx = 2;
+    optional TIndexColumnMeta Metadata = 3;
+    optional TBlobRangeLink16 BlobRangeLink = 4;
+}
+
+message TIndexPortionAccessor {
+    repeated TColumnChunkInfo Chunks = 1;
+}

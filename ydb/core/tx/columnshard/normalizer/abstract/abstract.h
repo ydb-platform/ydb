@@ -65,6 +65,7 @@ enum class ENormalizerSequentialId: ui32 {
     SyncMinSnapshotFromChunks,
     DeprecatedRestoreV1Chunks_V1,
     RestoreV1Chunks_V2,
+    RestoreV2Chunks,
 
     MAX
 };

@@ -501,6 +501,12 @@ void TPortionDataAccessor::SaveToDatabase(IDbWrapper& db, const ui32 firstPKColu
     FullValidation();
     db.WritePortion(*PortionInfo);
     if (!saveOnlyMeta) {
+        NKikimrTxColumnShard::TIndexPortionAccessor protoData;
+        for (auto& record : GetRecordsVerified()) {
+            *protoData.AddChunks() = record.SerializeToDBProto();
+        }
+        db.WriteColumns(*PortionInfo, std::move(protoData));
+
         for (auto& record : GetRecordsVerified()) {
             db.WriteColumn(*PortionInfo, record, firstPKColumnId);
         }

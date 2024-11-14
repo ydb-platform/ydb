@@ -1,8 +1,5 @@
 #include "object.h"
 
-#include <ydb/services/metadata/manager/ydb_value_operator.h>
-#include <ydb/services/metadata/secret/fetcher.h>
-
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/uri/uri.h>
@@ -10,7 +7,7 @@
 namespace NKikimr::NColumnShard::NTiers {
 
 NKikimrSchemeOp::TS3Settings TTierConfig::GetPatchedConfig(
-    std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) const {
+    const std::shared_ptr<NMetadata::NSecret::ISecretAccessor>& secrets) const {
     auto config = ProtoConfig;
     if (secrets) {
         if (!secrets->GetSecretValue(GetAccessKey(), *config.MutableAccessKey())) {

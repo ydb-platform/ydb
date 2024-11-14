@@ -3,6 +3,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/tx/tiering/tier/object.h>
+
 #include <utility>
 
 namespace {
@@ -232,6 +234,12 @@ public:
         RETURN_RESULT_UNLESS(IsDescriptionValid(result,
                                 externalDataSourceDescription,
                                 context.SS->ExternalSourceFactory));
+        if (!context.SS->ColumnTables.GetTablesWithTier(dstPath.PathString()).empty()) {
+            if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(externalDataSourceDescription); status.IsFail()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot make this change while external data source is used as an OLAP tiered storage: " + status.GetErrorMessage());
+                return result;
+            }
+        }
 
         const auto oldExternalDataSourceInfo =
         context.SS->ExternalDataSources.Value(dstPath->PathId, nullptr);

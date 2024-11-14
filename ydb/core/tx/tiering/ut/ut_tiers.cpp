@@ -132,11 +132,9 @@ public:
 
     void CreateExternalDataSource(const TString& name, const TString& location = "http://fake.fake/fake") const {
         StartSchemaRequest(R"(
-            CREATE EXTERNAL DATA SOURCE `)" +
-                           name + R"(` WITH (
+            CREATE EXTERNAL DATA SOURCE `)" + name + R"(` WITH (
                 SOURCE_TYPE="ObjectStorage",
-                LOCATION=")" +
-                           location + R"(",
+                LOCATION=")" + location + R"(",
                 AUTH_METHOD="AWS",
                 AWS_ACCESS_KEY_ID_SECRET_NAME="accessKey",
                 AWS_SECRET_ACCESS_KEY_SECRET_NAME="secretKey",
@@ -172,6 +170,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         }
 
         bool IsFound() const {
+            if (!Manager) {
+                return false;
+            }
             THashSet notFoundTiers = ExpectedTiers;
             for (const auto& [id, config] : Manager->GetTierConfigs()) {
                 notFoundTiers.erase(id);
@@ -254,14 +255,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             }
             Cerr << "Initialization finished" << Endl;
             {
-                lHelper.StartSchemaRequest("ALTER EXTERNAL DATA SOURCE `/Root/tier1` SET ENDPOINT = \"fake.fake/abc1\"");
-
-                TTestCSEmulator* emulator = new TTestCSEmulator({ "/Root/tier1", "/Root/tier2" });
-                runtime.Register(emulator);
-                emulator->CheckRuntime(runtime);
-                UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at("/Root/tier1").GetProtoConfig().GetBucket(), "abc1");
-            }
-            {
                 lHelper.StartSchemaRequest("DROP EXTERNAL DATA SOURCE `/Root/tier1`", false);
                 lHelper.StartSchemaRequest("DROP TABLE `/Root/olapStore/olapTable`");
                 lHelper.StartSchemaRequest("DROP EXTERNAL DATA SOURCE `/Root/tier1`");
@@ -339,7 +332,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             emulator->CheckRuntime(runtime);
         }
         lHelper.StartSchemaRequest("DROP EXTERNAL DATA SOURCE `/Root/tier2`");
-        lHelper.StartSchemaRequest("DROP EXTERNAL DATA SOURCE `/Root/tier1`", true, false);
+        lHelper.StartSchemaRequest("DROP EXTERNAL DATA SOURCE `/Root/tier1`");
 
         //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
         //runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
@@ -433,13 +426,13 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         lHelper.CreateSecrets();
         Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->SetSecretKey("fakeSecret");
 
-        lHelper.CreateExternalDataSource("/Root/tier1", TierEndpoint + "/fake");
-        lHelper.CreateExternalDataSource("/Root/tier2", TierEndpoint + "/fake");
+        lHelper.CreateExternalDataSource("/Root/tier1", "http://" + TierEndpoint + "/fake");
+        lHelper.CreateExternalDataSource("/Root/tier2", "http://" + TierEndpoint + "/fake");
         {
             TTestCSEmulator* emulator = new TTestCSEmulator({ "/Root/tier1", "/Root/tier2" });
             runtime.Register(emulator);
             emulator->CheckRuntime(runtime);
-            UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at("/Root/tier1").GetProtoConfig().GetEndpoint(), TierEndpoint);
+            UNIT_ASSERT_VALUES_EQUAL(emulator->GetTierConfigs().at("/Root/tier1").GetProtoConfig().GetEndpoint(), TierEndpoint);
         }
 
         lHelper.CreateTestOlapTable("olapTable", 2);

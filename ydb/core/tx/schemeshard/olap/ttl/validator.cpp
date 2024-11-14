@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/schemeshard/common/validation.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/tiering/tier/object.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -100,16 +101,26 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
     }
 
     for (const auto& tier : ttl.GetTiers()) {
-        TPath tierPath = TPath::Resolve(tier.GetStorageName(), ctx);
+        const TString& tierPathString = tier.GetStorageName();
+        TPath tierPath = TPath::Resolve(tierPathString, ctx);
         if (!tierPath.IsResolved() || tierPath.IsDeleted() || tierPath.IsUnderDeleting()) {
-            errors.AddError("Object not found: " + tier.GetStorageName());
+            errors.AddError("Object not found: " + tierPathString);
             return false;
         }
         if (!tierPath->IsExternalDataSource()) {
-            errors.AddError("Not an external data source: " + tier.GetStorageName());
+            errors.AddError("Not an external data source: " + tierPathString);
             return false;
         }
-        // TODO: check that TTierConfig is deserializable from external data source
+        {
+            auto* findExternalDataSource = ctx->ExternalDataSources.FindPtr(tierPath->PathId);
+            AFL_VERIFY(findExternalDataSource);
+            NKikimrSchemeOp::TExternalDataSourceDescription proto;
+            (*findExternalDataSource)->FillProto(proto);
+            if (auto status = NColumnShard::NTiers::TTierConfig().DeserializeFromProto(proto); status.IsFail()) {
+                errors.AddError("Cannot use external data source \"" + tierPathString + "\" for tiering: " + status.GetErrorMessage());
+                return false;
+            }
+        }
     }
 
     return true;

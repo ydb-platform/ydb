@@ -8441,7 +8441,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        testHelper.SetTiering(tableName, "/root/tier1", "created_at");
+        testHelper.SetTiering(tableName, "/Root/tier1", "created_at");
 
         while (csController->GetTieringUpdates().Val() == 0) {
             Cout << "Wait tiering..." << Endl;

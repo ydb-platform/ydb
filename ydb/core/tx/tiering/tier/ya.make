@@ -5,7 +5,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/services/metadata/secret
+    ydb/library/conclusion
+    ydb/services/metadata/secret/accessor
 )
 
 YQL_LAST_ABI_VERSION()

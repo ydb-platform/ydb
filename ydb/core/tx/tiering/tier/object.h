@@ -1,8 +1,10 @@
 #pragma once
-#include <ydb/library/accessor/accessor.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
-#include <ydb/services/metadata/secret/secret.h>
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/library/conclusion/status.h>
+#include <ydb/services/metadata/secret/accessor/secret_id.h>
+#include <ydb/services/metadata/secret/accessor/snapshot.h>
 
 #include <library/cpp/json/writer/json_value.h>
 
@@ -47,7 +49,7 @@ public:
 
     NJson::TJsonValue SerializeConfigToJson() const;
 
-    NKikimrSchemeOp::TS3Settings GetPatchedConfig(std::shared_ptr<NMetadata::NSecret::TSnapshot> secrets) const;
+    NKikimrSchemeOp::TS3Settings GetPatchedConfig(const std::shared_ptr<NMetadata::NSecret::ISecretAccessor>& secrets) const;
 
     bool IsSame(const TTierConfig& item) const;
     NJson::TJsonValue GetDebugJson() const;

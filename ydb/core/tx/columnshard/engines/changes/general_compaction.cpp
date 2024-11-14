@@ -238,7 +238,8 @@ std::shared_ptr<TGeneralCompactColumnEngineChanges::IMemoryPredictor> TGeneralCo
 
 ui64 TGeneralCompactColumnEngineChanges::TMemoryPredictorChunkedPolicy::AddPortion(const TPortionInfo::TConstPtr& portionInfo) {
     SumMemoryFix += portionInfo->GetRecordsCount() * (2 * sizeof(ui64) + sizeof(ui32) + sizeof(ui16)) + portionInfo->GetTotalBlobBytes();
-    return SumMemoryFix + ((ui64)500 << 20);
+    SumMemoryRaw += portionInfo->GetTotalRawBytes();
+    return SumMemoryFix + std::min<ui64>(SumMemoryRaw, ((ui64)500 << 20));
 }
 
 }   // namespace NKikimr::NOlap::NCompaction

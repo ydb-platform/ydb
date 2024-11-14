@@ -20,6 +20,9 @@ public:
         return &Default<TFakeGroupSelector>();
     }
 
+    virtual void WriteColumns(const NOlap::TPortionInfo& /*portion*/, const NKikimrTxColumnShard::TIndexPortionAccessor& /*proto*/) override {
+
+    }
     void Insert(const TInsertedData&) override {
     }
     void Commit(const TCommittedData&) override {

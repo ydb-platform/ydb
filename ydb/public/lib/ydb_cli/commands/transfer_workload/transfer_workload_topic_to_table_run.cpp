@@ -83,10 +83,18 @@ void TCommandWorkloadTransferTopicToTableRun::Config(TConfig& config)
 
     config.Opts->MutuallyExclusive("message-rate", "byte-rate");
 
-    config.Opts->AddLongOption("commit-period", "Waiting time between commit in seconds.")
-        .DefaultValue(10)
+    config.Opts->AddLongOption("commit-period", "DEPRECATED: use tx-commit-intervall-ms instead. If both options are specified, tx-commit-intervall-ms will be used. Waiting time between commit in seconds.")
+        .DefaultValue(1)
         .StoreResult(&Scenario.CommitPeriodSeconds);
-    config.Opts->AddLongOption("commit-messages", "Number of messages per transaction")
+    config.Opts->AddLongOption("tx-commit-interval-ms", "Interval of transaction commit in milliseconds."
+                                                            "Both tx-commit-messages-count and tx-commit-interval-ms can trigger transaction commit.")
+        .DefaultValue(1000)
+        .StoreResult(&Scenario.TxCommitIntervalMs);
+    config.Opts->AddLongOption("commit-messages", "DEPRECATED. Use --tx-commit-messages-count instead. Number of messages per transaction")
+        .DefaultValue(1'000'000)
+        .StoreResult(&Scenario.CommitMessages);
+    config.Opts->AddLongOption("tx-commit-messages-count", "Number of messages to commit transaction." 
+                                                            "Both tx-commit-messages-count and tx-commit-interval-ms can trigger transaction commit.")
         .DefaultValue(1'000'000)
         .StoreResult(&Scenario.CommitMessages);
 

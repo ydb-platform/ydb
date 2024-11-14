@@ -2310,9 +2310,19 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                     Value2 String,
                     PRIMARY KEY (Key)
                 );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            result = db.ExecuteQuery(R"(
                 UPSERT INTO TestDdlDml2 (Key, Value1, Value2) VALUES (1, "1", "1");
                 SELECT * FROM TestDdlDml2;
                 ALTER TABLE TestDdlDml2 DROP COLUMN Value2;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+
+            result = db.ExecuteQuery(R"(
+                UPSERT INTO TestDdlDml2 (Key, Value1) VALUES (1, "1");
+                SELECT * FROM TestDdlDml2;
                 UPSERT INTO TestDdlDml2 (Key, Value1) VALUES (2, "2");
                 SELECT * FROM TestDdlDml2;
                 CREATE TABLE TestDdlDml33 (
@@ -2322,7 +2332,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
-            CompareYson(R"([[[1u];["1"];["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[[1u];["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
             CompareYson(R"([[[1u];["1"]];[[2u];["2"]]])", FormatResultSetYson(result.GetResultSet(1)));
             UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
 
@@ -2349,7 +2359,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 );
                 UPSERT INTO TestDdlDml4 (Key, Value1, Value2) VALUES (1, "1", "2");
                 SELECT * FROM TestDdlDml4;
-                ALTER TABLE TestDdlDml4 DROP COLUMN Value2;
                 UPSERT INTO TestDdlDml4 (Key, Value1) VALUES (2, "2");
                 SELECT * FROM TestDdlDml5;
             )", TTxControl::NoTx()).ExtractValueSync();

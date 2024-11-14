@@ -226,6 +226,9 @@ class YdbCluster:
                 table_nodes = cls.get_cluster_nodes(p)
                 min = None
                 max = None
+                if expected_nodes_count:
+                    if len(table_nodes) < expected_nodes_count:
+                        min = 0
                 for tn in table_nodes:
                     tablet_count = 0
                     for tablet in tn.get("Tablets", []):

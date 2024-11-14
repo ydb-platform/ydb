@@ -1,6 +1,6 @@
 #include "schema.h"
 #include <ydb/library/accessor/validator.h>
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 
 namespace NKikimr::NSchemeShard {

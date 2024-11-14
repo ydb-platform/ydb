@@ -3,7 +3,7 @@
 #include <util/generic/bitmap.h>
 #include <util/generic/maybe.h>
 
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 namespace NYql {
 

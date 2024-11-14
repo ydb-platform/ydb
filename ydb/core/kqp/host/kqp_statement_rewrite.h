@@ -1,7 +1,7 @@
 #pragma once
 
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
 namespace NKikimr {

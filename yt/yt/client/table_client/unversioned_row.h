@@ -966,6 +966,7 @@ struct TBitwiseUnversionedValueRangeHash
 struct TBitwiseUnversionedValueRangeEqual
 {
     bool operator()(TUnversionedValueRange lhs, TUnversionedValueRange rhs) const;
+    static void FormatDiff(TStringBuilderBase* builder, TUnversionedValueRange lhs, TUnversionedValueRange rhs);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -978,6 +979,7 @@ struct TBitwiseUnversionedRowHash
 struct TBitwiseUnversionedRowEqual
 {
     bool operator()(TUnversionedRow lhs, TUnversionedRow rhs) const;
+    static void FormatDiff(TStringBuilderBase* builder, TUnversionedRow lhs, TUnversionedRow rhs);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

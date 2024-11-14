@@ -5,8 +5,8 @@
 #include <ydb/library/yql/public/purecalc/common/names.h>
 #include <ydb/library/yql/public/purecalc/common/transformations/utils.h>
 
-#include <ydb/library/yql/core/type_ann/type_ann_core.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/type_ann/type_ann_core.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 #include <util/generic/fwd.h>
 

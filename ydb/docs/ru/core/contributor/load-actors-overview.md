@@ -42,91 +42,76 @@
 
 - Embedded UI
 
-  1. Откройте страницу управления нагружающими акторами на узле (например, `http://<address>:8765/actors/load`, где `address` — адрес узла кластера, на котором нужно запустить нагрузку).
-  1. В поле ввода/вывода вставьте конфигурацию актора:
+    1. Откройте страницу управления нагружающими акторами на узле (например, `http://<address>:8765/actors/load`, где `address` — адрес узла кластера, на котором нужно запустить нагрузку).
+    2. В поле ввода/вывода вставьте конфигурацию актора:
 
-      ```proto
-      KqpLoad: {
-          DurationSeconds: 30
-          WindowDuration: 1
-          WorkingDir: "/slice/db"
-          NumOfSessions: 64
-          UniformPartitionsCount: 1000
-          DeleteTableOnFinish: 1
-          WorkloadType: 0
-          Kv: {
-              InitRowCount: 1000
-              PartitionsByLoad: true
-              MaxFirstKey: 18446744073709551615
-              StringLen: 8
-              ColumnsCnt: 2
-              RowsCnt: 1
-          }
-      }
-      ```
+    ```proto
+    KqpLoad: {
+        DurationSeconds: 30
+        WindowDuration: 1
+        WorkingDir: "/slice/db"
+        NumOfSessions: 64
+        UniformPartitionsCount: 1000
+        DeleteTableOnFinish: 1
+        WorkloadType: 0
+        Kv: {
+            InitRowCount: 1000
+            PartitionsByLoad: true
+            MaxFirstKey: 18446744073709551615
+            StringLen: 8
+            ColumnsCnt: 2
+            RowsCnt: 1
+        }
+    }
+    ```
 
-  1. Чтобы создать и запустить актор, нажмите кнопку:
+    3. Чтобы создать и запустить актор, нажмите кнопку:
 
-      * **Start new load on current node** — нагрузка будет запущена на текущем узле.
-      * **Start new load on all tenant nodes** — нагрузка будет запущена на всех узлах тенанта.
+        * **Start new load on current node** — нагрузка будет запущена на текущем узле.
+        * **Start new load on all tenant nodes** — нагрузка будет запущена на всех узлах тенанта.
 
-  В поле ввода/вывода появится следующее сообщение:
+    В поле ввода/вывода появится следующее сообщение:
 
-  ```text
-  {"status":"OK","tag":1}
-  ```
+    ```text
+    {"status":"OK","tag":1}
+    ```
 
-  * `status` — статус запуска нагрузки;
-  * `tag` — тег, который был присвоен нагрузке.
+    * `status` — статус запуска нагрузки;
+    * `tag` — тег, который был присвоен нагрузке.
 
 - CLI
 
-  1. Создайте файл с конфигурацией актора:
+    1. Создайте файл с конфигурацией актора:
 
-      ```proto
-      NodeId: 1
-      Event: {
-          KqpLoad: {
-              DurationSeconds: 30
-              WindowDuration: 1
-              WorkingDir: "/slice/db"
-              NumOfSessions: 64
-              UniformPartitionsCount: 1000
-              DeleteTableOnFinish: 1
-              WorkloadType: 0
-              Kv: {
-                  InitRowCount: 1000
-                  PartitionsByLoad: true
-                  MaxFirstKey: 18446744073709551615
-                  StringLen: 8
-                  ColumnsCnt: 2
-                  RowsCnt: 1
-              }
-          }
-      }
-      ```
+    ```proto
+    KqpLoad: {
+        DurationSeconds: 30
+        WindowDuration: 1
+        WorkingDir: "/slice/db"
+        NumOfSessions: 64
+        UniformPartitionsCount: 1000
+        DeleteTableOnFinish: 1
+        WorkloadType: 0
+        Kv: {
+            InitRowCount: 1000
+            PartitionsByLoad: true
+            MaxFirstKey: 18446744073709551615
+            StringLen: 8
+            ColumnsCnt: 2
+            RowsCnt: 1
+        }
+    }
+    ```
 
-      * `NodeId` — идентификатор узла, на котором нужно запустить актор. Чтобы указать несколько узлов, перечислите их в отдельных строках:
+    2. Запустите актор:
 
-        ```proto
-        NodeId: 1
-        NodeId: 2
-        ...
-        NodeId: N
-        Event: {
-        ...
-        ```
+    ```bash
+    curl <endpoint>/actors/load -H "Content-Type: application/x-protobuf-text" --data mode=start --data all_nodes=<start_on_all_nodes> --data config="$(cat proto_file)"
+    ```
 
-      * `Event` — конфигурация актора.
-
-  2. Запустите актор:
-
-      ```bash
-      ydbd load-test --server <endpoint> --protobuf "$(cat <proto_file>)"
-      ```
-
-      * `endpoint` — grpc-эндпоит узла (например, `grpc://<address>:<port>`, где `address` — адрес узла, `port` — grpc-порт узла).
-      * `proto_file` — путь к файлу с конфигурацией актора.
+    * `endpoint` — http-эндпоит узла (например, `http://<address>:<port>`, где `address` — адрес узла, `port` — http-порт узла).
+    * `proto_file` — путь к файлу с конфигурацией актора.
+    * `start_on_all_nodes` – `true`, чтобы запустить нагрузку на всех узлах тенанта, `false`, чтобы запустить нагрузку только на узле с данным `endpoint`.
 
 {% endlist %}
 
@@ -138,11 +123,11 @@
 
 - Embedded UI
 
-  1. Откройте страницу управления нагружающими акторами на узле (например, `http://<address>:<port>/actors/load`, где `address` — адрес узла, `port` — http-порт мониторинга узла, на котором была запущена нагрузка).
-  1. Нажмите кнопку **Results**.
+    1. Откройте страницу управления нагружающими акторами на узле (например, `http://<address>:<port>/actors/load`, где `address` — адрес узла, `port` — http-порт мониторинга узла, на котором была запущена нагрузка).
+    2. Нажмите кнопку **Results**.
 
-      Будут отображены результаты завершенных тестирований. Найдите результат с соответствующим тегом.
+        Будут отображены результаты завершенных тестирований. Найдите результат с соответствующим тегом.
 
-      ![load-actors-finished-tests](../_assets/load-actors-finished-tests.png)
+        ![load-actors-finished-tests](../_assets/load-actors-finished-tests.png)
 
 {% endlist %}

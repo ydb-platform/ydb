@@ -4,7 +4,7 @@
 #include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/common/simple/query_id.h>

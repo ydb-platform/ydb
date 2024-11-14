@@ -4,10 +4,10 @@
 
 #include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 
-#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 namespace NYql::NDqProto {
     class TData;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/public/udf/udf_data_type.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <util/system/types.h>
 #include <util/datetime/base.h>
@@ -87,7 +87,7 @@ constexpr ui32 DEFAULT_MAX_INPUT_TABLES = 3000;
 constexpr ui32 DEFAULT_MAX_OUTPUT_TABLES = 100;
 constexpr ui64 DEFAULT_APPLY_STORED_CONSTRAINTS = 0ULL;
 
-constexpr bool DEFAULT_TABLE_CONTENT_LOCAL_EXEC = false;
+constexpr ui64 DEFAULT_TABLE_CONTENT_LOCAL_EXEC = 0;
 
 constexpr ui32 DEFAULT_BATCH_LIST_FOLDER_CONCURRENCY = 5;
 

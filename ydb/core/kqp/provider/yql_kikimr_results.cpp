@@ -1,12 +1,12 @@
 #include "yql_kikimr_results.h"
 
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/dynumber/dynumber.h>
-#include <ydb/library/uuid/uuid.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
+#include <yql/essentials/types/uuid/uuid.h>
 
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/yql/public/result_format/yql_codec_results.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/public/result_format/yql_codec_results.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
 namespace NYql {
 

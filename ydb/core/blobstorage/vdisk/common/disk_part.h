@@ -258,3 +258,7 @@ struct THash<NKikimr::TDiskPart> {
     }
 };
 
+template<>
+inline void Out<NKikimr::TDiskPart>(IOutputStream& s, const NKikimr::TDiskPart& x) {
+    s << x.ToString();
+}

@@ -3,17 +3,17 @@
 #include "yql_yt_helpers.h"
 #include "yql_yt_op_settings.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/public/udf/tz/udf_tz.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
-#include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
-#include <ydb/library/yql/utils/utf8.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/public/udf/tz/udf_tz.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/decimal/yql_decimal_serialize.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/utils/utf8.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <yt/cpp/mapreduce/common/helpers.h>

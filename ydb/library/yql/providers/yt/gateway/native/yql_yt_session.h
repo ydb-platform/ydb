@@ -5,9 +5,9 @@
 #include <ydb/library/yql/providers/yt/gateway/lib/transaction_cache.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
 
-#include <ydb/library/yql/core/yql_execution.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/utils/threading/async_queue.h>
+#include <yql/essentials/core/yql_execution.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/utils/threading/async_queue.h>
 
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/threading/future/async_semaphore.h>

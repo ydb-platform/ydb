@@ -2,7 +2,7 @@
 // detail/win_iocp_socket_accept_op.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -89,6 +89,7 @@ public:
     boost::system::error_code ec(result_ec);
 
     // Take ownership of the operation object.
+    BOOST_ASIO_ASSUME(base != 0);
     win_iocp_socket_accept_op* o(static_cast<win_iocp_socket_accept_op*>(base));
     ptr p = { boost::asio::detail::addressof(o->handler_), o, o };
 
@@ -140,6 +141,8 @@ public:
     handler_work<Handler, IoExecutor> w(
         BOOST_ASIO_MOVE_CAST2(handler_work<Handler, IoExecutor>)(
           o->work_));
+
+    BOOST_ASIO_ERROR_LOCATION(ec);
 
     // Make a copy of the handler so that the memory can be deallocated before
     // the upcall is made. Even if we're not about to make an upcall, a
@@ -233,6 +236,7 @@ public:
     boost::system::error_code ec(result_ec);
 
     // Take ownership of the operation object.
+    BOOST_ASIO_ASSUME(base != 0);
     win_iocp_socket_move_accept_op* o(
         static_cast<win_iocp_socket_move_accept_op*>(base));
     ptr p = { boost::asio::detail::addressof(o->handler_), o, o };
@@ -285,6 +289,8 @@ public:
     handler_work<Handler, IoExecutor> w(
         BOOST_ASIO_MOVE_CAST2(handler_work<Handler, IoExecutor>)(
           o->work_));
+
+    BOOST_ASIO_ERROR_LOCATION(ec);
 
     // Make a copy of the handler so that the memory can be deallocated before
     // the upcall is made. Even if we're not about to make an upcall, a

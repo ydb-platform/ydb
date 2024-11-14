@@ -17,6 +17,7 @@ struct TActorFactory : public IActorFactory {
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const NYql::IPqGateway::TPtr& pqGateway) const override {
 
@@ -29,6 +30,7 @@ struct TActorFactory : public IActorFactory {
             partitionId,
             std::move(driver),
             credentialsProviderFactory,
+            pureCalcProgramFactory,
             counters,
             pqGateway
         );

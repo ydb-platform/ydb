@@ -114,6 +114,7 @@ message TStorageConfig {
     optional TStorageSettings External = 4;
     optional uint32 DataThreshold = 5;
     optional uint32 ExternalThreshold = 6;
+    optional uint32 ExternalChannelsCount = 7 [default = 1];
 }
 
 message TKeyValueStorageConfig {
@@ -464,10 +465,28 @@ message TCompactionPlannerConstructorContainer {
     }
 }
 
+message TMetadataManagerConstructorContainer {
+    optional string ClassName = 1;
+
+    message TInMem {
+    }
+
+    message TLocalDB {
+        optional uint64 MemoryCacheSize = 1 [default = 128000000];
+        optional bool FetchOnStart = 2 [default = false];
+    }
+
+    oneof Implementation {
+        TInMem InMem = 20;
+        TLocalDB LocalDB = 21;
+    }
+}
+
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
     optional bool ExternalGuaranteeExclusivePK = 2 [default = false];
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
+    optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
 }
 
 message TColumnTableSchema {
@@ -507,6 +526,7 @@ message TColumnTableRequestedOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
     optional bool ExternalGuaranteeExclusivePK = 2;
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
+    optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
 }
 
 message TAlterColumnTableSchema {
@@ -2141,6 +2161,7 @@ message TBackupCollectionDescription {
     optional string Name = 1;
     optional NKikimrProto.TPathID PathId = 2;
     optional uint64 Version = 3;
+    optional string Prefix = 8; // Used as WorkingDir for all entities. Not persisted.
 
     message TBackupEntry {
         enum EType {

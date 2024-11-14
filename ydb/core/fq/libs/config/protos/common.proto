@@ -31,4 +31,5 @@ message TCommonConfig {
     bool DisableSslForGenericDataSources = 15;
     bool ShowQueryTimeline = 16;
     uint64 MaxQueryTimelineSize = 17; // default: 200KB
+    string PqReconnectPeriod = 18; // default: disabled
 }

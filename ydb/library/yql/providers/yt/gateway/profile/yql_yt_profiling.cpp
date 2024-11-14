@@ -1,6 +1,6 @@
 #include "yql_yt_profiling.h"
 
-#include <ydb/library/yql/utils/log/profile.h>
+#include <yql/essentials/utils/log/profile.h>
 
 #include <util/generic/ptr.h>
 
@@ -146,6 +146,18 @@ public:
 
     NYT::TRichYPath GetWriteTable(const TString& sessionId, const TString& cluster, const TString& table, const TString& tmpFolder) const final {
         return Slave_->GetWriteTable(sessionId, cluster, table, tmpFolder);
+    }
+
+    TFuture<TDownloadTablesResult> DownloadTables(TDownloadTablesOptions&& options) final {
+        auto profileScope = YQL_PROFILE_FUNC_VAL(TRACE);
+        auto future = Slave_->DownloadTables(std::move(options));
+        return YQL_PROFILE_BIND_VAL(future, profileScope);
+    }
+
+    TFuture<TUploadTableResult> UploadTable(TUploadTableOptions&& options) final {
+        auto profileScope = YQL_PROFILE_FUNC_VAL(TRACE);
+        auto future = Slave_->UploadTable(std::move(options));
+        return YQL_PROFILE_BIND_VAL(future, profileScope);
     }
 
     NThreading::TFuture<TRunResult> GetTableStat(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) final {

@@ -5,16 +5,18 @@
 #include "yql_yt_helpers.h"
 
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/transform/yql_visit.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <util/string/cast.h>
 
 namespace NYql {
 
 using namespace NNodes;
+
+const TString YtProvider_AnonTableName = "YtProvider_AnonTableName";
 
 class TYtIntentDeterminationTransformer : public TVisitorTransformerBase {
 public:
@@ -453,7 +455,22 @@ private:
     void RegisterAnonymouseTable(const TString& cluster, const TString& label) {
         auto& path = State_->AnonymousLabels[std::make_pair(cluster, label)];
         if (path.empty()) {
-            path = "tmp/" + GetGuidAsString(State_->Types->RandomProvider->GenGuid());
+            auto& qContext = State_->Types->QContext;
+            const TString key = cluster + "." + label;
+            if (qContext.CanRead()) {
+                auto res = qContext.GetReader()->Get({YtProvider_AnonTableName, key}).GetValueSync();
+                if (!res) {
+                    ythrow yexception() << "Missing replay data";
+                }
+
+                path = res->Value;
+            } else {
+                path = "tmp/" + GetGuidAsString(State_->Types->RandomProvider->GenGuid());
+                if (qContext.CanWrite()) {
+                    qContext.GetWriter()->Put({YtProvider_AnonTableName, key}, path).GetValueSync();
+                }
+            }
+
             YQL_CLOG(INFO, ProviderYt) << "Anonymous label " << cluster << '.' << label << ": " << path;
         }
     }

@@ -23,10 +23,9 @@ struct TTabletCategoryInfo {
 struct TStoragePoolInfo;
 
 struct TLeaderTabletInfo : TTabletInfo {
-protected:
+public:
     static TString DEFAULT_STORAGE_POOL_NAME;
 
-public:
     struct TChannel {
         TTabletId TabletId;
         ui32 ChannelId;

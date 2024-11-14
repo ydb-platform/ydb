@@ -11,7 +11,7 @@ from yql_utils import get_supported_providers, yql_binary_path, is_xfail, is_ski
 from utils import get_config, DATA_PATH
 from file_common import run_file, run_file_no_cache
 
-ASTDIFF_PATH = yql_binary_path('ydb/library/yql/tools/astdiff/astdiff')
+ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 DQRUN_PATH = yql_binary_path('ydb/library/yql/tools/dqrun/dqrun')
 
 

@@ -26,10 +26,10 @@ public:
     }
 
     TBuildBatchesTask(
-        const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const TSnapshot& actualSnapshot, const TWritingContext& context)
+        const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const TWritingContext& context)
         : WriteData(std::move(writeData))
         , BufferActorId(bufferActorId)
-        , ActualSnapshot(actualSnapshot)
+        , ActualSnapshot(context.GetApplyToSnapshot())
         , Context(context) {
     }
 };

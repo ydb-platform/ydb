@@ -4,13 +4,13 @@
 #include <ydb/library/yql/providers/yt/lib/lambda_builder/lambda_builder.h>
 #include <ydb/library/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/providers/common/schema/parser/yql_type_parser.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_stats_registry.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_stats_registry.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <yt/cpp/mapreduce/client/structured_table_formats.h>
 #include <yt/cpp/mapreduce/io/yamr_table_reader.h>

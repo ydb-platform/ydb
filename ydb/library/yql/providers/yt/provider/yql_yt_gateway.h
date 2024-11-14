@@ -7,12 +7,12 @@
 #include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
 #include <ydb/library/yql/providers/stat/uploader/yql_stat_uploader.h>
 
-#include <ydb/library/yql/providers/common/gateway/yql_provider_gateway.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/core/yql_execution.h>
-#include <ydb/library/yql/core/file_storage/storage.h>
+#include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_execution.h>
+#include <yql/essentials/core/file_storage/storage.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
 
@@ -570,6 +570,49 @@ public:
         NYT::TMultiTablePartitions Partitions;
     };
 
+    struct TDownloadTablesReq {
+        using TSelf = TDownloadTablesReq;
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TString, Table)
+        OPTION_FIELD_DEFAULT(bool, Anonymous, false)
+        OPTION_FIELD(TString, TargetPath)
+    };
+
+    struct TDownloadTablesOptions : public TCommonOptions {
+        using TSelf = TDownloadTablesOptions;
+
+        TDownloadTablesOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TVector<TDownloadTablesReq>, Tables)
+        OPTION_FIELD_DEFAULT(ui32, Epoch, 0)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+    };
+
+    struct TDownloadTablesResult: public NCommon::TOperationResult {
+    };
+
+    struct TUploadTableOptions : public TCommonOptions {
+        using TSelf = TUploadTableOptions;
+
+        TUploadTableOptions(const TString& sessionId)
+            : TCommonOptions(sessionId)
+        {
+        }
+
+        OPTION_FIELD(TString, Cluster)
+        OPTION_FIELD(TString, Table)
+        OPTION_FIELD(TString, Path)
+        OPTION_FIELD(TString, Attrs)
+        OPTION_FIELD(TYtSettings::TConstPtr, Config)
+    };
+
+    struct TUploadTableResult: public NCommon::TOperationResult {
+    };
+
 public:
     virtual ~IYtGateway() = default;
 
@@ -617,6 +660,9 @@ public:
     virtual TString GetClusterServer(const TString& cluster) const = 0;
     virtual NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder) const = 0;
     virtual NYT::TRichYPath GetWriteTable(const TString& sessionId, const TString& cluster, const TString& table, const TString& tmpFolder) const = 0;
+
+    virtual NThreading::TFuture<TDownloadTablesResult> DownloadTables(TDownloadTablesOptions&& options) = 0;
+    virtual NThreading::TFuture<TUploadTableResult> UploadTable(TUploadTableOptions&& options) = 0;
 
     virtual TFullResultTableResult PrepareFullResultTable(TFullResultTableOptions&& options) = 0;
 

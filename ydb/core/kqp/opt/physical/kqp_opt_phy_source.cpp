@@ -8,7 +8,7 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
 

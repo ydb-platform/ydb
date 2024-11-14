@@ -114,7 +114,9 @@ void TServiceContextBase::Reply(const TSharedRefArray& responseMessage)
             responseMessage.End());
 
         if (header.has_codec()) {
-            YT_VERIFY(TryEnumCast(header.codec(), &ResponseCodec_));
+            auto codec = TryCheckedEnumCast<NCompression::ECodec>(header.codec());
+            YT_VERIFY(codec);
+            ResponseCodec_ = *codec;
             SetResponseBodySerializedWithCompression();
         }
         if (header.has_format()) {
@@ -374,6 +376,9 @@ std::optional<TDuration> TServiceContextBase::GetExecutionDuration() const
     return std::nullopt;
 }
 
+void TServiceContextBase::RecordThrottling(TDuration /*throttleDuration*/)
+{ }
+
 TTraceContextPtr TServiceContextBase::GetTraceContext() const
 {
     return nullptr;
@@ -579,6 +584,11 @@ std::optional<TDuration> TServiceContextWrapper::GetWaitDuration() const
 std::optional<TDuration> TServiceContextWrapper::GetExecutionDuration() const
 {
     return UnderlyingContext_->GetExecutionDuration();
+}
+
+void TServiceContextWrapper::RecordThrottling(TDuration throttleDuration)
+{
+    return UnderlyingContext_->RecordThrottling(throttleDuration);
 }
 
 TTraceContextPtr TServiceContextWrapper::GetTraceContext() const

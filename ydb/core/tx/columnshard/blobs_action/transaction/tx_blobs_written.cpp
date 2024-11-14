@@ -25,11 +25,11 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
         for (auto&& portion : pack.MutablePortions()) {
             if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
                 static TAtomicCounter Counter = 0;
-                portion.GetPortionInfoConstructor()->SetInsertWriteId((TInsertWriteId)Counter.Inc());
+                portion.GetPortionInfoConstructor()->MutablePortionConstructor().SetInsertWriteId((TInsertWriteId)Counter.Inc());
             } else {
-                portion.GetPortionInfoConstructor()->SetInsertWriteId(Self->InsertTable->BuildNextWriteId(txc));
+                portion.GetPortionInfoConstructor()->MutablePortionConstructor().SetInsertWriteId(Self->InsertTable->BuildNextWriteId(txc));
             }
-            pack.AddInsertWriteId(portion.GetPortionInfoConstructor()->GetInsertWriteIdVerified());
+            pack.AddInsertWriteId(portion.GetPortionInfoConstructor()->GetPortionConstructor().GetInsertWriteIdVerified());
             portion.Finalize(Self, txc);
             if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
                 granule.CommitImmediateOnExecute(txc, *CommitSnapshot, portion.GetPortionInfo());
@@ -99,7 +99,7 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
                     Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
                 }
             }
-            granule.InsertPortionOnComplete(portion.GetPortionInfo().MutablePortionInfoPtr());
+            granule.InsertPortionOnComplete(portion.GetPortionInfo(), index);
         }
         if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
             AFL_VERIFY(CommitSnapshot);

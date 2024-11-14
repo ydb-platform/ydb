@@ -11,6 +11,7 @@
 #include <string.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <sys/time.h>
 
 #include "liburing.h"
 #include "helpers.h"
@@ -533,6 +534,139 @@ static int test_single_link_timeout(struct io_uring *ring, unsigned nsec)
 
 	close(fds[0]);
 	close(fds[1]);
+	return 0;
+err:
+	return 1;
+}
+
+static int test_link_timeout_update(struct io_uring *ring, int async)
+{
+	struct __kernel_timespec ts;
+	struct io_uring_cqe *cqe;
+	struct io_uring_sqe *sqe;
+	struct timeval start;
+	unsigned long msec;
+	int fds[2], ret, i;
+	struct iovec iov;
+	char buffer[128];
+
+	if (pipe(fds)) {
+		perror("pipe");
+		return 1;
+	}
+
+	sqe = io_uring_get_sqe(ring);
+	if (!sqe) {
+		printf("get sqe failed\n");
+		goto err;
+	}
+	iov.iov_base = buffer;
+	iov.iov_len = sizeof(buffer);
+	io_uring_prep_readv(sqe, fds[0], &iov, 1, 0);
+	sqe->flags |= IOSQE_IO_LINK;
+	sqe->user_data = 1;
+
+	sqe = io_uring_get_sqe(ring);
+	if (!sqe) {
+		printf("get sqe failed\n");
+		goto err;
+	}
+	ts.tv_sec = 5;
+	ts.tv_nsec = 0;
+	io_uring_prep_link_timeout(sqe, &ts, 0);
+	sqe->user_data = 2;
+
+	ret = io_uring_submit(ring);
+	if (ret != 2) {
+		printf("sqe submit failed: %d\n", ret);
+		goto err;
+	}
+
+	ts.tv_sec = 0;
+	ts.tv_nsec = 100000000LL;
+	sqe = io_uring_get_sqe(ring);
+	io_uring_prep_timeout_update(sqe, &ts, 2, IORING_LINK_TIMEOUT_UPDATE);
+	if (async)
+		sqe->flags |= IOSQE_ASYNC;
+	sqe->user_data = 3;
+
+	io_uring_submit(ring);
+
+	gettimeofday(&start, NULL);
+	for (i = 0; i < 3; i++) {
+		ret = io_uring_wait_cqe(ring, &cqe);
+		if (ret < 0) {
+			printf("wait completion %d\n", ret);
+			goto err;
+		}
+		switch (cqe->user_data) {
+		case 1:
+			if (cqe->res != -EINTR && cqe->res != -ECANCELED) {
+				fprintf(stderr, "Req %" PRIu64 " got %d\n", (uint64_t) cqe->user_data,
+						cqe->res);
+				goto err;
+			}
+			break;
+		case 2:
+			/* FASTPOLL kernels can cancel successfully */
+			if (cqe->res != -EALREADY && cqe->res != -ETIME) {
+				fprintf(stderr, "Req %" PRIu64 " got %d\n", (uint64_t) cqe->user_data,
+						cqe->res);
+				goto err;
+			}
+			break;
+		case 3:
+			if (cqe->res) {
+				fprintf(stderr, "Req %" PRIu64 " got %d\n", (uint64_t) cqe->user_data,
+						cqe->res);
+				goto err;
+			}
+			break;
+		}
+
+		io_uring_cqe_seen(ring, cqe);
+	}
+
+	msec = mtime_since_now(&start);
+	if (msec < 10 || msec > 200) {
+		fprintf(stderr, "Timeout appears incorrect: %lu\n", msec);
+		goto err;
+	}
+
+	close(fds[0]);
+	close(fds[1]);
+	return 0;
+err:
+	return 1;
+}
+
+static int test_link_timeout_update_invalid(struct io_uring *ring, int async)
+{
+	struct __kernel_timespec ts;
+	struct io_uring_cqe *cqe;
+	struct io_uring_sqe *sqe;
+	int ret;
+
+	ts.tv_sec = 0;
+	ts.tv_nsec = 100000000LL;
+	sqe = io_uring_get_sqe(ring);
+	io_uring_prep_timeout_update(sqe, &ts, 2, IORING_LINK_TIMEOUT_UPDATE);
+	sqe->user_data = 0xcafe0000;
+	if (async)
+		sqe->flags |= IOSQE_ASYNC;
+
+	io_uring_submit(ring);
+
+	ret = io_uring_wait_cqe(ring, &cqe);
+	if (ret < 0) {
+		printf("wait completion %d\n", ret);
+		goto err;
+	}
+	if (cqe->res != -ENOENT) {
+		fprintf(stderr, "bad timeout update: %d\n", cqe->res);
+		goto err;
+	}
+	io_uring_cqe_seen(ring, cqe);
 	return 0;
 err:
 	return 1;
@@ -1104,6 +1238,31 @@ int main(int argc, char *argv[])
 		printf("test_fail_two_link_timeouts failed\n");
 		return ret;
 	}
+
+	ret = test_link_timeout_update(&ring, 0);
+	if (ret) {
+		printf("test_link_timeout_update 0 failed\n");
+		return ret;
+	}
+
+	ret = test_link_timeout_update(&ring, 1);
+	if (ret) {
+		printf("test_link_timeout_update 1 failed\n");
+		return ret;
+	}
+
+	ret = test_link_timeout_update_invalid(&ring, 0);
+	if (ret) {
+		printf("test_link_timeout_update_invalid 0 failed\n");
+		return ret;
+	}
+
+	ret = test_link_timeout_update_invalid(&ring, 1);
+	if (ret) {
+		printf("test_link_timeout_update_invalid 1 failed\n");
+		return ret;
+	}
+
 
 	return T_EXIT_PASS;
 }

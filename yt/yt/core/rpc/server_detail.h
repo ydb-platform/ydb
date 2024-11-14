@@ -45,6 +45,7 @@ public:
     std::optional<TInstant> GetFinishInstant() const override;
     std::optional<TDuration> GetWaitDuration() const override;
     std::optional<TDuration> GetExecutionDuration() const override;
+    void RecordThrottling(TDuration throttleDuration) override;
 
     NTracing::TTraceContextPtr GetTraceContext() const override;
     std::optional<TDuration> GetTraceContextTime() const override;
@@ -208,6 +209,7 @@ public:
     std::optional<TInstant> GetFinishInstant() const override;
     std::optional<TDuration> GetWaitDuration() const override;
     std::optional<TDuration> GetExecutionDuration() const override;
+    void RecordThrottling(TDuration throttleDuration) override;
 
     NTracing::TTraceContextPtr GetTraceContext() const override;
     std::optional<TDuration> GetTraceContextTime() const override;

@@ -13,10 +13,10 @@
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/mind/local.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/testlib/basics/runtime.h>

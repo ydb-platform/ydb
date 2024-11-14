@@ -5,7 +5,7 @@
 #include <util/generic/map.h>
 #include <util/string/cast.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
 

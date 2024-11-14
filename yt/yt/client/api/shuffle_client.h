@@ -27,10 +27,6 @@ struct TStartShuffleOptions
     : public TTimeoutOptions
 { };
 
-struct TFinishShuffleOptions
-    : public TTimeoutOptions
-{ };
-
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IShuffleClient
@@ -40,11 +36,8 @@ struct IShuffleClient
     virtual TFuture<TShuffleHandlePtr> StartShuffle(
         const TString& account,
         int partitionCount,
+        NObjectClient::TTransactionId parentTransactionId,
         const TStartShuffleOptions& options) = 0;
-
-    virtual TFuture<void> FinishShuffle(
-        const TShuffleHandlePtr& shuffleHandle,
-        const TFinishShuffleOptions& options) = 0;
 
     virtual TFuture<IRowBatchReaderPtr> CreateShuffleReader(
         const TShuffleHandlePtr& shuffleHandle,
@@ -53,7 +46,7 @@ struct IShuffleClient
 
     virtual TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
         const TShuffleHandlePtr& shuffleHandle,
-        const TString& partitionColumn,
+        const std::string& partitionColumn,
         const NTableClient::TTableWriterConfigPtr& config = New<NTableClient::TTableWriterConfig>()) = 0;
 };
 

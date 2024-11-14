@@ -2,7 +2,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>

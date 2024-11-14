@@ -8,7 +8,7 @@ with customer_total_return as
      ,{{date_dim}}
      ,{{customer_address}}
  where wr_returned_date_sk = d_date_sk
-   and d_year =2000
+   and d_year =2002
    and wr_returning_addr_sk = ca_address_sk
  group by wr_returning_customer_sk
          ,ca_state)

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>

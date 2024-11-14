@@ -47,11 +47,6 @@ def write_array(code: str, column: Sequence, dest: MutableSequence, col_name: Op
     :param dest: Destination byte buffer
     :param col_name: Optional column name for error tracking
     """
-    if len(column) and not isinstance(column[0], (int, float)):
-        if code in ('f', 'F', 'd', 'D'):
-            column = [float(x) for x in column]
-        else:
-            column = [int(x) for x in column]
     try:
         buff = struct.Struct(f'<{len(column)}{code}')
         dest += buff.pack(*column)

@@ -40,7 +40,6 @@ bool TDatabase::TChangeCounter::operator<(const TChangeCounter& rhs) const {
 
 TDatabase::TDatabase(TDatabaseImpl *databaseImpl) noexcept
     : DatabaseImpl(databaseImpl ? databaseImpl : new TDatabaseImpl(0, new TScheme, nullptr))
-    , NoMoreReadsFlag(true)
 {
 
 }
@@ -59,7 +58,7 @@ TIntrusiveConstPtr<TRowScheme> TDatabase::GetRowScheme(ui32 table) const noexcep
 
 TAutoPtr<TTableIter> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags, ELookup mode) const noexcept
 {
-    Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
+    CheckReadAllowed(table);
 
     const auto seekBy = [](TRawVals key, ELookup mode) {
         if (!key && mode != ELookup::ExactMatch) {
@@ -92,7 +91,7 @@ TAutoPtr<TTableIter> TDatabase::IterateExact(ui32 table, TRawVals key, TTagsRef 
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
 {
-    Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
+    CheckReadAllowed(table);
 
     auto iter = Require(table)->Iterate(key, tags, Env, ESeek::Exact, snapshot, visible, observer);
 
@@ -144,7 +143,7 @@ TAutoPtr<TTableIter> TDatabase::IterateRange(ui32 table, const TKeyRange& range,
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
 {
-    Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
+    CheckReadAllowed(table);
 
     Y_DEBUG_ABORT_UNLESS(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
         "%s", IsAmbiguousRangeReason(range, Require(table)->GetScheme()->Keys->Size()));
@@ -171,7 +170,7 @@ TAutoPtr<TTableReverseIter> TDatabase::IterateRangeReverse(ui32 table, const TKe
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const noexcept
 {
-    Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
+    CheckReadAllowed(table);
 
     Y_DEBUG_ABORT_UNLESS(!IsAmbiguousRange(range, Require(table)->GetScheme()->Keys->Size()),
         "%s", IsAmbiguousRangeReason(range, Require(table)->GetScheme()->Keys->Size()));
@@ -226,7 +225,7 @@ EReady TDatabase::Select(ui32 table, TRawVals key, TTagsRef tags, TRowState &row
         const ITransactionObserverPtr& observer) const noexcept
 {
     TempIterators.clear();
-    Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
+    CheckReadAllowed(table);
 
     auto prevSieved = stats.Sieved;
     auto prevWeeded = stats.Weeded;
@@ -268,7 +267,8 @@ void TDatabase::CalculateReadSize(TSizeEnv& env, ui32 table, TRawVals minKey, TR
                                   TTagsRef tags, ui64 flg, ui64 items, ui64 bytes,
                                   EDirection direction, TRowVersion snapshot)
 {
-    Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to do precharge after reads prohibited, table %u", table);
+    CheckReadAllowed(table);
+
     TSelectStats stats;
     Require(table)->Precharge(minKey, maxKey, tags, &env, flg, items, bytes, direction, snapshot, stats);
 }
@@ -277,7 +277,8 @@ bool TDatabase::Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
                     TTagsRef tags, ui64 flg, ui64 items, ui64 bytes,
                     EDirection direction, TRowVersion snapshot)
 {
-    Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to do precharge after reads prohibited, table %u", table);
+    CheckPrechargeAllowed(table, minKey, maxKey);
+
     TSelectStats stats;
     auto ready = Require(table)->Precharge(minKey, maxKey, tags, Env, flg, items, bytes, direction, snapshot, stats);
     Change->Stats.ChargeSieved += stats.Sieved;
@@ -428,16 +429,22 @@ void TDatabase::NoMoreReadsForTx() {
     NoMoreReadsFlag = true;
 }
 
+void TDatabase::NoMoreUnprechargedReadsForTx() {
+    NoMoreUnprechargedReadsFlag = true;
+}
+
 void TDatabase::Begin(TTxStamp stamp, IPages& env)
 {
     Y_ABORT_UNLESS(!Redo, "Transaction already in progress");
     Y_ABORT_UNLESS(!Env);
-    Annex = new TAnnex(*DatabaseImpl->Scheme);
+    Annex = new TAnnex(*DatabaseImpl->Scheme, DatabaseImpl->Stats.NormalizedFreeSpaceShareByChannel);
     Redo = new NRedo::TWriter;
     DatabaseImpl->BeginTransaction();
     Change = MakeHolder<TChange>(stamp, DatabaseImpl->Serial());
     Env = &env;
     NoMoreReadsFlag = false;
+    NoMoreUnprechargedReadsFlag = false;
+    PrechargedTables.clear();
 }
 
 void TDatabase::RollbackChanges()
@@ -509,6 +516,13 @@ ui64 TDatabase::EstimateRowSize(ui32 tableId) const {
 const TDbStats& TDatabase::Counters() const noexcept
 {
     return DatabaseImpl->Stats;
+}
+
+void TDatabase::UpdateApproximateFreeSharesByChannel(const THashMap<ui32, float>& approximateFreeSpaceShareByChannel)
+{
+    for (auto& [channel, value] : approximateFreeSpaceShareByChannel) {
+        DatabaseImpl->Stats.NormalizedFreeSpaceShareByChannel[channel] = NUtil::NormalizeFreeSpaceShare(value);
+    }
 }
 
 void TDatabase::SetTableObserver(ui32 table, TIntrusivePtr<ITableObserver> ptr) noexcept
@@ -793,6 +807,30 @@ TTable* TDatabase::Require(ui32 table) const noexcept
 TTable* TDatabase::RequireForUpdate(ui32 table) const noexcept
 {
     return DatabaseImpl->GetForUpdate(table).Self.Get();
+}
+
+void TDatabase::CheckReadAllowed(ui32 table) const noexcept
+{
+    Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
+    if (NoMoreUnprechargedReadsFlag) [[unlikely]] {
+        Y_DEBUG_ABORT_UNLESS(
+            std::find(PrechargedTables.begin(), PrechargedTables.end(), table) != PrechargedTables.end(),
+            "Trying to read a previously unprecharged table %u", table);
+    }
+}
+
+void TDatabase::CheckPrechargeAllowed(ui32 table, TRawVals minKey, TRawVals maxKey) const noexcept
+{
+    Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to precharge after reads prohibited, table %u", table);
+    if (NoMoreUnprechargedReadsFlag) [[unlikely]] {
+        Y_DEBUG_ABORT_UNLESS(
+            std::find(PrechargedTables.begin(), PrechargedTables.end(), table) != PrechargedTables.end(),
+            "Trying to precharge a previously unprecharged table %u", table);
+    } else if (!minKey && !maxKey) {
+        // Note: tables are usually fully precharged only in init transcations
+        // This vector is small or empty most of the time and not worth using a hash table
+        PrechargedTables.push_back(table);
+    }
 }
 
 TGarbage TDatabase::RollUp(TTxStamp stamp, TArrayRef<const char> delta, TArrayRef<const char> redo,

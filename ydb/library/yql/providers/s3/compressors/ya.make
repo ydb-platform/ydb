@@ -8,7 +8,7 @@ PEERDIR(
     contrib/libs/lzma
     contrib/libs/zstd
     ydb/library/yql/udfs/common/clickhouse/client
-    ydb/library/yql/utils
+    yql/essentials/utils
     ydb/library/yql/dq/actors/protos
 )
 

@@ -131,6 +131,11 @@ struct TTraits
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TThis>
+using TVersionFilter = bool (*)(typename TTraits<TThis>::TVersion version);
+
+////////////////////////////////////////////////////////////////////////////////
+
 #define PHOENIX_REGISTRAR_NODISCARD [[nodiscard("Did you forget to call operator()?")]]
 
 class PHOENIX_REGISTRAR_NODISCARD TDummyFieldRegistrar
@@ -357,8 +362,9 @@ public:
         return TFieldSaveRegistrar(std::move(*this));
     }
 
-    auto InVersions(auto /*filter*/) &&
+    auto InVersions(TVersionFilter<TThis> filter) &&
     {
+        VersionFilter_ = filter;
         return TFieldSaveRegistrar(std::move(*this));
     }
 
@@ -375,7 +381,9 @@ public:
 
     void operator()() &&
     {
-        TFieldSerializer::Save(Context_, This_->*Member);
+        if (!VersionFilter_ || VersionFilter_(Context_.GetVersion())) {
+            TFieldSerializer::Save(Context_, This_->*Member);
+        }
     }
 
 private:
@@ -384,6 +392,8 @@ private:
 
     const TThis* const This_;
     TContext& Context_;
+
+    TVersionFilter<TThis> VersionFilter_ = nullptr;
 };
 
 template <class TThis, class TContext>
@@ -556,9 +566,7 @@ public:
         return TFieldLoadRegistrar(std::move(*this));
     }
 
-    using TVersionFilter = bool (*)(TVersion version);
-
-    auto InVersions(TVersionFilter filter) &&
+    auto InVersions(TVersionFilter<TThis> filter) &&
     {
         VersionFilter_ = filter;
         return TFieldLoadRegistrar(std::move(*this));
@@ -592,7 +600,7 @@ private:
     const TStringBuf Name_;
 
     TVersion MinVersion_ = static_cast<TVersion>(std::numeric_limits<int>::min());
-    TVersionFilter VersionFilter_ = nullptr;
+    TVersionFilter<TThis> VersionFilter_ = nullptr;
     TFieldMissingHandler<TThis, TContext> MissingHandler_ = nullptr;
 };
 

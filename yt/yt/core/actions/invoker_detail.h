@@ -11,23 +11,41 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TInvokerWrapper
+namespace NDetail {
+
+template <bool VirtualizeBase>
+struct TMaybeVirtualInvokerBase
+    : public IInvoker
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+struct TMaybeVirtualInvokerBase<true>
     : public virtual IInvoker
+{ };
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <bool VirtualizeBase>
+class TInvokerWrapper
+    : public NDetail::TMaybeVirtualInvokerBase<VirtualizeBase>
 {
 public:
     void Invoke(TClosure callback) override;
-
     void Invoke(TMutableRange<TClosure> callbacks) override;
 
     NThreading::TThreadId GetThreadId() const override;
     bool CheckAffinity(const IInvokerPtr& invoker) const override;
     bool IsSerialized() const override;
-    void RegisterWaitTimeObserver(TWaitTimeObserver waitTimeObserver) override;
+    void RegisterWaitTimeObserver(IInvoker::TWaitTimeObserver waitTimeObserver) override;
 
 protected:
-    explicit TInvokerWrapper(IInvokerPtr underlyingInvoker);
+    const IInvokerPtr UnderlyingInvoker_;
 
-    IInvokerPtr UnderlyingInvoker_;
+    explicit TInvokerWrapper(IInvokerPtr underlyingInvoker);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

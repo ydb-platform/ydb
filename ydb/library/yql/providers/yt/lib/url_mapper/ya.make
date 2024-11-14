@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/providers/common/proto
+    yql/essentials/providers/common/proto
     library/cpp/regex/pcre
     library/cpp/uri
     library/cpp/cgiparam

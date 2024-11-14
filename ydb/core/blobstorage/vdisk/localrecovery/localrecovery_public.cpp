@@ -521,6 +521,7 @@ namespace NKikimr {
                         Config->HullSstSizeInChunksLevel,
                         Config->HullCompFreeSpaceThreshold,
                         Config->FreshCompMaxInFlightWrites,
+                        Config->FreshCompMaxInFlightReads,
                         Config->HullCompMaxInFlightWrites,
                         Config->HullCompMaxInFlightReads,
                         Config->HullCompReadBatchEfficiencyThreshold,

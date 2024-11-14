@@ -2036,6 +2036,27 @@ TEST(TProtobufToYsonTest, UnknownFields)
     }
 }
 
+TEST(TProtobufToYsonTest, UnknownFieldsNested)
+{
+    TProtobufParserOptions options;
+    options.SkipUnknownFields = true;
+
+    TEST_PROLOGUE()
+    codedStream.WriteTag(WireFormatLite::MakeTag(15 /*nested_message1*/, WireFormatLite::WIRETYPE_LENGTH_DELIMITED));
+    codedStream.WriteVarint64(3);
+    codedStream.WriteTag(WireFormatLite::MakeTag(42 /*unknown*/, WireFormatLite::WIRETYPE_VARINT));
+    codedStream.WriteVarint64(2);
+    TEST_EPILOGUE_WITH_OPTIONS(TMessage, options)
+
+    NProto::TMessage message;
+    TryDeserializeProto(&message, TRef::FromString(protobuf));
+
+    TString newYsonString;
+    TStringOutput newYsonOutputStream(newYsonString);
+    TYsonWriter ysonWriter(&newYsonOutputStream, EYsonFormat::Pretty);
+    WriteProtobufMessage(&ysonWriter, message, options);
+}
+
 TEST(TProtobufToYsonTest, ReservedFields)
 {
     TEST_PROLOGUE()

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common.h"
+
 #include <ydb/core/fq/libs/config/protos/row_dispatcher.pb.h>
 #include <util/generic/ptr.h>
 #include <ydb/library/actors/core/actor.h>
@@ -20,6 +22,7 @@ struct IActorFactory : public TThrRefBase {
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const NYql::IPqGateway::TPtr& pqGateway) const = 0;
 };

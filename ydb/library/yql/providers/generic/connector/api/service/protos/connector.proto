@@ -327,10 +327,11 @@ message TExpression {
             MUL = 1; // left_value * right_value
             ADD = 2; // left_value + right_value
             SUB = 3; // left_value - right_value
+            DIV = 7; // left_value / right_value
+            MOD = 8; // left_value % right_value
             BIT_AND = 4; // left_value & right_value
             BIT_OR = 5; // left_value | right_value
             BIT_XOR = 6; // left_value ^ right_value
-            // TODO: support `/` and `%`
         }
         EOperation operation = 1;
         TExpression left_value = 2;
@@ -367,6 +368,18 @@ message TPredicate {
     // OR
     message TDisjunction {
         repeated TPredicate operands = 1;
+    }
+
+    // "COALESCE($predicate_1, $predicate_2, ..., $predicate_n)"
+    message TCoalesce {
+        repeated TPredicate operands = 1;
+    }
+
+    // "IF($predicate, $then_predicate, $else_predicate)"
+    message TIf {
+        TPredicate predicate = 1;
+        TPredicate then_predicate = 2;
+        TPredicate else_predicate = 3;
     }
 
     // "$column BETWEEN $least AND $greatest"
@@ -410,6 +423,8 @@ message TPredicate {
             NE = 4; // "$column != value"
             GE = 5; // "$column >= value"
             G = 6;  // "$column > value"
+            IND = 7;// "$column IS NOT DISTINCT value"
+            ID = 8; // "$column IS DISTINCT value"
         }
 
         EOperation operation = 1;
@@ -427,6 +442,8 @@ message TPredicate {
         TIsNotNull is_not_null = 7;
         TComparison comparison = 8;
         TBoolExpression bool_expression = 9;
+        TCoalesce coalesce = 10;
+        TIf if = 11;
     }
 }
 

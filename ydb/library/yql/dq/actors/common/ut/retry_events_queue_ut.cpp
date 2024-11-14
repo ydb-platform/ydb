@@ -51,8 +51,10 @@ public:
         EventsQueue.Retry();
     }
 
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvPing::TPtr& ) {
-        EventsQueue.Ping();
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr& ) {
+        if (EventsQueue.Heartbeat()) {
+            EventsQueue.Send(new TEvDqCompute::TEvInjectCheckpoint());
+        }
     }
 
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr& ) {
@@ -77,7 +79,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
-        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvPing, Handle);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed, Handle);
         hFunc(TEvPrivate::TEvSend, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);

@@ -1,18 +1,18 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/computation/llvm14
+    yql/essentials/minikql
+    yql/essentials/minikql/computation/llvm14
     ydb/library/yql/providers/yt/comp_nodes
     ydb/library/yql/providers/yt/codec
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/utils/failure_injector
+    yql/essentials/providers/common/codec
+    yql/essentials/utils/failure_injector
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/common
     library/cpp/yson/node
     yt/yt/core
-    ydb/library/yql/public/udf/arrow
-    ydb/library/yql/public/udf
+    yql/essentials/public/udf/arrow
+    yql/essentials/public/udf
     contrib/libs/apache/arrow
     contrib/libs/flatbuffers
 )

@@ -19,7 +19,7 @@ from
     cross join {{call_center}} as cc
     cross join {{date_dim}} as d
 where
-    d.d_month_seq between 1178 and 1178 + 11
+    d.d_month_seq between 1200 and 1200 + 11
     and cs.cs_ship_date_sk   = d.d_date_sk
     and cs.cs_warehouse_sk   = w.w_warehouse_sk
     and cs.cs_ship_mode_sk   = sm.sm_ship_mode_sk

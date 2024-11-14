@@ -14,7 +14,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <util/generic/algorithm.h>
@@ -626,7 +626,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
                                                        record.GetColumnBuildSettings(),
                                                        userTable,
                                                        limits),
-                                  ev->Cookie,
+                                  0,
                                   scanOpts);
 
     TScanRecord recCard = {scanId, seqNo};

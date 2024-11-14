@@ -80,10 +80,9 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     readMetadataRange->OnBeforeStartReading(*Self);
 
     const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
-    auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(), TComputeShardingPolicy(),
-        ScanId, LockId.value_or(0), ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange,
-        NKikimrDataEvents::FORMAT_ARROW,
-        Self->Counters.GetScanCounters()));
+    auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->GetStoragesManager(), Self->DataAccessorsManager.GetObjectPtrVerified(),
+        TComputeShardingPolicy(), ScanId, LockId.value_or(0), ScanGen, requestCookie, Self->TabletID(), TDuration::Max(), readMetadataRange,
+        NKikimrDataEvents::FORMAT_ARROW, Self->Counters.GetScanCounters()));
 
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TTxInternalScan started")("actor_id", scanActor)("trace_detailed", detailedInfo);
 }

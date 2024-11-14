@@ -84,7 +84,7 @@ IInvokerPtr CreateFixedPriorityInvoker(
 //! Creates an invoker that executes all callbacks in the
 //! context of #underlyingInvoker allowing up to #maxConcurrentInvocations
 //! outstanding requests to the latter.
-IInvokerPtr CreateBoundedConcurrencyInvoker(
+IBoundedConcurrencyInvokerPtr CreateBoundedConcurrencyInvoker(
     IInvokerPtr underlyingInvoker,
     int maxConcurrentInvocations);
 

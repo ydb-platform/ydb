@@ -7,9 +7,9 @@ SRCS(
 PEERDIR(
     library/cpp/yson
     ydb/library/yql/providers/yt/common
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/schema/skiff
-    ydb/library/yql/utils
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/schema/skiff
+    yql/essentials/utils
 )
 
 END()

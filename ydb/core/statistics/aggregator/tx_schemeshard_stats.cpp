@@ -21,17 +21,71 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
             << ", stats size# " << stats.size());
 
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::BaseStatistics>().Key(schemeShardId).Update(
-            NIceDb::TUpdate<Schema::BaseStatistics::Stats>(stats));
 
-        Self->BaseStatistics[schemeShardId] = stats;
+        NKikimrStat::TSchemeShardStats statRecord;
+        Y_PROTOBUF_SUPPRESS_NODISCARD statRecord.ParseFromString(stats);
+
+        // if statistics is sent from schemeshard for the first time or
+        // AreAllStatsFull field is not set (schemeshard is working on previous code version) or
+        // statistics is full for all tables
+        // then persist incoming statistics without changes
+        if (!Self->BaseStatistics.contains(schemeShardId) ||
+            !statRecord.HasAreAllStatsFull() || statRecord.GetAreAllStatsFull())
+        {
+            db.Table<Schema::BaseStatistics>().Key(schemeShardId).Update(
+                NIceDb::TUpdate<Schema::BaseStatistics::Stats>(stats));
+            Self->BaseStatistics[schemeShardId] = stats;
+
+        } else {
+            NKikimrStat::TSchemeShardStats oldStatRecord;
+            const auto& oldStats = Self->BaseStatistics[schemeShardId];
+            Y_PROTOBUF_SUPPRESS_NODISCARD oldStatRecord.ParseFromString(oldStats);
+
+            struct TOldStats {
+                ui64 RowCount = 0;
+                ui64 BytesSize = 0;
+            };
+            THashMap<TPathId, TOldStats> oldStatsMap;
+
+            for (const auto& entry : oldStatRecord.GetEntries()) {
+                auto& oldEntry = oldStatsMap[PathIdFromPathId(entry.GetPathId())];
+                oldEntry.RowCount = entry.GetRowCount();
+                oldEntry.BytesSize = entry.GetBytesSize();
+            }
+
+            NKikimrStat::TSchemeShardStats newStatRecord;
+            for (const auto& entry : statRecord.GetEntries()) {
+                auto* newEntry = newStatRecord.AddEntries();
+                *newEntry->MutablePathId() = entry.GetPathId();
+                newEntry->SetIsColumnTable(entry.GetIsColumnTable());
+                newEntry->SetAreStatsFull(entry.GetAreStatsFull());
+
+                if (entry.GetAreStatsFull()) {
+                    newEntry->SetRowCount(entry.GetRowCount());
+                    newEntry->SetBytesSize(entry.GetBytesSize());
+                } else {
+                    auto oldIter = oldStatsMap.find(PathIdFromPathId(entry.GetPathId()));
+                    if (oldIter != oldStatsMap.end()) {
+                        newEntry->SetRowCount(oldIter->second.RowCount);
+                        newEntry->SetBytesSize(oldIter->second.BytesSize);
+                    } else {
+                        newEntry->SetRowCount(0);
+                        newEntry->SetBytesSize(0);
+                    }
+                }
+            }
+
+            TString newStats;
+            Y_PROTOBUF_SUPPRESS_NODISCARD newStatRecord.SerializeToString(&newStats);
+
+            db.Table<Schema::BaseStatistics>().Key(schemeShardId).Update(
+                NIceDb::TUpdate<Schema::BaseStatistics::Stats>(newStats));
+            Self->BaseStatistics[schemeShardId] = newStats;
+        }
 
         if (!Self->EnableColumnStatistics) {
             return true;
         }
-
-        NKikimrStat::TSchemeShardStats statRecord;
-        Y_PROTOBUF_SUPPRESS_NODISCARD statRecord.ParseFromString(stats);
 
         auto& oldPathIds = Self->ScheduleTraversalsBySchemeShard[schemeShardId];
         std::unordered_set<TPathId> newPathIds;

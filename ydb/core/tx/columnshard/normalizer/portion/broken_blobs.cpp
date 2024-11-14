@@ -2,7 +2,6 @@
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
-#include <ydb/core/tx/columnshard/engines/portions/constructor.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
@@ -29,7 +28,7 @@ public:
             AFL_VERIFY(!!schema)("portion_id", portionInfo.GetPortionInfo().GetPortionId());
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "portion_removed_as_broken")(
                 "portion_id", portionInfo.GetPortionInfo().GetAddress().DebugString());
-            auto copy = portionInfo.GetPortionInfo();
+            auto copy = portionInfo.GetPortionInfo().MakeCopy();
             copy.SetRemoveSnapshot(TSnapshot(1, 1));
             copy.SaveMetaToDatabase(db);
         }

@@ -1,8 +1,8 @@
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_builder.h>
+#include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 
 #include <ydb/library/yql/providers/generic/actors/yql_generic_lookup_actor.h>
 
@@ -12,8 +12,8 @@
 #include <ydb/library/yql/providers/generic/actors/yql_generic_lookup_actor.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/library/yql/utils/log/proto/logger_config.pb.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/proto/logger_config.pb.h>
+#include <yql/essentials/utils/log/log.h>
 
 using namespace NYql::NConnector;
 using namespace NYql::NConnector::NTest;

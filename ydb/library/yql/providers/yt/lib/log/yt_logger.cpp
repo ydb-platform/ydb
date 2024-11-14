@@ -1,6 +1,9 @@
+#include "yt_logger.h"
+
 #include <ydb/library/yql/providers/yt/lib/init_yt_api/init.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
 
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
 
@@ -130,6 +133,7 @@ void SetYtLoggerGlobalBackend(int level, size_t debugLogBufferSize, const TStrin
     InitYtApiOnce();
     if (level >= 0 || (debugLogBufferSize && debugLogFile)) {
         NYT::SetLogger(new TGlobalLoggerImpl(level, debugLogBufferSize, debugLogFile, debugLogAlwaysWrite));
+        NYql::NBacktrace::AddAfterFatalCallback([](int ){ NYql::FlushYtDebugLog(); });
     } else {
         NYT::SetLogger(NYT::ILoggerPtr());
     }

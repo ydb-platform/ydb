@@ -148,7 +148,8 @@ public:
                 }
             }
             if (ast.PgAutoParamValues) {
-                for (const auto& [name, param] : *ast.PgAutoParamValues) {
+                const auto& params = dynamic_cast<TKqpAutoParamBuilder*>(ast.PgAutoParamValues.Get())->Values;
+                for (const auto& [name, param] : params) {
                     astPgParams->insert({name, param.Gettype()});
                 }
             }

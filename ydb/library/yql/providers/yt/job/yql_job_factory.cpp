@@ -3,9 +3,9 @@
 #include <ydb/library/yql/providers/yt/comp_nodes/yql_mkql_input.h>
 #include <ydb/library/yql/providers/yt/comp_nodes/yql_mkql_output.h>
 #include <ydb/library/yql/providers/yt/comp_nodes/yql_mkql_table_content.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 
 #include <util/generic/strbuf.h>
 

@@ -220,6 +220,10 @@ void TServiceDiscoveryEndpointsConfig::Register(TRegistrar registrar)
     registrar.Parameter("endpoint_set_id", &TThis::EndpointSetId);
     registrar.Parameter("update_period", &TThis::UpdatePeriod)
         .Default(TDuration::Seconds(60));
+    registrar.Parameter("use_ipv4", &TThis::UseIPv4)
+        .Default(false);
+    registrar.Parameter("use_ipv6", &TThis::UseIPv6)
+        .Default(true);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->Cluster.has_value() == !config->Clusters.empty()) {

@@ -12,10 +12,10 @@ ENDIF()
 
 
 PEERDIR(
-    ydb/library/yql/minikql/computation/llvm14
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/sql
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/minikql/computation/llvm14
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql
+    yql/essentials/sql/pg_dummy
     ydb/library/yql/providers/yt/codec
 )
 

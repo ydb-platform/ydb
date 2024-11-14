@@ -1,13 +1,13 @@
 #ifndef MKQL_DISABLE_CODEGEN
 #include "yt_codec_cg.h"
-#include <ydb/library/yql/providers/common/codec/yql_codec_buf.h>
+#include <yql/essentials/providers/common/codec/yql_codec_buf.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <ydb/library/yql/providers/yt/codec/yt_codec_io.h>
-#include <ydb/library/yql/minikql/codegen/codegen.h>
+#include <yql/essentials/minikql/codegen/codegen.h>
 
 #include <llvm/IR/Module.h>
 

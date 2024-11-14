@@ -143,6 +143,7 @@ class ConnectionParams:
         self.parse_token(args.token_file)
         self.domain = 1
         self.verbose = args.verbose
+        self.debug = args.debug
         self.quiet = args.quiet
         self.http_timeout = args.http_timeout
         self.cafile = args.cafile
@@ -151,6 +152,7 @@ class ConnectionParams:
 
     def add_host_access_options(self, parser, with_endpoint=True):
         parser.add_argument('--verbose', '-v', action='store_true', help='Be verbose during operation')
+        parser.add_argument('--debug', '-d', action='store_true', help='Be very verbose during operation')
         parser.add_argument('--quiet', '-q', action='store_true', help="Don't show non-vital messages")
         g = parser.add_argument_group('Server access options')
         if with_endpoint:
@@ -299,7 +301,7 @@ def query_random_host_with_retry(retries=5, explicit_host_param=None, http=False
 @query_random_host_with_retry(explicit_host_param='explicit_host', http=True)
 def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True, method=None, data=None, content_type=None, accept=None):
     url = connection_params.make_url(host, path, params)
-    if connection_params.verbose:
+    if connection_params.debug:
         print('INFO: fetching %s' % url, file=sys.stderr)
     request = urllib.request.Request(url, data=data, method=method)
     if connection_params.token and url.startswith('http'):
@@ -326,7 +328,7 @@ def invoke_grpc(func, *params, explicit_host=None, host=None):
     options = [
         ('grpc.max_receive_message_length', 256 << 20),  # 256 MiB
     ]
-    if connection_params.verbose:
+    if connection_params.debug:
         p = ', '.join('<<< %s >>>' % text_format.MessageToString(param, as_one_line=True) for param in params)
         print('INFO: issuing %s(%s) @%s:%d protocol %s' % (func, p, host, connection_params.grpc_port,
               connection_params.mon_protocol), file=sys.stderr)
@@ -335,11 +337,11 @@ def invoke_grpc(func, *params, explicit_host=None, host=None):
         try:
             stub = kikimr_grpc.TGRpcServerStub(channel)
             res = getattr(stub, func)(*params)
-            if connection_params.verbose:
+            if connection_params.debug:
                 print('INFO: result <<< %s >>>' % text_format.MessageToString(res, as_one_line=True), file=sys.stderr)
             return res
         except Exception as e:
-            if connection_params.verbose:
+            if connection_params.debug:
                 print('ERROR: exception %s' % e, file=sys.stderr)
             raise ConnectionError("Can't connect to specified addresses by gRPC protocol")
 

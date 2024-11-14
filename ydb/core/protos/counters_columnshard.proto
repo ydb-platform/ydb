@@ -204,4 +204,4 @@ enum ETxTypes {
     TXTYPE_DATA_SHARING_START_SOURCE_CURSOR = 37            [(TxTypeOpts) = {Name: "TxDataSharingStartSourceCursor"}];
     TXTYPE_ASK_PORTION_METADATA = 38                        [(TxTypeOpts) = {Name: "TxAskPortionMetadata"}];
     TXTYPE_SET_COMPATIBLE_SCHEMA_VERSIONS = 39              [(TxTypeOpts) = {Name: "TxSetCompatibleSchemaVersions"}];
-
+}

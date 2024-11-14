@@ -223,7 +223,7 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
             ResponseAttachments_)
         : CreateErrorResponseMessage(header);
 
-    auto responseMessageError = CheckBusMessageLimits(ResponseMessage_);
+    auto responseMessageError = CheckBusMessageLimits(message);
     if (!responseMessageError.IsOK()) {
         return CreateErrorResponseMessage(responseMessageError);
     }

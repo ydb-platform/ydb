@@ -1161,10 +1161,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        if (auto logl = Logger->Log(ELnLev::Debug)) {
-            logl << "Config updated " << record.GetConfig().ShortDebugString();
-        }
-        
         auto currentReplacementPolicy = Config.GetReplacementPolicy();
 
         {
@@ -1183,6 +1179,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 config.MergeFrom(appData->SharedCacheConfig);
             }
             Config.Swap(&config);
+
+            if (auto logl = Logger->Log(ELnLev::Info)) {
+                logl << "Config updated " << Config.ShortDebugString();
+            }
         }
 
         ActualizeCacheSizeLimit();
@@ -1268,6 +1268,10 @@ public:
                 NKikimrConsole::TConfigItem::BootstrapConfigItem, NKikimrConsole::TConfigItem::SharedCacheConfigItem}));
 
         Become(&TThis::StateFunc);
+
+        if (auto logl = Logger->Log(ELnLev::Info)) {
+            logl << "Bootstrapped with config " << Config.ShortDebugString();
+        }
     }
 
     STFUNC(StateFunc) {

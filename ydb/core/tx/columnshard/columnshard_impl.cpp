@@ -1302,7 +1302,7 @@ public:
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "TTxAskPortionChunks::Execute")("stage", "processing")("size", i.second.size())("path_id", i.first);
             while (i.second.size()) {
                 auto p = i.second.back();
-                std::vector<NOlap::TColumnChunkLoadContextV2> records;
+                std::vector<NOlap::TColumnChunkLoadContextV1> records;
                 std::vector<NOlap::TIndexChunkLoadContext> indexes;
                 {
                     auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
@@ -1310,7 +1310,7 @@ public:
                         return false;
                     }
                     while (!rowset.EndOfSet()) {
-                        NOlap::TColumnChunkLoadContextV2::BuildFromDBV2(rowset, records);
+                        NOlap::TColumnChunkLoadContextV1::BuildFromDBV2(rowset, records);
                         if (!rowset.Next()) {
                             return false;
                         }

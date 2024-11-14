@@ -39,11 +39,12 @@ private:
     YDB_READONLY_DEF(std::optional<NArrow::NDictionary::TEncodingSettings>, DictionaryEncoding);
     YDB_READONLY_DEF(NOlap::TColumnDefaultScalarValue, DefaultValue);
     YDB_READONLY_DEF(NArrow::NAccessor::TConstructorContainer, AccessorConstructor);
-    YDB_ACCESSOR(std::optional<ui32>, ColumnFamilyId, std::nullopt);
+    YDB_READONLY_PROTECT(std::optional<ui32>, ColumnFamilyId, std::nullopt);
 
 public:
-    TOlapColumnBase(const std::optional<ui32>& keyOrder)
+    TOlapColumnBase(const std::optional<ui32>& keyOrder, const std::optional<ui32> columnFamilyId = {})
         : KeyOrder(keyOrder)
+        , ColumnFamilyId(columnFamilyId)
     {
     }
     bool ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescription& columnSchema, IErrorCollector& errors);

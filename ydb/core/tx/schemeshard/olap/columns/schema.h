@@ -8,11 +8,13 @@ private:
     using TBase = TOlapColumnBase;
     YDB_READONLY(ui32, Id, Max<ui32>());
 public:
-    TOlapColumnSchema(const TOlapColumnBase& base, const ui32 id)
+    TOlapColumnSchema(const TOlapColumnBase& base, const ui32 id, const std::optional<ui32> columnFamilyId = {})
         : TBase(base)
         , Id(id)
     {
+        ColumnFamilyId = columnFamilyId;
     }
+
     TOlapColumnSchema(const std::optional<ui32>& keyOrder)
         : TBase(keyOrder) {
 

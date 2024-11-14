@@ -39,10 +39,7 @@ bool TOlapColumnsDescription::ApplyUpdate(
                 return false;
             }
         }
-        TOlapColumnSchema newColumn(column, nextEntityId++);
-        if (newColumn.GetKeyOrder()) {
-            Y_ABORT_UNLESS(orderedKeyColumnIds.emplace(*newColumn.GetKeyOrder(), newColumn.GetId()).second);
-        }
+        std::optional<ui32> columnFamilyId;
         if (column.GetColumnFamilyName().has_value()) {
             TString familyName = column.GetColumnFamilyName().value();
             const TOlapColumnFamily* columnFamily = columnFamilies.GetByName(familyName);
@@ -53,7 +50,11 @@ bool TOlapColumnsDescription::ApplyUpdate(
                                                                       << column.GetName() << "`. Family not found");
                 return false;
             }
-            newColumn.SetColumnFamilyId(columnFamily->GetId());
+            columnFamilyId = columnFamily->GetId();
+        }
+        TOlapColumnSchema newColumn(column, nextEntityId++, columnFamilyId);
+        if (newColumn.GetKeyOrder()) {
+            Y_ABORT_UNLESS(orderedKeyColumnIds.emplace(*newColumn.GetKeyOrder(), newColumn.GetId()).second);
         }
         if (!newColumn.GetSerializer().has_value() && !columnFamilies.GetColumnFamilies().empty() &&
             !newColumn.ApplySerializerFromColumnFamily(columnFamilies, errors)) {

@@ -209,7 +209,7 @@ bool TOlapColumnBase::ApplySerializerFromColumnFamily(const TOlapColumnFamiliesD
             return false;
         }
 
-        SetColumnFamilyId(columnFamily->GetId());
+        ColumnFamilyId = columnFamily->GetId();
         SetSerializer(columnFamilies.GetByIdVerified(columnFamily->GetId())->GetSerializerContainer());
     }
     return true;

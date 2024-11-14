@@ -766,7 +766,7 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
             NScheme::ProtoFromTypeInfo(typeInfo, typeMod, *columnDesc->MutableTypeInfo());
         }
 
-        if (!column.Getfamily().Empty()) {
+        if (!column.Getfamily().empty()) {
             columnDesc->SetColumnFamilyName(column.Getfamily());
         }
     }

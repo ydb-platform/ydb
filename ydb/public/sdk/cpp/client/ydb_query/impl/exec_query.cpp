@@ -172,10 +172,12 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                     TVector<NYql::TIssue> issues;
                     TVector<Ydb::ResultSet> resultProtos;
                     TMaybe<TTransaction> tx;
+                    TString diagnostics;
 
                     std::swap(self->Issues_, issues);
                     std::swap(self->ResultSets_, resultProtos);
                     std::swap(self->Tx_, tx);
+                    std::swap(self->Diagnostics_, diagnostics);
 
                     TVector<TResultSet> resultSets;
                     for (auto& proto : resultProtos) {
@@ -187,7 +189,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                         std::move(resultSets),
                         std::move(stats),
                         std::move(tx),
-                        {}
+                        std::move(diagnostics)
                     ));
                 } else {
                     self->Promise_.SetValue(TExecuteQueryResult(std::move(part), {}, std::move(stats), {}, {}));

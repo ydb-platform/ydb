@@ -69,7 +69,7 @@ public:
         const ::Ydb::Operations::OperationParams* operationParams,
         const TQueryRequestSettings& querySettings = TQueryRequestSettings(),
         const TString& poolId = "",
-        bool collectFullDiagnostics = false);
+        std::optional<bool> collectFullDiagnostics = std::nullopt);
 
     TEvQueryRequest() {
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
@@ -283,7 +283,7 @@ public:
     }
 
     bool GetCollectDiagnostics() const {
-        return Record.GetRequest().GetCollectDiagnostics();
+        return CollectFullDiagnostics.has_value() ? CollectFullDiagnostics.value() : Record.GetRequest().GetCollectDiagnostics();
     }
 
     ui32 CalculateSerializedSize() const override {
@@ -396,7 +396,7 @@ private:
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     TDuration ProgressStatsPeriod;
     std::optional<NResourcePool::TPoolSettings> PoolConfig;
-    bool CollectFullDiagnostics = false;
+    std::optional<bool> CollectFullDiagnostics = std::nullopt;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

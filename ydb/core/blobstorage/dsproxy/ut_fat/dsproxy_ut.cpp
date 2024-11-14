@@ -4211,8 +4211,10 @@ public:
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(bsInfo), false,
                 dsProxyNodeMon, TIntrusivePtr(storagePoolCounters),
                 TBlobStorageProxyParameters{
-                    .EnablePutBatching = enablePutBatching,
-                    .EnableVPatch = enableVPatch,
+                    .Controls = TBlobStorageProxyControlWrappers{
+                        .EnablePutBatching = enablePutBatching,
+                        .EnableVPatch = enableVPatch,
+                    }
                 }
             )
         };

@@ -83,8 +83,10 @@ struct TDSProxyEnv {
         TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
         IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(Info), true, nodeMon,
             std::move(storagePoolCounters), TBlobStorageProxyParameters{
-                    .EnablePutBatching = enablePutBatching,
-                    .EnableVPatch = enableVPatch,
+                    .Controls = TBlobStorageProxyControlWrappers{
+                        .EnablePutBatching = enablePutBatching,
+                        .EnableVPatch = enableVPatch,
+                    }
                 }
             );
         TActorId actorId = runtime.Register(dsproxy, nodeIndex);

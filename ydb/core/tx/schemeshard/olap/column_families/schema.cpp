@@ -91,7 +91,7 @@ bool TOlapColumnFamiliesDescription::Validate(const NKikimrSchemeOp::TColumnTabl
     ui32 lastColumnFamilyId = 0;
     THashSet<ui32> usedColumnFamilies;
     for (const auto& familyProto : opSchema.GetColumnFamilies()) {
-        if (familyProto.GetName().Empty()) {
+        if (familyProto.GetName().empty()) {
             errors.AddError("column family can't have an empty name");
             return false;
         }

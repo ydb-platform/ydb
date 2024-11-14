@@ -101,7 +101,7 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
         if (name == "columnName") {
             YQL_ENSURE(field.Value().Maybe<TCoAtom>());
             settings.ColumnName = field.Value().Cast<TCoAtom>().StringValue();
-         } else if (name == "expireAfter") {
+        } else if (name == "expireAfter") {
             // TODO (yentsovsemyon): remove this clause after extending TTL syntax in YQL
             YQL_ENSURE(field.Value().Maybe<TCoInterval>());
             auto value = FromString<i64>(field.Value().Cast<TCoInterval>().Literal().Value());

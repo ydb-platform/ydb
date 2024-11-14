@@ -1062,11 +1062,6 @@ protected:
         }
 
         std::sort(std::begin(shardsRanges), std::end(shardsRanges), [&](const TShardRangesWithShardId& lhs, const TShardRangesWithShardId& rhs) {
-                // Special case for infinity
-                if (lhs.Ranges->GetRightBorder().first->GetCells().empty() || rhs.Ranges->GetRightBorder().first->GetCells().empty()) {
-                    return !lhs.Ranges->GetRightBorder().first->GetCells().empty();
-                }
-
                 return CompareBorders<false, false>(
                     lhs.Ranges->GetRightBorder().first->GetCells(),
                     rhs.Ranges->GetRightBorder().first->GetCells(),

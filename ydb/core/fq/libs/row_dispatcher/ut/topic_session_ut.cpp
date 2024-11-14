@@ -13,7 +13,6 @@
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
-#include <ydb/library/yql/public/purecalc/common/interface.h>
 
 namespace {
 
@@ -27,7 +26,7 @@ const ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
 class TFixture : public NUnitTest::TBaseFixture {
 public:
     TFixture()
-        : PureCalcProgramFactory(NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions()))
+        : PureCalcProgramFactory(CreatePureCalcProgramFactory())
         , Runtime(true)
     {}
 
@@ -158,7 +157,7 @@ public:
         return eventHolder->Get()->Record.MessagesSize();
     }
 
-    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
+    IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     NActors::TTestActorRuntime Runtime;
     TActorSystemStub ActorSystemStub;
     NActors::TActorId TopicSession;
@@ -435,6 +434,28 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId1, source1);
         StopSession(ReadActorId2, source2);
     }
+
+     Y_UNIT_TEST_F(TwoSessionsWithDifferentColumnTypes, TFixture) {
+        const TString topicName = "dif_types";
+        PQCreateStream(topicName);
+        Init(topicName);
+
+        auto source1 = BuildSource(topicName);
+        source1.AddColumns("field1");
+        source1.AddColumnTypes("[OptionalType; [DataType; String]]");
+        StartSession(ReadActorId1, source1);
+
+        TString json1 = "{\"dt\":101,\"field1\":null,\"value\":\"value1\"}";
+        PQWrite({ json1 }, topicName);
+        ExpectNewDataArrived({ReadActorId1});
+        ExpectMessageBatch(ReadActorId1, { json1 });
+
+        auto source2 = BuildSource(topicName);
+        source2.AddColumns("field1");
+        source2.AddColumnTypes("[DataType; String]");
+        StartSession(ReadActorId2, source2);
+        ExpectSessionError(ReadActorId2, "Use the same column type in all queries via RD, current type for column `field1` is [OptionalType; [DataType; String]] (requested type is [DataType; String])");
+     }
 }
 
 }

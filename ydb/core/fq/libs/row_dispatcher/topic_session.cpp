@@ -144,6 +144,11 @@ private:
         TParserInputType InputType;
     };
 
+    struct TFieldDescription {
+        ui64 IndexInParserSchema = 0;
+        TString Type;
+    };
+
     bool InflightReconnect = false;
     TDuration ReconnectPeriod;
     const TString TopicPath;
@@ -153,7 +158,7 @@ private:
     ui32 PartitionId;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
+    IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     NYql::ITopicClient::TPtr TopicClient;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     const i64 BufferSize;
@@ -170,7 +175,7 @@ private:
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TTopicSessionMetrics Metrics;
     TParserSchema ParserSchema;
-    THashMap<TString, ui64> FieldsIndexes;
+    THashMap<TString, TFieldDescription> FieldsIndexes;
     NYql::IPqGateway::TPtr PqGateway;
     TMaybe<TString> ConsumerName;
     ui64 RestartSessionByOffsets = 0;
@@ -185,7 +190,7 @@ public:
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-        NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
+        IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const NYql::IPqGateway::TPtr& pqGateway);
 
@@ -276,7 +281,7 @@ TTopicSession::TTopicSession(
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
+    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway)
     : TopicPath(topicPath)
@@ -686,14 +691,16 @@ void TTopicSession::SendData(TClientsInfo& info) {
 }
 
 void TTopicSession::UpdateFieldsIds(TClientsInfo& info) {
-    for (auto name : info.Settings.GetSource().GetColumns()) {
+    const auto& source = info.Settings.GetSource();
+    for (size_t i = 0; i < source.ColumnsSize(); ++i) {
+        const auto& name = source.GetColumns().Get(i);
         auto it = FieldsIndexes.find(name);
         if (it == FieldsIndexes.end()) {
             auto nextIndex = FieldsIndexes.size();
             info.FieldsIds.push_back(nextIndex);
-            FieldsIndexes[name] = nextIndex;
+            FieldsIndexes[name] = {nextIndex, source.GetColumnTypes().Get(i)};
         } else {
-            info.FieldsIds.push_back(it->second);
+            info.FieldsIds.push_back(it->second.IndexInParserSchema);
         }
     }
 }
@@ -730,10 +737,11 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             std::forward_as_tuple(ev)).first->second;
         UpdateFieldsIds(clientInfo);
 
-        TString predicate = clientInfo.Settings.GetSource().GetPredicate();
+        const auto& source = clientInfo.Settings.GetSource();
+        TString predicate = source.GetPredicate();
 
         // TODO: remove this when the re-parsing is removed from pq read actor
-        if (predicate.empty() && HasJsonColumns(clientInfo.Settings.GetSource())) {
+        if (predicate.empty() && HasJsonColumns(source)) {
             predicate = "WHERE TRUE";
         }
 
@@ -745,7 +753,9 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 [&, actorId = clientInfo.ReadActorId](ui64 offset, const TString& json){
                     Send(SelfId(), new NFq::TEvPrivate::TEvDataAfterFilteration(offset, json, actorId));
                 },
-                PureCalcProgramFactory);
+                PureCalcProgramFactory,
+                {.EnabledLLVM = source.GetEnabledLLVM()}
+            );
         } else {
             ClientsWithoutPredicate.insert(ev->Sender);
         }
@@ -821,7 +831,7 @@ void TTopicSession::UpdateParserSchema(const TParserInputType& inputType) {
     ui64 offset = 0;
     for (const auto& [name, type]: inputType) {
         Y_ENSURE(FieldsIndexes.contains(name));
-        ui64 index = FieldsIndexes[name];
+        ui64 index = FieldsIndexes[name].IndexInParserSchema;
         ParserSchema.FieldsMap[index] = offset++;
     }
     ParserSchema.InputType = inputType;
@@ -950,13 +960,26 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
         SendSessionError(ev->Sender, "Internal error: such a client already exists");
         return false;
     }
-    if (!Config.GetWithoutConsumer()
-        && ConsumerName 
-        && ConsumerName != ev->Get()->Record.GetSource().GetConsumerName()) {
-        LOG_ROW_DISPATCHER_INFO("Different consumer, expected " <<  ConsumerName << ", actual " << ev->Get()->Record.GetSource().GetConsumerName() << ", send error");
+
+    const auto& source = ev->Get()->Record.GetSource();
+    if (!Config.GetWithoutConsumer() && ConsumerName && ConsumerName != source.GetConsumerName()) {
+        LOG_ROW_DISPATCHER_INFO("Different consumer, expected " <<  ConsumerName << ", actual " << source.GetConsumerName() << ", send error");
         SendSessionError(ev->Sender, TStringBuilder() << "Use the same consumer in all queries via RD (current consumer " << ConsumerName << ")");
         return false;
     }
+
+    Y_ENSURE(source.ColumnsSize() == source.ColumnTypesSize());
+    for (size_t i = 0; i < source.ColumnsSize(); ++i) {
+        const auto& name = source.GetColumns().Get(i);
+        const auto& type = source.GetColumnTypes().Get(i);
+        const auto it = FieldsIndexes.find(name);
+        if (it != FieldsIndexes.end() && it->second.Type != type) {
+            LOG_ROW_DISPATCHER_INFO("Different column `" << name << "` type, expected " << it->second.Type << ", actual " << type << ", send error");
+            SendSessionError(ev->Sender, TStringBuilder() << "Use the same column type in all queries via RD, current type for column `" << name << "` is " << it->second.Type << " (requested type is " << type <<")");
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -973,7 +996,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
+    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway) {
     return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, pureCalcProgramFactory, counters, pqGateway));

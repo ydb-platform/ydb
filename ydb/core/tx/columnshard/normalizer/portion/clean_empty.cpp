@@ -1,12 +1,14 @@
 #include "clean_empty.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/protos/config.pb.h>
 
 namespace NKikimr::NOlap::NSyncChunksWithPortions {
 
 class IDBModifier {
 public:
     virtual void Apply(NIceDb::TNiceDb& db) = 0;
+    virtual ~IDBModifier() = default;
 };
 
 class TRemoveV1: public IDBModifier {
@@ -78,12 +80,14 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
 
     {
         std::map<TPortionAddress, std::vector<TChunkAddress>> usedPortions;
-        auto rowset = db.Table<Schema::IndexColumnsV1>().Select<Schema::IndexColumnsV1::PathId, Schema::IndexColumnsV1::Portion>();
+        auto rowset = db.Table<Schema::IndexColumnsV1>()
+                          .Select<Schema::IndexColumnsV1::PathId, Schema::IndexColumnsV1::PortionId, Schema::IndexColumnsV1::SSColumnId,
+                              Schema::IndexColumnsV1::ChunkIdx>();
         if (!rowset.IsReady()) {
             return false;
         }
         while (!rowset.EndOfSet()) {
-            TPortionAddress address(rowset.GetValue<Schema::IndexColumnsV1::PathId>(), rowset.GetValue<Schema::IndexColumnsV1::Portion>());
+            TPortionAddress address(rowset.GetValue<Schema::IndexColumnsV1::PathId>(), rowset.GetValue<Schema::IndexColumnsV1::PortionId>());
             TChunkAddress cAddress(rowset.GetValue<Schema::IndexColumnsV1::SSColumnId>(), rowset.GetValue<Schema::IndexColumnsV1::ChunkIdx>());
             usedPortions[address].emplace_back(cAddress);
             if (!rowset.Next()) {
@@ -98,7 +102,7 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
     }
     {
         std::map<TPortionAddress, std::shared_ptr<IDBModifier>> usedPortions;
-        auto rowset = db.Table<Schema::IndexColumnsV2>().Select<Schema::IndexColumnsV2::PathId, Schema::IndexColumnsV2::Portion>();
+        auto rowset = db.Table<Schema::IndexColumnsV2>().Select<Schema::IndexColumnsV2::PathId, Schema::IndexColumnsV2::PortionId>();
         if (!rowset.IsReady()) {
             return false;
         }
@@ -154,6 +158,16 @@ public:
         return Current != End;
     }
 
+    TPortionAddress GetPortionAddress() const {
+        AFL_VERIFY(IsValid());
+        return Current->first;
+    }
+
+    std::shared_ptr<IDBModifier> GetModification() const {
+        AFL_VERIFY(IsValid());
+        return Current->second;
+    }
+
     bool operator<(const TIterator& item) const {
         AFL_VERIFY(IsValid());
         AFL_VERIFY(item.IsValid());
@@ -201,8 +215,7 @@ std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortion
                     std::swap(result.back(), modificationsPack);
                 }
             }
-            ++i;
-            if (i.IsValid()) {
+            if (i.Next()) {
                 iteration[i.GetPortionAddress()].emplace_back(i);
             }
         }
@@ -229,7 +242,7 @@ public:
     }
 
     ui64 GetSize() const override {
-        return Addresses.size();
+        return Modifications.size();
     }
 
 private:

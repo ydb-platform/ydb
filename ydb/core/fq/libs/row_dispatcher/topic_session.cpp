@@ -90,7 +90,7 @@ struct TEvPrivate {
     };
 };
 
-ui64 SendStatisticPeriodSec = 5;
+ui64 SendStatisticPeriodSec = 2;
 ui64 MaxBatchSizeBytes = 10000000;
 ui64 MaxHandledEvents = 1000;
 

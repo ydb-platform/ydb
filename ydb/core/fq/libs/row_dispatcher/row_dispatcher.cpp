@@ -84,7 +84,7 @@ struct TQueryState {
     bool IsWaiting = false;
 };
 
-ui64 UpdateMetricsPeriodSec = 15;
+ui64 UpdateMetricsPeriodSec = 10;
 ui64 PrintStateToLogPeriodSec = 300;
 
 class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {

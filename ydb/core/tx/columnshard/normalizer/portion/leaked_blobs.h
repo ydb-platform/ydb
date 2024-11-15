@@ -31,8 +31,8 @@ public:
 
     TLeakedBlobsNormalizer(const TNormalizationController::TInitContext& info);
 
-    TConclusionStatus InitPortions(
-        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashSet<TLogoBlobID>& blobIds);
+    TConclusionStatus LoadPortionBlobIds(
+        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashSet<TLogoBlobID>& result);
 
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override;
 

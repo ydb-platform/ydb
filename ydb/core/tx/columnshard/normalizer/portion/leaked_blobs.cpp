@@ -16,11 +16,12 @@ private:
     THashSet<TLogoBlobID> CSBlobIds;
     TActorId CSActorId;
     ui64 CSTabletId;
-    THashSet<TLogoBlobID> AliveBlobs;
-    ui64 RepliesInFlight = 0;
+    TVector<TTabletChannelInfo>::iterator CurrentChannel;
+    TVector<TTabletChannelInfo::THistoryEntry>::iterator CurrentGroup;
 
 public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+    static constexpr NKikimrServices::TActivity::EType
+    ActorActivityType() {
         return NKikimrServices::TActivity::ASYNC_DESTROYER;
     }
 
@@ -32,87 +33,80 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        for (const auto& channel : Channels) {
-            if (channel.Channel >= NKeyValue::BLOB_CHANNEL) {
-                for (const auto& history : channel.History) {
-                    TLogoBlobID from(CSTabletId, 0, 0, channel.Channel, 0, 0);
-                    TLogoBlobID to(CSTabletId, Max<ui32>(), Max<ui32>(), channel.Channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
-                    auto request = MakeHolder<TEvBlobStorage::TEvRange>(CSTabletId, from, to, false, TInstant::Max(), true);
-                    SendToBSProxy(ctx, history.GroupID, request.Release());
-                    RepliesInFlight++;
-                }
-            }
-        }
+        CurrentChannel = Channels.begin();
+
+        ProcessNextChannel(ctx);
+
         Become(&TThis::StateWait);
     }
 
-    void Handle(TEvBlobStorage::TEvRangeResult::TPtr& ev, const TActorContext& /*ctx*/) {
-        TEvBlobStorage::TEvRangeResult* msg = ev->Get();
-        if (msg->Status != NKikimrProto::OK) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("reason", "request to blob storage returned not ok");
+    void ProcessNextGroup(const TActorContext& ctx) {
+        for (; CurrentGroup != CurrentChannel->History.end(); ++CurrentGroup)
+            ;
+
+        THashSet<TLogoBlobID> AliveBlobs;
+
+        if (CurrentGroup == CurrentChannel->History.end()) {
+            ProcessNextChannel(ctx);
             return;
         }
 
-        for (const auto& resp : msg->Responses) {
-            AliveBlobs.insert(resp.Id);
-        }
-
-        RepliesInFlight--;
-
-        if (RepliesInFlight == 0) {
-            SendLeakedBlobs();
-        }
+        TLogoBlobID from(CSTabletId, 0, 0, CurrentChannel->Channel, 0, 0);
+        TLogoBlobID to(CSTabletId, Max<ui32>(), Max<ui32>(), CurrentChannel->Channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
+        auto request = MakeHolder<TEvBlobStorage::TEvRange>(CSTabletId, from, to, false, TInstant::Max(), true);
+        SendToBSProxy(ctx, CurrentGroup->GroupID, request.Release());
     }
 
-    void SendLeakedBlobs() {
-        std::vector<TLogoBlobID> leakedBlobs;
-        std::vector<TLogoBlobID> curruptedBlobs;
+    void ProcessNextChannel(const TActorContext& ctx) {
+        for (; CurrentChannel != Channels.end() && CurrentChannel->Channel < NKeyValue::BLOB_CHANNEL; ++CurrentChannel)
+            ;
 
-        for (auto& id : AliveBlobs) {
-            if (!CSBlobIds.contains(id)) {
-                leakedBlobs.push_back(id);
+        if (CurrentChannel == Channels.end()) {
+            // TODO: notify completion
+            PassAway();
+            return;
+        }
+
+        CurrentGroup = CurrentChannel->History.begin();
+
+        ProcessNextGroup(ctx);
+    }
+
+    void Handle(TEvBlobStorage::TEvRangeResult::TPtr& ev, const TActorContext& ctx) {
+        TEvBlobStorage::TEvRangeResult* msg = ev->Get();
+        AFL_VERIFY(msg->Status == NKikimrProto::OK);
+
+        TVector<TLogoBlobID> leakedBlobs;
+
+        for (auto& resp : msg->Responses) {
+            if (!CSBlobIds.contains(resp.Id)) {
+                leakedBlobs.push_back(resp.Id);
             }
         }
 
-        // Send EvNormalizerResult with leakedBlobs
-
-        for (auto& id : CSBlobIds) {
-            if (!AliveBlobs.contains(id)) {
-                curruptedBlobs.push_back(id);
-            }
+        if (leakedBlobs.empty()) {
+            ProcessNextGroup(ctx);
+            return;
         }
 
-        AFL_VERIFY(curruptedBlobs.empty());
+        auto request = MakeHolder<TEvBlobStorage::TEvCollectGarbage>(CSTabletId, RecordGeneration,
+            CurrentChannel->Channel, collect, collectGeneration,
+            collectStep, nullptr, leakedBlobs, TInstant::Max());
+
+        SendToBSProxy(ctx, CurrentGroup->GroupID, request.Release());
+    }
+
+    void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx) {
+        ProcessNextGroup(ctx);
     }
 
     STFUNC(StateWait) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvRangeResult, Handle);
+            HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
             default:
                 break;
         }
-    }
-};
-
-class TRemoveLeakedBlobsTask: public INormalizerTask {
-private:
-    using TBase = NOlap::NBlobOperations::NRead::ITask;
-    TVector<TTabletChannelInfo> Channels;
-    std::vector<TPortionDataAccessor> Portions;
-    ui64 TabletId;
-    TActorId ActorId;
-
-public:
-    TRemoveLeakedBlobsTask(TVector<TTabletChannelInfo>&& channels, std::vector<TPortionDataAccessor>&& portions, ui64 tabletId, TActorId actorId)
-        : Channels(std::move(channels))
-        , Portions(std::move(portions))
-        , TabletId(tabletId)
-        , ActorId(actorId) {
-    }
-
-public:
-    virtual void Start(const TNormalizationController& /*controller*/, const TNormalizationContext& /*nCtx*/) {
-        TlsActivationContext->ExecutorThread.RegisterActor(new TRemoveLeakedBlobsActor(std::move(Channels), std::move(Portions), ActorId, TabletId));
     }
 };
 
@@ -145,28 +139,38 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(c
     }
 
     THashSet<TLogoBlobID> csBlobIDs;
-    auto conclusion = InitPortions(tablesManager, db, csBlobIDs);
+    auto conclusion = LoadPortionBlobIds(tablesManager, db, csBlobIDs);
     if (conclusion.IsFail()) {
         return conclusion;
     }
 
-    TlsActivationContext->ExecutorThread.RegisterActor(new TRemoveLeakedBlobsActor(std::move(Channels), std::move(csBlobIDs), ActorId, TabletId));
+    NActors::TActivationContext::Register(new TRemoveLeakedBlobsActor(std::move(Channels), std::move(csBlobIDs), ActorId, TabletId));
+
+    // TODO: create waiter task
+    std::vector<INormalizerTask::TPtr> result;
+
+    return result;
 }
 
-TConclusionStatus TLeakedBlobsNormalizer::InitPortions(
-    const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashSet<TLogoBlobID>& blobIds) {
-    // найти все TLogoBlobID которые достижимы из ColumnShard
+TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
+    const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashSet<TLogoBlobID>& result) {
+    TDbWrapper wrapper(db.GetDatabase(), nullptr);
+    if (!wrapper.LoadPortions({}, [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+            const TIndexInfo& indexInfo =
+                portion.GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())->GetIndexInfo();
+            AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, DsGroupSelector));
+            TPortionAccessorConstructor constructor(std::move(portion));
+            TPortionDataAccessor accessor = constructor.Build(false);
 
-    // TDbWrapper wrapper(db.GetDatabase(), nullptr);
-    // if (!wrapper.LoadPortions({}, [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-    //         const TIndexInfo& indexInfo =
-    //             portion.GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())->GetIndexInfo();
-    //         AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, DsGroupSelector));
-    //         const ui64 portionId = portion.GetPortionIdVerified();
-    //         AFL_VERIFY(constructors.push_back(TPortionAccessorConstructor(std::move(portion)).RestoreBlobRange(const TBlobRangeLink16 &linkRange)).second);
-    //     })) {
-    //     return TConclusionStatus::Fail("repeated read db");
-    // }
+            THashMap<TString, THashSet<TUnifiedBlobId>> blobIds;
+            accessor.FillBlobIdsByStorage(blobIds, indexInfo);
+
+            for (auto& id : blobIds[NBlobOperations::TGlobal::DefaultStorageId]) {
+                result.insert(id.GetLogoBlobId());
+            }
+        })) {
+        return TConclusionStatus::Fail("repeated read db");
+    }
     return TConclusionStatus::Success();
 }
 

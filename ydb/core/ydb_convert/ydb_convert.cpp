@@ -8,15 +8,15 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/binary_json/write.h>
-#include <ydb/library/dynumber/dynumber.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
-#include <ydb/library/yql/minikql/dom/json.h>
-#include <ydb/library/yql/minikql/dom/yson.h>
-#include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/utils/utf8.h>
+#include <yql/essentials/minikql/dom/json.h>
+#include <yql/essentials/minikql/dom/yson.h>
+#include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/utils/utf8.h>
 
 namespace NKikimr {
 
@@ -512,10 +512,11 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
         case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
             CheckTypeId(value.value_case(), Ydb::Value::kTextValue, "JsonDocument");
             const auto binaryJson = NBinaryJson::SerializeToBinaryJson(value.text_value());
-            if (binaryJson.IsFail()) {
-                throw yexception() << "Invalid JsonDocument value: " << binaryJson.GetErrorMessage();
+            if (std::holds_alternative<TString>(binaryJson)){
+                throw yexception() << "Invalid JsonDocument value: " << std::get<TString>(binaryJson);
             }
-            res.SetBytes(binaryJson->Data(), binaryJson->Size());
+            const auto& value = std::get<NBinaryJson::TBinaryJson>(binaryJson);
+            res.SetBytes(value.Data(), value.Size());
             break;
         }
         case NUdf::TDataType<NUdf::TDyNumber>::Id: {
@@ -1238,11 +1239,12 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
         }
     case NScheme::NTypeIds::JsonDocument : {
         const auto binaryJson = NBinaryJson::SerializeToBinaryJson(val.Gettext_value());
-        if (binaryJson.IsFail()) {
-            err = "Invalid JSON for JsonDocument provided: " + binaryJson.GetErrorMessage();
+        if (std::holds_alternative<TString>(binaryJson)) {
+            err = "Invalid JSON for JsonDocument provided: " + std::get<TString>(binaryJson);
             return false;
         }
-        const auto binaryJsonInPool = valueDataPool.AppendString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
+        const auto& value = std::get<NBinaryJson::TBinaryJson>(binaryJson);
+        const auto binaryJsonInPool = valueDataPool.AppendString(TStringBuf(value.Data(), value.Size()));
         c = TCell(binaryJsonInPool.data(), binaryJsonInPool.size());
         break;
     }

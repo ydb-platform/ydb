@@ -114,7 +114,9 @@ void TServiceContextBase::Reply(const TSharedRefArray& responseMessage)
             responseMessage.End());
 
         if (header.has_codec()) {
-            YT_VERIFY(TryEnumCast(header.codec(), &ResponseCodec_));
+            auto codec = TryCheckedEnumCast<NCompression::ECodec>(header.codec());
+            YT_VERIFY(codec);
+            ResponseCodec_ = *codec;
             SetResponseBodySerializedWithCompression();
         }
         if (header.has_format()) {

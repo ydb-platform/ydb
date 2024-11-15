@@ -21,16 +21,16 @@ PEERDIR(
     library/cpp/uri
     library/cpp/yson
     library/cpp/yson/node
-    ydb/library/yql/core/facade
-    ydb/library/yql/core/type_ann
+    yql/essentials/core/facade
+    yql/essentials/core/type_ann
     ydb/library/yql/providers/dq/provider
-    ydb/library/yql/providers/result/provider
-    ydb/library/yql/parser/pg_wrapper
-    ydb/library/yql/sql/v1/format
+    yql/essentials/providers/result/provider
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/sql/v1/format
     ydb/library/yql/providers/yt/gateway/file
     ydb/library/yql/providers/yt/provider
-    ydb/library/yql/core/url_preprocessing
-    ydb/library/yql/providers/pg/provider
+    yql/essentials/core/url_preprocessing
+    yql/essentials/providers/pg/provider
 )
 
 FILES(

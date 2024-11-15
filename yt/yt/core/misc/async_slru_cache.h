@@ -410,8 +410,8 @@ private:
         TGhostShard SmallGhost;
         TGhostShard LargeGhost;
 
-        //! Trims the lists and releases the guard. Returns the list of evicted items.
-        std::vector<TValuePtr> Trim(NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>& guard);
+        //! Returns the list of evicted items.
+        std::vector<TValuePtr> Trim(const TIntrusiveListWithAutoDelete<TItem, TDelete>& evictedItems);
 
     protected:
         void OnYoungerUpdated(i64 deltaCount, i64 deltaWeight);
@@ -451,7 +451,11 @@ private:
     //! Calls OnAdded on OnRemoved for the values evicted with Trim(). If the trim was caused by insertion, then
     //! insertedValue must be the value, insertion of which caused trim. Otherwise, insertedValue must be nullptr.
     //! If the trim was causes by weight update or weighted cookie, then weightDelta represents weight changes.
-    void NotifyOnTrim(const std::vector<TValuePtr>& evictedValues, const TValuePtr& insertedValue, i64 weightDelta = 0);
+    std::vector<TValuePtr> TrimWithNotify(
+        TShard* shard,
+        NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>& guard,
+        const TValuePtr& insertedValue,
+        i64 weightDelta = 0);
 
     void UpdateCookieWeight(const TInsertCookie& insertCookie, i64 newWeight);
     void EndInsert(const TInsertCookie& insertCookie, TValuePtr value);

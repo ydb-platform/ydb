@@ -4,8 +4,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/yson/json2yson.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 

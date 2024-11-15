@@ -1,11 +1,11 @@
-#include <ydb/library/yql/providers/common/schema/parser/yql_type_parser.h>
-#include <ydb/library/yql/public/udf/udf_version.h>
+#include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
+#include <yql/essentials/public/udf/udf_version.h>
 #include <ydb/library/yql/public/purecalc/purecalc.h>
 #include <ydb/library/yql/public/purecalc/io_specs/mkql/spec.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_terminator.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_terminator.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/common/util.h>
@@ -264,14 +264,15 @@ public:
         const TVector<TString>& types,
         const TString& whereFilter,
         TCallback callback,
-        NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory)
-        : Sql(GenerateSql(whereFilter)) {
+        IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
+        const IPureCalcProgramFactory::TSettings& factorySettings)
+        : Sql(GenerateSql(whereFilter, factorySettings)) {
         Y_ENSURE(columns.size() == types.size(), "Number of columns and types should by equal");
 
         // Program should be stateless because input values
         // allocated on another allocator and should be released
         LOG_ROW_DISPATCHER_DEBUG("Creating program...");
-        Program = pureCalcProgramFactory->MakePushStreamProgram(
+        Program = pureCalcProgramFactory->GetFactory(factorySettings)->MakePushStreamProgram(
             TFilterInputSpec(MakeInputSchema(columns, types)),
             TFilterOutputSpec(MakeOutputSchema()),
             Sql,
@@ -291,8 +292,9 @@ public:
     }
 
 private:
-    TString GenerateSql(const TString& whereFilter) {
+    TString GenerateSql(const TString& whereFilter, const IPureCalcProgramFactory::TSettings& factorySettings) {
         TStringStream str;
+        str << "PRAGMA config.flags(\"LLVM\", \"" << (factorySettings.EnabledLLVM ? "ON" : "OFF") << "\");\n";
         str << "$filtered = SELECT * FROM Input " << whereFilter << ";\n";
 
         str << "SELECT " << OffsetFieldName <<  ", Unwrap(Json::SerializeJson(Yson::From(RemoveMembers(TableRow(), [\"" << OffsetFieldName;
@@ -312,8 +314,9 @@ TJsonFilter::TJsonFilter(
     const TVector<TString>& types,
     const TString& whereFilter,
     TCallback callback,
-    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory)
-    : Impl(std::make_unique<TJsonFilter::TImpl>(columns, types, whereFilter, callback, pureCalcProgramFactory)) { 
+    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
+    const IPureCalcProgramFactory::TSettings& factorySettings)
+    : Impl(std::make_unique<TJsonFilter::TImpl>(columns, types, whereFilter, callback, pureCalcProgramFactory, factorySettings)) { 
 }
 
 TJsonFilter::~TJsonFilter() {
@@ -332,8 +335,9 @@ std::unique_ptr<TJsonFilter> NewJsonFilter(
     const TVector<TString>& types,
     const TString& whereFilter,
     TCallback callback,
-    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory) {
-    return std::unique_ptr<TJsonFilter>(new TJsonFilter(columns, types, whereFilter, callback, pureCalcProgramFactory));
+    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
+    const IPureCalcProgramFactory::TSettings& factorySettings) {
+    return std::unique_ptr<TJsonFilter>(new TJsonFilter(columns, types, whereFilter, callback, pureCalcProgramFactory, factorySettings));
 }
 
 } // namespace NFq

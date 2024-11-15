@@ -12,28 +12,28 @@ PEERDIR(
     library/cpp/yson/node
     yt/cpp/mapreduce/client
     yt/cpp/mapreduce/common
-    ydb/library/yql/ast
-    ydb/library/yql/sql/pg
-    ydb/library/yql/core/facade
-    ydb/library/yql/core/file_storage
-    ydb/library/yql/core/file_storage/defs
-    ydb/library/yql/core/file_storage/proto
-    ydb/library/yql/core/file_storage/http_download
-    ydb/library/yql/core/services/mounts
-    ydb/library/yql/core/user_data
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/invoke_builtins/llvm14
-    ydb/library/yql/minikql/comp_nodes/llvm14
-    ydb/library/yql/minikql/computation/llvm14
-    ydb/library/yql/protos
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/utils/backtrace
-    ydb/library/yql/utils/log
-    ydb/library/yql/parser/pg_wrapper
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/providers/common/udf_resolve
-    ydb/library/yql/core/url_preprocessing
-    ydb/library/yql/core/url_lister
+    yql/essentials/ast
+    yql/essentials/sql/pg
+    yql/essentials/core/facade
+    yql/essentials/core/file_storage
+    yql/essentials/core/file_storage/defs
+    yql/essentials/core/file_storage/proto
+    yql/essentials/core/file_storage/http_download
+    yql/essentials/core/services/mounts
+    yql/essentials/core/user_data
+    yql/essentials/minikql
+    yql/essentials/minikql/invoke_builtins/llvm14
+    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/computation/llvm14
+    yql/essentials/protos
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/utils/backtrace
+    yql/essentials/utils/log
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/providers/common/proto
+    yql/essentials/providers/common/udf_resolve
+    yql/essentials/core/url_preprocessing
+    yql/essentials/core/url_lister
     ydb/library/yql/providers/yt/gateway/native
     ydb/library/yql/providers/yt/lib/log
     ydb/library/yql/providers/yt/lib/yt_download
@@ -41,8 +41,8 @@ PEERDIR(
     ydb/library/yql/providers/yt/provider
     ydb/library/yql/providers/yt/codec/codegen
     ydb/library/yql/providers/yt/comp_nodes/llvm14
-    ydb/library/yql/parser/pg_wrapper/interface
-    ydb/library/yql/parser/pg_catalog
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/parser/pg_catalog
 )
 
 YQL_LAST_ABI_VERSION()

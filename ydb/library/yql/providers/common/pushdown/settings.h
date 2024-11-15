@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/library/yql/utils/log/log_component.h>
+#include <yql/essentials/utils/log/log_component.h>
 
 #include <util/system/types.h>
 
@@ -28,6 +28,7 @@ struct TSettings {
         JustPassthroughOperators = 1 << 18, // if + coalesce + just
         InOperator = 1 << 19, // IN()
         IsDistinctOperator = 1 << 20, // IS NOT DISTINCT FROM / IS DISTINCT FROM 
+        DivisionExpressions = 1 << 21, // %, / -- NOTE: division by zero is not handled and also pushdown
 
         // Option which enables partial pushdown for sequence of OR
         // For example next predicate:
@@ -35,7 +36,7 @@ struct TSettings {
         // May be partially pushdowned as:
         // $A OR $C
         // In case of unsupported / complicated expressions $B and $D
-        SplitOrOperator = 1 << 21
+        SplitOrOperator = 1 << 22
     };
 
     explicit TSettings(NLog::EComponent logComponent)

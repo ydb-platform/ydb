@@ -2,7 +2,7 @@
 #include "rpc_calls.h"
 
 #include "util/string/vector.h"
-#include "ydb/library/yql/minikql/mkql_type_ops.h"
+#include "yql/essentials/minikql/mkql_type_ops.h"
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -806,7 +806,7 @@ private:
         TString prefixColumns = PrefixColumns.GetBuffer();
         TString lastCommonPrefix = NextPrefix(CommonPrefixesRows.back());
 
-        TSerializedCellVec::UnsafeAppendCells({TCell(lastCommonPrefix.Data(), lastCommonPrefix.Size())}, prefixColumns);
+        TSerializedCellVec::UnsafeAppendCells({TCell(lastCommonPrefix.data(), lastCommonPrefix.size())}, prefixColumns);
 
         TSerializedCellVec afterLastFolderPrefix;
         afterLastFolderPrefix.Parse(prefixColumns);

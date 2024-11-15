@@ -27,7 +27,6 @@
             << " got# " << Ydb::StatusIds::StatusCode_Name(got.status()) << " issues# "  << got.issues()) \
 // UNIT_ASSERT_CHECK_STATUS
 
-
 namespace NKikimr::NGRpcService {
 
 

@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <fmt/format.h>

@@ -1,14 +1,14 @@
 #include "kqp_statement_rewrite.h"
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/kqp/provider/rewrite_io_utils.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/core/type_ann/type_ann_expr.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 namespace NKikimr {
 namespace NKqp {

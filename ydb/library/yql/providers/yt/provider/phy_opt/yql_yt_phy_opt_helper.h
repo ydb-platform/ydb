@@ -3,7 +3,7 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider_impl.h>
 #include <ydb/library/yql/providers/yt/lib/key_filter/yql_key_filter.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
 #include <util/generic/strbuf.h>
 #include <util/generic/set.h>

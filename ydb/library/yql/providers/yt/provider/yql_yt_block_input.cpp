@@ -1,9 +1,9 @@
 #include "yql_yt_provider_impl.h"
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 

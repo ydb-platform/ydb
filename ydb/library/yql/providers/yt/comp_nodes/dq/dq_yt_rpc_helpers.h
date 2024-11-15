@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/providers/yt/codec/yt_codec.h>
-#include <ydb/library/yql/public/udf/udf_value_builder.h>
+#include <yql/essentials/public/udf/udf_value_builder.h>
 
 #include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/cpp/mapreduce/common/helpers.h>

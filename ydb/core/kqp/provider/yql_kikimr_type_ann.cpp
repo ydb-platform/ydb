@@ -3,14 +3,14 @@
 
 #include <ydb/core/docapi/traits.h>
 
-#include <ydb/library/yql/core/type_ann/type_ann_impl.h>
-#include <ydb/library/yql/core/type_ann/type_ann_list.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/core/type_ann/type_ann_impl.h>
+#include <yql/essentials/core/type_ann/type_ann_list.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>

@@ -11,11 +11,7 @@ RUN_PROGRAM(
     IN dispatch_op.h.in
     OUT dispatch_op.h
     OUTPUT_INCLUDES
-        ydb/core/tx/schemeshard/generated/traits.h
-)
-
-SRCS(
-    traits.h
+        ydb/core/protos/flat_scheme_op.pb.h
 )
 
 END()

@@ -151,6 +151,21 @@ TTosLevel TTcpDispatcher::TImpl::GetTosLevelForBand(EMultiplexingBand band)
     return bandDescriptor.TosLevel.load(std::memory_order::relaxed);
 }
 
+int TTcpDispatcher::TImpl::GetMultiplexingParallelism(EMultiplexingBand band, int multiplexingParallelism)
+{
+    if (band < TEnumTraits<EMultiplexingBand>::GetMinValue() || band > TEnumTraits<EMultiplexingBand>::GetMaxValue()) {
+        return std::clamp<int>(
+            multiplexingParallelism,
+            DefaultMinMultiplexingParallelism,
+            DefaultMaxMultiplexingParallelism);
+    }
+    const auto& bandDescriptor = BandToDescriptor_[band];
+    return std::clamp<int>(
+        multiplexingParallelism,
+        bandDescriptor.MinMultiplexingParallelism.load(std::memory_order::relaxed),
+        bandDescriptor.MaxMultiplexingParallelism.load(std::memory_order::relaxed));
+}
+
 IPollerPtr TTcpDispatcher::TImpl::GetAcceptorPoller()
 {
     static const TString ThreadNamePrefix("BusAcpt");
@@ -197,6 +212,8 @@ void TTcpDispatcher::TImpl::Configure(const TTcpDispatcherConfigPtr& config)
         const auto& bandConfig = config->MultiplexingBands[band];
         auto& bandDescriptor = BandToDescriptor_[band];
         bandDescriptor.TosLevel.store(bandConfig ? bandConfig->TosLevel : DefaultTosLevel);
+        bandDescriptor.MinMultiplexingParallelism.store(bandConfig ? bandConfig->MinMultiplexingParallelism : DefaultMinMultiplexingParallelism);
+        bandDescriptor.MaxMultiplexingParallelism.store(bandConfig ? bandConfig->MaxMultiplexingParallelism : DefaultMaxMultiplexingParallelism);
     }
 }
 

@@ -4,11 +4,11 @@
 #include <ydb/core/fq/libs/common/cache.h>
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb/library/yql/utils/exceptions.h>
+#include <yql/essentials/utils/exceptions.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-#include <ydb/library/yql/utils/url_builder.h>
+#include <yql/essentials/utils/url_builder.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>

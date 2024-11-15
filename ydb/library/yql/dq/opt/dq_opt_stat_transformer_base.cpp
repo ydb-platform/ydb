@@ -1,7 +1,7 @@
 #include "dq_opt_stat_transformer_base.h"
 
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 
 namespace NYql::NDq {
 

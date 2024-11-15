@@ -14,8 +14,8 @@ YQL_LAST_ABI_VERSION()
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/testlib/basics/pg
-    ydb/library/yql/minikql/comp_nodes/llvm14
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/public/udf/service/exception_policy
 )
 
 END()

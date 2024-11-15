@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/public/udf/udf_data_type.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <util/system/types.h>
 #include <util/datetime/base.h>

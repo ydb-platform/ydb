@@ -2,9 +2,9 @@
 
 #include <ydb/library/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
 #include <ydb/library/yql/providers/yt/common/yql_yt_settings.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 #include <util/string/cast.h>
 #include <util/generic/hash_set.h>

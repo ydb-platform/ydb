@@ -4,15 +4,15 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/exception.h>
 
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
-#include <ydb/library/yql/parser/pg_catalog/catalog.h>
-#include <ydb/library/yql/public/udf/arrow/block_builder.h>
-#include <ydb/library/yql/public/udf/arrow/block_item.h>
-#include <ydb/library/yql/public/udf/arrow/block_reader.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_builder.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/parser/pg_catalog/catalog.h>
+#include <yql/essentials/public/udf/arrow/block_builder.h>
+#include <yql/essentials/public/udf/arrow/block_item.h>
+#include <yql/essentials/public/udf/arrow/block_reader.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <arrow/api.h>
 

@@ -15,7 +15,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
-    ydb/library/yql/parser/pg_wrapper/interface
+    yql/essentials/parser/pg_wrapper/interface
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
     ydb/core/kqp/executer_actor

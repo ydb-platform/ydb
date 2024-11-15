@@ -1,7 +1,7 @@
 #include "dq_yt_rpc_reader.h"
 #include "dq_yt_rpc_helpers.h"
 
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <yql/essentials/utils/failure_injector/failure_injector.h>
 
 #include "yt/cpp/mapreduce/common/helpers.h"
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 #include <util/generic/strbuf.h>
 #include <util/generic/map.h>

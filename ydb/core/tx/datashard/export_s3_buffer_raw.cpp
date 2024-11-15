@@ -4,7 +4,7 @@
 #include "type_serialization.h"
 
 #include <ydb/core/tablet_flat/flat_row_state.h>
-#include <ydb/library/binary_json/read.h>
+#include <yql/essentials/types/binary_json/read.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <library/cpp/string_utils/quote/quote.h>

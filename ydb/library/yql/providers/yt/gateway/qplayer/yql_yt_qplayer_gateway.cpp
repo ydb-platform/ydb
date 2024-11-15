@@ -1,6 +1,6 @@
 #include "yql_yt_qplayer_gateway.h"
 
-#include <ydb/library/yql/core/file_storage/storage.h>
+#include <yql/essentials/core/file_storage/storage.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/node/node_builder.h>
 #include <yt/cpp/mapreduce/interface/serialize.h>

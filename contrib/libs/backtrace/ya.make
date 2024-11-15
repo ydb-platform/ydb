@@ -6,9 +6,9 @@ LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2024-10-18)
+VERSION(2024-10-25)
 
-ORIGINAL_SOURCE(https://github.com/ianlancetaylor/libbacktrace/archive/3d0be558448724ff2618b72249143aa774d594ad.tar.gz)
+ORIGINAL_SOURCE(https://github.com/ianlancetaylor/libbacktrace/archive/d48f84034ce3e53e501d10593710d025cb1121db.tar.gz)
 
 ADDINCL(
     contrib/libs/backtrace

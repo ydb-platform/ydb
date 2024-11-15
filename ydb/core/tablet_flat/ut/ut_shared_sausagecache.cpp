@@ -135,12 +135,12 @@ void RestartAndClearCache(TMyEnvBase& env) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 }
 
-void SwitchPolicy(TMyEnvBase& env, NKikimrSharedCache::TReplacementPolicy policy) {
+void SetupSharedCache(TMyEnvBase& env, NKikimrSharedCache::TReplacementPolicy policy = NKikimrSharedCache::ThreeLeveledLRU, ui64 limit = 8_MB) {
     auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
 
     auto config = request->Record.MutableConfig()->MutableSharedCacheConfig();
     config->SetReplacementPolicy(policy);
-    config->SetMemoryLimit(8_MB);
+    config->SetMemoryLimit(limit);
     
     env->Send(MakeSharedPageCacheId(), TActorId{}, request.Release());
     WaitEvent(env, NConsole::TEvConsole::EvConfigNotificationRequest);
@@ -156,7 +156,7 @@ Y_UNIT_TEST(Limits) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    SwitchPolicy(env, NKikimrSharedCache::ThreeLeveledLRU);
+    SetupSharedCache(env);
 
     // write 300 rows, each ~100KB (~30MB)
     for (i64 key = 0; key < 300; ++key) {
@@ -201,14 +201,78 @@ Y_UNIT_TEST(Limits) {
     UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(3_MB), static_cast<i64>(1_MB / 3));
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 3_MB);
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
-    UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), counters->ActiveLimitBytes->Val());
+    UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 3_MB);
 
     env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0_MB));
     WaitEvent(env, NMemory::EvConsumerLimit);
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveBytes->Val(), 0_MB);
     UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 0_MB);
     UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
-    UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), counters->ActiveLimitBytes->Val());
+    UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 0_MB);
+}
+
+Y_UNIT_TEST(Limits_Config) {
+    TMyEnvBase env;
+    auto counters = GetSharedPageCounters(env);
+
+    bool bTreeIndex = env->GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
+    ui32 passiveBytes = bTreeIndex ? 131 : 7772;
+
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
+
+    SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU);
+
+    // write 300 rows, each ~100KB (~30MB)
+    for (i64 key = 0; key < 300; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(key, std::move(value)) });
+    }
+
+    Cerr << "...compacting" << Endl;
+    env.SendSync(new NFake::TEvCompact(TableId));
+    Cerr << "...waiting until compacted" << Endl;
+    env.WaitFor<NFake::TEvCompacted>();
+
+    TRetriedCounters retried;
+    for (i64 key = 0; key < 100; ++key) {
+        env.SendSync(new NFake::TEvExecute{ new TTxReadRow(key, retried) });
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(counters->LoadInFlyBytes->Val(), 0);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3)); // 2 full layers (fresh & staging)
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 8_MB);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 8_MB);
+
+    SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 100_MB);
+    LogCounters(counters);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 8_MB);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 100_MB);
+
+    SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 2_MB);
+    LogCounters(counters);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(8_MB / 3 * 2), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 2_MB);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 2_MB);
+
+    env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(1_MB));
+    WaitEvent(env, NMemory::EvConsumerLimit);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(1_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 1_MB);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
+    UNIT_ASSERT_VALUES_EQUAL(counters->MemLimitBytes->Val(), 1_MB);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 2_MB);
+
+    SetupSharedCache(env, NKikimrSharedCache::ThreeLeveledLRU, 0_MB);
+    LogCounters(counters);
+    UNIT_ASSERT_DOUBLES_EQUAL(counters->ActiveBytes->Val(), static_cast<i64>(1_MB), static_cast<i64>(1_MB / 3));
+    UNIT_ASSERT_VALUES_EQUAL(counters->ActiveLimitBytes->Val(), 0_MB);
+    UNIT_ASSERT_VALUES_EQUAL(counters->PassiveBytes->Val(), passiveBytes);
+    UNIT_ASSERT_VALUES_EQUAL(counters->ConfigLimitBytes->Val(), 0_MB);
 }
 
 Y_UNIT_TEST(ThreeLeveledLRU) {
@@ -218,7 +282,7 @@ Y_UNIT_TEST(ThreeLeveledLRU) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    SwitchPolicy(env, NKikimrSharedCache::ThreeLeveledLRU);
+    SetupSharedCache(env);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -316,7 +380,7 @@ Y_UNIT_TEST(S3FIFO) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    SwitchPolicy(env, NKikimrSharedCache::S3FIFO);
+    SetupSharedCache(env, NKikimrSharedCache::S3FIFO);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -414,7 +478,7 @@ Y_UNIT_TEST(ClockPro) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    SwitchPolicy(env, NKikimrSharedCache::ClockPro);
+    SetupSharedCache(env, NKikimrSharedCache::ClockPro);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -526,7 +590,7 @@ Y_UNIT_TEST(ReplacementPolicySwitch) {
     env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
     env.SendSync(new NFake::TEvExecute{ new TTxInitSchema() });
 
-    SwitchPolicy(env, NKikimrSharedCache::ThreeLeveledLRU);
+    SetupSharedCache(env);
 
     // write 100 rows, each ~100KB (~10MB)
     for (i64 key = 0; key < 100; ++key) {
@@ -550,7 +614,7 @@ Y_UNIT_TEST(ReplacementPolicySwitch) {
     UNIT_ASSERT_GT(counters->ReplacementPolicySize(NKikimrSharedCache::ThreeLeveledLRU)->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(counters->ReplacementPolicySize(NKikimrSharedCache::S3FIFO)->Val(), 0);
 
-    SwitchPolicy(env, NKikimrSharedCache::S3FIFO);
+    SetupSharedCache(env, NKikimrSharedCache::S3FIFO);
 
     retried = {};
     for (i64 key = 0; key < 3; ++key) {

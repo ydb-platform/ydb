@@ -252,7 +252,7 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
         }
     }
     {
-        NOlap::TNormalizationController::TInitContext initCtx(Self->Info());
+        NOlap::TNormalizationController::TInitContext initCtx(Self->Info(), Self->SelfId());
         Self->NormalizerController.InitNormalizers(initCtx);
     }
 
@@ -299,4 +299,4 @@ void TColumnShard::Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActo
     Execute(new TTxApplyNormalizer(this, ev->Get()->GetChanges()), ctx);
 }
 
-}   // namespace NKikimr::NColumnShard
+} // namespace NKikimr::NColumnShard

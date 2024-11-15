@@ -157,4 +157,4 @@ TConclusionStatus TPortionsNormalizerBase::InitIndexes(NIceDb::TNiceDb& db, THas
     return TConclusionStatus::Success();
 }
 
-}   // namespace NKikimr::NOlap
+} // namespace NKikimr::NOlap

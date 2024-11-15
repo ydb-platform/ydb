@@ -261,7 +261,6 @@ def max_intersect_interval_by_x(rectangles: list[Rectangle]) -> Interval:
         elif point.border == Border.END:
             current_intersect -= 1
             if max_interval.count_intersect < current_intersect:
-                print(point.num_rectangle)
                 max_interval.count_intersect = current_intersect
                 max_interval.start = rectangles[point.num_rectangle].get_x()
                 max_interval.end = max_interval.start + rectangles[point.num_rectangle].get_width()
@@ -348,14 +347,6 @@ if __name__ == '__main__':
 
     print(f"count drawn rectangles: {len(rectangles)}")
 
-    rectangles = []
-    for i in range(0, 5):
-        rectangles.append(Rectangle((i, i), 1, 1, color="black", fc='none'))
-    for i in range(5, 0, -1):
-        rectangles.append(Rectangle((i + 5, i - 1), 1, 1, color="black", fc='none'))
-    max_interval: Interval = max_intersect_interval_by_x(rectangles)
-    print(f"max_interval: ({max_interval.start}, {max_interval.end}), count intersect: {max_interval.count_intersect}")
-
     fig, ax = plt.subplots()
     ax.set_title("intersect portions")
     ax.add_collection(PatchCollection(rectangles, match_original=True))
@@ -363,6 +354,6 @@ if __name__ == '__main__':
     plt.xlabel("primary key (TimeStamp)")
     plt.ylabel("snapshot plan step")
     plt.title("intersect portions")
-    # plt.xlim(limit_x[0] , limit_x[1])
-    # plt.ylim(limit_y[0] , limit_y[1])
+    plt.xlim(limit_x[0], limit_x[1])
+    plt.ylim(limit_y[0], limit_y[1])
     plt.show()

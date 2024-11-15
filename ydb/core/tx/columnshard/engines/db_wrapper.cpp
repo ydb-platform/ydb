@@ -99,8 +99,8 @@ void TDbWrapper::WritePortion(const NOlap::TPortionInfo& portion) {
 
 void TDbWrapper::ErasePortion(const NOlap::TPortionInfo& portion) {
     NIceDb::TNiceDb db(Database);
-    using IndexPortions = NColumnShard::Schema::IndexPortions;
-    db.Table<IndexPortions>().Key(portion.GetPathId(), portion.GetPortionId()).Delete();
+    db.Table<NColumnShard::Schema::IndexPortions>().Key(portion.GetPathId(), portion.GetPortionId()).Delete();
+    db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(portion.GetPathId(), portion.GetPortionId()).Delete();
 }
 
 void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) {

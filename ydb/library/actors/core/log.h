@@ -146,6 +146,8 @@ struct TLogRateLimiter {
 
 #define LOG_DEBUG_S_RATELIMITED(actorCtxOrSystem, component, stream, rateLimit, limit)  \
     LOG_LOG_S_RATELIMITED(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, 0ull, stream, rateLimit, limit)
+#define LOG_TRACE_S_RATELIMITED(actorCtxOrSystem, component, stream, rateLimit, limit)  \
+    LOG_LOG_S_RATELIMITED(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, 0ull, stream, rateLimit, limit)
 
 // Log Throttling
 #define LOG_LOG_THROTTLE(throttler, actorCtxOrSystem, priority, component, ...) \

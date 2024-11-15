@@ -19,8 +19,8 @@ namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
 
-void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
-    std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx) {
+void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize,
+    const ui64 cookie, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx) {
     Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
     switch (overloadReason) {
         case EOverloadStatus::Disk:
@@ -262,8 +262,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
                                     << (writeMeta.GetWriteId() ? (" writeId " + ToString(writeMeta.GetWriteId())).c_str() : " ")
                                     << Counters.GetWritesMonitor()->DebugString() << " at tablet " << TabletID());
         writeData.MutableWriteMeta().SetWriteMiddle1StartInstant(TMonotonic::Now());
-        std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(
-            TabletID(), SelfId(), BufferizationWriteActorId, std::move(writeData), snapshotSchema, GetLastTxSnapshot(), Counters.GetCSCounters().WritingCounters);
+        std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(TabletID(), SelfId(), BufferizationWriteActorId,
+            std::move(writeData), snapshotSchema, GetLastTxSnapshot(), Counters.GetCSCounters().WritingCounters);
         NConveyor::TInsertServiceOperator::AsyncTaskToExecute(task);
     }
 }
@@ -285,7 +285,8 @@ public:
     }
 
     TCommitOperation(const ui64 tabletId)
-        : TabletId(tabletId) {
+        : TabletId(tabletId)
+    {
     }
 
     TConclusionStatus Parse(const NEvents::TDataEvents::TEvWrite& evWrite) {
@@ -357,7 +358,8 @@ public:
         : TBase(self)
         , WriteCommit(op)
         , Source(source)
-        , Cookie(cookie) {
+        , Cookie(cookie)
+    {
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -402,7 +404,8 @@ public:
         : TBase(self)
         , TxId(txId)
         , Source(source)
-        , Cookie(cookie) {
+        , Cookie(cookie)
+    {
     }
 
     virtual bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -466,9 +469,8 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                         NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
                 } else {
                     if (lockInfo->GetGeneration() != commitOperation->GetGeneration()) {
-                        sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) +
-                                      " != " + ::ToString(commitOperation->GetGeneration()),
-                            NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+                        sendError("tablet lock have another generation: " + ::ToString(lockInfo->GetGeneration()) + " != " +
+                                      ::ToString(commitOperation->GetGeneration()), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
                     } else if (lockInfo->GetInternalGenerationCounter() != commitOperation->GetInternalGenerationCounter()) {
                         sendError(
                             "tablet lock have another internal generation counter: " + ::ToString(lockInfo->GetInternalGenerationCounter()) +
@@ -567,7 +569,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     auto writeOperation = OperationsManager->RegisterOperation(lockId, cookie, granuleShardingVersionId, *mType);
     Y_ABORT_UNLESS(writeOperation);
     writeOperation->SetBehaviour(behaviour);
-    writeOperation->Start(*this, tableId, arrowData, source, schema, ctx);
+    writeOperation->Start(*this, tableId, arrowData, source, schema, ctx, NOlap::TSnapshot::Max());
 }
 
-}   // namespace NKikimr::NColumnShard
+}  // namespace NKikimr::NColumnShard

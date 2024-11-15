@@ -96,7 +96,7 @@
 
       Настройка `YDB_USE_IN_MEMORY_PDISKS` делает все данные волатильными, хранящимися только в оперативной памяти. В настоящее время сохранение данных путем её отключения поддерживается только на x86_64 процессорах.
 
-      Чтобы отключить опцию YDB_USE_IN_MEMORY_PDISKS при запуске контейнера Docker на Mac с процессором Apple Silicon, он должен эмулировать набор инструкций x86_64:
+      Чтобы отключить опцию `YDB_USE_IN_MEMORY_PDISKS` при запуске контейнера Docker на Mac с процессором Apple Silicon, он должен эмулировать набор инструкций x86_64:
 
       - С помощью [colima](https://github.com/abiosoft/colima) используйте параметры `colima start --arch aarch64 --vm-type=vz --vz-rosetta`.
       - С помощью [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/) установите и включите Rosetta 2.

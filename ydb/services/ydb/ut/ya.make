@@ -38,7 +38,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common
-    ydb/core/testlib/default
+    ydb/core/testlib/pg
     ydb/core/tx/datashard/ut_common
     ydb/core/grpc_services/base
     ydb/core/testlib

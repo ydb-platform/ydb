@@ -5,8 +5,6 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 
-#include <library/cpp/pop_count/popcount.h>
-
 namespace NKikimr {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

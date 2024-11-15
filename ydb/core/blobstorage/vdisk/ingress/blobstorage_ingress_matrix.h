@@ -2,10 +2,10 @@
 
 #include <ydb/core/util/bits.h>
 
-#include <library/cpp/pop_count/popcount.h>
-
 #include <util/stream/str.h>
 #include <util/string/cast.h>
+
+#include <bit>
 
 namespace NKikimr {
 
@@ -81,7 +81,7 @@ namespace NKikimr {
                 ui8 shift = 8 - i;
                 ui8 mask = 0xFF >> shift << shift;
                 unsigned v = Vec & mask;
-                return ::PopCount(v);
+                return ::std::popcount(v);
             }
 
             ui8 FirstPosition() const {
@@ -97,7 +97,7 @@ namespace NKikimr {
             }
 
             ui8 CountBits() const {
-                return ::PopCount(Vec);
+                return ::std::popcount(Vec);
             }
 
             ui8 Raw() const {

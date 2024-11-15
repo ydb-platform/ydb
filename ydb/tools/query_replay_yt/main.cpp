@@ -282,6 +282,7 @@ int main(int argc, const char** argv) {
     if (!config.CoreTablePath.empty()) {
         spec.CoreTablePath(config.CoreTablePath);
     }
+    spec.MaxFailedJobCount(10000);
 
     client->Map(spec, new TQueryReplayMapper(config.UdfFiles, config.ActorSystemThreadsCount, config.EnableAntlr4Parser, config.YqlLogLevel));
 

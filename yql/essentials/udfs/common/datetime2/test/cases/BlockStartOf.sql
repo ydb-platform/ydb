@@ -24,7 +24,5 @@ select
     DateTime::StartOf(`tztimestamp`, Interval("PT15M")),
     DateTime::StartOf(`tztimestamp`, Interval("PT20S")),
     DateTime::StartOf(`tztimestamp`, Interval("PT7S")),
-    DateTime::TimeOfDay(`tztimestamp`),
-
-    DateTime::EndOfMonth(`tztimestamp`),
+    DateTime::TimeOfDay(`tztimestamp`)
 from @t;

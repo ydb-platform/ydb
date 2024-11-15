@@ -17,7 +17,7 @@ in the source code repo
   not a commit which may be shared across this branch and `main`. Create the
   branch like:
 ```
-BRANCH=1.32
+BRANCH=1.35
 git pull && \
 git checkout main && \
 git checkout -b v${BRANCH} main && \
@@ -29,23 +29,18 @@ git push -u origin v${BRANCH}
   Major version number, `Y` is the minor version number, and `Z` is the release.
   This tag needs to be created from the release branch, for example:
 ```
-BRANCH=1.32
-RELEASE=1.32.0
+BRANCH=1.35
+RELEASE=1.35.0
 git checkout v${BRANCH} && \
 git pull && \
 git tag -s v${RELEASE} -m 'c-ares release v${RELEASE}' v${BRANCH} && \
 git push origin --tags
 ```
-- Create the release tarball using `make dist`, it is best to check out the
-  specific tag fresh and build from that:
+- When a tag is created, it will spawn off a github action to generate a new
+  draft release based on this workflow: [package.yml](https://github.com/c-ares/c-ares/blob/main/.github/workflows/package.yml).
+  Wait for this workflow to complete then fetch the generated source tarball:
 ```
-RELEASE=1.32.0
-git clone --depth 1 --branch v${RELEASE} https://github.com/c-ares/c-ares c-ares-${RELEASE} && \
-cd c-ares-${RELEASE} && \
-autoreconf -fi && \
-./configure && \
-make && \
-make dist VERSION=${RELEASE}
+wget https://github.com/c-ares/c-ares/releases/download/v${RELEASE}/c-ares-${RELEASE}.tar.gz
 ```
 - GPG sign the release with a detached signature. Valid signing keys are currently:
   - Daniel Stenberg <daniel@haxx.se> - 27EDEAF22F3ABCEB50DB9A125CC908FDB71E12C2
@@ -53,8 +48,8 @@ make dist VERSION=${RELEASE}
 ```
 gpg -ab c-ares-${RELEASE}.tar.gz
 ```
-- Create a new release on GitHub using the `RELEASE-NOTES.md` as the body.
-  Upload the generated tarball and signature as an artifact.
+- Upload the generated `c-ares-${RELEASE}.tar.gz.asc` signature as a release
+  asset, then unmark the release as being a draft.
 
 in the c-ares-www repo
 ----------------------

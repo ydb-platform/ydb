@@ -182,6 +182,7 @@ private:
         auto childPid = fork();
 
         if (childPid == 0) {
+            NFs::MakeDirectoryRecursive(Options_.HeapDumpDirectory);
             SetupMemoryProfileTimeout(Options_.Timeout.Seconds());
             CollectAndDumpMemoryProfile(profilePaths->HeapProfilePath, tcmalloc::ProfileType::kHeap);
             CollectAndDumpMemoryProfile(profilePaths->PeakProfilePath, tcmalloc::ProfileType::kPeakHeap);

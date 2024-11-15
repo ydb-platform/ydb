@@ -13,7 +13,6 @@
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
-#include <ydb/library/yql/public/purecalc/common/interface.h>
 
 namespace {
 
@@ -27,7 +26,7 @@ const ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
 class TFixture : public NUnitTest::TBaseFixture {
 public:
     TFixture()
-        : PureCalcProgramFactory(NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions()))
+        : PureCalcProgramFactory(CreatePureCalcProgramFactory())
         , Runtime(true)
     {}
 
@@ -158,7 +157,7 @@ public:
         return eventHolder->Get()->Record.MessagesSize();
     }
 
-    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
+    IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     NActors::TTestActorRuntime Runtime;
     TActorSystemStub ActorSystemStub;
     NActors::TActorId TopicSession;

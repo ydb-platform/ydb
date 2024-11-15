@@ -1,5 +1,6 @@
 #pragma once
 
+#include "convert_to_cpo.h"
 #include "mergeable_dictionary.h"
 
 #include <library/cpp/yt/misc/optional.h>
@@ -13,6 +14,9 @@ namespace NYT {
 // Eventually it would be a simple hash map.
 // NB(arkady-e1ppa): For now most methods are defined in yt/yt/core/misc/stripped_error.cpp
 // eventually they will be moved here.
+// NB(arkady-e1ppa): For now we use TYsonString as value.
+// TODO(arkady-e1ppa): Try switching to TString/std::string eventually.
+// representing text-encoded yson string eventually (maybe).
 class TErrorAttributes
 {
 public:
@@ -54,28 +58,34 @@ public:
     //! Finds the attribute and deserializes its value.
     //! Throws if no such value is found.
     template <class T>
+        requires CConvertToWorks<T, TValue>
     T Get(TStringBuf key) const;
 
     //! Same as #Get but removes the value.
     template <class T>
+        requires CConvertToWorks<T, TValue>
     T GetAndRemove(const TString& key);
 
     //! Finds the attribute and deserializes its value.
     //! Uses default value if no such attribute is found.
     template <class T>
+        requires CConvertToWorks<T, TValue>
     T Get(TStringBuf key, const T& defaultValue) const;
 
     //! Same as #Get but removes the value if it exists.
     template <class T>
+        requires CConvertToWorks<T, TValue>
     T GetAndRemove(const TString& key, const T& defaultValue);
 
     //! Finds the attribute and deserializes its value.
     //! Returns null if no such attribute is found.
     template <class T>
+        requires CConvertToWorks<T, TValue>
     typename TOptionalTraits<T>::TOptional Find(TStringBuf key) const;
 
     //! Same as #Find but removes the value if it exists.
     template <class T>
+        requires CConvertToWorks<T, TValue>
     typename TOptionalTraits<T>::TOptional FindAndRemove(const TString& key);
 
     template <CMergeableDictionary TDictionary>
@@ -92,6 +102,9 @@ private:
 
     TErrorAttributes(TErrorAttributes&& other) = default;
     TErrorAttributes& operator= (TErrorAttributes&& other) = default;
+
+    // defined in yt/yt/core/misc/stripped_error.cpp right now.
+    [[noreturn]] static void ThrowCannotParseAttributeException(TStringBuf key, const std::exception& ex);
 };
 
 bool operator == (const TErrorAttributes& lhs, const TErrorAttributes& rhs);

@@ -1,13 +1,3 @@
-IF (YQL_PACKAGED)
-    PACKAGE()
-
-    FROM_SANDBOX(
-        FILE 7319899245 OUT_NOAUTO libhyperscan_udf.so
-    )
-
-    END()
-ELSE()
-
     # NO_BUILD_IF does not like logical expressions by now
     # see DEVTOOLSSUPPORT-44378
     IF (NOT OS_LINUX OR NOT CLANG)
@@ -34,8 +24,6 @@ YQL_UDF_CONTRIB(hyperscan_udf)
     )
 
     END()
-
-ENDIF()
 
 RECURSE_FOR_TESTS(
     test

@@ -7,7 +7,7 @@ from ydb.tests.olap.lib.utils import get_external_param
 import ydb
 from copy import deepcopy
 from time import sleep, time
-from typing import List
+from typing import List, Optional
 
 LOGGER = logging.getLogger()
 
@@ -53,9 +53,11 @@ class YdbCluster:
         return f'http://{host}:{port}'
 
     @classmethod
-    def get_cluster_nodes(cls, path=None):
+    def get_cluster_nodes(cls, path: Optional[str] = None, db_only: bool = False) -> list[dict[str:any]]:
         try:
-            url = f'{cls._get_service_url()}/viewer/json/nodes?database=/{cls.ydb_database}'
+            url = f'{cls._get_service_url()}/viewer/json/nodes?'
+            if db_only or path is not None:
+                url += f'database=/{cls.ydb_database}'
             if path is not None:
                 url += f'&path={path}&tablets=true'
             headers = {}
@@ -64,8 +66,7 @@ class YdbCluster:
             #    headers['Authorization'] = token
             data = requests.get(url, headers=headers).json()
             nodes = data.get('Nodes', [])
-            nodes_count = int(data.get('TotalNodes', len(nodes)))
-            return nodes, nodes_count
+            return nodes
         except Exception as e:
             LOGGER.error(e)
         return [], 0
@@ -76,7 +77,7 @@ class YdbCluster:
             version = ''
             cluster_name = ''
             nodes_wilcard = ''
-            nodes, node_count = cls.get_cluster_nodes()
+            nodes = cls.get_cluster_nodes()
             for node in nodes:
                 n = node.get('SystemState', {})
                 cluster_name = n.get('ClusterName', cluster_name)
@@ -86,7 +87,6 @@ class YdbCluster:
                         nodes_wilcard = n.get('Host', nodes_wilcard).split('.')[0].rstrip('0123456789')
             cls._cluster_info = {
                 'database': cls.ydb_database,
-                'node_count': node_count,
                 'version': version,
                 'name': cluster_name,
                 'nodes_wilcard': nodes_wilcard,
@@ -183,63 +183,53 @@ class YdbCluster:
         def _check_node(n):
             name = 'UnknownNode'
             error = None
-            role = 'Unknown'
             try:
                 ss = n.get('SystemState', {})
                 name = ss.get("Host")
                 start_time = int(ss.get('StartTime', int(time()) * 1000)) / 1000
                 uptime = int(time()) - start_time
-                r = ss.get('Roles', [])
-                for role_candidate in ['Storage', 'Tenant']:
-                    if role_candidate in r:
-                        role = role_candidate
-                        break
                 if uptime < 15:
                     error = f'Node {name} too yong: {uptime}'
             except BaseException as ex:
                 error = f"Error while process node {name}: {ex}"
             if error:
                 LOGGER.error(error)
-            return error, role
+            return error
 
         errors = []
         try:
-            nodes, node_count = cls.get_cluster_nodes()
-            if node_count == 0:
-                errors.append('nodes_count == 0')
-            if len(nodes) < node_count:
-                errors.append(f"{node_count - len(nodes)} nodes from {node_count} don't live")
-            ok_by_role = {'Tenant': 0, 'Storage': 0, 'Unknown': 0}
-            nodes_by_role = deepcopy(ok_by_role)
-            node_errors = {'Tenant': [], 'Storage': [], 'Unknown': []}
+            nodes = cls.get_cluster_nodes(db_only=True)
+            expected_nodes_count = os.getenv('EXPECTED_DYN_NODES_COUNT')
+            nodes_count = len(nodes)
+            if expected_nodes_count:
+                LOGGER.debug(f'Expected nodes count: {expected_nodes_count}')
+                expected_nodes_count = int(expected_nodes_count)
+                if nodes_count < expected_nodes_count:
+                    errors.append(f"{expected_nodes_count - nodes_count} nodes from {expected_nodes_count} don't alive")
+            ok_node_count = 0
+            node_errors = []
             for n in nodes:
-                error, role = _check_node(n)
+                error = _check_node(n)
                 if error:
-                    node_errors[role].append(error)
+                    node_errors.append(error)
                 else:
-                    ok_by_role[role] += 1
-                nodes_by_role[role] += 1
-            dynnodes_count = nodes_by_role['Tenant']
-            ok_dynnodes_count = ok_by_role['Tenant']
-            if ok_dynnodes_count < dynnodes_count:
-                dynnodes_errors = ','.join(node_errors['Tenant'])
-                errors.append(f'Only {ok_dynnodes_count} from {dynnodes_count} dynnodes are ok: {dynnodes_errors}')
-            storage_nodes_count = nodes_by_role['Storage']
-            ok_storage_nodes_count = ok_by_role['Storage']
-            if ok_storage_nodes_count < storage_nodes_count:
-                storage_nodes_errors = ','.join(node_errors['Tenant'])
-                errors.append(f'Only {ok_storage_nodes_count} from {storage_nodes_count} storage nodes are ok. {storage_nodes_errors}')
-            paths_to_balance = []
-            if isinstance(balanced_paths, str):
-                paths_to_balance += cls._get_tables(balanced_paths)
-            elif isinstance(balanced_paths, list):
-                for path in balanced_paths:
-                    paths_to_balance += cls._get_tables(path)
+                    ok_node_count += 1
+            if ok_node_count < nodes_count:
+                errors.append(f'Only {ok_node_count} from {ok_node_count} dynnodes are ok: {",".join(node_errors)}')
             if os.getenv('TEST_CHECK_BALANCING', 'no') == 'yes':
+                paths_to_balance = []
+                if isinstance(balanced_paths, str):
+                    paths_to_balance += cls._get_tables(balanced_paths)
+                elif isinstance(balanced_paths, list):
+                    for path in balanced_paths:
+                        paths_to_balance += cls._get_tables(path)
                 for p in paths_to_balance:
-                    table_nodes, _ = cls.get_cluster_nodes(p)
+                    table_nodes = cls.get_cluster_nodes(p)
                     min = None
                     max = None
+                    if expected_nodes_count:
+                        if len(table_nodes) < expected_nodes_count:
+                            min = 0
                     for tn in table_nodes:
                         tablet_count = 0
                         for tablet in tn.get("Tablets", []):
@@ -256,7 +246,7 @@ class YdbCluster:
                         errors.append(f'Table {p} has no tablets')
                     elif max - min > 1:
                         errors.append(f'Table {p} is not balanced: {min}-{max} shards.')
-                    LOGGER.info(f'Table {p} is balanced: {min}-{max} shards.')
+                    LOGGER.info(f'Table {p} balance: {min}-{max} shards.')
 
             cls.execute_single_result_query("select 1", timeout)
         except BaseException as ex:

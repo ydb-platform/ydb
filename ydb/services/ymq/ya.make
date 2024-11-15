@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     ymq_proxy.cpp
     grpc_service.cpp
+    utils.cpp
 )
 
 PEERDIR(

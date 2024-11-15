@@ -1,12 +1,12 @@
 # PrettyTable
 
-[![Jazzband](https://jazzband.co/static/img/badge.svg)](https://jazzband.co/)
 [![PyPI version](https://img.shields.io/pypi/v/prettytable.svg?logo=pypi&logoColor=FFE873)](https://pypi.org/project/prettytable/)
 [![Supported Python versions](https://img.shields.io/pypi/pyversions/prettytable.svg?logo=python&logoColor=FFE873)](https://pypi.org/project/prettytable/)
 [![PyPI downloads](https://img.shields.io/pypi/dm/prettytable.svg)](https://pypistats.org/packages/prettytable)
-[![GitHub Actions status](https://github.com/jazzband/prettytable/workflows/Test/badge.svg)](https://github.com/jazzband/prettytable/actions)
-[![codecov](https://codecov.io/gh/jazzband/prettytable/branch/main/graph/badge.svg)](https://codecov.io/gh/jazzband/prettytable)
-[![Code style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![GitHub Actions status](https://github.com/prettytable/prettytable/workflows/Test/badge.svg)](https://github.com/prettytable/prettytable/actions)
+[![codecov](https://codecov.io/gh/prettytable/prettytable/branch/main/graph/badge.svg)](https://codecov.io/gh/prettytable/prettytable)
+[![Code style: Black](https://img.shields.io/badge/code%20style-Black-000000.svg)](https://github.com/psf/black)
+[![Tidelift](https://tidelift.com/badges/package/pypi/prettytable)](https://tidelift.com/subscription/pkg/pypi-prettytable?utm_source=pypi-prettytable&utm_medium=badge)
 
 PrettyTable lets you print tables in an attractive ASCII form:
 
@@ -32,11 +32,11 @@ Install via pip:
 
 Install latest development version:
 
-    python -m pip install -U git+https://github.com/jazzband/prettytable
+    python -m pip install -U git+https://github.com/prettytable/prettytable
 
 Or from `requirements.txt`:
 
-    -e git://github.com/jazzband/prettytable.git#egg=prettytable
+    -e git://github.com/prettytable/prettytable.git#egg=prettytable
 
 ## Tutorial on how to use the PrettyTable API
 

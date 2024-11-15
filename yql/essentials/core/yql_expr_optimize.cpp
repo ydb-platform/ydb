@@ -4,6 +4,7 @@
 #include "yql_expr_type_annotation.h"
 
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/log/profile.h>
 
 namespace NYql {
 
@@ -343,7 +344,7 @@ namespace {
         }
     }
 
-    void VisitExprLambdasLastInternal(const TExprNode::TPtr& node, 
+    void VisitExprLambdasLastInternal(const TExprNode::TPtr& node,
         const TExprVisitPtrFunc& preLambdaFunc,
         const TExprVisitPtrFunc& postLambdaFunc,
         TNodeSet& visitedNodes)
@@ -357,9 +358,9 @@ namespace {
                 VisitExprLambdasLastInternal(child, preLambdaFunc, postLambdaFunc, visitedNodes);
             }
         }
-        
+
         preLambdaFunc(node);
-        
+
         for (auto child : node->Children()) {
             if (child->IsLambda()) {
                 VisitExprLambdasLastInternal(child, preLambdaFunc, postLambdaFunc, visitedNodes);
@@ -536,7 +537,7 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
     if (ctx.Step.IsDone(TExprStep::ExpandApplyForLambdas))
         return IGraphTransformer::TStatus::Ok;
 
-    YQL_CLOG(DEBUG, Core) << "Start ExpandApply";
+    YQL_PROFILE_SCOPE(DEBUG, "ExpandApply");
     TOptimizeExprSettings settings(nullptr);
     auto ret = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, bool& changed, TExprContext& ctx) -> TExprNode::TPtr {
         if (node->Content() == "WithOptionalArgs") {
@@ -858,7 +859,6 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
         ctx.Step.Done(TExprStep::ExpandApplyForLambdas);
     }
 
-    YQL_CLOG(DEBUG, Core) << "Finish ExpandApply";
     return ret;
 }
 
@@ -910,7 +910,7 @@ void VisitExpr(const TExprNode& root, const TExprVisitRefFunc& preFunc, const TE
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes) {
     VisitExprInternal(root, func, {}, visitedNodes);
 }
-    
+
 void VisitExprLambdasLast(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preLambdaFunc, const TExprVisitPtrFunc& postLambdaFunc)
 {
     TNodeSet visitedNodes;

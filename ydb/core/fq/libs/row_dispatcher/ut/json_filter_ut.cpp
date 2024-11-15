@@ -26,7 +26,9 @@ public:
         : PureCalcProgramFactory(CreatePureCalcProgramFactory())
         , Runtime(true)
         , Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false)
-    {}
+    {
+        Alloc.Ref().UseRefLocking = true;
+    }
 
     static void SegmentationFaultHandler(int) {
         Cerr << "segmentation fault call stack:" << Endl;
@@ -70,7 +72,7 @@ public:
     }
 
     void Push(const TVector<ui64>& offsets, const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values) {
-        Filter->Push(offsets, values, 0, values.size());
+        Filter->Push(offsets, values, 0, values.front()->size());
     }
 
     const TVector<NYql::NUdf::TUnboxedValue>* MakeVector(size_t size, std::function<NYql::NUdf::TUnboxedValuePod(size_t)> valueCreator) {

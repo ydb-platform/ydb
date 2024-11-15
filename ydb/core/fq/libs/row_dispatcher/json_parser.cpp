@@ -19,7 +19,9 @@ namespace {
 
 TString LogPrefix = "JsonParser: ";
 
+constexpr ui64 DEFAULT_BATCH_SIZE = 1_MB;
 constexpr ui64 DEFAULT_STATIC_BUFFER_SIZE = 1000000;
+constexpr TDuration DEFAULT_BATCH_CREATION_TIMEOUT = TDuration::Seconds(1);
 
 struct TJsonParserBuffer {
     size_t NumberValues = 0;
@@ -40,20 +42,11 @@ struct TJsonParserBuffer {
         Offsets.reserve(numberValues);
     }
 
-    void AddMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
+    void AddMessage(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
         Y_ENSURE(!Finished, "Cannot add messages into finished buffer");
-
-        size_t messagesSize = 0;
-        for (const auto& message : messages) {
-            messagesSize += message.GetData().size();
-        }
-
-        NumberValues += messages.size();
-        Reserve(Values.size() + messagesSize, NumberValues);
-        for (const auto& message : messages) {
-            Values << message.GetData();
-            Offsets.emplace_back(message.GetOffset());
-        }
+        NumberValues++;
+        Values << message.GetData();
+        Offsets.emplace_back(message.GetOffset());
     }
 
     std::pair<const char*, size_t> Finish() {
@@ -102,8 +95,8 @@ public:
     }
 
     void ParseJsonValue(ui64 rowId, simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
-        Parser(jsonValue, resultValue);
         ParsedRows.emplace_back(rowId);
+        Parser(jsonValue, resultValue);
     }
 
     void ValidateNumberValues(size_t expectedNumberValues, ui64 firstOffset) const {
@@ -280,9 +273,9 @@ public:
     TImpl(const TVector<TString>& columns, const TVector<TString>& types, TCallback parseCallback, ui64 batchSize, TDuration batchCreationTimeout, ui64 staticBufferSize)
         : Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false)
         , TypeEnv(std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc))
-        , BatchSize(batchSize)
+        , BatchSize(batchSize ? batchSize : DEFAULT_BATCH_SIZE)
         , MaxNumberRows(((staticBufferSize ? staticBufferSize : DEFAULT_STATIC_BUFFER_SIZE) - 1) / columns.size() + 1)
-        , BatchCreationTimeout(batchCreationTimeout)
+        , BatchCreationTimeout(batchCreationTimeout ? batchCreationTimeout : DEFAULT_BATCH_CREATION_TIMEOUT)
         , ParseCallback(parseCallback)
         , ParsedValues(columns.size())
     {
@@ -330,14 +323,13 @@ public:
     }
 
     void AddMessages(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
-        if (messages.empty()) {
-            return;
+        Y_ENSURE(!Buffer.Finished, "Cannot add messages into finished buffer");
+        for (const auto& message : messages) {
+            Buffer.AddMessage(message);
+            if (IsReady()) {
+                Parse();
+            }
         }
-
-        if (Buffer.Finished) {
-            Buffer.Clear();
-        }
-        Buffer.AddMessages(messages);
     }
 
     void Parse() {
@@ -347,13 +339,18 @@ public:
         LOG_ROW_DISPATCHER_TRACE("Parse values:\n" << values);
 
         with_lock (Alloc) {
-            const ui64 firstOffset = Buffer.Offsets.front();
+            Y_DEFER {
+                // Clear all UV in case of exception
+                ClearColumns();
+                Buffer.Clear();
+            };
+
             size_t rowId = 0;
             size_t parsedRows = 0;
             simdjson::ondemand::document_stream documents = Parser.iterate_many(values, size, simdjson::ondemand::DEFAULT_BATCH_SIZE);
             for (auto document : documents) {
                 if (Y_UNLIKELY(parsedRows >= Buffer.NumberValues)) {
-                    throw yexception() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << firstOffset << " but got " << parsedRows + 1;
+                    throw yexception() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << parsedRows + 1;
                 }
                 for (auto item : document.get_object()) {
                     const auto it = ColumnsIndex.find(item.escaped_key().value());
@@ -372,18 +369,17 @@ public:
 
                 rowId++;
                 parsedRows++;
-
                 if (rowId == MaxNumberRows) {
-                    ClearColumns(parsedRows, MaxNumberRows);
+                    FlushColumns(parsedRows, MaxNumberRows);
                     rowId = 0;
                 }
             }
 
-            if (parsedRows != Buffer.NumberValues) {
-                throw yexception() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << firstOffset << " but got " << rowId;
+            if (Y_UNLIKELY(parsedRows != Buffer.NumberValues)) {
+                throw yexception() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << rowId;
             }
             if (rowId) {
-                ClearColumns(parsedRows, rowId);
+                FlushColumns(parsedRows, rowId);
             }
         }
     }
@@ -406,7 +402,7 @@ public:
     }
 
 private:
-    void ClearColumns(size_t parsedRows, size_t savedRows) {
+    void FlushColumns(size_t parsedRows, size_t savedRows) {
         const ui64 firstOffset = Buffer.Offsets.front();
         for (const auto& column : Columns) {
             column.ValidateNumberValues(savedRows, firstOffset);
@@ -417,6 +413,10 @@ private:
             ParseCallback(parsedRows - savedRows, savedRows, ParsedValues);
         }
 
+        ClearColumns();
+    }
+
+    void ClearColumns() {
         for (size_t i = 0; i < Columns.size(); ++i) {
             auto& parsedColumn = ParsedValues[i];
             for (size_t rowId : Columns[i].ParsedRows) {

@@ -139,6 +139,13 @@ public:
 
         NKikimr::NMiniKQL::TThrowingBindTerminator bind;
         with_lock (Worker->GetScopedAlloc()) {
+            Y_DEFER {
+                // Clear cache after each object because
+                // values allocated on another allocator and should be released
+                Cache.Clear();
+                Worker->GetGraph().Invalidate();
+            };
+
             auto& holderFactory = Worker->GetGraph().GetHolderFactory();
 
             // TODO: use blocks here
@@ -159,11 +166,6 @@ public:
 
                 Worker->Push(std::move(result));
             }
-
-            // Clear cache after each object because
-            // values allocated on another allocator and should be released
-            Cache.Clear();
-            Worker->GetGraph().Invalidate();
         }
     }
 

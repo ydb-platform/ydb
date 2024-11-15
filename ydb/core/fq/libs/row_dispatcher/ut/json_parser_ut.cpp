@@ -46,8 +46,8 @@ public:
         }
     }
 
-    void MakeParser(TVector<TString> columns, TVector<TString> types, TJsonParser::TCallback callback, ui64 staticBufferSize = 1000) {
-        Parser = NFq::NewJsonParser(columns, types, callback, 0, TDuration::Zero(), staticBufferSize);
+    void MakeParser(TVector<TString> columns, TVector<TString> types, TJsonParser::TCallback callback, ui64 batchSize = 1_MB, ui64 staticBufferSize = 1000) {
+        Parser = NFq::NewJsonParser(columns, types, callback, batchSize, TDuration::Hours(1), staticBufferSize);
     }
 
     void MakeParser(TVector<TString> columns, TJsonParser::TCallback callback) {
@@ -219,7 +219,7 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
     Y_UNIT_TEST_F(SimpleBooleans, TFixture) {
         MakeParser({"a"}, {"[DataType; Bool]"}, [&](ui64 rowsOffset, ui64 numberRows, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& result) {
             UNIT_ASSERT_VALUES_EQUAL(0, rowsOffset);
-            UNIT_ASSERT_VALUES_EQUAL(3, numberRows);
+            UNIT_ASSERT_VALUES_EQUAL(2, numberRows);
 
             UNIT_ASSERT_VALUES_EQUAL(1, result.size());
             UNIT_ASSERT_VALUES_EQUAL(true, result[0][0].Get<bool>());
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
             UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
             UNIT_ASSERT_VALUES_EQUAL(1, result.size());
             UNIT_ASSERT_VALUES_EQUAL(largeString, TString(result[0][0].AsStringRef()));
-        }, 1);
+        }, 1_MB, 1);
 
         const TString jsonString = TStringBuilder() << "{\"col\": \"" << largeString << "\"}";
         Parser->AddMessages({
@@ -252,6 +252,29 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
             GetMessage(43, jsonString)
         });
         Parser->Parse();
+    }
+
+    Y_UNIT_TEST_F(LittleBatches, TFixture) {
+        const TString largeString = "abcdefghjkl1234567890+abcdefghjkl1234567890";
+
+        ui64 currentOffset = 42;
+        MakeParser({"col"}, {"[DataType; String]"}, [&](ui64 rowsOffset, ui64 numberRows, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& result) {
+            UNIT_ASSERT_VALUES_EQUAL(Parser->GetOffsets().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(Parser->GetOffsets().front(), currentOffset);
+            currentOffset++;
+
+            UNIT_ASSERT_VALUES_EQUAL(0, rowsOffset);
+            UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
+            UNIT_ASSERT_VALUES_EQUAL(1, result.size());
+            UNIT_ASSERT_VALUES_EQUAL(largeString, TString(result[0][0].AsStringRef()));
+        }, 10);
+
+        const TString jsonString = TStringBuilder() << "{\"col\": \"" << largeString << "\"}";
+        Parser->AddMessages({
+            GetMessage(42, jsonString),
+            GetMessage(43, jsonString)
+        });
+        UNIT_ASSERT_VALUES_EQUAL(Parser->GetNumberValues(), 0);
     }
 
     Y_UNIT_TEST_F(MissingFieldsValidation, TFixture) {

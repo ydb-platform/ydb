@@ -15,8 +15,8 @@ message TRowDispatcherCoordinatorConfig {
 }
 
 message TJsonParserConfig {
-    uint64 BatchSizeBytes = 1;
-    uint64 BatchCreationTimeoutMs = 2;
+    uint64 BatchSizeBytes = 1;  // default 1 MiB
+    uint64 BatchCreationTimeoutMs = 2;  // default 1 second
     uint64 StaticBufferSize = 3;  // (number rows) * (number columns) limit, default 10^6
 }
 

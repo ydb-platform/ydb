@@ -12,7 +12,7 @@ index 5bde46a..33bf0eb 100644
  #    endif
  
 diff --git a/include/string b/include/string
-index 123e1d6..57624c7 100644
+index 9193516..0ff5802 100644
 --- a/include/string
 +++ b/include/string
 @@ -703,6 +703,7 @@ struct __init_with_sentinel_tag {};
@@ -23,7 +23,7 @@ index 123e1d6..57624c7 100644
  public:
      typedef basic_string                                 __self;
      typedef basic_string_view<_CharT, _Traits>           __self_view;
-@@ -947,9 +948,11 @@ public:
+@@ -943,9 +944,11 @@ public:
      __init(__s, traits_type::length(__s));
    }
  
@@ -36,7 +36,7 @@ index 123e1d6..57624c7 100644
  
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string(const _CharT* __s, size_type __n)
        : __r_(__default_init_tag(), __default_init_tag()) {
-@@ -957,6 +960,9 @@ public:
+@@ -953,6 +956,9 @@ public:
      __init(__s, __n);
    }
  
@@ -46,7 +46,7 @@ index 123e1d6..57624c7 100644
    _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20
    basic_string(const _CharT* __s, size_type __n, const _Allocator& __a)
        : __r_(__default_init_tag(), __a) {
-@@ -1120,7 +1126,7 @@ public:
+@@ -1111,7 +1117,7 @@ public:
  #endif
      _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20
      basic_string& operator=(const value_type* __s) {return assign(__s);}
@@ -55,7 +55,7 @@ index 123e1d6..57624c7 100644
      basic_string& operator=(nullptr_t) = delete;
  #endif
      _LIBCPP_CONSTEXPR_SINCE_CXX20 basic_string& operator=(value_type __c);
-@@ -1182,6 +1188,13 @@ public:
+@@ -1173,6 +1179,13 @@ public:
          return (__is_long() ? __get_long_cap() : static_cast<size_type>(__min_cap)) - 1;
      }
  
@@ -69,7 +69,7 @@ index 123e1d6..57624c7 100644
      _LIBCPP_CONSTEXPR_SINCE_CXX20 void resize(size_type __n, value_type __c);
      _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 void resize(size_type __n) { resize(__n, value_type()); }
  
-@@ -1701,7 +1714,7 @@ public:
+@@ -1706,7 +1719,7 @@ public:
      { return ends_with(__self_view(__s)); }
  #endif
  

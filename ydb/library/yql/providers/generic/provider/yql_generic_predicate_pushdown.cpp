@@ -202,7 +202,7 @@ namespace NYql {
             return true;
         }
 
-        bool SerializeExists(const TCoExists& exists, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth, bool withNot = false) {
+        bool SerializeExists(const TCoExists& exists, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, bool withNot, ui64 depth) {
             auto* expressionProto = withNot ? proto->mutable_is_null()->mutable_value() : proto->mutable_is_not_null()->mutable_value();
             return SerializeExpression(exists.Optional(), expressionProto, arg, err, depth + 1);
         }
@@ -267,7 +267,7 @@ namespace NYql {
         bool SerializeNot(const TCoNot& notExpr, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
             // Special case: (Not (Exists ...))
             if (auto exists = notExpr.Value().Maybe<TCoExists>()) {
-                return SerializeExists(exists.Cast(), proto, arg, err, true);
+                return SerializeExists(exists.Cast(), proto, arg, err, true, depth + 1);
             }
             auto* dstProto = proto->mutable_negation();
             return SerializePredicate(notExpr.Value(), dstProto->mutable_operand(), arg, err, depth + 1);
@@ -336,7 +336,7 @@ namespace NYql {
                 return SerializeMember(member.Cast(), proto, arg, err);
             }
             if (auto exists = predicate.Maybe<TCoExists>()) {
-                return SerializeExists(exists.Cast(), proto, arg, err, depth);
+                return SerializeExists(exists.Cast(), proto, arg, err, false, depth);
             }
             if (auto sqlIn = predicate.Maybe<TCoSqlIn>()) {
                 return SerializeSqlIn(sqlIn.Cast(), proto, arg, err, depth);

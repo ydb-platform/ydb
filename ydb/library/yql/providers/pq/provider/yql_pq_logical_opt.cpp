@@ -39,7 +39,7 @@ namespace {
                 // Split features
                 EFlag::SplitOrOperator
             );
-            EnableUdf("Re2.Grep");  // For REGEXP pushdown
+            EnableFunction("Re2.Grep");  // For REGEXP pushdown
         }
     };
 

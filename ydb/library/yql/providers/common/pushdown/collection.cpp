@@ -578,12 +578,12 @@ bool ExistsCanBePushed(const TCoExists& exists, const TExprBase& lambdaArg) {
 }
 
 bool UdfCanBePushed(const TCoUdf& udf, const TExprNode::TListType& children, const TExprBase& lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
-    const TString udfName(udf.MethodName());
-    if (!settings.IsEnabledUdf(udfName)) {
+    const TString functionName(udf.MethodName());
+    if (!settings.IsEnabledFunction(functionName)) {
         return false;
     }
 
-    if (udfName == "Re2.Grep") {
+    if (functionName == "Re2.Grep") {
         if (children.size() != 2) {
             // Expected exactly one argument (first child of apply is callable)
             return false;

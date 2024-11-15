@@ -50,11 +50,11 @@ struct TSettings {
 
     void Enable(ui64 flagsMask, bool set = true);
 
-    void EnableUdf(const TString& udfName);
+    void EnableFunction(const TString& functionName);
 
     bool IsEnabled(EFeatureFlag flagMask) const;
 
-    bool IsEnabledUdf(const TString& udfName) const;
+    bool IsEnabledFunction(const TString& functionName) const;
 
     NLog::EComponent GetLogComponent() const {
         return LogComponent;
@@ -63,7 +63,7 @@ struct TSettings {
 private:
     const NLog::EComponent LogComponent;
     ui64 FeatureFlags = 0;
-    std::unordered_set<TString> EnabledUdfs;
+    std::unordered_set<TString> EnabledFunctions;
 };
 
 } // namespace NYql::NPushdown

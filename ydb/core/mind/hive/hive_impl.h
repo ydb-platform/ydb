@@ -380,6 +380,7 @@ protected:
     TDuration MaxTimeBetweenConnects;
     bool WarmUp;
     ui64 ExpectedNodes;
+    ui64 AliveNodes = 0;
 
     THashMap<ui32, TEvInterconnect::TNodeInfo> NodesInfo;
     TTabletCountersBase* TabletCounters;

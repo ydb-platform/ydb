@@ -250,9 +250,10 @@ public:
     void HandleNodeInfo(typename TResponseEventType::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
         ev->Get()->Record.SetResponseDuration((AppData()->TimeProvider->Now() - NodesRequestedTime).MicroSeconds());
-        NodeResponses[nodeId].Set(std::move(ev));
-        //PerNodeStateInfo[nodeId] = std::move(ev->Get()->Record);
-        TBase::RequestDone();
+        if (NodeResponses[nodeId].Set(std::move(ev))) {
+            //PerNodeStateInfo[nodeId] = std::move(ev->Get()->Record);
+            TBase::RequestDone();
+        }
     }
 
     void HandleRetryNode(TEvPrivate::TEvRetryNodeRequest::TPtr& ev) {

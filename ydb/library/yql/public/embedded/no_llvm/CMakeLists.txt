@@ -12,62 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(public-embedded-no_llvm)
-
-
-target_compile_options(public-embedded-no_llvm PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_include_directories(public-embedded-no_llvm PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/embedded
-)
-
-target_link_libraries(public-embedded-no_llvm PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  library-cpp-resource
-  library-cpp-yson
-  cpp-yson-node
-  cpp-mapreduce-client
-  cpp-mapreduce-common
-  yql-essentials-ast
-  essentials-sql-pg
-  essentials-core-facade
-  essentials-core-file_storage
-  core-file_storage-defs
-  core-file_storage-proto
-  core-file_storage-http_download
-  core-services-mounts
-  essentials-core-user_data
-  yql-essentials-minikql
-  minikql-invoke_builtins-no_llvm
-  minikql-comp_nodes-no_llvm
-  minikql-computation-no_llvm
-  minikql-codegen-no_llvm
-  yql-essentials-protos
-  udf-service-exception_policy
-  essentials-utils-backtrace
-  essentials-utils-log
-  essentials-parser-pg_wrapper
-  providers-common-proto
-  providers-common-udf_resolve
-  essentials-core-url_preprocessing
-  essentials-core-url_lister
-  yt-gateway-native
-  yt-lib-log
-  yt-lib-yt_download
-  yt-lib-yt_url_lister
-  providers-yt-provider
-  codec-codegen-no_llvm
-  yt-comp_nodes-no_llvm
-  parser-pg_wrapper-interface
-  essentials-parser-pg_catalog
-)
-
-target_sources(public-embedded-no_llvm PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/embedded/yql_embedded.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

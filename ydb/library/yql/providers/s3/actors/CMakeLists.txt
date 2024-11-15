@@ -12,70 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(providers-s3-actors)
-
-
-target_compile_options(providers-s3-actors PRIVATE
-  -DARCADIA_BUILD
-  -DUSE_PARQUET
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_include_directories(providers-s3-actors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src
-)
-
-target_link_libraries(providers-s3-actors PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  contrib-libs-fmt
-  libs-poco-Util
-  library-actors-http
-  cpp-protobuf-util
-  cpp-string_utils-base64
-  cpp-string_utils-quote
-  cpp-xml-document
-  ydb-core-base
-  fq-libs-events
-  dq-actors-compute
-  essentials-minikql-computation
-  providers-common-arrow
-  common-arrow-interface
-  providers-common-http_gateway
-  common-schema-mkql
-  common-token_accessor-client
-  providers-generic-pushdown
-  providers-s3-actors_factory
-  providers-s3-common
-  providers-s3-compressors
-  providers-s3-credentials
-  providers-s3-events
-  providers-s3-object_listers
-  providers-s3-proto
-  providers-s3-range_helpers
-  essentials-public-issue
-  essentials-public-types
-  clickhouse_client_udf
-  yql-essentials-utils
-  providers-s3-serializations
-)
-
-target_sources(providers-s3-actors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_arrow_push_down.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_actors_util.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_applicator_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_raw_read_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_write_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_arrow_column_converters.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_decompressor_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_read_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_source_queue.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

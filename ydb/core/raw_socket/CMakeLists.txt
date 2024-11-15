@@ -12,26 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(ydb-core-raw_socket)
-
-
-target_link_libraries(ydb-core-raw_socket PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  library-actors-protos
-  ydb-core-base
-  ydb-core-protos
-)
-
-target_sources(ydb-core-raw_socket PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/raw_socket/sock_listener.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/raw_socket/sock64.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/raw_socket/sock_config.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/raw_socket/sock_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/raw_socket/sock_listener.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/raw_socket/sock_ssl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/raw_socket/sock_settings.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

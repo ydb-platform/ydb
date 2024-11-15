@@ -32,7 +32,7 @@ target_link_libraries(ydb-core-kqp-workload_service-ut PUBLIC
   cpp-testing-unittest_main
   core-kqp-workload_service
   workload_service-ut-common
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
 )
 
 target_allocator(ydb-core-kqp-workload_service-ut

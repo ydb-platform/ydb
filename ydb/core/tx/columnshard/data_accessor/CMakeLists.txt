@@ -12,27 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(abstract)
-add_subdirectory(local_db)
-add_subdirectory(in_mem)
-
-add_library(tx-columnshard-data_accessor)
-
-
-target_link_libraries(tx-columnshard-data_accessor PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  columnshard-engines-portions
-  columnshard-data_accessor-abstract
-  columnshard-data_accessor-local_db
-)
-
-target_sources(tx-columnshard-data_accessor PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_accessor/actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_accessor/events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_accessor/request.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_accessor/manager.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

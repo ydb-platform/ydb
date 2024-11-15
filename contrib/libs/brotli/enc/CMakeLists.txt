@@ -12,43 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(libs-brotli-enc)
-
-
-target_compile_options(libs-brotli-enc PRIVATE
-  -DBROTLI_BUILD_PORTABLE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(libs-brotli-enc PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/include
-)
-
-target_link_libraries(libs-brotli-enc PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  libs-brotli-common
-  libs-brotli-dec
-)
-
-target_sources(libs-brotli-enc PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/backward_references.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/backward_references_hq.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/bit_cost.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/block_splitter.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/brotli_bit_stream.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/cluster.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/compress_fragment.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/compress_fragment_two_pass.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/dictionary_hash.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/encode.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/encoder_dict.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/entropy_encode.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/histogram.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/literal_cost.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/memory.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/metablock.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/static_dict.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/brotli/enc/utf8_util.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

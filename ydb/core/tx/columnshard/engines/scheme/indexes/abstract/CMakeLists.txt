@@ -12,47 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(scheme-indexes-abstract)
-
-
-target_compile_options(scheme-indexes-abstract PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(scheme-indexes-abstract PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  core-formats-arrow
-  library-formats-arrow-protos
-)
-
-target_sources(scheme-indexes-abstract PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/meta.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/checker.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/program.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/simple.cpp
-)
-
-
-add_global_library_for(scheme-indexes-abstract.global
-  scheme-indexes-abstract)
-
-
-target_compile_options(scheme-indexes-abstract.global PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(scheme-indexes-abstract.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  core-formats-arrow
-  library-formats-arrow-protos
-)
-
-target_sources(scheme-indexes-abstract.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/indexes/abstract/composite.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

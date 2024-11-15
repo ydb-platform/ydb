@@ -19,7 +19,7 @@ target_link_libraries(tx-schemeshard-common PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-protos
-  public-lib-scheme_types
+  ydb-core-scheme_types
 )
 
 target_sources(tx-schemeshard-common PRIVATE

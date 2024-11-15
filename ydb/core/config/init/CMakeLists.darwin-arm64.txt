@@ -36,8 +36,8 @@ target_link_libraries(core-config-init PUBLIC
   core-driver_lib-cli_config_base
   ydb-core-protos
   ydb-library-yaml_config
-  library-yql-minikql
-  yql-public-udf
+  yql-essentials-minikql
+  essentials-public-udf
   lib-deprecated-kicli
   cpp-client-ydb_discovery
   cpp-client-ydb_driver

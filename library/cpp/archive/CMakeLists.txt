@@ -12,20 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(library-cpp-archive)
-
-
-target_link_libraries(library-cpp-archive PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-)
-
-target_sources(library-cpp-archive PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/archive/yarchive.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/archive/directory_models_archive_reader.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/archive/models_archive_reader.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/archive/yarchive.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/archive/directory_models_archive_reader.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

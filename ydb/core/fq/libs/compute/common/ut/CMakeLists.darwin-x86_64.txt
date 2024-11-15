@@ -103,6 +103,7 @@ resources(ydb-core-fq-libs-compute-common-ut
   KEYS
   plan.json
   stat.json
+  OPTS
 )
 
 vcs_info(ydb-core-fq-libs-compute-common-ut)

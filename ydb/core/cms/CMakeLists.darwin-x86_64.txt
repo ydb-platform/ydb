@@ -98,6 +98,7 @@ target_sources(ydb-core-cms PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/defs.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/downtime.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/erasure_checkers.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/error_info.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/http.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/info_collector.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/json_proxy.h
@@ -451,4 +452,5 @@ resources(ydb-core-cms.global
   cms/ui/sentinel_state.js
   cms/ui/nanotable.js
   cms/ui/sentinel.css
+  OPTS
 )

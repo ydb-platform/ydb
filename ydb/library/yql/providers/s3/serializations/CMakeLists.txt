@@ -12,44 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(providers-s3-serializations)
-
-
-target_compile_options(providers-s3-serializations PRIVATE
-  -DARCADIA_BUILD
-  -DUSE_PARQUET
-)
-
-target_include_directories(providers-s3-serializations PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src
-)
-
-target_link_libraries(providers-s3-serializations PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-fmt
-  libs-poco-Util
-  clickhouse_client_udf
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(providers-s3-serializations PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/serializations/serialization_interval.cpp
-)
-
-
-generate_enum_serilization(providers-s3-serializations
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/serializations/serialization_interval.h
-  INCLUDE_HEADERS
-  ydb/library/yql/providers/s3/serializations/serialization_interval.h
-)

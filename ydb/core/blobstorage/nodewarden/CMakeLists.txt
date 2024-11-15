@@ -12,57 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-add_subdirectory(ut_sequence)
-
-add_library(core-blobstorage-nodewarden)
-
-
-target_link_libraries(core-blobstorage-nodewarden PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-json
-  cpp-openssl-crypto
-  ydb-core-base
-  core-blob_depot-agent
-  core-blobstorage-crypto
-  core-blobstorage-groupinfo
-  core-blobstorage-pdisk
-  ydb-core-control
-  ydb-library-pdisk_io
-  ydb-library-yaml_config
-  core-util-actorsys_test
-)
-
-target_sources(core-blobstorage-nodewarden PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/group_stat_aggregator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_binding.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_dynamic.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_generate.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_fsm.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_invoke.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_mon.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_persistent_storage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_scatter_gather.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf_validate.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_cache.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_group.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_group_resolver.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_mon.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_pdisk.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_pipe.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_proxy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_resource.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_scrub.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_stat_aggr.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_vdisk.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/group_stat_aggregator.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_events.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_impl.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

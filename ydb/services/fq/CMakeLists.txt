@@ -12,26 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut_integration)
-
-add_library(ydb-services-fq)
-
-
-target_link_libraries(ydb-services-fq PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-grpc-server
-  library-cpp-retry
-  fq-libs-grpc
-  ydb-core-grpc_services
-  core-grpc_services-base
-  ydb-library-protobuf_printer
-)
-
-target_sources(ydb-services-fq PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/services/fq/grpc_service.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/fq/private_grpc.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/fq/ydb_over_fq.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -32,6 +32,7 @@ add_library(columnshard-data_sharing-protos)
 target_link_libraries(columnshard-data_sharing-protos PUBLIC
   contrib-libs-cxxsupp
   yutil
+  ydb-core-protos
   columnshard-engines-protos
   columnshard-common-protos
   library-actors-protos

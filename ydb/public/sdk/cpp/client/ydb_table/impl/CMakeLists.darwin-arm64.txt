@@ -25,6 +25,7 @@ target_link_libraries(client-ydb_table-impl PUBLIC
   impl-ydb_internal-session_pool
   client-ydb_table-query_stats
   public-issue-protos
+  yql-public-ydb_issue
 )
 
 target_sources(client-ydb_table-impl PRIVATE

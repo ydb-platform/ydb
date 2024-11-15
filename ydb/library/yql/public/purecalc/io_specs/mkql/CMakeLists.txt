@@ -12,34 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-add_subdirectory(no_llvm)
-
-add_library(purecalc-io_specs-mkql)
-
-
-target_compile_options(purecalc-io_specs-mkql PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_include_directories(purecalc-io_specs-mkql PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/mkql
-)
-
-target_link_libraries(purecalc-io_specs-mkql PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  providers-yt-codec
-  providers-yt-common
-  yt-lib-mkql_helpers
-  providers-common-codec
-  common-schema-mkql
-  public-purecalc-common
-)
-
-target_sources(purecalc-io_specs-mkql PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/mkql/spec.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/mkql/spec.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

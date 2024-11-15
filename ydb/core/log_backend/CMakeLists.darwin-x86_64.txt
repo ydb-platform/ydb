@@ -12,6 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(ut)
+
 add_library(ydb-core-log_backend)
 
 
@@ -23,10 +25,12 @@ target_link_libraries(ydb-core-log_backend PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-unified_agent_client
+  cpp-messagebus-monitoring
   ydb-core-base
 )
 
 target_sources(ydb-core-log_backend PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/log_backend/json_envelope.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/log_backend/log_backend.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/log_backend/log_backend_build.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/log_backend/log_backend.h

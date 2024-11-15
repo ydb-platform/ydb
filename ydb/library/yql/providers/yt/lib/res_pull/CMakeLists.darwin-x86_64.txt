@@ -23,9 +23,9 @@ target_link_libraries(yt-lib-res_pull PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-yson
-  library-yql-minikql
-  yql-public-udf
-  library-yql-utils
+  yql-essentials-minikql
+  essentials-public-udf
+  yql-essentials-utils
   providers-common-codec
   providers-yt-codec
   yt-lib-mkql_helpers

@@ -12,35 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(providers-s3-events)
-
-
-target_compile_options(providers-s3-events PRIVATE
-  -DARCADIA_BUILD
-  -DUSE_PARQUET
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_include_directories(providers-s3-events PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Foundation/include
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src
-)
-
-target_link_libraries(providers-s3-events PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  dq-actors-protos
-  providers-s3-proto
-  providers-common-http_gateway
-  essentials-public-issue
-  clickhouse_client_udf
-)
-
-target_sources(providers-s3-events PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/events/events.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,33 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut_helpers)
-
-add_library(generic-connector-libcpp)
-
-
-target_link_libraries(generic-connector-libcpp PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  contrib-libs-grpc
-  formats-arrow-serializer
-  library-grpc-client
-  yql-essentials-ast
-  dq-actors-protos
-  providers-common-proto
-  connector-api-common
-  connector-api-service
-  api-service-protos
-  essentials-public-issue
-  yql-essentials-utils
-  essentials-utils-log
-)
-
-target_sources(generic-connector-libcpp PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/client.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/error.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/utils.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

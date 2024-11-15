@@ -12,37 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(events)
-add_subdirectory(ut)
-
-add_library(fq-libs-test_connection)
-
-
-target_compile_options(fq-libs-test_connection PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(fq-libs-test_connection PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lwtrace
-  cpp-xml-document
-  fq-libs-actors
-  libs-actors-logging
-  libs-config-protos
-  fq-libs-control_plane_storage
-  libs-test_connection-events
-  providers-pq-cm_client
-  providers-solomon-async_io
-)
-
-target_sources(fq-libs-test_connection PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/test_connection/counters.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/test_connection/probes.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/test_connection/test_connection.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/test_connection/test_data_streams.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/test_connection/test_monitoring.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/test_connection/test_object_storage.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

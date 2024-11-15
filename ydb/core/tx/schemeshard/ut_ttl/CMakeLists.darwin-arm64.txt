@@ -30,7 +30,8 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_ttl PUBLIC
   core-tx-schemeshard
   kqp-ut-common
   tx-schemeshard-ut_helpers
-  yql-sql-pg_dummy
+  essentials-parser-pg_wrapper
+  essentials-sql-pg
 )
 
 target_allocator(ydb-core-tx-schemeshard-ut_ttl

@@ -12,32 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(yt-lib-row_spec)
-
-
-target_compile_options(yt-lib-row_spec PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(yt-lib-row_spec PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-yson-node
-  yql-essentials-ast
-  essentials-core-expr_nodes_gen
-  yql-essentials-core
-  essentials-core-expr_nodes
-  essentials-core-issue
-  providers-common-codec
-  providers-common-provider
-  providers-common-schema
-  common-schema-expr
-  providers-yt-common
-  providers-yt-expr_nodes
-)
-
-target_sources(yt-lib-row_spec PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,30 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(core)
-add_subdirectory(codecs)
-
-add_library(library-cpp-blockcodecs)
-
-
-target_link_libraries(library-cpp-blockcodecs PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-blockcodecs-core
-  blockcodecs-codecs-brotli
-  blockcodecs-codecs-bzip
-  blockcodecs-codecs-fastlz
-  blockcodecs-codecs-legacy_zstd06
-  blockcodecs-codecs-lz4
-  blockcodecs-codecs-lzma
-  blockcodecs-codecs-snappy
-  blockcodecs-codecs-zlib
-  blockcodecs-codecs-zstd
-)
-
-target_sources(library-cpp-blockcodecs PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/blockcodecs/codecs.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/blockcodecs/stream.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

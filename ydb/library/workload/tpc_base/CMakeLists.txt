@@ -12,72 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-get_built_tool_path(
-  TOOL_rescompiler_bin
-  TOOL_rescompiler_dependency
-  tools/rescompiler/bin
-  rescompiler
-)
-
-add_library(library-workload-tpc_base)
-
-
-target_link_libraries(library-workload-tpc_base PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-  ydb-library-accessor
-  library-workload-benchmark_base
-  public-lib-scheme_types
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(library-workload-tpc_base PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpc_base/tpc_base.cpp
-)
-
-
-generate_enum_serilization(library-workload-tpc_base
-  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpc_base/tpc_base.h
-  INCLUDE_HEADERS
-  ydb/library/workload/tpc_base/tpc_base.h
-)
-
-add_global_library_for(library-workload-tpc_base.global
-  library-workload-tpc_base)
-
-
-target_link_libraries(library-workload-tpc_base.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-  ydb-library-accessor
-  library-workload-benchmark_base
-  public-lib-scheme_types
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(library-workload-tpc_base.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpc_base/ac98c4d01c2035c460570b862a5799aa.cpp
-)
-
-
-resources(library-workload-tpc_base.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpc_base/ac98c4d01c2035c460570b862a5799aa.cpp
-  INPUTS
-  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/gen_queries/consts.yql
-  ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/gen_queries/consts_decimal.yql
-  KEYS
-  consts.yql
-  consts_decimal.yql
-  OPTS
-)

@@ -32,8 +32,8 @@ target_link_libraries(providers-s3-path_generator PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-scheme
-  yql-minikql-datetime
-  yql-public-udf
+  essentials-minikql-datetime
+  essentials-public-udf
   tools-enum_parser-enum_serialization_runtime
 )
 

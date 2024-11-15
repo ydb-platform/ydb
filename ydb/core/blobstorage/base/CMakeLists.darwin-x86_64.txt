@@ -23,6 +23,7 @@ target_link_libraries(core-blobstorage-base PUBLIC
   library-actors-wilson
   cpp-deprecated-atomic
   library-cpp-lwtrace
+  ydb-core-base
   ydb-core-protos
 )
 

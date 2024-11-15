@@ -12,42 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(providers-dq-global_worker_manager)
-
-
-target_compile_options(providers-dq-global_worker_manager PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-dq-global_worker_manager PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  essentials-utils-failure_injector
-  providers-common-config
-  providers-common-gateway
-  providers-common-metrics
-  providers-dq-actors
-  dq-api-grpc
-  dq-api-protos
-  providers-dq-config
-  providers-dq-counters
-  providers-dq-runtime
-  providers-dq-task_runner
-  dq-actors-yt
-  providers-dq-scheduler
-  providers-dq-service
-)
-
-target_sources(providers-dq-global_worker_manager PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager/benchmark.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager/global_worker_manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager/service_node_pinger.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager/workers_storage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager/worker_filter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager/service_node_resolver.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/global_worker_manager/coordination_helper.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

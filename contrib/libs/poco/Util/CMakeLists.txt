@@ -12,67 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(libs-poco-Util)
-
-
-target_compile_options(libs-poco-Util PRIVATE
-  -DPOCO_ENABLE_CPP11
-  -DPOCO_ENABLE_CPP14
-  -DPOCO_NO_AUTOMATIC_LIBS
-  -DPOCO_UNBUNDLED
-  -DPOCO_OS_FAMILY_UNIX
-  -DPOCO_HAVE_FD_EPOLL
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(libs-poco-Util PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/include
-)
-
-target_include_directories(libs-poco-Util PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/expat
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Foundation/include
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/JSON/include
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/XML/include
-)
-
-target_link_libraries(libs-poco-Util PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-expat
-  libs-poco-Foundation
-  libs-poco-JSON
-  libs-poco-XML
-)
-
-target_sources(libs-poco-Util PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/AbstractConfiguration.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/Application.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/ConfigurationMapper.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/ConfigurationView.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/FilesystemConfiguration.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/HelpFormatter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/IniFileConfiguration.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/IntValidator.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/JSONConfiguration.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/LayeredConfiguration.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/LoggingConfigurator.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/LoggingSubsystem.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/MapConfiguration.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/Option.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/OptionCallback.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/OptionException.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/OptionProcessor.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/OptionSet.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/PropertyFileConfiguration.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/RegExpValidator.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/ServerApplication.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/Subsystem.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/SystemConfiguration.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/Timer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/TimerTask.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/Validator.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/src/XMLConfiguration.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

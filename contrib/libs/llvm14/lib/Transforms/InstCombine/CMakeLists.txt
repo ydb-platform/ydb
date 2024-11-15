@@ -12,43 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(lib-Transforms-InstCombine)
-
-
-target_compile_options(lib-Transforms-InstCombine PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(lib-Transforms-InstCombine PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine
-)
-
-target_link_libraries(lib-Transforms-InstCombine PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-llvm14
-  libs-llvm14-include
-  llvm14-lib-Analysis
-  llvm14-lib-IR
-  llvm14-lib-Support
-  lib-Transforms-Utils
-)
-
-target_sources(lib-Transforms-InstCombine PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine/InstCombineAddSub.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine/InstCombineAndOrXor.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine/InstCombineAtomicRMW.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine/InstCombineCalls.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine/InstCombineCasts.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine/InstCombineCompares.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine/InstCombineLoadStoreAlloca.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine/InstCombineMulDivRem.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine/InstCombineNegator.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine/InstCombinePHI.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine/InstCombineSelect.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine/InstCombineShifts.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine/InstCombineSimplifyDemanded.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine/InstCombineVectorOps.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/InstCombine/InstructionCombining.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

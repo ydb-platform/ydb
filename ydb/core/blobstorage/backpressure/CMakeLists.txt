@@ -12,38 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-add_subdirectory(ut_client)
-
-add_library(core-blobstorage-backpressure)
-
-
-target_link_libraries(core-blobstorage-backpressure PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  library-actors-core
-  cpp-containers-intrusive_rb_tree
-  ydb-core-base
-  core-blobstorage-groupinfo
-  core-blobstorage-lwtrace_probes
-  blobstorage-vdisk-common
-  ydb-core-protos
-)
-
-target_sources(core-blobstorage-backpressure PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/event.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_client.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/unisched.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/common.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/event.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_client.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_common.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/queue_backpressure_server.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/backpressure/unisched.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

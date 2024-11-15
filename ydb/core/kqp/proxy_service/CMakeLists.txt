@@ -12,57 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(proto)
-add_subdirectory(ut)
-
-add_library(core-kqp-proxy_service)
-
-
-target_compile_options(core-kqp-proxy_service PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-kqp-proxy_service PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  library-actors-http
-  cpp-protobuf-json
-  ydb-core-actorlib_impl
-  ydb-core-base
-  core-cms-console
-  core-kqp-common
-  kqp-common-events
-  core-kqp-counters
-  gateway-behaviour-resource_pool_classifier
-  kqp-proxy_service-proto
-  core-kqp-run_script_actor
-  core-kqp-workload_service
-  ydb-core-mind
-  ydb-core-protos
-  core-tx-tx_proxy
-  core-tx-scheme_cache
-  core-tx-schemeshard
-  ydb-core-mon
-  ydb-library-query_actor
-  ydb-library-table_creator
-  providers-common-http_gateway
-  providers-common-proto
-  providers-s3-actors_factory
-  essentials-public-issue
-  dq-actors-spilling
-  api-protos
-  public-lib-operation_id
-  public-lib-scheme_types
-  cpp-client-ydb_params
-)
-
-target_sources(core-kqp-proxy_service PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/proxy_service/kqp_proxy_service.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/proxy_service/kqp_proxy_databases_cache.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/proxy_service/kqp_proxy_peer_stats_calculator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/proxy_service/kqp_script_executions.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/proxy_service/kqp_session_info.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

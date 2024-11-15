@@ -12,22 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(olap-bg_tasks-tx_chain)
-
-
-target_link_libraries(olap-bg_tasks-tx_chain PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  olap-bg_tasks-protos
-  columnshard-bg_tasks-abstract
-)
-
-target_sources(olap-bg_tasks-tx_chain PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/bg_tasks/tx_chain/status_channel.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/bg_tasks/tx_chain/task.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/bg_tasks/tx_chain/session.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/bg_tasks/tx_chain/actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/bg_tasks/tx_chain/common.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

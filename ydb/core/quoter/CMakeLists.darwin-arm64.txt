@@ -28,7 +28,7 @@ target_link_libraries(ydb-core-quoter PUBLIC
   core-kesus-tablet
   core-tx-scheme_cache
   ydb-core-util
-  yql-public-issue
+  essentials-public-issue
   ydb-library-time_series_vec
 )
 

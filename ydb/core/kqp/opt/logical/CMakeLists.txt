@@ -12,35 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(kqp-opt-logical)
-
-
-target_compile_options(kqp-opt-logical PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(kqp-opt-logical PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  core-kqp-common
-  essentials-core-extract_predicate
-  yql-dq-common
-  yql-dq-opt
-)
-
-target_sources(kqp-opt-logical PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_effects.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_extract.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_join.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_indexes.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_ranges.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_ranges_predext.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_sort.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_sqlin.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log_sqlin_compact.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_log.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/logical/kqp_opt_cbo.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,60 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(blobstorage-vdisk-syncer)
-
-
-target_link_libraries(blobstorage-vdisk-syncer PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  library-actors-interconnect
-  monlib-service-pages
-  ydb-core-base
-  core-blobstorage-base
-  core-blobstorage-groupinfo
-  blobstorage-vdisk-anubis_osiris
-  blobstorage-vdisk-common
-  vdisk-hulldb-base
-  version
-)
-
-target_sources(blobstorage-vdisk-syncer PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_committer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_recoverlostdata.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_recoverlostdata_proxy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_scheduler.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_firstrun.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_propagator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_proxyobtain.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_proxywrite.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_recovery.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/syncer_job_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/syncer_job_task.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_committer.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_dataserdes.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_recoverlostdata.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_recoverlostdata_proxy.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_scheduler.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_firstrun.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_propagator.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_proxybase.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_proxyobtain.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_proxywrite.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/guid_recovery.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/syncer_context.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/syncer_job_actor.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/syncer_job_task.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

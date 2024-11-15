@@ -12,37 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(ut)
-
-add_library(topic)
-
-
-target_link_libraries(topic PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  common
-  cpp-client-ydb_proto
-  cpp-client-ydb_persqueue_public
-  cpp-client-ydb_topic
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(topic PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_read.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_write.cpp
-)
-
-
-generate_enum_serilization(topic
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/topic/topic_metadata_fields.h
-  INCLUDE_HEADERS
-  ydb/public/lib/ydb_cli/topic/topic_metadata_fields.h
-)

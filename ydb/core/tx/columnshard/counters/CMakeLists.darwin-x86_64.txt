@@ -32,6 +32,7 @@ target_link_libraries(tx-columnshard-counters PUBLIC
   columnshard-counters-aggregation
   columnshard-counters-common
   ydb-core-base
+  library-actors-core
   tools-enum_parser-enum_serialization_runtime
 )
 
@@ -48,6 +49,7 @@ target_sources(tx-columnshard-counters PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/req_tracer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/scan.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/splitter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters/portions.cpp
 )
 
 

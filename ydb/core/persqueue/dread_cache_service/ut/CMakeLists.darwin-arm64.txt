@@ -86,14 +86,6 @@ set_yunittest_property(
   ENVIRONMENT
 )
 
-set_yunittest_property(
-  TEST
-  ydb-core-persqueue-dread_cache_service-ut
-  PROPERTY
-  TIMEOUT
-  60
-)
-
 vcs_info(ydb-core-persqueue-dread_cache_service-ut)
 
 set_yunittest_property(

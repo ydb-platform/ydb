@@ -12,36 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(ydb-services-datastreams)
-
-
-target_link_libraries(ydb-services-datastreams PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-grpc-server
-  ydb-core-base
-  core-client-server
-  ydb-core-grpc_services
-  ydb-core-mind
-  api-grpc
-  api-grpc-draft
-  public-lib-operation_id
-  cpp-client-resources
-  cpp-client-ydb_datastreams
-  services-lib-actors
-  services-lib-sharding
-  ydb-services-persqueue_v1
-  ydb-services-ydb
-)
-
-target_sources(ydb-services-datastreams PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/services/datastreams/datastreams_proxy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/datastreams/grpc_service.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/datastreams/next_token.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/datastreams/put_records_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/datastreams/shard_iterator.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

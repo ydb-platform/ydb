@@ -12,62 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(rule)
-add_subdirectory(tier)
-add_subdirectory(abstract)
-add_subdirectory(ut)
-
-add_library(core-tx-tiering)
-
-
-target_link_libraries(core-tx-tiering PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  cpp-json-writer
-  ydb-core-blobstorage
-  ydb-core-protos
-  core-tx-schemeshard
-  tx-tiering-rule
-  tx-tiering-tier
-  core-tablet_flat-protos
-  ydb-core-wrappers
-  api-protos
-  services-bg_tasks-abstract
-  ydb-services-metadata
-)
-
-target_sources(core-tx-tiering PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/snapshot.cpp
-)
-
-
-add_global_library_for(core-tx-tiering.global
-  core-tx-tiering)
-
-
-target_link_libraries(core-tx-tiering.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  cpp-json-writer
-  ydb-core-blobstorage
-  ydb-core-protos
-  core-tx-schemeshard
-  tx-tiering-rule
-  tx-tiering-tier
-  core-tablet_flat-protos
-  ydb-core-wrappers
-  api-protos
-  services-bg_tasks-abstract
-  ydb-services-metadata
-)
-
-target_sources(core-tx-tiering.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/external_data.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

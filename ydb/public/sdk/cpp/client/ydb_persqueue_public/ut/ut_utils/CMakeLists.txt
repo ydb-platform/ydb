@@ -12,36 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(ydb_persqueue_public-ut-ut_utils)
-
-
-target_compile_options(ydb_persqueue_public-ut-ut_utils PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(ydb_persqueue_public-ut-ut_utils PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-grpc-server
-  cpp-testing-unittest
-  cpp-threading-chunk_queue
-  core-testlib-default
-  library-persqueue-topic_parser_public
-  cpp-client-ydb_driver
-  cpp-client-ydb_topic
-  cpp-client-ydb_persqueue_public
-  cpp-client-ydb_table
-)
-
-target_sources(ydb_persqueue_public-ut-ut_utils PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/data_plane_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/test_server.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/data_plane_helpers.h
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/sdk_test_setup.h
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/test_utils.h
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/test_server.h
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/ut/ut_utils/ut_utils.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

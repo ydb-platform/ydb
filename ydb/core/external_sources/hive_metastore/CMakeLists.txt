@@ -12,27 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(hive_metastore_native)
-add_subdirectory(ut)
-
-add_library(core-external_sources-hive_metastore)
-
-
-target_link_libraries(core-external_sources-hive_metastore PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-threading-future
-  external_sources-hive_metastore-hive_metastore_native
-  library-actors-core
-  api-service-protos
-  public-issue-protos
-)
-
-target_sources(core-external_sources-hive_metastore PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/hive_metastore/events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/hive_metastore/hive_metastore_client.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/hive_metastore/hive_metastore_converters.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/hive_metastore/hive_metastore_fetcher.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

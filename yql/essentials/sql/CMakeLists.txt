@@ -12,33 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(settings)
-add_subdirectory(v0)
-add_subdirectory(v1)
-add_subdirectory(pg)
-add_subdirectory(pg_dummy)
-
-add_library(yql-essentials-sql)
-
-
-target_link_libraries(yql-essentials-sql PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-deprecated-split
-  parser-pg_wrapper-interface
-  essentials-sql-settings
-  essentials-sql-v0
-  sql-v0-lexer
-  essentials-sql-v1
-  sql-v1-format
-  sql-v1-lexer
-  sql-v1-proto_parser
-  yql-essentials-utils
-)
-
-target_sources(yql-essentials-sql PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/cluster_mapping.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/sql.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

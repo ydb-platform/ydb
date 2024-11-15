@@ -28,7 +28,7 @@ target_link_libraries(ydb-core-mon PUBLIC
   ydb-library-aclib
   library-actors-core
   library-actors-http
-  yql-public-issue
+  essentials-public-issue
   client-ydb_types-status
 )
 

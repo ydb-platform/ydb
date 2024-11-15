@@ -12,35 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-find_package(Python3 REQUIRED)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(library-cpp-tld)
-
-
-target_link_libraries(library-cpp-tld PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-digest-lower_case
-)
-
-target_sources(library-cpp-tld PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/tld/tld.cpp
-  ${PROJECT_BINARY_DIR}/library/cpp/tld/tld.inc
-  ${PROJECT_BINARY_DIR}/library/cpp/tld/tld.inc
-)
-
-
-add_custom_command(
-  OUTPUT
-  ${PROJECT_BINARY_DIR}/library/cpp/tld/tld.inc
-  DEPENDS
-  ${PROJECT_SOURCE_DIR}/library/cpp/tld/tlds-alpha-by-domain.txt
-  ${PROJECT_SOURCE_DIR}/library/cpp/tld/gen_tld.py
-  COMMAND
-  Python3::Interpreter
-  ${PROJECT_SOURCE_DIR}/library/cpp/tld/gen_tld.py
-  ${PROJECT_SOURCE_DIR}/library/cpp/tld/tlds-alpha-by-domain.txt
-  >
-  tld.inc
-)

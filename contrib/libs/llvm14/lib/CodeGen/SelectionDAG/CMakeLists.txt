@@ -12,56 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(lib-CodeGen-SelectionDAG)
-
-
-target_compile_options(lib-CodeGen-SelectionDAG PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(lib-CodeGen-SelectionDAG PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG
-)
-
-target_link_libraries(lib-CodeGen-SelectionDAG PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-llvm14
-  libs-llvm14-include
-  llvm14-lib-Analysis
-  llvm14-lib-CodeGen
-  llvm14-lib-IR
-  llvm14-lib-MC
-  llvm14-lib-Support
-  llvm14-lib-Target
-  lib-Transforms-Utils
-)
-
-target_sources(lib-CodeGen-SelectionDAG PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/DAGCombiner.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/FastISel.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/FunctionLoweringInfo.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/InstrEmitter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/LegalizeDAG.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/LegalizeFloatTypes.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/LegalizeIntegerTypes.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/LegalizeTypes.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/LegalizeTypesGeneric.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/LegalizeVectorOps.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/LegalizeVectorTypes.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/ResourcePriorityQueue.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/ScheduleDAGFast.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/ScheduleDAGRRList.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/ScheduleDAGSDNodes.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/ScheduleDAGVLIW.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/SelectionDAG.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/SelectionDAGAddressAnalysis.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/SelectionDAGBuilder.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/SelectionDAGDumper.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/SelectionDAGISel.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/SelectionDAGPrinter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/SelectionDAGTargetInfo.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/StatepointLowering.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/CodeGen/SelectionDAG/TargetLowering.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

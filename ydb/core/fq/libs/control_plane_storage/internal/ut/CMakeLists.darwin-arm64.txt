@@ -111,6 +111,7 @@ resources(core-fq-libs-control_plane_storage-internal-ut
   v2_s3source.json
   v1_two_results.json
   v2_two_results.json
+  OPTS
 )
 
 vcs_info(core-fq-libs-control_plane_storage-internal-ut)

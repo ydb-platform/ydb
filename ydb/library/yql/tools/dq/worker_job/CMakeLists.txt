@@ -12,40 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(tools-dq-worker_job)
-
-
-target_compile_options(tools-dq-worker_job PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(tools-dq-worker_job PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  cpp-protobuf-util
-  cpp-mapreduce-client
-  cpp-mapreduce-interface
-  yt-yt-core
-  dq-actors-spilling
-  minikql-comp_nodes-llvm14
-  providers-common-metrics
-  providers-dq-runtime
-  providers-dq-service
-  providers-dq-stats_collector
-  providers-dq-task_runner
-  udf-service-terminate_policy
-  yql-essentials-utils
-  essentials-utils-network
-  essentials-utils-log
-  utils-log-proto
-  dq-actors-yt
-  providers-dq-global_worker_manager
-  essentials-utils-signals
-)
-
-target_sources(tools-dq-worker_job PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/dq/worker_job/dq_worker.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

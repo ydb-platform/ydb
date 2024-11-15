@@ -12,46 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(defaults)
-add_subdirectory(indexes)
-add_subdirectory(abstract)
-add_subdirectory(versions)
-add_subdirectory(tiering)
-add_subdirectory(column)
-
-add_library(columnshard-engines-scheme)
-
-
-target_compile_options(columnshard-engines-scheme PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(columnshard-engines-scheme PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-protos
-  core-formats-arrow
-  library-actors-core
-  engines-scheme-indexes
-  engines-scheme-abstract
-  engines-scheme-versions
-  engines-scheme-tiering
-  engines-scheme-column
-  engines-scheme-defaults
-  formats-arrow-accessor
-  columnshard-blobs_action-abstract
-)
-
-target_sources(columnshard-engines-scheme PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/abstract_scheme.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/snapshot_scheme.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/filtered_scheme.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/index_info.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/tier_info.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/column_features.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/schema_diff.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/objects_cache.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/scheme/schema_version.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

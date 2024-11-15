@@ -12,87 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(mock)
-add_subdirectory(ut)
-
-add_library(core-blobstorage-pdisk)
-
-
-target_link_libraries(core-blobstorage-pdisk PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-lz4
-  library-actors-core
-  library-actors-protos
-  library-actors-util
-  library-actors-wilson
-  cpp-containers-stack_vector
-  cpp-deprecated-atomic
-  library-cpp-lwtrace
-  monlib-dynamic_counters-percentile
-  monlib-service-pages
-  ydb-core-base
-  core-base-services
-  core-blobstorage-base
-  core-blobstorage-crypto
-  core-blobstorage-groupinfo
-  core-blobstorage-lwtrace_probes
-  ydb-core-control
-  version
-  ydb-core-protos
-  ydb-core-util
-  ydb-library-pdisk_io
-  ydb-library-schlab
-  library-schlab-mon
-  library-schlab-schine
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(core-blobstorage-pdisk PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_blockdevice_async.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_completion_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_delayed_cost_loop.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_driveestimator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_drivemodel_db.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl_http.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl_log.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl_metadata.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_internal_interface.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_log_cache.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_logreader.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_mon.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_params.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_requestimpl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_syslogreader.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_sectorrestorator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_atomicblockcounter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_flightcontrol.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_signal_event.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_writer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/drivedata_serializer.cpp
-)
-
-
-generate_enum_serilization(core-blobstorage-pdisk
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_state.h
-  INCLUDE_HEADERS
-  ydb/core/blobstorage/pdisk/blobstorage_pdisk_state.h
-)
-
-generate_enum_serilization(core-blobstorage-pdisk
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h
-  INCLUDE_HEADERS
-  ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h
-)

@@ -12,33 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(events)
-add_subdirectory(proto)
-add_subdirectory(ut_helpers)
-
-add_library(fq-libs-quota_manager)
-
-
-target_compile_options(fq-libs-quota_manager PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(fq-libs-quota_manager PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-monlib-dynamic_counters
-  cpp-protobuf-json
-  libs-control_plane_storage-proto
-  libs-quota_manager-events
-  fq-libs-shared_resources
-  ydb-core-protos
-  api-grpc-draft
-  cpp-client-ydb_table
-)
-
-target_sources(fq-libs-quota_manager PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/quota_manager/quota_manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/quota_manager/quota_proxy.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

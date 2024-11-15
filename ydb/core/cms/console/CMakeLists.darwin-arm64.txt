@@ -89,6 +89,7 @@ target_sources(core-cms-console PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console__update_subdomain_key.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console__update_tenant_state.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console__update_tenant_pool_config.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/feature_flags_configurator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/grpc_library_helper.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/http.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/immediate_controls_configurator.cpp
@@ -113,6 +114,7 @@ target_sources(core-cms-console PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_tenants_manager.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console__scheme.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/defs.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/feature_flags_configurator.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/http.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/immediate_controls_configurator.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/jaeger_tracing_configurator.h

@@ -12,91 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(restricted-boost-serialization)
-
-
-target_compile_options(restricted-boost-serialization PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(restricted-boost-serialization PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/include
-)
-
-target_link_libraries(restricted-boost-serialization PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  restricted-boost-array
-  restricted-boost-assert
-  restricted-boost-config
-  restricted-boost-core
-  restricted-boost-detail
-  restricted-boost-function
-  restricted-boost-integer
-  restricted-boost-io
-  restricted-boost-iterator
-  restricted-boost-move
-  restricted-boost-mpl
-  restricted-boost-optional
-  restricted-boost-predef
-  restricted-boost-preprocessor
-  restricted-boost-smart_ptr
-  restricted-boost-spirit
-  restricted-boost-static_assert
-  restricted-boost-type_traits
-  restricted-boost-unordered
-  restricted-boost-utility
-  restricted-boost-variant
-)
-
-target_sources(restricted-boost-serialization PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/archive_exception.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/basic_archive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/basic_iarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/basic_iserializer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/basic_oarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/basic_oserializer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/basic_pointer_iserializer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/basic_pointer_oserializer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/basic_serializer_map.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/basic_text_iprimitive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/basic_text_oprimitive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/basic_text_wiprimitive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/basic_text_woprimitive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/basic_xml_archive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/binary_iarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/binary_oarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/binary_wiarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/binary_woarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/codecvt_null.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/extended_type_info.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/extended_type_info_no_rtti.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/extended_type_info_typeid.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_binary_iarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_binary_oarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_iarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_oarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_text_iarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_text_oarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_text_wiarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_text_woarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_xml_iarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_xml_oarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_xml_wiarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/polymorphic_xml_woarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/stl_port.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/text_iarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/text_oarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/text_wiarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/text_woarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/utf8_codecvt_facet.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/void_cast.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/xml_archive_exception.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/xml_grammar.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/xml_iarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/xml_oarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/xml_wgrammar.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/xml_wiarchive.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/serialization/src/xml_woarchive.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

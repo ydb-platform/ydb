@@ -22,7 +22,7 @@ target_link_libraries(core-kqp-counters PUBLIC
   ydb-core-protos
   core-sys_view-service
   dq-actors-spilling
-  library-yql-minikql
+  yql-essentials-minikql
 )
 
 target_sources(core-kqp-counters PRIVATE

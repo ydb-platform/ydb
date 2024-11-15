@@ -12,84 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(ut)
-
-add_library(common)
-
-
-target_link_libraries(common PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-aws-sdk-cpp-aws-cpp-sdk-s3
-  library-cpp-config
-  library-cpp-getopt
-  cpp-json-writer
-  cpp-yaml-as
-  cpp-string_utils-csv
-  public-lib-json_value
-  public-lib-operation_id
-  public-lib-yson_value
-  cpp-client-draft
-  cpp-client-ydb_result
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
-  cpp-client-ydb_topic
-  cpp-client-ydb_types
-  client-ydb_types-credentials
-  ydb_types-credentials-oauth2_token_exchange
-  ydb-library-arrow_parquet
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(common PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/aws.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/command.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/csv_parser.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/examples.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/format.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/interactive.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/interruptible.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/normalize_path.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/parameter_stream.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/parameters.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/pg_dump_parser.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/plan2svg.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/pretty_table.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/print_operation.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/print_utils.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/profile_manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/progress_bar.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/query_stats.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/recursive_list.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/recursive_remove.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/retry_func.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/root.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/scheme_printers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/sys.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/tabbed_table.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/waiting_bar.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/ydb_updater.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/yt.cpp
-)
-
-
-generate_enum_serilization(common
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/formats.h
-  INCLUDE_HEADERS
-  ydb/public/lib/ydb_cli/common/formats.h
-)
-
-generate_enum_serilization(common
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/parameters.h
-  INCLUDE_HEADERS
-  ydb/public/lib/ydb_cli/common/parameters.h
-)

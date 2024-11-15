@@ -24,7 +24,7 @@ target_link_libraries(dq-worker_manager-interface PUBLIC
   yutil
   library-actors-core
   library-actors-interconnect
-  yql-utils-log
+  essentials-utils-log
   yql-dq-common
   providers-common-metrics
   dq-api-grpc

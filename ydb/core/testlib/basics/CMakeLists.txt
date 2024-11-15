@@ -12,50 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(default)
-add_subdirectory(pg)
-
-add_library(core-testlib-basics)
-
-
-target_compile_options(core-testlib-basics PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-testlib-basics PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-dnsresolver
-  cpp-regex-pcre
-  cpp-testing-unittest
-  ydb-core-base
-  ydb-core-blobstorage
-  core-blobstorage-crypto
-  core-blobstorage-nodewarden
-  core-blobstorage-pdisk
-  core-client-server
-  ydb-core-formats
-  ydb-core-mind
-  ydb-core-node_whiteboard
-  ydb-core-quoter
-  core-statistics-service
-  ydb-core-tablet_flat
-  core-testlib-actors
-  core-tx-columnshard
-  core-tx-scheme_board
-  ydb-core-util
-  minikql-invoke_builtins-llvm14
-  udf-service-exception_policy
-  ydb-services-kesus
-  ydb-services-persqueue_cluster_discovery
-  ydb-services-ydb
-)
-
-target_sources(core-testlib-basics PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/basics/appdata.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/basics/helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/basics/runtime.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/basics/services.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

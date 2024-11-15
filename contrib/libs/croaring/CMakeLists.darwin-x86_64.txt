@@ -23,10 +23,6 @@ target_include_directories(contrib-libs-croaring PUBLIC
   ${PROJECT_SOURCE_DIR}/contrib/libs/croaring/include
 )
 
-target_include_directories(contrib-libs-croaring PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/croaring/include/roaring
-)
-
 target_sources(contrib-libs-croaring PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/croaring/src/array_util.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/croaring/src/art/art.c

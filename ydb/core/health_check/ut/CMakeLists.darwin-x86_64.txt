@@ -75,7 +75,7 @@ set_yunittest_property(
   ydb-core-health_check-ut
   PROPERTY
   LABELS
-  SMALL
+  MEDIUM
 )
 
 set_yunittest_property(

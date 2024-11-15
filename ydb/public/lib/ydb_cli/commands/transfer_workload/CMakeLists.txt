@@ -12,35 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(transfer_workload)
-
-
-target_link_libraries(transfer_workload PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  essentials-public-issue
-  public-issue-protos
-  api-grpc
-  api-protos
-  api-protos-annotations
-  public-lib-operation_id
-  lib-operation_id-protos
-  cpp-client-draft
-  cpp-client-ydb_driver
-  cpp-client-ydb_proto
-  cpp-client-ydb_table
-  cpp-client-ydb_topic
-  client-ydb_types-operation
-  client-ydb_types-status
-)
-
-target_sources(transfer_workload PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/transfer_workload/transfer_workload.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/transfer_workload/transfer_workload_topic_to_table.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/transfer_workload/transfer_workload_topic_to_table_init.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/transfer_workload/transfer_workload_topic_to_table_clean.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/transfer_workload/transfer_workload_topic_to_table_run.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/transfer_workload/transfer_workload_defines.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

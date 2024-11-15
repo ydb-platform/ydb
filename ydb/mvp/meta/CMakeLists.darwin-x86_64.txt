@@ -27,11 +27,11 @@ target_link_libraries(ydb-mvp-meta PUBLIC
   yutil
   ydb-mvp-core
   client-yc_private-resourcemanager
-  yql-public-udf
+  essentials-public-udf
   udf-service-exception_policy
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
   providers-result-expr_nodes
-  yql-core-expr_nodes
+  essentials-core-expr_nodes
   library-aclib-protos
   cpp-protobuf-json
 )

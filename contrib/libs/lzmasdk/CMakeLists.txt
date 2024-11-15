@@ -12,33 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(contrib-libs-lzmasdk)
-
-
-target_compile_options(contrib-libs-lzmasdk PRIVATE
-  -D_7ZIP_ST=1
-)
-
-target_link_libraries(contrib-libs-lzmasdk PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-)
-
-target_sources(contrib-libs-lzmasdk PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzmasdk/7zStream.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzmasdk/Aes.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzmasdk/AesOpt.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzmasdk/Alloc.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzmasdk/Bra.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzmasdk/Bra86.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzmasdk/BraIA64.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzmasdk/CpuArch.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzmasdk/LzFind.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzmasdk/Lzma2Dec.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzmasdk/Lzma2Enc.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzmasdk/LzmaDec.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzmasdk/LzmaEnc.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzmasdk/LzmaLib.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lzmasdk/Sha256.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

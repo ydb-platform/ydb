@@ -12,51 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(extractor)
-
-add_library(services-ext_index-metadata)
-
-
-target_link_libraries(services-ext_index-metadata PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  ydb-core-base
-  core-grpc_services-local_rpc
-  core-grpc_services-base
-  ydb-core-grpc_services
-  services-metadata-request
-  ext_index-metadata-extractor
-)
-
-target_sources(services-ext_index-metadata PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/metadata/object.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/metadata/manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/metadata/initializer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/metadata/snapshot.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/metadata/fetcher.cpp
-)
-
-
-add_global_library_for(services-ext_index-metadata.global
-  services-ext_index-metadata)
-
-
-target_link_libraries(services-ext_index-metadata.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  ydb-core-base
-  core-grpc_services-local_rpc
-  core-grpc_services-base
-  ydb-core-grpc_services
-  services-metadata-request
-  ext_index-metadata-extractor
-)
-
-target_sources(services-ext_index-metadata.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/services/ext_index/metadata/behaviour.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

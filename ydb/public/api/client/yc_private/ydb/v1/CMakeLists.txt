@@ -12,117 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_grpc_cpp_bin
-  TOOL_grpc_cpp_dependency
-  contrib/tools/protoc/plugins/grpc_cpp
-  grpc_cpp
-)
-
-get_built_tool_path(
-  TOOL_protoc_bin
-  TOOL_protoc_dependency
-  contrib/tools/protoc/bin
-  protoc
-)
-
-get_built_tool_path(
-  TOOL_cpp_styleguide_bin
-  TOOL_cpp_styleguide_dependency
-  contrib/tools/protoc/plugins/cpp_styleguide
-  cpp_styleguide
-)
-
-add_library(yc_private-ydb-v1)
-
-
-set_property(TARGET yc_private-ydb-v1 PROPERTY PROTOC_EXTRA_OUTS
-  .grpc.pb.cc
-  .grpc.pb.h
-)
-
-target_link_libraries(yc_private-ydb-v1 PUBLIC
-  contrib-libs-googleapis-common-protos
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-grpc
-  client-yc_private-access
-  client-yc_private-operation
-  client-yc_private-quota
-  contrib-libs-protobuf
-)
-
-target_proto_messages(yc_private-ydb-v1 PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/ydb/v1/backup.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/ydb/v1/backup_service.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/ydb/v1/console_service.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/ydb/v1/database.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/ydb/v1/database_service.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/ydb/v1/location.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/ydb/v1/location_service.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/ydb/v1/operation_service.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/ydb/v1/quota_service.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/ydb/v1/resource_preset.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/ydb/v1/resource_preset_service.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/ydb/v1/storage_type.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/ydb/v1/storage_type_service.proto
-)
-
-target_sources(yc_private-ydb-v1 PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/backup.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/backup.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/backup_service.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/backup_service.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/console_service.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/console_service.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/database.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/database.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/database_service.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/database_service.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/location.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/location.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/location_service.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/location_service.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/operation_service.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/operation_service.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/quota_service.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/quota_service.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/resource_preset.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/resource_preset.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/resource_preset_service.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/resource_preset_service.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/storage_type.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/storage_type.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/storage_type_service.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/ydb/v1/storage_type_service.grpc.pb.h
-)
-
-
-target_proto_outs(yc_private-ydb-v1
-  --cpp_out=${PROJECT_BINARY_DIR}/
-  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
-)
-
-target_proto_addincls(yc_private-ydb-v1
-  ./
-  ${PROJECT_SOURCE_DIR}/
-  ${PROJECT_BINARY_DIR}
-  ${PROJECT_SOURCE_DIR}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/googleapis-common-protos
-  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${PROJECT_BINARY_DIR}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-
-target_proto_plugin(yc_private-ydb-v1
-  grpc_cpp
-  ${TOOL_grpc_cpp_bin}
-)
-
-
-if(NOT CMAKE_CROSSCOMPILING)
-  add_dependencies(yc_private-ydb-v1
-    grpc_cpp
-  )
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
 endif()
+

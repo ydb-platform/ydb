@@ -12,37 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(cpp-mapreduce-http)
-
-
-target_compile_options(cpp-mapreduce-http PRIVATE
-  -Wdeprecated-this-capture
-)
-
-target_link_libraries(cpp-mapreduce-http PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-deprecated-atomic
-  cpp-http-io
-  cpp-string_utils-base64
-  cpp-string_utils-quote
-  cpp-threading-cron
-  cpp-mapreduce-common
-  cpp-mapreduce-interface
-  mapreduce-interface-logging
-  yt-core-http
-  yt-core-https
-)
-
-target_sources(cpp-mapreduce-http PRIVATE
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/abortable_http_response.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/context.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/helpers.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/host_manager.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/http.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/http_client.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/requests.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/http/retry_request.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,33 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(protos)
-add_subdirectory(mon)
-
-add_library(library-cpp-lwtrace)
-
-
-target_link_libraries(library-cpp-lwtrace PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-lwtrace-protos
-  cpp-deprecated-atomic
-)
-
-target_sources(library-cpp-lwtrace PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/lwtrace/check.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/lwtrace/control.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/lwtrace/custom_action.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/lwtrace/kill_action.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/lwtrace/log_shuttle.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/lwtrace/perf.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/lwtrace/probes.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/lwtrace/shuttle.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/lwtrace/sleep_action.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/lwtrace/start.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/lwtrace/stderr_writer.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/lwtrace/symbol.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/lwtrace/trace.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

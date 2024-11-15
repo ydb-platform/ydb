@@ -12,30 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(providers-ydb-actors)
-
-
-target_compile_options(providers-ydb-actors PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-ydb-actors PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-scheme
-  essentials-minikql-computation
-  common-token_accessor-client
-  essentials-public-types
-  essentials-utils-log
-  public-lib-experimental
-  cpp-client-ydb_driver
-  dq-actors-compute
-  providers-ydb-proto
-)
-
-target_sources(providers-ydb-actors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/actors/yql_ydb_read_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

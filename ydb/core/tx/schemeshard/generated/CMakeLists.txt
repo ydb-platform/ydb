@@ -12,47 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_codegen_bin
-  TOOL_codegen_dependency
-  ydb/core/tx/schemeshard/generated/codegen
-  codegen
-)
-
-add_subdirectory(codegen)
-
-add_library(tx-schemeshard-generated STATIC)
-
-set_property(TARGET tx-schemeshard-generated PROPERTY LINKER_LANGUAGE CXX)
-
-target_link_libraries(tx-schemeshard-generated PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-protos
-)
-
-target_sources(tx-schemeshard-generated PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/core/tx/schemeshard/generated/dispatch_op.h
-  ${PROJECT_BINARY_DIR}/ydb/core/tx/schemeshard/generated/dispatch_op.h
-)
-
-
-add_custom_command(
-  OUTPUT
-  ${PROJECT_BINARY_DIR}/ydb/core/tx/schemeshard/generated/dispatch_op.h
-  DEPENDS
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/generated/dispatch_op.h.in
-  ${TOOL_codegen_bin}
-  COMMAND
-  ${TOOL_codegen_bin}
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/generated/dispatch_op.h.in
-  ${PROJECT_BINARY_DIR}/ydb/core/tx/schemeshard/generated/dispatch_op.h
-)
-
-
-if(NOT CMAKE_CROSSCOMPILING)
-  add_dependencies(tx-schemeshard-generated
-    codegen
-  )
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
 endif()
+

@@ -12,31 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(absl)
-
-add_library(contrib-restricted-abseil-cpp INTERFACE)
-
-
-target_link_libraries(contrib-restricted-abseil-cpp INTERFACE
-  contrib-libs-linux-headers
-  abseil-cpp-absl-algorithm
-  abseil-cpp-absl-base
-  abseil-cpp-absl-container
-  abseil-cpp-absl-debugging
-  abseil-cpp-absl-flags
-  abseil-cpp-absl-functional
-  abseil-cpp-absl-hash
-  abseil-cpp-absl-log
-  abseil-cpp-absl-memory
-  abseil-cpp-absl-meta
-  abseil-cpp-absl-numeric
-  abseil-cpp-absl-profiling
-  abseil-cpp-absl-random
-  abseil-cpp-absl-status
-  abseil-cpp-absl-strings
-  abseil-cpp-absl-synchronization
-  abseil-cpp-absl-time
-  abseil-cpp-absl-types
-  abseil-cpp-absl-utility
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

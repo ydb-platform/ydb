@@ -12,123 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_protoc_bin
-  TOOL_protoc_dependency
-  contrib/tools/protoc/bin
-  protoc
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-get_built_tool_path(
-  TOOL_cpp_styleguide_bin
-  TOOL_cpp_styleguide_dependency
-  contrib/tools/protoc/plugins/cpp_styleguide
-  cpp_styleguide
-)
-
-set(ANTLR_PACKAGE_NAME NJsonPathGenerated)
-
-set(ANTLR_PACKAGE_NAME NJsonPathGenerated)
-
-set(LEXER_PARSER_NAMESPACE NALP)
-
-set(PROTOBUF_HEADER_PATH yql/essentials/parser/proto_ast/gen/jsonpath)
-
-set(PROTOBUF_SUFFIX_PATH .pb.h)
-
-add_library(proto_ast-gen-jsonpath)
-
-
-target_compile_options(proto_ast-gen-jsonpath PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(proto_ast-gen-jsonpath PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/libs/antlr4_cpp_runtime/src
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/Cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf
-)
-
-target_link_libraries(proto_ast-gen-jsonpath PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-)
-
-target_proto_messages(proto_ast-gen-jsonpath PRIVATE
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.proto
-)
-
-target_sources(proto_ast-gen-jsonpath PRIVATE
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathLexer.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/Cpp/Cpp.stg
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathLexer.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.pb.h
-)
-
-
-configure_file(
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
-)
-
-run_antlr(
-  OUTPUT
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.proto
-  DEPENDS
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/jsonpath/JsonPath.g
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf/protobuf.stg
-  WORKING_DIRECTORY
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath
-  ANTLER_ARGS
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/jsonpath/JsonPath.g
-  -lib
-  .
-  -fo
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath
-  -language
-  protobuf
-)
-
-configure_file(
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/Cpp/Cpp.stg
-)
-
-run_antlr(
-  OUTPUT
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathLexer.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathLexer.h
-  DEPENDS
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/jsonpath/JsonPath.g
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/Cpp/Cpp.stg
-  WORKING_DIRECTORY
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath
-  ANTLER_ARGS
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/jsonpath/JsonPath.g
-  -lib
-  .
-  -fo
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/jsonpath
-)
-
-target_proto_outs(proto_ast-gen-jsonpath
-  --cpp_out=${PROJECT_BINARY_DIR}/
-  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
-)
-
-target_proto_addincls(proto_ast-gen-jsonpath
-  ./
-  ${PROJECT_SOURCE_DIR}/
-  ${PROJECT_BINARY_DIR}
-  ${PROJECT_SOURCE_DIR}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${PROJECT_BINARY_DIR}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
-)

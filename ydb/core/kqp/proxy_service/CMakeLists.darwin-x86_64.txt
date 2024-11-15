@@ -49,7 +49,7 @@ target_link_libraries(core-kqp-proxy_service PUBLIC
   providers-common-http_gateway
   providers-common-proto
   providers-s3-actors_factory
-  yql-public-issue
+  essentials-public-issue
   dq-actors-spilling
   api-protos
   public-lib-operation_id

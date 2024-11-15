@@ -12,35 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(mock)
-add_subdirectory(ut)
-
-add_library(providers-common-http_gateway)
-
-
-target_compile_options(providers-common-http_gateway PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-common-http_gateway PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-curl
-  cpp-monlib-dynamic_counters
-  library-cpp-retry
-  library-actors-http
-  library-actors-prof
-  library-actors-protos
-  providers-common-proto
-  essentials-public-issue
-  yql-essentials-utils
-  essentials-utils-log
-)
-
-target_sources(providers-common-http_gateway PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/http_gateway/yql_aws_signature.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/http_gateway/yql_http_gateway.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

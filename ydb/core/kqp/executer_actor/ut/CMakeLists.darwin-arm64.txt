@@ -33,7 +33,7 @@ target_link_libraries(ydb-core-kqp-executer_actor-ut PUBLIC
   kqp-ut-common
   cpp-client-ydb_proto
   providers-common-http_gateway
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
 )
 
 target_allocator(ydb-core-kqp-executer_actor-ut

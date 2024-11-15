@@ -12,37 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(dq-actors-spilling)
-
-
-target_compile_options(dq-actors-spilling PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(dq-actors-spilling PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-library-services
-  yql-dq-common
-  yql-dq-actors
-  yql-dq-runtime
-  yql-essentials-utils
-  library-actors-core
-  library-actors-util
-  cpp-monlib-dynamic_counters
-  monlib-service-pages
-)
-
-target_sources(dq-actors-spilling PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/actors/spilling/channel_storage_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/actors/spilling/channel_storage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/actors/spilling/compute_storage_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/actors/spilling/compute_storage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/actors/spilling/spilling_counters.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/actors/spilling/spilling_file.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/actors/spilling/spilling.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

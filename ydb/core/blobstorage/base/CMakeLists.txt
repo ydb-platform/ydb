@@ -12,38 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(core-blobstorage-base)
-
-
-target_link_libraries(core-blobstorage-base PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-wilson
-  cpp-deprecated-atomic
-  library-cpp-lwtrace
-  ydb-core-base
-  ydb-core-protos
-)
-
-target_sources(core-blobstorage-base PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_vdiskid.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_syncstate.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/html.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/batched_vec.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_events.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_oos_defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_vdiskid.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/blobstorage_syncstate.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/html.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/ptr.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/vdisk_lsn.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/vdisk_sync_common.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/vdisk_priorities.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/base/utility.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

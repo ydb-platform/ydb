@@ -12,32 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(proto)
-
-add_library(cpp-protobuf-json)
-
-
-target_link_libraries(cpp-protobuf-json PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-json
-  cpp-protobuf-runtime
-  cpp-protobuf-util
-  protobuf-json-proto
-  cpp-string_utils-relaxed_escaper
-)
-
-target_sources(cpp-protobuf-json PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/protobuf/json/json2proto.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/protobuf/json/json_output_create.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/protobuf/json/json_value_output.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/protobuf/json/json_writer_output.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/protobuf/json/name_generator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/protobuf/json/proto2json.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/protobuf/json/proto2json_printer.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/protobuf/json/string_transform.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/protobuf/json/util.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/protobuf/json/util.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

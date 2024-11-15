@@ -12,30 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(core-sys_view-common)
-
-
-target_link_libraries(core-sys_view-common PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  ydb-core-base
-  ydb-core-protos
-  ydb-core-tablet_flat
-  cpp-deprecated-atomic
-  parser-pg_wrapper-interface
-)
-
-target_sources(core-sys_view-common PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/common/schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/common/common.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/common/events.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/common/keys.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/common/path.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/common/scan_actor_base_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/common/schema.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/common/utils.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/common/processor_scan.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

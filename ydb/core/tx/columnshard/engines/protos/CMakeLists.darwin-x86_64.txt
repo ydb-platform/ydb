@@ -33,6 +33,7 @@ target_link_libraries(columnshard-engines-protos PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-formats-arrow-protos
+  columnshard-common-protos
   contrib-libs-protobuf
 )
 

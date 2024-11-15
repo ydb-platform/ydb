@@ -12,29 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(cpp-yt-string)
-
-
-target_compile_options(cpp-yt-string PRIVATE
-  -Wdeprecated-this-capture
-)
-
-target_link_libraries(cpp-yt-string PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-yt-assert
-  cpp-yt-exception
-  cpp-yt-misc
-  cpp-yt-small_containers
-)
-
-target_sources(cpp-yt-string PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/string/enum.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/string/guid.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/string/string.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/string/format_string.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/string/format.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/string/string_builder.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

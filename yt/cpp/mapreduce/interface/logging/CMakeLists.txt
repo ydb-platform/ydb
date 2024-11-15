@@ -12,36 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(mapreduce-interface-logging)
-
-
-target_compile_options(mapreduce-interface-logging PRIVATE
-  -Wdeprecated-this-capture
-)
-
-target_link_libraries(mapreduce-interface-logging PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-yt-logging
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(mapreduce-interface-logging PRIVATE
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/logging/logger.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/logging/yt_log.cpp
-)
-
-
-generate_enum_serilization(mapreduce-interface-logging
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/logging/logger.h
-  INCLUDE_HEADERS
-  yt/cpp/mapreduce/interface/logging/logger.h
-)

@@ -12,40 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(yql-dq-type_ann)
-
-
-target_compile_options(yql-dq-type_ann PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(yql-dq-type_ann PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  yql-essentials-ast
-  yql-essentials-core
-  essentials-core-type_ann
-  yql-dq-expr_nodes
-  yql-dq-proto
-  providers-common-provider
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(yql-dq-type_ann PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/type_ann/dq_type_ann.cpp
-)
-
-
-generate_enum_serilization(yql-dq-type_ann
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/type_ann/dq_type_ann.h
-  INCLUDE_HEADERS
-  ydb/library/yql/dq/type_ann/dq_type_ann.h
-)

@@ -12,56 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(contrib-libs-jinja2cpp)
-
-
-target_compile_options(contrib-libs-jinja2cpp PRIVATE
-  -DBOOST_ERROR_CODE_HEADER_ONLY
-  -DBOOST_SYSTEM_NO_DEPRECATED
-  -DFMT_HEADER_ONLY=1
-  -DFMT_USE_INTERNAL=TRUE
-  -DJINJA2CPP_BUILD_AS_SHARED
-  -DJINJA2CPP_LINK_AS_SHARED
-  -DJINJA2CPP_USE_REGEX_BOOST
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(contrib-libs-jinja2cpp PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/include
-  ${PROJECT_SOURCE_DIR}/contrib/libs/rapidjson/include
-)
-
-target_link_libraries(contrib-libs-jinja2cpp PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-fmt
-  contrib-libs-rapidjson
-  restricted-boost-algorithm
-  restricted-boost-container
-  restricted-boost-filesystem
-  restricted-boost-numeric_conversion
-  restricted-boost-unordered
-  restricted-boost-variant
-  contrib-restricted-expected-lite
-)
-
-target_sources(contrib-libs-jinja2cpp PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/binding/rapid_json_serializer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/error_info.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/expression_evaluator.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/expression_parser.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/filesystem_handler.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/filters.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/generic_list.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/internal_value.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/lexer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/serialize_filters.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/statements.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/string_converter_filter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/template.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/template_env.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/template_parser.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/testers.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jinja2cpp/src/value.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

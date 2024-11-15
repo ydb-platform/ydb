@@ -12,74 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(blobstorage-vdisk-common)
-
-
-target_link_libraries(blobstorage-vdisk-common PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-protos
-  monlib-service-pages
-  ydb-core-base
-  vdisk-hulldb-base
-  blobstorage-vdisk-protos
-  ydb-core-protos
-)
-
-target_sources(blobstorage-vdisk-common PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/blobstorage_cost_tracker.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/blobstorage_event_filter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/blobstorage_status.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/blobstorage_vdisk_guids.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_config.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_context.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_costmodel.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_handle_class.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_histogram_latency.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_histograms.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_log.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_mongroups.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_outofspace.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_performance_params.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_recoverylogwriter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_response.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/align.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/blobstorage_event_filter.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/blobstorage_status.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/blobstorage_vdisk_guids.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/disk_part.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/sublog.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_config.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_context.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_costmodel.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_dbtype.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_defrag.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_events.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_handle_class.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_histogram_latency.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_histograms.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_hulllogctx.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_log.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_lsnmngr.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_mon.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_outofspace.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_performance_params.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_pdisk_error.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_private_events.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_queues.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_recoverylogwriter.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_response.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/common/vdisk_syncneighbors.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -25,6 +25,7 @@ target_link_libraries(mvp_meta PUBLIC
   yutil
   library-cpp-cpuid_check
   ydb-mvp-meta
+  library-cpp-getopt
 )
 
 target_allocator(mvp_meta

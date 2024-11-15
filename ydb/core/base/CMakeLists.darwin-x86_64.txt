@@ -19,6 +19,7 @@ get_built_tool_path(
   enum_parser
 )
 
+add_subdirectory(generated)
 add_subdirectory(services)
 add_subdirectory(ut)
 add_subdirectory(ut_board_subscriber)
@@ -40,6 +41,7 @@ target_link_libraries(ydb-core-base PUBLIC
   cpp-lwtrace-mon
   library-cpp-random_provider
   library-cpp-time_provider
+  core-base-generated
   core-base-services
   ydb-core-debug
   ydb-core-erasure
@@ -52,7 +54,7 @@ target_link_libraries(ydb-core-base PUBLIC
   library-pretty_types_print-protobuf
   ydb-library-ydb_issue
   api-protos-out
-  library-yql-minikql
+  yql-essentials-minikql
   cpp-deprecated-atomic
   library-cpp-dwarf_backtrace
   tools-enum_parser-enum_serialization_runtime
@@ -69,6 +71,7 @@ target_sources(ydb-core-base PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/base/counters.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/domain.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/event_filter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/feature_flags_service.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/group_stat.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/localdb.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/logoblob.cpp
@@ -100,6 +103,8 @@ target_sources(ydb-core-base PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/base/domain.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/event_filter.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/events.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/feature_flags.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/feature_flags_service.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/group_stat.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/hive.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/interconnect_channels.h
@@ -111,6 +116,7 @@ target_sources(ydb-core-base PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/base/pool_stats_collector.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/resource_profile.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/row_version.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/runtime_feature_flags.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/shared_quota.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/statestorage.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/statestorage_guardian_impl.h

@@ -12,42 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ev_write)
-
-add_library(columnshard-transactions-operators)
-
-
-target_link_libraries(columnshard-transactions-operators PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  data_sharing-destination-events
-  transactions-operators-ev_write
-  columnshard-export-session
-)
-
-target_sources(columnshard-transactions-operators PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/propose_tx.cpp
-)
-
-
-add_global_library_for(columnshard-transactions-operators.global
-  columnshard-transactions-operators)
-
-
-target_link_libraries(columnshard-transactions-operators.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  data_sharing-destination-events
-  transactions-operators-ev_write
-  columnshard-export-session
-)
-
-target_sources(columnshard-transactions-operators.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/long_tx_write.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/backup.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/sharing.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

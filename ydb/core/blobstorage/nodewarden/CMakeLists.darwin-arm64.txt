@@ -31,6 +31,7 @@ target_link_libraries(core-blobstorage-nodewarden PUBLIC
   ydb-core-control
   ydb-library-pdisk_io
   ydb-library-yaml_config
+  core-util-actorsys_test
 )
 
 target_sources(core-blobstorage-nodewarden PRIVATE
@@ -57,7 +58,6 @@ target_sources(core-blobstorage-nodewarden PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_scrub.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_stat_aggr.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden_vdisk.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/defs.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/group_stat_aggregator.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/distconf.h
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/nodewarden/node_warden.h

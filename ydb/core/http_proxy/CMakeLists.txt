@@ -12,61 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(ydb-core-http_proxy)
-
-
-target_compile_options(ydb-core-http_proxy PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(ydb-core-http_proxy PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-restricted-nlohmann_json
-  library-actors-http
-  library-actors-core
-  library-grpc-actor_client
-  ydb-core-base
-  ydb-core-protos
-  core-grpc_services-local_rpc
-  ydb-core-security
-  essentials-public-issue
-  library-http_proxy-authorization
-  library-http_proxy-error
-  library-ycloud-api
-  library-ycloud-impl
-  ydb-library-naming_conventions
-  cpp-client-ydb_datastreams
-  cpp-client-ydb_persqueue_core
-  client-ydb_topic-codecs
-  cpp-client-iam_private
-  ydb-services-datastreams
-  services-persqueue_v1-actors
-  ydb-services-ymq
-  api-grpc
-  api-protos
-)
-
-target_sources(ydb-core-http_proxy PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/auth_factory.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/discovery_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/exceptions_mapping.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/grpc_service.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/http_req.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/http_service.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/metrics_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/auth_factory.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/custom_metrics.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/discovery_actor.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/events.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/exceptions_mapping.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/grpc_service.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/http_req.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/http_service.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/json_proto_conversion.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/http_proxy/metrics_actor.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,40 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(providers-function-provider)
-
-
-target_compile_options(providers-function-provider PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-function-provider PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  essentials-core-dq_integration
-  common-token_accessor-client
-  providers-common-dq
-  providers-common-provider
-  common-schema-mkql
-  providers-function-expr_nodes
-  providers-function-common
-  providers-function-gateway
-  providers-function-proto
-  yql-essentials-core
-  essentials-core-expr_nodes
-  yql-dq-expr_nodes
-  yql-dq-opt
-)
-
-target_sources(providers-function-provider PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/function/provider/dq_function_load_meta.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/function/provider/dq_function_intent_transformer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/function/provider/dq_function_provider.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/function/provider/dq_function_datasource.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/function/provider/dq_function_datasink.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/function/provider/dq_function_type_ann.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/function/provider/dq_function_physical_optimize.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/function/provider/dq_function_dq_integration.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

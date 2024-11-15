@@ -12,105 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_rescompiler_bin
-  TOOL_rescompiler_dependency
-  tools/rescompiler/bin
-  rescompiler
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(no_llvm)
-add_subdirectory(ut)
-
-add_library(yt-codec-codegen)
-
-
-target_compile_options(yt-codec-codegen PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(yt-codec-codegen PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-  essentials-types-binary_json
-  minikql-computation-llvm14
-  parser-pg_wrapper-interface
-  yql-essentials-utils
-  minikql-codegen-llvm14
-)
-
-target_sources(yt-codec-codegen PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_cg.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_cg.h
-)
-
-
-add_global_library_for(yt-codec-codegen.global
-  yt-codec-codegen)
-
-
-target_compile_options(yt-codec-codegen.global PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(yt-codec-codegen.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-  essentials-types-binary_json
-  minikql-computation-llvm14
-  parser-pg_wrapper-interface
-  yql-essentials-utils
-  minikql-codegen-llvm14
-)
-
-target_sources(yt-codec-codegen.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/12ec3101983db48f6ee4095b4f5fb784.cpp
-)
-
-
-add_custom_command(
-  OUTPUT
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_merged.bc
-  DEPENDS
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_bc.cpp.bc
-  COMMAND
-  ${LLVMLINK}
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_bc.cpp.bc
-  -o
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_merged.bc
-)
-
-add_custom_command(
-  OUTPUT
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_optimized.bc
-  DEPENDS
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_merged.bc
-  COMMAND
-  ${LLVMOPT}
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_merged.bc
-  -o
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_optimized.bc
-  -internalize-public-api-list=WriteJust#WriteNothing#WriteBool#Write8#Write16#Write32#Write64#Write120#WriteDecimal32#WriteDecimal64#WriteDecimal128#WriteFloat#WriteDouble#WriteString#ReadBool#ReadInt8#ReadUint8#ReadInt16#ReadUint16#ReadInt32#ReadUint32#ReadInt64#ReadUint64#ReadInt120#ReadDecimal32#ReadDecimal64#ReadDecimal128#ReadFloat#ReadDouble#ReadOptional#ReadVariantData#SkipFixedData#SkipVarData#ReadTzDate#ReadTzDatetime#ReadTzTimestamp#ReadTzDate32#ReadTzDatetime64#ReadTzTimestamp64#WriteTzDate#WriteTzDatetime#WriteTzTimestamp#WriteTzDate32#WriteTzDatetime64#WriteTzTimestamp64#GetWrittenBytes#FillZero
-  -passes="default<O2>,globalopt,globaldce,internalize"
-)
-
-llvm_compile_cxx(yt-codec-codegen.global
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_bc.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/yt_codec_bc.cpp.bc
-  ${CLANGPLUSPLUS}
-  -Wno-unknown-warning-option
-  -emit-llvm
-)
-
-resources(yt-codec-codegen.global
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/12ec3101983db48f6ee4095b4f5fb784.cpp
-  INPUTS
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/yt/codec/codegen/YtCodecFuncs_optimized.bc
-  KEYS
-  /llvm_bc/YtCodecFuncs
-  OPTS
-)

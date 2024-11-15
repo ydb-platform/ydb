@@ -12,70 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(libs-poco-NetSSL_OpenSSL)
-
-
-target_compile_options(libs-poco-NetSSL_OpenSSL PRIVATE
-  -DPOCO_ENABLE_CPP11
-  -DPOCO_ENABLE_CPP14
-  -DPOCO_NO_AUTOMATIC_LIBS
-  -DPOCO_UNBUNDLED
-  -DPOCO_OS_FAMILY_UNIX
-  -DPOCO_HAVE_FD_EPOLL
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(libs-poco-NetSSL_OpenSSL PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/include
-)
-
-target_include_directories(libs-poco-NetSSL_OpenSSL PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Crypto/include
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Foundation/include
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Net/include
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/Util/include
-)
-
-target_link_libraries(libs-poco-NetSSL_OpenSSL PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-openssl
-  libs-poco-Crypto
-  libs-poco-Foundation
-  libs-poco-JSON
-  libs-poco-Net
-  libs-poco-Util
-  libs-poco-XML
-)
-
-target_sources(libs-poco-NetSSL_OpenSSL PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/AcceptCertificateHandler.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/CertificateHandlerFactory.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/CertificateHandlerFactoryMgr.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/ConsoleCertificateHandler.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/Context.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/HTTPSClientSession.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/HTTPSSessionInstantiator.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/HTTPSStreamFactory.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/InvalidCertificateHandler.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/KeyConsoleHandler.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/KeyFileHandler.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/PrivateKeyFactory.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/PrivateKeyFactoryMgr.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/PrivateKeyPassphraseHandler.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/RejectCertificateHandler.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/SSLException.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/SSLManager.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/SecureSMTPClientSession.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/SecureServerSocket.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/SecureServerSocketImpl.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/SecureSocketImpl.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/SecureStreamSocket.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/SecureStreamSocketImpl.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/Session.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/Utility.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/VerificationErrorArgs.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/src/X509Certificate.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

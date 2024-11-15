@@ -12,57 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(core-kqp-compute_actor)
-
-
-target_compile_options(core-kqp-compute_actor PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-kqp-compute_actor PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-actorlib_impl
-  ydb-core-base
-  core-kqp-federated_query
-  core-kqp-runtime
-  core-tx-datashard
-  core-tx-scheme_cache
-  library-formats-arrow-protos
-  library-formats-arrow-common
-  dq-actors-compute
-  providers-generic-actors
-  providers-s3-actors_factory
-  essentials-public-issue
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(core-kqp-compute_actor PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_actor_factory.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_actor_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_state.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_pure_compute_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_compute_stat.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_compute_manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_compute_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_fetcher_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_scan_events.cpp
-)
-
-
-generate_enum_serilization(core-kqp-compute_actor
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/compute_actor/kqp_compute_state.h
-  INCLUDE_HEADERS
-  ydb/core/kqp/compute_actor/kqp_compute_state.h
-)

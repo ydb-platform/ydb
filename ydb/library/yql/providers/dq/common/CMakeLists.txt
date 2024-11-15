@@ -12,44 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(providers-dq-common)
-
-
-target_compile_options(providers-dq-common PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-dq-common PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-string_utils-parse_size
-  yql-essentials-minikql
-  yql-essentials-sql
-  yql-essentials-utils
-  essentials-utils-log
-  yql-dq-actors
-  yql-dq-proto
-  essentials-core-dq_integration
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(providers-dq-common PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/common/attrs.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/common/yql_dq_common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/common/yql_dq_settings.cpp
-)
-
-
-generate_enum_serilization(providers-dq-common
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/common/yql_dq_settings.h
-  INCLUDE_HEADERS
-  ydb/library/yql/providers/dq/common/yql_dq_settings.h
-)

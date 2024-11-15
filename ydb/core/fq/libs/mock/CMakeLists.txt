@@ -12,53 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(fq-libs-mock)
-
-
-target_compile_options(fq-libs-mock PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(fq-libs-mock PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  cpp-json-yson
-  cpp-monlib-dynamic_counters
-  library-cpp-random_provider
-  library-cpp-time_provider
-  library-cpp-yson
-  cpp-yson-node
-  ydb-core-base
-  fq-libs-actors
-  fq-libs-common
-  fq-libs-db_schema
-  libs-shared_resources-interface
-  ydb-core-protos
-  ydb-library-mkql_proto
-  yql-essentials-ast
-  essentials-core-facade
-  core-services-mounts
-  core-dq_integration-transform
-  essentials-minikql-comp_nodes
-  providers-clickhouse-provider
-  providers-common-codec
-  providers-common-comp_nodes
-  providers-common-provider
-  common-schema-mkql
-  providers-common-udf_resolve
-  providers-dq-provider
-  dq-worker_manager-interface
-  providers-ydb-provider
-  essentials-public-issue
-  public-issue-protos
-  essentials-sql-settings
-  api-protos
-  cpp-client-ydb_table
-)
-
-target_sources(fq-libs-mock PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/mock/yql_mock.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

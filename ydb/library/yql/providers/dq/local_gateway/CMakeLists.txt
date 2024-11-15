@@ -12,30 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(providers-dq-local_gateway)
-
-
-target_compile_options(providers-dq-local_gateway PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-dq-local_gateway PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  yql-essentials-utils
-  essentials-utils-network
-  dq-actors-compute
-  dq-actors-spilling
-  providers-dq-provider
-  dq-api-protos
-  providers-dq-task_runner
-  providers-dq-worker_manager
-  providers-dq-service
-  providers-dq-stats_collector
-)
-
-target_sources(providers-dq-local_gateway PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/local_gateway/yql_dq_gateway_local.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

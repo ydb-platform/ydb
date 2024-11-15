@@ -35,6 +35,7 @@ target_link_libraries(ydb-core-tx-datashard-ut_change_exchange PUBLIC
   kqp-ut-common
   core-testlib-pg
   ydb-core-tx
+  tx-schemeshard-ut_helpers
   udf-service-exception_policy
   public-lib-yson_value
   cpp-client-ydb_datastreams

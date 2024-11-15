@@ -12,73 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(shards_resolver)
-add_subdirectory(ut)
-
-add_library(core-kqp-executer_actor)
-
-
-target_compile_options(core-kqp-executer_actor PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-kqp-executer_actor PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  cpp-containers-absl_flat_hash
-  ydb-core-actorlib_impl
-  ydb-core-base
-  core-client-minikql_compile
-  ydb-core-formats
-  core-kqp-common
-  core-kqp-compute_actor
-  kqp-executer_actor-shards_resolver
-  core-kqp-federated_query
-  core-kqp-query_compiler
-  core-kqp-rm_service
-  core-kqp-topics
-  kqp-gateway-local_rpc
-  ydb-core-protos
-  tx-long_tx_service-public
-  ydb-core-ydb_convert
-  services-metadata-abstract
-  ydb-library-mkql_proto
-  library-mkql_proto-protos
-  dq-actors-compute
-  yql-dq-runtime
-  yql-dq-tasks
-  providers-common-http_gateway
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(core-kqp-executer_actor PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_data_executer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_scan_executer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_scheme_executer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_executer_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_executer_stats.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_literal_executer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_locks_helper.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_partition_helper.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_planner.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_planner_strategy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_table_resolver.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_tasks_validate.cpp
-)
-
-
-generate_enum_serilization(core-kqp-executer_actor
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/executer_actor/kqp_executer.h
-  INCLUDE_HEADERS
-  ydb/core/kqp/executer_actor/kqp_executer.h
-)

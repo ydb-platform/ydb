@@ -12,29 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(services-lib-actors)
-
-
-target_link_libraries(services-lib-actors PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-grpc-server
-  cpp-digest-md5
-  ydb-core-grpc_services
-  core-grpc_services-base
-  ydb-core-metering
-  ydb-core-mind
-  ydb-core-protos
-  library-persqueue-obfuscate
-  library-persqueue-topic_parser
-  api-grpc
-  api-grpc-draft
-  public-lib-jwt
-  public-lib-operation_id
-)
-
-target_sources(services-lib-actors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/services/lib/actors/pq_schema_actor.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,76 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_grpc_cpp_bin
-  TOOL_grpc_cpp_dependency
-  contrib/tools/protoc/plugins/grpc_cpp
-  grpc_cpp
-)
-
-get_built_tool_path(
-  TOOL_protoc_bin
-  TOOL_protoc_dependency
-  contrib/tools/protoc/bin
-  protoc
-)
-
-get_built_tool_path(
-  TOOL_cpp_styleguide_bin
-  TOOL_cpp_styleguide_dependency
-  contrib/tools/protoc/plugins/cpp_styleguide
-  cpp_styleguide
-)
-
-add_library(grpc_streaming-ut-grpc)
-
-
-set_property(TARGET grpc_streaming-ut-grpc PROPERTY PROTOC_EXTRA_OUTS
-  .grpc.pb.cc
-  .grpc.pb.h
-)
-
-target_link_libraries(grpc_streaming-ut-grpc PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-grpc
-  contrib-libs-protobuf
-)
-
-target_proto_messages(grpc_streaming-ut-grpc PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_streaming/ut/grpc/streaming_service.proto
-)
-
-target_sources(grpc_streaming-ut-grpc PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/core/grpc_streaming/ut/grpc/streaming_service.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/core/grpc_streaming/ut/grpc/streaming_service.grpc.pb.h
-)
-
-
-target_proto_outs(grpc_streaming-ut-grpc
-  --cpp_out=${PROJECT_BINARY_DIR}/
-  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
-)
-
-target_proto_addincls(grpc_streaming-ut-grpc
-  ./
-  ${PROJECT_SOURCE_DIR}/
-  ${PROJECT_BINARY_DIR}
-  ${PROJECT_SOURCE_DIR}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${PROJECT_BINARY_DIR}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-
-target_proto_plugin(grpc_streaming-ut-grpc
-  grpc_cpp
-  ${TOOL_grpc_cpp_bin}
-)
-
-
-if(NOT CMAKE_CROSSCOMPILING)
-  add_dependencies(grpc_streaming-ut-grpc
-    grpc_cpp
-  )
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
 endif()
+

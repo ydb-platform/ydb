@@ -12,46 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(library-cpp-scheme)
-
-
-target_link_libraries(library-cpp-scheme PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  library-cpp-json
-  cpp-string_utils-relaxed_escaper
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(library-cpp-scheme PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/scheme/scheme.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/scheme/scimpl_private.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/scheme/scimpl_protobuf.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/scheme/scimpl_json_read.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/scheme/scimpl_json_write.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/scheme/scheme_cast.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/scheme/scimpl.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/scheme/scimpl_defs.h
-)
-
-
-generate_enum_serilization(library-cpp-scheme
-  ${PROJECT_SOURCE_DIR}/library/cpp/scheme/scheme.h
-  INCLUDE_HEADERS
-  library/cpp/scheme/scheme.h
-)
-
-target_ragel_lexers(library-cpp-scheme
-  PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/scheme/scimpl_select.rl6
-  -CG2
-)

@@ -12,38 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-add_subdirectory(events)
-
-add_library(fq-libs-checkpointing)
-
-
-target_compile_options(fq-libs-checkpointing PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(fq-libs-checkpointing PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  libs-actors-logging
-  fq-libs-checkpointing_common
-  libs-checkpoint_storage-events
-  dq-actors-compute
-  yql-dq-proto
-  yql-dq-state
-  dq-api-protos
-)
-
-target_sources(fq-libs-checkpointing PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/checkpoint_coordinator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/checkpoint_id_generator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/pending_checkpoint.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/utils.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/checkpoint_id_generator.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/pending_checkpoint.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing/utils.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

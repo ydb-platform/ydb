@@ -12,52 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(tx-schemeshard-ut_helpers)
-
-
-target_compile_options(tx-schemeshard-ut_helpers PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(tx-schemeshard-ut_helpers PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-testing-unittest
-  ydb-core-base
-  core-blockstore-core
-  core-cms-console
-  ydb-core-engine
-  core-engine-minikql
-  core-filestore-core
-  ydb-core-metering
-  persqueue-ut-common
-  ydb-core-protos
-  ydb-core-scheme
-  ydb-core-tablet_flat
-  ydb-core-testlib
-  ydb-core-tx
-  core-tx-datashard
-  core-tx-schemeshard
-  core-tx-tx_allocator
-  core-tx-tx_proxy
-  public-lib-scheme_types
-  essentials-public-issue
-  cpp-client-ydb_driver
-  cpp-client-ydb_table
-)
-
-target_sources(tx-schemeshard-ut_helpers PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/export_reboots_common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/failing_mtpq.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/ls_checks.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/test_env.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/helpers.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/ls_checks.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/test_env.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

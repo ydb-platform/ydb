@@ -25,6 +25,8 @@ target_link_libraries(ydb-core-fq-libs-ydb-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   fq-libs-ydb
+  core-testlib-default
+  ydb-library-security
 )
 
 target_allocator(ydb-core-fq-libs-ydb-ut
@@ -49,7 +51,7 @@ set_property(
   ydb-core-fq-libs-ydb-ut
   PROPERTY
   SPLIT_FACTOR
-  1
+  10
 )
 
 add_yunittest(
@@ -78,6 +80,7 @@ set_yunittest_property(
   ydb-core-fq-libs-ydb-ut
   PROPERTY
   ENVIRONMENT
+  "YDB_DRIVER_BINARY=ydb/apps/ydbd/ydbd"
 )
 
 vcs_info(ydb-core-fq-libs-ydb-ut)

@@ -12,24 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(abseil-cpp-absl-profiling)
-
-
-target_compile_options(abseil-cpp-absl-profiling PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(abseil-cpp-absl-profiling PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp
-)
-
-target_link_libraries(abseil-cpp-absl-profiling PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-)
-
-target_sources(abseil-cpp-absl-profiling PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/profiling/internal/exponential_biased.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/profiling/internal/periodic_sampler.cc
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

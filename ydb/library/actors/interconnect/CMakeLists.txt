@@ -12,93 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(mock)
-add_subdirectory(ut)
-add_subdirectory(ut_fat)
-add_subdirectory(ut_huge_cluster)
-
-add_library(library-actors-interconnect)
-
-
-target_link_libraries(library-actors-interconnect PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-libc_compat
-  contrib-libs-openssl
-  contrib-libs-xxhash
-  library-actors-core
-  library-actors-dnscachelib
-  library-actors-dnsresolver
-  library-actors-helpers
-  library-actors-prof
-  library-actors-protos
-  library-actors-util
-  library-actors-wilson
-  cpp-digest-crc32c
-  library-cpp-json
-  library-cpp-lwtrace
-  cpp-monlib-dynamic_counters
-  cpp-monlib-metrics
-  service-pages-resources
-  service-pages-tablesorter
-  cpp-openssl-init
-  library-cpp-packedtypes
-)
-
-target_sources(library-actors-interconnect PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_address.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_channel.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_counters.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_handshake.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_mon.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_nameserver_dynamic.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_nameserver_table.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_proxy_wrapper.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_resolve.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_stream.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_input_session.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_proxy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_server.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_session.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/load.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/packet.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/poller_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/poller_tcp.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/poller_tcp_unit.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/poller_tcp_unit_select.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/subscription_manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/types.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/poller_tcp_unit_epoll.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/channel_scheduler.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/event_filter.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/event_holder_pool.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/events_local.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_address.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_channel.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_common.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_handshake.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_mon.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_proxy_wrapper.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_stream.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_proxy.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_server.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/interconnect_tcp_session.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/load.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/logging.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/packet.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/poller_actor.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/poller.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/poller_tcp.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/poller_tcp_unit.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/poller_tcp_unit_select.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/profiler.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/slowpoke_actor.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/subscription_manager.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/types.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/watchdog_timer.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/interconnect/poller_tcp_unit_epoll.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

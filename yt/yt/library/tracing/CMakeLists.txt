@@ -12,27 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(jaeger)
-
-add_library(yt-library-tracing)
-
-
-target_compile_options(yt-library-tracing PRIVATE
-  -Wdeprecated-this-capture
-)
-
-target_link_libraries(yt-library-tracing PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  yt-yt-build
-  yt_proto-yt-core
-)
-
-target_sources(yt-library-tracing PRIVATE
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/tracing/public.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/tracing/tracer.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/tracing/async_queue_trace.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/tracing/batch_trace.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

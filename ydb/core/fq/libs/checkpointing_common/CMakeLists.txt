@@ -12,31 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(fq-libs-checkpointing_common)
-
-
-target_link_libraries(fq-libs-checkpointing_common PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-graph_params-proto
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(fq-libs-checkpointing_common PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing_common/defs.cpp
-)
-
-
-generate_enum_serilization(fq-libs-checkpointing_common
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpointing_common/defs.h
-  INCLUDE_HEADERS
-  ydb/core/fq/libs/checkpointing_common/defs.h
-)

@@ -12,98 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(dom)
-add_subdirectory(jsonpath)
-add_subdirectory(computation)
-add_subdirectory(arrow)
-add_subdirectory(comp_nodes)
-add_subdirectory(invoke_builtins)
-add_subdirectory(codegen)
-add_subdirectory(datetime)
-add_subdirectory(protobuf_udf)
-
-add_library(yql-essentials-minikql)
-
-
-target_compile_options(yql-essentials-minikql PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(yql-essentials-minikql PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  libs-cctz-tzdata
-  cpp-deprecated-enum_codegen
-  library-cpp-enumbitset
-  cpp-monlib-dynamic_counters
-  library-cpp-packedtypes
-  library-cpp-resource
-  library-cpp-yson
-  essentials-core-pg_settings
-  essentials-core-sql_types
-  essentials-minikql-dom
-  essentials-parser-pg_catalog
-  parser-pg_wrapper-interface
-  essentials-public-udf
-  public-udf-tz
-  essentials-types-binary_json
-  essentials-types-dynumber
-  essentials-types-uuid
-  yql-essentials-utils
-  essentials-utils-memory_profiling
-)
-
-target_sources(yql-essentials-minikql PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/aligned_page_pool.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/compact_hash.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_alloc.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_buffer.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_function_metadata.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_function_registry.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_mem_info.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_node.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_node_builder.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_node_cast.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_node_printer.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_node_serialization.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_node_visitor.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_opt_literal.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_program_builder.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_runtime_version.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_stats_registry.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_string_util.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_terminator.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_type_builder.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_type_ops.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_unboxed_value_stream.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/pack_num.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/primes.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/watermark_tracker.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/aligned_page_pool.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/compact_hash.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/defs.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_buffer.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_function_metadata.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_function_registry.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_node.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_node_builder.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_node_cast.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_node_printer.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_node_serialization.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_node_visitor.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_opt_literal.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_program_builder.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_runtime_version.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_string_util.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_terminator.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_type_builder.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_type_ops.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_watermark.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/mkql_unboxed_value_stream.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/pack_num.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/primes.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/watermark_tracker.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

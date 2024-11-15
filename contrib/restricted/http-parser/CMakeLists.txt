@@ -12,24 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(contrib-restricted-http-parser)
-
-
-target_compile_options(contrib-restricted-http-parser PRIVATE
-  -DHTTP_MAX_HEADER_SIZE=0x7fffffff
-  -DHTTP_PARSER_STRICT=0
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(contrib-restricted-http-parser PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/http-parser
-)
-
-target_link_libraries(contrib-restricted-http-parser PUBLIC
-  contrib-libs-linux-headers
-)
-
-target_sources(contrib-restricted-http-parser PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/http-parser/http_parser.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

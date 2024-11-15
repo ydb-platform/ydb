@@ -12,43 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(events)
-add_subdirectory(proto)
-add_subdirectory(ut)
-
-add_library(fq-libs-checkpoint_storage)
-
-
-target_compile_options(fq-libs-checkpoint_storage PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(fq-libs-checkpoint_storage PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-fmt
-  library-actors-core
-  libs-actors-logging
-  libs-config-protos
-  fq-libs-control_plane_storage
-  fq-libs-ydb
-  libs-checkpoint_storage-events
-  libs-checkpoint_storage-proto
-  fq-libs-checkpointing_common
-  fq-libs-shared_resources
-  ydb-library-security
-  dq-actors-compute
-  yql-dq-proto
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
-)
-
-target_sources(fq-libs-checkpoint_storage PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/gc.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/storage_proxy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/storage_service.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/ydb_checkpoint_storage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/checkpoint_storage/ydb_state_storage.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

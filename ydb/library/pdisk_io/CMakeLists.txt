@@ -12,55 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-find_package(AIO REQUIRED)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
-
-add_subdirectory(protos)
-
-add_library(ydb-library-pdisk_io)
-
-
-target_link_libraries(ydb-library-pdisk_io PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  AIO::aio
-  contrib-libs-liburing
-  library-actors-core
-  library-actors-wilson
-  cpp-monlib-dynamic_counters
-  ydb-core-debug
-  library-pdisk_io-protos
-)
-
-target_sources(ydb-library-pdisk_io PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/aio_linux.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/file_params_linux.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/aio.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/aio_map.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/buffers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/device_type.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/drivedata.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/sector_map.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/wcache.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/aio.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/buffers.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/device_type.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/drivedata.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/sector_map.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/wcache.h
-)
-
-
-generate_enum_serilization(ydb-library-pdisk_io
-  ${PROJECT_SOURCE_DIR}/ydb/library/pdisk_io/aio.h
-  INCLUDE_HEADERS
-  ydb/library/pdisk_io/aio.h
-)

@@ -12,79 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(ut_base_tenant)
-add_subdirectory(ut_encrypted_storage)
-add_subdirectory(ut_ext_tenant)
-add_subdirectory(ut_storage_tenant)
-
-add_library(core-tx-tx_proxy)
-
-
-target_compile_options(core-tx-tx_proxy PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-tx-tx_proxy PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  library-actors-core
-  library-actors-helpers
-  library-actors-interconnect
-  util-draft
-  ydb-core-actorlib_impl
-  ydb-core-base
-  core-blobstorage-base
-  ydb-core-docapi
-  ydb-core-engine
-  ydb-core-formats
-  core-grpc_services-local_rpc
-  core-io_formats-arrow
-  ydb-core-protos
-  ydb-core-scheme
-  core-sys_view-common
-  ydb-core-tablet
-  ydb-core-tablet_flat
-  ydb-core-tx
-  core-tx-balance_coverage
-  core-tx-datashard
-  core-tx-scheme_cache
-  core-tx-schemeshard
-  core-tx-tx_allocator
-  core-tx-tx_allocator_client
-  ydb-library-aclib
-  library-mkql_proto-protos
-  public-lib-base
-)
-
-target_sources(core-tx-tx_proxy PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/mon.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/proxy_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/schemereq.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/datareq.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/describe.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/proxy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/read_table_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/resolvereq.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/rpc_long_tx.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/snapshotreq.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/commitreq.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/upload_rows_common_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/upload_rows.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/global.cpp
-)
-
-
-generate_enum_serilization(core-tx-tx_proxy
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/read_table_impl.h
-  INCLUDE_HEADERS
-  ydb/core/tx/tx_proxy/read_table_impl.h
-)

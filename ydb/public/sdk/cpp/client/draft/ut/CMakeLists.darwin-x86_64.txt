@@ -12,6 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(helpers)
+
 add_executable(ydb-public-sdk-cpp-client-draft-ut)
 
 
@@ -25,6 +27,7 @@ target_link_libraries(ydb-public-sdk-cpp-client-draft-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   cpp-client-draft
+  draft-ut-helpers
 )
 
 target_allocator(ydb-public-sdk-cpp-client-draft-ut
@@ -40,7 +43,8 @@ target_link_options(ydb-public-sdk-cpp-client-draft-ut PRIVATE
 )
 
 target_sources(ydb-public-sdk-cpp-client-draft-ut PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_scripting_response_headers_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ut/ydb_scripting_response_headers_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ut/ydb_view_ut.cpp
 )
 
 

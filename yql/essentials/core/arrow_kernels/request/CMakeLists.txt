@@ -12,39 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(core-arrow_kernels-request)
-
-
-target_compile_options(core-arrow_kernels-request PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-arrow_kernels-request PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  yql-essentials-ast
-  yql-essentials-minikql
-  providers-common-mkql
-  yql-essentials-core
-  yql-essentials-sql
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(core-arrow_kernels-request PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/arrow_kernels/request/request.cpp
-)
-
-
-generate_enum_serilization(core-arrow_kernels-request
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/arrow_kernels/request/request.h
-  INCLUDE_HEADERS
-  yql/essentials/core/arrow_kernels/request/request.h
-)

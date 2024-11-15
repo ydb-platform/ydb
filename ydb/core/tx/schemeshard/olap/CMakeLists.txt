@@ -12,37 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(schema)
-add_subdirectory(columns)
-add_subdirectory(common)
-add_subdirectory(indexes)
-add_subdirectory(options)
-add_subdirectory(bg_tasks)
-add_subdirectory(operations)
-add_subdirectory(ttl)
-add_subdirectory(table)
-add_subdirectory(store)
-add_subdirectory(layout)
-add_subdirectory(manager)
-
-add_library(tx-schemeshard-olap INTERFACE)
-
-
-target_link_libraries(tx-schemeshard-olap INTERFACE
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  schemeshard-olap-columns
-  schemeshard-olap-bg_tasks
-  schemeshard-olap-indexes
-  schemeshard-olap-schema
-  schemeshard-olap-common
-  schemeshard-olap-operations
-  schemeshard-olap-options
-  schemeshard-olap-layout
-  schemeshard-olap-manager
-  schemeshard-olap-store
-  schemeshard-olap-table
-  schemeshard-olap-ttl
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,50 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(tx-tiering-tier)
-
-
-target_compile_options(tx-tiering-tier PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(tx-tiering-tier PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  services-metadata-initializer
-  services-metadata-abstract
-  services-metadata-secret
-  core-tx-schemeshard
-)
-
-target_sources(tx-tiering-tier PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/tier/manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/tier/object.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/tier/initializer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/tier/checker.cpp
-)
-
-
-add_global_library_for(tx-tiering-tier.global
-  tx-tiering-tier)
-
-
-target_compile_options(tx-tiering-tier.global PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(tx-tiering-tier.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  services-metadata-initializer
-  services-metadata-abstract
-  services-metadata-secret
-  core-tx-schemeshard
-)
-
-target_sources(tx-tiering-tier.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tiering/tier/behaviour.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

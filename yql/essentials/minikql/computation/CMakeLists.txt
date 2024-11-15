@@ -12,41 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(llvm14)
-add_subdirectory(no_llvm)
-
-add_library(essentials-minikql-computation)
-
-
-target_compile_options(essentials-minikql-computation PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(essentials-minikql-computation PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  essentials-public-types
-  parser-pg_wrapper-interface
-  essentials-public-udf
-  essentials-minikql-arrow
-)
-
-target_sources(essentials-minikql-computation PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_block_builder.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_block_impl.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_block_reader.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_block_transport.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node_holders.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node_impl.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node_pack.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node_pack_impl.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_custom_list.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_validate.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_value_builder.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_pattern_cache.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/presort.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,26 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(blobstorage-vdisk-balance)
-
-
-target_link_libraries(blobstorage-vdisk-balance PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  core-blobstorage-base
-  core-blobstorage-groupinfo
-  blobstorage-vdisk-common
-  blobstorage-vdisk-hulldb
-  blobstorage-vdisk-ingress
-  blobstorage-vdisk-repl
-)
-
-target_sources(blobstorage-vdisk-balance PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/balance/balancing_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/balance/deleter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/balance/handoff_map.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/balance/sender.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/balance/utils.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

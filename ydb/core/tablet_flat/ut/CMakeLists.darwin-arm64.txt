@@ -64,6 +64,8 @@ target_sources(ydb-core-tablet_flat-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/flat_table_part_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/flat_test_db.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/shared_cache_s3fifo_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/shared_cache_clock_pro_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/shared_cache_switchable_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/shared_handle_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_btree_index_nodes.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_btree_index_iter_charge.cpp
@@ -150,6 +152,7 @@ resources(ydb-core-tablet_flat-ut
   KEYS
   abi/002_full_part.pages
   abi/008_basics_db.redo
+  OPTS
 )
 
 vcs_info(ydb-core-tablet_flat-ut)

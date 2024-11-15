@@ -12,104 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(lib-Transforms-Utils)
-
-
-target_compile_options(lib-Transforms-Utils PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(lib-Transforms-Utils PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils
-)
-
-target_link_libraries(lib-Transforms-Utils PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-llvm14
-  libs-llvm14-include
-  llvm14-lib-Analysis
-  llvm14-lib-IR
-  llvm14-lib-Support
-)
-
-target_sources(lib-Transforms-Utils PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/AMDGPUEmitPrintf.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/ASanStackFrameLayout.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/AddDiscriminators.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/AssumeBundleBuilder.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/BasicBlockUtils.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/BreakCriticalEdges.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/BuildLibCalls.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/BypassSlowDivision.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/CallGraphUpdater.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/CallPromotionUtils.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/CanonicalizeAliases.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/CanonicalizeFreezeInLoops.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/CloneFunction.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/CloneModule.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/CodeExtractor.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/CodeLayout.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/CodeMoverUtils.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/CtorUtils.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/Debugify.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/DemoteRegToStack.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/EntryExitInstrumenter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/EscapeEnumerator.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/Evaluator.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/FixIrreducible.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/FlattenCFG.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/FunctionComparator.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/FunctionImportUtils.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/GlobalStatus.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/GuardUtils.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/HelloWorld.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/InjectTLIMappings.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/InlineFunction.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/InstructionNamer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/IntegerDivision.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/LCSSA.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/LibCallsShrinkWrap.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/Local.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/LoopPeel.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/LoopRotationUtils.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/LoopSimplify.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/LoopUnroll.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/LoopUnrollAndJam.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/LoopUnrollRuntime.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/LoopUtils.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/LoopVersioning.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/LowerInvoke.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/LowerMemIntrinsics.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/LowerSwitch.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/MatrixUtils.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/Mem2Reg.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/MemoryOpRemark.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/MetaRenamer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/ModuleUtils.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/NameAnonGlobals.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/PredicateInfo.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/PromoteMemoryToRegister.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/RelLookupTableConverter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/SCCPSolver.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/SSAUpdater.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/SSAUpdaterBulk.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/SampleProfileInference.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/SampleProfileLoaderBaseUtil.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/SanitizerStats.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/ScalarEvolutionExpander.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/SimplifyCFG.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/SimplifyIndVar.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/SimplifyLibCalls.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/SizeOpts.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/SplitModule.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/StripGCRelocates.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/StripNonLineTableDebugInfo.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/SymbolRewriter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/UnifyFunctionExitNodes.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/UnifyLoopExits.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/Utils.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/VNCoercion.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/Utils/ValueMapper.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

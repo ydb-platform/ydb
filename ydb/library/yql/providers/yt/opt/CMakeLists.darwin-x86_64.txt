@@ -23,9 +23,9 @@ target_link_libraries(providers-yt-opt PUBLIC
   contrib-libs-cxxsupp
   yutil
   yt-lib-row_spec
-  yql-core-expr_nodes
-  library-yql-core
-  library-yql-ast
+  essentials-core-expr_nodes
+  yql-essentials-core
+  yql-essentials-ast
 )
 
 target_sources(providers-yt-opt PRIVATE

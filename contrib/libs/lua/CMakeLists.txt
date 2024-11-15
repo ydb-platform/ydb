@@ -12,63 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_archiver_bin
-  TOOL_archiver_dependency
-  tools/archiver
-  archiver
-)
-
-add_library(contrib-libs-lua)
-
-
-target_compile_options(contrib-libs-lua PRIVATE
-  -DLUA_USE_LINUX
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(contrib-libs-lua PUBLIC
-  ${PROJECT_BINARY_DIR}/contrib/libs/lua
-)
-
-target_include_directories(contrib-libs-lua PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lua/lua-5.2.0/src
-)
-
-target_link_libraries(contrib-libs-lua PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-archive
-)
-
-target_sources(contrib-libs-lua PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lua/lib.cpp
-  ${PROJECT_BINARY_DIR}/contrib/libs/lua/common.inc
-  ${PROJECT_BINARY_DIR}/contrib/libs/lua/common.inc
-)
-
-
-add_custom_command(
-  OUTPUT
-  ${PROJECT_BINARY_DIR}/contrib/libs/lua/common.inc
-  DEPENDS
-  ${TOOL_archiver_bin}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lua/common/json.lua
-  COMMAND
-  ${TOOL_archiver_bin}
-  -q
-  -x
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lua/common/stdlib.lua:
-  ${PROJECT_SOURCE_DIR}/contrib/libs/lua/common/json.lua:
-  -o
-  ${PROJECT_BINARY_DIR}/contrib/libs/lua/common.inc
-)
-
-
-if(NOT CMAKE_CROSSCOMPILING)
-  add_dependencies(contrib-libs-lua
-    archiver
-  )
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
 endif()
+

@@ -29,8 +29,8 @@ target_link_libraries(ydb-core-kqp-ut-view PUBLIC
   cpp-testing-unittest_main
   ydb-core-kqp
   kqp-ut-common
-  library-yql-sql
-  yql-utils-log
+  yql-essentials-sql
+  essentials-utils-log
   testlib-basics-default
 )
 

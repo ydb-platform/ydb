@@ -25,7 +25,7 @@ target_link_libraries(core-driver_lib-cli_config_base PUBLIC
   cpp-deprecated-enum_codegen
   ydb-core-util
   lib-deprecated-client
-  library-yql-minikql
+  yql-essentials-minikql
 )
 
 target_sources(core-driver_lib-cli_config_base PRIVATE

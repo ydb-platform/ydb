@@ -23,7 +23,7 @@ target_link_libraries(pq-gateway-native PUBLIC
   common-token_accessor-client
   providers-pq-cm_client
   providers-pq-provider
-  library-yql-utils
+  yql-essentials-utils
   cpp-client-ydb_datastreams
   cpp-client-ydb_driver
   cpp-client-ydb_topic

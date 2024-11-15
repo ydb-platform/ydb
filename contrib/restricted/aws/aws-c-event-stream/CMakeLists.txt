@@ -12,37 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(restricted-aws-aws-c-event-stream)
-
-
-target_compile_options(restricted-aws-aws-c-event-stream PRIVATE
-  -DAWS_CAL_USE_IMPORT_EXPORT
-  -DAWS_CHECKSUMS_USE_IMPORT_EXPORT
-  -DAWS_COMMON_USE_IMPORT_EXPORT
-  -DAWS_EVENT_STREAM_USE_IMPORT_EXPORT
-  -DAWS_IO_USE_IMPORT_EXPORT
-  -DAWS_USE_EPOLL
-  -DHAVE_SYSCONF
-  -DINTEL_NO_ITTNOTIFY_API
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(restricted-aws-aws-c-event-stream PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-event-stream/include
-)
-
-target_link_libraries(restricted-aws-aws-c-event-stream PUBLIC
-  contrib-libs-linux-headers
-  restricted-aws-aws-c-common
-  restricted-aws-aws-c-io
-  restricted-aws-aws-checksums
-)
-
-target_sources(restricted-aws-aws-c-event-stream PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-event-stream/source/event_stream.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-event-stream/source/event_stream_channel_handler.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-event-stream/source/event_stream_rpc.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-event-stream/source/event_stream_rpc_client.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-event-stream/source/event_stream_rpc_server.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,21 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(vdisk-hulldb-recovery)
-
-
-target_link_libraries(vdisk-hulldb-recovery PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  core-blobstorage-base
-  blobstorage-vdisk-common
-  vdisk-hulldb-bulksst_add
-  ydb-core-protos
-)
-
-target_sources(vdisk-hulldb-recovery PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/recovery/hulldb_recovery.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

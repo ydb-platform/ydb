@@ -12,31 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(blobstorage-vdisk-huge)
-
-
-target_link_libraries(blobstorage-vdisk-huge PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  monlib-service-pages
-  ydb-core-base
-  blobstorage-vdisk-common
-  vdisk-hulldb-base
-)
-
-target_sources(blobstorage-vdisk-huge PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugedefs.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugerecovery.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugedefs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugerecovery.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/booltt.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/defs.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

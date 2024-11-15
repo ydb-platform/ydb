@@ -12,54 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(library-actors-util)
-
-
-target_link_libraries(library-actors-util PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-containers-absl_flat_hash
-  cpp-deprecated-atomic
-  library-cpp-pop_count
-)
-
-target_sources(library-actors-util PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/affinity.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/memory_track.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/memory_tracker.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/rope.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/rc_buf.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/shared_data.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/should_continue.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/threadparkpad.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/affinity.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/cpu_load_log.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/cpumask.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/datetime.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/funnel_queue.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/futex.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/intrinsics.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/local_process_key.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/named_tuple.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/queue_chunk.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/queue_oneone_inplace.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/memory_track.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/memory_tracker.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/recentwnd.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/rope.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/rc_buf.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/shared_data.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/shared_data_rope_backend.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/should_continue.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/thread.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/threadparkpad.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/thread_load_log.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/ticket_lock.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/timerfd.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/unordered_cache.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

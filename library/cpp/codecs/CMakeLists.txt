@@ -12,36 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(greedy_dict)
-
-add_library(library-cpp-codecs)
-
-
-target_link_libraries(library-cpp-codecs PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-zstd
-  library-cpp-bit_io
-  library-cpp-blockcodecs
-  cpp-codecs-greedy_dict
-  library-cpp-comptable
-  cpp-containers-comptrie
-  cpp-deprecated-accessors
-  library-cpp-packers
-  cpp-string_utils-relaxed_escaper
-)
-
-target_sources(library-cpp-codecs PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/codecs/tls_cache.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/codecs/codecs.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/codecs/codecs_registry.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/codecs/comptable_codec.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/codecs/delta_codec.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/codecs/float_huffman.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/codecs/huffman_codec.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/codecs/pfor_codec.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/codecs/solar_codec.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/codecs/zstd_dict_codec.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

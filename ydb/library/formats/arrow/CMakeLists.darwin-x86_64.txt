@@ -50,8 +50,8 @@ target_link_libraries(library-formats-arrow PUBLIC
   library-formats-arrow-hash
   library-actors-core
   ydb-library-arrow_kernels
-  ydb-library-binary_json
-  ydb-library-dynumber
+  essentials-types-binary_json
+  essentials-types-dynumber
   ydb-library-services
   core-arrow_kernels-request
   ydb-library-arrow_clickhouse

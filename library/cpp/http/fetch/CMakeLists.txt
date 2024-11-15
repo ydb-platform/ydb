@@ -12,53 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(cpp-http-fetch)
-
-
-target_link_libraries(cpp-http-fetch PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-zlib
-  library-cpp-charset
-  cpp-digest-md5
-  cpp-http-misc
-  library-cpp-logger
-  cpp-mime-types
-  library-cpp-uri
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(cpp-http-fetch PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/http_digest.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/http_socket.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpheader.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpload.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/exthttpcodes.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpagent.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpfetcher.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpheader.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpparser.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpzreader.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/sockhandler.h
-)
-
-
-generate_enum_serilization(cpp-http-fetch
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpheader.h
-  INCLUDE_HEADERS
-  library/cpp/http/fetch/httpheader.h
-)
-
-target_ragel_lexers(cpp-http-fetch
-  PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/fetch/httpfsm.rl6
-  -CG1
-)

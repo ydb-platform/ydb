@@ -41,6 +41,7 @@ target_sources(engines-storage-granule PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/granule/granule.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/granule/storage.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/granule/portions_index.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/granule/stages.cpp
 )
 
 

@@ -12,45 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(core-blob_depot-agent)
-
-
-target_link_libraries(core-blob_depot-agent PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  blobstorage-vdisk-common
-  ydb-core-blob_depot
-  ydb-core-protos
-)
-
-target_sources(core-blob_depot-agent PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/agent.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/blob_mapping_cache.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/blocks.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/channel_kind.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/comm.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/garbage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/metrics.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/proxy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/query.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/read.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/request.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/resolved_value.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/status.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_put.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_get.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_block.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_discover.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_range.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_collect_garbage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_status.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_patch.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/agent.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/blob_mapping_cache.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/blocks.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent/resolved_value.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

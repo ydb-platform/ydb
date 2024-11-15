@@ -12,60 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-add_subdirectory(quoter_performance_test)
-
-add_library(core-kesus-tablet)
-
-
-target_link_libraries(core-kesus-tablet PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-protobuf-util
-  ydb-core-actorlib_impl
-  ydb-core-base
-  core-engine-minikql
-  ydb-core-erasure
-  ydb-core-metering
-  ydb-core-protos
-  ydb-core-tablet_flat
-  ydb-library-time_series_vec
-  ydb-library-services
-)
-
-target_sources(core-kesus-tablet PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/probes.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/quoter_resource_tree.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/quoter_runtime.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/rate_accounting.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tablet_db.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tablet_html.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tablet_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tablet.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_config_get.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_config_set.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_dummy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_init_schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_init.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_quoter_resource_add.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_quoter_resource_delete.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_quoter_resource_describe.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_quoter_resource_update.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_self_check.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_semaphore_acquire.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_semaphore_create.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_semaphore_delete.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_semaphore_describe.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_semaphore_release.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_semaphore_timeout.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_semaphore_update.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_session_attach.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_session_destroy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_session_detach.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_session_timeout.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kesus/tablet/tx_sessions_describe.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

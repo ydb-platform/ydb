@@ -12,60 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(gateway-behaviour-resource_pool_classifier)
-
-
-target_compile_options(gateway-behaviour-resource_pool_classifier PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(gateway-behaviour-resource_pool_classifier PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  core-cms-console
-  kqp-workload_service-actors
-  ydb-core-protos
-  ydb-core-resource_pools
-  ydb-library-query_actor
-  services-metadata-abstract
-  services-metadata-initializer
-  services-metadata-manager
-)
-
-target_sources(gateway-behaviour-resource_pool_classifier PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/resource_pool_classifier/checker.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/resource_pool_classifier/initializer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/resource_pool_classifier/manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/resource_pool_classifier/object.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/resource_pool_classifier/snapshot.cpp
-)
-
-
-add_global_library_for(gateway-behaviour-resource_pool_classifier.global
-  gateway-behaviour-resource_pool_classifier)
-
-
-target_compile_options(gateway-behaviour-resource_pool_classifier.global PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(gateway-behaviour-resource_pool_classifier.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  core-cms-console
-  kqp-workload_service-actors
-  ydb-core-protos
-  ydb-core-resource_pools
-  ydb-library-query_actor
-  services-metadata-abstract
-  services-metadata-initializer
-  services-metadata-manager
-)
-
-target_sources(gateway-behaviour-resource_pool_classifier.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/resource_pool_classifier/behaviour.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

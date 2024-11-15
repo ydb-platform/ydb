@@ -12,22 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(tx-columnshard-blobs_reader)
-
-
-target_link_libraries(tx-columnshard-blobs_reader PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-protos
-  library-actors-core
-  ydb-core-tablet_flat
-)
-
-target_sources(tx-columnshard-blobs_reader PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_reader/actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_reader/task.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_reader/events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_reader/read_coordinator.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

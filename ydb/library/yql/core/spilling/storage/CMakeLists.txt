@@ -12,26 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(file_storage)
-add_subdirectory(ut)
-
-add_library(core-spilling-storage)
-
-
-target_compile_options(core-spilling-storage PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_link_libraries(core-spilling-storage PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  spilling-storage-file_storage
-)
-
-target_sources(core-spilling-storage PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/storage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/storage.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

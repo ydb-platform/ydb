@@ -12,67 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(protos)
-add_subdirectory(ut)
-add_subdirectory(ut_trace)
-
-add_library(ydb-core-keyvalue)
-
-
-target_link_libraries(ydb-core-keyvalue PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  library-actors-protos
-  ydb-core-base
-  core-blobstorage-base
-  core-engine-minikql
-  core-keyvalue-protos
-  ydb-core-protos
-  ydb-core-tablet_flat
-  ydb-core-tx
-  ydb-core-util
-  public-lib-base
-)
-
-target_sources(ydb-core-keyvalue PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_collect_operation.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_collector.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_data.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_index_record.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_intermediate.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_simple_db_flat.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_state.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_state_collect.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_storage_read_request.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_storage_request.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_stored_state_data.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_collect_operation.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_collector.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_const.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_data.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_data_header.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_events.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_flat_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_helpers.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_index_record.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_intermediate.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_item_type.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_key_header.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_key_range.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_request_stat.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_request_type.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_scheme_flat.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_simple_db_flat.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_simple_db.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_state.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_storage_request.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_stored_state_data.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/keyvalue/keyvalue_trash_key_arbitrary.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

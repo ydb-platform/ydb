@@ -12,46 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(contrib-libs-libfyaml)
-
-
-target_compile_options(contrib-libs-libfyaml PRIVATE
-  -DHAVE_CONFIG_H
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(contrib-libs-libfyaml PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/include
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib
-  ${PROJECT_SOURCE_DIR}/contrib/libs/xxhash
-)
-
-target_link_libraries(contrib-libs-libfyaml PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-xxhash
-)
-
-target_sources(contrib-libs-libfyaml PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-accel.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-atom.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-composer.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-ctype.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-diag.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-doc.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-docbuilder.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-docstate.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-dump.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-emit.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-event.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-input.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-parse.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-path.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-token.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-types.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-utf8.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-utils.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libfyaml/src/lib/fy-walk.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

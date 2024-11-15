@@ -12,41 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ldap_auth_provider)
-add_subdirectory(certificate_check)
-add_subdirectory(ut)
-
-add_library(ydb-core-security)
-
-
-target_link_libraries(ydb-core-security PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  library-actors-http
-  library-grpc-actor_client
-  monlib-service-pages
-  cpp-openssl-io
-  ydb-core-audit
-  ydb-core-base
-  ydb-core-protos
-  ydb-library-aclib
-  library-aclib-protos
-  ydb-library-login
-  library-ncloud-impl
-  ydb-library-security
-  library-ycloud-api
-  library-ycloud-impl
-)
-
-target_sources(ydb-core-security PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/security/login_page.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/security/login_shared_func.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/security/ticket_parser.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/security/login_page.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/security/secure_request.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/security/ticket_parser_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/security/ticket_parser.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

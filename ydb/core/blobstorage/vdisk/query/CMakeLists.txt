@@ -12,45 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(blobstorage-vdisk-query)
-
-
-target_link_libraries(blobstorage-vdisk-query PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-streams-bzip2
-  ydb-core-base
-  core-blobstorage-base
-  vdisk-hulldb-barriers
-  vdisk-hulldb-base
-)
-
-target_sources(blobstorage-vdisk-query PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/assimilation.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_barrier.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_extr.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_public.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_range.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_readactor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_readbatch.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_statdb.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_stathuge.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_stattablet.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/assimilation.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_base.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_dumpdb.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_public.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_readactor.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_readbatch.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_spacetracker.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_statalgo.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_statdb.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_stathuge.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_stattablet.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_stream.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

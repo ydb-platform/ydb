@@ -12,38 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(storage)
-add_subdirectory(ut)
-
-add_library(yql-core-spilling)
-
-
-target_compile_options(yql-core-spilling PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_link_libraries(yql-core-spilling PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  essentials-types-binary_json
-  yql-essentials-utils
-  essentials-utils-log
-  core-spilling-storage
-)
-
-target_sources(yql-core-spilling PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/spilling_imp.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/namespaces_list.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/namespace_cache.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/file_storage/file_storage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/storage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/spilling_imp.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/namespaces_list.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/namespace_cache.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/interface/spilling.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/spilling/storage/storage.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

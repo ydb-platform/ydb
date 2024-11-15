@@ -12,32 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(cms-console-validators)
-
-
-target_link_libraries(cms-console-validators PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  ydb-core-protos
-  ydb-core-tablet
-  api-protos
-  cpp-deprecated-atomic
-)
-
-target_sources(cms-console-validators PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/core_validators.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/registry.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/validator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/validator_bootstrap.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/validator_nameservice.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/core_validators.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/registry.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/validator.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/validator_bootstrap.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/validators/validator_nameservice.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

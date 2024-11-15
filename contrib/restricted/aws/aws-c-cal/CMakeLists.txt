@@ -12,37 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(restricted-aws-aws-c-cal)
-
-
-target_compile_options(restricted-aws-aws-c-cal PRIVATE
-  -DAWS_CAL_USE_IMPORT_EXPORT
-  -DAWS_COMMON_USE_IMPORT_EXPORT
-  -DHAVE_SYSCONF
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(restricted-aws-aws-c-cal PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/include
-)
-
-target_link_libraries(restricted-aws-aws-c-cal PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-openssl
-  restricted-aws-aws-c-common
-)
-
-target_sources(restricted-aws-aws-c-cal PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/cal.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/der.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/ecc.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hash.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hmac.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/symmetric_cipher.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/openssl_aes.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/openssl_platform_init.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_ecc.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_hash.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_hmac.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

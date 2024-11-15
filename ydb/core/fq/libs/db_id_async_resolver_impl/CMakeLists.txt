@@ -12,27 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(fq-libs-db_id_async_resolver_impl)
-
-
-target_compile_options(fq-libs-db_id_async_resolver_impl PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(fq-libs-db_id_async_resolver_impl PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-threading-future
-  fq-libs-events
-  providers-common-db_id_async_resolver
-  providers-dq-actors
-)
-
-target_sources(fq-libs-db_id_async_resolver_impl PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

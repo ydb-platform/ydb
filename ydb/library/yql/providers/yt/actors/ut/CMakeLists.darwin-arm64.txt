@@ -33,9 +33,9 @@ target_link_libraries(ydb-library-yql-providers-yt-actors-ut PUBLIC
   yt-gateway-file
   minikql-codegen-no_llvm
   library-actors-testlib
-  yql-public-udf
+  essentials-public-udf
   cpp-testing-unittest
-  yql-sql-pg
+  essentials-sql-pg
   udf-service-terminate_policy
   parser-pg_wrapper-interface
 )

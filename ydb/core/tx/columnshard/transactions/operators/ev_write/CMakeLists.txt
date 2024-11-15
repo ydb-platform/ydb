@@ -12,42 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(transactions-operators-ev_write)
-
-
-target_link_libraries(transactions-operators-ev_write PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  services-metadata-abstract
-  columnshard-blobs_action-events
-  data_sharing-destination-events
-  columnshard-transactions-locks
-)
-
-target_sources(transactions-operators-ev_write PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/ev_write/abstract.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/ev_write/sync.cpp
-)
-
-
-add_global_library_for(transactions-operators-ev_write.global
-  transactions-operators-ev_write)
-
-
-target_link_libraries(transactions-operators-ev_write.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  services-metadata-abstract
-  columnshard-blobs_action-events
-  data_sharing-destination-events
-  columnshard-transactions-locks
-)
-
-target_sources(transactions-operators-ev_write.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/ev_write/secondary.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/ev_write/simple.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/operators/ev_write/primary.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

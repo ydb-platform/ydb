@@ -12,45 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(protos)
-add_subdirectory(public)
-add_subdirectory(ut)
-add_subdirectory(deprecated)
-add_subdirectory(static_validator)
-add_subdirectory(validator)
-add_subdirectory(tools)
-
-add_library(ydb-library-yaml_config)
-
-
-target_link_libraries(ydb-library-yaml_config PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-openssl
-  contrib-libs-protobuf
-  contrib-libs-yaml-cpp
-  cpp-protobuf-json
-  ydb-core-base
-  cms-console-util
-  ydb-core-erasure
-  ydb-core-protos
-  core-protos-out
-  library-actors-core
-  ydb-library-fyamlcpp
-  yaml-config-protos
-  library-yaml_config-public
-)
-
-target_sources(ydb-library-yaml_config PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/console_dumper.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/serialize_deserialize.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/yaml_config.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/yaml_config_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/yaml_config_parser.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/console_dumper.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/yaml_config.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/yaml_config_helpers.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/yaml_config_parser.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

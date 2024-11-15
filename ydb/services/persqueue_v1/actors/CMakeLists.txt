@@ -12,62 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(services-persqueue_v1-actors)
-
-
-target_link_libraries(services-persqueue_v1-actors PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  cpp-containers-disjoint_interval_tree
-  cpp-string_utils-base64
-  ydb-core-util
-  ydb-core-base
-  ydb-core-grpc_services
-  ydb-core-persqueue
-  core-persqueue-events
-  ydb-core-protos
-  ydb-core-scheme
-  core-tx-scheme_cache
-  ydb-library-aclib
-  library-persqueue-topic_parser
-  api-protos
-  public-lib-base
-  services-lib-actors
-  services-lib-sharding
-  ydb-services-metadata
-)
-
-target_sources(services-persqueue_v1-actors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/codecs.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/commit_offset_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/persqueue_utils.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/partition_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/read_init_auth_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/read_info_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/read_session_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/direct_read_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/write_session_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/schema_actors.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/update_offsets_in_transaction_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/partition_writer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/partition_writer_cache_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/codecs.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/commit_offset_actor.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/events.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/persqueue_utils.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/helpers.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/partition_actor.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/partition_id.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/read_init_auth_actor.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/read_info_actor.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/read_session_actor.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/direct_read_actor.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/write_session_actor.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/schema_actors.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/partition_writer.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/actors/partition_writer_cache_actor.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

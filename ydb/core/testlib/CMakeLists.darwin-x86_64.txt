@@ -108,6 +108,7 @@ target_link_libraries(ydb-core-testlib PUBLIC
   services-ext_index-service
   ydb-services-ymq
   tx-conveyor-service
+  tx-priorities-service
   limiter-grouped_memory-usage
   ydb-services-fq
   ydb-services-kesus

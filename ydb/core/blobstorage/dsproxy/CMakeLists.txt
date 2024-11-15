@@ -12,85 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(mock)
-add_subdirectory(ut)
-add_subdirectory(ut_fat)
-add_subdirectory(ut_ftol)
-add_subdirectory(ut_strategy)
-
-add_library(core-blobstorage-dsproxy)
-
-
-target_link_libraries(core-blobstorage-dsproxy PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  monlib-dynamic_counters-percentile
-  ydb-core-base
-  core-blobstorage-backpressure
-  core-blobstorage-base
-  core-blobstorage-groupinfo
-  core-blobstorage-storagepoolmon
-  blobstorage-vdisk-ingress
-  ydb-core-control
-  ydb-core-util
-)
-
-target_sources(core-blobstorage-dsproxy PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_encrypt.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_request.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_stat.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_state.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_blackboard.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_assimilate.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_block.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_collect.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_discover.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_discover_m3dc.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_discover_m3of4.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_get.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_get_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_indexrestoreget.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_mon.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_monactor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_multicollect.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_multiget.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_nodemon.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_nodemonactor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_patch.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_put.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_put_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_range.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_status.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_base.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/group_sessions.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_blackboard.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_get_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_mon.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_monactor.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_nodemonactor.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_put_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_quorum_tracker.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_responsiveness.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_accelerate_put.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_accelerate_put_m3dc.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_base.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_bold.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_m3dc_basic.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_m3dc_restore.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_m3of4.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_min_iops_block.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_get_min_iops_mirror.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_m3of4_base.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_put_m3dc.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_put_m3of4.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_strategy_restore.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/group_sessions.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/log_acc.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

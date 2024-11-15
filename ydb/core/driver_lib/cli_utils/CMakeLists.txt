@@ -12,73 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(cli_utils)
-
-
-target_compile_options(cli_utils PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(cli_utils PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-deprecated-enum_codegen
-  cpp-protobuf-json
-  library-cpp-yson
-  ydb-core-actorlib_impl
-  ydb-core-base
-  core-blobstorage-pdisk
-  core-client-minikql_compile
-  core-client-scheme_cache_lib
-  core-config-init
-  core-config-validation
-  cli_base
-  ydb-core-engine
-  ydb-core-erasure
-  core-mind-bscontroller
-  ydb-core-protos
-  ydb-core-scheme
-  ydb-library-aclib
-  library-folder_service-proto
-  library-grpc-client
-  ydb-library-yaml_config
-  api-grpc
-  api-grpc-draft
-  lib-deprecated-client
-  cpp-client-ydb_driver
-  ydb_cli_command_ydb_discovery
-)
-
-target_sources(cli_utils PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_actorsystem_perftest.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmd_config.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_admin.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_bs.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_cms.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_config.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_console.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_validate_config.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_debug.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_disk.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_genconfig.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_node.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_root.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_server.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_tablet.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds_tenant.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_fakeinitshard.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_persqueue.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_persqueue_cluster_discovery.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_persqueue_stress.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_minikql_compile_and_exec.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_scheme_cache_append.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_scheme_initroot.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/melancholic_gopher.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmd_config.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/cli_cmds.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/cli_utils/melancholic_gopher.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

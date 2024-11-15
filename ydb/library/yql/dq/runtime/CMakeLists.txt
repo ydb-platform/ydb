@@ -12,59 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(ut)
-
-add_library(yql-dq-runtime)
-
-
-target_compile_options(yql-dq-runtime PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(yql-dq-runtime PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  ydb-library-yverify_stream
-  ydb-library-mkql_proto
-  essentials-minikql-comp_nodes
-  parser-pg_wrapper-interface
-  essentials-public-udf
-  dq-actors-protos
-  yql-dq-common
-  yql-dq-expr_nodes
-  yql-dq-type_ann
-  providers-common-comp_nodes
-  common-schema-mkql
-  library-actors-util
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(yql-dq-runtime PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_arrow_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_async_input.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_async_output.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_columns_resolve.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_compute.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_input_channel.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_input_producer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_output_channel.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_output_consumer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_tasks_runner.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_transport.cpp
-)
-
-
-generate_enum_serilization(yql-dq-runtime
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/runtime/dq_tasks_runner.h
-  INCLUDE_HEADERS
-  ydb/library/yql/dq/runtime/dq_tasks_runner.h
-)

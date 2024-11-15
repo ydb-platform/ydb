@@ -12,38 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(providers-common-db_id_async_resolver)
-
-
-target_compile_options(providers-common-db_id_async_resolver PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-common-db_id_async_resolver PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-threading-future
-  connector-api-common
-  essentials-public-issue
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(providers-common-db_id_async_resolver PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h
-)
-
-
-generate_enum_serilization(providers-common-db_id_async_resolver
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h
-  INCLUDE_HEADERS
-  ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h
-)

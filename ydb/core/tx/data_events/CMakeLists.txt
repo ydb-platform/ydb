@@ -12,39 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(common)
-
-add_library(core-tx-data_events)
-
-
-target_link_libraries(core-tx-data_events PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-tablet
-  api-grpc-draft
-  api-protos
-  ydb-core-base
-  tx-data_events-common
-  core-tx-sharding
-  tx-long_tx_service-public
-  core-tx-scheme_cache
-  core-formats-arrow
-  ydb-core-protos
-  ydb-library-accessor
-  ydb-library-conclusion
-  libs-apache-arrow
-  library-actors-core
-  library-actors-wilson
-  core-tablet_flat-protos
-  ydb-core-tablet_flat
-  blobstorage-vdisk-protos
-)
-
-target_sources(core-tx-data_events PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/data_events/shard_writer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/data_events/shards_splitter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/data_events/write_data.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/data_events/columnshard_splitter.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

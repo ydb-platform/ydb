@@ -35,6 +35,7 @@ target_link_libraries(core-tx-scheme_board PUBLIC
   library-actors-core
   ydb-core-base
   ydb-core-mon
+  core-persqueue-partition_key_range
   ydb-core-protos
   core-sys_view-common
   core-tx-scheme_cache

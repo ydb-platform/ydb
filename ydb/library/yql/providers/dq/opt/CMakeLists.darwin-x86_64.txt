@@ -26,14 +26,14 @@ target_link_libraries(providers-dq-opt PUBLIC
   providers-common-mkql
   providers-common-codec
   providers-common-transform
-  yql-utils-log
+  essentials-utils-log
   yql-dq-opt
   yql-dq-type_ann
-  yql-dq-integration
-  library-yql-core
-  yql-core-peephole_opt
-  yql-core-type_ann
-  yql-minikql-computation
+  essentials-core-dq_integration
+  yql-essentials-core
+  essentials-core-peephole_opt
+  essentials-core-type_ann
+  essentials-minikql-computation
   cpp-yson-node
 )
 

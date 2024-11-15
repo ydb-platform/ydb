@@ -20,7 +20,7 @@ add_library(yql-dq-state)
 target_link_libraries(yql-dq-state PUBLIC
   contrib-libs-cxxsupp
   yutil
-  yql-public-issue
+  essentials-public-issue
   core-issue-protos
   yql-dq-proto
   providers-pq-proto

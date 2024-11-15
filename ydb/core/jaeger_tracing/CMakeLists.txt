@@ -12,30 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(ydb-core-jaeger_tracing)
-
-
-target_link_libraries(ydb-core-jaeger_tracing PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-protos
-)
-
-target_sources(ydb-core-jaeger_tracing PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/request_discriminator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_configurator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_control.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_control_internals.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/throttler.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/request_discriminator.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/sampler.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_configurator.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_control.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/sampling_throttling_control_internals.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/settings.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/jaeger_tracing/throttler.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

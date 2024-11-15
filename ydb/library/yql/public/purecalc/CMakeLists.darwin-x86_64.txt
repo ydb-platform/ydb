@@ -13,8 +13,8 @@
 # changes in this file.
 
 add_subdirectory(common)
-add_subdirectory(io_specs)
 add_subdirectory(ut)
+add_subdirectory(io_specs)
 add_subdirectory(helpers)
 add_subdirectory(no_llvm)
 add_subdirectory(examples)

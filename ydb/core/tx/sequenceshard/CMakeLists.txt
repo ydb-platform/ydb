@@ -12,42 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(public)
-add_subdirectory(ut)
-
-add_library(core-tx-sequenceshard)
-
-
-target_compile_options(core-tx-sequenceshard PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-tx-sequenceshard PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  core-engine-minikql
-  ydb-core-erasure
-  ydb-core-protos
-  ydb-core-tablet_flat
-  tx-sequenceshard-public
-)
-
-target_sources(core-tx-sequenceshard PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/sequenceshard.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/sequenceshard_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_allocate_sequence.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_create_sequence.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_drop_sequence.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_freeze_sequence.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_get_sequence.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_init.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_init_schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_mark_schemeshard_pipe.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_redirect_sequence.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_restore_sequence.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/sequenceshard/tx_update_sequence.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

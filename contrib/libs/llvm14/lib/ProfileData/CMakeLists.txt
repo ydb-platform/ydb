@@ -12,39 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(llvm14-lib-ProfileData)
-
-
-target_compile_options(llvm14-lib-ProfileData PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(llvm14-lib-ProfileData PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ProfileData
-)
-
-target_link_libraries(llvm14-lib-ProfileData PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-llvm14
-  libs-llvm14-include
-  lib-DebugInfo-DWARF
-  llvm14-lib-Demangle
-  llvm14-lib-IR
-  llvm14-lib-Object
-  llvm14-lib-Support
-)
-
-target_sources(llvm14-lib-ProfileData PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ProfileData/GCOV.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ProfileData/InstrProf.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ProfileData/InstrProfCorrelator.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ProfileData/InstrProfReader.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ProfileData/InstrProfWriter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ProfileData/ProfileSummaryBuilder.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ProfileData/RawMemProfReader.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ProfileData/SampleProf.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ProfileData/SampleProfReader.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ProfileData/SampleProfWriter.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

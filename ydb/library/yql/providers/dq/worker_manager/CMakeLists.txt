@@ -12,34 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(interface)
-
-add_library(providers-dq-worker_manager)
-
-
-target_compile_options(providers-dq-worker_manager PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-dq-worker_manager PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  ydb-library-ydb_issue
-  essentials-utils-failure_injector
-  providers-common-config
-  providers-common-gateway
-  providers-common-metrics
-  dq-api-grpc
-  dq-api-protos
-  providers-dq-runtime
-  providers-dq-task_runner
-  providers-dq-task_runner_actor
-  dq-worker_manager-interface
-)
-
-target_sources(providers-dq-worker_manager PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/worker_manager/local_worker_manager.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

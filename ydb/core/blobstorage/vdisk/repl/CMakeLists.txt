@@ -12,43 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(blobstorage-vdisk-repl)
-
-
-target_link_libraries(blobstorage-vdisk-repl PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  monlib-service-pages
-  ydb-core-base
-  core-blobstorage-backpressure
-  core-blobstorage-groupinfo
-  blobstorage-vdisk-common
-  vdisk-hulldb-barriers
-  vdisk-hulldb-base
-  vdisk-hulldb-generic
-  vdisk-hulldb-bulksst_add
-  ydb-core-protos
-)
-
-target_sources(blobstorage-vdisk-repl PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_hullrepljob.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_repl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_replproxy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_replmonhandler.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_hullrepljob.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_hullreplwritesst.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_replctx.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_replproxy.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/blobstorage_replrecoverymachine.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/query_donor.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/repl/repl_quoter.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

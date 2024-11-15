@@ -26,8 +26,7 @@ target_link_libraries(core-client-metadata PUBLIC
   yutil
   ydb-core-protos
   ydb-core-scheme_types
-  library-yql-minikql
-  minikql-invoke_builtins-llvm14
+  yql-essentials-minikql
 )
 
 target_sources(core-client-metadata PRIVATE

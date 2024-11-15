@@ -12,39 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(actors)
-add_subdirectory(ut)
-
-add_library(library-grpc-server)
-
-
-target_link_libraries(library-grpc-server PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  ydb-library-protobuf_printer
-  contrib-libs-grpc
-  monlib-dynamic_counters-percentile
-)
-
-target_sources(library-grpc-server PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/server/event_callback.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/server/grpc_request.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/server/grpc_server.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/server/grpc_counters.cpp
-)
-
-
-generate_enum_serilization(library-grpc-server
-  ${PROJECT_SOURCE_DIR}/ydb/library/grpc/server/grpc_request_base.h
-  INCLUDE_HEADERS
-  ydb/library/grpc/server/grpc_request_base.h
-)

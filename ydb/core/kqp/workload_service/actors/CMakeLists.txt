@@ -12,25 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(kqp-workload_service-actors)
-
-
-target_compile_options(kqp-workload_service-actors PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(kqp-workload_service-actors PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  kqp-workload_service-common
-  kqp-workload_service-tables
-  core-tx-tx_proxy
-)
-
-target_sources(kqp-workload_service-actors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/workload_service/actors/cpu_load_actors.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/workload_service/actors/pool_handlers_acors.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/workload_service/actors/scheme_actors.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

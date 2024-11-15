@@ -12,75 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(protos)
-add_subdirectory(ut)
-
-add_library(ydb-mvp-core)
-
-
-target_link_libraries(ydb-mvp-core PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  yc_private-ydb-v1
-  client-yc_private-resourcemanager
-  client-yc_private-iam
-  client-nc_private-iam
-  contrib-libs-googleapis-common-protos
-  contrib-libs-jwt-cpp
-  contrib-libs-yaml-cpp
-  mvp-core-protos
-  mvp-security-simple
-  library-actors-core
-  library-actors-http
-  library-actors-protos
-  ydb-library-security
-  cpp-lwtrace-protos
-  cpp-lfalloc-alloc_profiler
-  core-viewer-json
-  ydb-core-protos
-  cpp-client-draft
-  cpp-client-ydb_datastreams
-  cpp-client-ydb_topic
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
-  cpp-client-ydb_persqueue_core
-  api-protos
-  api-grpc
-  public-lib-operation_id
-)
-
-target_sources(ydb-mvp-core PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/filter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/mapper.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/merger.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/mvp_mem_profiler.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/mvp_test_runtime.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/mvp_tokens.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/parser.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/reducer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/core_ydb.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/core_ydbc.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/cache_policy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/appdata.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/filter.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/grpc_log.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/http_check.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/http_sensors.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/infra.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/mapper.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/merger.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/mvp_log.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/mvp_swagger.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/mvp_test_runtime.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/mvp_tokens.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/parser.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/reducer.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/signals.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/core_ydb.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/core_ydb_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/core_ydbc.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/core_ydbc_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/mvp/core/cache_policy.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

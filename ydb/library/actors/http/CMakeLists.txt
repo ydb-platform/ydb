@@ -12,40 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(library-actors-http)
-
-
-target_link_libraries(library-actors-http PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-openssl
-  contrib-libs-zlib
-  library-actors-core
-  library-actors-interconnect
-  library-cpp-dns
-  cpp-monlib-metrics
-  cpp-string_utils-quote
-)
-
-target_sources(library-actors-http PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_cache.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_compress.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy_acceptor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy_incoming.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy_outgoing.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_static.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_cache.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_config.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy_sock_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy_sock64.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy_ssl.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_proxy.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http_static.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/http/http.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

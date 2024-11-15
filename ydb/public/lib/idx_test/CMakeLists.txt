@@ -12,39 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(ut)
-
-add_library(public-lib-idx_test)
-
-
-target_link_libraries(public-lib-idx_test PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-string_utils-base64
-  cpp-client-ydb_table
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(public-lib-idx_test PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/idx_test/idx_test_checker.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/idx_test/idx_test_common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/idx_test/idx_test_data_provider.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/idx_test/idx_test_stderr_progress_tracker.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/idx_test/idx_test_loader.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/idx_test/idx_test_upload.cpp
-)
-
-
-generate_enum_serilization(public-lib-idx_test
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/idx_test/idx_test.h
-  INCLUDE_HEADERS
-  ydb/public/lib/idx_test/idx_test.h
-)

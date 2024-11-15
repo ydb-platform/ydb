@@ -21,6 +21,7 @@ target_link_libraries(arrow-accessor-abstract PUBLIC
   libs-apache-arrow
   ydb-library-conclusion
   services-metadata-abstract
+  library-actors-core
   library-formats-arrow-accessor-abstract
   library-formats-arrow-accessor-common
   library-formats-arrow-protos

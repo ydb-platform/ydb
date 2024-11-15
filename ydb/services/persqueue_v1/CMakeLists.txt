@@ -12,48 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(actors)
-add_subdirectory(ut)
-
-add_library(ydb-services-persqueue_v1)
-
-
-target_link_libraries(ydb-services-persqueue_v1 PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  cpp-containers-disjoint_interval_tree
-  library-grpc-server
-  ydb-core-base
-  ydb-core-grpc_services
-  ydb-core-kqp
-  ydb-core-persqueue
-  core-persqueue-codecs
-  core-persqueue-writer
-  ydb-core-protos
-  ydb-core-ydb_convert
-  ydb-library-aclib
-  library-persqueue-obfuscate
-  library-persqueue-topic_parser
-  api-grpc
-  api-grpc-draft
-  api-protos
-  services-lib-actors
-  services-lib-sharding
-  services-persqueue_v1-actors
-)
-
-target_sources(ydb-services-persqueue_v1 PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_read.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_write.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/services_initializer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/topic.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_read.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_schema.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/grpc_pq_write.h
-  ${PROJECT_SOURCE_DIR}/ydb/services/persqueue_v1/persqueue.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

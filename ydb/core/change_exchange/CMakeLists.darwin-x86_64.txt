@@ -42,6 +42,7 @@ target_sources(ydb-core-change_exchange PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/change_sender.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/change_sender_monitoring.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/resolve_partition.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/util.cpp
 )
 
 

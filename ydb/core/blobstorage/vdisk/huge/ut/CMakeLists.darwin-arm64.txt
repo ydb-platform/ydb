@@ -45,7 +45,6 @@ target_link_options(ydb-core-blobstorage-vdisk-huge-ut PRIVATE
 )
 
 target_sources(ydb-core-blobstorage-vdisk-huge-ut PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugedefs_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap_ctx_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge_ut.cpp

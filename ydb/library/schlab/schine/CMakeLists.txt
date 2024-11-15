@@ -12,39 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(library-schlab-schine)
-
-
-target_link_libraries(library-schlab-schine PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-containers-stack_vector
-  library-cpp-lwtrace
-  cpp-lwtrace-mon
-  library-schlab-probes
-)
-
-target_sources(library-schlab-schine PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/cbs.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/cbs_bin.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/cbs_state.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/job.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/job_kind.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/job_state.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/scheduler.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/schlog.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/bin_log.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/cbs.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/cbs_bin.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/cbs_state.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/job.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/job_kind.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/job_state.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/name_table.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/scheduler.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/schlog.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schine/schlog_frame.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

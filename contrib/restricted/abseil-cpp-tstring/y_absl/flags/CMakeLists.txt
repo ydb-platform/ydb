@@ -12,45 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(abseil-cpp-tstring-y_absl-flags)
-
-
-target_compile_options(abseil-cpp-tstring-y_absl-flags PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(abseil-cpp-tstring-y_absl-flags PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
-)
-
-target_link_libraries(abseil-cpp-tstring-y_absl-flags PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  abseil-cpp-tstring-y_absl-base
-  abseil-cpp-tstring-y_absl-container
-  abseil-cpp-tstring-y_absl-debugging
-  abseil-cpp-tstring-y_absl-hash
-  abseil-cpp-tstring-y_absl-memory
-  abseil-cpp-tstring-y_absl-numeric
-  abseil-cpp-tstring-y_absl-profiling
-  abseil-cpp-tstring-y_absl-strings
-  abseil-cpp-tstring-y_absl-synchronization
-  abseil-cpp-tstring-y_absl-time
-  abseil-cpp-tstring-y_absl-types
-)
-
-target_sources(abseil-cpp-tstring-y_absl-flags PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/flags/commandlineflag.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/flags/internal/commandlineflag.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/flags/internal/flag.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/flags/internal/private_handle_accessor.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/flags/internal/program_name.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/flags/internal/usage.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/flags/marshalling.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/flags/parse.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/flags/reflection.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/flags/usage.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/flags/usage_config.cc
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

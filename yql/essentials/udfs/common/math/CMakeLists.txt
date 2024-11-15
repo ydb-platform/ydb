@@ -12,110 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_rescompiler_bin
-  TOOL_rescompiler_dependency
-  tools/rescompiler/bin
-  rescompiler
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(lib)
-
-add_library(math_udf INTERFACE)
-
-
-target_compile_options(math_udf INTERFACE
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=28
-  -DUDF_ABI_VERSION_PATCH=0
-)
-
-target_link_libraries(math_udf INTERFACE
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  essentials-public-udf
-  public-udf-support
-  common-math-lib
-  library-cpp-resource
-)
-
-
-add_global_library_for(math_udf.global
-  math_udf)
-
-
-target_compile_options(math_udf.global PRIVATE
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=28
-  -DUDF_ABI_VERSION_PATCH=0
-)
-
-target_link_libraries(math_udf.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  essentials-public-udf
-  public-udf-support
-  common-math-lib
-  library-cpp-resource
-)
-
-target_sources(math_udf.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/udfs/common/math/math_udf.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/udfs/common/math/d7ae26bd65dd2aef1aa80f78b00c6984.cpp
-)
-
-
-add_custom_command(
-  OUTPUT
-  ${PROJECT_BINARY_DIR}/yql/essentials/udfs/common/math/Math_merged.udfs.bc
-  DEPENDS
-  ${PROJECT_BINARY_DIR}/yql/essentials/udfs/common/math/math_ir.cpp.udfs.bc
-  ${PROJECT_BINARY_DIR}/yql/essentials/udfs/common/math/lib/erfinv.cpp.udfs.bc
-  COMMAND
-  ${LLVMLINK}
-  ${PROJECT_BINARY_DIR}/yql/essentials/udfs/common/math/math_ir.cpp.udfs.bc
-  ${PROJECT_BINARY_DIR}/yql/essentials/udfs/common/math/lib/erfinv.cpp.udfs.bc
-  -o
-  ${PROJECT_BINARY_DIR}/yql/essentials/udfs/common/math/Math_merged.udfs.bc
-)
-
-add_custom_command(
-  OUTPUT
-  ${PROJECT_BINARY_DIR}/yql/essentials/udfs/common/math/Math_optimized.udfs.bc
-  DEPENDS
-  ${PROJECT_BINARY_DIR}/yql/essentials/udfs/common/math/Math_merged.udfs.bc
-  COMMAND
-  ${LLVMOPT}
-  ${PROJECT_BINARY_DIR}/yql/essentials/udfs/common/math/Math_merged.udfs.bc
-  -o
-  ${PROJECT_BINARY_DIR}/yql/essentials/udfs/common/math/Math_optimized.udfs.bc
-  -internalize-public-api-list=PiIR#EIR#EpsIR#RoundDownwardIR#RoundToNearestIR#RoundTowardZeroIR#RoundUpwardIR#AbsIR#AcosIR#AsinIR#AsinhIR#AtanIR#CbrtIR#CeilIR#CosIR#CoshIR#ErfIR#ErfInvIR#ErfcInvIR#ExpIR#Exp2IR#FabsIR#FloorIR#LgammaIR#RintIR#SinIR#SinhIR#SqrtIR#TanIR#TanhIR#TgammaIR#TruncIR#IsFiniteIR#IsInfIR#IsNaNIR#Atan2IR#FmodIR#HypotIR#RemainderIR#PowIR#LdexpIR#LogIR#Log2IR#Log10IR#SigmoidIR#FuzzyEqualsIR#RoundIR#ModIR#RemIR
-  -passes="default<O2>,globalopt,globaldce,internalize"
-)
-
-llvm_compile_cxx(math_udf.global
-  ${PROJECT_SOURCE_DIR}/yql/essentials/udfs/common/math/math_ir.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/udfs/common/math/math_ir.cpp.udfs.bc
-  ${CLANGPLUSPLUS}
-  -Wno-unknown-warning-option
-  -emit-llvm
-)
-
-llvm_compile_cxx(math_udf.global
-  ${PROJECT_SOURCE_DIR}/yql/essentials/udfs/common/math/lib/erfinv.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/udfs/common/math/lib/erfinv.cpp.udfs.bc
-  ${CLANGPLUSPLUS}
-  -Wno-unknown-warning-option
-  -emit-llvm
-)
-
-resources(math_udf.global
-  ${PROJECT_BINARY_DIR}/yql/essentials/udfs/common/math/d7ae26bd65dd2aef1aa80f78b00c6984.cpp
-  INPUTS
-  ${PROJECT_BINARY_DIR}/yql/essentials/udfs/common/math/Math_optimized.udfs.bc
-  KEYS
-  /llvm_bc/Math
-  OPTS
-)

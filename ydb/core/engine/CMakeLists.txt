@@ -12,42 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(minikql)
-add_subdirectory(ut)
-
-add_library(ydb-core-engine)
-
-
-target_compile_options(ydb-core-engine PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(ydb-core-engine PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-containers-stack_vector
-  cpp-deprecated-enum_codegen
-  library-cpp-random_provider
-  library-cpp-time_provider
-  ydb-core-base
-  ydb-core-scheme
-  ydb-core-tablet
-  ydb-library-mkql_proto
-  library-mkql_proto-protos
-  api-protos
-  essentials-minikql-comp_nodes
-  parser-pg_wrapper-interface
-  essentials-public-decimal
-)
-
-target_sources(ydb-core-engine PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/engine/kikimr_program_builder.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_extfunc.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/engine/mkql_engine_flat_host.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/engine/mkql_keys.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/engine/mkql_proto.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/engine/mkql_proto.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

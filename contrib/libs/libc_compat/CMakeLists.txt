@@ -12,34 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(contrib-libs-libc_compat)
-
-
-target_compile_options(contrib-libs-libc_compat PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(contrib-libs-libc_compat PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libc_compat/include/readpassphrase
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libc_compat/reallocarray
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libc_compat/random
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libc_compat/memfd_create
-)
-
-target_link_libraries(contrib-libs-libc_compat PUBLIC
-  contrib-libs-linux-headers
-  cpp-sanitizer-include
-)
-
-target_sources(contrib-libs-libc_compat PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libc_compat/string.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libc_compat/readpassphrase.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libc_compat/explicit_bzero.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libc_compat/strlcat.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libc_compat/strlcpy.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libc_compat/reallocarray/reallocarray.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libc_compat/random/getrandom.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libc_compat/random/getentropy.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libc_compat/memfd_create/memfd_create.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

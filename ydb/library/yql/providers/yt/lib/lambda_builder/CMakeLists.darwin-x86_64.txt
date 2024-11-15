@@ -24,10 +24,10 @@ target_link_libraries(yt-lib-lambda_builder PUBLIC
   yutil
   library-cpp-random_provider
   library-cpp-time_provider
-  library-yql-ast
-  yql-minikql-computation
-  yql-public-udf
-  library-yql-utils
+  yql-essentials-ast
+  essentials-minikql-computation
+  essentials-public-udf
+  yql-essentials-utils
   providers-common-mkql
 )
 

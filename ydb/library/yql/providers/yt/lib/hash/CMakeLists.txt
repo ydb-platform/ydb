@@ -12,23 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(yt-lib-hash)
-
-
-target_link_libraries(yt-lib-hash PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-openssl
-  yql-essentials-ast
-  yql-essentials-utils
-  essentials-utils-log
-  yql-essentials-core
-  essentials-core-expr_nodes
-)
-
-target_sources(yt-lib-hash PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/lib/hash/yql_hash_builder.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/lib/hash/yql_op_hash.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,36 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(Common)
-add_subdirectory(Columns)
-add_subdirectory(DataStreams)
-add_subdirectory(ut)
-
-add_library(ydb-library-arrow_clickhouse)
-
-
-target_include_directories(ydb-library-arrow_clickhouse PUBLIC
-  ${PROJECT_SOURCE_DIR}/ydb/library/arrow_clickhouse/base
-)
-
-target_include_directories(ydb-library-arrow_clickhouse PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/arrow_clickhouse
-)
-
-target_link_libraries(ydb-library-arrow_clickhouse PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  contrib-restricted-cityhash-1.0.2
-  library-arrow_clickhouse-Common
-  library-arrow_clickhouse-Columns
-  library-arrow_clickhouse-DataStreams
-)
-
-target_sources(ydb-library-arrow_clickhouse PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/arrow_clickhouse/AggregateFunctions/IAggregateFunction.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/arrow_clickhouse/Aggregator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/arrow_clickhouse/base/common/mremap.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

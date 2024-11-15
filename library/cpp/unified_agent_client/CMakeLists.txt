@@ -12,79 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
-
-add_subdirectory(proto)
-
-add_library(library-cpp-unified_agent_client)
-
-
-target_include_directories(library-cpp-unified_agent_client PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc
-  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/include
-)
-
-target_link_libraries(library-cpp-unified_agent_client PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-grpc
-  cpp-logger-global
-  cpp-threading-future
-  cpp-monlib-dynamic_counters
-  cpp-unified_agent_client-proto
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(library-cpp-unified_agent_client PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/backend.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/backend_creator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/client_impl.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/counters.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/helpers.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/grpc_io.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/grpc_status_code.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/clock.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/duration_counter.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/logger.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/throttling.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/proto_weighing.cpp
-)
-
-
-generate_enum_serilization(library-cpp-unified_agent_client
-  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/grpc_io.h
-  INCLUDE_HEADERS
-  library/cpp/unified_agent_client/grpc_io.h
-)
-
-add_global_library_for(library-cpp-unified_agent_client.global
-  library-cpp-unified_agent_client)
-
-
-target_include_directories(library-cpp-unified_agent_client.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc
-  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/include
-)
-
-target_link_libraries(library-cpp-unified_agent_client.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-grpc
-  cpp-logger-global
-  cpp-threading-future
-  cpp-monlib-dynamic_counters
-  cpp-unified_agent_client-proto
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(library-cpp-unified_agent_client.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/registrar.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

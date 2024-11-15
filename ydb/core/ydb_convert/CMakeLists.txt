@@ -12,41 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(ydb-core-ydb_convert)
-
-
-target_compile_options(ydb-core-ydb_convert PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(ydb-core-ydb_convert PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  ydb-core-engine
-  formats-arrow-switch
-  yql-essentials-core
-  ydb-core-protos
-  ydb-core-scheme
-  ydb-core-util
-  essentials-types-binary_json
-  essentials-types-dynumber
-  library-mkql_proto-protos
-  essentials-minikql-dom
-  essentials-public-udf
-  api-protos
-)
-
-target_sources(ydb-core-ydb_convert PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/ydb_convert/column_families.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ydb_convert/compression.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ydb_convert/table_settings.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ydb_convert/table_description.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ydb_convert/table_profiles.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ydb_convert/ydb_convert.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ydb_convert/tx_proxy_status.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

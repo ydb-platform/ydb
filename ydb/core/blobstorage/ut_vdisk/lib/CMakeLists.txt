@@ -12,77 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(blobstorage-ut_vdisk-lib)
-
-
-target_link_libraries(blobstorage-ut_vdisk-lib PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-protos
-  cpp-http-io
-  cpp-openssl-io
-  cpp-string_utils-url
-  cpp-testing-unittest
-  ydb-core-base
-  ydb-core-blobstorage
-  core-blobstorage-backpressure
-  core-blobstorage-base
-  core-blobstorage-crypto
-  core-blobstorage-pdisk
-  core-blobstorage-vdisk
-  blobstorage-vdisk-common
-  blobstorage-vdisk-huge
-  vdisk-hulldb-base
-  blobstorage-vdisk-repl
-  blobstorage-vdisk-skeleton
-  blobstorage-vdisk-synclog
-  ydb-core-erasure
-  ydb-library-pdisk_io
-)
-
-target_sources(blobstorage-ut_vdisk-lib PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/dataset.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/http_client.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/prepare.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_bad_blobid.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_brokendevice.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_dbstat.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_defrag.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_faketablet.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_gc.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_huge.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_load.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_localrecovery.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_many.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_outofspace.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_repl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_simplebs.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_synclog.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/vdisk_mock.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/astest.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/dataset.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/helpers.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/helpers_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/http_client.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/prepare.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/setup.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_bad_blobid.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_brokendevice.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_dbstat.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_defrag.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_faketablet.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_gc.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_huge.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_load.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_localrecovery.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_many.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_outofspace.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_repl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_simplebs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/test_synclog.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_vdisk/lib/vdisk_mock.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

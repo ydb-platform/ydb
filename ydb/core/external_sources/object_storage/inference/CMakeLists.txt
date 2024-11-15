@@ -12,33 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(external_sources-object_storage-inference)
-
-
-target_compile_options(external_sources-object_storage-inference PRIVATE
-  -Wno-unused-parameter
-)
-
-target_include_directories(external_sources-object_storage-inference PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src
-)
-
-target_link_libraries(external_sources-object_storage-inference PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  core-external_sources-object_storage
-  providers-s3-compressors
-)
-
-target_sources(external_sources-object_storage-inference PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/object_storage/inference/arrow_fetcher.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/object_storage/inference/arrow_inferencinator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/object_storage/inference/infer_config.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

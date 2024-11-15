@@ -25,11 +25,11 @@ target_link_libraries(providers-generic-actors PUBLIC
   contrib-libs-cxxsupp
   yutil
   dq-actors-compute
-  yql-minikql-computation
+  essentials-minikql-computation
   providers-common-structured_token
   common-token_accessor-client
   providers-generic-proto
-  yql-public-types
+  essentials-public-types
   generic-connector-libcpp
   client-ydb_types-credentials
 )

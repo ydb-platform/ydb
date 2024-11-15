@@ -12,21 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(schemeshard-olap-schema)
-
-
-target_link_libraries(schemeshard-olap-schema PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  schemeshard-olap-columns
-  schemeshard-olap-indexes
-  schemeshard-olap-options
-  tx-schemeshard-common
-)
-
-target_sources(schemeshard-olap-schema PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/schema/schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/olap/schema/update.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

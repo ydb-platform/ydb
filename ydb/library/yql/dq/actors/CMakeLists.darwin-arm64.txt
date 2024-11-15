@@ -29,11 +29,6 @@ add_subdirectory(input_transforms)
 add_library(yql-dq-actors)
 
 
-set_property(TARGET yql-dq-actors PROPERTY PROTOC_EXTRA_OUTS
-  .grpc.pb.cc
-  .grpc.pb.h
-)
-
 target_link_libraries(yql-dq-actors PUBLIC
   contrib-libs-cxxsupp
   yutil

@@ -21,7 +21,7 @@ target_link_libraries(engines-writer-buffer PUBLIC
   library-actors-core
   ydb-core-protos
   ydb-core-tablet_flat
-  yql-core-expr_nodes
+  essentials-core-expr_nodes
   actors-testlib-common
   columnshard-data_sharing-protos
   columnshard-blobs_action-protos

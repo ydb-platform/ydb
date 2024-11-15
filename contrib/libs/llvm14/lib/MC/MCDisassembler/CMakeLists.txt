@@ -12,30 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(lib-MC-MCDisassembler)
-
-
-target_compile_options(lib-MC-MCDisassembler PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(lib-MC-MCDisassembler PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCDisassembler
-)
-
-target_link_libraries(lib-MC-MCDisassembler PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-llvm14
-  llvm14-lib-MC
-  llvm14-lib-Support
-)
-
-target_sources(lib-MC-MCDisassembler PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCDisassembler/Disassembler.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCDisassembler/MCDisassembler.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCDisassembler/MCExternalSymbolizer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCDisassembler/MCRelocationInfo.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCDisassembler/MCSymbolizer.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

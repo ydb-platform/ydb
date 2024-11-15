@@ -12,56 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_rescompiler_bin
-  TOOL_rescompiler_dependency
-  tools/rescompiler/bin
-  rescompiler
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(proto)
-
-add_library(ydb-library-ydb_issue)
-
-
-target_link_libraries(ydb-library-ydb_issue PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-ydb_issue-proto
-  yql-public-ydb_issue
-  library-cpp-resource
-)
-
-target_sources(ydb-library-ydb_issue PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/ydb_issue/issue_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/ydb_issue/issue_helpers.h
-)
-
-
-add_global_library_for(ydb-library-ydb_issue.global
-  ydb-library-ydb_issue)
-
-
-target_link_libraries(ydb-library-ydb_issue.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-ydb_issue-proto
-  yql-public-ydb_issue
-  library-cpp-resource
-)
-
-target_sources(ydb-library-ydb_issue.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/library/ydb_issue/11a2a83241c8a9ca7a1ce00f99de45d7.cpp
-)
-
-
-resources(ydb-library-ydb_issue.global
-  ${PROJECT_BINARY_DIR}/ydb/library/ydb_issue/11a2a83241c8a9ca7a1ce00f99de45d7.cpp
-  INPUTS
-  ${PROJECT_SOURCE_DIR}/ydb/library/ydb_issue/ydb_issue.txt
-  KEYS
-  ydb_issue.txt
-  OPTS
-)

@@ -12,32 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(core-kqp-query_data)
-
-
-target_compile_options(core-kqp-query_data PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-kqp-query_data PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  api-grpc-draft
-  lib-operation_id-protos
-  library-actors-core
-  ydb-core-actorlib_impl
-  ydb-core-base
-  kqp-common-simple
-  yql-dq-expr_nodes
-  yql-dq-proto
-  providers-result-expr_nodes
-  core-kqp-expr_nodes
-)
-
-target_sources(core-kqp-query_data PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/query_data/kqp_query_data.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/query_data/kqp_prepared_query.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/query_data/kqp_predictor.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,60 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(events)
-add_subdirectory(proto)
-add_subdirectory(internal)
-
-add_library(fq-libs-control_plane_storage)
-
-
-target_compile_options(fq-libs-control_plane_storage PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(fq-libs-control_plane_storage PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-lwtrace
-  cpp-protobuf-interop
-  ydb-core-base
-  ydb-core-external_sources
-  libs-actors-logging
-  fq-libs-common
-  fq-libs-config
-  libs-config-protos
-  libs-control_plane_storage-events
-  libs-control_plane_storage-internal
-  libs-control_plane_storage-proto
-  fq-libs-db_schema
-  libs-graph_params-proto
-  libs-quota_manager-events
-  fq-libs-shared_resources
-  fq-libs-ydb
-  ydb-core-mon
-  ydb-library-db_pool
-  ydb-library-security
-  providers-s3-path_generator
-  essentials-public-issue
-  api-protos
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
-)
-
-target_sources(fq-libs-control_plane_storage PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/config.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/control_plane_storage_counters.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/in_memory_control_plane_storage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/probes.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/request_validators.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/util.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/validators.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_bindings.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_compute_database.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_connections.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_queries.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_quotas.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

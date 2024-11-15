@@ -31,8 +31,8 @@ target_link_libraries(ydb-library-yql-providers-pq-provider-ut PUBLIC
   library-cpp-lwtrace
   cpp-lwtrace-mon
   actors-wilson-protos
-  yql-core-facade
-  yql-core-file_storage
+  essentials-core-facade
+  essentials-core-file_storage
   core-services-mounts
   yql-dq-comp_nodes
   yql-dq-transform
@@ -46,7 +46,7 @@ target_link_libraries(ydb-library-yql-providers-pq-provider-ut PUBLIC
   providers-solomon-gateway
   providers-solomon-provider
   udf-service-exception_policy
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
   cpp-client-ydb_params
   client-ydb_persqueue_public-codecs
 )

@@ -12,25 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(main)
-
-add_library(cpp-testing-benchmark)
-
-
-target_link_libraries(cpp-testing-benchmark PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-re2
-  library-cpp-colorizer
-  cpp-getopt-small
-  library-cpp-json
-  library-cpp-linear_regression
-  cpp-threading-poor_man_openmp
-)
-
-target_sources(cpp-testing-benchmark PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/testing/benchmark/bench.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/testing/benchmark/dummy.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

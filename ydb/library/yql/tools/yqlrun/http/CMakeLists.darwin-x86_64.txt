@@ -33,15 +33,15 @@ target_link_libraries(tools-yqlrun-http PUBLIC
   library-cpp-uri
   library-cpp-yson
   cpp-yson-node
-  yql-core-facade
-  yql-core-type_ann
+  essentials-core-facade
+  essentials-core-type_ann
   providers-dq-provider
   providers-result-provider
-  yql-parser-pg_wrapper
+  essentials-parser-pg_wrapper
   sql-v1-format
   yt-gateway-file
   providers-yt-provider
-  yql-core-url_preprocessing
+  essentials-core-url_preprocessing
   providers-pg-provider
 )
 

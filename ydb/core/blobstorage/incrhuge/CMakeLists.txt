@@ -12,45 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(core-blobstorage-incrhuge)
-
-
-target_link_libraries(core-blobstorage-incrhuge PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  ydb-core-protos
-)
-
-target_sources(core-blobstorage-incrhuge PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_alloc.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_defrag.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_delete.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_log.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_read.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_recovery.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_recovery_read_log.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_recovery_scan.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_write.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_data.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_id_dict.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_alloc.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_common.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_defrag.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_delete.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_log.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_read.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_recovery.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_recovery_read_log.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_recovery_scan.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/incrhuge/incrhuge_keeper_write.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

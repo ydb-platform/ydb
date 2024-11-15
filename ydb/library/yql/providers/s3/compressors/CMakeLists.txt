@@ -12,44 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(providers-s3-compressors)
-
-
-target_compile_options(providers-s3-compressors PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_include_directories(providers-s3-compressors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src
-)
-
-target_link_libraries(providers-s3-compressors PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-fmt
-  libs-poco-Util
-  libs-brotli-dec
-  contrib-libs-libbz2
-  contrib-libs-lz4
-  contrib-libs-lzma
-  contrib-libs-zstd
-  clickhouse_client_udf
-  yql-essentials-utils
-  dq-actors-protos
-)
-
-target_sources(providers-s3-compressors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/brotli.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/bzip2.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/gz.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/factory.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/lz4io.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/zstd.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/xz.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

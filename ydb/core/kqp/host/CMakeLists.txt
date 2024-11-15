@@ -12,47 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(core-kqp-host)
-
-
-target_compile_options(core-kqp-host PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-kqp-host PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  core-kqp-common
-  core-kqp-federated_query
-  kqp-gateway-utils
-  core-kqp-opt
-  core-kqp-provider
-  tx-long_tx_service-public
-  essentials-core-services
-  essentials-minikql-invoke_builtins
-  yql-essentials-sql
-  yql-essentials-core
-  providers-common-codec
-  providers-common-http_gateway
-  providers-common-udf_resolve
-  essentials-providers-config
-  providers-generic-provider
-  providers-pg-provider
-  providers-result-provider
-  providers-s3-expr_nodes
-  impl-ydb_internal-common
-)
-
-target_sources(core-kqp-host PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/host/kqp_explain_prepared.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/host/kqp_gateway_proxy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/host/kqp_host.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/host/kqp_runner.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/host/kqp_transform.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/host/kqp_translate.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/host/kqp_type_ann.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/host/kqp_statement_rewrite.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

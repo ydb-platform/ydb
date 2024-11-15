@@ -12,114 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_rescompiler_bin
-  TOOL_rescompiler_dependency
-  tools/rescompiler/bin
-  rescompiler
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(tests-tpch-lib)
-
-
-target_link_libraries(tests-tpch-lib PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-  ydb-core-protos
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
-)
-
-target_sources(tests-tpch-lib PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/tpch_runner.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/tpch_tables.cpp
-)
-
-
-add_global_library_for(tests-tpch-lib.global
-  tests-tpch-lib)
-
-
-target_link_libraries(tests-tpch-lib.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-  ydb-core-protos
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
-)
-
-target_sources(tests-tpch-lib.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/tests/tpch/lib/8a9b63095ffdea8c245fccfb0c6b87ec.cpp
-)
-
-
-resources(tests-tpch-lib.global
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/tests/tpch/lib/8a9b63095ffdea8c245fccfb0c6b87ec.cpp
-  INPUTS
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/ps_0.001/customer.tbl
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/ps_0.001/lineitem.tbl
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/ps_0.001/nation.tbl
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/ps_0.001/orders.tbl
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/ps_0.001/partsupp.tbl
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/ps_0.001/part.tbl
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/ps_0.001/region.tbl
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/ps_0.001/supplier.tbl
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/01_Pricing_Summary_Report_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/02_Minimum_Cost_Supplier_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/03_Shipping_Priority_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/04_Order_Priority_Checking_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/05_Local_Supplier_Volume_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/06_Forecasting_Revenue_Change_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/07_Volume_Shipping_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/08_National_Market_Share_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/09_Product_Type_Profit_Measure_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/10_Returned_Item_Reporting_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/11_Important_Stock_Identification_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/12_Shipping_Modes_and_Order_Priority_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/13_Customer_Distribution_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/14_Promotion_Effect_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/15_Top_Supplier_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/16_Parts_Supplier_Relationship_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/17_Small_Quantity_Order_Revenue_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/18_Large_Volume_Customer_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/19_Discounted_Revenue_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/20_Potential_Part_Promotion_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/21_Suppliers_Who_Kept_Orders_Waiting_Query.sql
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tests/tpch/lib/data/queries/22_Global_Sales_Opportunity_Query.sql
-  KEYS
-  customer.tbl
-  lineitem.tbl
-  nation.tbl
-  orders.tbl
-  partsupp.tbl
-  part.tbl
-  region.tbl
-  supplier.tbl
-  01.sql
-  02.sql
-  03.sql
-  04.sql
-  05.sql
-  06.sql
-  07.sql
-  08.sql
-  09.sql
-  10.sql
-  11.sql
-  12.sql
-  13.sql
-  14.sql
-  15.sql
-  16.sql
-  17.sql
-  18.sql
-  19.sql
-  20.sql
-  21.sql
-  22.sql
-  OPTS
-)

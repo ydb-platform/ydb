@@ -12,39 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(udf-service-terminate_policy INTERFACE)
-
-
-target_compile_options(udf-service-terminate_policy INTERFACE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(udf-service-terminate_policy INTERFACE
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  yql-essentials-minikql
-  essentials-public-udf
-)
-
-
-add_global_library_for(udf-service-terminate_policy.global
-  udf-service-terminate_policy)
-
-
-target_compile_options(udf-service-terminate_policy.global PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(udf-service-terminate_policy.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  yql-essentials-minikql
-  essentials-public-udf
-)
-
-target_sources(udf-service-terminate_policy.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/service/terminate_policy/udf_service.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

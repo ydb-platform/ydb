@@ -12,46 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(restricted-boost-program_options)
-
-
-target_compile_options(restricted-boost-program_options PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(restricted-boost-program_options PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/include
-)
-
-target_link_libraries(restricted-boost-program_options PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  restricted-boost-any
-  restricted-boost-bind
-  restricted-boost-config
-  restricted-boost-core
-  restricted-boost-detail
-  restricted-boost-function
-  restricted-boost-iterator
-  restricted-boost-lexical_cast
-  restricted-boost-smart_ptr
-  restricted-boost-static_assert
-  restricted-boost-throw_exception
-  restricted-boost-tokenizer
-  restricted-boost-type_traits
-)
-
-target_sources(restricted-boost-program_options PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/cmdline.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/config_file.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/convert.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/options_description.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/parsers.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/positional_options.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/split.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/utf8_codecvt_facet.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/value_semantic.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/variables_map.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/program_options/src/winmain.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,44 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(local_rpc)
-add_subdirectory(utils)
-add_subdirectory(actors)
-add_subdirectory(behaviour)
-add_subdirectory(ut)
-
-add_library(core-kqp-gateway)
-
-
-target_compile_options(core-kqp-gateway PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-kqp-gateway PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  ydb-core-actorlib_impl
-  ydb-core-base
-  core-kqp-common
-  core-kqp-provider
-  core-kqp-query_data
-  kqp-gateway-actors
-  gateway-behaviour-tablestore
-  gateway-behaviour-table
-  gateway-behaviour-external_data_source
-  gateway-behaviour-resource_pool
-  gateway-behaviour-resource_pool_classifier
-  gateway-behaviour-view
-  kqp-gateway-utils
-  core-statistics-service
-  providers-result-expr_nodes
-)
-
-target_sources(core-kqp-gateway PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/kqp_gateway.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/kqp_ic_gateway.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/kqp_metadata_loader.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

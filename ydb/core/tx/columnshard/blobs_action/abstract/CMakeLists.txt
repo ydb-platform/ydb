@@ -12,34 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(columnshard-blobs_action-abstract)
-
-
-target_link_libraries(columnshard-blobs_action-abstract PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-protos
-  libs-apache-arrow
-  ydb-core-tablet_flat
-  tx-tiering-abstract
-  columnshard-hooks-abstract
-  columnshard-blobs_action-common
-  columnshard-data_sharing-protos
-  columnshard-blobs_action-events
-  columnshard-blobs_action-protos
-)
-
-target_sources(columnshard-blobs_action-abstract PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/gc.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/gc_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/blob_set.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/read.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/write.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/remove.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/storage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/action.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

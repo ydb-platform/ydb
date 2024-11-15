@@ -21,7 +21,8 @@ target_link_libraries(yt-lib-yt_url_lister PUBLIC
   library-cpp-cgiparam
   core-url_lister-interface
   yt-lib-init_yt_api
-  yql-utils-log
+  essentials-utils-fetch
+  essentials-utils-log
   cpp-mapreduce-interface
 )
 

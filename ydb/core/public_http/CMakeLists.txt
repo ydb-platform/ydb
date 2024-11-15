@@ -12,91 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_rescompiler_bin
-  TOOL_rescompiler_dependency
-  tools/rescompiler/bin
-  rescompiler
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(protos)
-add_subdirectory(ut)
-
-add_library(ydb-core-public_http)
-
-
-target_compile_options(ydb-core-public_http PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(ydb-core-public_http PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  library-actors-http
-  cpp-protobuf-json
-  library-cpp-resource
-  ydb-core-base
-  fq-libs-result_formatter
-  core-grpc_services-local_rpc
-  ydb-core-http_proxy
-  ydb-core-protos
-  core-public_http-protos
-  core-viewer-json
-  essentials-public-issue
-  cpp-client-ydb_types
-)
-
-target_sources(ydb-core-public_http PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/public_http/http_req.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/public_http/http_router.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/public_http/http_service.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/public_http/grpc_request_context_wrapper.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/public_http/http_req.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/public_http/http_router.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/public_http/http_service.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/public_http/grpc_request_context_wrapper.h
-)
-
-
-add_global_library_for(ydb-core-public_http.global
-  ydb-core-public_http)
-
-
-target_compile_options(ydb-core-public_http.global PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(ydb-core-public_http.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  library-actors-http
-  cpp-protobuf-json
-  library-cpp-resource
-  ydb-core-base
-  fq-libs-result_formatter
-  core-grpc_services-local_rpc
-  ydb-core-http_proxy
-  ydb-core-protos
-  core-public_http-protos
-  core-viewer-json
-  essentials-public-issue
-  cpp-client-ydb_types
-)
-
-target_sources(ydb-core-public_http.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/core/public_http/61d421c52ac59775eb29fb236d3d6f5a.cpp
-)
-
-
-resources(ydb-core-public_http.global
-  ${PROJECT_BINARY_DIR}/ydb/core/public_http/61d421c52ac59775eb29fb236d3d6f5a.cpp
-  INPUTS
-  ${PROJECT_SOURCE_DIR}/ydb/core/public_http/openapi/openapi.yaml
-  KEYS
-  resources/openapi.yaml
-  OPTS
-)

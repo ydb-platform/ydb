@@ -12,6 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(ut)
+
 add_library(services-persqueue_cluster_discovery-cluster_ordering)
 
 

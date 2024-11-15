@@ -12,77 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(monitoring)
-add_subdirectory(actor)
-add_subdirectory(config)
-add_subdirectory(scheduler)
-add_subdirectory(protobuf)
-add_subdirectory(www)
-add_subdirectory(oldmodule)
-
-add_library(library-cpp-messagebus)
-
-
-target_link_libraries(library-cpp-messagebus PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-sparsehash
-  library-cpp-codecs
-  cpp-deprecated-enum_codegen
-  cpp-getopt-small
-  library-cpp-lwtrace
-  messagebus_actor
-  cpp-messagebus-config
-  cpp-messagebus-monitoring
-  cpp-messagebus-scheduler
-  cpp-string_utils-indent_text
-  cpp-threading-future
-  cpp-deprecated-atomic
-)
-
-target_sources(library-cpp-messagebus PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/acceptor.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/acceptor_status.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/connection.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/coreconn.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/duration_histogram.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/event_loop.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/futex_like.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/handler.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/key_value_printer.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/local_flags.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/locator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/mb_lwtrace.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/message.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/message_counter.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/message_status.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/message_status_counter.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/messqueue.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/network.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/queue_config.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/remote_client_connection.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/remote_client_session.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/remote_client_session_semaphore.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/remote_connection.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/remote_connection_status.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/remote_server_connection.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/remote_server_session.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/remote_server_session_semaphore.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/session.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/session_impl.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/session_job_count.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/shutdown_state.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/socket_addr.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/storage.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/synchandler.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/use_after_free_checker.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/use_count_checker.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/misc/atomic_box.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/misc/granup.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/misc/test_sync.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/misc/tokenquota.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/misc/weak_ptr.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/messagebus/ybus.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

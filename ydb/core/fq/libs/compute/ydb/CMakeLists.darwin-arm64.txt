@@ -37,9 +37,9 @@ target_link_libraries(libs-compute-ydb PUBLIC
   ydb-core-protos
   ydb-core-util
   library-db_pool-protos
-  yql-core-expr_nodes
+  essentials-core-expr_nodes
   yql-dq-expr_nodes
-  yql-minikql-arrow
+  essentials-minikql-arrow
   dq-api-protos
   api-grpc
   api-grpc-draft

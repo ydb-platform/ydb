@@ -12,39 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(cpp-testing-gmock_in_unittest)
-
-
-target_link_libraries(cpp-testing-gmock_in_unittest PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  restricted-googletest-googlemock
-  restricted-googletest-googletest
-  cpp-testing-gtest_extensions
-  cpp-testing-unittest
-)
-
-target_sources(cpp-testing-gmock_in_unittest PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/testing/gmock_in_unittest/events.cpp
-)
-
-
-add_global_library_for(cpp-testing-gmock_in_unittest.global
-  cpp-testing-gmock_in_unittest)
-
-
-target_link_libraries(cpp-testing-gmock_in_unittest.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  restricted-googletest-googlemock
-  restricted-googletest-googletest
-  cpp-testing-gtest_extensions
-  cpp-testing-unittest
-)
-
-target_sources(cpp-testing-gmock_in_unittest.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/testing/gmock_in_unittest/registration.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

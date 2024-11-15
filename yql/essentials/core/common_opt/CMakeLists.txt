@@ -12,38 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(essentials-core-common_opt)
-
-
-target_compile_options(essentials-core-common_opt PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(essentials-core-common_opt PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  yql-essentials-core
-  essentials-core-expr_nodes
-  essentials-parser-pg_catalog
-  library-cpp-disjoint_sets
-)
-
-target_sources(essentials-core-common_opt PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/common_opt/yql_co_extr_members.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/common_opt/yql_flatmap_over_join.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/common_opt/yql_co_finalizers.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/common_opt/yql_co_flow1.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/common_opt/yql_co_flow2.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/common_opt/yql_co_flowidaw1.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/common_opt/yql_co_last.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/common_opt/yql_co_pgselect.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/common_opt/yql_co_simple1.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/common_opt/yql_co_simple2.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/common_opt/yql_co_simple3.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/common_opt/yql_co_transformer.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/common_opt/yql_co.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/common_opt/yql_co_pgselect.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/common_opt/yql_co_transformer.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

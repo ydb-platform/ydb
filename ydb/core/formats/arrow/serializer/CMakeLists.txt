@@ -12,43 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(formats-arrow-serializer)
-
-
-target_link_libraries(formats-arrow-serializer PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  services-metadata-abstract
-  library-actors-core
-  library-formats-arrow-common
-  ydb-core-protos
-)
-
-target_sources(formats-arrow-serializer PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/serializer/abstract.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/serializer/stream.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/serializer/parsing.cpp
-)
-
-
-add_global_library_for(formats-arrow-serializer.global
-  formats-arrow-serializer)
-
-
-target_link_libraries(formats-arrow-serializer.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  services-metadata-abstract
-  library-actors-core
-  library-formats-arrow-common
-  ydb-core-protos
-)
-
-target_sources(formats-arrow-serializer.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/serializer/native.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

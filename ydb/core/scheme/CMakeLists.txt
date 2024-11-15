@@ -12,39 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(protos)
-add_subdirectory(ut)
-add_subdirectory(ut_pg)
-
-add_library(ydb-core-scheme)
-
-
-target_link_libraries(ydb-core-scheme PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  library-cpp-charset
-  cpp-containers-bitseq
-  cpp-deprecated-enum_codegen
-  library-cpp-yson
-  api-protos
-  core-scheme-protos
-  ydb-core-scheme_types
-  ydb-library-aclib
-  parser-pg_wrapper-interface
-  public-lib-scheme_types
-  library-pretty_types_print-protobuf
-  cpp-lwtrace-mon
-)
-
-target_sources(ydb-core-scheme PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/scheme/scheme_borders.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/scheme/scheme_tablecell.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/scheme/scheme_tabledefs.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/scheme/scheme_types_defs.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/scheme/scheme_type_info.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/scheme/scheme_types_proto.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/scheme/scheme_pathid.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

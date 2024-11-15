@@ -12,58 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(client-ydb_persqueue_public-include)
-
-
-target_link_libraries(client-ydb_persqueue_public-include PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  api-grpc
-  api-grpc-draft
-  api-protos
-  public-issue-protos
-)
-
-target_sources(client-ydb_persqueue_public-include PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/include/aliases.h
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/include/client.h
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/include/control_plane.h
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/include/read_events.h
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/include/read_session.h
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/include/write_events.h
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/include/write_session.h
-)
-
-
-generate_enum_serilization(client-ydb_persqueue_public-include
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/include/control_plane.h
-  INCLUDE_HEADERS
-  ydb/public/sdk/cpp/client/ydb_persqueue_public/include/control_plane.h
-)
-
-generate_enum_serilization(client-ydb_persqueue_public-include
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/include/read_events.h
-  INCLUDE_HEADERS
-  ydb/public/sdk/cpp/client/ydb_persqueue_public/include/read_events.h
-)
-
-generate_enum_serilization(client-ydb_persqueue_public-include
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/include/write_events.h
-  INCLUDE_HEADERS
-  ydb/public/sdk/cpp/client/ydb_persqueue_public/include/write_events.h
-)
-
-generate_enum_serilization(client-ydb_persqueue_public-include
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_public/include/write_session.h
-  INCLUDE_HEADERS
-  ydb/public/sdk/cpp/client/ydb_persqueue_public/include/write_session.h
-)

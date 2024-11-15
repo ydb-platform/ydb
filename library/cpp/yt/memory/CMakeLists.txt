@@ -12,37 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(cpp-yt-memory)
-
-
-target_compile_options(cpp-yt-memory PRIVATE
-  -Wdeprecated-this-capture
-)
-
-target_link_libraries(cpp-yt-memory PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-sanitizer-include
-  cpp-yt-assert
-  cpp-yt-misc
-  cpp-yt-malloc
-  cpp-yt-system
-)
-
-target_sources(cpp-yt-memory PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/memory/allocation_tags_hooks.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/memory/blob.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/memory/chunked_input_stream.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/memory/chunked_memory_allocator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/memory/chunked_memory_pool.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/memory/chunked_memory_pool_output.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/memory/chunked_output_stream.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/memory/memory_tag.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/memory/new.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/memory/ref.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/memory/ref_tracked.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/memory/safe_memory_reader.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/memory/shared_range.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

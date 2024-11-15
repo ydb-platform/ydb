@@ -12,55 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(providers-common-comp_nodes)
-
-
-target_compile_options(providers-common-comp_nodes PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-common-comp_nodes PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  yql-essentials-ast
-  essentials-ast-serialize
-  essentials-minikql-computation
-  yql-essentials-core
-  essentials-core-type_ann
-  providers-common-codec
-  common-schema-expr
-  essentials-parser-pg_catalog
-)
-
-target_sources(providers-common-comp_nodes PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_factory.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_formatcode.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_formattype.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_formattypediff.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_makecode.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_maketype.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_parsetypehandle.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_position.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_reprcode.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_serializetypehandle.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_splittype.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_type_resource.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_typehandle.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_typekind.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_factory.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_formatcode.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_formattype.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_formattypediff.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_makecode.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_maketype.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_parsetypehandle.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_position.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_reprcode.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_serializetypehandle.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_splittype.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_type_resource.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_typehandle.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/comp_nodes/yql_typekind.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,43 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(yql-dq-opt)
-
-
-target_compile_options(yql-dq-opt PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(yql-dq-opt PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  yql-essentials-ast
-  yql-essentials-core
-  yql-dq-common
-  yql-dq-expr_nodes
-  essentials-core-dq_integration
-  yql-dq-proto
-  yql-dq-type_ann
-  providers-dq-expr_nodes
-)
-
-target_sources(yql-dq-opt PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_build.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_conflict_rules_collector.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_join.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_join_cost_based.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_join_tree_node.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_hopping.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_log.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_peephole.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_phy_finalizing.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_phy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_stat.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_stat_transformer_base.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/opt/dq_opt_predicate_selectivity.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

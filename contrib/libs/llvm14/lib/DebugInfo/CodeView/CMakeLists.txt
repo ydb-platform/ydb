@@ -12,64 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(lib-DebugInfo-CodeView)
-
-
-target_compile_options(lib-DebugInfo-CodeView PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(lib-DebugInfo-CodeView PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView
-)
-
-target_link_libraries(lib-DebugInfo-CodeView PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-llvm14
-  llvm14-lib-Support
-)
-
-target_sources(lib-DebugInfo-CodeView PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/AppendingTypeTableBuilder.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/CVSymbolVisitor.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/CVTypeVisitor.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/CodeViewError.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/CodeViewRecordIO.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/ContinuationRecordBuilder.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/DebugChecksumsSubsection.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/DebugCrossExSubsection.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/DebugCrossImpSubsection.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/DebugFrameDataSubsection.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/DebugInlineeLinesSubsection.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/DebugLinesSubsection.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/DebugStringTableSubsection.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/DebugSubsection.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/DebugSubsectionRecord.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/DebugSubsectionVisitor.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/DebugSymbolRVASubsection.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/DebugSymbolsSubsection.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/EnumTables.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/Formatters.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/GlobalTypeTableBuilder.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/LazyRandomTypeCollection.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/Line.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/MergingTypeTableBuilder.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/RecordName.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/RecordSerialization.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/SimpleTypeSerializer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/StringsAndChecksums.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/SymbolDumper.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/SymbolRecordHelpers.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/SymbolRecordMapping.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/SymbolSerializer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/TypeDumpVisitor.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/TypeHashing.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/TypeIndex.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/TypeIndexDiscovery.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/TypeRecordHelpers.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/TypeRecordMapping.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/TypeStreamMerger.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/DebugInfo/CodeView/TypeTableCollection.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

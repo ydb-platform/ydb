@@ -12,57 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(behaviour-tablestore-operations)
-
-
-target_compile_options(behaviour-tablestore-operations PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(behaviour-tablestore-operations PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  services-metadata-manager
-  formats-arrow-serializer
-  storage-optimizer-abstract
-  columnshard-data_accessor-abstract
-  kqp-gateway-utils
-  ydb-core-protos
-)
-
-target_sources(behaviour-tablestore-operations PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/abstract.cpp
-)
-
-
-add_global_library_for(behaviour-tablestore-operations.global
-  behaviour-tablestore-operations)
-
-
-target_compile_options(behaviour-tablestore-operations.global PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(behaviour-tablestore-operations.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  services-metadata-manager
-  formats-arrow-serializer
-  storage-optimizer-abstract
-  columnshard-data_accessor-abstract
-  kqp-gateway-utils
-  ydb-core-protos
-)
-
-target_sources(behaviour-tablestore-operations.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/add_column.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/alter_column.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_column.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/upsert_index.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/drop_index.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/upsert_opt.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/tablestore/operations/alter_sharding.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

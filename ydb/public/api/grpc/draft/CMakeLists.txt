@@ -12,116 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_grpc_cpp_bin
-  TOOL_grpc_cpp_dependency
-  contrib/tools/protoc/plugins/grpc_cpp
-  grpc_cpp
-)
-
-get_built_tool_path(
-  TOOL_protoc_bin
-  TOOL_protoc_dependency
-  contrib/tools/protoc/bin
-  protoc
-)
-
-get_built_tool_path(
-  TOOL_cpp_styleguide_bin
-  TOOL_cpp_styleguide_dependency
-  contrib/tools/protoc/plugins/cpp_styleguide
-  cpp_styleguide
-)
-
-add_library(api-grpc-draft)
-
-
-set_property(TARGET api-grpc-draft PROPERTY PROTOC_EXTRA_OUTS
-  .grpc.pb.cc
-  .grpc.pb.h
-)
-
-target_link_libraries(api-grpc-draft PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-grpc
-  api-protos
-  contrib-libs-protobuf
-)
-
-target_proto_messages(api-grpc-draft PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/dummy.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/fq_v1.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_backup_v1.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_clickhouse_internal_v1.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_datastreams_v1.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_dynamic_config_v1.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_logstore_v1.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_maintenance_v1.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_persqueue_v1.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_object_storage_v1.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_replication_v1.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_tablet_v1.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_view_v1.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_ymq_v1.proto
-)
-
-target_sources(api-grpc-draft PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/dummy.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/dummy.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/fq_v1.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/fq_v1.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_backup_v1.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_backup_v1.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_clickhouse_internal_v1.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_clickhouse_internal_v1.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_datastreams_v1.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_dynamic_config_v1.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_dynamic_config_v1.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_logstore_v1.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_logstore_v1.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_maintenance_v1.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_maintenance_v1.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_persqueue_v1.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_object_storage_v1.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_object_storage_v1.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_replication_v1.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_replication_v1.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_tablet_v1.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_tablet_v1.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_view_v1.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_view_v1.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_ymq_v1.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_ymq_v1.grpc.pb.h
-)
-
-
-target_proto_outs(api-grpc-draft
-  --cpp_out=${PROJECT_BINARY_DIR}/
-  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
-)
-
-target_proto_addincls(api-grpc-draft
-  ./
-  ${PROJECT_SOURCE_DIR}/
-  ${PROJECT_BINARY_DIR}
-  ${PROJECT_SOURCE_DIR}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${PROJECT_BINARY_DIR}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-
-target_proto_plugin(api-grpc-draft
-  grpc_cpp
-  ${TOOL_grpc_cpp_bin}
-)
-
-
-if(NOT CMAKE_CROSSCOMPILING)
-  add_dependencies(api-grpc-draft
-    grpc_cpp
-  )
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
 endif()
+

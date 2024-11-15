@@ -12,53 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(public)
-add_subdirectory(protos)
-add_subdirectory(ut)
-
-add_library(core-tx-coordinator)
-
-
-target_link_libraries(core-tx-coordinator PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  library-actors-helpers
-  library-actors-interconnect
-  cpp-containers-absl_flat_hash
-  ydb-core-actorlib_impl
-  ydb-core-base
-  core-engine-minikql
-  ydb-core-protos
-  ydb-core-scheme
-  ydb-core-tablet
-  ydb-core-tablet_flat
-  ydb-core-tx
-  tx-coordinator-public
-  ydb-core-util
-)
-
-target_sources(core-tx-coordinator PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator_hooks.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator_state.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__acquire_read_step.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__configure.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__check.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__init.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__last_step_subscriptions.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__mediators_confirmations.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__monitoring.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__plan_step.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__read_step_subscriptions.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__restore_params.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__restore_transaction.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__schema_upgrade.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/coordinator__stop_guard.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/mediator_queue.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/coordinator/defs.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

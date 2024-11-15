@@ -12,30 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(core-grpc_services-base INTERFACE)
-
-
-target_compile_options(core-grpc_services-base INTERFACE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-grpc_services-base INTERFACE
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-grpc-server
-  cpp-string_utils-quote
-  ydb-core-base
-  core-grpc_services-counters
-  ydb-core-grpc_streaming
-  ydb-core-jaeger_tracing
-  api-protos
-  cpp-client-resources
-  essentials-public-issue
-)
-
-target_sources(core-grpc_services-base INTERFACE
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/base/base_service.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/base/base.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

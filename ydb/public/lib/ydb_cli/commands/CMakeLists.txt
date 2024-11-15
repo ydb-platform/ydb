@@ -12,79 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(sdk_core_access)
-add_subdirectory(ydb_discovery)
-add_subdirectory(command_base)
-add_subdirectory(interactive)
-add_subdirectory(topic_workload)
-add_subdirectory(transfer_workload)
-
-add_library(clicommands)
-
-
-target_link_libraries(clicommands PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-fmt
-  cpp-histogram-hdr
-  cpp-protobuf-json
-  cpp-regex-pcre
-  cpp-threading-local_executor
-  kikimr_backup
-  ydb-library-workload
-  library-yaml_config-public
-  public-lib-operation_id
-  public-lib-stat_visualization
-  common
-  ydb_cli_command_base
-  ydb_cli-commands-interactive
-  topic_workload
-  transfer_workload
-  ydb_cli_command_ydb_discovery
-  ydb_sdk_core_access
-  lib-ydb_cli-dump
-  lib-ydb_cli-import
-  topic
-  cpp-client-draft
-  cpp-client-ydb_coordination
-  cpp-client-ydb_export
-  cpp-client-ydb_import
-  cpp-client-ydb_monitoring
-  cpp-client-ydb_operation
-  cpp-client-ydb_persqueue_public
-  cpp-client-ydb_proto
-  cpp-client-ydb_scheme
-  cpp-client-ydb_table
-  cpp-client-ydb_topic
-  ydb_types-credentials-login
-)
-
-target_sources(clicommands PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/benchmark_utils.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_operations_scenario.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_read_scenario.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_write_scenario.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/topic_readwrite_scenario.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/query_workload.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_admin.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_benchmark.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_dynamic_config.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_profile.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_root_common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_auth.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_export.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_import.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_monitoring.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_operation.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_scheme.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_scripting.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_topic.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_table.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_sql.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_tools.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_workload.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_workload_import.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_yql.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

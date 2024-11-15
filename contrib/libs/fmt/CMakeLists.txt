@@ -12,28 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(contrib-libs-fmt)
-
-
-target_compile_options(contrib-libs-fmt PUBLIC
-  -DFMT_EXPORT
-)
-
-target_compile_options(contrib-libs-fmt PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(contrib-libs-fmt PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/libs/fmt/include
-)
-
-target_link_libraries(contrib-libs-fmt PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-)
-
-target_sources(contrib-libs-fmt PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/fmt/src/format.cc
-  ${PROJECT_SOURCE_DIR}/contrib/libs/fmt/src/os.cc
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

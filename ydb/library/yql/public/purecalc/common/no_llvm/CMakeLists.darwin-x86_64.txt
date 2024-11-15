@@ -33,14 +33,14 @@ target_include_directories(purecalc-common-no_llvm PRIVATE
 target_link_libraries(purecalc-common-no_llvm PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-yql-ast
-  yql-core-services
+  yql-essentials-ast
+  essentials-core-services
   core-services-mounts
-  yql-core-user_data
-  yql-utils-backtrace
-  yql-utils-log
-  library-yql-core
-  yql-core-type_ann
+  essentials-core-user_data
+  essentials-utils-backtrace
+  essentials-utils-log
+  yql-essentials-core
+  essentials-core-type_ann
   providers-common-codec
   providers-common-comp_nodes
   providers-common-mkql
@@ -50,14 +50,14 @@ target_link_libraries(purecalc-common-no_llvm PUBLIC
   providers-common-arrow_resolve
   tools-enum_parser-enum_serialization_runtime
   codec-codegen-no_llvm
-  yql-providers-config
+  essentials-providers-config
   minikql-computation-no_llvm
   minikql-invoke_builtins-no_llvm
   minikql-comp_nodes-no_llvm
   minikql-codegen-no_llvm
-  yql-parser-pg_wrapper
+  essentials-parser-pg_wrapper
   parser-pg_wrapper-interface
-  yql-sql-pg
+  essentials-sql-pg
 )
 
 target_sources(purecalc-common-no_llvm PRIVATE

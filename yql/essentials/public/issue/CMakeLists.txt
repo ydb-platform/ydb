@@ -12,41 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(protos)
-
-add_library(essentials-public-issue)
-
-
-target_link_libraries(essentials-public-issue PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  library-cpp-colorizer
-  library-cpp-resource
-  public-issue-protos
-  yql-essentials-utils
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(essentials-public-issue PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/issue/yql_issue.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/issue/yql_issue_message.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/issue/yql_issue_manager.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/issue/yql_issue_utils.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/issue/yql_warning.cpp
-)
-
-
-generate_enum_serilization(essentials-public-issue
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/issue/yql_warning.h
-  INCLUDE_HEADERS
-  yql/essentials/public/issue/yql_warning.h
-)

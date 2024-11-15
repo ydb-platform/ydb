@@ -12,29 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(contrib-libs-hdr_histogram)
-
-
-target_compile_options(contrib-libs-hdr_histogram PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(contrib-libs-hdr_histogram PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/hdr_histogram/src
-)
-
-target_link_libraries(contrib-libs-hdr_histogram PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-zlib
-)
-
-target_sources(contrib-libs-hdr_histogram PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/hdr_histogram/src/hdr_encoding.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/hdr_histogram/src/hdr_interval_recorder.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/hdr_histogram/src/hdr_histogram.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/hdr_histogram/src/hdr_writer_reader_phaser.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/hdr_histogram/src/hdr_time.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/hdr_histogram/src/hdr_thread.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

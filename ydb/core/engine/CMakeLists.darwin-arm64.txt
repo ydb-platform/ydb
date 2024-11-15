@@ -35,9 +35,9 @@ target_link_libraries(ydb-core-engine PUBLIC
   ydb-library-mkql_proto
   library-mkql_proto-protos
   api-protos
-  yql-minikql-comp_nodes
+  essentials-minikql-comp_nodes
   parser-pg_wrapper-interface
-  yql-public-decimal
+  essentials-public-decimal
 )
 
 target_sources(ydb-core-engine PRIVATE

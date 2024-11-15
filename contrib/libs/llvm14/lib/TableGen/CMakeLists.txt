@@ -12,35 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(llvm14-lib-TableGen)
-
-
-target_compile_options(llvm14-lib-TableGen PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(llvm14-lib-TableGen PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen
-)
-
-target_link_libraries(llvm14-lib-TableGen PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-llvm14
-  llvm14-lib-Support
-)
-
-target_sources(llvm14-lib-TableGen PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/DetailedRecordsBackend.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/Error.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/JSONBackend.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/Main.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/Record.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/SetTheory.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/StringMatcher.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/TGLexer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/TGParser.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/TableGenBackend.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/TableGen/TableGenBackendSkeleton.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

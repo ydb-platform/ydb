@@ -12,44 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(providers-yt-common)
-
-
-target_compile_options(providers-yt-common PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-yt-common PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-regex-pcre
-  cpp-string_utils-parse_size
-  cpp-yson-node
-  cpp-mapreduce-interface
-  yql-essentials-ast
-  essentials-utils-log
-  providers-common-codec
-  providers-common-config
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(providers-yt-common PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/common/yql_configuration.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/common/yql_names.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/common/yql_yt_settings.cpp
-)
-
-
-generate_enum_serilization(providers-yt-common
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/common/yql_yt_settings.h
-  INCLUDE_HEADERS
-  ydb/library/yql/providers/yt/common/yql_yt_settings.h
-)

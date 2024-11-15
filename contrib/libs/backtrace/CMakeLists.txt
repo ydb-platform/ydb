@@ -12,34 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(contrib-libs-backtrace)
-
-
-target_compile_options(contrib-libs-backtrace PRIVATE
-  -DHAVE_CONFIG_H
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(contrib-libs-backtrace PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace
-)
-
-target_link_libraries(contrib-libs-backtrace PUBLIC
-  contrib-libs-linux-headers
-)
-
-target_sources(contrib-libs-backtrace PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/atomic.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/backtrace.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/dwarf.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/fileline.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/mmap.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/mmapio.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/posix.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/print.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/simple.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/sort.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/state.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/backtrace/elf.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

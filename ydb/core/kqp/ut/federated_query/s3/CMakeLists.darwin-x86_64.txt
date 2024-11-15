@@ -33,7 +33,7 @@ target_link_libraries(ydb-core-kqp-ut-federated_query-s3 PUBLIC
   kqp-ut-common
   ut-federated_query-common
   providers-s3-actors
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
   library-testlib-s3_recipe_helper
   client-ydb_types-operation
 )

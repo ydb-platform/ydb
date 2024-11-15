@@ -20,7 +20,8 @@ target_link_libraries(impl-ydb_internal-plain_status PUBLIC
   yutil
   contrib-libs-protobuf
   library-grpc-client
-  yql-public-issue
+  api-protos
+  essentials-public-issue
 )
 
 target_sources(impl-ydb_internal-plain_status PRIVATE

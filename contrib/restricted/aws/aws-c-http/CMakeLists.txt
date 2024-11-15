@@ -12,60 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(restricted-aws-aws-c-http)
-
-
-target_compile_options(restricted-aws-aws-c-http PRIVATE
-  -DAWS_CAL_USE_IMPORT_EXPORT
-  -DAWS_COMMON_USE_IMPORT_EXPORT
-  -DAWS_COMPRESSION_USE_IMPORT_EXPORT
-  -DAWS_HTTP_USE_IMPORT_EXPORT
-  -DAWS_IO_USE_IMPORT_EXPORT
-  -DAWS_USE_EPOLL
-  -DHAVE_SYSCONF
-  -DINTEL_NO_ITTNOTIFY_API
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(restricted-aws-aws-c-http PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/include
-)
-
-target_link_libraries(restricted-aws-aws-c-http PUBLIC
-  contrib-libs-linux-headers
-  restricted-aws-aws-c-cal
-  restricted-aws-aws-c-common
-  restricted-aws-aws-c-compression
-  restricted-aws-aws-c-io
-)
-
-target_sources(restricted-aws-aws-c-http PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/connection.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/connection_manager.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/connection_monitor.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h1_connection.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h1_decoder.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h1_encoder.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h1_stream.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h2_connection.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h2_decoder.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h2_frames.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/h2_stream.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/hpack.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/hpack_decoder.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/hpack_encoder.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/hpack_huffman_static.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/http.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/http2_stream_manager.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/proxy_connection.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/proxy_strategy.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/random_access_set.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/request_response.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/statistics.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/strutil.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/websocket.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/websocket_bootstrap.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/websocket_decoder.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-http/source/websocket_encoder.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

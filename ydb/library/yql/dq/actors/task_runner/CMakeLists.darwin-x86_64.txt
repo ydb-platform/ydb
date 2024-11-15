@@ -26,7 +26,7 @@ target_link_libraries(dq-actors-task_runner PUBLIC
   yql-dq-runtime
   yql-dq-common
   yql-dq-proto
-  yql-minikql-computation
+  essentials-minikql-computation
   yql-utils-actors
   ydb-library-services
 )

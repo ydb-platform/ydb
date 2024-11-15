@@ -12,25 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(essentials-public-result_format)
-
-
-target_link_libraries(essentials-public-result_format PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-yson
-  cpp-yson-node
-  cpp-string_utils-base64
-  essentials-public-issue
-  yql-essentials-utils
-)
-
-target_sources(essentials-public-result_format PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/result_format/yql_result_format_response.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/result_format/yql_result_format_type.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/result_format/yql_result_format_data.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/result_format/yql_codec_results.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/result_format/yql_restricted_yson.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

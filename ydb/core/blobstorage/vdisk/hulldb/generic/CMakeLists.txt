@@ -12,46 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(vdisk-hulldb-generic)
-
-
-target_link_libraries(vdisk-hulldb-generic PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  vdisk-hulldb-base
-  vdisk-hulldb-fresh
-  blobstorage-vdisk-protos
-  ydb-core-protos
-)
-
-target_sources(vdisk-hulldb-generic PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hulloptlsn.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hulldb_bulksstmngr.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idx.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstslice.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstvec.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hulldatamerger.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullmergeits.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hulloptlsn.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullrecmerger.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwritesst.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hulldb_bulksstloaded.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hulldb_bulksstmngr.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idx.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idxsnap_it.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_leveledssts.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sst_it.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstslice.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstslice_it.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstvec.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstvec_it.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

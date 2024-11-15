@@ -12,34 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(parser-pg_wrapper-interface)
-
-
-target_compile_options(parser-pg_wrapper-interface PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(parser-pg_wrapper-interface PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  yql-essentials-ast
-  essentials-public-udf
-  public-udf-arrow
-  essentials-core-cbo
-  library-cpp-disjoint_sets
-)
-
-target_sources(parser-pg_wrapper-interface PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/pg_wrapper/interface/interface.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/pg_wrapper/interface/codec.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/pg_wrapper/interface/compare.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/pg_wrapper/interface/comp_factory.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/pg_wrapper/interface/context.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/pg_wrapper/interface/interface.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/pg_wrapper/interface/pack.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/pg_wrapper/interface/parser.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/pg_wrapper/interface/type_desc.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/pg_wrapper/interface/utils.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

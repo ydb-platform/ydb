@@ -72,6 +72,7 @@ target_link_libraries(yt-yt-core PUBLIC
 )
 
 target_sources(yt-yt-core PRIVATE
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/actions/cancelation_token.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/actions/cancelable_context.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/actions/current_invoker.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/actions/future.cpp
@@ -242,7 +243,7 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/message_format.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/null_channel.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/peer_discovery.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/per_user_request_queue_provider.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/per_key_request_queue_provider.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/protocol_version.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/public.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/rpc/request_queue_provider.cpp

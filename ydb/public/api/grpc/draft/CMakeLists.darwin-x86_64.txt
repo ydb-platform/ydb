@@ -62,6 +62,7 @@ target_proto_messages(api-grpc-draft PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_object_storage_v1.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_replication_v1.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_tablet_v1.proto
+  ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_view_v1.proto
   ${PROJECT_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_ymq_v1.proto
 )
 
@@ -90,6 +91,8 @@ target_sources(api-grpc-draft PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_replication_v1.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_tablet_v1.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_tablet_v1.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_view_v1.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_view_v1.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_ymq_v1.pb.h
   ${PROJECT_BINARY_DIR}/ydb/public/api/grpc/draft/ydb_ymq_v1.grpc.pb.h
 )

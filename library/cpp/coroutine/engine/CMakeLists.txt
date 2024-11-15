@@ -12,51 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(cpp-coroutine-engine)
-
-
-target_link_libraries(cpp-coroutine-engine PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  contrib-libs-libc_compat
-  cpp-containers-intrusive_rb_tree
-  cpp-deprecated-atomic
-)
-
-target_sources(cpp-coroutine-engine PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/coroutine/engine/cont_poller.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/coroutine/engine/helper.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/coroutine/engine/impl.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/coroutine/engine/iostatus.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/coroutine/engine/network.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/coroutine/engine/poller.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/coroutine/engine/sockpool.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/coroutine/engine/stack/stack.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/coroutine/engine/stack/stack_allocator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/coroutine/engine/stack/stack_guards.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/coroutine/engine/stack/stack_storage.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/coroutine/engine/stack/stack_utils.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/coroutine/engine/trampoline.cpp
-)
-
-
-generate_enum_serilization(cpp-coroutine-engine
-  ${PROJECT_SOURCE_DIR}/library/cpp/coroutine/engine/poller.h
-  INCLUDE_HEADERS
-  library/cpp/coroutine/engine/poller.h
-)
-
-generate_enum_serilization(cpp-coroutine-engine
-  ${PROJECT_SOURCE_DIR}/library/cpp/coroutine/engine/stack/stack_common.h
-  INCLUDE_HEADERS
-  library/cpp/coroutine/engine/stack/stack_common.h
-)

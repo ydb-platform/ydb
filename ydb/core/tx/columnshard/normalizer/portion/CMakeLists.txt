@@ -12,49 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(columnshard-normalizer-portion)
-
-
-target_link_libraries(columnshard-normalizer-portion PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  columnshard-normalizer-abstract
-  tx-columnshard-blobs_reader
-  columnshard-engines-portions
-  tx-conveyor-usage
-)
-
-target_sources(columnshard-normalizer-portion PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/normalizer.cpp
-)
-
-
-add_global_library_for(columnshard-normalizer-portion.global
-  columnshard-normalizer-portion)
-
-
-target_link_libraries(columnshard-normalizer-portion.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  columnshard-normalizer-abstract
-  tx-columnshard-blobs_reader
-  columnshard-engines-portions
-  tx-conveyor-usage
-)
-
-target_sources(columnshard-normalizer-portion.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/portion.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/chunks.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/clean.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/clean_empty.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/broken_blobs.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/special_cleaner.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/chunks_actualization.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/restore_portion_from_chunks.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/restore_v1_chunks.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/restore_v2_chunks.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/normalizer/portion/snapshot_from_chunks.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

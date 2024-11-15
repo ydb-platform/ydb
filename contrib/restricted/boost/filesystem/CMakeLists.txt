@@ -12,51 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(restricted-boost-filesystem)
-
-
-target_compile_options(restricted-boost-filesystem PUBLIC
-  -DBOOST_FILESYSTEM_HAS_POSIX_AT_APIS
-)
-
-target_compile_options(restricted-boost-filesystem PRIVATE
-  -DBOOST_FILESYSTEM_NO_CXX20_ATOMIC_REF
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(restricted-boost-filesystem PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/filesystem/include
-)
-
-target_link_libraries(restricted-boost-filesystem PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  restricted-boost-assert
-  restricted-boost-atomic
-  restricted-boost-config
-  restricted-boost-container_hash
-  restricted-boost-core
-  restricted-boost-detail
-  restricted-boost-io
-  restricted-boost-iterator
-  restricted-boost-predef
-  restricted-boost-scope
-  restricted-boost-smart_ptr
-  restricted-boost-system
-  restricted-boost-type_traits
-  restricted-boost-winapi
-)
-
-target_sources(restricted-boost-filesystem PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/filesystem/src/codecvt_error_category.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/filesystem/src/directory.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/filesystem/src/exception.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/filesystem/src/operations.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/filesystem/src/path.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/filesystem/src/path_traits.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/filesystem/src/portability.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/filesystem/src/unique_path.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/filesystem/src/utf8_codecvt_facet.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/filesystem/src/windows_file_codecvt.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

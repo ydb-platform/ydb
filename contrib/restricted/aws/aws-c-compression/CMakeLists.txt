@@ -12,29 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(restricted-aws-aws-c-compression)
-
-
-target_compile_options(restricted-aws-aws-c-compression PRIVATE
-  -DAWS_COMMON_USE_IMPORT_EXPORT
-  -DAWS_COMPRESSION_USE_IMPORT_EXPORT
-  -DHAVE_SYSCONF
-  -DINTEL_NO_ITTNOTIFY_API
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(restricted-aws-aws-c-compression PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-compression/include
-)
-
-target_link_libraries(restricted-aws-aws-c-compression PUBLIC
-  contrib-libs-linux-headers
-  restricted-aws-aws-c-common
-)
-
-target_sources(restricted-aws-aws-c-compression PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-compression/source/compression.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-compression/source/huffman.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-compression/source/huffman_testing.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

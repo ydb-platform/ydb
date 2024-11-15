@@ -52,7 +52,7 @@ target_link_libraries(fq-libs-init PUBLIC
   dq-actors-input_transforms
   yql-dq-comp_nodes
   yql-dq-transform
-  yql-minikql-comp_nodes
+  essentials-minikql-comp_nodes
   providers-common-comp_nodes
   providers-common-metrics
   providers-dq-actors

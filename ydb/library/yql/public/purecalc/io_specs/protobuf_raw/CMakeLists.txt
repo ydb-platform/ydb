@@ -12,24 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(purecalc-io_specs-protobuf_raw)
-
-
-target_compile_options(purecalc-io_specs-protobuf_raw PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(purecalc-io_specs-protobuf_raw PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  public-purecalc-common
-  purecalc-helpers-protobuf
-)
-
-target_sources(purecalc-io_specs-protobuf_raw PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/protobuf_raw/proto_holder.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/protobuf_raw/spec.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/io_specs/protobuf_raw/spec.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

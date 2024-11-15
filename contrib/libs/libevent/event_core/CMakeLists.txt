@@ -12,43 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(libs-libevent-event_core)
-
-
-target_compile_options(libs-libevent-event_core PRIVATE
-  -DHAVE_CONFIG_H
-  -DEVENT__HAVE_STRLCPY=1
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(libs-libevent-event_core PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/include
-)
-
-target_link_libraries(libs-libevent-event_core PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-libc_compat
-)
-
-target_sources(libs-libevent-event_core PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/buffer.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/bufferevent.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/bufferevent_filter.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/bufferevent_pair.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/bufferevent_ratelim.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/bufferevent_sock.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/event.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/evmap.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/evthread.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/evutil.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/evutil_rand.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/evutil_time.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/listener.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/log.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/signal.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/poll.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/select.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libevent/epoll.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,45 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(Target-X86-MCTargetDesc)
-
-
-target_compile_options(Target-X86-MCTargetDesc PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(Target-X86-MCTargetDesc PRIVATE
-  ${PROJECT_BINARY_DIR}/contrib/libs/llvm14/lib/Target/X86
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/MCTargetDesc
-)
-
-target_link_libraries(Target-X86-MCTargetDesc PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-llvm14
-  libs-llvm14-include
-  llvm14-lib-BinaryFormat
-  llvm14-lib-MC
-  lib-MC-MCDisassembler
-  llvm14-lib-Support
-  Target-X86-TargetInfo
-)
-
-target_sources(Target-X86-MCTargetDesc PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/MCTargetDesc/X86ATTInstPrinter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/MCTargetDesc/X86AsmBackend.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/MCTargetDesc/X86ELFObjectWriter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/MCTargetDesc/X86InstComments.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/MCTargetDesc/X86InstPrinterCommon.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/MCTargetDesc/X86IntelInstPrinter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/MCTargetDesc/X86MCAsmInfo.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/MCTargetDesc/X86MCCodeEmitter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/MCTargetDesc/X86MCTargetDesc.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/MCTargetDesc/X86MachObjectWriter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/MCTargetDesc/X86ShuffleDecode.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/MCTargetDesc/X86WinCOFFObjectWriter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/MCTargetDesc/X86WinCOFFStreamer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/MCTargetDesc/X86WinCOFFTargetStreamer.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

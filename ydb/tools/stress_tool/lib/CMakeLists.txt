@@ -12,28 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(ydb_device_test)
-
-
-target_link_libraries(ydb_device_test PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  monlib-dynamic_counters-percentile
-  core-blobstorage-lwtrace_probes
-  ydb-core-load_test
-  ydb-core-protos
-  tools-stress_tool-proto
-  library-actors-core
-)
-
-target_sources(ydb_device_test PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/tools/stress_tool/device_test_tool_trim_test.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/tools/stress_tool/device_test_tool.h
-  ${PROJECT_SOURCE_DIR}/ydb/tools/stress_tool/device_test_tool_aio_test.h
-  ${PROJECT_SOURCE_DIR}/ydb/tools/stress_tool/device_test_tool_driveestimator.h
-  ${PROJECT_SOURCE_DIR}/ydb/tools/stress_tool/device_test_tool_trim_test.h
-  ${PROJECT_SOURCE_DIR}/ydb/tools/stress_tool/device_test_tool_pdisk_test.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

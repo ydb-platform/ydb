@@ -19,6 +19,7 @@ get_built_tool_path(
   enum_parser
 )
 
+add_subdirectory(ut_json_change_record)
 add_subdirectory(ut_table_writer)
 add_subdirectory(ut_topic_reader)
 add_subdirectory(ut_worker)

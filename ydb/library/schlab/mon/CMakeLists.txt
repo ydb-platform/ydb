@@ -12,78 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_rescompiler_bin
-  TOOL_rescompiler_dependency
-  tools/rescompiler/bin
-  rescompiler
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(static)
-add_subdirectory(test)
-
-add_library(library-schlab-mon)
-
-
-target_link_libraries(library-schlab-mon PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-  cpp-html-pcdata
-  cpp-monlib-dynamic_counters
-  library-schlab-schemu
-)
-
-target_sources(library-schlab-mon PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/mon.cpp
-)
-
-
-add_global_library_for(library-schlab-mon.global
-  library-schlab-mon)
-
-
-target_link_libraries(library-schlab-mon.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-  cpp-html-pcdata
-  cpp-monlib-dynamic_counters
-  library-schlab-schemu
-)
-
-target_sources(library-schlab-mon.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/library/schlab/mon/a4c6647a47483a30dd2cb446cfff2507.cpp
-)
-
-
-resources(library-schlab-mon.global
-  ${PROJECT_BINARY_DIR}/ydb/library/schlab/mon/a4c6647a47483a30dd2cb446cfff2507.cpp
-  INPUTS
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/static/css/bootstrap.min.css
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/static/css/scharm.css
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/static/css/schviz.css
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/static/js/jquery.min.js
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/static/js/bootstrap.min.js
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/static/js/d3-tip-0.8.0-alpha.1.js
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/static/js/d3.v4.min.js
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/static/js/scharm.js
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/static/js/schviz.js
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/static/js/scharm-test0.js
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/mon/static/scharm.html
-  KEYS
-  schlab/css/bootstrap.min.css
-  schlab/css/scharm.css
-  schlab/css/schviz.css
-  schlab/js/jquery.min.js
-  schlab/js/bootstrap.min.js
-  schlab/js/d3-tip-0.8.0-alpha.1.js
-  schlab/js/d3.v4.min.js
-  schlab/js/scharm.js
-  schlab/js/schviz.js
-  schlab/js/scharm-test0.js
-  schlab/scharm.html
-  OPTS
-)

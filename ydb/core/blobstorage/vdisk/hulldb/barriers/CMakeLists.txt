@@ -12,32 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(vdisk-hulldb-barriers)
-
-
-target_link_libraries(vdisk-hulldb-barriers PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  core-blobstorage-base
-  vdisk-hulldb-base
-  vdisk-hulldb-generic
-  ydb-core-protos
-)
-
-target_sources(vdisk-hulldb-barriers PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_chain.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_essence.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_public.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_tree.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_chain.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_essence.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_public.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/barriers_tree.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/hullds_cache_barrier.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/barriers/hullds_gcessence_defs.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

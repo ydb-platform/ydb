@@ -12,74 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(yt-gateway-native)
-
-
-target_compile_options(yt-gateway-native PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(yt-gateway-native PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-containers-sorted_vector
-  cpp-digest-md5
-  library-cpp-random_provider
-  cpp-streams-brotli
-  cpp-threading-future
-  library-cpp-time_provider
-  library-cpp-yson
-  cpp-yson-node
-  cpp-mapreduce-common
-  cpp-mapreduce-interface
-  yql-essentials-ast
-  essentials-core-file_storage
-  essentials-minikql-comp_nodes
-  yql-essentials-utils
-  essentials-utils-log
-  essentials-utils-threading
-  yql-essentials-core
-  essentials-core-expr_nodes
-  essentials-core-issue
-  providers-common-codec
-  providers-common-comp_nodes
-  providers-common-mkql
-  providers-common-proto
-  providers-common-provider
-  common-schema-expr
-  providers-result-expr_nodes
-  providers-stat-expr_nodes
-  providers-stat-uploader
-  providers-yt-codec
-  providers-yt-common
-  providers-yt-expr_nodes
-  yt-gateway-lib
-  providers-yt-job
-  yt-lib-expr_traits
-  yt-lib-infer_schema
-  yt-lib-lambda_builder
-  yt-lib-log
-  yt-lib-mkql_helpers
-  yt-lib-res_pull
-  yt-lib-schema
-  yt-lib-skiff
-  yt-lib-url_mapper
-  yt-lib-yson_helpers
-  yt-lib-init_yt_api
-  yt-lib-config_clusters
-  providers-yt-provider
-)
-
-target_sources(yt-gateway-native PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_exec_ctx.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_lambda_builder.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_native.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_native_folders.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_op_tracker.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_qb2.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_session.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_spec.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/native/yql_yt_transform.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

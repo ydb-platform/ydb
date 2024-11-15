@@ -12,31 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(ydb-core-control)
-
-
-target_link_libraries(ydb-core-control PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  cpp-monlib-dynamic_counters
-  ydb-core-base
-  ydb-core-mon
-  ydb-core-node_whiteboard
-  cpp-deprecated-atomic
-)
-
-target_sources(ydb-core-control PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_control.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/control/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_control.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/control/immediate_control_board_wrapper.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

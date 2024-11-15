@@ -12,90 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_grpc_cpp_bin
-  TOOL_grpc_cpp_dependency
-  contrib/tools/protoc/plugins/grpc_cpp
-  grpc_cpp
-)
-
-get_built_tool_path(
-  TOOL_protoc_bin
-  TOOL_protoc_dependency
-  contrib/tools/protoc/bin
-  protoc
-)
-
-get_built_tool_path(
-  TOOL_cpp_styleguide_bin
-  TOOL_cpp_styleguide_dependency
-  contrib/tools/protoc/plugins/cpp_styleguide
-  cpp_styleguide
-)
-
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
-
-add_library(cpp-unified_agent_client-proto)
-
-
-set_property(TARGET cpp-unified_agent_client-proto PROPERTY PROTOC_EXTRA_OUTS
-  .grpc.pb.cc
-  .grpc.pb.h
-)
-
-target_link_libraries(cpp-unified_agent_client-proto PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-grpc
-  tools-enum_parser-enum_serialization_runtime
-  contrib-libs-protobuf
-)
-
-target_proto_messages(cpp-unified_agent_client-proto PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/unified_agent_client/proto/unified_agent.proto
-)
-
-target_sources(cpp-unified_agent_client-proto PRIVATE
-  ${PROJECT_BINARY_DIR}/library/cpp/unified_agent_client/proto/unified_agent.pb.h
-  ${PROJECT_BINARY_DIR}/library/cpp/unified_agent_client/proto/unified_agent.grpc.pb.h
-)
-
-
-target_proto_outs(cpp-unified_agent_client-proto
-  --cpp_out=${PROJECT_BINARY_DIR}/
-  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
-)
-
-target_proto_addincls(cpp-unified_agent_client-proto
-  ./
-  ${PROJECT_SOURCE_DIR}/
-  ${PROJECT_BINARY_DIR}
-  ${PROJECT_SOURCE_DIR}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${PROJECT_BINARY_DIR}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-
-target_proto_plugin(cpp-unified_agent_client-proto
-  grpc_cpp
-  ${TOOL_grpc_cpp_bin}
-)
-
-generate_enum_serilization(cpp-unified_agent_client-proto
-  ${PROJECT_BINARY_DIR}/library/cpp/unified_agent_client/proto/unified_agent.pb.h
-  INCLUDE_HEADERS
-  library/cpp/unified_agent_client/proto/unified_agent.pb.h
-)
-
-
-if(NOT CMAKE_CROSSCOMPILING)
-  add_dependencies(cpp-unified_agent_client-proto
-    grpc_cpp
-  )
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
 endif()
+

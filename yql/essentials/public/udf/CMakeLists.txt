@@ -12,65 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(arrow)
-add_subdirectory(tz)
-add_subdirectory(support)
-add_subdirectory(service)
-
-add_library(essentials-public-udf)
-
-
-target_compile_options(essentials-public-udf PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(essentials-public-udf PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-deprecated-enum_codegen
-  library-cpp-resource
-  essentials-public-decimal
-  essentials-public-types
-  cpp-deprecated-atomic
-)
-
-target_sources(essentials-public-udf PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_allocator.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_counter.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_data_type.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_registrator.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_static_registry.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_string.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_type_builder.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_type_inspection.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_type_printer.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_types.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_validate.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_value.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_value_builder.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_version.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_allocator.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_counter.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_data_type.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_helpers.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_pg_type_description.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_ptr.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_registrator.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_static_registry.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_string.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_type_builder.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_type_inspection.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_type_ops.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_type_printer.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_type_size_check.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_types.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_ut_helpers.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_validate.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_value.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_value_builder.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_value_inl.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/udf_version.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

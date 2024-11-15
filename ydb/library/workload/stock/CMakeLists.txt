@@ -12,51 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
-
-add_library(library-workload-stock)
-
-
-target_link_libraries(library-workload-stock PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-workload-abstract
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(library-workload-stock PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/workload/stock/stock.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/stock/stock.h_serialized.h
-)
-
-
-generate_enum_serilization(library-workload-stock
-  ${PROJECT_SOURCE_DIR}/ydb/library/workload/stock/stock.h
-  GEN_HEADER
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/stock/stock.h_serialized.h
-  INCLUDE_HEADERS
-  ydb/library/workload/stock/stock.h
-)
-
-add_global_library_for(library-workload-stock.global
-  library-workload-stock)
-
-
-target_link_libraries(library-workload-stock.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-workload-abstract
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(library-workload-stock.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/workload/stock/registrar.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

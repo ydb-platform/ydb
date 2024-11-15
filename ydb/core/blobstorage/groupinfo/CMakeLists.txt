@@ -12,34 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(core-blobstorage-groupinfo)
-
-
-target_link_libraries(core-blobstorage-groupinfo PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  cpp-digest-crc32c
-  library-cpp-pop_count
-  ydb-core-base
-  core-base-services
-  core-blobstorage-crypto
-  blobstorage-vdisk-ingress
-  ydb-core-protos
-)
-
-target_sources(core-blobstorage-groupinfo PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_blobmap.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/groupinfo/defs.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

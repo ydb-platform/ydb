@@ -12,40 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-find_package(IDN REQUIRED)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(library-cpp-uri)
-
-
-target_link_libraries(library-cpp-uri PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  IDN::IDN
-  library-cpp-charset
-)
-
-target_sources(library-cpp-uri PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/uri/assign.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/uri/common.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/uri/encode.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/uri/location.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/uri/other.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/uri/parse.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/uri/qargs.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/uri/uri.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/uri/http_url.h
-)
-
-
-target_ragel_lexers(library-cpp-uri
-  PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/uri/encodefsm.rl6
-  -CG2
-)
-
-target_ragel_lexers(library-cpp-uri
-  PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/uri/parsefsm.rl6
-  -CG2
-)

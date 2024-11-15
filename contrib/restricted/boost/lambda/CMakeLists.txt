@@ -12,29 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(restricted-boost-lambda INTERFACE)
-
-
-target_compile_options(restricted-boost-lambda INTERFACE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(restricted-boost-lambda INTERFACE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/lambda/include
-)
-
-target_link_libraries(restricted-boost-lambda INTERFACE
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  restricted-boost-bind
-  restricted-boost-config
-  restricted-boost-core
-  restricted-boost-detail
-  restricted-boost-iterator
-  restricted-boost-mpl
-  restricted-boost-preprocessor
-  restricted-boost-tuple
-  restricted-boost-type_traits
-  restricted-boost-utility
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,101 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(minikql-computation-llvm14)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-
-target_compile_options(minikql-computation-llvm14 PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_include_directories(minikql-computation-llvm14 PUBLIC
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/yql/essentials/minikql/computation
-)
-
-target_include_directories(minikql-computation-llvm14 PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation
-)
-
-target_link_libraries(minikql-computation-llvm14 PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  minikql-codegen-llvm14
-  llvm14-lib-IR
-  lib-ExecutionEngine-MCJIT
-  llvm14-lib-Linker
-  lib-Target-X86
-  Target-X86-AsmParser
-  lib-Transforms-IPO
-  libs-apache-arrow
-  library-cpp-enumbitset
-  library-cpp-packedtypes
-  library-cpp-random_provider
-  library-cpp-time_provider
-  yql-essentials-minikql
-  essentials-minikql-arrow
-  essentials-minikql-computation
-  parser-pg_wrapper-interface
-  essentials-public-udf
-  yql-essentials-utils
-  cpp-threading-future
-)
-
-target_sources(minikql-computation-llvm14 PRIVATE
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/mkql_computation_node_codegen.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/mkql_simple_codegen.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/mkql_computation_node_graph.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/mkql_computation_node_graph_saveload.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/mkql_computation_node_holders_codegen.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/mkql_llvm_base.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/yql/essentials/minikql/computation/mkql_computation_node_codegen.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/yql/essentials/minikql/computation/mkql_llvm_base.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/yql/essentials/minikql/computation/mkql_block_impl_codegen.h
-)
-
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node_codegen.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/mkql_computation_node_codegen.cpp
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_simple_codegen.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/mkql_simple_codegen.cpp
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node_graph.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/mkql_computation_node_graph.cpp
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node_graph_saveload.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/mkql_computation_node_graph_saveload.cpp
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/mkql_computation_node_holders_codegen.cpp
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_llvm_base.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/mkql_llvm_base.cpp
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_computation_node_codegen.h.txt
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/yql/essentials/minikql/computation/mkql_computation_node_codegen.h
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_llvm_base.h.txt
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/yql/essentials/minikql/computation/mkql_llvm_base.h
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/computation/mkql_block_impl_codegen.h.txt
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/computation/llvm14/yql/essentials/minikql/computation/mkql_block_impl_codegen.h
-)

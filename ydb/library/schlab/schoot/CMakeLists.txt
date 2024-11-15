@@ -12,23 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(library-schlab-schoot)
-
-
-target_link_libraries(library-schlab-schoot PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-containers-stack_vector
-  cpp-protobuf-json
-  library-schlab-protos
-)
-
-target_sources(library-schlab-schoot PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schoot/schoot_gen.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schoot/schoot_gen_cfg.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schoot/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schoot/schoot_gen.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/schlab/schoot/schoot_gen_cfg.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

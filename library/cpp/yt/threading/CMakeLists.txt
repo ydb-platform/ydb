@@ -12,39 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(cpp-yt-threading)
-
-
-target_compile_options(cpp-yt-threading PRIVATE
-  -Wdeprecated-this-capture
-)
-
-target_link_libraries(cpp-yt-threading PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-yt-assert
-  cpp-yt-cpu_clock
-  cpp-yt-exception
-  cpp-yt-system
-  cpp-yt-memory
-)
-
-target_sources(cpp-yt-threading PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/at_fork.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/count_down_latch.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/event_count.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/fork_aware_spin_lock.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/fork_aware_rw_spin_lock.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/futex.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/notification_handle.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/public.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/recursive_spin_lock.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/rw_spin_lock.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/spin_lock_base.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/spin_lock_count.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/spin_lock.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/spin_wait.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yt/threading/spin_wait_hook.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

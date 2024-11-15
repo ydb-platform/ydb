@@ -12,84 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(lib-Transforms-IPO)
-
-
-target_compile_options(lib-Transforms-IPO PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(lib-Transforms-IPO PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO
-)
-
-target_link_libraries(lib-Transforms-IPO PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-llvm14
-  libs-llvm14-include
-  llvm14-lib-Analysis
-  lib-Bitcode-Reader
-  lib-Bitcode-Writer
-  lib-Frontend-OpenMP
-  llvm14-lib-IR
-  llvm14-lib-IRReader
-  llvm14-lib-Linker
-  llvm14-lib-Object
-  llvm14-lib-ProfileData
-  llvm14-lib-Support
-  lib-Transforms-AggressiveInstCombine
-  lib-Transforms-InstCombine
-  lib-Transforms-Instrumentation
-  lib-Transforms-Scalar
-  lib-Transforms-Utils
-  lib-Transforms-Vectorize
-)
-
-target_sources(lib-Transforms-IPO PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/AlwaysInliner.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/Annotation2Metadata.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/ArgumentPromotion.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/Attributor.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/AttributorAttributes.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/BarrierNoopPass.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/BlockExtractor.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/CalledValuePropagation.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/ConstantMerge.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/CrossDSOCFI.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/DeadArgumentElimination.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/ElimAvailExtern.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/ExtractGV.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/ForceFunctionAttrs.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/FunctionAttrs.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/FunctionImport.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/FunctionSpecialization.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/GlobalDCE.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/GlobalOpt.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/GlobalSplit.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/HotColdSplitting.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/IPO.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/IROutliner.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/InferFunctionAttrs.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/InlineSimple.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/Inliner.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/Internalize.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/LoopExtractor.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/LowerTypeTests.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/MergeFunctions.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/ModuleInliner.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/OpenMPOpt.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/PartialInlining.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/PassManagerBuilder.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/PruneEH.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/SCCP.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/SampleContextTracker.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/SampleProfile.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/SampleProfileProbe.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/StripDeadPrototypes.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/StripSymbols.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/SyntheticCountsPropagation.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/ThinLTOBitcodeWriter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Transforms/IPO/WholeProgramDevirt.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

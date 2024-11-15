@@ -12,58 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(providers-clickhouse-provider)
-
-
-target_compile_options(providers-clickhouse-provider PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-clickhouse-provider PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-json
-  library-cpp-random_provider
-  library-cpp-time_provider
-  yql-essentials-ast
-  essentials-minikql-comp_nodes
-  yql-essentials-core
-  essentials-core-type_ann
-  yql-dq-expr_nodes
-  essentials-core-dq_integration
-  providers-common-db_id_async_resolver
-  providers-clickhouse-expr_nodes
-  providers-clickhouse-proto
-  providers-common-config
-  providers-common-dq
-  providers-common-http_gateway
-  providers-common-mkql
-  providers-common-proto
-  providers-common-provider
-  providers-common-transform
-  providers-dq-common
-  providers-dq-expr_nodes
-)
-
-target_sources(providers-clickhouse-provider PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasink.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasink_execution.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasink_type_ann.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasource.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_datasource_type_ann.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_dq_integration.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_io_discovery.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_load_meta.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_logical_opt.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_mkql_compiler.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_physical_opt.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_settings.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_util.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_settings.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_util.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

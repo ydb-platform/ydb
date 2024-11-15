@@ -27,9 +27,9 @@ target_link_libraries(yql-core-spilling PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
-  ydb-library-binary_json
-  library-yql-utils
-  yql-utils-log
+  essentials-types-binary_json
+  yql-essentials-utils
+  essentials-utils-log
   core-spilling-storage
 )
 

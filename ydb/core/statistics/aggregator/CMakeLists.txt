@@ -12,51 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(core-statistics-aggregator)
-
-
-target_compile_options(core-statistics-aggregator PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-statistics-aggregator PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  core-engine-minikql
-  ydb-core-protos
-  ydb-core-tablet
-  ydb-core-tablet_flat
-  core-statistics-database
-  essentials-core-minsketch
-)
-
-target_sources(core-statistics-aggregator PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/aggregator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/aggregator_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_ack_timeout.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_aggr_stat_response.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_analyze.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_analyze_deadline.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_analyze_table_delivery_problem.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_analyze_table_request.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_analyze_table_response.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_configure.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_datashard_scan_response.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_finish_trasersal.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_init.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_init_schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_navigate.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_resolve.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_response_tablet_distribution.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_schedule_traversal.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/tx_schemeshard_stats.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/aggregator.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/aggregator_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/statistics/aggregator/schema.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

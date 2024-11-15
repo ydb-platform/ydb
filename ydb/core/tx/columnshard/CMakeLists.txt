@@ -12,128 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(engines)
-add_subdirectory(common)
-add_subdirectory(bg_tasks)
-add_subdirectory(data_sharing)
-add_subdirectory(blobs_action)
-add_subdirectory(counters)
-add_subdirectory(hooks)
-add_subdirectory(data_accessor)
-add_subdirectory(splitter)
-add_subdirectory(resources)
-add_subdirectory(tx_reader)
-add_subdirectory(operations)
-add_subdirectory(data_reader)
-add_subdirectory(export)
-add_subdirectory(transactions)
-add_subdirectory(blobs_reader)
-add_subdirectory(data_locks)
-add_subdirectory(subscriber)
-add_subdirectory(loading)
-add_subdirectory(resource_subscriber)
-add_subdirectory(normalizer)
-add_subdirectory(test_helper)
-add_subdirectory(ut_rw)
-add_subdirectory(ut_schema)
-
-add_library(core-tx-columnshard)
-
-
-target_compile_options(core-tx-columnshard PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-tx-columnshard PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  library-actors-core
-  ydb-core-actorlib_impl
-  ydb-core-base
-  ydb-core-control
-  ydb-core-formats
-  ydb-core-kqp
-  ydb-core-protos
-  ydb-core-tablet
-  ydb-core-tablet_flat
-  core-tx-time_cast
-  tx-columnshard-engines
-  columnshard-engines-writer
-  engines-reader-abstract
-  tx-columnshard-counters
-  tx-columnshard-common
-  tx-columnshard-splitter
-  tx-columnshard-operations
-  tx-columnshard-transactions
-  columnshard-transactions-operators
-  tx-columnshard-blobs_reader
-  tx-columnshard-blobs_action
-  tx-columnshard-data_locks
-  tx-columnshard-data_sharing
-  tx-columnshard-subscriber
-  tx-columnshard-export
-  tx-columnshard-tx_reader
-  tx-columnshard-loading
-  tx-columnshard-data_accessor
-  tx-columnshard-resource_subscriber
-  tx-columnshard-normalizer
-  columnshard-blobs_action-storages_manager
-  columnshard-data_accessor-in_mem
-  core-tx-tiering
-  tx-conveyor-usage
-  tx-priorities-service
-  core-tx-tracing
-  tx-long_tx_service-public
-  ydb-core-util
-  api-protos
-  dq-actors-compute
-  ydb-library-chunks_limiter
-)
-
-target_sources(core-tx-columnshard PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/background_controller.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blob.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/blob_cache.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__init.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__notify_tx_completion.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__plan_step.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__progress_tx.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__propose_cancel.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__propose_transaction.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__scan.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__statistics.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__write.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard__write_index.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_private_events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_view.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/counters.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/defs.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/inflight_request_tracker.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/write_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/tables_manager.cpp
-)
-
-
-generate_enum_serilization(core-tx-columnshard
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard.h
-  INCLUDE_HEADERS
-  ydb/core/tx/columnshard/columnshard.h
-)
-
-generate_enum_serilization(core-tx-columnshard
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/columnshard_impl.h
-  INCLUDE_HEADERS
-  ydb/core/tx/columnshard/columnshard_impl.h
-)

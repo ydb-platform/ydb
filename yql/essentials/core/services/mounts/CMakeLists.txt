@@ -12,72 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_rescompiler_bin
-  TOOL_rescompiler_dependency
-  tools/rescompiler/bin
-  rescompiler
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(core-services-mounts)
-
-
-target_compile_options(core-services-mounts PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-services-mounts PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-  essentials-core-user_data
-  yql-essentials-core
-)
-
-target_sources(core-services-mounts PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/services/mounts/yql_mounts.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/services/mounts/yql_mounts.h
-)
-
-
-add_global_library_for(core-services-mounts.global
-  core-services-mounts)
-
-
-target_compile_options(core-services-mounts.global PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-services-mounts.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-  essentials-core-user_data
-  yql-essentials-core
-)
-
-target_sources(core-services-mounts.global PRIVATE
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/services/mounts/f253d269a1028d424f19edbdd1ca9eaf.cpp
-)
-
-
-resources(core-services-mounts.global
-  ${PROJECT_BINARY_DIR}/yql/essentials/core/services/mounts/f253d269a1028d424f19edbdd1ca9eaf.cpp
-  INPUTS
-  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/aggregate.yql
-  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/window.yql
-  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/id.yql
-  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/sqr.yql
-  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/core.yql
-  ${PROJECT_SOURCE_DIR}/yql/essentials/mount/lib/yql/walk_folders.yql
-  KEYS
-  /lib/yql/aggregate.yql
-  /lib/yql/window.yql
-  /lib/yql/id.yql
-  /lib/yql/sqr.yql
-  /lib/yql/core.yql
-  /lib/yql/walk_folders.yql
-  OPTS
-)

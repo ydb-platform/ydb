@@ -12,29 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(client-ydb_table-impl)
-
-
-target_link_libraries(client-ydb_table-impl PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-threading-future
-  api-protos
-  lib-operation_id-protos
-  client-impl-ydb_endpoints
-  impl-ydb_internal-session_pool
-  client-ydb_table-query_stats
-  public-issue-protos
-  yql-public-ydb_issue
-)
-
-target_sources(client-ydb_table-impl PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_table/impl/client_session.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_table/impl/data_query.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_table/impl/readers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_table/impl/request_migrator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_table/impl/table_client.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_table/impl/transaction.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

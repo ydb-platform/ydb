@@ -12,40 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(library-ycloud-impl)
-
-
-target_link_libraries(library-ycloud-impl PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-ycloud-api
-  library-actors-core
-  library-grpc-actor_client
-  library-cpp-json
-  ydb-core-base
-  ydb-library-services
-  lib-deprecated-client
-  lib-deprecated-kicli
-)
-
-target_sources(library-ycloud-impl PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/access_service.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service_transitional.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service_adapter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/iam_token_service.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/mock_access_service.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/service_account_service.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/user_account_service.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/access_service.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/folder_service_transitional.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/iam_token_service.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/mock_access_service.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/service_account_service.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/ycloud/impl/user_account_service.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

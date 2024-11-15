@@ -34,9 +34,11 @@ target_link_libraries(ydb-core-tx-datashard-ut_erase_rows PUBLIC
   cpp-regex-pcre
   library-cpp-svnversion
   kqp-ut-common
-  core-testlib-default
+  ydb-core-testlib
   ydb-core-tx
+  essentials-parser-pg_wrapper
   udf-service-exception_policy
+  essentials-sql-pg
   public-lib-yson_value
   cpp-client-ydb_result
 )

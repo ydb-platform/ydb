@@ -12,40 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(providers-pq-async_io)
-
-
-target_compile_options(providers-pq-async_io PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-pq-async_io PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-graph_params-proto
-  fq-libs-protos
-  fq-libs-row_dispatcher
-  library-actors-log_backend
-  dq-actors-compute
-  essentials-minikql-computation
-  common-token_accessor-client
-  dq-api-protos
-  providers-pq-common
-  providers-pq-proto
-  essentials-public-types
-  essentials-utils-log
-  cpp-client-ydb_driver
-  cpp-client-ydb_topic
-  client-ydb_types-credentials
-)
-
-target_sources(providers-pq-async_io PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pq/async_io/dq_pq_rd_read_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pq/async_io/probes.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

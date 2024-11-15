@@ -12,27 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(proto)
-
-add_library(essentials-utils-log)
-
-
-target_link_libraries(essentials-utils-log PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  library-cpp-logger
-  cpp-logger-global
-  cpp-deprecated-atomic
-  utils-log-proto
-  essentials-utils-backtrace
-)
-
-target_sources(essentials-utils-log PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/log/context.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/log/log.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/log/profile.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/log/tls_backend.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

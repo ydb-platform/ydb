@@ -12,110 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(libraries)
-
-add_library(contrib-libs-openldap)
-
-
-target_compile_options(contrib-libs-openldap PRIVATE
-  -DLDAPI_SOCK="/run/openldap/ldapi"
-  -DLDAP_LIBRARY
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(contrib-libs-openldap PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/include
-)
-
-target_include_directories(contrib-libs-openldap PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/include
-)
-
-target_link_libraries(contrib-libs-openldap PUBLIC
-  contrib-libs-linux-headers
-  openldap-libraries-liblber
-  contrib-libs-openssl
-  contrib-libs-sasl
-)
-
-target_sources(contrib-libs-openldap PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/abandon.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/account_usability.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/add.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/addentry.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/assertion.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/avl.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/bind.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/cancel.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/charray.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/compare.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/controls.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/cyrus.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/dds.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/delete.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/deref.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/dnssrv.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/error.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/extended.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/fetch.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/filter.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/free.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/getattr.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/getdn.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/getentry.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/getvalues.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/init.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/lbase64.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/ldap_sync.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/ldif.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/ldifutil.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/messages.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/modify.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/modrdn.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/msctrl.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/open.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/options.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/os-ip.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/os-local.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/pagectrl.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/passwd.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/ppolicy.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/print.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/psearchctrl.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/rdwr.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/references.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/request.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/result.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/rq.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/sasl.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/sbind.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/schema.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/search.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/sort.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/sortctrl.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/stctrl.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/string.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/tavl.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/thr_debug.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/thr_nt.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/thr_posix.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/thr_pth.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/thr_thr.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/threads.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/tls2.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/tls_g.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/tls_o.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/tpool.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/turn.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/txn.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/unbind.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/url.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/utf-8-conv.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/utf-8.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/util-int.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/vc.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/version.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/vlvctrl.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/openldap/libraries/libldap/whoami.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

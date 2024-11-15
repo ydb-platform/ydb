@@ -12,41 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(ut)
-
-add_library(providers-s3-object_listers)
-
-
-target_link_libraries(providers-s3-object_listers PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  contrib-libs-re2
-  cpp-string_utils-quote
-  cpp-xml-document
-  providers-common-http_gateway
-  providers-s3-credentials
-  yql-essentials-utils
-  yql-utils-actor_log
-  essentials-utils-threading
-)
-
-target_sources(providers-s3-object_listers PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/object_listers/yql_s3_list.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/object_listers/yql_s3_path.cpp
-)
-
-
-generate_enum_serilization(providers-s3-object_listers
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/s3/object_listers/yql_s3_list.h
-  INCLUDE_HEADERS
-  ydb/library/yql/providers/s3/object_listers/yql_s3_list.h
-)

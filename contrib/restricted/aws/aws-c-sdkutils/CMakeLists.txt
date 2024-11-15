@@ -12,35 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(restricted-aws-aws-c-sdkutils)
-
-
-target_compile_options(restricted-aws-aws-c-sdkutils PRIVATE
-  -DAWS_COMMON_USE_IMPORT_EXPORT
-  -DAWS_SDKUTILS_USE_IMPORT_EXPORT
-  -DHAVE_SYSCONF
-  -DINTEL_NO_ITTNOTIFY_API
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(restricted-aws-aws-c-sdkutils PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/include
-)
-
-target_link_libraries(restricted-aws-aws-c-sdkutils PUBLIC
-  contrib-libs-linux-headers
-  restricted-aws-aws-c-common
-)
-
-target_sources(restricted-aws-aws-c-sdkutils PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/aws_profile.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_rule_engine.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_ruleset.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_standard_lib.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_types_impl.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_util.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/partitions.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/resource_name.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/sdkutils.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

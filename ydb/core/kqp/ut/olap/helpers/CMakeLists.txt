@@ -12,26 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(ut-olap-helpers)
-
-
-target_compile_options(ut-olap-helpers PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(ut-olap-helpers PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-testlib
-)
-
-target_sources(ut-olap-helpers PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/helpers/local.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/helpers/query_executor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/helpers/typed_local.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/helpers/writer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/helpers/get_value.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/helpers/aggregation.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

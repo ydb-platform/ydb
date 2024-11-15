@@ -30,7 +30,7 @@ target_link_libraries(fq-libs-gateway PUBLIC
   fq-libs-shared_resources
   fq-libs-tasks_packer
   common-token_accessor-client
-  yql-public-issue
+  essentials-public-issue
   providers-common-metrics
   providers-dq-actors
   dq-api-protos

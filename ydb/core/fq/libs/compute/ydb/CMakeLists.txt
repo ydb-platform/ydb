@@ -12,51 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(control_plane)
-add_subdirectory(synchronization_service)
-add_subdirectory(events)
-
-add_library(libs-compute-ydb)
-
-
-target_compile_options(libs-compute-ydb PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(libs-compute-ydb PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-protos
-  cpp-lwtrace-protos
-  libs-compute-common
-  libs-config-protos
-  libs-control_plane_storage-proto
-  libs-graph_params-proto
-  fq-libs-grpc
-  libs-quota_manager-proto
-  ydb-core-protos
-  ydb-core-util
-  library-db_pool-protos
-  essentials-core-expr_nodes
-  yql-dq-expr_nodes
-  essentials-minikql-arrow
-  dq-api-protos
-  api-grpc
-  api-grpc-draft
-  lib-operation_id-protos
-)
-
-target_sources(libs-compute-ydb PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/actors_factory.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/executer_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/finalizer_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/initializer_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/resources_cleaner_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/result_writer_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/status_tracker_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/stopper_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/ydb_connector_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/compute/ydb/ydb_run_actor.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

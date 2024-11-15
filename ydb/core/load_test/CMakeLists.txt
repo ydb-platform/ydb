@@ -12,82 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(ut)
-add_subdirectory(ut_ycsb)
-
-add_library(ydb-core-load_test)
-
-
-target_link_libraries(ydb-core-load_test PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  cpp-histogram-hdr
-  monlib-dynamic_counters-percentile
-  monlib-service-pages
-  ydb-core-base
-  core-blobstorage-backpressure
-  core-blobstorage-base
-  core-blobstorage-pdisk
-  ydb-core-control
-  ydb-core-keyvalue
-  ydb-core-jaeger_tracing
-  core-kqp-common
-  core-kqp-rm_service
-  core-tx-columnshard
-  core-tx-datashard
-  library-workload-abstract
-  library-workload-kv
-  library-workload-stock
-  public-lib-base
-  public-lib-operation_id
-  cpp-client-ydb_proto
-  ydb-services-kesus
-  ydb-services-metadata
-  ydb-services-persqueue_cluster_discovery
-  ydb-services-ydb
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(ydb-core-load_test PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/aggregated_result.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/archive.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/config_examples.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/keyvalue_write.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/kqp.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/memory.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/pdisk_log.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/pdisk_read.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/pdisk_write.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/service_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/group_write.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/vdisk_write.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/yql_single_query.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/ycsb/bulk_mkql_upsert.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/ycsb/common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/ycsb/info_collector.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/ycsb/kqp_select.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/ycsb/kqp_upsert.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/ycsb/test_load_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/ycsb/test_load_read_iterator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/ycsb/actors.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/ycsb/common.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/ycsb/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/ycsb/info_collector.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/ycsb/test_load_actor.h
-)
-
-
-generate_enum_serilization(ydb-core-load_test
-  ${PROJECT_SOURCE_DIR}/ydb/core/load_test/percentile.h
-  INCLUDE_HEADERS
-  ydb/core/load_test/percentile.h
-)

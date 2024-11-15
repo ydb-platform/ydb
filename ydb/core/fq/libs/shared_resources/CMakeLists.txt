@@ -12,41 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(interface)
-
-add_library(fq-libs-shared_resources)
-
-
-target_compile_options(fq-libs-shared_resources PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(fq-libs-shared_resources PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  cpp-monlib-dynamic_counters
-  fq-libs-common
-  fq-libs-config
-  libs-control_plane_storage-proto
-  fq-libs-db_schema
-  fq-libs-events
-  libs-quota_manager-events
-  libs-shared_resources-interface
-  ydb-core-protos
-  ydb-library-db_pool
-  ydb-library-logger
-  ydb-library-security
-  yql-essentials-utils
-  client-extensions-solomon_stats
-  cpp-client-ydb_driver
-  cpp-client-ydb_extension
-  cpp-client-ydb_table
-)
-
-target_sources(fq-libs-shared_resources PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/shared_resources/db_exec.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/shared_resources/shared_resources.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

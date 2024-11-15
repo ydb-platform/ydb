@@ -29,7 +29,7 @@ target_link_libraries(ydb-core-kqp-rm_service-ut PUBLIC
   cpp-testing-unittest_main
   core-kqp-rm_service
   kqp-ut-common
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
 )
 
 target_allocator(ydb-core-kqp-rm_service-ut

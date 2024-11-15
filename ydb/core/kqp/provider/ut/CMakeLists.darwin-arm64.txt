@@ -28,9 +28,10 @@ target_link_libraries(ydb-core-kqp-provider-ut PUBLIC
   yutil
   cpp-testing-unittest_main
   core-kqp-provider
-  core-client-minikql_result_lib
   kqp-ut-common
-  yql-sql-pg_dummy
+  yql-essentials-ast
+  essentials-sql-pg_dummy
+  essentials-sql-v1
   cpp-testing-gmock_in_unittest
 )
 

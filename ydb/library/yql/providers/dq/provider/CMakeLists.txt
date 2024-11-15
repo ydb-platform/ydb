@@ -12,80 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(exec)
-add_subdirectory(ut)
-
-add_library(providers-dq-provider)
-
-
-target_compile_options(providers-dq-provider PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-dq-provider PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-grpc-client
-  cpp-threading-task_scheduler
-  cpp-threading-future
-  library-cpp-svnversion
-  cpp-yson-node
-  library-cpp-yson
-  public-lib-yson_value
-  cpp-client-ydb_driver
-  yql-essentials-ast
-  yql-essentials-core
-  essentials-core-issue
-  essentials-utils-backtrace
-  essentials-utils-failure_injector
-  essentials-core-dq_integration
-  core-dq_integration-transform
-  yql-dq-transform
-  yql-dq-tasks
-  yql-dq-type_ann
-  providers-common-gateway
-  providers-common-metrics
-  common-schema-expr
-  providers-common-transform
-  providers-common-activation
-  providers-common-proto
-  dq-api-grpc
-  dq-api-protos
-  providers-dq-common
-  providers-dq-config
-  providers-dq-expr_nodes
-  providers-dq-opt
-  providers-dq-planner
-  providers-dq-actors
-  providers-result-expr_nodes
-  yql-essentials-minikql
-  essentials-public-issue
-)
-
-target_sources(providers-dq-provider PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_control.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasink_constraints.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasink_type_ann.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasource_constraints.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_gateway.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_provider.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasink.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasource.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_recapture.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_statistics.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_statistics_json.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_validate.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_control.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasink_type_ann.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_gateway.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_provider.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasink.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_datasource.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_recapture.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_statistics.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/provider/yql_dq_statistics_json.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,84 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(ut_dst_creator)
-add_subdirectory(ut_target_discoverer)
-
-add_library(tx-replication-controller)
-
-
-target_compile_options(tx-replication-controller PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(tx-replication-controller PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  ydb-core-discovery
-  core-engine-minikql
-  ydb-core-protos
-  ydb-core-tablet
-  ydb-core-tablet_flat
-  tx-replication-common
-  tx-replication-ydb_proxy
-  core-tx-scheme_board
-  ydb-core-util
-  ydb-core-ydb_convert
-  ydb-services-metadata
-  library-cpp-json
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(tx-replication-controller PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/controller.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/dst_alterer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/dst_creator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/dst_remover.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/event_util.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/lag_provider.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/logging.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/nodes_manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/private_events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/replication.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/secret_resolver.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/session_info.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/stream_creator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/stream_remover.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/sys_params.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/target_base.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/target_discoverer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/target_table.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/target_with_stream.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tenant_resolver.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_alter_dst_result.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_alter_replication.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_assign_stream_name.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_create_dst_result.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_create_replication.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_create_stream_result.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_describe_replication.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_discovery_targets_result.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_drop_dst_result.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_drop_replication.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_drop_stream_result.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_init.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_init_schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_resolve_secret_result.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/tx_worker_error.cpp
-)
-
-
-generate_enum_serilization(tx-replication-controller
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/controller/replication.h
-  INCLUDE_HEADERS
-  ydb/core/tx/replication/controller/replication.h
-)

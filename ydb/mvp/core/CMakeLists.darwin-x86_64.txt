@@ -33,6 +33,7 @@ target_link_libraries(ydb-mvp-core PUBLIC
   library-actors-core
   library-actors-http
   library-actors-protos
+  ydb-library-security
   cpp-lwtrace-protos
   cpp-lfalloc-alloc_profiler
   core-viewer-json

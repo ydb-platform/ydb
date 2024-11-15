@@ -12,33 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(base_utils)
-
-
-target_compile_options(base_utils PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(base_utils PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-deprecated-enum_codegen
-  library-grpc-client
-  core-blobstorage-pdisk
-  core-client-server
-  core-driver_lib-cli_config_base
-  ydb-core-protos
-  lib-deprecated-client
-)
-
-target_sources(base_utils PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/base_utils/format_info.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/base_utils/format_util.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/base_utils/node_by_host.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/base_utils/base_utils.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/base_utils/format_info.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/base_utils/format_util.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/driver_lib/base_utils/node_by_host.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

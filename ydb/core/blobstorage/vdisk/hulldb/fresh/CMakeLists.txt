@@ -12,32 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(vdisk-hulldb-fresh)
-
-
-target_link_libraries(vdisk-hulldb-fresh PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  vdisk-hulldb-base
-  blobstorage-vdisk-protos
-  ydb-core-protos
-)
-
-target_sources(vdisk-hulldb-fresh PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_appendix.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_data.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_datasnap.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_segment.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_appendix.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_data.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_datasnap.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_segment.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_segment_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/fresh/snap_vec.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

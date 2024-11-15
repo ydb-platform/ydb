@@ -12,108 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(logging)
-
-add_library(cpp-mapreduce-interface)
-
-
-target_compile_options(cpp-mapreduce-interface PRIVATE
-  -Wdeprecated-this-capture
-)
-
-target_link_libraries(cpp-mapreduce-interface PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-protobuf-runtime
-  library-cpp-type_info
-  cpp-threading-future
-  cpp-yson-node
-  mapreduce-interface-logging
-  yt_proto-yt-formats
-  yt-library-tvm
-  yt-yt-core
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(cpp-mapreduce-interface PRIVATE
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/batch_request.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/client.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/client_method_options.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/common.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/config.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/cypress.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/errors.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/format.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/helpers.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/job_counters.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/job_statistics.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/io.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/operation.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/protobuf_format.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/serialize.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/skiff_row.cpp
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/tvm.cpp
-)
-
-
-generate_enum_serilization(cpp-mapreduce-interface
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/client_method_options.h
-  INCLUDE_HEADERS
-  yt/cpp/mapreduce/interface/client_method_options.h
-)
-
-generate_enum_serilization(cpp-mapreduce-interface
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/client.h
-  INCLUDE_HEADERS
-  yt/cpp/mapreduce/interface/client.h
-)
-
-generate_enum_serilization(cpp-mapreduce-interface
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/common.h
-  INCLUDE_HEADERS
-  yt/cpp/mapreduce/interface/common.h
-)
-
-generate_enum_serilization(cpp-mapreduce-interface
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/config.h
-  INCLUDE_HEADERS
-  yt/cpp/mapreduce/interface/config.h
-)
-
-generate_enum_serilization(cpp-mapreduce-interface
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/cypress.h
-  INCLUDE_HEADERS
-  yt/cpp/mapreduce/interface/cypress.h
-)
-
-generate_enum_serilization(cpp-mapreduce-interface
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/job_counters.h
-  INCLUDE_HEADERS
-  yt/cpp/mapreduce/interface/job_counters.h
-)
-
-generate_enum_serilization(cpp-mapreduce-interface
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/job_statistics.h
-  INCLUDE_HEADERS
-  yt/cpp/mapreduce/interface/job_statistics.h
-)
-
-generate_enum_serilization(cpp-mapreduce-interface
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/operation.h
-  INCLUDE_HEADERS
-  yt/cpp/mapreduce/interface/operation.h
-)
-
-generate_enum_serilization(cpp-mapreduce-interface
-  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/interface/protobuf_format.h
-  INCLUDE_HEADERS
-  yt/cpp/mapreduce/interface/protobuf_format.h
-)

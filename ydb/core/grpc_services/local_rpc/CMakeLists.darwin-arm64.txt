@@ -12,22 +12,21 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(core-grpc_services-local_rpc)
+add_library(core-grpc_services-local_rpc INTERFACE)
 
 
-target_compile_options(core-grpc_services-local_rpc PRIVATE
+target_compile_options(core-grpc_services-local_rpc INTERFACE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
-target_link_libraries(core-grpc_services-local_rpc PUBLIC
+target_link_libraries(core-grpc_services-local_rpc INTERFACE
   contrib-libs-cxxsupp
   yutil
   ydb-core-base
   core-grpc_services-base
 )
 
-target_sources(core-grpc_services-local_rpc PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/local_rpc/local_rpc.cpp
+target_sources(core-grpc_services-local_rpc INTERFACE
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/local_rpc/local_rpc.h
 )
 

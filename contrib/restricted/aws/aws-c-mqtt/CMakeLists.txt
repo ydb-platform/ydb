@@ -12,51 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(restricted-aws-aws-c-mqtt)
-
-
-target_compile_options(restricted-aws-aws-c-mqtt PRIVATE
-  -DAWS_CAL_USE_IMPORT_EXPORT
-  -DAWS_COMMON_USE_IMPORT_EXPORT
-  -DAWS_COMPRESSION_USE_IMPORT_EXPORT
-  -DAWS_HTTP_USE_IMPORT_EXPORT
-  -DAWS_IO_USE_IMPORT_EXPORT
-  -DAWS_MQTT_USE_IMPORT_EXPORT
-  -DAWS_MQTT_WITH_WEBSOCKETS
-  -DAWS_USE_EPOLL
-  -DHAVE_SYSCONF
-  -DINTEL_NO_ITTNOTIFY_API
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(restricted-aws-aws-c-mqtt PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/include
-)
-
-target_link_libraries(restricted-aws-aws-c-mqtt PUBLIC
-  contrib-libs-linux-headers
-  restricted-aws-aws-c-common
-  restricted-aws-aws-c-http
-  restricted-aws-aws-c-io
-)
-
-target_sources(restricted-aws-aws-c-mqtt PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/client.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/client_channel_handler.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/fixed_header.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/mqtt.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/packets.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/shared_constants.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/topic_tree.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_callbacks.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_client.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_decoder.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_encoder.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_listener.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_options_storage.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_topic_alias.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_types.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_utils.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/rate_limiters.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

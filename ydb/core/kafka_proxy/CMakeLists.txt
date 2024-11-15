@@ -12,69 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(ut)
-
-add_library(ydb-core-kafka_proxy)
-
-
-target_link_libraries(ydb-core-kafka_proxy PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  library-actors-core
-  library-actors-protos
-  ydb-core-base
-  ydb-core-protos
-  ydb-core-raw_socket
-  ydb-services-persqueue_v1
-)
-
-target_sources(ydb-core-kafka_proxy PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_api_versions_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_init_producer_id_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_metadata_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_produce_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_sasl_auth_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_sasl_handshake_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_metrics_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_list_offsets_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_topic_offsets_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_fetch_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_find_coordinator_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_read_session_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_offset_fetch_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_offset_commit_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_create_topics_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_create_partitions_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/actors/kafka_alter_configs_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_connection.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages_int.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_records.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_consumer_protocol.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_metrics.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_connection.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_constants.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_listener.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_log.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_log_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages_int.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_proxy.h
-)
-
-
-generate_enum_serilization(ydb-core-kafka_proxy
-  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka.h
-  INCLUDE_HEADERS
-  ydb/core/kafka_proxy/kafka.h
-)

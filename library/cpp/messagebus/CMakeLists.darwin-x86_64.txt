@@ -12,9 +12,9 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(monitoring)
 add_subdirectory(actor)
 add_subdirectory(config)
-add_subdirectory(monitoring)
 add_subdirectory(scheduler)
 add_subdirectory(protobuf)
 add_subdirectory(www)

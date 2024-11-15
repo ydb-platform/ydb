@@ -12,54 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(contrib-libs-nghttp2)
-
-
-target_compile_options(contrib-libs-nghttp2 PRIVATE
-  -DBUILDING_NGHTTP2
-  -DHAVE_CONFIG_H
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(contrib-libs-nghttp2 PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/includes
-)
-
-target_include_directories(contrib-libs-nghttp2 PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib
-)
-
-target_link_libraries(contrib-libs-nghttp2 PUBLIC
-  contrib-libs-linux-headers
-)
-
-target_sources(contrib-libs-nghttp2 PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_alpn.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_buf.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_callbacks.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_debug.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_extpri.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_frame.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_hd.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_hd_huffman.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_hd_huffman_data.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_helper.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_http.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_map.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_mem.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_option.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_outbound_item.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_pq.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_priority_spec.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_queue.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_ratelim.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_rcbuf.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_session.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_stream.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_submit.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_time.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_version.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/nghttp2/lib/sfparse.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

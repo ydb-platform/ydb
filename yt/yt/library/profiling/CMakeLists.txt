@@ -12,35 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(resource_tracker)
-add_subdirectory(solomon)
-add_subdirectory(tcmalloc)
-add_subdirectory(perf)
-
-add_library(yt-library-profiling)
-
-
-target_compile_options(yt-library-profiling PRIVATE
-  -Wdeprecated-this-capture
-)
-
-target_link_libraries(yt-library-profiling PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-yt-assert
-  cpp-yt-cpu_clock
-  cpp-yt-small_containers
-  cpp-yt-string
-  cpp-yt-memory
-)
-
-target_sources(yt-library-profiling PRIVATE
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/sensor.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/producer.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/impl.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/tag.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/testing.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/library/profiling/histogram_snapshot.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

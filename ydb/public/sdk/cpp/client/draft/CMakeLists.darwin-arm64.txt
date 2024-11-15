@@ -28,7 +28,7 @@ target_link_libraries(cpp-client-draft PUBLIC
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime
-  yql-public-issue
+  essentials-public-issue
   api-grpc-draft
   cpp-client-ydb_table
   client-ydb_types-operation
@@ -39,6 +39,7 @@ target_sources(cpp-client-draft PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_dynamic_config.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_replication.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_scripting.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/draft/ydb_view.cpp
 )
 
 

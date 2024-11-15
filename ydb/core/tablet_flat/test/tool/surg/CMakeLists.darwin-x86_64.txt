@@ -21,7 +21,7 @@ target_link_libraries(surg PUBLIC
   library-cpp-cpuid_check
   library-cpp-getopt
   ydb-core-tablet_flat
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
   udf-service-exception_policy
 )
 

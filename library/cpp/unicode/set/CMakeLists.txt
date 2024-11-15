@@ -12,41 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(cpp-unicode-set)
-
-
-target_link_libraries(cpp-unicode-set PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(cpp-unicode-set PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/unicode/set/set.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unicode/set/quoted_pair.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unicode/set/unicode_set.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unicode/set/unicode_set_parser.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unicode/set/unicode_set_token.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/unicode/set/generated/category_ranges.cpp
-)
-
-
-generate_enum_serilization(cpp-unicode-set
-  ${PROJECT_SOURCE_DIR}/library/cpp/unicode/set/unicode_set_token.h
-  INCLUDE_HEADERS
-  library/cpp/unicode/set/unicode_set_token.h
-)
-
-target_ragel_lexers(cpp-unicode-set
-  PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/unicode/set/unicode_set_lexer.rl6
-  -CG2
-)

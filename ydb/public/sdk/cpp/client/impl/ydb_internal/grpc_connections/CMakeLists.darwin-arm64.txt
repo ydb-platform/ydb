@@ -26,6 +26,7 @@ target_link_libraries(impl-ydb_internal-grpc_connections PUBLIC
   client-impl-ydb_stats
   cpp-client-resources
   client-ydb_types-exceptions
+  yql-public-ydb_issue
 )
 
 target_sources(impl-ydb_internal-grpc_connections PRIVATE

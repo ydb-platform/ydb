@@ -32,16 +32,16 @@ target_link_libraries(dqrun PUBLIC
   library-cpp-yson
   cpp-digest-md5
   cpp-mapreduce-interface
-  yql-sql-pg
-  yql-core-facade
-  yql-core-file_storage
+  essentials-sql-pg
+  essentials-core-facade
+  essentials-core-file_storage
   core-file_storage-proto
   core-file_storage-http_download
-  yql-core-services
+  essentials-core-services
   core-services-mounts
   dq-actors-input_transforms
   yql-dq-comp_nodes
-  dq-integration-transform
+  core-dq_integration-transform
   yql-dq-transform
   minikql-comp_nodes-llvm14
   minikql-invoke_builtins-llvm14
@@ -70,13 +70,13 @@ target_link_libraries(dqrun PUBLIC
   providers-ydb-provider
   providers-pg-provider
   udf-service-terminate_policy
-  yql-utils-backtrace
+  essentials-utils-backtrace
   yql-utils-bindings
-  yql-utils-log
-  yql-utils-failure_injector
-  yql-core-url_preprocessing
-  yql-core-url_lister
-  yql-core-pg_ext
+  essentials-utils-log
+  essentials-utils-failure_injector
+  essentials-core-url_preprocessing
+  essentials-core-url_lister
+  essentials-core-pg_ext
   providers-yt-actors
   yt-comp_nodes-dq
   providers-yt-dq_task_preprocessor
@@ -89,13 +89,14 @@ target_link_libraries(dqrun PUBLIC
   yt-lib-yt_download
   yt-lib-yt_url_lister
   yt-lib-config_clusters
-  yql-parser-pg_wrapper
+  essentials-parser-pg_wrapper
   utils-log-proto
   qplayer-storage-file
-  yql-public-result_format
+  essentials-public-result_format
   yql-utils-actor_system
   fq-libs-actors
   fq-libs-db_id_async_resolver_impl
+  fq-libs-init
   clickhouse_client_udf
 )
 

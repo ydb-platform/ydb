@@ -12,40 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(providers-dq-runtime)
-
-
-target_compile_options(providers-dq-runtime PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-dq-runtime PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  essentials-minikql-invoke_builtins
-  yql-essentials-utils
-  essentials-utils-log
-  essentials-utils-backtrace
-  essentials-core-expr_nodes
-  yql-dq-common
-  core-dq_integration-transform
-  yql-dq-runtime
-  providers-common-proto
-  providers-common-provider
-  dq-api-protos
-  providers-dq-common
-  providers-dq-counters
-  providers-dq-task_runner
-  parser-pg_wrapper-interface
-  essentials-parser-pg_catalog
-)
-
-target_sources(providers-dq-runtime PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/runtime/file_cache.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/runtime/task_command_executor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/runtime/runtime_data.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

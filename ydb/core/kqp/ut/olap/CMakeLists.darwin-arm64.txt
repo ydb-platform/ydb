@@ -31,7 +31,7 @@ target_link_libraries(ydb-core-kqp-ut-olap PUBLIC
   cpp-testing-unittest_main
   ydb-core-kqp
   kqp-ut-common
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
   columnshard-hooks-testing
   tx-columnshard-test_helper
   core-tx-columnshard
@@ -53,6 +53,7 @@ target_link_options(ydb-core-kqp-ut-olap PRIVATE
 )
 
 target_sources(ydb-core-kqp-ut-olap PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/delete_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/kqp_olap_stats_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/kqp_olap_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/sys_view_ut.cpp

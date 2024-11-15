@@ -12,45 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(libs-pcre-pcre32)
-
-
-target_compile_options(libs-pcre-pcre32 PRIVATE
-  -DHAVE_CONFIG_H
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(libs-pcre-pcre32 PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre
-)
-
-target_link_libraries(libs-pcre-pcre32 PUBLIC
-  contrib-libs-linux-headers
-)
-
-target_sources(libs-pcre-pcre32 PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_byte_order.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_chartables.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_compile.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_config.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_dfa_exec.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_exec.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_fullinfo.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_get.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_globals.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_jit_compile.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_maketables.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_newline.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_ord2utf32.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_refcount.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_string_utils.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_study.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_tables.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_ucd.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_utf32_utils.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_valid_utf32.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_version.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre32_xclass.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/pcre/pcre_chartables.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

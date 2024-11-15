@@ -12,36 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(data_sharing-initiator-controller)
-
-
-target_link_libraries(data_sharing-initiator-controller PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  data_sharing-initiator-status
-  services-bg_tasks-abstract
-)
-
-target_sources(data_sharing-initiator-controller PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/initiator/controller/abstract.cpp
-)
-
-
-add_global_library_for(data_sharing-initiator-controller.global
-  data_sharing-initiator-controller)
-
-
-target_link_libraries(data_sharing-initiator-controller.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  data_sharing-initiator-status
-  services-bg_tasks-abstract
-)
-
-target_sources(data_sharing-initiator-controller.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/initiator/controller/test.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/initiator/controller/schemeshard.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

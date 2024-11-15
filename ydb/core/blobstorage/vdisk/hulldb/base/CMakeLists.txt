@@ -12,37 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(vdisk-hulldb-base)
-
-
-target_link_libraries(vdisk-hulldb-base PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  monlib-service-pages
-  ydb-core-base
-  core-blobstorage-pdisk
-  blobstorage-vdisk-protos
-)
-
-target_sources(vdisk-hulldb-base PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hulldefs.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hulldefs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullstorageratio.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_block.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_arena.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_generic_it.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_glue.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hulldb/base/hullds_settings.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

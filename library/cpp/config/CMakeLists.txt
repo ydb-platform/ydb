@@ -12,66 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_archiver_bin
-  TOOL_archiver_dependency
-  tools/archiver
-  archiver
-)
-
-add_library(library-cpp-config)
-
-
-target_include_directories(library-cpp-config PUBLIC
-  ${PROJECT_BINARY_DIR}/library/cpp/config
-)
-
-target_link_libraries(library-cpp-config PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-archive
-  library-cpp-json
-  library-cpp-lua
-  cpp-string_utils-relaxed_escaper
-)
-
-target_sources(library-cpp-config PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/config/config.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/config/sax.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/config/value.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/config/markup.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/config/ini.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/config/domscheme.cpp
-  ${PROJECT_BINARY_DIR}/library/cpp/config/code.inc
-  ${PROJECT_BINARY_DIR}/library/cpp/config/code.inc
-)
-
-
-add_custom_command(
-  OUTPUT
-  ${PROJECT_BINARY_DIR}/library/cpp/config/code.inc
-  DEPENDS
-  ${TOOL_archiver_bin}
-  ${PROJECT_SOURCE_DIR}/library/cpp/config/support/pp.lua
-  COMMAND
-  ${TOOL_archiver_bin}
-  -q
-  -x
-  ${PROJECT_SOURCE_DIR}/library/cpp/config/support/pp.lua:
-  -o
-  ${PROJECT_BINARY_DIR}/library/cpp/config/code.inc
-)
-
-target_ragel_lexers(library-cpp-config
-  PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/config/markupfsm.h.rl6
-  -CG2
-)
-
-
-if(NOT CMAKE_CROSSCOMPILING)
-  add_dependencies(library-cpp-config
-    archiver
-  )
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
 endif()
+

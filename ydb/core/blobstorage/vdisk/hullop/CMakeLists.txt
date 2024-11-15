@@ -12,49 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(hullcompdelete)
-add_subdirectory(ut)
-
-add_library(blobstorage-vdisk-hullop)
-
-
-target_link_libraries(blobstorage-vdisk-hullop PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  vdisk-hulldb-barriers
-  vdisk-hulldb-base
-  vdisk-hulldb-generic
-  vdisk-hulldb-cache_block
-  vdisk-hulldb-recovery
-  vdisk-hulldb-bulksst_add
-  vdisk-hulldb-compstrat
-  vdisk-hullop-hullcompdelete
-  blobstorage-vdisk-synclog
-  ydb-core-protos
-)
-
-target_sources(blobstorage-vdisk-hullop PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hullactor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hulllog.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hulllogcutternotify.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/hullop_compactfreshappendix.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/hullop_entryserialize.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_buildslice.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hullactor.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcommit.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompactdeferredqueue.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompact.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompactworker.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hullload.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hulllog.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hulllogcutternotify.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_readbatch.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/hullop_compactfreshappendix.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/hullop_delayedresp.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/hullop_entryserialize.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

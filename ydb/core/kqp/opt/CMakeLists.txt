@@ -12,62 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(logical)
-add_subdirectory(peephole)
-add_subdirectory(physical)
-
-add_library(core-kqp-opt)
-
-
-target_compile_options(core-kqp-opt PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-kqp-opt PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  core-kqp-common
-  kqp-opt-logical
-  kqp-opt-peephole
-  kqp-opt-physical
-  yql-dq-common
-  yql-dq-opt
-  yql-dq-type_ann
-  providers-s3-expr_nodes
-  providers-s3-statistics
-  yql-utils-plan
-  core-kqp-provider
-  library-formats-arrow-protos
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(core-kqp-opt PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_build_phy_query.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_build_txs.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_effects.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_kql.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_phase.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_phy_check.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_opt_phy_finalize.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_query_blocks_transformer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_query_plan.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_statistics_transformer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_column_statistics_requester.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_constant_folding_transformer.cpp
-)
-
-
-generate_enum_serilization(core-kqp-opt
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_query_plan.h
-  INCLUDE_HEADERS
-  ydb/core/kqp/opt/kqp_query_plan.h
-)

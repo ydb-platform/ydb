@@ -54,6 +54,7 @@ target_sources(ydb-library-yql-public-purecalc-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_user_data.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_eval.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_pool.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/test_mixed_allocators.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/empty_stream.h
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/public/purecalc/ut/fake_spec.h
 )

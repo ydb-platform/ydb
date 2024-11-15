@@ -12,39 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(src-compiler-grpc_plugin_support)
-
-
-target_compile_options(src-compiler-grpc_plugin_support PRIVATE
-  -DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(src-compiler-grpc_plugin_support PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/include
-)
-
-target_include_directories(src-compiler-grpc_plugin_support PRIVATE
-  ${PROJECT_BINARY_DIR}/contrib/libs/grpc
-  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc
-)
-
-target_link_libraries(src-compiler-grpc_plugin_support PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-protobuf
-  contrib-libs-protoc
-)
-
-target_sources(src-compiler-grpc_plugin_support PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/cpp_generator.cc
-  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/csharp_generator.cc
-  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/node_generator.cc
-  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/objective_c_generator.cc
-  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/php_generator.cc
-  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/proto_parser_helper.cc
-  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/python_generator.cc
-  ${PROJECT_SOURCE_DIR}/contrib/libs/grpc/src/compiler/ruby_generator.cc
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

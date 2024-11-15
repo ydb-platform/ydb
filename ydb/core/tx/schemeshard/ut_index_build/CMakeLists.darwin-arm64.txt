@@ -35,6 +35,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_index_build PUBLIC
   core-testlib-default
   ydb-core-tx
   tx-schemeshard-ut_helpers
+  cpp-client-ydb_table
 )
 
 target_allocator(ydb-core-tx-schemeshard-ut_index_build

@@ -18,7 +18,7 @@ add_library(transfer_workload)
 target_link_libraries(transfer_workload PUBLIC
   contrib-libs-cxxsupp
   yutil
-  yql-public-issue
+  essentials-public-issue
   public-issue-protos
   api-grpc
   api-protos

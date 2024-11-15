@@ -12,42 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(core-sys_view-processor)
-
-
-target_compile_options(core-sys_view-processor PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-sys_view-processor PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  core-engine-minikql
-  core-grpc_services-counters
-  core-kqp-counters
-  ydb-core-protos
-  ydb-core-tablet
-  ydb-core-tablet_flat
-  core-tx-scheme_cache
-)
-
-target_sources(core-sys_view-processor PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/processor/processor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/processor/processor_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/processor/schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/processor/db_counters.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/processor/tx_init.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/processor/tx_init_schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/processor/tx_configure.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/processor/tx_collect.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/processor/tx_aggregate.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/processor/tx_interval_summary.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/processor/tx_interval_metrics.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/processor/tx_top_partitions.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/processor/processor.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/processor/processor_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/processor/schema.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

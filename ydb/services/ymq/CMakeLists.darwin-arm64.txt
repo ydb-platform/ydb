@@ -36,5 +36,6 @@ target_link_libraries(ydb-services-ymq PUBLIC
 target_sources(ydb-services-ymq PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/ymq/ymq_proxy.cpp
   ${PROJECT_SOURCE_DIR}/ydb/services/ymq/grpc_service.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ymq/utils.cpp
 )
 

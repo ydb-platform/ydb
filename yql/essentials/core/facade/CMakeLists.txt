@@ -12,46 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(essentials-core-facade)
-
-
-target_compile_options(essentials-core-facade PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(essentials-core-facade PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-deprecated-split
-  library-cpp-random_provider
-  cpp-string_utils-base64
-  cpp-threading-future
-  library-cpp-time_provider
-  library-cpp-yson
-  cpp-yson-node
-  essentials-core-extract_predicate
-  essentials-core-file_storage
-  essentials-core-services
-  core-url_lister-interface
-  core-url_preprocessing-interface
-  essentials-core-credentials
-  qplayer-storage-interface
-  core-qplayer-udf_resolver
-  yql-essentials-sql
-  essentials-utils-log
-  yql-essentials-core
-  essentials-core-type_ann
-  providers-common-config
-  providers-common-proto
-  providers-common-provider
-  providers-common-udf_resolve
-  providers-common-arrow_resolve
-  essentials-providers-config
-  providers-result-provider
-)
-
-target_sources(essentials-core-facade PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/facade/yql_facade.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

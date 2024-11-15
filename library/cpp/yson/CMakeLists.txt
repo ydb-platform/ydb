@@ -12,27 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(node)
-add_subdirectory(json)
-
-add_library(library-cpp-yson)
-
-
-target_link_libraries(library-cpp-yson PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-yt-misc
-  cpp-yt-yson
-)
-
-target_sources(library-cpp-yson PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/yson/consumer.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yson/lexer.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yson/parser.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yson/token.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yson/tokenizer.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yson/varint.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/yson/writer.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

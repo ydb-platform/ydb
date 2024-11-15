@@ -28,8 +28,8 @@ target_link_libraries(dq-provider-exec PUBLIC
   cpp-threading-future
   public-lib-yson_value
   cpp-client-ydb_driver
-  library-yql-core
-  yql-dq-integration
+  yql-essentials-core
+  essentials-core-dq_integration
   yql-dq-runtime
   yql-dq-tasks
   yql-dq-type_ann

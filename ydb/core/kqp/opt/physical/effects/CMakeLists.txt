@@ -12,33 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(opt-physical-effects)
-
-
-target_compile_options(opt-physical-effects PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(opt-physical-effects PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  core-kqp-common
-  yql-dq-common
-  yql-dq-opt
-)
-
-target_sources(opt-physical-effects PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_delete_index.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_effects.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_indexes.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_insert_index.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_insert.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_uniq_helper.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_update_index.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_update.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_upsert_index.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_returning.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/physical/effects/kqp_opt_phy_upsert_defaults.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

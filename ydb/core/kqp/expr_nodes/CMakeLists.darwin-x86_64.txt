@@ -31,9 +31,6 @@ target_sources(core-kqp-expr_nodes PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.gen.h
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.decl.inl.h
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.defs.inl.h
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.gen.h
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.decl.inl.h
-  ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.defs.inl.h
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.h
 )
 
@@ -44,13 +41,13 @@ add_custom_command(
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.decl.inl.h
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.defs.inl.h
   DEPENDS
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.json
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/gen/__main__.py
   COMMAND
   Python3::Interpreter
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/gen/__main__.py
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/gen/__main__.py
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.jnj
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.json
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.gen.h
   ${PROJECT_BINARY_DIR}/ydb/core/kqp/expr_nodes/kqp_expr_nodes.decl.inl.h

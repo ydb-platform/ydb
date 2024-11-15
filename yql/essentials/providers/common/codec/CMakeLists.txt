@@ -12,51 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(arrow)
-
-add_library(providers-common-codec)
-
-
-target_compile_options(providers-common-codec PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-common-codec PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  essentials-minikql-computation
-  parser-pg_wrapper-interface
-  providers-common-mkql
-  essentials-public-result_format
-  cpp-yson-node
-  library-cpp-yson
-  library-cpp-json
-  library-cpp-enumbitset
-  yt-library-decimal
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(providers-common-codec PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/codec/yql_codec.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/codec/yql_codec_buf.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/codec/yql_codec_type_flags.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/codec/yql_json_codec.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/codec/yql_codec.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/codec/yql_codec_buf.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/codec/yql_codec_type_flags.h
-)
-
-
-generate_enum_serilization(providers-common-codec
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/codec/yql_codec_type_flags.h
-  INCLUDE_HEADERS
-  yql/essentials/providers/common/codec/yql_codec_type_flags.h
-)

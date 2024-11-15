@@ -12,62 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(providers-ydb-provider)
-
-
-target_compile_options(providers-ydb-provider PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-ydb-provider PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-random_provider
-  library-cpp-time_provider
-  cpp-yson-node
-  fq-libs-common
-  yql-essentials-ast
-  essentials-minikql-comp_nodes
-  providers-common-structured_token
-  common-token_accessor-client
-  yql-essentials-core
-  essentials-core-type_ann
-  yql-dq-expr_nodes
-  essentials-core-dq_integration
-  providers-common-config
-  providers-common-db_id_async_resolver
-  providers-common-dq
-  providers-common-mkql
-  providers-common-proto
-  providers-common-provider
-  common-schema-expr
-  providers-common-transform
-  providers-dq-common
-  providers-dq-expr_nodes
-  providers-result-expr_nodes
-  providers-ydb-expr_nodes
-  providers-ydb-proto
-  public-lib-experimental
-  cpp-client-ydb_driver
-  cpp-client-ydb_table
-)
-
-target_sources(providers-ydb-provider PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_datasink.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_datasink_execution.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_datasink_type_ann.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_datasource.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_datasource_type_ann.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_dq_integration.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_exec.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_io_discovery.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_load_meta.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_logical_opt.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_physical_opt.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_mkql_compiler.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_provider.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_provider_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/ydb/provider/yql_ydb_settings.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

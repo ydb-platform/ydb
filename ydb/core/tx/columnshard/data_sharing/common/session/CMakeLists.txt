@@ -12,34 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(data_sharing-common-session)
-
-
-target_link_libraries(data_sharing-common-session PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-library-conclusion
-  tx-columnshard-common
-  data_sharing-common-context
-  ydb-core-tablet_flat
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(data_sharing-common-session PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/common/session/common.cpp
-)
-
-
-generate_enum_serilization(data_sharing-common-session
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/common/session/common.h
-  INCLUDE_HEADERS
-  ydb/core/tx/columnshard/data_sharing/common/session/common.h
-)

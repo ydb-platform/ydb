@@ -34,19 +34,19 @@ target_link_libraries(mrrun PUBLIC
   cpp-mapreduce-client
   cpp-mapreduce-common
   ydb-core-util
-  yql-sql-pg
-  library-yql-core
-  yql-core-facade
+  essentials-sql-pg
+  yql-essentials-core
+  essentials-core-facade
   core-file_storage-proto
   core-file_storage-http_download
-  yql-core-file_storage
+  essentials-core-file_storage
   core-services-mounts
-  yql-core-url_lister
+  essentials-core-url_lister
   yql-dq-comp_nodes
-  dq-integration-transform
+  core-dq_integration-transform
   minikql-comp_nodes-llvm14
   minikql-invoke_builtins-llvm14
-  library-yql-protos
+  yql-essentials-protos
   providers-clickhouse-actors
   providers-clickhouse-provider
   providers-common-comp_nodes
@@ -64,11 +64,11 @@ target_link_libraries(mrrun PUBLIC
   providers-ydb-provider
   providers-pg-provider
   udf-service-terminate_policy
-  yql-utils-log
-  yql-utils-backtrace
-  yql-utils-failure_injector
+  essentials-utils-log
+  essentials-utils-backtrace
+  essentials-utils-failure_injector
   cpp-client-ydb_driver
-  yql-core-url_preprocessing
+  essentials-core-url_preprocessing
   yt-comp_nodes-dq
   yt-comp_nodes-llvm14
   yt-codec-codegen
@@ -79,7 +79,7 @@ target_link_libraries(mrrun PUBLIC
   yt-lib-yt_download
   yt-lib-yt_url_lister
   yt-lib-config_clusters
-  yql-parser-pg_wrapper
+  essentials-parser-pg_wrapper
   providers-dq-global_worker_manager
 )
 

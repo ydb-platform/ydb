@@ -12,108 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(logging)
-add_subdirectory(ut)
-
-add_library(fq-libs-actors)
-
-
-target_compile_options(fq-libs-actors PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(fq-libs-actors PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  library-actors-interconnect
-  cpp-json-yson
-  cpp-monlib-dynamic_counters
-  library-cpp-random_provider
-  library-cpp-scheme
-  cpp-string_utils-quote
-  library-cpp-time_provider
-  library-cpp-yson
-  cpp-yson-node
-  ydb-core-base
-  libs-actors-logging
-  fq-libs-checkpointing
-  fq-libs-checkpointing_common
-  fq-libs-common
-  libs-compute-common
-  libs-compute-ydb
-  libs-config-protos
-  fq-libs-control_plane_storage
-  libs-control_plane_storage-events
-  fq-libs-db_id_async_resolver_impl
-  fq-libs-db_schema
-  fq-libs-events
-  fq-libs-grpc
-  fq-libs-private_client
-  libs-rate_limiter-utils
-  fq-libs-result_formatter
-  fq-libs-shared_resources
-  fq-libs-signer
-  ydb-core-protos
-  ydb-core-util
-  ydb-library-mkql_proto
-  ydb-library-security
-  yql-essentials-ast
-  essentials-core-facade
-  core-services-mounts
-  core-dq_integration-transform
-  essentials-minikql-comp_nodes
-  providers-common-codec
-  providers-common-comp_nodes
-  providers-common-db_id_async_resolver
-  providers-common-metrics
-  providers-common-provider
-  common-schema-mkql
-  common-token_accessor-client
-  providers-common-udf_resolve
-  providers-dq-actors
-  providers-dq-common
-  providers-dq-counters
-  providers-dq-provider
-  dq-provider-exec
-  dq-worker_manager-interface
-  connector-api-common
-  generic-connector-libcpp
-  providers-generic-provider
-  providers-pq-cm_client
-  providers-pq-provider
-  providers-pq-task_meta
-  providers-s3-actors_factory
-  providers-s3-provider
-  essentials-public-issue
-  public-issue-protos
-  essentials-sql-settings
-  yql-essentials-utils
-  yql-utils-actor_log
-  api-protos
-  public-lib-fq
-  cpp-client-ydb_query
-  cpp-client-ydb_operation
-  cpp-client-ydb_table
-)
-
-target_sources(fq-libs-actors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/clusters_from_connections.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/database_resolver.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/error.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/nodes_health_check.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/nodes_manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/pending_fetcher.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/proxy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/proxy_private.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/rate_limiter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/rate_limiter_resources.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/result_writer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/run_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/table_bindings_from_bindings.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/task_get.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/task_ping.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/actors/task_result_write.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

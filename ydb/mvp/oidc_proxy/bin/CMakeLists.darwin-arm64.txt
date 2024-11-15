@@ -24,6 +24,7 @@ target_link_libraries(mvp_oidc_proxy PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-mvp-oidc_proxy
+  library-cpp-getopt
 )
 
 target_allocator(mvp_oidc_proxy

@@ -36,10 +36,10 @@ target_link_libraries(ydb-core-yql_testlib PUBLIC
   core-testlib-default
   core-testlib-actors
   core-testlib-basics
-  yql-core-facade
-  yql-public-udf
+  essentials-core-facade
+  essentials-public-udf
   public-lib-base
-  library-yql-core
+  yql-essentials-core
   providers-common-provider
   providers-common-udf_resolve
 )

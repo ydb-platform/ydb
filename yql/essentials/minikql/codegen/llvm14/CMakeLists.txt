@@ -12,43 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(minikql-codegen-llvm14)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-
-target_include_directories(minikql-codegen-llvm14 PRIVATE
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/codegen/llvm14
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/codegen
-)
-
-target_link_libraries(minikql-codegen-llvm14 PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  llvm14-lib-IR
-  lib-ExecutionEngine-MCJIT
-  llvm14-lib-Linker
-  lib-Target-X86
-  Target-X86-AsmParser
-  Target-X86-Disassembler
-  lib-Transforms-IPO
-  lib-Transforms-ObjCARC
-  lib-ExecutionEngine-PerfJITEvents
-  libs-cxxsupp-builtins
-  contrib-libs-re2
-)
-
-target_sources(minikql-codegen-llvm14 PRIVATE
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/codegen/llvm14/codegen.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/codegen/llvm14/codegen_llvm_deps.h
-)
-
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/codegen/codegen_llvm_deps.h.txt
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/codegen/llvm14/codegen_llvm_deps.h
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/yql/essentials/minikql/codegen/codegen.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/minikql/codegen/llvm14/codegen.cpp
-)

@@ -12,45 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(providers-solomon-provider)
-
-
-target_compile_options(providers-solomon-provider PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-solomon-provider PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-protos
-  yql-dq-expr_nodes
-  essentials-core-dq_integration
-  yql-dq-opt
-  providers-common-config
-  providers-common-proto
-  providers-common-provider
-  providers-common-transform
-  providers-dq-expr_nodes
-  providers-result-expr_nodes
-  providers-solomon-expr_nodes
-  providers-solomon-proto
-  providers-solomon-scheme
-)
-
-target_sources(providers-solomon-provider PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_config.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_datasink_execution.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_datasink_type_ann.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_datasink.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_datasource_execution.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_datasource_type_ann.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_datasource.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_io_discovery.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_load_meta.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_mkql_compiler.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_physical_optimize.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/provider/yql_solomon_provider.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

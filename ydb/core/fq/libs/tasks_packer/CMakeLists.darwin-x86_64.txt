@@ -23,7 +23,7 @@ target_link_libraries(fq-libs-tasks_packer PUBLIC
   contrib-libs-cxxsupp
   yutil
   yql-dq-proto
-  library-yql-utils
+  yql-essentials-utils
 )
 
 target_sources(fq-libs-tasks_packer PRIVATE

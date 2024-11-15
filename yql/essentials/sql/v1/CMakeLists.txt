@@ -12,91 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(lexer)
-add_subdirectory(proto_parser)
-add_subdirectory(format)
-
-add_library(essentials-sql-v1)
-
-
-target_compile_options(essentials-sql-v1 PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(essentials-sql-v1 PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-charset
-  library-cpp-enumbitset
-  library-cpp-json
-  cpp-yson-node
-  yql-essentials-minikql
-  essentials-public-udf
-  essentials-sql-settings
-  essentials-core-issue
-  core-issue-protos
-  essentials-core-sql_types
-  essentials-parser-lexer_common
-  parser-proto_ast-collect_issues
-  proto_ast-gen-v1
-  proto_ast-gen-v1_ansi
-  proto_ast-gen-v1_proto_split
-  proto_ast-gen-v1_antlr4
-  proto_ast-gen-v1_ansi_antlr4
-  essentials-parser-pg_catalog
-  sql-v1-lexer
-  sql-v1-proto_parser
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(essentials-sql-v1 PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/aggregation.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/builtin.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/context.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/join.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/insert.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/list_builtin.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/match_recognize.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/node.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/select.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/source.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/sql.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/sql_call_expr.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/sql_expression.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/sql_group_by.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/sql_match_recognize.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/sql_into_tables.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/sql_query.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/sql_select.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/sql_translation.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/sql_values.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/query.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/object_processing.cpp
-)
-
-
-generate_enum_serilization(essentials-sql-v1
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/match_recognize.h
-  INCLUDE_HEADERS
-  yql/essentials/sql/v1/match_recognize.h
-)
-
-generate_enum_serilization(essentials-sql-v1
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/node.h
-  INCLUDE_HEADERS
-  yql/essentials/sql/v1/node.h
-)
-
-generate_enum_serilization(essentials-sql-v1
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/sql_call_param.h
-  INCLUDE_HEADERS
-  yql/essentials/sql/v1/sql_call_param.h
-)

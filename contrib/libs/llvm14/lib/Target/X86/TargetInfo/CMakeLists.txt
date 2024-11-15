@@ -12,27 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(Target-X86-TargetInfo)
-
-
-target_compile_options(Target-X86-TargetInfo PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(Target-X86-TargetInfo PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/TargetInfo
-)
-
-target_link_libraries(Target-X86-TargetInfo PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-llvm14
-  llvm14-lib-MC
-  llvm14-lib-Support
-)
-
-target_sources(Target-X86-TargetInfo PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/Target/X86/TargetInfo/X86TargetInfo.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

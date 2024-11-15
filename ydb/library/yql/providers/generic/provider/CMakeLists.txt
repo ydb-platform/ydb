@@ -12,74 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(providers-generic-provider)
-
-
-target_compile_options(providers-generic-provider PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-generic-provider PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-fmt
-  library-cpp-json
-  library-cpp-random_provider
-  library-cpp-time_provider
-  fq-libs-common
-  fq-libs-result_formatter
-  yql-essentials-ast
-  yql-essentials-core
-  essentials-core-type_ann
-  yql-dq-expr_nodes
-  essentials-core-dq_integration
-  essentials-minikql-comp_nodes
-  providers-common-config
-  providers-common-db_id_async_resolver
-  providers-common-dq
-  providers-common-mkql
-  providers-common-proto
-  providers-common-provider
-  providers-common-pushdown
-  providers-common-structured_token
-  common-token_accessor-client
-  providers-common-transform
-  providers-dq-common
-  providers-dq-expr_nodes
-  providers-generic-expr_nodes
-  providers-generic-proto
-  connector-api-common
-  generic-connector-libcpp
-  providers-result-expr_nodes
-  yql-utils-plan
-  client-ydb_types-credentials
-)
-
-target_sources(providers-generic-provider PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_cluster_config.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_datasink.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_datasink_execution.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_datasink_type_ann.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_datasource.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_datasource_type_ann.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_dq_integration.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_io_discovery.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_load_meta.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_logical_opt.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_mkql_compiler.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_physical_opt.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_provider.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_settings.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_state.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_utils.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_provider.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_provider_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_settings.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_state.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/provider/yql_generic_utils.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,39 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(lib-MC-MCParser)
-
-
-target_compile_options(lib-MC-MCParser PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(lib-MC-MCParser PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCParser
-)
-
-target_link_libraries(lib-MC-MCParser PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-llvm14
-  llvm14-lib-MC
-  llvm14-lib-Support
-)
-
-target_sources(lib-MC-MCParser PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCParser/AsmLexer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCParser/AsmParser.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCParser/COFFAsmParser.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCParser/COFFMasmParser.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCParser/DarwinAsmParser.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCParser/ELFAsmParser.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCParser/GOFFAsmParser.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCParser/MCAsmLexer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCParser/MCAsmParser.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCParser/MCAsmParserExtension.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCParser/MCTargetAsmParser.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCParser/MasmParser.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCParser/WasmAsmParser.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/MC/MCParser/XCOFFAsmParser.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

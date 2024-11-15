@@ -12,70 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(abseil-cpp-absl-strings)
-
-
-target_compile_options(abseil-cpp-absl-strings PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(abseil-cpp-absl-strings PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp
-)
-
-target_link_libraries(abseil-cpp-absl-strings PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  abseil-cpp-absl-base
-  abseil-cpp-absl-numeric
-)
-
-target_sources(abseil-cpp-absl-strings PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/crc/crc32c.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/crc/internal/cpu_detect.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/crc/internal/crc.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/crc/internal/crc_cord_state.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/crc/internal/crc_memcpy_fallback.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/crc/internal/crc_memcpy_x86_arm_combined.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/crc/internal/crc_non_temporal_memcpy.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/crc/internal/crc_x86_arm_combined.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/status/statusor.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/ascii.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/charconv.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/cord.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/cord_analysis.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/cord_buffer.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/escaping.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/charconv_bigint.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/charconv_parse.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cord_internal.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cord_rep_btree.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cord_rep_btree_navigator.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cord_rep_btree_reader.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cord_rep_consume.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cord_rep_crc.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cordz_functions.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cordz_handle.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cordz_info.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cordz_sample_token.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/damerau_levenshtein_distance.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/escaping.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/memutil.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/ostringstream.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/str_format/arg.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/str_format/bind.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/str_format/extension.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/str_format/float_conversion.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/str_format/output.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/str_format/parser.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/stringify_sink.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/utf8.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/match.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/numbers.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/str_cat.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/str_replace.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/str_split.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/string_view.cc
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/substitute.cc
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

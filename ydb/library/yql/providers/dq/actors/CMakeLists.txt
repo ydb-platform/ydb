@@ -12,70 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(events)
-add_subdirectory(yt)
-add_subdirectory(ut)
-
-add_library(providers-dq-actors)
-
-
-target_compile_options(providers-dq-actors PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-dq-actors PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  library-cpp-yson
-  ydb-library-mkql_proto
-  essentials-core-services
-  core-services-mounts
-  essentials-core-user_data
-  yql-essentials-core
-  yql-utils-actors
-  yql-utils-actor_log
-  essentials-utils-backtrace
-  essentials-utils-log
-  api-protos
-  public-lib-yson_value
-  yql-dq-common
-  yql-dq-proto
-  yql-dq-runtime
-  yql-dq-tasks
-  dq-actors-compute
-  essentials-utils-failure_injector
-  providers-common-metrics
-  dq-actors-events
-  dq-api-grpc
-  dq-api-protos
-  providers-dq-common
-  providers-dq-config
-  providers-dq-counters
-  providers-dq-interface
-  providers-dq-planner
-  providers-dq-task_runner
-  providers-dq-task_runner_actor
-  providers-dq-worker_manager
-  dq-worker_manager-interface
-)
-
-target_sources(providers-dq-actors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/compute_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/dummy_lock.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/dynamic_nameserver.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/executer_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/execution_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/graph_execution_events_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/resource_allocator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/task_controller.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/worker_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/result_aggregator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/result_receiver.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/full_result_writer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/proto_builder.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/grouped_issues.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

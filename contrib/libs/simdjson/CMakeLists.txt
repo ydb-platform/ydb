@@ -12,29 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(contrib-libs-simdjson)
-
-
-target_compile_options(contrib-libs-simdjson PRIVATE
-  -DSIMDJSON_AVX512_ALLOWED=1
-  -DSIMDJSON_UTF8VALIDATION=1
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(contrib-libs-simdjson PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/libs/simdjson/include
-)
-
-target_include_directories(contrib-libs-simdjson PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/simdjson/src
-)
-
-target_link_libraries(contrib-libs-simdjson PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-)
-
-target_sources(contrib-libs-simdjson PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/simdjson/src/simdjson.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

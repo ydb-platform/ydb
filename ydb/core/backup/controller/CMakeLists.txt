@@ -12,22 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(core-backup-controller)
-
-
-target_link_libraries(core-backup-controller PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-lwtrace-protos
-  ydb-core-tablet_flat
-  ydb-core-protos
-  core-scheme-protos
-)
-
-target_sources(core-backup-controller PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/backup/controller/tablet.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/backup/controller/tx_init.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/backup/controller/tx_init_schema.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

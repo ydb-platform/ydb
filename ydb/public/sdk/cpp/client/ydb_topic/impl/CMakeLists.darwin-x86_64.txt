@@ -37,10 +37,12 @@ target_sources(client-ydb_topic-impl PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/impl/common.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/impl/deferred_commit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/impl/event_handlers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/impl/offsets_collector.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/impl/read_session_event.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/impl/read_session.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/impl/topic.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/impl/transaction.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/impl/write_session_impl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/impl/write_session.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/impl/common.h

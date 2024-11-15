@@ -12,38 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(limiter-grouped_memory-service)
-
-
-target_link_libraries(limiter-grouped_memory-service PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-protos
-  columnshard-counters-common
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(limiter-grouped_memory-service PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/limiter/grouped_memory/service/actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/limiter/grouped_memory/service/manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/limiter/grouped_memory/service/counters.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/limiter/grouped_memory/service/group.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/limiter/grouped_memory/service/process.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/limiter/grouped_memory/service/allocation.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/limiter/grouped_memory/service/ids.cpp
-)
-
-
-generate_enum_serilization(limiter-grouped_memory-service
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/limiter/grouped_memory/service/allocation.h
-  INCLUDE_HEADERS
-  ydb/core/tx/limiter/grouped_memory/service/allocation.h
-)

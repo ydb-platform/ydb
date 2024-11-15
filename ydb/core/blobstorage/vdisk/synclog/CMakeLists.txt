@@ -12,67 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(blobstorage-vdisk-synclog)
-
-
-target_link_libraries(blobstorage-vdisk-synclog PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  library-actors-interconnect
-  library-cpp-blockcodecs
-  library-cpp-codecs
-  cpp-containers-intrusive_avl_tree
-  monlib-service-pages
-  ydb-core-base
-  core-blobstorage-base
-  core-blobstorage-groupinfo
-  blobstorage-vdisk-common
-  vdisk-hulldb-base
-  vdisk-hulldb-generic
-  blobstorage-vdisk-ingress
-  ydb-core-util
-)
-
-target_sources(blobstorage-vdisk-synclog PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdata.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdsk.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogformat.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_syncloghttp.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_committer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_state.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmem.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgimpl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogneighbors.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogreader.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogrecovery.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdata.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogdsk.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogformat.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_syncloghttp.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_committer.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogkeeper_state.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmem.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgimpl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgreader.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogmsgwriter.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogneighbors.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogreader.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogrecovery.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogwriteparts.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/synclog/codecs.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

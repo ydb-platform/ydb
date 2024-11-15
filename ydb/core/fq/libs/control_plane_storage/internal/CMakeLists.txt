@@ -12,51 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(libs-control_plane_storage-internal)
-
-
-target_compile_options(libs-control_plane_storage-internal PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(libs-control_plane_storage-internal PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-fmt
-  library-actors-core
-  cpp-lwtrace-mon
-  monlib-service-pages
-  ydb-core-base
-  ydb-core-metering
-  fq-libs-common
-  libs-compute-common
-  fq-libs-config
-  libs-control_plane_storage-proto
-  fq-libs-metrics
-  fq-libs-quota_manager
-  libs-quota_manager-events
-  libs-rate_limiter-events
-  fq-libs-ydb
-  ydb-core-mon
-  ydb-library-protobuf_printer
-  ydb-library-security
-  essentials-public-issue
-  yql-essentials-utils
-  public-lib-fq
-  cpp-client-ydb_scheme
-  cpp-client-ydb_value
-)
-
-target_sources(libs-control_plane_storage-internal PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/nodes_health_check.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/rate_limiter_resources.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/response_tasks.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/task_get.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/task_ping.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/task_result_write.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_storage/internal/utils.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

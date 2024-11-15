@@ -25,9 +25,9 @@ target_link_libraries(providers-yt-mkql_dq PUBLIC
   cpp-yson-node
   cpp-mapreduce-common
   cpp-mapreduce-interface
-  library-yql-minikql
-  yql-public-udf
-  library-yql-utils
+  yql-essentials-minikql
+  essentials-public-udf
+  yql-essentials-utils
 )
 
 target_sources(providers-yt-mkql_dq PRIVATE

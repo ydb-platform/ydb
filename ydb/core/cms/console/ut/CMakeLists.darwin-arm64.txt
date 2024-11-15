@@ -52,6 +52,7 @@ target_sources(ydb-core-cms-console-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/configs_dispatcher_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_ut_tenants.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/console_ut_configs.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/feature_flags_configurator_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/immediate_controls_configurator_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/log_settings_configurator_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/modifications_validator_ut.cpp

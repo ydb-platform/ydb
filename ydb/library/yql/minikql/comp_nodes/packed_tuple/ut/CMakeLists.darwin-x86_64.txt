@@ -30,10 +30,10 @@ target_link_libraries(library-yql-minikql-comp_nodes-packed_tuple-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   minikql-comp_nodes-packed_tuple
-  yql-public-udf
+  essentials-public-udf
   public-udf-arrow
   udf-service-exception_policy
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
 )
 
 target_allocator(library-yql-minikql-comp_nodes-packed_tuple-ut

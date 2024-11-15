@@ -12,36 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(cpp-http-misc)
-
-
-target_link_libraries(cpp-http-misc PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  library-cpp-case_insensitive_string
-  library-cpp-cgiparam
-  cpp-digest-lower_case
-)
-
-target_sources(cpp-http-misc PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/misc/httpcodes.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/misc/httpdate.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/misc/httpreqdata.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/misc/parsed_request.cpp
-)
-
-
-generate_enum_serilization(cpp-http-misc
-  ${PROJECT_SOURCE_DIR}/library/cpp/http/misc/httpcodes.h
-  INCLUDE_HEADERS
-  library/cpp/http/misc/httpcodes.h
-)

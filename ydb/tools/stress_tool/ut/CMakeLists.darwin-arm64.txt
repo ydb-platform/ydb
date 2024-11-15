@@ -25,8 +25,8 @@ target_link_libraries(ydb-tools-stress_tool-ut PUBLIC
   cpp-testing-unittest_main
   ydb_device_test
   version_definition
-  yql-parser-pg_wrapper
-  yql-sql-pg
+  essentials-parser-pg_wrapper
+  essentials-sql-pg
   minikql-comp_nodes-llvm14
 )
 

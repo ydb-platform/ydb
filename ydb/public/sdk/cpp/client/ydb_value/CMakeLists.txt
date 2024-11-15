@@ -12,39 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(ut)
-
-add_library(cpp-client-ydb_value)
-
-
-target_link_libraries(cpp-client-ydb_value PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  cpp-containers-stack_vector
-  api-protos
-  impl-ydb_internal-value_helpers
-  client-ydb_types-fatal_error_handlers
-  essentials-public-decimal
-  essentials-types-uuid
-)
-
-target_sources(cpp-client-ydb_value PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_value/out.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_value/value.cpp
-)
-
-
-generate_enum_serilization(cpp-client-ydb_value
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_value/value.h
-  INCLUDE_HEADERS
-  ydb/public/sdk/cpp/client/ydb_value/value.h
-)

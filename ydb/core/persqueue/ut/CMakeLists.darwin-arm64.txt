@@ -143,6 +143,7 @@ resources(ydb-core-persqueue-ut
   counters_topics.html
   counters_pqproxy.html
   counters_labeled.json
+  OPTS
 )
 
 vcs_info(ydb-core-persqueue-ut)

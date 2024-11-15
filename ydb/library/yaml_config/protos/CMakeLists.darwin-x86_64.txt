@@ -46,10 +46,12 @@ target_link_libraries(yaml-config-protos PUBLIC
 
 target_proto_messages(yaml-config-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/protos/config.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yaml_config/protos/blobstorage_config.proto
 )
 
 target_sources(yaml-config-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/library/yaml_config/protos/config.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yaml_config/protos/blobstorage_config.pb.h
 )
 
 

@@ -12,46 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(locks)
-add_subdirectory(protos)
-add_subdirectory(operators)
-add_subdirectory(transactions)
-
-add_library(tx-columnshard-transactions)
-
-
-target_compile_options(tx-columnshard-transactions PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(tx-columnshard-transactions PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-tablet_flat
-  core-tx-data_events
-  data_sharing-destination-events
-  columnshard-transactions-operators
-  columnshard-transactions-transactions
-  columnshard-transactions-locks
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(tx-columnshard-transactions PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/tx_controller.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/locks_db.cpp
-)
-
-
-generate_enum_serilization(tx-columnshard-transactions
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/transactions/tx_controller.h
-  INCLUDE_HEADERS
-  ydb/core/tx/columnshard/transactions/tx_controller.h
-)

@@ -12,58 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(yt-gateway-file)
-
-
-target_compile_options(yt-gateway-file PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(yt-gateway-file PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-yson
-  cpp-yson-node
-  cpp-mapreduce-common
-  cpp-mapreduce-interface
-  essentials-core-file_storage
-  core-file_storage-proto
-  core-file_storage-http_download
-  essentials-minikql-comp_nodes
-  essentials-public-udf
-  yql-essentials-utils
-  essentials-utils-threading
-  yql-essentials-core
-  essentials-core-expr_nodes
-  essentials-core-type_ann
-  providers-common-codec
-  providers-common-comp_nodes
-  providers-common-gateway
-  providers-common-mkql
-  providers-common-provider
-  common-schema-expr
-  common-schema-mkql
-  providers-result-expr_nodes
-  providers-yt-common
-  providers-yt-comp_nodes
-  providers-yt-expr_nodes
-  yt-gateway-lib
-  yt-lib-infer_schema
-  yt-lib-lambda_builder
-  yt-lib-mkql_helpers
-  yt-lib-res_pull
-  yt-lib-schema
-  yt-lib-yson_helpers
-  providers-yt-provider
-  essentials-parser-pg_wrapper
-)
-
-target_sources(yt-gateway-file PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/file/yql_yt_file_mkql_compiler.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/file/yql_yt_file.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/gateway/file/yql_yt_file_text_yson.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

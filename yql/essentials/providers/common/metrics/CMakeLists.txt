@@ -12,23 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(protos)
-
-add_library(providers-common-metrics)
-
-
-target_link_libraries(providers-common-metrics PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-logger-global
-  cpp-monlib-dynamic_counters
-  common-metrics-protos
-)
-
-target_sources(providers-common-metrics PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/metrics/metrics_registry.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/metrics/sensors_group.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/metrics/service_counters.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

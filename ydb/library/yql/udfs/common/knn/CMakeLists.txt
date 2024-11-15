@@ -12,49 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(knn_udf INTERFACE)
-
-
-target_compile_options(knn_udf INTERFACE
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=35
-  -DUDF_ABI_VERSION_PATCH=0
-)
-
-target_link_libraries(knn_udf INTERFACE
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  essentials-public-udf
-  public-udf-support
-  library-cpp-dot_product
-  library-cpp-l1_distance
-  library-cpp-l2_distance
-)
-
-
-add_global_library_for(knn_udf.global
-  knn_udf)
-
-
-target_compile_options(knn_udf.global PRIVATE
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=35
-  -DUDF_ABI_VERSION_PATCH=0
-)
-
-target_link_libraries(knn_udf.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  essentials-public-udf
-  public-udf-support
-  library-cpp-dot_product
-  library-cpp-l1_distance
-  library-cpp-l2_distance
-)
-
-target_sources(knn_udf.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/udfs/common/knn/knn.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

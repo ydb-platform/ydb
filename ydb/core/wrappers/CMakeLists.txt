@@ -12,31 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(events)
-add_subdirectory(ut_helpers)
-add_subdirectory(ut)
-
-add_library(ydb-core-wrappers)
-
-
-target_link_libraries(ydb-core-wrappers PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-aws-sdk-cpp-aws-cpp-sdk-s3
-  contrib-libs-curl
-  library-actors-core
-  ydb-core-base
-  ydb-core-protos
-  core-wrappers-events
-)
-
-target_sources(ydb-core-wrappers PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/s3_wrapper.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/s3_storage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/s3_storage_config.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/abstract.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/fake_storage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/wrappers/fake_storage_config.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

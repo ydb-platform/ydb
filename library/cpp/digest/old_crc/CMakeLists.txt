@@ -12,45 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_gencrc_bin
-  TOOL_gencrc_dependency
-  library/cpp/digest/old_crc/gencrc
-  gencrc
-)
-
-add_subdirectory(gencrc)
-
-add_library(cpp-digest-old_crc)
-
-
-target_link_libraries(cpp-digest-old_crc PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-)
-
-target_sources(cpp-digest-old_crc PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/digest/old_crc/crc.cpp
-  ${PROJECT_BINARY_DIR}/library/cpp/digest/old_crc/crc.inc
-  ${PROJECT_BINARY_DIR}/library/cpp/digest/old_crc/crc.inc
-)
-
-
-add_custom_command(
-  OUTPUT
-  ${PROJECT_BINARY_DIR}/library/cpp/digest/old_crc/crc.inc
-  DEPENDS
-  ${TOOL_gencrc_bin}
-  COMMAND
-  ${TOOL_gencrc_bin}
-  >
-  crc.inc
-)
-
-
-if(NOT CMAKE_CROSSCOMPILING)
-  add_dependencies(cpp-digest-old_crc
-    gencrc
-  )
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
 endif()
+

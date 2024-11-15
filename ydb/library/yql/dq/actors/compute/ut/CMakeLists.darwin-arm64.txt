@@ -29,11 +29,12 @@ target_link_libraries(ydb-library-yql-dq-actors-compute-ut PUBLIC
   cpp-testing-unittest_main
   dq-actors-compute
   cpp-testing-unittest
+  yql-public-ydb_issue
   yql-dq-actors
   library-actors-wilson
   library-actors-testlib
   udf-service-stub
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
   minikql-comp_nodes-no_llvm
 )
 

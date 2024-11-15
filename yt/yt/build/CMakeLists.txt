@@ -12,69 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-set(HAVE_CXXABI_H 0)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-set(HAVE_DLFCN_H 1)
-
-set(HAVE_EXECINFO_H 1)
-
-set(HAVE_LIBUNWIND_H 0)
-
-set(HAVE_PTHREAD_H 1)
-
-set(HAVE_SYS_TYPES_H 1)
-
-set(HAVE_SYS_UCONTEXT_H 1)
-
-set(HAVE_UCONTEXT_H 1)
-
-set(HAVE_UNISTD_H 1)
-
-set(HAVE_UNWIND_H 0)
-
-set(PC_FROM_UCONTEXT uc_mcontext.gregs[REG_RIP])
-
-set(YT_VERSION_BRANCH local)
-
-set(YT_VERSION_MAJOR 25)
-
-set(YT_VERSION_MINOR 1)
-
-set(YT_VERSION_PATCH 0)
-
-set(YT_VERSION_TYPE os)
-
-add_library(yt-yt-build)
-
-
-target_compile_options(yt-yt-build PRIVATE
-  -Wdeprecated-this-capture
-)
-
-target_include_directories(yt-yt-build PUBLIC
-  ${PROJECT_BINARY_DIR}/yt/yt/build
-)
-
-target_link_libraries(yt-yt-build PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-)
-
-target_sources(yt-yt-build PRIVATE
-  ${PROJECT_SOURCE_DIR}/yt/yt/build/ya_version.cpp
-  ${PROJECT_BINARY_DIR}/yt/yt/build/build.cpp
-  ${PROJECT_BINARY_DIR}/yt/yt/build/config.h
-  ${PROJECT_SOURCE_DIR}/yt/yt/build/build.h
-)
-
-
-configure_file(
-  ${PROJECT_SOURCE_DIR}/yt/yt/build/config.h.in
-  ${PROJECT_BINARY_DIR}/yt/yt/build/config.h
-)
-
-configure_file(
-  ${PROJECT_SOURCE_DIR}/yt/yt/build/build.cpp.in
-  ${PROJECT_BINARY_DIR}/yt/yt/build/build.cpp
-)

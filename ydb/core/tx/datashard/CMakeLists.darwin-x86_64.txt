@@ -34,6 +34,7 @@ add_subdirectory(ut_change_exchange)
 add_subdirectory(ut_column_stats)
 add_subdirectory(ut_compaction)
 add_subdirectory(ut_erase_rows)
+add_subdirectory(ut_external_blobs)
 add_subdirectory(ut_followers)
 add_subdirectory(ut_incremental_backup)
 add_subdirectory(ut_incremental_restore_scan)
@@ -42,6 +43,7 @@ add_subdirectory(ut_keys)
 add_subdirectory(ut_kqp)
 add_subdirectory(ut_kqp_errors)
 add_subdirectory(ut_kqp_scan)
+add_subdirectory(ut_local_kmeans)
 add_subdirectory(ut_locks)
 add_subdirectory(ut_minikql)
 add_subdirectory(ut_minstep)
@@ -52,7 +54,9 @@ add_subdirectory(ut_read_iterator)
 add_subdirectory(ut_read_table)
 add_subdirectory(ut_reassign)
 add_subdirectory(ut_replication)
+add_subdirectory(ut_reshuffle_kmeans)
 add_subdirectory(ut_rs)
+add_subdirectory(ut_sample_k)
 add_subdirectory(ut_sequence)
 add_subdirectory(ut_snapshot)
 add_subdirectory(ut_stats)
@@ -98,7 +102,6 @@ target_link_libraries(core-tx-datashard PUBLIC
   ydb-core-formats
   core-io_formats-ydb_dump
   core-kqp-runtime
-  core-persqueue-partition_key_range
   core-persqueue-writer
   ydb-core-protos
   ydb-core-tablet
@@ -109,16 +112,15 @@ target_link_libraries(core-tx-datashard PUBLIC
   ydb-core-wrappers
   ydb-core-ydb_convert
   ydb-library-aclib
-  ydb-library-binary_json
-  ydb-library-dynumber
-  ydb-library-minsketch
+  essentials-types-binary_json
+  essentials-types-dynumber
+  essentials-core-minsketch
   parser-pg_wrapper-interface
   api-protos
-  lib-deprecated-kicli
   dq-actors-compute
   services-lib-sharding
   ydb-library-chunks_limiter
-  ydb-library-uuid
+  essentials-types-uuid
 )
 
 target_sources(core-tx-datashard PRIVATE
@@ -234,7 +236,6 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_split_dst.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_split_src.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_subdomain_path_id.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_switch_mvcc_state.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_trans_queue.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_user_db.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_user_table.cpp
@@ -309,6 +310,7 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/type_serialization.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/upload_stats.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/volatile_tx.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/volatile_tx_mon.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_plan_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/wait_for_stream_clearance_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/export_s3_buffer_raw.cpp
@@ -395,6 +397,12 @@ generate_enum_serilization(core-tx-datashard
   ydb/core/tx/datashard/operation.h
 )
 
+generate_enum_serilization(core-tx-datashard
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/volatile_tx.h
+  INCLUDE_HEADERS
+  ydb/core/tx/datashard/volatile_tx.h
+)
+
 add_global_library_for(core-tx-datashard.global
   core-tx-datashard)
 
@@ -433,7 +441,6 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   ydb-core-formats
   core-io_formats-ydb_dump
   core-kqp-runtime
-  core-persqueue-partition_key_range
   core-persqueue-writer
   ydb-core-protos
   ydb-core-tablet
@@ -444,27 +451,27 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   ydb-core-wrappers
   ydb-core-ydb_convert
   ydb-library-aclib
-  ydb-library-binary_json
-  ydb-library-dynumber
-  ydb-library-minsketch
+  essentials-types-binary_json
+  essentials-types-dynumber
+  essentials-core-minsketch
   parser-pg_wrapper-interface
   api-protos
-  lib-deprecated-kicli
   dq-actors-compute
   services-lib-sharding
   ydb-library-chunks_limiter
-  ydb-library-uuid
+  essentials-types-uuid
 )
 
 target_sources(core-tx-datashard.global PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/core/tx/datashard/eacf331f0ffc35d4b482f1d15a887d3b.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/datashard/c2cace4d46ce7c7b8eb886dfb16275a3.cpp
 )
 
 
 resources(core-tx-datashard.global
-  ${PROJECT_BINARY_DIR}/ydb/core/tx/datashard/eacf331f0ffc35d4b482f1d15a887d3b.cpp
+  ${PROJECT_BINARY_DIR}/ydb/core/tx/datashard/c2cace4d46ce7c7b8eb886dfb16275a3.cpp
   INPUTS
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/index.html
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/ui/index.html
   KEYS
   datashard/index.html
+  OPTS
 )

@@ -12,22 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(client-extensions-solomon_stats)
-
-
-target_link_libraries(client-extensions-solomon_stats PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  monlib-encode-json
-  cpp-monlib-metrics
-  cpp-monlib-service
-  monlib-service-pages
-  cpp-client-ydb_extension
-)
-
-target_sources(client-extensions-solomon_stats PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/solomon_stats/pull_client.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/extensions/solomon_stats/pull_connector.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

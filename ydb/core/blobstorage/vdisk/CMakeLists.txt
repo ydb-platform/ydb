@@ -12,51 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ingress)
-add_subdirectory(common)
-add_subdirectory(hulldb)
-add_subdirectory(protos)
-add_subdirectory(anubis_osiris)
-add_subdirectory(defrag)
-add_subdirectory(huge)
-add_subdirectory(hullop)
-add_subdirectory(synclog)
-add_subdirectory(localrecovery)
-add_subdirectory(query)
-add_subdirectory(repl)
-add_subdirectory(scrub)
-add_subdirectory(skeleton)
-add_subdirectory(balance)
-add_subdirectory(syncer)
-
-add_library(core-blobstorage-vdisk)
-
-
-target_link_libraries(core-blobstorage-vdisk PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  blobstorage-vdisk-anubis_osiris
-  blobstorage-vdisk-common
-  blobstorage-vdisk-defrag
-  blobstorage-vdisk-huge
-  blobstorage-vdisk-hulldb
-  blobstorage-vdisk-hullop
-  blobstorage-vdisk-ingress
-  blobstorage-vdisk-localrecovery
-  blobstorage-vdisk-protos
-  blobstorage-vdisk-query
-  blobstorage-vdisk-repl
-  blobstorage-vdisk-scrub
-  blobstorage-vdisk-skeleton
-  blobstorage-vdisk-syncer
-  blobstorage-vdisk-synclog
-)
-
-target_sources(core-blobstorage-vdisk PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/vdisk_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/vdisk_actor.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/vdisk_services.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

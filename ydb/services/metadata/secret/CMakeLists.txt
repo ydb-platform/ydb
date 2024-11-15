@@ -12,53 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(services-metadata-secret)
-
-
-target_link_libraries(services-metadata-secret PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  ydb-core-base
-  core-grpc_services-local_rpc
-  core-grpc_services-base
-  ydb-core-grpc_services
-  services-metadata-request
-)
-
-target_sources(services-metadata-secret PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/secret/secret.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/secret/checker_secret.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/secret/access.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/secret/checker_access.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/secret/manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/secret/snapshot.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/secret/initializer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/secret/fetcher.cpp
-)
-
-
-add_global_library_for(services-metadata-secret.global
-  services-metadata-secret)
-
-
-target_link_libraries(services-metadata-secret.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  ydb-core-base
-  core-grpc_services-local_rpc
-  core-grpc_services-base
-  ydb-core-grpc_services
-  services-metadata-request
-)
-
-target_sources(services-metadata-secret.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/secret/secret_behaviour.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/secret/access_behaviour.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

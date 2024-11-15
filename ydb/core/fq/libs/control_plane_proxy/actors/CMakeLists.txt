@@ -12,44 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(libs-control_plane_proxy-actors)
-
-
-target_compile_options(libs-control_plane_proxy-actors PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(libs-control_plane_proxy-actors PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-fmt
-  library-cpp-iterator
-  fq-libs-common
-  libs-control_plane_proxy-events
-  libs-control_plane_storage-events
-  fq-libs-result_formatter
-  core-kqp-provider
-  library-db_pool-protos
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(libs-control_plane_proxy-actors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_proxy/actors/control_plane_storage_requester_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_proxy/actors/query_utils.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_proxy/actors/ydb_schema_query_actor.cpp
-)
-
-
-generate_enum_serilization(libs-control_plane_proxy-actors
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/control_plane_proxy/actors/ydb_schema_query_actor.h
-  INCLUDE_HEADERS
-  ydb/core/fq/libs/control_plane_proxy/actors/ydb_schema_query_actor.h
-)

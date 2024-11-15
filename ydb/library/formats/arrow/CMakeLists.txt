@@ -12,58 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(protos)
-add_subdirectory(switch)
-add_subdirectory(accessor)
-add_subdirectory(common)
-add_subdirectory(splitter)
-add_subdirectory(validation)
-add_subdirectory(simple_builder)
-add_subdirectory(transformer)
-add_subdirectory(modifier)
-add_subdirectory(scalar)
-add_subdirectory(hash)
-add_subdirectory(ut)
-
-add_library(library-formats-arrow)
-
-
-target_compile_options(library-formats-arrow PRIVATE
-  -Wno-unused-parameter
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_include_directories(library-formats-arrow PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/arrow_clickhouse
-)
-
-target_link_libraries(library-formats-arrow PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  library-formats-arrow-accessor
-  library-formats-arrow-simple_builder
-  library-formats-arrow-transformer
-  library-formats-arrow-splitter
-  library-formats-arrow-modifier
-  library-formats-arrow-scalar
-  library-formats-arrow-hash
-  library-actors-core
-  ydb-library-arrow_kernels
-  essentials-types-binary_json
-  essentials-types-dynumber
-  ydb-library-services
-  core-arrow_kernels-request
-  ydb-library-arrow_clickhouse
-)
-
-target_sources(library-formats-arrow PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/formats/arrow/arrow_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/formats/arrow/permutations.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/formats/arrow/replace_key.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/formats/arrow/size_calcer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/formats/arrow/simple_arrays_cache.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/formats/arrow/input_stream.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

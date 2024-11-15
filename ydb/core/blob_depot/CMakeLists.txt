@@ -12,74 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(agent)
-add_subdirectory(ut)
-
-add_library(ydb-core-blob_depot)
-
-
-target_link_libraries(ydb-core-blob_depot PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  blobstorage-vdisk-common
-  ydb-core-tablet_flat
-  ydb-core-protos
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(ydb-core-blob_depot PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/blob_depot.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/agent.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/assimilator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/blocks.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/coro_tx.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/data.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/data_decommit.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/data_gc.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/data_load.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/data_mon.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/data_resolve.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/data_trash.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/data_uncertain.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/garbage_collection.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/given_id_range.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/group_metrics_exchange.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/mon_main.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/space_monitor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/testing.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/op_apply_config.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/op_init_schema.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/op_load.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/op_commit_blob_seq.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/blob_depot.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/types.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/events.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/schema.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/assimilator.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/blob_depot_tablet.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/blocks.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/coro_tx.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/data.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/data_resolve.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/data_uncertain.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/garbage_collection.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/mon_main.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/space_monitor.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/testing.h
-)
-
-
-generate_enum_serilization(ydb-core-blob_depot
-  ${PROJECT_SOURCE_DIR}/ydb/core/blob_depot/schema.h
-  INCLUDE_HEADERS
-  ydb/core/blob_depot/schema.h
-)

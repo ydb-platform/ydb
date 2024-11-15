@@ -12,47 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(dq-actors-yt)
-
-
-target_compile_options(dq-actors-yt PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(dq-actors-yt PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  library-grpc-client
-  cpp-mapreduce-interface
-  providers-dq-config
-  essentials-core-issue
-  providers-common-metrics
-  dq-api-grpc
-  dq-api-protos
-  providers-dq-common
-  yt-lib-log
-  dq-actors-events
-  yt-yt-client
-)
-
-target_sources(dq-actors-yt PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_assigner.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_cleaner.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/worker_registrator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/lock.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_uploader.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_downloader.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_cleaner.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/yt_wrapper.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/yt_resource_manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_assigner.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/resource_manager.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/nodeid_cleaner.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/worker_registrator.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/lock.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/yt/yt_wrapper.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

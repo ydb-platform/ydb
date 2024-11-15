@@ -12,36 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(restricted-boost-range INTERFACE)
-
-
-target_compile_options(restricted-boost-range INTERFACE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(restricted-boost-range INTERFACE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/range/include
-)
-
-target_link_libraries(restricted-boost-range INTERFACE
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  restricted-boost-array
-  restricted-boost-assert
-  restricted-boost-concept_check
-  restricted-boost-config
-  restricted-boost-container_hash
-  restricted-boost-conversion
-  restricted-boost-core
-  restricted-boost-detail
-  restricted-boost-iterator
-  restricted-boost-mpl
-  restricted-boost-optional
-  restricted-boost-preprocessor
-  restricted-boost-regex
-  restricted-boost-static_assert
-  restricted-boost-tuple
-  restricted-boost-type_traits
-  restricted-boost-utility
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

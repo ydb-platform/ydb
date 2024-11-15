@@ -12,43 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(ydb-core-change_exchange)
-
-
-target_compile_options(ydb-core-change_exchange PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(ydb-core-change_exchange PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  ydb-core-base
-  ydb-core-scheme
-  library-actors-core
-  monlib-service-pages
-)
-
-target_sources(ydb-core-change_exchange PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/change_exchange.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/change_record.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/change_sender.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/change_sender_monitoring.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/resolve_partition.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/util.cpp
-)
-
-
-generate_enum_serilization(ydb-core-change_exchange
-  ${PROJECT_SOURCE_DIR}/ydb/core/change_exchange/change_record.h
-  INCLUDE_HEADERS
-  ydb/core/change_exchange/change_record.h
-)

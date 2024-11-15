@@ -12,77 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
-
-add_subdirectory(global)
-
-add_library(library-cpp-logger)
-
-
-target_link_libraries(library-cpp-logger PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  library-cpp-json
-  cpp-deprecated-atomic
-)
-
-target_sources(library-cpp-logger PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/backend.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/backend_creator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/composite.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/element.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/file.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/filter.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/filter_creator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/log.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/null.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/rotating_file.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/stream.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/sync_page_cache_file.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/system.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/thread.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/thread_creator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/all.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/priority.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/record.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/reopen.h
-)
-
-
-generate_enum_serilization(library-cpp-logger
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/priority.h
-  INCLUDE_HEADERS
-  library/cpp/logger/priority.h
-)
-
-add_global_library_for(library-cpp-logger.global
-  library-cpp-logger)
-
-
-target_link_libraries(library-cpp-logger.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  library-cpp-json
-  cpp-deprecated-atomic
-)
-
-target_sources(library-cpp-logger.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/composite_creator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/file_creator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/null_creator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/rotating_file_creator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/stream_creator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/sync_page_cache_file_creator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/system_creator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/logger/uninitialized_creator.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

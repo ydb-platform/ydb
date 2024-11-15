@@ -55,6 +55,7 @@ resources(ydb
   ${PROJECT_SOURCE_DIR}/ydb/apps/ydb/version.txt
   KEYS
   version.txt
+  OPTS
 )
 
 vcs_info(ydb)

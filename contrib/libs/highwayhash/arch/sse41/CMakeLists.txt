@@ -12,25 +12,9 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(highwayhash-arch-sse41)
-
-
-target_compile_options(highwayhash-arch-sse41 PRIVATE
-  -msse4.1
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(highwayhash-arch-sse41 PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/highwayhash
-)
-
-target_link_libraries(highwayhash-arch-sse41 PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-)
-
-target_sources(highwayhash-arch-sse41 PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/highwayhash/highwayhash/hh_sse41.cc
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+endif()
 

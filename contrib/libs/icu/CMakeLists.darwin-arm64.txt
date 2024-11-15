@@ -510,5 +510,5 @@ target_sources(contrib-libs-icu PRIVATE
 
 target_rodata_sources(contrib-libs-icu
   PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/icudt75_dat.rodata
+  ${PROJECT_SOURCE_DIR}/contrib/libs/icu/icudt76_dat.rodata
 )

@@ -12,30 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(core-persqueue-writer)
-
-
-target_link_libraries(core-persqueue-writer PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  cpp-digest-md5
-  cpp-string_utils-base64
-  ydb-core-base
-  core-persqueue-events
-  grpc_services-cancelation-protos
-  kqp-common-simple
-  ydb-core-protos
-  public-lib-base
-  lib-deprecated-kicli
-  cpp-client-ydb_params
-)
-
-target_sources(core-persqueue-writer PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/writer/metadata_initializers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/writer/partition_chooser_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/writer/source_id_encoding.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/writer/writer.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

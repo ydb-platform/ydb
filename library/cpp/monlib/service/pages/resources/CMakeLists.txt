@@ -12,65 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_rescompiler_bin
-  TOOL_rescompiler_dependency
-  tools/rescompiler/bin
-  rescompiler
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(service-pages-resources INTERFACE)
-
-
-target_link_libraries(service-pages-resources INTERFACE
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-  cpp-monlib-dynamic_counters
-)
-
-target_sources(service-pages-resources INTERFACE
-  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/resources/css_mon_page.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/resources/fonts_mon_page.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/resources/js_mon_page.h
-)
-
-
-add_global_library_for(service-pages-resources.global
-  service-pages-resources)
-
-
-target_link_libraries(service-pages-resources.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-resource
-  cpp-monlib-dynamic_counters
-)
-
-target_sources(service-pages-resources.global PRIVATE
-  ${PROJECT_BINARY_DIR}/library/cpp/monlib/service/pages/resources/ff1cb2429e1fce561e9b0ed0d5522c37.cpp
-)
-
-
-resources(service-pages-resources.global
-  ${PROJECT_BINARY_DIR}/library/cpp/monlib/service/pages/resources/ff1cb2429e1fce561e9b0ed0d5522c37.cpp
-  INPUTS
-  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/resources/static/css/bootstrap.min.css
-  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/resources/static/fonts/glyphicons-halflings-regular.eot
-  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/resources/static/fonts/glyphicons-halflings-regular.svg
-  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/resources/static/fonts/glyphicons-halflings-regular.ttf
-  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/resources/static/fonts/glyphicons-halflings-regular.woff
-  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/resources/static/js/bootstrap.min.js
-  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/pages/resources/static/js/jquery.min.js
-  KEYS
-  static/css/bootstrap.min.css
-  static/fonts/glyphicons-halflings-regular.eot
-  static/fonts/glyphicons-halflings-regular.svg
-  static/fonts/glyphicons-halflings-regular.ttf
-  static/fonts/glyphicons-halflings-regular.woff
-  static/js/bootstrap.min.js
-  static/js/jquery.min.js
-  OPTS
-)

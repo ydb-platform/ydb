@@ -12,39 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(object_storage)
-add_subdirectory(ut)
-add_subdirectory(hive_metastore)
-
-add_library(ydb-core-external_sources)
-
-
-target_link_libraries(ydb-core-external_sources PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  cpp-regex-pcre
-  library-cpp-scheme
-  ydb-core-base
-  core-external_sources-object_storage
-  external_sources-object_storage-inference
-  ydb-core-protos
-  library-actors-http
-  providers-common-db_id_async_resolver
-  providers-common-gateway
-  providers-s3-common
-  providers-s3-object_listers
-  providers-s3-path_generator
-  essentials-public-issue
-  cpp-client-ydb_params
-  cpp-client-ydb_value
-)
-
-target_sources(ydb-core-external_sources PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/external_data_source.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/external_source_factory.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/object_storage.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/validation_functions.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

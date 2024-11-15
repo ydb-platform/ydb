@@ -12,41 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(MCJIT)
-add_subdirectory(Orc)
-add_subdirectory(RuntimeDyld)
-add_subdirectory(PerfJITEvents)
-
-add_library(llvm14-lib-ExecutionEngine)
-
-
-target_compile_options(llvm14-lib-ExecutionEngine PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(llvm14-lib-ExecutionEngine PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine
-)
-
-target_link_libraries(llvm14-lib-ExecutionEngine PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-llvm14
-  libs-llvm14-include
-  ExecutionEngine-Orc-TargetProcess
-  lib-ExecutionEngine-RuntimeDyld
-  llvm14-lib-IR
-  llvm14-lib-MC
-  llvm14-lib-Object
-  llvm14-lib-Support
-  llvm14-lib-Target
-)
-
-target_sources(llvm14-lib-ExecutionEngine PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/ExecutionEngine.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/ExecutionEngineBindings.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/GDBRegistrationListener.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/SectionMemoryManager.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/TargetSelect.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

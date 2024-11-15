@@ -28,7 +28,7 @@ target_link_libraries(ydb-core-fq-libs-result_formatter-ut PUBLIC
   yutil
   cpp-testing-unittest_main
   fq-libs-result_formatter
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
   ydb-core-testlib
 )
 

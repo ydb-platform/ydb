@@ -30,7 +30,7 @@ target_link_libraries(ydb-core-mind-bscontroller-ut_selfheal PUBLIC
   core-tx-scheme_board
   minikql-comp_nodes-llvm14
   udf-service-stub
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
 )
 
 target_allocator(ydb-core-mind-bscontroller-ut_selfheal

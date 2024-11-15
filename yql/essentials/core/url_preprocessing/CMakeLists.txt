@@ -12,24 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(interface)
-
-add_library(essentials-core-url_preprocessing)
-
-
-target_link_libraries(essentials-core-url_preprocessing PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  core-url_preprocessing-interface
-  providers-common-proto
-  essentials-utils-log
-  cpp-regex-pcre
-)
-
-target_sources(essentials-core-url_preprocessing PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/url_preprocessing/url_mapper.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/url_preprocessing/pattern_group.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/core/url_preprocessing/url_preprocessing.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

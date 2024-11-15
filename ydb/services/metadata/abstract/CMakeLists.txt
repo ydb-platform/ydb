@@ -12,42 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(services-metadata-abstract)
-
-
-target_link_libraries(services-metadata-abstract PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  ydb-core-base
-  ydb-library-accessor
-  library-actors-core
-  essentials-core-expr_nodes
-  api-protos
-)
-
-target_sources(services-metadata-abstract PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/abstract/common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/abstract/decoder.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/abstract/events.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/abstract/fetcher.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/abstract/kqp_common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/abstract/initialization.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/abstract/parsing.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/abstract/request_features.cpp
-)
-
-
-generate_enum_serilization(services-metadata-abstract
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/abstract/kqp_common.h
-  INCLUDE_HEADERS
-  ydb/services/metadata/abstract/kqp_common.h
-)

@@ -12,56 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-find_package(Python3 REQUIRED)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-set(KOSHER_SVN_VERSION )
-
-set(SANDBOX_TASK_ID 0)
-
-set(BUILD_TYPE RELEASE)
-
-add_library(library-cpp-build_info)
-
-
-target_include_directories(library-cpp-build_info PUBLIC
-  ${PROJECT_BINARY_DIR}/library/cpp/build_info
-)
-
-target_link_libraries(library-cpp-build_info PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-string_utils-base64
-)
-
-target_sources(library-cpp-build_info PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/build_info/build_info_static.cpp
-  ${PROJECT_BINARY_DIR}/library/cpp/build_info/buildinfo_data.h
-  ${PROJECT_BINARY_DIR}/library/cpp/build_info/sandbox.cpp
-  ${PROJECT_BINARY_DIR}/library/cpp/build_info/build_info.cpp
-  ${PROJECT_BINARY_DIR}/library/cpp/build_info/buildinfo_data.h
-)
-
-
-add_custom_command(
-  OUTPUT
-  ${PROJECT_BINARY_DIR}/library/cpp/build_info/buildinfo_data.h
-  DEPENDS
-  ${PROJECT_SOURCE_DIR}/build/scripts/build_info_gen.py
-  COMMAND
-  Python3::Interpreter
-  ${PROJECT_SOURCE_DIR}/build/scripts/build_info_gen.py
-  ${PROJECT_BINARY_DIR}/library/cpp/build_info/buildinfo_data.h
-  \"${CMAKE_CXX_COMPILER}\"
-  \"${CMAKE_CXX_FLAGS}\"
-)
-
-configure_file(
-  ${PROJECT_SOURCE_DIR}/library/cpp/build_info/sandbox.cpp.in
-  ${PROJECT_BINARY_DIR}/library/cpp/build_info/sandbox.cpp
-)
-
-configure_file(
-  ${PROJECT_SOURCE_DIR}/library/cpp/build_info/build_info.cpp.in
-  ${PROJECT_BINARY_DIR}/library/cpp/build_info/build_info.cpp
-)

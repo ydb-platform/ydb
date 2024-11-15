@@ -12,6 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(ut)
+
 add_library(dq-actors-common)
 
 
@@ -24,7 +26,7 @@ target_link_libraries(dq-actors-common PUBLIC
   yutil
   library-actors-core
   dq-actors-protos
-  yql-public-issue
+  essentials-public-issue
 )
 
 target_sources(dq-actors-common PRIVATE

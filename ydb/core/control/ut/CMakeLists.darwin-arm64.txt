@@ -30,7 +30,7 @@ target_link_libraries(ydb-core-control-ut PUBLIC
   ydb-core-base
   ydb-core-mind
   ydb-core-mon
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
   ydb-services-ydb
   ydb-services-persqueue_v1
   ydb-services-kesus

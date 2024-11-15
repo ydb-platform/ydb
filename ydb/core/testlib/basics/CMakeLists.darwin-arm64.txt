@@ -13,6 +13,7 @@
 # changes in this file.
 
 add_subdirectory(default)
+add_subdirectory(pg)
 
 add_library(core-testlib-basics)
 

@@ -24,9 +24,9 @@ target_link_libraries(providers-common-ut_helpers PUBLIC
   yutil
   library-cpp-retry
   core-testlib-basics
-  yql-minikql-computation
+  essentials-minikql-computation
   udf-service-exception_policy
-  library-yql-sql
+  yql-essentials-sql
   providers-common-comp_nodes
 )
 

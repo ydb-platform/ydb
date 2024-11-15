@@ -12,35 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(ydb-core-mon)
-
-
-target_link_libraries(ydb-core-mon PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-json
-  cpp-lwtrace-mon
-  cpp-protobuf-json
-  cpp-string_utils-url
-  ydb-core-base
-  core-grpc_services-base
-  ydb-core-protos
-  ydb-library-aclib
-  library-actors-core
-  library-actors-http
-  essentials-public-issue
-  client-ydb_types-status
-)
-
-target_sources(ydb-core-mon PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/mon/async_http_mon.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/mon/mon.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/mon/sync_http_mon.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/mon/crossref.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/mon/async_http_mon.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/mon/mon.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/mon/sync_http_mon.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/mon/crossref.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

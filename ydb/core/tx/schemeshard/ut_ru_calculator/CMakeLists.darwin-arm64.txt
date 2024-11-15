@@ -31,7 +31,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_ru_calculator PUBLIC
   cpp-testing-unittest
   core-tx-tx_proxy
   udf-service-stub
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
   ydb-services-ydb
   ydb-services-kesus
   ydb-services-persqueue_cluster_discovery

@@ -12,66 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(ut)
-
-add_library(core-ymq-base)
-
-
-target_link_libraries(core-ymq-base PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  contrib-libs-openssl
-  library-cpp-cgiparam
-  library-cpp-ipmath
-  library-cpp-lwtrace
-  cpp-monlib-dynamic_counters
-  library-cpp-scheme
-  cpp-string_utils-base64
-  library-cpp-unified_agent_client
-  ydb-core-base
-  ydb-core-protos
-  core-ymq-proto
-  core-kqp-common
-  ydb-library-aclib
-  library-http_proxy-authorization
-  library-http_proxy-error
-  ydb-library-protobuf_printer
-  public-lib-scheme_types
-)
-
-target_sources(core-ymq-base PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/base/acl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/base/action.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/base/counters.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/base/dlq_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/base/events_writer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/base/helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/base/probes.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/base/queue_attributes.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/base/queue_id.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/base/run_query.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/base/secure_protobuf_printer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/base/events_writer_iface.h
-)
-
-
-generate_enum_serilization(core-ymq-base
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/base/query_id.h
-  INCLUDE_HEADERS
-  ydb/core/ymq/base/query_id.h
-)
-
-generate_enum_serilization(core-ymq-base
-  ${PROJECT_SOURCE_DIR}/ydb/core/ymq/base/cloud_enums.h
-  INCLUDE_HEADERS
-  ydb/core/ymq/base/cloud_enums.h
-)

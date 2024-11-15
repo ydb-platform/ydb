@@ -12,45 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(dsv_udf INTERFACE)
-
-
-target_compile_options(dsv_udf INTERFACE
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=28
-  -DUDF_ABI_VERSION_PATCH=0
-)
-
-target_link_libraries(dsv_udf INTERFACE
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  essentials-public-udf
-  public-udf-support
-  cpp-deprecated-split
-)
-
-
-add_global_library_for(dsv_udf.global
-  dsv_udf)
-
-
-target_compile_options(dsv_udf.global PRIVATE
-  -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=28
-  -DUDF_ABI_VERSION_PATCH=0
-)
-
-target_link_libraries(dsv_udf.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  essentials-public-udf
-  public-udf-support
-  cpp-deprecated-split
-)
-
-target_sources(dsv_udf.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/udfs/logs/dsv/dsv_udf.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

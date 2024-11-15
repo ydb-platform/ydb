@@ -12,27 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(columnshard-engines-insert_table)
-
-
-target_link_libraries(columnshard-engines-insert_table PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  library-formats-arrow-modifier
-  ydb-core-protos
-  core-formats-arrow
-  ydb-core-tablet_flat
-)
-
-target_sources(columnshard-engines-insert_table PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/insert_table/insert_table.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/insert_table/rt_insertion.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/insert_table/user_data.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/insert_table/inserted.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/insert_table/committed.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/insert_table/path_info.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/insert_table/meta.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

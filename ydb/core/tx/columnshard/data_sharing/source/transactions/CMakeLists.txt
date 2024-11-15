@@ -12,21 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(data_sharing-source-transactions)
-
-
-target_link_libraries(data_sharing-source-transactions PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  data_sharing-common-transactions
-)
-
-target_sources(data_sharing-source-transactions PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/source/transactions/tx_start_to_source.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/source/transactions/tx_data_ack_to_source.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/source/transactions/tx_finish_ack_to_source.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/source/transactions/tx_write_source_cursor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/data_sharing/source/transactions/tx_start_source_cursor.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

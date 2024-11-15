@@ -12,50 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(ut)
-
-add_library(fq-libs-common)
-
-
-target_compile_options(fq-libs-common PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(fq-libs-common PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  tools-enum_parser-enum_serialization_runtime
-  library-cpp-blockcodecs
-  libs-control_plane_storage-events
-  fq-libs-events
-  providers-common-structured_token
-  essentials-public-issue
-  api-protos
-)
-
-target_sources(fq-libs-common PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/compression.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/debug_info.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/entity_id.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/util.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/rows_proto_splitter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/cache.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/compression.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/entity_id.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/rows_proto_splitter.h
-)
-
-
-generate_enum_serilization(fq-libs-common
-  ${PROJECT_SOURCE_DIR}/ydb/core/fq/libs/common/util.h
-  INCLUDE_HEADERS
-  ydb/core/fq/libs/common/util.h
-)

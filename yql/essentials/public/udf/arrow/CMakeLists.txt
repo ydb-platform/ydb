@@ -12,31 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(public-udf-arrow)
-
-
-target_compile_options(public-udf-arrow PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(public-udf-arrow PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  essentials-public-udf
-  libs-apache-arrow
-)
-
-target_sources(public-udf-arrow PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/args_dechunker.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/udf_arrow_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/bit_util.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/util.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/block_reader.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/block_item.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/block_item_hasher.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/block_item_comparator.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/block_type_helper.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/public/udf/arrow/memory_pool.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

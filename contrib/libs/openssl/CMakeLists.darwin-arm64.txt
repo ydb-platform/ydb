@@ -79,6 +79,7 @@ target_sources(contrib-libs-openssl PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/openssl/ssl/ssl_sess.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/openssl/ssl/ssl_stat.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/openssl/ssl/ssl_txt.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/openssl/ssl/ssl_quic.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/openssl/ssl/ssl_utst.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/openssl/ssl/statem/extensions.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/openssl/ssl/statem/extensions_clnt.c
@@ -88,6 +89,7 @@ target_sources(contrib-libs-openssl PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/libs/openssl/ssl/statem/statem_clnt.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/openssl/ssl/statem/statem_dtls.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/openssl/ssl/statem/statem_lib.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/openssl/ssl/statem/statem_quic.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/openssl/ssl/statem/statem_srvr.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/openssl/ssl/t1_enc.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/openssl/ssl/t1_lib.c

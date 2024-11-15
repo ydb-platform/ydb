@@ -33,8 +33,8 @@ target_link_libraries(ydb_stress_tool PUBLIC
   ydb-core-node_whiteboard
   ydb-core-tablet
   ydb-library-pdisk_io
-  yql-parser-pg_wrapper
-  yql-sql-pg
+  essentials-parser-pg_wrapper
+  essentials-sql-pg
   minikql-comp_nodes-llvm14
   ydb_device_test
   tools-stress_tool-proto

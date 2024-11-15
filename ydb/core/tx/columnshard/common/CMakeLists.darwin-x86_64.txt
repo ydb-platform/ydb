@@ -42,6 +42,7 @@ target_sources(tx-columnshard-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/portion.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/tablet_id.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/blob.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/volume.cpp
 )
 
 

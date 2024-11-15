@@ -12,57 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(restricted-boost-iostreams)
-
-
-target_compile_options(restricted-boost-iostreams PRIVATE
-  -DBOOST_IOSTREAMS_USE_DEPRECATED
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(restricted-boost-iostreams PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/iostreams/include
-)
-
-target_include_directories(restricted-boost-iostreams PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libbz2
-  ${PROJECT_SOURCE_DIR}/contrib/libs/zstd/include
-)
-
-target_link_libraries(restricted-boost-iostreams PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-libbz2
-  contrib-libs-lzma
-  contrib-libs-zlib
-  contrib-libs-zstd
-  restricted-boost-assert
-  restricted-boost-config
-  restricted-boost-core
-  restricted-boost-detail
-  restricted-boost-function
-  restricted-boost-integer
-  restricted-boost-iterator
-  restricted-boost-mpl
-  restricted-boost-numeric_conversion
-  restricted-boost-preprocessor
-  restricted-boost-random
-  restricted-boost-range
-  restricted-boost-regex
-  restricted-boost-smart_ptr
-  restricted-boost-static_assert
-  restricted-boost-throw_exception
-  restricted-boost-type_traits
-  restricted-boost-utility
-)
-
-target_sources(restricted-boost-iostreams PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/bzip2.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/file_descriptor.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/gzip.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/lzma.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/mapped_file.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/zlib.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/iostreams/src/zstd.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

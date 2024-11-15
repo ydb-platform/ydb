@@ -12,28 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(ExecutionEngine-Orc-Shared)
-
-
-target_compile_options(ExecutionEngine-Orc-Shared PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(ExecutionEngine-Orc-Shared PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared
-)
-
-target_link_libraries(ExecutionEngine-Orc-Shared PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-llvm14
-  llvm14-lib-Support
-)
-
-target_sources(ExecutionEngine-Orc-Shared PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared/AllocationActions.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared/OrcError.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared/OrcRTBridge.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/llvm14/lib/ExecutionEngine/Orc/Shared/SimpleRemoteEPCUtils.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

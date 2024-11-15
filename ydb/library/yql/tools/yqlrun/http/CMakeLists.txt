@@ -12,118 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(tools-yqlrun-http)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-
-target_compile_options(tools-yqlrun-http PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(tools-yqlrun-http PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-charset
-  cpp-http-misc
-  cpp-http-server
-  library-cpp-json
-  library-cpp-logger
-  cpp-mime-types
-  cpp-openssl-io
-  cpp-string_utils-quote
-  library-cpp-uri
-  library-cpp-yson
-  cpp-yson-node
-  essentials-core-facade
-  essentials-core-type_ann
-  providers-dq-provider
-  providers-result-provider
-  essentials-parser-pg_wrapper
-  sql-v1-format
-  yt-gateway-file
-  providers-yt-provider
-  essentials-core-url_preprocessing
-  providers-pg-provider
-)
-
-target_sources(tools-yqlrun-http PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/assets_servlet.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/server.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/servlet.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/yql_functions_servlet.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/yql_servlet.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/yql_server.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/bower.json
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/favicon.ico
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/file-index.html
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/css/base.css
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/ace.min.js
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/app.js
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/dagre-d3.core.min.js
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/dagre.core.min.js
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/graphlib.core.min.js
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/mode-sql.js
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/mode-yql.js
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/theme-tomorrow.min.js
-)
-
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/bower.json
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/bower.json
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/favicon.ico
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/favicon.ico
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/file-index.html
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/file-index.html
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/css/base.css
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/css/base.css
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/ace.min.js
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/ace.min.js
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/app.js
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/app.js
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/dagre-d3.core.min.js
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/dagre-d3.core.min.js
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/dagre.core.min.js
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/dagre.core.min.js
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/graphlib.core.min.js
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/graphlib.core.min.js
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/mode-sql.js
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/mode-sql.js
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/mode-yql.js
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/mode-yql.js
-)
-
-copy_file(
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/theme-tomorrow.min.js
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/tools/yqlrun/http/www/js/theme-tomorrow.min.js
-)

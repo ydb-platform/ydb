@@ -57,4 +57,5 @@ resources(cpp-client-resources.global
   KEYS
   ydb_sdk_version.txt
   ydb_root_ca.pem
+  OPTS
 )

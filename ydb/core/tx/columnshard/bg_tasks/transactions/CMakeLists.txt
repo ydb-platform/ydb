@@ -12,25 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(columnshard-bg_tasks-transactions)
-
-
-target_link_libraries(columnshard-bg_tasks-transactions PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-tablet_flat
-  columnshard-bg_tasks-abstract
-  columnshard-bg_tasks-events
-  columnshard-bg_tasks-session
-  ydb-core-protos
-)
-
-target_sources(columnshard-bg_tasks-transactions PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/bg_tasks/transactions/tx_general.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/bg_tasks/transactions/tx_save_progress.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/bg_tasks/transactions/tx_save_state.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/bg_tasks/transactions/tx_remove.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/bg_tasks/transactions/tx_add.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

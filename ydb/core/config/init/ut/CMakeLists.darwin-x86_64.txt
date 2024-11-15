@@ -29,7 +29,7 @@ target_link_libraries(ydb-core-config-init-ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-config-init
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
   udf-service-stub
 )
 

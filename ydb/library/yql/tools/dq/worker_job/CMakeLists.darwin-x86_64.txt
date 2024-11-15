@@ -35,12 +35,13 @@ target_link_libraries(tools-dq-worker_job PUBLIC
   providers-dq-stats_collector
   providers-dq-task_runner
   udf-service-terminate_policy
-  library-yql-utils
-  yql-utils-log
+  yql-essentials-utils
+  essentials-utils-network
+  essentials-utils-log
   utils-log-proto
   dq-actors-yt
   providers-dq-global_worker_manager
-  yql-utils-signals
+  essentials-utils-signals
 )
 
 target_sources(tools-dq-worker_job PRIVATE

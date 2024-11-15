@@ -12,41 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(api)
-
-add_library(services-deprecated-persqueue_v0)
-
-
-target_link_libraries(services-deprecated-persqueue_v0 PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  api-grpc-persqueue-deprecated
-  api-protos-persqueue-deprecated
-  persqueue-deprecated-read_batch_converter
-  ydb-core-base
-  core-tx-tx_proxy
-  core-client-server
-  ydb-core-grpc_services
-  core-mind-address_classification
-  ydb-core-persqueue
-  core-persqueue-events
-  core-persqueue-writer
-  ydb-core-protos
-  ydb-library-aclib
-  library-persqueue-topic_parser
-  services-lib-actors
-  services-lib-sharding
-  ydb-services-persqueue_v1
-  ydb-services-metadata
-)
-
-target_sources(services-deprecated-persqueue_v0 PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/grpc_pq_clusters_updater_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/grpc_pq_read.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/grpc_pq_read_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/grpc_pq_write.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/grpc_pq_write_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/deprecated/persqueue_v0/persqueue.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,22 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(library-cpp-packedtypes)
-
-
-target_link_libraries(library-cpp-packedtypes PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-streams-zc_memory_input
-)
-
-target_sources(library-cpp-packedtypes PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/packedtypes/longs.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/packedtypes/packedfloat.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/packedtypes/fixed_point.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/packedtypes/packed.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/packedtypes/packedfloat.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/packedtypes/zigzag.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

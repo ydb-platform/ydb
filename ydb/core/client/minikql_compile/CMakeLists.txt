@@ -12,40 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
-
-add_library(core-client-minikql_compile)
-
-
-target_compile_options(core-client-minikql_compile PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-client-minikql_compile PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  cpp-threading-future
-  ydb-core-base
-  ydb-core-engine
-  core-kqp-provider
-  ydb-core-scheme
-  yql-essentials-ast
-  yql-essentials-core
-  yql-essentials-minikql
-  providers-common-mkql
-)
-
-target_sources(core-client-minikql_compile PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/minikql_compile/compile_context.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/minikql_compile/compile_result.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/minikql_compile/db_key_resolver.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/minikql_compile/mkql_compile_service.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/minikql_compile/yql_expr_minikql.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/minikql_compile/compile_context.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/minikql_compile/compile_result.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/minikql_compile/db_key_resolver.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/client/minikql_compile/yql_expr_minikql.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

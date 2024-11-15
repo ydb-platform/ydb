@@ -12,53 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(services-metadata-manager)
-
-
-target_link_libraries(services-metadata-manager PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-library-accessor
-  library-actors-core
-  ydb-library-table_creator
-  essentials-sql-settings
-  api-protos
-  ydb-core-protos
-  services-bg_tasks-abstract
-  services-metadata-initializer
-  ydb-core-base
-  services-metadata-request
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(services-metadata-manager PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/manager/abstract.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/manager/alter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/manager/alter_impl.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/manager/table_record.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/manager/restore.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/manager/modification.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/manager/generic_manager.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/manager/preparation_controller.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/manager/restore_controller.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/manager/common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/manager/ydb_value_operator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/manager/modification_controller.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/manager/object.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/manager/fetch_database.cpp
-)
-
-
-generate_enum_serilization(services-metadata-manager
-  ${PROJECT_SOURCE_DIR}/ydb/services/metadata/manager/abstract.h
-  INCLUDE_HEADERS
-  ydb/services/metadata/manager/abstract.h
-)

@@ -12,33 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(providers-dq-planner)
-
-
-target_compile_options(providers-dq-planner PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-dq-planner PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  essentials-core-services
-  essentials-minikql-comp_nodes
-  essentials-core-dq_integration
-  yql-dq-opt
-  yql-dq-type_ann
-  yql-dq-tasks
-  providers-common-mkql
-  dq-api-protos
-  providers-dq-common
-  providers-dq-expr_nodes
-  providers-dq-mkql
-  providers-dq-opt
-)
-
-target_sources(providers-dq-planner PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/planner/dqs_task_graph.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/planner/execution_planner.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

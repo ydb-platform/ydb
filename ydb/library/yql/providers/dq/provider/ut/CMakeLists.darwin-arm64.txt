@@ -29,7 +29,7 @@ target_link_libraries(ydb-library-yql-providers-dq-provider-ut PUBLIC
   cpp-testing-unittest_main
   providers-dq-provider
   cpp-testing-unittest
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
   udf-service-stub
 )
 

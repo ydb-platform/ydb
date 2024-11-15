@@ -12,53 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(gateway-behaviour-external_data_source)
-
-
-target_compile_options(gateway-behaviour-external_data_source PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(gateway-behaviour-external_data_source PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  services-metadata-initializer
-  services-metadata-abstract
-  services-metadata-secret
-  kqp-gateway-actors
-  core-kqp-federated_query
-  kqp-gateway-utils
-  behaviour-tablestore-operations
-)
-
-target_sources(gateway-behaviour-external_data_source PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/external_data_source/manager.cpp
-)
-
-
-add_global_library_for(gateway-behaviour-external_data_source.global
-  gateway-behaviour-external_data_source)
-
-
-target_compile_options(gateway-behaviour-external_data_source.global PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(gateway-behaviour-external_data_source.global PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  services-metadata-initializer
-  services-metadata-abstract
-  services-metadata-secret
-  kqp-gateway-actors
-  core-kqp-federated_query
-  kqp-gateway-utils
-  behaviour-tablestore-operations
-)
-
-target_sources(gateway-behaviour-external_data_source.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/gateway/behaviour/external_data_source/behaviour.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

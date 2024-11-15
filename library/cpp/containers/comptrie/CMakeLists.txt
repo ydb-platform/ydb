@@ -12,39 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(cpp-containers-comptrie)
-
-
-target_link_libraries(cpp-containers-comptrie PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-packers
-  cpp-containers-compact_vector
-  cpp-on_disk-chunks
-  util-draft
-)
-
-target_sources(cpp-containers-comptrie PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/comptrie.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/comptrie_builder.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/comptrie_impl.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/make_fast_layout.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/minimize.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/node.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/opaque_trie_iterator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/prefix_iterator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/search_iterator.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/write_trie_backwards.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/writeable_node.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/array_with_size.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/chunked_helpers_trie.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/comptrie.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/comptrie_packer.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/comptrie_trie.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/first_symbol_iterator.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/key_selector.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/leaf_skipper.h
-  ${PROJECT_SOURCE_DIR}/library/cpp/containers/comptrie/set.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,47 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(codegen)
-add_subdirectory(ut)
-
-add_library(providers-yt-codec)
-
-
-target_compile_options(providers-yt-codec PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-yt-codec PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-streams-brotli
-  library-cpp-yson
-  cpp-yson-node
-  cpp-mapreduce-interface
-  cpp-mapreduce-io
-  libs-apache-arrow
-  yql-essentials-minikql
-  essentials-public-udf
-  yql-essentials-utils
-  essentials-public-result_format
-  public-udf-arrow
-  providers-common-codec
-  common-codec-arrow
-  common-schema-mkql
-  common-schema-parser
-  providers-yt-common
-  yt-lib-mkql_helpers
-  yt-lib-skiff
-)
-
-target_sources(providers-yt-codec PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_arrow_converter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_io.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_job.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_io.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec_job.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/codec/yt_codec.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

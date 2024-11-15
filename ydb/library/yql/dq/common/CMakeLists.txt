@@ -12,40 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(yql-dq-common)
-
-
-target_link_libraries(yql-dq-common PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  library-actors-util
-  library-mkql_proto-protos
-  yql-dq-proto
-  yql-essentials-utils
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(yql-dq-common PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/common/dq_common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/common/dq_value.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/common/dq_serialized_batch.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/common/rope_over_buffer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/common/dq_resource_quoter.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/common/rope_over_buffer.h
-)
-
-
-generate_enum_serilization(yql-dq-common
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/common/dq_common.h
-  INCLUDE_HEADERS
-  ydb/library/yql/dq/common/dq_common.h
-)

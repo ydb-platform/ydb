@@ -31,7 +31,7 @@ target_compile_options(yt-yt-client PRIVATE
 
 target_include_directories(yt-yt-client PUBLIC
   ${PROJECT_BINARY_DIR}/yt
-  ${PROJECT_BINARY_DIR}/yt/yt/client/_/api/rpc_proxy
+  ${PROJECT_BINARY_DIR}/yt/yt/client/api/rpc_proxy
 )
 
 target_link_libraries(yt-yt-client PUBLIC
@@ -59,7 +59,7 @@ target_sources(yt-yt-client PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/client/api/client_cache.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/api/delegating_client.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/api/delegating_transaction.cpp
-  ${PROJECT_SOURCE_DIR}/yt/yt/client/api/distributed_table_sessions.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/client/api/distributed_table_session.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/api/etc_client.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/api/journal_client.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/api/operation_client.cpp
@@ -158,6 +158,7 @@ target_sources(yt-yt-client PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/schemaless_buffered_dynamic_table_writer.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/schemaless_dynamic_table_writer.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/serialize.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/table_upload_options.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/logical_type.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/merge_table_schemas.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/table_client/name_table.cpp
@@ -216,11 +217,11 @@ target_sources(yt-yt-client PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/client/kafka/packet.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/kafka/protocol.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/kafka/requests.cpp
-  ${PROJECT_BINARY_DIR}/yt/yt/client/_/api/rpc_proxy/protocol_version_variables.h
+  ${PROJECT_BINARY_DIR}/yt/yt/client/api/rpc_proxy/protocol_version_variables.h
 )
 
 
 configure_file(
   ${PROJECT_SOURCE_DIR}/yt/yt/client/api/rpc_proxy/protocol_version_variables.h.in
-  ${PROJECT_BINARY_DIR}/yt/yt/client/_/api/rpc_proxy/protocol_version_variables.h
+  ${PROJECT_BINARY_DIR}/yt/yt/client/api/rpc_proxy/protocol_version_variables.h
 )

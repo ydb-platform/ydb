@@ -12,37 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(core-quoter-public)
-
-
-target_compile_options(core-quoter-public PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-quoter-public PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  ydb-library-time_series_vec
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(core-quoter-public PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/quoter/public/quoter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/quoter/public/quoter.h
-)
-
-
-generate_enum_serilization(core-quoter-public
-  ${PROJECT_SOURCE_DIR}/ydb/core/quoter/public/quoter.h
-  INCLUDE_HEADERS
-  ydb/core/quoter/public/quoter.h
-)

@@ -12,53 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(contrib-libs-sasl)
-
-
-target_compile_options(contrib-libs-sasl PRIVATE
-  -DCONFIGDIR="/tmp/yamaker/sasl/out/lib/sasl2:/var/empty/cyrus-sasl-2.1.28/etc/sasl2"
-  -DHAVE_CONFIG_H
-  -DOBSOLETE_CRAM_ATTR=1
-  -DOBSOLETE_DIGEST_ATTR=1
-  -DPLUGINDIR="/tmp/yamaker/sasl/out/lib/sasl2"
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(contrib-libs-sasl PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/common
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/include
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/sasldb
-)
-
-target_link_libraries(contrib-libs-sasl PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-openssl
-)
-
-target_sources(contrib-libs-sasl PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/common/plugin_common.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/auxprop.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/canonusr.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/checkpw.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/client.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/common.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/config.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/dlopen.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/external.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/md5.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/saslutil.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/server.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/lib/seterror.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins/anonymous.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins/cram.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins/digestmd5.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins/otp.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins/plain.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins/sasldb.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/plugins/scram.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/sasl/sasldb/db_none.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

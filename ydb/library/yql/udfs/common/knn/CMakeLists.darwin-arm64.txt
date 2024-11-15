@@ -24,7 +24,7 @@ target_compile_options(knn_udf INTERFACE
 target_link_libraries(knn_udf INTERFACE
   contrib-libs-cxxsupp
   yutil
-  yql-public-udf
+  essentials-public-udf
   public-udf-support
   library-cpp-dot_product
   library-cpp-l1_distance
@@ -45,7 +45,7 @@ target_compile_options(knn_udf.global PRIVATE
 target_link_libraries(knn_udf.global PUBLIC
   contrib-libs-cxxsupp
   yutil
-  yql-public-udf
+  essentials-public-udf
   public-udf-support
   library-cpp-dot_product
   library-cpp-l1_distance

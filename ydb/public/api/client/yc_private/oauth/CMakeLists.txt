@@ -12,85 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_grpc_cpp_bin
-  TOOL_grpc_cpp_dependency
-  contrib/tools/protoc/plugins/grpc_cpp
-  grpc_cpp
-)
-
-get_built_tool_path(
-  TOOL_protoc_bin
-  TOOL_protoc_dependency
-  contrib/tools/protoc/bin
-  protoc
-)
-
-get_built_tool_path(
-  TOOL_cpp_styleguide_bin
-  TOOL_cpp_styleguide_dependency
-  contrib/tools/protoc/plugins/cpp_styleguide
-  cpp_styleguide
-)
-
-add_library(client-yc_private-oauth)
-
-
-set_property(TARGET client-yc_private-oauth PROPERTY PROTOC_EXTRA_OUTS
-  .grpc.pb.cc
-  .grpc.pb.h
-)
-
-target_link_libraries(client-yc_private-oauth PUBLIC
-  contrib-libs-googleapis-common-protos
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-grpc
-  client-yc_private-iam
-  contrib-libs-protobuf
-)
-
-target_proto_messages(client-yc_private-oauth PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/oauth/session_service.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/oauth/cloud_user.proto
-  ${PROJECT_SOURCE_DIR}/ydb/public/api/client/yc_private/oauth/claims.proto
-)
-
-target_sources(client-yc_private-oauth PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/oauth/session_service.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/oauth/session_service.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/oauth/cloud_user.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/oauth/cloud_user.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/oauth/claims.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/public/api/client/yc_private/oauth/claims.grpc.pb.h
-)
-
-
-target_proto_outs(client-yc_private-oauth
-  --cpp_out=${PROJECT_BINARY_DIR}/
-  --cpp_styleguide_out=${PROJECT_BINARY_DIR}/
-)
-
-target_proto_addincls(client-yc_private-oauth
-  ./
-  ${PROJECT_SOURCE_DIR}/
-  ${PROJECT_BINARY_DIR}
-  ${PROJECT_SOURCE_DIR}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/googleapis-common-protos
-  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
-  ${PROJECT_BINARY_DIR}
-  ${PROJECT_SOURCE_DIR}/contrib/libs/protobuf/src
-)
-
-target_proto_plugin(client-yc_private-oauth
-  grpc_cpp
-  ${TOOL_grpc_cpp_bin}
-)
-
-
-if(NOT CMAKE_CROSSCOMPILING)
-  add_dependencies(client-yc_private-oauth
-    grpc_cpp
-  )
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
 endif()
+

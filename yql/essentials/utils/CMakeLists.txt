@@ -12,67 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(fetch)
-add_subdirectory(log)
-add_subdirectory(backtrace)
-add_subdirectory(memory_profiling)
-add_subdirectory(failure_injector)
-add_subdirectory(threading)
-add_subdirectory(network)
-add_subdirectory(signals)
-
-add_library(yql-essentials-utils)
-
-
-target_link_libraries(yql-essentials-utils PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-digest-md5
-  cpp-string_utils-quote
-  cpp-threading-future
-  cpp-deprecated-atomic
-  contrib-libs-miniselect
-)
-
-target_sources(yql-essentials-utils PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/chunked_buffer.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/debug_info.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/exceptions.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/future_action.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/hash.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/limiting_allocator.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/line_split.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/md5_stream.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/method_index.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/multi_resource_lock.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/parse_double.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/proc_alive.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/rand_guid.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/retry.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/sort.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/swap_bytes.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/url_builder.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/utf8.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/yql_panic.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/yql_paths.cpp
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/cast.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/chunked_buffer.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/debug_info.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/exceptions.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/future_action.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/hash.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/md5_stream.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/method_index.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/multi_resource_lock.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/parse_double.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/proc_alive.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/rand_guid.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/resetable_setting.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/retry.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/sort.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/swap_bytes.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/yql_panic.h
-  ${PROJECT_SOURCE_DIR}/yql/essentials/utils/yql_paths.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

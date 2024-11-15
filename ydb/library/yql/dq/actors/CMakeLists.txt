@@ -12,45 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_grpc_cpp_bin
-  TOOL_grpc_cpp_dependency
-  contrib/tools/protoc/plugins/grpc_cpp
-  grpc_cpp
-)
-
-add_subdirectory(protos)
-add_subdirectory(compute)
-add_subdirectory(common)
-add_subdirectory(spilling)
-add_subdirectory(task_runner)
-add_subdirectory(input_transforms)
-
-add_library(yql-dq-actors)
-
-
-target_link_libraries(yql-dq-actors PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-grpc
-  dq-actors-protos
-)
-
-target_sources(yql-dq-actors PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/actors/dq.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/dq/actors/dq_events_ids.cpp
-)
-
-
-target_proto_plugin(yql-dq-actors
-  grpc_cpp
-  ${TOOL_grpc_cpp_bin}
-)
-
-
-if(NOT CMAKE_CROSSCOMPILING)
-  add_dependencies(yql-dq-actors
-    grpc_cpp
-  )
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
 endif()
+

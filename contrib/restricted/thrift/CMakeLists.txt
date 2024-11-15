@@ -12,83 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(contrib-restricted-thrift)
-
-
-target_compile_options(contrib-restricted-thrift PRIVATE
-  -Wno-deprecated-declarations
-  -Wno-unused-function
-  -Wno-unused-parameter
-  -Wno-unused-private-field
-  -Wno-unused-variable
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(contrib-restricted-thrift PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift
-)
-
-target_link_libraries(contrib-restricted-thrift PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-libevent
-  contrib-libs-openssl
-  contrib-libs-zlib
-  restricted-boost-interprocess
-  restricted-boost-locale
-  restricted-boost-math
-  restricted-boost-system
-  restricted-boost-thread
-)
-
-target_sources(contrib-restricted-thrift PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/TApplicationException.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/TOutput.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/VirtualProfiling.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/async/TAsyncChannel.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/async/TAsyncProtocolProcessor.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/async/TConcurrentClientSyncInfo.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/async/TEvhttpClientChannel.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/async/TEvhttpServer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/concurrency/StdMonitor.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/concurrency/StdMutex.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/concurrency/StdThreadFactory.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/concurrency/ThreadManager.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/concurrency/TimerManager.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/concurrency/Util.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/processor/PeekProcessor.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/protocol/TBase64Utils.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/protocol/TDebugProtocol.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/protocol/THeaderProtocol.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/protocol/TJSONProtocol.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/protocol/TMultiplexedProtocol.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/protocol/TProtocol.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/server/TConnectedClient.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/server/TNonblockingServer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/server/TServer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/server/TServerFramework.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/server/TSimpleServer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/server/TThreadPoolServer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/server/TThreadedServer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TBufferTransports.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TFDTransport.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TFileTransport.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/THeaderTransport.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/THttpClient.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/THttpServer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/THttpTransport.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TNonblockingSSLServerSocket.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TNonblockingServerSocket.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TPipe.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TPipeServer.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TSSLServerSocket.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TSSLSocket.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TServerSocket.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TSimpleFileTransport.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TSocket.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TSocketPool.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TTransportException.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TTransportUtils.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/thrift/thrift/transport/TZlibTransport.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

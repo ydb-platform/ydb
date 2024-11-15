@@ -12,35 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(providers-dq-opt)
-
-
-target_compile_options(providers-dq-opt PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-dq-opt PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  providers-dq-expr_nodes
-  providers-common-mkql
-  providers-common-codec
-  providers-common-transform
-  essentials-utils-log
-  yql-dq-opt
-  yql-dq-type_ann
-  essentials-core-dq_integration
-  yql-essentials-core
-  essentials-core-peephole_opt
-  essentials-core-type_ann
-  essentials-minikql-computation
-  cpp-yson-node
-)
-
-target_sources(providers-dq-opt PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/opt/dqs_opt.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/opt/logical_optimize.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/dq/opt/physical_optimize.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

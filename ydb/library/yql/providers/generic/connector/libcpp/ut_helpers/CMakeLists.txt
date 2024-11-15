@@ -12,31 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(connector-libcpp-ut_helpers)
-
-
-target_compile_options(connector-libcpp-ut_helpers PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(connector-libcpp-ut_helpers PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-fmt
-  cpp-testing-gmock_in_unittest
-  cpp-testing-unittest
-  formats-arrow-serializer
-  kqp-ut-common
-  providers-common-db_id_async_resolver
-  providers-common-structured_token
-  connector-api-common
-  generic-connector-libcpp
-)
-
-target_sources(connector-libcpp-ut_helpers PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/database_resolver_mock.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/defaults.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

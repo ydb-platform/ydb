@@ -12,89 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(contrib-libs-jemalloc)
-
-
-target_compile_options(contrib-libs-jemalloc PRIVATE
-  -funroll-loops
-  -fvisibility=hidden
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(contrib-libs-jemalloc PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/include
-  ${PROJECT_SOURCE_DIR}/contrib/libs/libunwind/include
-)
-
-target_link_libraries(contrib-libs-jemalloc PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  contrib-libs-libunwind
-)
-
-target_sources(contrib-libs-jemalloc PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/arena.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/background_thread.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/base.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/bin.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/bin_info.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/bitmap.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/buf_writer.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/cache_bin.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/ckh.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/counter.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/ctl.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/decay.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/div.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/ecache.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/edata.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/edata_cache.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/ehooks.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/emap.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/eset.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/exp_grow.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/extent.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/extent_dss.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/extent_mmap.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/fxp.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/hook.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/hpa.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/hpa_hooks.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/hpdata.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/inspect.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/jemalloc.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/jemalloc_cpp.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/large.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/log.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/malloc_io.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/mutex.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/nstime.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/pa.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/pa_extra.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/pac.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/pages.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/pai.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/peak_event.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/prof.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/prof_data.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/prof_log.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/prof_recent.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/prof_stats.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/prof_sys.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/psset.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/rtree.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/safety_check.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/san.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/san_bump.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/sc.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/sec.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/stats.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/sz.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/tcache.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/test_hooks.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/thread_event.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/ticker.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/tsd.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/jemalloc/src/witness.c
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

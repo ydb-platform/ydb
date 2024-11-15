@@ -12,34 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(pages)
-
-add_library(cpp-monlib-service)
-
-
-target_link_libraries(cpp-monlib-service PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-string_utils-base64
-  contrib-libs-protobuf
-  cpp-coroutine-engine
-  cpp-coroutine-listener
-  cpp-http-fetch
-  cpp-http-server
-  cpp-http-io
-  library-cpp-logger
-  cpp-malloc-api
-  library-cpp-svnversion
-  library-cpp-uri
-  library-cpp-cgiparam
-)
-
-target_sources(cpp-monlib-service PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/monservice.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/mon_service_http_request.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/service.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/format.cpp
-  ${PROJECT_SOURCE_DIR}/library/cpp/monlib/service/auth.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

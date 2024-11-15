@@ -12,6 +12,7 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(actorsys_test)
 add_subdirectory(btree_benchmark)
 add_subdirectory(ut)
 
@@ -54,9 +55,9 @@ target_sources(ydb-core-util PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/util/intrusive_heap.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/memory_tracker.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/page_map.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/util/single_thread_ic_mock.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/util/random.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/util/source_location.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/stlog.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/util/testactorsys.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/text.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/ulid.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/ui64id.cpp
@@ -86,9 +87,7 @@ target_sources(ydb-core-util PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/util/queue_inplace.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/queue_oneone_inplace.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/simple_cache.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/util/single_thread_ic_mock.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/stlog.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/util/testactorsys.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/text.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/token_bucket.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/throughput_meter.h

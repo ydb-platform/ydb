@@ -12,57 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(ut_json_change_record)
-add_subdirectory(ut_table_writer)
-add_subdirectory(ut_topic_reader)
-add_subdirectory(ut_worker)
-
-add_library(tx-replication-service)
-
-
-target_compile_options(tx-replication-service PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(tx-replication-service PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  ydb-core-base
-  ydb-core-change_exchange
-  ydb-core-protos
-  ydb-core-scheme
-  ydb-core-scheme_types
-  ydb-core-tablet_flat
-  core-io_formats-cell_maker
-  tx-replication-common
-  tx-replication-ydb_proxy
-  library-actors-core
-  ydb-library-services
-  ydb-core-wrappers
-  library-cpp-json
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(tx-replication-service PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/base_table_writer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/json_change_record.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/service.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/table_writer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/topic_reader.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/worker.cpp
-)
-
-
-generate_enum_serilization(tx-replication-service
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/worker.h
-  INCLUDE_HEADERS
-  ydb/core/tx/replication/service/worker.h
-)

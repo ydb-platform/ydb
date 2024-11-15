@@ -31,7 +31,7 @@ target_link_libraries(ydb-library-yql-dq-actors-spilling-ut PUBLIC
   cpp-testing-unittest
   library-actors-testlib
   ydb-library-services
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
   udf-service-exception_policy
 )
 

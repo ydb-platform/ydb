@@ -12,43 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_subdirectory(protos)
-
-add_library(tx-columnshard-common)
-
-
-target_link_libraries(tx-columnshard-common PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-formats-arrow-protos
-  libs-apache-arrow
-  core-formats-arrow
-  columnshard-common-protos
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(tx-columnshard-common PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/limits.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/reverse_accessor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/scalars.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/snapshot.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/portion.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/tablet_id.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/blob.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/volume.cpp
-)
-
-
-generate_enum_serilization(tx-columnshard-common
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/common/portion.h
-  INCLUDE_HEADERS
-  ydb/core/tx/columnshard/common/portion.h
-)

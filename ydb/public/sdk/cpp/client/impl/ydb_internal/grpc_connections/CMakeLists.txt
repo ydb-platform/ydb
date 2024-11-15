@@ -12,26 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(impl-ydb_internal-grpc_connections)
-
-
-target_link_libraries(impl-ydb_internal-grpc_connections PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  api-grpc
-  api-protos
-  impl-ydb_internal-db_driver_state
-  impl-ydb_internal-plain_status
-  impl-ydb_internal-thread_pool
-  client-impl-ydb_stats
-  cpp-client-resources
-  client-ydb_types-exceptions
-  yql-public-ydb_issue
-)
-
-target_sources(impl-ydb_internal-grpc_connections PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/actions.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/grpc_connections.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

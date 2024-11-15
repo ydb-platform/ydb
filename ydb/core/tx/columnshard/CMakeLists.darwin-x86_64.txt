@@ -26,8 +26,10 @@ add_subdirectory(data_sharing)
 add_subdirectory(blobs_action)
 add_subdirectory(counters)
 add_subdirectory(hooks)
-add_subdirectory(resources)
+add_subdirectory(data_accessor)
 add_subdirectory(splitter)
+add_subdirectory(resources)
+add_subdirectory(tx_reader)
 add_subdirectory(operations)
 add_subdirectory(data_reader)
 add_subdirectory(export)
@@ -35,6 +37,7 @@ add_subdirectory(transactions)
 add_subdirectory(blobs_reader)
 add_subdirectory(data_locks)
 add_subdirectory(subscriber)
+add_subdirectory(loading)
 add_subdirectory(resource_subscriber)
 add_subdirectory(normalizer)
 add_subdirectory(test_helper)
@@ -77,11 +80,16 @@ target_link_libraries(core-tx-columnshard PUBLIC
   tx-columnshard-data_sharing
   tx-columnshard-subscriber
   tx-columnshard-export
+  tx-columnshard-tx_reader
+  tx-columnshard-loading
+  tx-columnshard-data_accessor
   tx-columnshard-resource_subscriber
   tx-columnshard-normalizer
   columnshard-blobs_action-storages_manager
+  columnshard-data_accessor-in_mem
   core-tx-tiering
   tx-conveyor-usage
+  tx-priorities-service
   core-tx-tracing
   tx-long_tx_service-public
   ydb-core-util

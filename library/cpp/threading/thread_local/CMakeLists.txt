@@ -12,32 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 
-add_library(cpp-threading-thread_local)
-
-
-target_link_libraries(cpp-threading-thread_local PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  cpp-threading-hot_swap
-  cpp-threading-skip_list
-  tools-enum_parser-enum_serialization_runtime
-)
-
-target_sources(cpp-threading-thread_local PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/threading/thread_local/thread_local.cpp
-)
-
-
-generate_enum_serilization(cpp-threading-thread_local
-  ${PROJECT_SOURCE_DIR}/library/cpp/threading/thread_local/thread_local.h
-  INCLUDE_HEADERS
-  library/cpp/threading/thread_local/thread_local.h
-)

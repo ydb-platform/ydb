@@ -29,7 +29,7 @@ target_link_libraries(ydb-library-yql-providers-dq-scheduler-ut PUBLIC
   cpp-testing-unittest_main
   providers-dq-scheduler
   udf-service-stub
-  yql-utils-log
+  essentials-utils-log
 )
 
 target_allocator(ydb-library-yql-providers-dq-scheduler-ut

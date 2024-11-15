@@ -12,57 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(contrib-libs-yaml-cpp)
-
-
-target_compile_options(contrib-libs-yaml-cpp PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(contrib-libs-yaml-cpp PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/include
-)
-
-target_include_directories(contrib-libs-yaml-cpp PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src
-)
-
-target_link_libraries(contrib-libs-yaml-cpp PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-)
-
-target_sources(contrib-libs-yaml-cpp PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/binary.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/contrib/graphbuilder.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/contrib/graphbuilderadapter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/convert.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/depthguard.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/directives.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/emit.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/emitfromevents.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/emitter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/emitterstate.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/emitterutils.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/exceptions.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/exp.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/memory.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/node.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/node_data.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/nodebuilder.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/nodeevents.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/null.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/ostream_wrapper.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/parse.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/parser.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/regex_yaml.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/scanner.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/scanscalar.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/scantag.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/scantoken.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/simplekey.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/singledocparser.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/stream.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yaml-cpp/src/tag.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

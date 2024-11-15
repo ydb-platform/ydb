@@ -79,25 +79,33 @@ target_link_libraries(query_replay_yt PUBLIC
   ydb-services-rate_limiter
   ydb-services-ydb
   clickhouse_client_udf
-  datetime_udf
+  knn_udf
+  roaring
+  compress_udf
   datetime2_udf
   digest_udf
+  file_udf
   histogram_udf
   hyperloglog_udf
   hyperscan_udf
+  ip_udf
   json_udf
   json2_udf
   math_udf
   pire_udf
+  protobuf_udf
   re2_udf
   set_udf
   stat_udf
+  streaming_udf
   string_udf
   top_udf
   topfreq_udf
+  unicode_udf
+  url_udf
   yson2_udf
   dsv_udf
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
 )
 
 target_allocator(query_replay_yt

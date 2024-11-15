@@ -22,6 +22,7 @@ target_link_libraries(library-formats-arrow-accessor-abstract PUBLIC
   library-formats-arrow-accessor-common
   libs-apache-arrow
   ydb-library-conclusion
+  library-actors-core
 )
 
 target_sources(library-formats-arrow-accessor-abstract PRIVATE

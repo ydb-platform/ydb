@@ -12,36 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(protos)
-add_subdirectory(ut)
-
-add_library(ydb-core-pgproxy)
-
-
-target_link_libraries(ydb-core-pgproxy PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  library-actors-protos
-  cpp-string_utils-base64
-  ydb-core-base
-  core-pgproxy-protos
-  ydb-core-protos
-  ydb-core-raw_socket
-)
-
-target_sources(ydb-core-pgproxy PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/pgproxy/pg_connection.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/pgproxy/pg_proxy_types.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/pgproxy/pg_proxy.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/pgproxy/pg_connection.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/pgproxy/pg_listener.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/pgproxy/pg_log_impl.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/pgproxy/pg_log.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/pgproxy/pg_proxy_events.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/pgproxy/pg_proxy_types.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/pgproxy/pg_proxy.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/pgproxy/pg_stream.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

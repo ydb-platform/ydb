@@ -12,29 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(corobenchmark)
-add_subdirectory(ut)
-
-add_library(library-actors-cppcoro)
-
-
-target_link_libraries(library-actors-cppcoro PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-)
-
-target_sources(library-actors-cppcoro PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/await_callback.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task_actor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task_group.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task_result.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/await_callback.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task_actor.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task_group.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task_result.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/cppcoro/task.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

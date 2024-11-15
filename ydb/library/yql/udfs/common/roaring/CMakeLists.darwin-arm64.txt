@@ -24,7 +24,7 @@ target_compile_options(roaring INTERFACE
 target_link_libraries(roaring INTERFACE
   contrib-libs-cxxsupp
   yutil
-  yql-public-udf
+  essentials-public-udf
   public-udf-support
   contrib-libs-croaring
 )
@@ -43,7 +43,7 @@ target_compile_options(roaring.global PRIVATE
 target_link_libraries(roaring.global PUBLIC
   contrib-libs-cxxsupp
   yutil
-  yql-public-udf
+  essentials-public-udf
   public-udf-support
   contrib-libs-croaring
 )

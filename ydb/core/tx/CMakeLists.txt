@@ -12,55 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(columnshard)
-add_subdirectory(long_tx_service)
-add_subdirectory(sharding)
-add_subdirectory(schemeshard)
-add_subdirectory(datashard)
-add_subdirectory(locks)
-add_subdirectory(scheme_cache)
-add_subdirectory(scheme_board)
-add_subdirectory(tx_proxy)
-add_subdirectory(balance_coverage)
-add_subdirectory(replication)
-add_subdirectory(tx_allocator_client)
-add_subdirectory(tx_allocator)
-add_subdirectory(data_events)
-add_subdirectory(tiering)
-add_subdirectory(time_cast)
-add_subdirectory(program)
-add_subdirectory(conveyor)
-add_subdirectory(limiter)
-add_subdirectory(priorities)
-add_subdirectory(tracing)
-add_subdirectory(coordinator)
-add_subdirectory(mediator)
-add_subdirectory(sequenceproxy)
-add_subdirectory(sequenceshard)
-
-add_library(ydb-core-tx)
-
-
-target_link_libraries(ydb-core-tx PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-actors-core
-  ydb-core-base
-  core-persqueue-config
-  ydb-core-protos
-  ydb-core-tablet
-  ydb-core-tablet_flat
-  ydb-core-util
-  ydb-library-aclib
-)
-
-target_sources(ydb-core-tx PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/message_seqno.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy_schemereq.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/defs.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_processing.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

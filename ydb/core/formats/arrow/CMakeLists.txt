@@ -12,65 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(hash)
-add_subdirectory(switch)
-add_subdirectory(reader)
-add_subdirectory(common)
-add_subdirectory(splitter)
-add_subdirectory(serializer)
-add_subdirectory(dictionary)
-add_subdirectory(accessor)
-add_subdirectory(save_load)
-add_subdirectory(transformer)
-add_subdirectory(ut)
-
-add_library(core-formats-arrow)
-
-
-target_compile_options(core-formats-arrow PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_include_directories(core-formats-arrow PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/arrow_clickhouse
-)
-
-target_link_libraries(core-formats-arrow PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  libs-apache-arrow
-  ydb-core-scheme
-  formats-arrow-accessor
-  formats-arrow-serializer
-  formats-arrow-dictionary
-  formats-arrow-transformer
-  formats-arrow-reader
-  formats-arrow-save_load
-  formats-arrow-splitter
-  formats-arrow-hash
-  library-actors-core
-  ydb-library-arrow_kernels
-  essentials-types-binary_json
-  essentials-types-dynumber
-  library-formats-arrow
-  ydb-library-services
-  core-arrow_kernels-request
-  ydb-library-arrow_clickhouse
-)
-
-target_sources(core-formats-arrow PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/arrow_batch_builder.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/arrow_filter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/arrow_helpers.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/converter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/custom_registry.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/permutations.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/program.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/size_calcer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/ssa_program_optimizer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/special_keys.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/process_columns.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/converter.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

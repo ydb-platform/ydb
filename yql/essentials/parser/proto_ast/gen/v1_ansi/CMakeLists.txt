@@ -12,73 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-set(ANTLR_PACKAGE_NAME NSQLv1Generated)
-
-set(LEXER_PARSER_NAMESPACE NALPAnsi)
-
-set(PROTOBUF_HEADER_PATH yql/essentials/parser/proto_ast/gen/v1_proto_split)
-
-set(PROTOBUF_SUFFIX_PATH .pb.main.h)
-
-add_library(proto_ast-gen-v1_ansi)
-
-
-target_compile_options(proto_ast-gen-v1_ansi PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(proto_ast-gen-v1_ansi PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/libs/antlr4_cpp_runtime/src
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/org/antlr/codegen/templates/Cpp
-)
-
-target_link_libraries(proto_ast-gen-v1_ansi PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  proto_ast-gen-v1_proto_split
-  parser-proto_ast-antlr3
-)
-
-target_sources(proto_ast-gen-v1_ansi PRIVATE
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1Parser.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/org/antlr/codegen/templates/Cpp/Cpp.stg
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1Parser.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.h
-)
-
-
-configure_file(
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/org/antlr/codegen/templates/Cpp/Cpp.stg
-)
-
-run_antlr(
-  OUTPUT
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1Parser.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1Parser.h
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1Lexer.h
-  DEPENDS
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1.g
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/org/antlr/codegen/templates/Cpp/Cpp.stg
-  WORKING_DIRECTORY
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi
-  ANTLER_ARGS
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1.g
-  -lib
-  .
-  -fo
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi
-)
-set(GRAMMAR_STRING_CORE_SINGLE "~QUOTE_SINGLE | (QUOTE_SINGLE QUOTE_SINGLE)")
-set(GRAMMAR_STRING_CORE_DOUBLE "~QUOTE_DOUBLE | (QUOTE_DOUBLE QUOTE_DOUBLE)")
-set(GRAMMAR_MULTILINE_COMMENT_CORE "MULTILINE_COMMENT | .")
-
-configure_file(
-  ${CMAKE_SOURCE_DIR}/yql/essentials/sql/v1/SQLv1.g.in
-  ${CMAKE_BINARY_DIR}/yql/essentials/parser/proto_ast/gen/v1_ansi/SQLv1.g
-)
-
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -12,41 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(restricted-patched-replxx)
-
-
-target_compile_options(restricted-patched-replxx PUBLIC
-  -DREPLXX_STATIC
-)
-
-target_compile_options(restricted-patched-replxx PRIVATE
-  $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
-)
-
-target_include_directories(restricted-patched-replxx PUBLIC
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/patched/replxx/include
-)
-
-target_include_directories(restricted-patched-replxx PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/patched/replxx/src
-)
-
-target_link_libraries(restricted-patched-replxx PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-)
-
-target_sources(restricted-patched-replxx PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/patched/replxx/src/ConvertUTF.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/patched/replxx/src/conversion.cxx
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/patched/replxx/src/escape.cxx
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/patched/replxx/src/history.cxx
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/patched/replxx/src/prompt.cxx
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/patched/replxx/src/replxx.cxx
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/patched/replxx/src/replxx_impl.cxx
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/patched/replxx/src/terminal.cxx
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/patched/replxx/src/util.cxx
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/patched/replxx/src/wcwidth.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/patched/replxx/src/windows.cxx
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

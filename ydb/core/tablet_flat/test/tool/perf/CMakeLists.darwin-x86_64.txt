@@ -23,7 +23,7 @@ target_link_libraries(table-perf PUBLIC
   library-cpp-charset
   library-cpp-getopt
   ydb-core-tablet_flat
-  yql-sql-pg_dummy
+  essentials-sql-pg_dummy
   udf-service-exception_policy
 )
 

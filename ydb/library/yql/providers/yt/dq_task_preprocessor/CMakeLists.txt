@@ -12,35 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(providers-yt-dq_task_preprocessor)
-
-
-target_compile_options(providers-yt-dq_task_preprocessor PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(providers-yt-dq_task_preprocessor PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
-  library-cpp-yson
-  cpp-yson-node
-  cpp-mapreduce-common
-  cpp-mapreduce-interface
-  yql-essentials-utils
-  essentials-utils-log
-  essentials-utils-failure_injector
-  yql-essentials-minikql
-  essentials-minikql-computation
-  providers-common-codec
-  providers-dq-interface
-  providers-yt-codec
-  providers-yt-provider
-  yt-gateway-lib
-  yt-lib-yson_helpers
-)
-
-target_sources(providers-yt-dq_task_preprocessor PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/yt/dq_task_preprocessor/yql_yt_dq_task_preprocessor.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

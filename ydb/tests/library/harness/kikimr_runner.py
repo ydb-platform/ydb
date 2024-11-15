@@ -29,9 +29,12 @@ def get_unique_path_for_current_test(output_path, sub_folder):
     # we can't remove it now, because it is used in Arcadia
     import yatest.common
     import os
-    test_name = yatest.common.context.test_name or ""
+    try:
+        test_name = yatest.common.context.test_name or ""
+    except Exception:
+        test_name = ""
+    
     test_name = test_name.replace(':', '_')
-
     return os.path.join(output_path, test_name, sub_folder)
 
 

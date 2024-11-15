@@ -44,7 +44,7 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .StoreResult(&Scenario.ProducerThreadCount);
     config.Opts->AddLongOption("producers-per-thread",
                                "Number of producers in every writer thread. "
-                               "Every producer writes to only one dedicated to it partition. "
+                               "Every producer is dedicated to one partition. "
                                "If you want to write to all partitions set this param to the number of partitions in the topic. "
                                "If you use transactions, they will span across all partitions that fit into the transaction "
                                "(e.g. if you have 100 messages per second, 100ms transaction commit interval and 100 producers per thread "

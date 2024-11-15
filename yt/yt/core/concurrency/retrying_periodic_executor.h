@@ -58,6 +58,8 @@ private:
     TBackoffStrategy Backoff_;
 
     bool IsInBackoffMode() const;
+
+    bool ShouldRestartBackoff(const std::optional<TExponentialBackoffOptions>& newBackoffOptions) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

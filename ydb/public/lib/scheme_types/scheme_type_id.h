@@ -3,7 +3,7 @@
 #include <util/system/types.h>
 #include <util/generic/array_size.h>
 #include <util/generic/strbuf.h>
-#include <ydb/library/yql/public/types/yql_types.pb.h>
+#include <yql/essentials/public/types/yql_types.pb.h>
 
 namespace NKikimr {
 namespace NScheme {

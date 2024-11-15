@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/mkql_stats_registry.h>
+#include <yql/essentials/minikql/mkql_stats_registry.h>
 
 #include <util/stream/output.h>
 

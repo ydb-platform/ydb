@@ -5,10 +5,10 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/core/qplayer/storage/interface
-    ydb/library/yql/providers/common/schema/expr
-    ydb/library/yql/core
-    ydb/library/yql/core/file_storage
+    yql/essentials/core/qplayer/storage/interface
+    yql/essentials/providers/common/schema/expr
+    yql/essentials/core
+    yql/essentials/core/file_storage
     library/cpp/yson/node
     library/cpp/random_provider
     yt/cpp/mapreduce/interface

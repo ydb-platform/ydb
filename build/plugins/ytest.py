@@ -759,7 +759,7 @@ def onadd_check(unit, *args):
         check_resource(unit, *args)
     elif check_type == "ktlint":
         ktlint(unit, *args)
-    elif check_type == "JAVA_STYLE" and (unit.get('YMAKE_JAVA_TEST') != 'yes' or unit.get('ALL_SRCDIRS')):
+    elif check_type == "JAVA_STYLE" and unit.get('ALL_SRCDIRS'):
         java_style(unit, *args)
     elif check_type == "gofmt":
         gofmt(unit, *args)

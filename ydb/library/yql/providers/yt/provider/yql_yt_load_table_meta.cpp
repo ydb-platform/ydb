@@ -5,12 +5,12 @@
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
 #include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
 #include <library/cpp/threading/future/async.h>
 #include <library/cpp/yson/node/node_io.h>

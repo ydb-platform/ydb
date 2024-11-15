@@ -3,14 +3,14 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
 
+#include <ydb/core/fq/libs/row_dispatcher/common.h>
 #include <ydb/core/fq/libs/row_dispatcher/json_filter.h>
 
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/actor_helpers.h>
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/public/purecalc/common/interface.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -23,7 +23,7 @@ class TFixture : public NUnitTest::TBaseFixture {
 
 public:
     TFixture()
-        : PureCalcProgramFactory(NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions()))
+        : PureCalcProgramFactory(CreatePureCalcProgramFactory())
         , Runtime(true)
         , Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false)
     {}
@@ -65,7 +65,8 @@ public:
             types,
             whereFilter,
             callback,
-            PureCalcProgramFactory);
+            PureCalcProgramFactory,
+            {.EnabledLLVM = false});
     }
 
     const NKikimr::NMiniKQL::TUnboxedValueVector* MakeVector(size_t size, std::function<NYql::NUdf::TUnboxedValuePod(size_t)> valueCreator) {
@@ -100,7 +101,7 @@ public:
         });
     }
 
-    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
+    IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     NActors::TTestActorRuntime Runtime;
     TActorSystemStub ActorSystemStub;
     std::unique_ptr<NFq::TJsonFilter> Filter;

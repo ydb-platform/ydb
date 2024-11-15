@@ -3,10 +3,10 @@
 #include "grpc_service.h"
 #include "interconnect_helpers.h"
 
-#include <ydb/library/yql/providers/common/metrics/metrics_registry.h>
+#include <yql/essentials/providers/common/metrics/metrics_registry.h>
 #include <ydb/library/yql/providers/dq/interface/yql_dq_task_preprocessor.h>
 
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>

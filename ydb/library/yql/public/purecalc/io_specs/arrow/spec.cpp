@@ -2,11 +2,11 @@
 
 #include <ydb/library/yql/public/purecalc/common/names.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/public/udf/arrow/udf_arrow_helpers.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_custom_list.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/public/udf/arrow/udf_arrow_helpers.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 using namespace NYql::NPureCalc;
 using namespace NKikimr::NUdf;

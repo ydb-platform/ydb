@@ -26,9 +26,9 @@
 
 #include <google/protobuf/any.h>
 
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
@@ -5700,7 +5700,9 @@ Y_UNIT_TEST(DisableWritesToDatabase) {
     // try upsert when the feature flag is enabled
     {
         runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(true);
-        WaitTableStats(runtime, datashard, 1);
+        WaitTableStats(runtime, datashard, [](const NKikimrTableStats::TTableStats& stats) {
+            return stats.GetPartCount() >= 1;
+        });
         upsert(table, "2u, \"Bar\"", Ydb::StatusIds::UNAVAILABLE);
         checkDatabaseState(tenantPath, true);
     }
@@ -5708,7 +5710,9 @@ Y_UNIT_TEST(DisableWritesToDatabase) {
     // try upsert when the feature flag is disabled
     {
         runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(false);
-        WaitTableStats(runtime, datashard, 1);
+        WaitTableStats(runtime, datashard, [](const NKikimrTableStats::TTableStats& stats) {
+            return stats.GetPartCount() >= 1;
+        });
         upsert(table, "2u, \"Bar\"");
         checkDatabaseState(tenantPath, false);
     }

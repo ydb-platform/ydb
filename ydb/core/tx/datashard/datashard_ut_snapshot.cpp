@@ -11,7 +11,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD)
 #include <ydb/core/mind/local.h>
 
-#include <ydb/library/yql/minikql/mkql_node_printer.h>
+#include <yql/essentials/minikql/mkql_node_printer.h>
 
 namespace NKikimr {
 

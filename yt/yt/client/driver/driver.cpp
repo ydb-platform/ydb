@@ -230,6 +230,7 @@ public:
         REGISTER    (TGetTablePivotKeysCommand,            "get_table_pivot_keys",            Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TGetTabletInfosCommand,               "get_tablet_infos",                Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TGetTabletErrorsCommand,              "get_tablet_errors",               Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TGetTableMountInfoCommand,             "get_table_mount_info",           Null,       Structured, false, false, ApiVersion4);
 
         REGISTER    (TCreateTableBackupCommand,            "create_table_backup",             Null,       Null,       true,  false, ApiVersion3);
         REGISTER    (TRestoreTableBackupCommand,           "restore_table_backup",            Null,       Null,       true,  false, ApiVersion3);
@@ -383,7 +384,6 @@ public:
         REGISTER    (TGetFlowViewCommand,                  "get_flow_view",                   Null,       Structured, false, false, ApiVersion4);
 
         REGISTER    (TStartShuffleCommand,                 "start_shuffle",                   Null,       Structured, true,  false, ApiVersion4);
-        REGISTER    (TFinishShuffleCommand,                "finish_shuffle",                  Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TReadShuffleDataCommand,              "read_shuffle_data",               Null,       Tabular,    false,  true, ApiVersion4);
         REGISTER    (TWriteShuffleDataCommand,             "write_shuffle_data",              Tabular,    Structured, false,  true, ApiVersion4);
 

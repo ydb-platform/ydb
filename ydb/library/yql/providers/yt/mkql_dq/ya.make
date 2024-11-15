@@ -8,9 +8,9 @@ PEERDIR(
     library/cpp/yson/node
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface
-    ydb/library/yql/minikql
-    ydb/library/yql/public/udf
-    ydb/library/yql/utils
+    yql/essentials/minikql
+    yql/essentials/public/udf
+    yql/essentials/utils
 )
 
 YQL_LAST_ABI_VERSION()

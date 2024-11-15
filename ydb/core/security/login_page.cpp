@@ -8,40 +8,73 @@
 
 #include <ydb/core/util/address_classifier.h>
 #include <ydb/core/audit/audit_log.h>
-#include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
+
+#include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 
 #include <ydb/library/login/login.h>
 #include <ydb/library/security/util.h>
 
+#include <util/datetime/base.h>  // for ToInstant
+
+
 namespace {
 
-using namespace NActors;
 using namespace NKikimr;
-using namespace NSchemeShard;
-using namespace NMonitoring;
 
-void AuditLogWebUILogout(const NHttp::THttpIncomingRequest& request, const TString& userSID) {
+void AuditLogWebUILogout(const NHttp::THttpIncomingRequest& request, const TString& userSID, const TString& sanitizedToken) {
     static const TString WebLoginComponentName = "web-login";
     static const TString LogoutOperationName = "LOGOUT";
     static const TString EmptyValue = "{none}";
 
-    auto remoteAddress = NKikimr::NAddressClassifier::ExtractAddress(request.Address->ToString());
+    auto remoteAddress = NAddressClassifier::ExtractAddress(request.Address->ToString());
 
-    // NOTE: audit field set here must be in sync with ydb/core/tx/schemeshard/schemeshard_audit_log.h, AuditLogLogin()
+    // NOTE: audit field set here must be in sync with ydb/core/grpc_services/audit_logins.cpp, AuditLogLogin()
     AUDIT_LOG(
         AUDIT_PART("component", WebLoginComponentName)
         AUDIT_PART("remote_address", (!remoteAddress.empty() ? remoteAddress : EmptyValue))
         AUDIT_PART("subject", (!userSID.empty() ? userSID : EmptyValue))
+        AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue))
         //NOTE: no database specified as web logout considered cluster-wide
         AUDIT_PART("operation", LogoutOperationName)
         AUDIT_PART("status", TString("SUCCESS"))
     );
 }
 
-using THttpResponsePtr = THolder<NMon::IEvHttpInfoRes>;
+struct TEvPrivate {
+    enum EEv {
+        EvLoginResponse = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+
+    struct TEvLoginResponse : NActors::TEventLocal<TEvLoginResponse, EvLoginResponse> {
+        Ydb::Auth::LoginResponse LoginResponse;
+
+        TEvLoginResponse(const Ydb::Auth::LoginResponse& loginResponse)
+            : LoginResponse(loginResponse)
+        {}
+    };
+};
+
+void SendLoginRequest(const TString& database, const TString& user, const TString& password, const TActorContext& recipientCtx) {
+    Ydb::Auth::LoginRequest request;
+    request.set_user(user);
+    request.set_password(password);
+
+    auto* actorSystem = recipientCtx.ActorSystem();
+    auto recipientId = recipientCtx.SelfID;
+
+    using TEvLoginRequest = NGRpcService::TGRpcRequestWrapperNoAuth<NGRpcService::TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
+
+    auto rpcFuture = NRpcService::DoLocalRpc<TEvLoginRequest>(std::move(request), database, {}, actorSystem);
+    rpcFuture.Subscribe([actorSystem, recipientId](const auto& future) {
+        actorSystem->Send(recipientId, new TEvPrivate::TEvLoginResponse(future.GetValueSync()));
+    });
+}
 
 class TLoginRequest : public NActors::TActorBootstrapped<TLoginRequest> {
 public:
@@ -60,11 +93,8 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvPoisonPill, HandlePoisonPill);
-            hFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
-            hFunc(TEvSchemeShard::TEvLoginResult, HandleResult);
-            hFunc(TEvLdapAuthProvider::TEvAuthenticateResponse, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            hFunc(TEvPrivate::TEvLoginResponse, HandleLoginResponse);
         }
     }
 
@@ -91,11 +121,10 @@ public:
             return ReplyErrorAndPassAway("400", "Bad Request", "Invalid JSON data");
         }
 
-        TString login;
         TString password;
         NJson::TJsonValue* jsonUser;
         if (postData.GetValuePointer("user", &jsonUser)) {
-            login = jsonUser->GetStringRobust();
+            User = jsonUser->GetStringRobust();
         } else {
             return ReplyErrorAndPassAway("400", "Bad Request", "User must be specified");
         }
@@ -111,83 +140,30 @@ public:
             Database = postData["database"].GetStringRobust();
         }
 
-        AuthCredentials = PrepareCredentials(login, password, AppData()->AuthConfig);
-        if (AuthCredentials.AuthType == TAuthCredentials::EAuthType::Ldap) {
-            ALOG_DEBUG(NActorsServices::HTTP, "Login: Requesting LDAP provider for user " << AuthCredentials.Login);
-            Send(MakeLdapAuthProviderID(), new TEvLdapAuthProvider::TEvAuthenticateRequest(AuthCredentials.Login, AuthCredentials.Password));
-        } else {
-            RequestLoginProvider();
-        }
+        SendLoginRequest(Database, User, password, ActorContext());
+
         Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
 
-    static NTabletPipe::TClientConfig GetPipeClientConfig() {
-        NTabletPipe::TClientConfig clientConfig;
-        clientConfig.RetryPolicy = {.RetryLimitCount = 3};
-        return clientConfig;
-    }
 
-    void RequestSchemeShard(ui64 schemeShardTabletId) {
-        ALOG_DEBUG(NActorsServices::HTTP, "Login: Requesting schemeshard " << schemeShardTabletId << " for user " << AuthCredentials.Login);
-        IActor* pipe = NTabletPipe::CreateClient(SelfId(), schemeShardTabletId, GetPipeClientConfig());
-        PipeClient = RegisterWithSameMailbox(pipe);
-        THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>();
-        request.Get()->Record = CreateLoginRequest(AuthCredentials, AppData()->AuthConfig);
-        request.Get()->Record.SetPeerName(Request->Address->ToString());
-        NTabletPipe::SendData(SelfId(), PipeClient, request.Release());
-    }
+    void HandleLoginResponse(TEvPrivate::TEvLoginResponse::TPtr& ev) {
+        const auto& operation = ev->Get()->LoginResponse.operation();
 
-    void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        const NSchemeCache::TSchemeCacheNavigate* response = ev->Get()->Request.Get();
-        if (response->ResultSet.size() == 1) {
-            if (response->ResultSet.front().Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = response->ResultSet.front();
-                ui64 schemeShardTabletId = entry.DomainInfo->ExtractSchemeShard();
-                RequestSchemeShard(schemeShardTabletId);
-                return;
+        if (operation.status() == Ydb::StatusIds::SUCCESS) {
+            Ydb::Auth::LoginResult loginResult;
+            operation.result().UnpackTo(&loginResult);
+
+            ReplyCookieAndPassAway(loginResult.token());
+
+        } else {
+            TString error;
+            if (operation.issues_size() > 0) {
+                error = operation.issues(0).message();
             } else {
-                ReplyErrorAndPassAway("503", "Service Unavailable", TStringBuilder()
-                    << "Status " << static_cast<int>(response->ResultSet.front().Status));
+                error = Ydb::StatusIds_StatusCode_Name(operation.status());
             }
-        } else {
-            ReplyErrorAndPassAway("503", "Service Unavailable", "Scheme error");
-        }
-    }
 
-    void Handle(TEvLdapAuthProvider::TEvAuthenticateResponse::TPtr& ev) {
-        TEvLdapAuthProvider::TEvAuthenticateResponse* response = ev->Get();
-        if (response->Status == TEvLdapAuthProvider::EStatus::SUCCESS) {
-            RequestLoginProvider();
-        } else {
-            ReplyErrorAndPassAway("403", "Forbidden", response->Error.Message);
-        }
-    }
-
-    void RequestLoginProvider() {
-        auto *domain = AppData()->DomainsInfo->GetDomain();
-        TString rootDatabase = "/" + domain->Name;
-        ui64 rootSchemeShardTabletId = domain->SchemeRoot;
-        if (!Database.empty() && Database != rootDatabase) {
-            Database = rootDatabase;
-            ALOG_DEBUG(NActorsServices::HTTP, "Login: Requesting schemecache for database " << Database);
-            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(CreateNavigateKeySetRequest(Database).Release()));
-        } else {
-            Database = rootDatabase;
-            RequestSchemeShard(rootSchemeShardTabletId);
-        }
-    }
-
-    void HandleResult(TEvSchemeShard::TEvLoginResult::TPtr& ev) {
-        if (ev->Get()->Record.GetError()) {
-            ReplyErrorAndPassAway("403", "Forbidden", ev->Get()->Record.GetError());
-        } else {
-            ReplyCookieAndPassAway(ev->Get()->Record.GetToken());
-        }
-    }
-
-    void HandleConnect(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        if (ev->Get()->Status != NKikimrProto::OK) {
-            ReplyErrorAndPassAway("503", "Service Unavailable", "SchemeShard is not available");
+            ReplyErrorAndPassAway("403", "Forbidden", error);
         }
     }
 
@@ -220,7 +196,7 @@ public:
     }
 
     void ReplyCookieAndPassAway(const TString& cookie) {
-        ALOG_DEBUG(NActorsServices::HTTP, "Login success for " << AuthCredentials.Login);
+        ALOG_DEBUG(NActorsServices::HTTP, "Login success for " << User);
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         TDuration maxAge = (ToInstant(NLogin::TLoginProvider::GetTokenExpiresAt(cookie)) - TInstant::Now());
@@ -230,7 +206,7 @@ public:
     }
 
     void ReplyErrorAndPassAway(const TString& status, const TString& message, const TString& error) {
-        ALOG_ERROR(NActorsServices::HTTP, "Login: " << error);
+        ALOG_ERROR(NActorsServices::HTTP, "Login fail for " << User << ": " << error);
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         headers.Set("Content-Type", "application/json");
@@ -240,20 +216,12 @@ public:
         PassAway();
     }
 
-    void PassAway() override {
-        if (PipeClient) {
-            NTabletPipe::CloseClient(TBase::SelfId(), PipeClient);
-        }
-        TBase::PassAway();
-    }
-
 protected:
     TActorId Sender;
     NHttp::THttpIncomingRequestPtr Request;
     TDuration Timeout = TDuration::Seconds(60);
+    TString User;
     TString Database;
-    TActorId PipeClient;
-    TAuthCredentials AuthCredentials;
 };
 
 class TLogoutRequest : public NActors::TActorBootstrapped<TLogoutRequest> {
@@ -293,7 +261,7 @@ public:
             return ReplyErrorAndPassAway("401", "Unauthorized", "No ydb_session_id cookie");
         }
 
-        Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
+        Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
             .Database = TString(),
             .Ticket = TString("Login ") + ydbSessionId,
             .PeerName = Request->Address->ToString(),
@@ -311,7 +279,7 @@ public:
             return ReplyErrorAndPassAway("403", "Forbidden", "Empty token");
         }
 
-        ReplyDeleteCookieAndPassAway(result.Token->GetUserSID());
+        ReplyDeleteCookieAndPassAway(result.Token->GetUserSID(), result.Token->GetSanitizedToken());
     }
 
     void HandlePoisonPill(TEvents::TEvPoisonPill::TPtr&) {
@@ -342,14 +310,14 @@ public:
         headers.Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST");
     }
 
-    void ReplyDeleteCookieAndPassAway(const TString& userSID) {
+    void ReplyDeleteCookieAndPassAway(const TString& userSID, const TString& sanitizedToken) {
         ALOG_DEBUG(NActorsServices::HTTP, "Logout success");
         NHttp::THeadersBuilder headers;
         SetCORS(headers);
         headers.Set("Set-Cookie", "ydb_session_id=; Max-Age=0");
         Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("200", "OK", headers)));
 
-        AuditLogWebUILogout(*Request, userSID);
+        AuditLogWebUILogout(*Request, userSID, sanitizedToken);
 
         PassAway();
     }

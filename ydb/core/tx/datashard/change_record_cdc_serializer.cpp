@@ -6,8 +6,8 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/uuid/uuid.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/uuid/uuid.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 

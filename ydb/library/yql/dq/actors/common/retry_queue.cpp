@@ -56,7 +56,7 @@ void TRetryEventsQueue::HandleNodeConnected(ui32 nodeId) {
             }
         }
         if (KeepAlive) {
-            SchedulePing();
+            ScheduleHeartbeat();
         }
     }
 }
@@ -86,21 +86,16 @@ void TRetryEventsQueue::Retry() {
     }
 }
 
-void TRetryEventsQueue::Ping() {
-    PingScheduled = false;
+bool TRetryEventsQueue::Heartbeat() {
+    HeartbeatScheduled = false;
 
     if (!Connected) {
-        return;
+        return false;
     }
-
-    if (TInstant::Now() - LastReceivedDataTime < TDuration::Seconds(PingPeriodSeconds)) {
-        SchedulePing();
-        return;
-    }
-
-    auto ev = MakeHolder<NActors::TEvents::TEvPing>();
-    NActors::TActivationContext::Send(new NActors::IEventHandle(RecipientId, SenderId, ev.Release(), NActors::IEventHandle::FlagTrackDelivery));
-    SchedulePing();
+    ScheduleHeartbeat();
+    auto now = TInstant::Now();
+    return (now - LastReceivedDataTime >= TDuration::Seconds(PingPeriodSeconds)
+        || (now - LastSentDataTime >= TDuration::Seconds(PingPeriodSeconds)));
 }
 
 void TRetryEventsQueue::Connect() {
@@ -133,6 +128,7 @@ void TRetryEventsQueue::RemoveConfirmedEvents(ui64 confirmedSeqNo) {
 }
 
 void TRetryEventsQueue::SendRetryable(const IRetryableEvent::TPtr& ev) {
+    LastSentDataTime = TInstant::Now();
     NActors::TActivationContext::Send(ev->Clone(MyConfirmedSeqNo).Release());
 }
 
@@ -148,13 +144,13 @@ void TRetryEventsQueue::ScheduleRetry() {
     NActors::TActivationContext::Schedule(RetryState->GetNextDelay(), new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
 }
 
-void TRetryEventsQueue::SchedulePing() {
-    if (!KeepAlive || PingScheduled) {
+void TRetryEventsQueue::ScheduleHeartbeat() {
+    if (!KeepAlive || HeartbeatScheduled) {
         return;
     }
 
-    PingScheduled = true;
-    auto ev = MakeHolder<TEvRetryQueuePrivate::TEvPing>(EventQueueId);
+    HeartbeatScheduled = true;
+    auto ev = MakeHolder<TEvRetryQueuePrivate::TEvEvHeartbeat>(EventQueueId);
     NActors::TActivationContext::Schedule(TDuration::Seconds(PingPeriodSeconds), new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
 }
 
@@ -172,8 +168,13 @@ TDuration TRetryEventsQueue::TRetryState::RandomizeDelay(TDuration baseDelay) {
 }
 
 void TRetryEventsQueue::PrintInternalState(TStringStream& stream) const {
-    stream << "id " << EventQueueId << ", NextSeqNo "
-        << NextSeqNo << ", MyConfSeqNo " << MyConfirmedSeqNo << ", SeqNos " << ReceivedEventsSeqNos.size() << ", events size " << Events.size() << "\n";
+    stream << "id " << EventQueueId;
+    if (LocalRecipient) {
+        stream << ", LocalRecipient\n";
+        return;
+    }
+    stream << ", NextSeqNo "
+        << NextSeqNo << ", MyConfSeqNo " << MyConfirmedSeqNo << ", SeqNos " << ReceivedEventsSeqNos.size() << ", events size " << Events.size() << ", connected " << Connected << "\n";
 }
 
 

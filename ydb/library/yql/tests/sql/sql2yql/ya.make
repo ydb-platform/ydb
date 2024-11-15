@@ -23,14 +23,14 @@ ENDIF()
     FORK_SUBTESTS()
     SPLIT_FACTOR(5)
     DEPENDS(
-        ydb/library/yql/tools/sql2yql
+        yql/essentials/tools/sql2yql
         ydb/library/yql/tools/yqlrun
-        ydb/library/yql/tools/sql_formatter
+        yql/essentials/tools/sql_formatter
         contrib/libs/protobuf/python
     )
     DATA(
         arcadia/ydb/library/yql/tests/sql # python files
-        arcadia/ydb/library/yql/mount
+        arcadia/yql/essentials/mount
         arcadia/ydb/library/yql/cfg/tests
     )
     PEERDIR(

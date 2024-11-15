@@ -2,7 +2,7 @@ PY3TEST()
 
 PEERDIR(
     ydb/tests/library
-    ydb/library/yql/providers/common/proto
+    yql/essentials/providers/common/proto
 )
 
 TEST_SRCS(

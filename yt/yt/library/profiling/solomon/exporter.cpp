@@ -899,6 +899,11 @@ IYPathServicePtr TSolomonExporter::GetSensorService()
     return CreateSensorService(Config_, Registry_, MakeStrong(this));
 }
 
+const TSolomonRegistryPtr& TSolomonExporter::GetRegistry() const
+{
+    return Registry_;
+}
+
 TErrorOr<TReadWindow> TSolomonExporter::SelectReadWindow(
     TInstant now,
     TDuration period,

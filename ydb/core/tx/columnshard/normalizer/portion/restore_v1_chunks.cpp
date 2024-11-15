@@ -145,7 +145,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     if (!ready) {
         return TConclusionStatus::Fail("Not ready");
     }
-
+    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage());
     THashMap<ui64, TPortionLoadContext> portions0;
     THashSet<ui64> existPortions0;
     THashMap<ui64, std::map<TFullChunkAddress, TColumnChunkLoadContext>> columns0;
@@ -160,7 +160,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         while (!rowset.EndOfSet()) {
             TPortionLoadContext portion(rowset);
             existPortions0.emplace(portion.GetPortionId());
-            AFL_VERIFY(portions0.emplace(portion.GetPortionId(), portion).second);
+            if (!portion.GetMetaProto().BlobIdsSize()) {
+                AFL_VERIFY(portions0.emplace(portion.GetPortionId(), portion).second);
+            }
 
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");
@@ -194,10 +196,10 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
 
         while (!rowset.EndOfSet()) {
             TColumnChunkLoadContextV1 chunk(rowset);
-//            AFL_VERIFY(!portions0.contains(chunk.GetPortionId()));
-//            if (!existPortions0.contains(chunk.GetPortionId())) {
+            //AFL_VERIFY(!portions0.contains(chunk.GetPortionId()));
+            if (!existPortions0.contains(chunk.GetPortionId())) {
                 AFL_VERIFY(columns1Remove.emplace(chunk.GetFullChunkAddress(), chunk).second);
-//            }
+            }
 
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");
@@ -248,4 +250,4 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     return tasks;
 }
 
-}   // namespace NKikimr::NOlap::NRestorePortionsFromChunks
+}   // namespace NKikimr::NOlap::NRestoreV1Chunks

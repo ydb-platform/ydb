@@ -4,7 +4,9 @@
 #include "core_constants.h"
 
 #include <ydb/library/pdisk_io/device_type.h>
-#include <ydb/library/yaml_config/protos/config.pb.h>
+#include <library/cpp/json/json_reader.h>
+#include <ydb/core/viewer/json/json.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/blobstorage_pdisk_category.h>
@@ -13,7 +15,6 @@
 #include <ydb/core/protos/blobstorage_base3.pb.h>
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/protos/tablet.pb.h>
-
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/protobuf/json/util.h>
 
@@ -99,6 +100,48 @@ namespace NKikimr::NYaml {
         }
 
         ythrow yexception() << "Unknown type of YAML node: '" << yaml.as<TString>() << "'";
+    }
+
+    YAML::Node Json2Yaml(const NJson::TJsonValue& json) {
+        YAML::Node yamlNode;
+        yamlNode["host_configs"] = YAML::Node(YAML::NodeType::Sequence);
+        auto jsonHostConfigs = json["host_config"];
+        for (const auto& host_config: jsonHostConfigs.GetArray()) {
+            YAML::Node configNode;
+            configNode["host_config_id"] = host_config["host_config_id"].GetInteger();
+            configNode["drive"] = YAML::Node(YAML::NodeType::Sequence);
+            for (const auto& drive : host_config["drive"].GetArray()) {
+                YAML::Node driveNode;
+                driveNode["path"] = drive["path"].GetString();
+                driveNode["type"] = drive["type"].GetString();
+                driveNode["expected_slot_count"] = 9; // Default value
+                configNode["drive"].push_back(driveNode);
+            }
+            
+            yamlNode["host_configs"].push_back(configNode);
+        }
+
+        yamlNode["hosts"] = YAML::Node(YAML::NodeType::Sequence);
+        auto jsonHosts = json["host"];
+        if (jsonHosts.IsArray()) {
+            for (const auto& host : jsonHosts.GetArray()) {
+                YAML::Node hostNode;
+                hostNode["host"] = host["key"]["endpoint"]["fqdn"].GetString();
+                hostNode["port"] = host["key"]["endpoint"]["ic_port"].GetInteger();
+                hostNode["host_config_id"] = host["host_config_id"].GetInteger();
+                yamlNode["hosts"].push_back(hostNode);
+            }
+        }
+        return yamlNode;
+    }
+
+    TString ParseProtoToYaml(const NKikimrConfig::StorageConfig& storageConfig) {
+        NJson::TJsonValue json;
+        NProtobufJson::Proto2Json(storageConfig, json);
+        TString output;
+        YAML::Node yaml = NKikimr::NYaml::Json2Yaml(json);
+        output = YAML::Dump(yaml);
+        return output;
     }
 
     std::optional<bool> GetBoolByPathOrNone(const NJson::TJsonValue& json, const TStringBuf& path) {
@@ -562,7 +605,7 @@ namespace NKikimr::NYaml {
             }
         }
 
-        // Patch disk types
+        // Patch disk types and expected slot size
         if (ephemeralConfig.HostConfigsSize()) {
             for(auto& hostConfig : *ephemeralConfig.MutableHostConfigs()) {
                 int sectorMapIndex = 0;
@@ -575,6 +618,9 @@ namespace NKikimr::NYaml {
                         ++sectorMapIndex;
                         drive.SetPath(Sprintf("SectorMap:%d:64", sectorMapIndex));
                         drive.SetType("SSD");
+                    }
+                    if (drive.HasExpectedSlotCount()) {
+                        drive.MutablePDiskConfig()->SetExpectedSlotCount(drive.GetExpectedSlotCount());
                     }
                 }
             }
@@ -1408,6 +1454,7 @@ namespace NKikimr::NYaml {
         for(const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
             auto *hostConfigProto = result.AddCommand()->MutableDefineHostConfig();
             hostConfig.CopyToTDefineHostConfig(*hostConfigProto);
+        
             // KIKIMR-16712
             // Avoid checking the version number for "host_config" configuration items.
             // This allows to add new host configuration items after the initial cluster setup.
@@ -1428,6 +1475,12 @@ namespace NKikimr::NYaml {
         }
 
         return result;
+    }
+
+    Ydb::BSConfig::ReplaceStorageConfigRequest BuildReplaceDistributedStorageCommand(const TString& data) {
+        Ydb::BSConfig::ReplaceStorageConfigRequest replaceRequest;
+        replaceRequest.set_yaml_config(data);
+        return replaceRequest;
     }
 
     void Parse(const NJson::TJsonValue& json, NProtobufJson::TJson2ProtoConfig convertConfig, NKikimrConfig::TAppConfig& config, bool transform, bool relaxed) {

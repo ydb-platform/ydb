@@ -360,10 +360,8 @@ class Classpath:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if ymake_java_test:
-            value = '$B/{}/{}.jar ${{DART_CLASSPATH}}'.format(unit.get('MODDIR'), unit.get('REALPRJNAME'))
-            return {cls.KEY: value}
+        value = '$B/{}/{}.jar ${{DART_CLASSPATH}}'.format(unit.get('MODDIR'), unit.get('REALPRJNAME'))
+        return {cls.KEY: value}
 
 
 class ConfigPath:
@@ -847,10 +845,8 @@ class TestClasspath:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if ymake_java_test:
-            value = '${DART_CLASSPATH}'
-            return {cls.KEY: value}
+        value = '${DART_CLASSPATH}'
+        return {cls.KEY: value}
 
 
 class TestClasspathDeps:
@@ -858,9 +854,7 @@ class TestClasspathDeps:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if ymake_java_test:
-            return {cls.KEY: '${DART_CLASSPATH_DEPS}'}
+        return {cls.KEY: '${DART_CLASSPATH_DEPS}'}
 
 
 class TestCwd:
@@ -930,9 +924,7 @@ class TestData:
 
     @classmethod
     def java_style(cls, unit, flat_args, spec_args):
-        ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if ymake_java_test:
-            return {cls.KEY: java_srcdirs_to_data(unit, 'ALL_SRCDIRS')}
+        return {cls.KEY: java_srcdirs_to_data(unit, 'ALL_SRCDIRS')}
 
     @classmethod
     def from_unit_with_canonical(cls, unit, flat_args, spec_args):
@@ -1219,13 +1211,11 @@ class TestJar:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-        if ymake_java_test:
-            if unit.get('UNITTEST_DIR'):
-                value = '${UNITTEST_MOD}'
-            else:
-                value = '{}/{}.jar'.format(unit.get('MODDIR'), unit.get('REALPRJNAME'))
-            return {cls.KEY: value}
+        if unit.get('UNITTEST_DIR'):
+            value = '${UNITTEST_MOD}'
+        else:
+            value = '{}/{}.jar'.format(unit.get('MODDIR'), unit.get('REALPRJNAME'))
+        return {cls.KEY: value}
 
 
 class TestName:

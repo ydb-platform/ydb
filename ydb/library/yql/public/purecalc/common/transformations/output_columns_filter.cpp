@@ -1,6 +1,6 @@
 #include "output_columns_filter.h"
 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 using namespace NYql;
 using namespace NYql::NPureCalc;

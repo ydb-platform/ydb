@@ -2,7 +2,7 @@
 
 #include "yql_yt_provider.h"
 
-#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
+#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>

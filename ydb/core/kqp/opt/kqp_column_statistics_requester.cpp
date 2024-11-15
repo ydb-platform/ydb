@@ -1,13 +1,13 @@
 #include "kqp_column_statistics_requester.h"
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
-#include <ydb/library/yql/core/yql_statistics.h>
+#include <yql/essentials/core/yql_statistics.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp {
 

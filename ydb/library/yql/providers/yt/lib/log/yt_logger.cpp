@@ -2,8 +2,8 @@
 
 #include <ydb/library/yql/providers/yt/lib/init_yt_api/init.h>
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
 
 #include <yt/cpp/mapreduce/interface/logging/logger.h>
 

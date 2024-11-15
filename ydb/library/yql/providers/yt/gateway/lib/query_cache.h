@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/providers/yt/common/yql_yt_settings.h>
 #include <ydb/library/yql/providers/yt/gateway/lib/transaction_cache.h>
-#include <ydb/library/yql/utils/threading/async_queue.h>
+#include <yql/essentials/utils/threading/async_queue.h>
 
 #include <yt/cpp/mapreduce/interface/fwd.h>
 

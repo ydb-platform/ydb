@@ -12,13 +12,13 @@ SRCS(
 
 PEERDIR(
     ydb/core/testlib/basics/default
-    ydb/library/yql/minikql/comp_nodes/llvm14
-    ydb/library/yql/minikql/computation/llvm14
-    ydb/library/yql/providers/common/comp_nodes
+    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/computation/llvm14
+    yql/essentials/providers/common/comp_nodes
     ydb/library/yql/providers/common/ut_helpers
     ydb/library/yql/providers/pq/gateway/native
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/sql
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql
     ydb/public/sdk/cpp/client/ydb_datastreams
     ydb/public/sdk/cpp/client/ydb_persqueue_public
     ydb/tests/fq/pq_async_io

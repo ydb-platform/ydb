@@ -3591,6 +3591,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_ABORT_UNLESS(operationId.GetSubTxId() == operation->Parts.size());
                 TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
                 ISubOperation::TPtr part = operation->RestorePart(txState.TxType, txState.State, context);
+                ++(operation->PreparedParts);
                 operation->AddPart(part);
 
                 if (!txInFlightRowset.Next())

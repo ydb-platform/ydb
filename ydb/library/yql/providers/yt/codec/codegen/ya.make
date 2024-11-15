@@ -7,15 +7,15 @@ SRCS(
 
 PEERDIR(
     library/cpp/resource
-    ydb/library/binary_json
-    ydb/library/yql/minikql/computation/llvm14
-    ydb/library/yql/parser/pg_wrapper/interface
-    ydb/library/yql/utils
+    yql/essentials/types/binary_json
+    yql/essentials/minikql/computation/llvm14
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/utils
 )
 
 IF (NOT MKQL_DISABLE_CODEGEN)
     PEERDIR(
-        ydb/library/yql/minikql/codegen/llvm14
+        yql/essentials/minikql/codegen/llvm14
     )
     USE_LLVM_BC14()
     LLVM_BC(

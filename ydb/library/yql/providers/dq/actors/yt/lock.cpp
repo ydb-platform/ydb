@@ -2,7 +2,7 @@
 
 #include "yt_wrapper.h"
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yt/yt/client/api/transaction.h>
 #include <yt/yt/core/ytree/public.h>

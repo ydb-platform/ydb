@@ -8,7 +8,7 @@ namespace NKikimr::NColumnShard {
 
 class TInsertedPortion {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<NOlap::TPortionInfoConstructor>, PortionInfoConstructor);
+    YDB_READONLY_DEF(std::shared_ptr<NOlap::TPortionAccessorConstructor>, PortionInfoConstructor);
     std::optional<NOlap::TPortionDataAccessor> PortionInfo;
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PKBatch);
 

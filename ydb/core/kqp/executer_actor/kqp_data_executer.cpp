@@ -29,7 +29,7 @@
 
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 
 namespace NKikimr {
@@ -191,6 +191,7 @@ public:
 
     bool ForceAcquireSnapshot() const {
         const bool forceSnapshot = (
+            !GetSnapshot().IsValid() &&
             ReadOnlyTx &&
             !ImmediateTx &&
             !HasPersistentChannels &&
@@ -220,9 +221,6 @@ public:
             YQL_ENSURE(ResponseEv->BrokenLockShardId);
             return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, {});
         }
-
-        ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
-        Counters->TxProxyMon->ReportStatusOK->Inc();
 
         auto addLocks = [this](const ui64 taskId, const auto& data) {
             if (data.GetData().template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
@@ -256,11 +254,13 @@ public:
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                     if (TxManager) {
                         YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap);
-                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
-                        TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::WRITE);
+                        IKqpTransactionManager::TActionFlags flags = IKqpTransactionManager::EAction::WRITE;
                         if (info.GetHasRead()) {
-                            TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
+                            flags |= IKqpTransactionManager::EAction::READ;
                         }
+
+                        TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
+                        TxManager->AddAction(lock.GetDataShard(), flags);
                         TxManager->AddLock(lock.GetDataShard(), lock);
                     }
                 }
@@ -337,6 +337,9 @@ public:
     }
 
     void MakeResponseAndPassAway() {
+        ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
+        Counters->TxProxyMon->ReportStatusOK->Inc();
+
         ResponseEv->Snapshot = GetSnapshot();
 
         if (!Locks.empty() || (TxManager && TxManager->HasLocks())) {
@@ -1942,10 +1945,6 @@ private:
         return false;
     }
 
-    bool HasOlapSink(const NKqpProto::TKqpPhyStage& stage, const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpPhyTable>& tables) {
-        return NKqp::HasOlapTableWriteInStage(stage, tables);
-    }
-
     void Execute() {
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
@@ -2037,10 +2036,6 @@ private:
         THashMap<ui64, TVector<NDqProto::TDqTask*>> datashardTasks;  // shardId -> [task]
         THashMap<ui64, TVector<ui64>> remoteComputeTasks;  // shardId -> [task]
         TVector<ui64> computeTasks;
-
-        if (StreamResult) {
-            InitializeChannelProxies();
-        }
 
         for (auto& task : TasksGraph.GetTasks()) {
             auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
@@ -2853,8 +2848,9 @@ private:
             hFunc(TEvDqCompute::TEvState, HandleShutdown);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
             hFunc(TEvents::TEvPoison, HandleShutdown);
+            hFunc(TEvDq::TEvAbortExecution, HandleShutdown);
             default:
-                LOG_E("Unexpected event: " << ev->GetTypeName()); // ignore all other events
+                LOG_E("Unexpected event while waiting for shutdown: " << ev->GetTypeName()); // ignore all other events
         }
     }
 
@@ -2892,6 +2888,16 @@ private:
         LOG_I("Timed out on waiting for Compute Actors to finish - forcing shutdown. Sender: " << ev->Sender);
 
         if (ev->Sender == SelfId()) {
+            PassAway();
+        }
+    }
+
+    void HandleShutdown(TEvDq::TEvAbortExecution::TPtr& ev) {
+        auto statusCode = NYql::NDq::DqStatusToYdbStatus(ev->Get()->Record.GetStatusCode());
+
+        // In case of external timeout the response is already sent to the client - no need to wait for stats.
+        if (statusCode == Ydb::StatusIds::TIMEOUT) {
+            LOG_I("External timeout while waiting for Compute Actors to finish - forcing shutdown. Sender: " << ev->Sender);
             PassAway();
         }
     }

@@ -1307,8 +1307,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
                     if (msg->Record.GetResultSet().rows().size()) {
                         observedResults.emplace_back(FormatResult(msg->Record.GetResultSet()));
                     }
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-                    resp->Record.SetSeqNo(msg->Record.GetSeqNo());
+                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(msg->Record.GetSeqNo(), msg->Record.GetChannelId());
                     resp->Record.SetFreeSpace(1);
                     ctx.Send(ev->Sender, resp.Release());
                     break;

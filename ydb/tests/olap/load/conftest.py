@@ -3,6 +3,7 @@ import pytest
 import allure
 import json
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType
+from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.allure_utils import allure_test_description
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
@@ -51,6 +52,14 @@ class LoadSuiteBase:
     @classmethod
     @allure.step('check tables size')
     def check_tables_size(cls, folder: Optional[str], tables: dict[str, int]):
+        wait_error = YdbCluster.wait_ydb_alive(
+            300, (
+                f'{YdbCluster.tables_path}/{folder}'
+                if folder is not None
+                else [f'{YdbCluster.tables_path}/{t}' for t in tables.keys()]
+            ))
+        if wait_error is not None:
+            pytest.fail(f'Cluster is dead: {wait_error}')
         sth = ScenarioTestHelper(None)
         errors: list[str] = []
         for table, expected_size in tables.items():

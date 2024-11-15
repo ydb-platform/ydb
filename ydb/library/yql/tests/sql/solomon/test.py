@@ -5,7 +5,7 @@ import codecs
 import yatest.common
 
 from google.protobuf import text_format
-import ydb.library.yql.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
+import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
 from yqlrun import YQLRun
 
 from yql_utils import (
@@ -20,7 +20,7 @@ from utils import (
     get_config,
     pytest_generate_tests_for_run)
 
-ASTDIFF_PATH = yql_binary_path('ydb/library/yql/tools/astdiff/astdiff')
+ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 DQRUN_PATH = yql_binary_path('ydb/library/yql/tools/dqrun/dqrun')
 DATA_PATH = yatest.common.source_path('ydb/library/yql/tests/sql/suites')
 

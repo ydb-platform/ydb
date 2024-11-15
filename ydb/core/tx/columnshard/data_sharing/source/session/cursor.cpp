@@ -26,8 +26,8 @@ void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& stor
                 NextPortionId = itPortion->first;
             } else {
                 portions.emplace_back(itPortion->second);
-                chunksCount += portions.back().GetRecords().size();
-                chunksCount += portions.back().GetIndexes().size();
+                chunksCount += portions.back().GetRecordsVerified().size();
+                chunksCount += portions.back().GetIndexesVerified().size();
                 ++count;
             }
         }

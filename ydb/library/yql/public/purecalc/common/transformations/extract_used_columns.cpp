@@ -2,8 +2,8 @@
 
 #include <ydb/library/yql/public/purecalc/common/inspect_input.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
 using namespace NYql;
 using namespace NYql::NPureCalc;

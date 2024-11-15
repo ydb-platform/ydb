@@ -86,6 +86,8 @@ namespace NYql {
             MATCH_ARITHMETICAL(Sub, SUB);
             MATCH_ARITHMETICAL(Add, ADD);
             MATCH_ARITHMETICAL(Mul, MUL);
+            MATCH_ARITHMETICAL(Div, DIV);
+            MATCH_ARITHMETICAL(Mod, MOD);
 
             if (auto maybeNull = expression.Maybe<TCoNull>()) {
                 proto->mutable_null();
@@ -97,6 +99,7 @@ namespace NYql {
         }
 
 #undef MATCH_ATOM
+#undef MATCH_ARITHMETICAL
 
 #define EXPR_NODE_TO_COMPARE_TYPE(TExprNodeType, COMPARE_TYPE)       \
     if (!opMatched && compare.Maybe<TExprNodeType>()) {              \
@@ -118,7 +121,7 @@ namespace NYql {
             EXPR_NODE_TO_COMPARE_TYPE(TCoAggrNotEqual, ID);
 
             if (proto->operation() == TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED) {
-                err << "unknown operation: " << compare.Raw()->Content();
+                err << "unknown compare operation: " << compare.Raw()->Content();
                 return false;
             }
             return SerializeExpression(compare.Left(), proto->mutable_left_value(), arg, err) && SerializeExpression(compare.Right(), proto->mutable_right_value(), arg, err);
@@ -181,7 +184,7 @@ namespace NYql {
             } else if (auto maybeAsList = expr.Maybe<TCoAsList>()) {
                 collection = maybeAsList.Cast().Ptr();
             } else {
-                err << "unknown operation: " << expr.Ref().Content();
+                err << "unknown source for in: " << expr.Ref().Content();
                 return false;
             }
 
@@ -195,7 +198,7 @@ namespace NYql {
 
         bool SerializeIsNotDistinctFrom(const TExprBase& predicate, TPredicate* predicateProto, const TCoArgument& arg, TStringBuilder& err, bool invert) {
             if (predicate.Ref().ChildrenSize() != 2) {
-                err << "unknown predicate, expected 2, children size " << predicate.Ref().ChildrenSize();
+                err << "invalid IsNotDistinctFrom predicate, expected 2 children but got " << predicate.Ref().ChildrenSize();
                 return false;
             }
             TPredicate::TComparison* proto = predicateProto->mutable_comparison();
@@ -341,6 +344,12 @@ namespace NYql {
             case TExpression_TArithmeticalExpression::SUB:
                 operation = " - ";
                 break;
+            case TExpression_TArithmeticalExpression::DIV:
+                operation = " / ";
+                break;
+            case TExpression_TArithmeticalExpression::MOD:
+                operation = " % ";
+                break;
             case TExpression_TArithmeticalExpression::BIT_AND:
                 operation = " & ";
                 break;
@@ -356,7 +365,7 @@ namespace NYql {
 
         auto left = FormatExpression(expression.left_value());
         auto right = FormatExpression(expression.right_value());
-        return left + operation + right;
+        return TStringBuilder() << "(" << left << operation << right << ")";
     }
 
     TString FormatNegation(const TPredicate_TNegation& negation) {
@@ -525,14 +534,22 @@ namespace NYql {
 
     TString FormatIn(const TPredicate_TIn& in) {
         auto value = FormatExpression(in.value());
-        TString list;
+        TStringStream list;
         for (const auto& expr : in.set()) {
             if (!list.empty()) {
-                list += ",";
+                list << ", ";
+            } else {
+                list << value << " IN (";
             }
-            list += FormatExpression(expr);
+            list << FormatExpression(expr);
         }
-        return value + " IN (" + list + ")";
+
+        if (list.empty()) {
+            throw yexception() << "failed to format IN statement, no operands";
+        }
+
+        list << ")";
+        return list.Str();
     }
 
     TString FormatPredicate(const TPredicate& predicate, bool topLevel ) {

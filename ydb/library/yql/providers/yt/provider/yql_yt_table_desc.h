@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/url_lister/interface/url_lister_manager.h>
-#include <ydb/library/yql/core/yql_udf_resolver.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
+#include <yql/essentials/core/yql_udf_resolver.h>
 
 #include <library/cpp/random_provider/random_provider.h>
 

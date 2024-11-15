@@ -128,6 +128,7 @@ namespace NKikimr {
         double HullCompLevelRateThreshold;
         double HullCompFreeSpaceThreshold;
         ui32 FreshCompMaxInFlightWrites;
+        ui32 FreshCompMaxInFlightReads;
         ui32 HullCompMaxInFlightWrites;
         ui32 HullCompMaxInFlightReads;
         double HullCompReadBatchEfficiencyThreshold;

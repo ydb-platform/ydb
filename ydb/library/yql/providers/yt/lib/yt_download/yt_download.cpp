@@ -2,11 +2,11 @@
 
 #include <ydb/library/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
 #include <ydb/library/yql/providers/yt/lib/init_yt_api/init.h>
-#include <ydb/library/yql/core/file_storage/defs/provider.h>
+#include <yql/essentials/core/file_storage/defs/provider.h>
 
-#include <ydb/library/yql/utils/md5_stream.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/md5_stream.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/interface/client.h>
 

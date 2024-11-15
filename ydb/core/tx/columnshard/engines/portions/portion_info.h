@@ -87,9 +87,6 @@ private:
     TPortionMeta Meta;
     TRuntimeFeatures RuntimeFeatures = 0;
 
-    std::vector<TIndexChunk> Indexes;
-    std::vector<TColumnRecord> Records;
-
     void FullValidation() const {
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
@@ -122,10 +119,6 @@ public:
     }
 
     bool NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const;
-
-    ui64 GetChunksCount() const {
-        return Records.size() + Indexes.size();
-    }
 
     NSplitter::TEntityGroups GetEntityGroupsByStorageId(
         const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const;
@@ -178,16 +171,6 @@ public:
         SetRemoveSnapshot(TSnapshot(planStep, txId));
     }
 
-    std::vector<TString> GetIndexInplaceDataVerified(const ui32 indexId) const {
-        std::vector<TString> result;
-        for (auto&& i : Indexes) {
-            if (i.GetEntityId() == indexId) {
-                result.emplace_back(i.GetBlobDataVerified());
-            }
-        }
-        return result;
-    }
-
     void InitRuntimeFeature(const ERuntimeFeature feature, const bool activity) {
         if (activity) {
             AddRuntimeFeature(feature);
@@ -238,7 +221,11 @@ public:
     const TString& GetIndexStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
     const TString& GetEntityStorageId(const ui32 entityId, const TIndexInfo& indexInfo) const;
 
-    ui64 GetTxVolume() const;   // fake-correct method for determ volume on rewrite this portion in transaction progress
+    ui64 GetTxVolume() const {
+        return 1024;
+    }
+
+    ui64 GetApproxChunksCount(const ui32 schemaColumnsCount) const;
     ui64 GetMetadataMemorySize() const;
 
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;

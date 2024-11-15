@@ -45,9 +45,9 @@ PEERDIR(
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common
     ydb/library/yql/dq/runtime
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/minikql/computation/llvm14
-    ydb/library/yql/utils
+    yql/essentials/minikql/computation/llvm14
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/utils
 )
 
 YQL_LAST_ABI_VERSION()

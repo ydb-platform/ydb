@@ -4,10 +4,10 @@
 
 #include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <yt/cpp/mapreduce/interface/node.h>
 #include <yt/cpp/mapreduce/interface/common.h>

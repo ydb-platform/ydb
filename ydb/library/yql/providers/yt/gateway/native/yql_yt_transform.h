@@ -9,11 +9,11 @@
 #include <ydb/library/yql/providers/yt/common/yql_yt_settings.h>
 #include <ydb/library/yql/providers/yt/job/yql_job_base.h>
 
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/core/yql_udf_resolver.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_udf_resolver.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_visitor.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 
 #include <yt/cpp/mapreduce/interface/operation.h>
 

@@ -9,6 +9,7 @@
 /tools @ydb-platform/ci
 /util @ydb-platform/ci
 /vendor @ydb-platform/ci
+/yql @ydb-platform/ci
 /yt @ydb-platform/ci
 
 /ydb/core/fq/ @ydb-platform/fq

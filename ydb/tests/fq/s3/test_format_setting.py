@@ -456,7 +456,17 @@ Pear;15;33'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
-        return self.canonize_result(s3, "date/simple/" + type_format + "/", filename.replace('/', '_'))
+        sql = f'''
+            SELECT *
+            FROM bindings.`{storage_sink_binding_name}`
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        self.validate_date_simple_result(result_set)
 
     @yq_all
     @pytest.mark.parametrize(

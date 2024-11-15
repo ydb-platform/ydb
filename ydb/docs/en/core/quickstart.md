@@ -97,27 +97,10 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
 
       The `YDB_USE_IN_MEMORY_PDISKS` setting makes all data volatile, stored only in RAM. Currently, data persistence by turning it off is supported only on x86_64 processors.
 
-      {% note warning %}
+      To disable the `YDB_USE_IN_MEMORY_PDISKS` option when running a Docker container on a Mac with an Apple Silicon processor, it must emulate the x86_64 instruction set:
 
-      You can use one of the following methods to save data using the disable `YDB_USE_IN_MEMORY_PDISKS` option when running a Docker container on a Mac with ARM processors:
-
-      - Use [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/)
-
-      - Use [colima](https://github.com/abiosoft/colima)
-
-        1. You can install it via brew
-
-           ```bash
-           brew install colima
-           ```
-
-        2. Start the VM via colima specifying `--vm-type=vz` instead of `qemu` which is specified by default
-
-           ```bash
-           colima start --arch aarch64 --vm-type=vz --vz-rosetta
-           ```
-
-      {% endnote %}
+      - With [colima](https://github.com/abiosoft/colima), use the `colima start --arch aarch64 --vm-type=vz --vz-rosetta` options.
+      - With [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/), install and enable Rosetta 2.
 
 - Minikube
 

@@ -96,28 +96,10 @@
 
       Настройка `YDB_USE_IN_MEMORY_PDISKS` делает все данные волатильными, хранящимися только в оперативной памяти. В настоящее время сохранение данных путем её отключения поддерживается только на x86_64 процессорах.
 
-      {% note warning %}
+      Чтобы отключить опцию YDB_USE_IN_MEMORY_PDISKS при запуске контейнера Docker на Mac с процессором Apple Silicon, он должен эмулировать набор инструкций x86_64:
 
-      Для сохранения данных путем отключения опции `YDB_USE_IN_MEMORY_PDISKS` при запуске Docker контейнера на Mac с ARM процессорами можно использовать один из следующих способов:
-
-      - Использовать [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/)
-
-      - Использовать [colima](https://github.com/abiosoft/colima)
-
-        1. Установить ее можно через brew
-
-           ```bash
-           brew install colima
-           ```
-
-        2. Запустить ВМ через colima с указанием `--vm-type=vz` вместо `qemu` который указан по умолчанию
-
-           ```bash
-           colima start --arch aarch64 --vm-type=vz --vz-rosetta
-           ```
-
-      {% endnote %}
-
+      - С помощью [colima](https://github.com/abiosoft/colima) используйте параметры `colima start --arch aarch64 --vm-type=vz --vz-rosetta`.
+      - С помощью [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/) установите и включите Rosetta 2.
 - Minikube
 
    1. Установите интерфейс командной строки Kubernetes [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl) и менеджер пакетов [Helm 3](https://helm.sh/docs/intro/install/).

@@ -36,7 +36,9 @@ std::pair<ui64, ui64> TConsumerOperations::GetOffsetsCommitRange() const
 
     if (Offsets_.Empty()) {
         return {0,0};
-    } else return {Offsets_.Min(), Offsets_.Max()};
+    } else {
+        return {Offsets_.Min(), Offsets_.Max()};
+    }
 }
 
 bool TConsumerOperations::GetForceCommit() const

@@ -21,7 +21,6 @@ TString LogPrefix = "JsonParser: ";
 
 constexpr ui64 DEFAULT_BATCH_SIZE = 1_MB;
 constexpr ui64 DEFAULT_STATIC_BUFFER_SIZE = 1000000;
-constexpr TDuration DEFAULT_BATCH_CREATION_TIMEOUT = TDuration::Seconds(1);
 
 struct TJsonParserBuffer {
     size_t NumberValues = 0;
@@ -275,7 +274,7 @@ public:
         , TypeEnv(std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc))
         , BatchSize(batchSize ? batchSize : DEFAULT_BATCH_SIZE)
         , MaxNumberRows(((staticBufferSize ? staticBufferSize : DEFAULT_STATIC_BUFFER_SIZE) - 1) / columns.size() + 1)
-        , BatchCreationTimeout(batchCreationTimeout ? batchCreationTimeout : DEFAULT_BATCH_CREATION_TIMEOUT)
+        , BatchCreationTimeout(batchCreationTimeout)
         , ParseCallback(parseCallback)
         , ParsedValues(columns.size())
     {
@@ -326,7 +325,7 @@ public:
         Y_ENSURE(!Buffer.Finished, "Cannot add messages into finished buffer");
         for (const auto& message : messages) {
             Buffer.AddMessage(message);
-            if (IsReady()) {
+            if (Buffer.IsReady() && Buffer.GetSize() >= BatchSize) {
                 Parse();
             }
         }

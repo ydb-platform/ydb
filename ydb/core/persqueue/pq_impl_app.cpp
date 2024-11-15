@@ -10,6 +10,27 @@
 
 namespace NKikimr::NPQ {
 
+using EState = NKikimrPQ::TTransaction::EState;
+
+namespace {
+    struct TTransactionSnapshot {
+        TTransactionSnapshot(const TDistributedTransaction& tx)
+            : TxId(tx.TxId)
+            , Step(tx.Step)
+            , State(tx.State)
+            , MinStep(tx.MaxStep)
+            , MaxStep(tx.MaxStep) {
+        }
+
+        ui64 TxId;
+        ui64 Step;
+        EState State;
+        ui64 MinStep;
+        ui64 MaxStep;
+    };
+}
+
+
 class TMonitoringProxy : public TActorBootstrapped<TMonitoringProxy> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -17,7 +38,7 @@ public:
     }
 
     TMonitoringProxy(const TActorId& sender, const TString& query, const TMap<ui32, TActorId>&& partitions, const TActorId& cache,
-                     const TString& topicName, ui64 tabletId, ui32 inflight, TString&& config)
+                     const TString& topicName, ui64 tabletId, ui32 inflight, TString&& config, std::vector<TTransactionSnapshot>&& transactions)
     : Sender(sender)
     , Query(query)
     , Partitions(std::move(partitions))
@@ -27,6 +48,7 @@ public:
     , TabletID(tabletId)
     , Inflight(inflight)
     , Config(std::move(config))
+    , Transactions(std::move(transactions))
     , TotalResponses(0)
     {
         for (auto& p : Partitions) {
@@ -79,6 +101,34 @@ private:
                             str << "<a href=\"app?TabletID=" << TabletID << "&kv=1\">KV-tablet internals</a>";
                         }
                     }
+
+                    LAYOUT_ROW() {
+                        LAYOUT_COLUMN() {
+                            TABLE_CLASS("table") {
+                                CAPTION() {str << "Transactions";}
+                                TABLEHEAD() {
+                                    TABLER() {
+                                        TABLEH() {str << "TxId";}
+                                        TABLEH() {str << "Step";}
+                                        TABLEH() {str << "State";}
+                                        TABLEH() {str << "MinStep";}
+                                        TABLEH() {str << "MaxStep";}
+                                    }
+                                }
+                                TABLEBODY() {
+                                    for (auto& tx : Transactions) {
+                                        TABLER() {
+                                            TABLED() {str << tx.TxId;}
+                                            TABLED() {str << tx.Step;}
+                                            TABLED() {str << (int)tx.State;}
+                                            TABLED() {str << tx.MinStep;}
+                                            TABLED() {str << tx.MaxStep;}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 str << CacheResult;
@@ -128,6 +178,7 @@ private:
     const ui64 TabletID;
     const ui32 Inflight;
     const TString Config;
+    const std::vector<TTransactionSnapshot> Transactions;
 
     TString CacheResult;
     TMap<ui32, TString> PartitionResults;
@@ -153,7 +204,14 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     }
 
     TString config = SecureDebugStringMultiline(Config);
-    ctx.Register(new TMonitoringProxy(ev->Sender, ev->Get()->Query, std::move(res), CacheActor, TopicName, TabletID(), ResponseProxy.size(), std::move(config)));
+    std::vector<TTransactionSnapshot> transactions;
+    transactions.reserve(Txs.size());
+    for (auto& [_, tx] : Txs) {
+        transactions.emplace_back(tx);
+    }
+
+    ctx.Register(new TMonitoringProxy(ev->Sender, ev->Get()->Query, std::move(res), CacheActor, TopicName,
+        TabletID(), ResponseProxy.size(), std::move(config), std::move(transactions)));
 
     return true;
 }

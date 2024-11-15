@@ -4,6 +4,7 @@
 #include "partition_util.h"
 #include "partition.h"
 #include "read.h"
+#include "transaction.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>

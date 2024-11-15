@@ -39,7 +39,7 @@ struct TRowDispatcherMetrics {
         ErrorsCount = Counters->GetCounter("ErrorsCount");
         ClientsCount = Counters->GetCounter("ClientsCount");
         RowsSent = Counters->GetCounter("RowsSent", true);
-        SumDataRate = Counters->GetCounter("SumDataRate", true);
+        SumDataRate = Counters->GetCounter("SumDataRate");
     }
 
     ::NMonitoring::TDynamicCounterPtr Counters;
@@ -84,7 +84,7 @@ struct TQueryState {
     bool IsWaiting = false;
 };
 
-ui64 UpdateMetricsPeriodSec = 10;
+ui64 UpdateMetricsPeriodSec = 60;
 ui64 PrintStateToLogPeriodSec = 300;
 
 class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
@@ -469,13 +469,14 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscrib
 }
 
 void TRowDispatcher::UpdateMetrics() {
-    if (Consumers.empty()) {
-        return;
-    }
     static TInstant LastUpdateMetricsTime = TInstant::Now();
     auto now = TInstant::Now();
     AggrStats.LastUpdateMetricsPeriod = now - LastUpdateMetricsTime;
     LastUpdateMetricsTime = now;
+    auto secs = AggrStats.LastUpdateMetricsPeriod.Seconds();
+    if (!secs) {
+        return;
+    }
 
     AggrStats.AllSessionsReadBytes = NYql::TCounters::TEntry();
     AggrStats.LastQueryStats.clear();
@@ -495,13 +496,12 @@ void TRowDispatcher::UpdateMetrics() {
             }
         }
     }
-    Metrics.SumDataRate->Add(AggrStats.AllSessionsReadBytes.Sum);
-
+    Metrics.SumDataRate->Set(AggrStats.AllSessionsReadBytes.Sum / secs);
     for (const auto& [queryId, stat] : AggrStats.LastQueryStats) {
         auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryId);
         queryGroup->GetCounter("MaxUnreadBytes")->Set(stat.UnreadBytes.Max);
         queryGroup->GetCounter("AvgUnreadBytes")->Set(stat.UnreadBytes.Avg);
-        queryGroup->GetCounter("DataRate", true)->Add(stat.ReadBytes.Sum);
+        queryGroup->GetCounter("DataRate")->Set(stat.ReadBytes.Sum / secs);
     }
 }
 
@@ -521,7 +521,7 @@ TString TRowDispatcher::GetInternalState() {
         str << " (sum " << toHuman(entry.Sum) << "   max  " << toHuman(entry.Max) << "   min " << toHuman(entry.Min) << ")";
     };
     str << "Consumers count: " << Consumers.size() << "\n";
-    str << "Sessions count: " << TopicSessions.size() << "\n";
+    str << "TopicSessions count: " << TopicSessions.size() << "\n";
     str << "DataRate (all sessions): ";
     printDataRate(AggrStats.AllSessionsReadBytes);
     str << "\n";

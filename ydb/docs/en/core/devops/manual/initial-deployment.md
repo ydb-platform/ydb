@@ -135,7 +135,7 @@ sudo usermod -aG disk ydb
 
 {% note warning %}
 
-After executing the command, the data on the disk will be erased.
+After executing this command, data on the disk will be erased.
 
 {% endnote %}
 

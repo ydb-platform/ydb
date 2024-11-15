@@ -20,11 +20,12 @@ TWriteOperation::TWriteOperation(const TOperationWriteId writeId, const ui64 loc
     , LockId(lockId)
     , Cookie(cookie)
     , GranuleShardingVersionId(granuleShardingVersionId)
-    , ModificationType(mType) {
+    , ModificationType(mType)
+{
 }
 
 void TWriteOperation::Start(TColumnShard& owner, const ui64 tableId, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source,
-    const std::shared_ptr<NOlap::ISnapshotSchema>& schema, const TActorContext& ctx) {
+    const std::shared_ptr<NOlap::ISnapshotSchema>& schema, const TActorContext& ctx, const NOlap::TSnapshot& applyToSnapshot) {
     Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
 
     NEvWrite::TWriteMeta writeMeta((ui64)WriteId, tableId, source, GranuleShardingVersionId);
@@ -34,13 +35,14 @@ void TWriteOperation::Start(TColumnShard& owner, const ui64 tableId, const NEvWr
         std::make_shared<NOlap::TBuildBatchesTask>(owner.TabletID(), ctx.SelfID, owner.BufferizationWriteActorId,
             NEvWrite::TWriteData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(),
                 owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR)),
-            schema, owner.GetLastTxSnapshot(), owner.Counters.GetCSCounters().WritingCounters);
+                schema, applyToSnapshot, owner.Counters.GetCSCounters().WritingCounters);
     NConveyor::TCompServiceOperator::SendTaskToExecute(task);
 
     Status = EOperationStatus::Started;
 }
 
-void TWriteOperation::CommitOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const {
+void TWriteOperation::CommitOnExecute(
+    TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const {
     Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
 
     TBlobGroupSelector dsGroupSelector(owner.Info());
@@ -78,12 +80,10 @@ void TWriteOperation::OnWriteFinish(
     TString metadata;
     Y_ABORT_UNLESS(proto.SerializeToString(&metadata));
 
-    db.Table<Schema::Operations>()
-        .Key((ui64)WriteId)
-        .Update(NIceDb::TUpdate<Schema::Operations::Status>((ui32)Status), NIceDb::TUpdate<Schema::Operations::CreatedAt>(CreatedAt.Seconds()),
-            NIceDb::TUpdate<Schema::Operations::Metadata>(metadata), NIceDb::TUpdate<Schema::Operations::LockId>(LockId),
-            NIceDb::TUpdate<Schema::Operations::Cookie>(Cookie),
-            NIceDb::TUpdate<Schema::Operations::GranuleShardingVersionId>(GranuleShardingVersionId.value_or(0)));
+    db.Table<Schema::Operations>().Key((ui64)WriteId).Update(NIceDb::TUpdate<Schema::Operations::Status>((ui32)Status),
+        NIceDb::TUpdate<Schema::Operations::CreatedAt>(CreatedAt.Seconds()), NIceDb::TUpdate<Schema::Operations::Metadata>(metadata),
+        NIceDb::TUpdate<Schema::Operations::LockId>(LockId), NIceDb::TUpdate<Schema::Operations::Cookie>(Cookie),
+        NIceDb::TUpdate<Schema::Operations::GranuleShardingVersionId>(GranuleShardingVersionId.value_or(0)));
 }
 
 void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& proto) const {
@@ -119,4 +119,4 @@ void TWriteOperation::AbortOnComplete(TColumnShard& /*owner*/) const {
     Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
 }
 
-}   // namespace NKikimr::NColumnShard
+}  // namespace NKikimr::NColumnShard

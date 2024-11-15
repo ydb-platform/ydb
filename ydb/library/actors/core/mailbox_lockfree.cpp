@@ -397,6 +397,16 @@ namespace NActors {
 
     EMailboxPush TMailbox::Push(TAutoPtr<IEventHandle>& evPtr) noexcept {
         IEventHandle* ev = evPtr.Release();
+
+        // For logging
+        TStringStream logOut;
+        logOut << "Send "
+            << ev->GetRecipientRewrite() << " "
+            << ev->Sender << " "
+            << (void*)ev.Get() << " "
+            << TInstant::Now().ToString() << "\n";
+        Cerr << logOut.Str(); 
+
         uintptr_t current = NextEventPtr.load(std::memory_order_relaxed);
         for (;;) {
             if (current == MarkerFree) {
@@ -534,6 +544,14 @@ namespace NActors {
         // This is similar to sending the event again
         ev->SendTime = (::NHPTimer::STime)GetCycleCountFast();
 #endif
+        // For logging
+        TStringStream logOut;
+        logOut << "Send "
+            << ev->GetRecipientRewrite() << " "
+            << ev->Sender << " "
+            << (void*)ev.Get() << " "
+            << TInstant::Now().ToString() << "\n";
+        Cerr << logOut.Str(); 
 
         SetNextPtr(ev, nullptr);
         PrependPreProcessed(ev, ev);

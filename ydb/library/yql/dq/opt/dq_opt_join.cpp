@@ -588,11 +588,11 @@ TExprBase DqRewriteRightJoinToLeft(const TExprBase node, TExprContext& ctx) {
         for (auto flag: flags.Cast()) {
             TStringBuf tail;
             if (flag.Name().Value().AfterPrefix("Left", tail)) {
-                list.push_back(Build<TCoNameValueTuple>(ctx, flag.Pos())
+                list.push_back(Build<TCoNameValueTuple>(ctx, flag.Pos()).InitFrom(flag)
                         .Name().Build("Right" + TString(tail))
                     .Done());
             } else if (flag.Name().Value().AfterPrefix("Right", tail)) {
-                list.push_back(Build<TCoNameValueTuple>(ctx, flag.Pos())
+                list.push_back(Build<TCoNameValueTuple>(ctx, flag.Pos()).InitFrom(flag)
                         .Name().Build("Left" + TString(tail))
                     .Done());
             } else {

@@ -250,6 +250,16 @@ namespace NActors {
 
                     actor->Receive(ev);
 
+                    // For logging
+                    TStringStream logOut;
+                    logOut << "Receive "
+                        << actor->GetActorName() << " "
+                        << actor->SelfId() << " "
+                        // << ev->Sender << " "
+                        << (void*)ev.Get() << " "
+                        << TInstant::Now().ToString() << "\n";
+                    Cerr << logOut.Str();
+
                     hpnow = GetCycleCountFast();
                     hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
 

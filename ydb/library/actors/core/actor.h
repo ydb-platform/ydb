@@ -535,6 +535,10 @@ namespace NActors {
             }
         }
 
+        virtual TStringBuf GetActorName() {
+            return "zaglushka IActor";
+        }
+
         TActorContext ActorContext() const {
             return TActivationContext::ActorContextFor(SelfId());
         }
@@ -648,6 +652,10 @@ namespace NActors {
         TReceiveFunc CurrentStateFunc() const {
             return CImpl.CurrentStateFunc();
         }
+
+        virtual TStringBuf GetActorName() override {
+            return "zaglushka Actor Callback";
+        }
     };
 
     template <typename TDerived>
@@ -676,6 +684,11 @@ namespace NActors {
                 // 200 characters is limit for solomon metric tag length
                 return TLocalProcessExtKey<TActorActivityTag, TDerived, 200>::GetIndex();
             }
+        }
+
+        virtual TStringBuf GetActorName() override {
+            auto actorIndex = GetActivityTypeIndex();
+            return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(actorIndex);
         }
 
         static ui32 GetActivityTypeIndex() {

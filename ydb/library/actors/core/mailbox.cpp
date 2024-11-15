@@ -168,6 +168,15 @@ namespace NActors {
         const TActorId& recipient = ev->GetRecipientRewrite();
         const ui32 hint = recipient.Hint();
 
+        // For logging
+        TStringStream logOut;
+        logOut << "Send "
+            << recipient << " "
+            << ev->Sender << " "
+            << (void*)ev.Get() << " "
+            << TInstant::Now().ToString() << "\n";
+        Cerr << logOut.Str(); 
+
         // copy-paste from Get to avoid duplicated type-switches
         const ui32 lineIndex = (hint & LineIndexMask) >> LineIndexShift;
         const ui32 lineHint = hint & LineHintMask;

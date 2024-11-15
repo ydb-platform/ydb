@@ -16,15 +16,6 @@ constexpr TDuration MIN_QUOTED_CPU_TIME = TDuration::MilliSeconds(10);
 
 using namespace NActors;
 
-namespace {
-
-bool IsDebugLogEnabled(const TActorSystem* actorSystem) {
-    auto* settings = actorSystem->LoggerSettings();
-    return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, NKikimrServices::KQP_COMPUTE);
-}
-
-} // anonymous namespace
-
 //Used in Async CA to interact with TaskRunnerActor
 struct TComputeActorAsyncInputHelperAsync : public TComputeActorAsyncInputHelper
 {
@@ -96,16 +87,6 @@ public:
     }
 
     void DoBootstrap() {
-        const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
-
-        TLogFunc logger;
-        if (IsDebugLogEnabled(actorSystem)) {
-            logger = [actorSystem, txId = GetTxId(), taskId = Task.GetId()] (const TString& message) {
-                LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TxId: " << txId
-                    << ", task: " << taskId << ": " << message);
-            };
-        }
-
         NActors::IActor* actor;
         THashSet<ui32> inputWithDisabledCheckpointing;
         for (const auto&[idx, inputInfo]: InputChannelsMap) {

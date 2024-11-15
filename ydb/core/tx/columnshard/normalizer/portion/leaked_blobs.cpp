@@ -41,10 +41,10 @@ public:
     }
 
     void ProcessNextGroup(const TActorContext& ctx) {
-        for (; CurrentGroup != CurrentChannel->History.end(); ++CurrentGroup)
-            ;
+        ++CurrentGroup;
 
-        THashSet<TLogoBlobID> AliveBlobs;
+        THashSet<TLogoBlobID>
+            AliveBlobs;
 
         if (CurrentGroup == CurrentChannel->History.end()) {
             ProcessNextChannel(ctx);

@@ -179,7 +179,7 @@ class YdbCluster:
 
     @classmethod
     @allure.step('Check if YDB alive')
-    def check_if_ydb_alive(cls, timeout=10, balanced_paths=None):
+    def check_if_ydb_alive(cls, timeout=10, balanced_paths=None) -> tuple[str, str]:
         def _check_node(n):
             name = 'UnknownNode'
             error = None
@@ -197,6 +197,7 @@ class YdbCluster:
             return error
 
         errors = []
+        warnings = []
         try:
             nodes = cls.get_cluster_nodes(db_only=True)
             expected_nodes_count = os.getenv('EXPECTED_DYN_NODES_COUNT')
@@ -216,46 +217,44 @@ class YdbCluster:
                     ok_node_count += 1
             if ok_node_count < nodes_count:
                 errors.append(f'Only {ok_node_count} from {ok_node_count} dynnodes are ok: {",".join(node_errors)}')
-            if os.getenv('TEST_CHECK_BALANCING', 'no') == 'yes':
-                paths_to_balance = []
-                if isinstance(balanced_paths, str):
-                    paths_to_balance += cls._get_tables(balanced_paths)
-                elif isinstance(balanced_paths, list):
-                    for path in balanced_paths:
-                        paths_to_balance += cls._get_tables(path)
-                for p in paths_to_balance:
-                    table_nodes = cls.get_cluster_nodes(p)
-                    min = None
-                    max = None
-                    if expected_nodes_count:
-                        if len(table_nodes) < expected_nodes_count:
-                            min = 0
-                    for tn in table_nodes:
-                        tablet_count = 0
-                        for tablet in tn.get("Tablets", []):
-                            if tablet.get("State") != "Green":
-                                errors.append(f'Node {tn.get("SystemState", {}).get("Host")}: {tablet.get("Count")} tablets of type {tablet.get("Type")} in {tablet.get("State")} state')
-                            if tablet.get("Type") in {"ColumnShard", "DataShard"}:
-                                tablet_count += tablet.get("Count")
-                        if tablet_count > 0:
-                            if min is None or tablet_count < min:
-                                min = tablet_count
-                            if max is None or tablet_count > max:
-                                max = tablet_count
-                    if min is None or max is None:
-                        errors.append(f'Table {p} has no tablets')
-                    elif max - min > 1:
-                        errors.append(f'Table {p} is not balanced: {min}-{max} shards.')
-                    LOGGER.info(f'Table {p} balance: {min}-{max} shards.')
+            paths_to_balance = []
+            if isinstance(balanced_paths, str):
+                paths_to_balance += cls._get_tables(balanced_paths)
+            elif isinstance(balanced_paths, list):
+                for path in balanced_paths:
+                    paths_to_balance += cls._get_tables(path)
+            for p in paths_to_balance:
+                table_nodes = cls.get_cluster_nodes(p)
+                min = None
+                max = None
+                if expected_nodes_count:
+                    if len(table_nodes) < expected_nodes_count:
+                        min = 0
+                for tn in table_nodes:
+                    tablet_count = 0
+                    for tablet in tn.get("Tablets", []):
+                        if tablet.get("State") != "Green":
+                            warnings.append(f'Node {tn.get("SystemState", {}).get("Host")}: {tablet.get("Count")} tablets of type {tablet.get("Type")} in {tablet.get("State")} state')
+                        if tablet.get("Type") in {"ColumnShard", "DataShard"}:
+                            tablet_count += tablet.get("Count")
+                    if tablet_count > 0:
+                        if min is None or tablet_count < min:
+                            min = tablet_count
+                        if max is None or tablet_count > max:
+                            max = tablet_count
+                if min is None or max is None:
+                    warnings.append(f'Table {p} has no tablets')
+                elif max - min > 1:
+                    warnings.append(f'Table {p} is not balanced: {min}-{max} shards.')
+                LOGGER.info(f'Table {p} balance: {min}-{max} shards.')
 
             cls.execute_single_result_query("select 1", timeout)
         except BaseException as ex:
             errors.append(f"Cannot connect to YDB: {ex}")
-        if len(errors) == 0:
-            return None
-        error = ', '.join(errors)
-        LOGGER.error(error)
-        return error
+        error = ', '.join(errors) if len(errors) > 0 else None
+        warning = ', '.join(warnings) if len(warnings) > 0 else None
+        LOGGER.error(f'Errors: {error}, warnings: {warning}')
+        return error, warning
 
     @classmethod
     @allure.step('Wait YDB alive')
@@ -263,8 +262,8 @@ class YdbCluster:
         deadline = time() + timeout
         error = None
         while time() < deadline:
-            error = cls.check_if_ydb_alive(deadline - time(), balanced_paths=balanced_paths)
-            if error is None:
+            error, warning = cls.check_if_ydb_alive(deadline - time(), balanced_paths=balanced_paths)
+            if error is None and warning is None:
                 break
             sleep(1)
         return error

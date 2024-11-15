@@ -561,8 +561,7 @@ public:
             RequestId_);
 
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
-            static const auto CanceledError = TError(NYT::EErrorCode::Canceled, "Request canceled");
-            AbortStreamsUnlessClosed(CanceledError);
+            AbortStreamsUnlessClosed(TError(NYT::EErrorCode::Canceled, "Request canceled"));
         }
 
         CancelInstant_ = NProfiling::GetInstant();
@@ -586,8 +585,7 @@ public:
             stage);
 
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
-            static const auto TimedOutError = TError(NYT::EErrorCode::Timeout, "Request timed out");
-            AbortStreamsUnlessClosed(TimedOutError);
+            AbortStreamsUnlessClosed(TError(NYT::EErrorCode::Timeout, "Request timed out"));
         }
 
         CanceledList_.Fire(GetCanceledError());
@@ -895,8 +893,7 @@ private:
         }
 
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
-            static const auto FinishedError = TError("Request finished");
-            AbortStreamsUnlessClosed(Error_.IsOK() ? Error_ : FinishedError);
+            AbortStreamsUnlessClosed(Error_.IsOK() ? Error_ : TError("Request finished"));
         }
 
         DoSetComplete();

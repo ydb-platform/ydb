@@ -62,6 +62,35 @@
             "SchemeRoot":72057594046678944,
             "PlanResolution":10,
             "Name":"Root",
+            "StoragePoolTypes":
+              [
+                {
+                  "Kind":"ssd",
+                  "PoolConfig":
+                    {
+                      "ErasureSpecies":"mirror-3-dc",
+                      "Geometry":
+                        {
+                          "RealmLevelBegin":10,
+                          "RealmLevelEnd":20,
+                          "DomainLevelBegin":10,
+                          "DomainLevelEnd":256
+                        },
+                      "VDiskKind":"Default",
+                      "PDiskFilter":
+                        [
+                          {
+                            "Property":
+                              [
+                                {
+                                  "Type":"SSD"
+                                }
+                              ]
+                          }
+                        ]
+                    }
+                }
+              ],
             "ExplicitMediators":
               [
                 72057594046382081,
@@ -226,6 +255,42 @@
                       "Type":"SSD"
                     }
                   ]
+              },
+              {
+                "HostConfigId":2,
+                "Drive":
+                  [
+                    {
+                      "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
+                      "Type":"SSD"
+                    },
+                    {
+                      "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_02",
+                      "Type":"SSD"
+                    },
+                    {
+                      "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_03",
+                      "Type":"SSD"
+                    }
+                  ]
+              },
+              {
+                "HostConfigId":3,
+                "Drive":
+                  [
+                    {
+                      "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
+                      "Type":"SSD"
+                    },
+                    {
+                      "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_02",
+                      "Type":"SSD"
+                    },
+                    {
+                      "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_03",
+                      "Type":"SSD"
+                    }
+                  ]
               }
             ],
           "DefineBox":
@@ -238,16 +303,43 @@
                     "EnforcedNodeId":1
                   },
                   {
-                    "HostConfigId":1,
+                    "HostConfigId":2,
                     "EnforcedNodeId":2
                   },
                   {
-                    "HostConfigId":1,
+                    "HostConfigId":3,
                     "EnforcedNodeId":3
                   }
                 ]
             }
         }
+    },
+  "ChannelProfileConfig":
+    {
+      "Profile":
+        [
+          {
+            "ProfileId":0,
+            "Channel":
+              [
+                {
+                  "ErasureSpecies":"mirror-3-dc",
+                  "PDiskCategory":1,
+                  "StoragePoolKind":"ssd"
+                },
+                {
+                  "ErasureSpecies":"mirror-3-dc",
+                  "PDiskCategory":1,
+                  "StoragePoolKind":"ssd"
+                },
+                {
+                  "ErasureSpecies":"mirror-3-dc",
+                  "PDiskCategory":1,
+                  "StoragePoolKind":"ssd"
+                }
+              ]
+          }
+        ]
     },
   "BootstrapConfig":
     {
@@ -1041,13 +1133,10 @@
     },
   "GRpcConfig":
     {
+      "Port":2135,
       "CA":"/opt/ydb/certs/ca.crt",
       "Cert":"/opt/ydb/certs/node.crt",
-      "Key":"/opt/ydb/certs/node.key",
-      "ServicesEnabled":
-        [
-          "legacy"
-        ]
+      "Key":"/opt/ydb/certs/node.key"
     },
   "AuthConfig":
     {

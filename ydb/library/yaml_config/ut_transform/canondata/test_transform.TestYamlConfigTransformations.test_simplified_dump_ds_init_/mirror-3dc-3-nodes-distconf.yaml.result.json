@@ -24,6 +24,50 @@
           }
       },
       {
+        "DefineHostConfig":
+          {
+            "HostConfigId":2,
+            "Drive":
+              [
+                {
+                  "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
+                  "Type":"SSD"
+                },
+                {
+                  "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_02",
+                  "Type":"SSD"
+                },
+                {
+                  "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_03",
+                  "Type":"SSD"
+                }
+              ],
+            "ItemConfigGeneration":18446744073709551615
+          }
+      },
+      {
+        "DefineHostConfig":
+          {
+            "HostConfigId":3,
+            "Drive":
+              [
+                {
+                  "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
+                  "Type":"SSD"
+                },
+                {
+                  "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_02",
+                  "Type":"SSD"
+                },
+                {
+                  "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_03",
+                  "Type":"SSD"
+                }
+              ],
+            "ItemConfigGeneration":18446744073709551615
+          }
+      },
+      {
         "DefineBox":
           {
             "BoxId":1,
@@ -45,7 +89,7 @@
                       "IcPort":19001,
                       "NodeId":2
                     },
-                  "HostConfigId":1
+                  "HostConfigId":2
                 },
                 {
                   "Key":
@@ -54,7 +98,7 @@
                       "IcPort":19001,
                       "NodeId":3
                     },
-                  "HostConfigId":1
+                  "HostConfigId":3
                 }
               ]
           }

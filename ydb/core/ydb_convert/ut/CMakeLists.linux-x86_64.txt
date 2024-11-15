@@ -27,7 +27,7 @@ target_link_libraries(ydb-core-ydb_convert-ut PUBLIC
   cpp-testing-unittest_main
   ydb-core-ydb_convert
   cpp-testing-unittest
-  core-testlib-default
+  core-testlib-pg
 )
 
 target_allocator(ydb-core-ydb_convert-ut

@@ -86,7 +86,7 @@ public:
         AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
         InitKikimr(yandexCloudMode);
         InitAccessServiceService();
-        InitHttpServer();
+        InitHttpServer(yandexCloudMode);
     }
 
     static TString FormAuthorizationStr(const TString& region) {
@@ -639,7 +639,7 @@ private:
         AccessServiceServer = builder.BuildAndStart();
     }
 
-    void InitHttpServer() {
+    void InitHttpServer(bool yandexCloudMode) {
         NKikimrConfig::TServerlessProxyConfig config;
         config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central1");
         config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central-1");
@@ -649,7 +649,7 @@ private:
         config.MutableHttpConfig()->SetAccessServiceEndpoint(TStringBuilder() << "127.0.0.1:" << AccessServicePort);
         config.SetTestMode(true);
         config.MutableHttpConfig()->SetPort(HttpServicePort);
-        config.MutableHttpConfig()->SetYandexCloudMode(true);
+        config.MutableHttpConfig()->SetYandexCloudMode(yandexCloudMode);
         config.MutableHttpConfig()->SetYmqEnabled(true);
 
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYdb::CreateOAuthCredentialsProviderFactory("proxy_sa@builtin");

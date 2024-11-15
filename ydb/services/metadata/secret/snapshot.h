@@ -11,8 +11,12 @@ class TSnapshot: public NFetcher::ISnapshot {
 private:
     using TBase = NFetcher::ISnapshot;
     using TSecrets = std::map<TSecretId, TSecret>;
+    using TIdsByName = THashMap<TString, std::vector<TSecretId>>;
     YDB_READONLY_DEF(TSecrets, Secrets);
     YDB_READONLY_DEF(std::vector<TAccess>, Access);
+    YDB_READONLY_DEF(TIdsByName, IndexByName);
+private:
+    void BuildIndex();
 protected:
     virtual bool DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawData) override;
     virtual TString DoSerializeToString() const override;

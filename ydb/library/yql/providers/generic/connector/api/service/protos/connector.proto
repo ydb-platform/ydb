@@ -316,7 +316,7 @@ message TContinuation {
 
 // ---------- Filters ----------
 
-// Expression with value (any type expression)
+// Expression with value (value can be expression of any type)
 // Can be a column, a constant or a result of, for example,
 // some arithmetical operation
 message TExpression {
@@ -344,6 +344,8 @@ message TExpression {
     }
 
     // "IF($predicate, $then_expression, $else_expression)"
+    // Example predicate:
+    // WHERE IF($A IS NOT NULL, $A, $B) + $B = 0
     message TIf {
         TPredicate predicate = 1;
         TExpression then_expression = 2;
@@ -369,7 +371,7 @@ message TExpression {
     }
 }
 
-// Predicate (exactly bool expression)
+// Predicate (use this types only for bool expressions)
 message TPredicate {
     // NOT
     message TNegation {
@@ -392,6 +394,8 @@ message TPredicate {
     }
 
     // "IF($predicate, $then_predicate, $else_predicate)"
+    // Example predicate:
+    // WHERE IF($A IS NOT NULL, $A + $B = 0, $B = 0)
     message TIf {
         TPredicate predicate = 1;
         TPredicate then_predicate = 2;

@@ -321,7 +321,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), false,
         false, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
-        false, SplittedCtx.Get(), SplittedExprs.at(NextSplittedExpr));
+        false, SplittedCtx.get(), SplittedExprs.at(NextSplittedExpr));
 }
 
 bool TKqpQueryState::ProcessingLastStatementPart() {
@@ -343,7 +343,7 @@ bool TKqpQueryState::PrepareNextStatementPart() {
     if (ProcessingLastStatementPart()) {
         SplittedWorld.Reset();
         SplittedExprs.clear();
-        SplittedCtx.Reset();
+        SplittedCtx.reset();
         NextSplittedExpr = -1;
         return false;
     }

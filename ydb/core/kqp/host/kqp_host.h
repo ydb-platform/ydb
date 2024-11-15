@@ -108,7 +108,7 @@ public:
 
     /* Split */
     struct TSplitResult : public NYql::NCommon::TOperationResult {
-        THolder<NYql::TExprContext> Ctx;
+        std::shared_ptr<NYql::TExprContext> Ctx;
         TVector<NYql::TExprNode::TPtr> Exprs;
         NYql::TExprNode::TPtr World;
     };

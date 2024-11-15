@@ -158,7 +158,7 @@ struct TEvSplitResponse: public TEventLocal<TEvSplitResponse, TKqpEvents::EvSpli
             const TKqpQueryId& query,
             TVector<NYql::TExprNode::TPtr> exprs,
             NYql::TExprNode::TPtr world,
-            THolder<NYql::TExprContext> ctx)
+            std::shared_ptr<NYql::TExprContext> ctx)
         : Status(status)
         , Issues(issues)
         , Query(query)
@@ -170,7 +170,7 @@ struct TEvSplitResponse: public TEventLocal<TEvSplitResponse, TKqpEvents::EvSpli
     NYql::TIssues Issues;
 
     TKqpQueryId Query;
-    THolder<NYql::TExprContext> Ctx;
+    std::shared_ptr<NYql::TExprContext> Ctx;
     TVector<NYql::TExprNode::TPtr> Exprs;
     NYql::TExprNode::TPtr World;
 };

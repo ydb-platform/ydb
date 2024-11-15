@@ -93,7 +93,7 @@ namespace {
         return true;
     }
 
-    NYql::TExprNode::TPtr PrepareCreateTableAs(
+    TPrepareRewriteInfo PrepareCreateTableAs(
             NYql::TExprNode::TPtr root,
             NYql::TExprContext& exprCtx,
             NYql::TTypeAnnotationContext& typeCtx,
@@ -133,8 +133,6 @@ namespace {
         const auto& insertData = writeArgs.Get(3);
         YQL_ENSURE(insertData.Ptr()->Content() != "Void");
 
-        auto prevEval = exprCtx.Step.IsDone(NYql::TExprStep::ExprEval);
-        exprCtx.Step.Done(NYql::TExprStep::ExprEval);
         auto typeTransformer = NYql::TTransformationPipeline(&typeCtx)
             .AddServiceTransformers()
             .AddPreTypeAnnotation()
@@ -142,15 +140,10 @@ namespace {
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
             .Build(false);
 
-        auto insertDataPtr = insertData.Ptr();
-        const auto transformResult = NYql::SyncTransform(*typeTransformer, insertDataPtr, exprCtx);
-        if (!prevEval) {
-            exprCtx.Step.Repeat(NYql::TExprStep::ExprEval);
-        }
-        if (transformResult != NYql::IGraphTransformer::TStatus::Ok) {
-            return nullptr;
-        }
-        return insertDataPtr;
+        return TPrepareRewriteInfo{
+            .InputExpr = insertData.Ptr(),
+            .Transformer = typeTransformer,
+        };
     }
 
     std::optional<TCreateTableAsResult> RewriteCreateTableAs(
@@ -419,28 +412,24 @@ bool CheckRewrite(
     return true;
 }
 
-NYql::TExprNode::TPtr PrepareRewrite(
+TPrepareRewriteInfo PrepareRewrite(
         const NYql::TExprNode::TPtr& root,
         NYql::TExprContext& exprCtx,
         NYql::TTypeAnnotationContext& typeCtx,
         const TIntrusivePtr<NYql::TKikimrSessionContext>& sessionCtx,
         const TString& cluster) {
     // CREATE TABLE AS statement can be used only with perstatement execution.
-    // Thus we assume that there is only one such statement.
-    NYql::TExprNode::TPtr result = nullptr;
+    // Thus we assume that there is only one such statement. (it was checked in CheckRewrite)
+    NYql::TExprNode::TPtr createTableAsNode = nullptr;
     VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
         if (NYql::NNodes::TCoWrite::Match(node.Get()) && IsCreateTableAs(node, exprCtx)) {
-            YQL_ENSURE(!result);
-            result = PrepareCreateTableAs(node, exprCtx, typeCtx, sessionCtx, cluster);
+            createTableAsNode = node;
         }
-        return true;
+        return !createTableAsNode;
     });
+    YQL_ENSURE(createTableAsNode);
 
-    if (!exprCtx.IssueManager.GetIssues().Empty()) {
-        return nullptr;
-    }
-
-    return result;
+    return PrepareCreateTableAs(createTableAsNode, exprCtx, typeCtx, sessionCtx, cluster);
 }
 
 TVector<NYql::TExprNode::TPtr> RewriteExpression(

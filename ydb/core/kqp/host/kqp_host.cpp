@@ -433,60 +433,60 @@ public:
     }
 };
 
-class TAsyncSplitQueryResult : public IKikimrAsyncResult<IKqpHost::TSplitResult> {
+class TAsyncSplitQueryResult : public TKqpAsyncResultBase<IKqpHost::TSplitResult> {
 public:
     using TResult = IKqpHost::TSplitResult;
 
     TAsyncSplitQueryResult(
         NYql::TExprNode::TPtr expr,
-        THolder<TExprContext> exprCtxStorage,
+        std::shared_ptr<TExprContext> exprCtxStorage,
         TExprNode::TPtr fakeWorld,
+        NYql::TExprNode::TPtr inputExpr,
+        TAutoPtr<NYql::IGraphTransformer> transformer,
         TIntrusivePtr<TTypeAnnotationContext> typesCtx,
         TIntrusivePtr<TKikimrSessionContext> sessionCtx,
-        const TString& cluster)
-            : ExprCtxStorage(std::move(exprCtxStorage))
+        const TString& cluster,
+        TAsyncExecuteKqlResult::TAsyncTransformStatusCallback asyncTransformCallback)
+            : TKqpAsyncResultBase(inputExpr, *exprCtxStorage, *transformer, asyncTransformCallback)
+            , ExprCtxStorage(std::move(exprCtxStorage))
             , Expr(expr)
             , FakeWorld(fakeWorld)
+            , Transformer(transformer)
             , TypesCtx(std::move(typesCtx))
             , SessionCtx(std::move(sessionCtx))
             , Cluster(cluster) {
+        YQL_ENSURE(ExprCtxStorage && Expr && FakeWorld);
+        //auto prevEval = ExprCtxStorage->Step.IsDone(NYql::TExprStep::ExprEval);
+        //ExprCtxStorage->Step.Done(NYql::TExprStep::ExprEval);
     }
 
-    bool HasResult() const override {
-        return true;
-    }
-
-    TResult GetResult() override {
-        auto prepareData = PrepareRewrite(Expr, *ExprCtxStorage, *TypesCtx, SessionCtx, Cluster);
-        if (!prepareData) {
-            return ResultFromErrors<TResult>(ExprCtxStorage->IssueManager.GetIssues());
+    void FillResult(TResult& result) const override {
+        if (!result.Success()) {
+            return;
         }
+        //if (!prevEval) {
+        //    ExprCtxStorage->Step.Repeat(NYql::TExprStep::ExprEval);
+        //}
 
-        auto rewriteResults = RewriteExpression(Expr, *ExprCtxStorage, SessionCtx, prepareData);
+        auto rewriteResults = RewriteExpression(Expr, *ExprCtxStorage, SessionCtx, GetExprRoot());
         if (rewriteResults.empty()) {
-            return ResultFromErrors<TResult>(ExprCtxStorage->IssueManager.GetIssues());
+            result = ResultFromErrors<TResult>(ExprCtxStorage->IssueManager.GetIssues());
+            return;
         }
         for (const auto& resultPart : rewriteResults) {
             YQL_CLOG(DEBUG, ProviderKqp) << "Splitted query part: " << KqpExprToPrettyString(*resultPart, *ExprCtxStorage);
         }
 
-        TResult result{
-            .Ctx = std::move(ExprCtxStorage),
-            .Exprs = std::move(rewriteResults),
-            .World = std::move(FakeWorld),
-        };
-        result.SetSuccess();
-        return result;
-    }
-
-    NThreading::TFuture<bool> Continue() override {
-        return NThreading::MakeFuture<bool>(true);
+        result.Ctx = ExprCtxStorage;
+        result.Exprs = rewriteResults;
+        result.World = FakeWorld;
     }
 
 private:
-    THolder<TExprContext> ExprCtxStorage;
+    std::shared_ptr<TExprContext> ExprCtxStorage;
     NYql::TExprNode::TPtr Expr;
     TExprNode::TPtr FakeWorld;
+    TAutoPtr<NYql::IGraphTransformer> Transformer;
     TIntrusivePtr<TTypeAnnotationContext> TypesCtx;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     TString Cluster;
@@ -1101,7 +1101,7 @@ public:
         , GUCSettings(gUCSettings)
         , ApplicationName(applicationName)
         , ExprCtxStorage(ctx ? nullptr : new TExprContext())
-        , ExprCtx(ctx ? ctx : ExprCtxStorage.Get())
+        , ExprCtx(ctx ? ctx : ExprCtxStorage.get())
         , ModuleResolver(moduleResolver)
         , KeepConfigChanges(keepConfigChanges)
         , IsInternalCall(isInternalCall)
@@ -1596,13 +1596,20 @@ private:
             return nullptr;
         }
 
+        YQL_ENSURE(ExprCtxStorage);
+
+        auto prepareData = PrepareRewrite(compileResult.QueryExpr, *ExprCtxStorage, *TypesCtx, SessionCtx, Cluster);
+
         return MakeIntrusive<TAsyncSplitQueryResult>(
             compileResult.QueryExpr,
-            std::move(ExprCtxStorage),
+            ExprCtxStorage,
             std::move(FakeWorld),
+            prepareData.InputExpr,
+            prepareData.Transformer,
             TypesCtx,
             SessionCtx,
-            Cluster);
+            Cluster,
+            DataProvidersFinalizer);
     }
 
     IAsyncQueryResultPtr PrepareScanQueryInternal(const TKqpQueryRef& query, bool isSql, TExprContext& ctx,
@@ -1990,7 +1997,7 @@ private:
     TString Cluster;
     TGUCSettings::TPtr GUCSettings;
     const TMaybe<TString> ApplicationName;
-    THolder<TExprContext> ExprCtxStorage;
+    std::shared_ptr<TExprContext> ExprCtxStorage;
     TExprContext* ExprCtx;
     IModuleResolver::TPtr ModuleResolver;
     bool KeepConfigChanges;

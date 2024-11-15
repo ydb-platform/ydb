@@ -15,7 +15,12 @@ bool CheckRewrite(
     const NYql::TExprNode::TPtr& root,
     NYql::TExprContext& exprCtx);
 
-NYql::TExprNode::TPtr PrepareRewrite(
+struct TPrepareRewriteInfo {
+    NYql::TExprNode::TPtr InputExpr;
+    TAutoPtr<NYql::IGraphTransformer> Transformer; 
+};
+
+TPrepareRewriteInfo PrepareRewrite(
     const NYql::TExprNode::TPtr& root,
     NYql::TExprContext& exprCtx,
     NYql::TTypeAnnotationContext& typeCtx,

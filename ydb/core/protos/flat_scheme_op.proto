@@ -2201,6 +2201,5 @@ message TBackupCollectionDescription {
 message TBackupBackupCollection {
     optional string Name = 1;
     optional NKikimrProto.TPathID PathId = 2;
-    optional string Prefix = 3; // Used as WorkingDir for all entities. Not persisted.
-    optional string TargetDir = 4;
+    optional string TargetDir = 3; // must be set on Rewrite
 }

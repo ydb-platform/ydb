@@ -287,7 +287,7 @@ private:
             html << "<h4>Input Transform Id: " << id << "</h4>";
             html << "LogPrefix: " << info.LogPrefix << "<br />";
             html << "Type: " << info.Type << "<br />";
-            html << "PendingWatermark: " << !info.PendingWatermark << " " << (info.PendingWatermark ? info.PendingWatermark->ToString() : TString{} ) << "<br />";
+            html << "PendingWatermark: " << !!info.PendingWatermark << " " << (!info.PendingWatermark ? TString{} : info.PendingWatermark->ToString()) << "<br />";
             html << "WatermarksMode: " << NDqProto::EWatermarksMode_Name(info.WatermarksMode) << "<br />";
             html << "FreeSpace: " << info.GetFreeSpace() << "<br />";
             if (info.Buffer) {
@@ -295,10 +295,10 @@ private:
                 html << "DqInputBuffer.FreeSpace: " << info.Buffer->GetFreeSpace() << "<br />";
                 html << "DqInputBuffer.StoredBytes: " << info.Buffer->GetStoredBytes() << "<br />";
                 html << "DqInputBuffer.Empty: " << info.Buffer->Empty() << "<br />";
-                html << "DqInputBuffer.IsPending: " << info.Buffer->IsPending() << "<br />";
                 html << "DqInputBuffer.InputType: " << (info.Buffer->GetInputType() ? info.Buffer->GetInputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
                 html << "DqInputBuffer.InputWidth: " << (info.Buffer->GetInputWidth() ? ToString(*info.Buffer->GetInputWidth()) : TString{"unknown"})  << "<br />";
                 html << "DqInputBuffer.IsFinished: " << info.Buffer->IsFinished() << "<br />";
+                html << "DqInputBuffer.IsPending: " << info.Buffer->IsPending() << "<br />";
 
                 const auto& popStats = info.Buffer->GetPopStats();
                 html << "DqInputBuffer.PopStats.Bytes: " << popStats.Bytes << "<br />";

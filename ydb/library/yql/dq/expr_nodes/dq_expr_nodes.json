@@ -48,6 +48,14 @@
         ]
     },
     {
+        "Name": "TDqPhyGraceJoin",
+        "Base": "TDqJoinBase",
+        "Match": {"Type": "Callable", "Name": "DqPhyGraceJoin"},
+        "Children": [
+            {"Index": 8, "Name": "Flags", "Type": "TCoAtomList", "Optional": true}
+        ]
+    },
+    {
         "Name": "TDqPhyMapJoin",
         "Base": "TDqJoinBase",
         "Match": {"Type": "Callable", "Name": "DqPhyMapJoin"}

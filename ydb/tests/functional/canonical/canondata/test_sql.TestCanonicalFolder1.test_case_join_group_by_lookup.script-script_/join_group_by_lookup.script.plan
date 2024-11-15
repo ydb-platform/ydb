@@ -35,7 +35,7 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TopSort-LeftJoin (MapJoin)",
+                                                "Node Type": "TopSort-LeftJoin (MapJoin)-Filter",
                                                 "Operators": [
                                                     {
                                                         "Inputs": [
@@ -54,10 +54,19 @@
                                                                 "ExternalPlanNodeId": 16
                                                             },
                                                             {
-                                                                "ExternalPlanNodeId": 14
+                                                                "InternalOperatorId": 2
                                                             }
                                                         ],
                                                         "Name": "LeftJoin (MapJoin)"
+                                                    },
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "ExternalPlanNodeId": 14
+                                                            }
+                                                        ],
+                                                        "Name": "Filter",
+                                                        "Predicate": "Exist(item.Group)"
                                                     }
                                                 ],
                                                 "PlanNodeId": 17,

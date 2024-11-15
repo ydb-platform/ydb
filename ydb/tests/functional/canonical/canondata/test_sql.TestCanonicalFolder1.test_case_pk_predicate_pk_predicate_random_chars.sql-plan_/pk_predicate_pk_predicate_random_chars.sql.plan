@@ -12,9 +12,6 @@
                         "HashPassword",
                         "Login"
                     ],
-                    "lookup_by": [
-                        "HashPassword (Non-UTF8 string)"
-                    ],
                     "type": "Lookup"
                 }
             ]

@@ -7,6 +7,7 @@
 #include "viewer_vdiskinfo.h"
 #include "viewer_pdiskinfo.h"
 #include "viewer_bsgroupinfo.h"
+#include "viewer_nodeinfo.h"
 #include "wb_req.h"
 
 namespace NKikimr::NViewer {
@@ -74,6 +75,11 @@ public:
         NKikimr::NViewer::MergeWhiteboardResponses(*(response->Record.MutableBSGroupResponse()), perNodeStateInfo, fields);
     }
 
+    template<>
+    void MergeWhiteboardResponses<NKikimrWhiteboard::TEvNodeStateResponse>(TEvViewer::TEvViewerResponse* response, TMap<TNodeId, NKikimrWhiteboard::TEvNodeStateResponse>& perNodeStateInfo, const TString& fields) {
+        NKikimr::NViewer::MergeWhiteboardResponses(*(response->Record.MutableNodeResponse()), perNodeStateInfo, fields);
+    }
+
     static void Merge(NKikimrViewer::TEvViewerResponse& viewerResponse, TNodeId nodeId, TResponseType& nodeResponse);
 
     void ReplyAndPassAway() override {
@@ -112,6 +118,8 @@ IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr& request) {
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvPDiskStateRequest, TEvWhiteboard::TEvPDiskStateResponse>(request);
         case NKikimrViewer::TEvViewerRequest::kBSGroupRequest:
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvBSGroupStateRequest, TEvWhiteboard::TEvBSGroupStateResponse>(request);
+        case NKikimrViewer::TEvViewerRequest::kNodeRequest:
+            return new TViewerWhiteboardRequest<TEvWhiteboard::TEvNodeStateRequest, TEvWhiteboard::TEvNodeStateResponse>(request);
         case NKikimrViewer::TEvViewerRequest::kQueryRequest:
             return new TJsonQueryOld(request);
         case NKikimrViewer::TEvViewerRequest::kRenderRequest:
@@ -209,6 +217,24 @@ void TViewerWhiteboardRequest<TEvWhiteboard::TEvBSGroupStateRequest, TEvWhiteboa
     auto& target = *viewerResponse.MutableBSGroupResponse();
     for (auto& info : *nodeResponse.MutableBSGroupStateInfo()) {
         auto& i = *target.AddBSGroupStateInfo();
+        i.MergeFrom(info);
+        i.SetNodeId(nodeId);
+    }
+}
+
+template<>
+THolder<TEvWhiteboard::TEvNodeStateRequest> TViewerWhiteboardRequest<TEvWhiteboard::TEvNodeStateRequest, TEvWhiteboard::TEvNodeStateResponse>::BuildRequest() {
+    auto request = TBase::BuildRequest();
+    request->Record.MergeFrom(Event->Get()->Record.GetNodeRequest());
+    return request;
+}
+
+template<>
+void TViewerWhiteboardRequest<TEvWhiteboard::TEvNodeStateRequest, TEvWhiteboard::TEvNodeStateResponse>::Merge(
+        NKikimrViewer::TEvViewerResponse& viewerResponse, TNodeId nodeId, NKikimrWhiteboard::TEvNodeStateResponse& nodeResponse) {
+    auto& target = *viewerResponse.MutableNodeResponse();
+    for (auto& info : *nodeResponse.MutableNodeStateInfo()) {
+        auto& i = *target.AddNodeStateInfo();
         i.MergeFrom(info);
         i.SetNodeId(nodeId);
     }

@@ -456,17 +456,13 @@ public:
             , SessionCtx(std::move(sessionCtx))
             , Cluster(cluster) {
         YQL_ENSURE(ExprCtxStorage && Expr && FakeWorld);
-        //auto prevEval = ExprCtxStorage->Step.IsDone(NYql::TExprStep::ExprEval);
-        //ExprCtxStorage->Step.Done(NYql::TExprStep::ExprEval);
+        ExprCtxStorage->Step.Done(NYql::TExprStep::ExprEval);
     }
 
     void FillResult(TResult& result) const override {
         if (!result.Success()) {
             return;
         }
-        //if (!prevEval) {
-        //    ExprCtxStorage->Step.Repeat(NYql::TExprStep::ExprEval);
-        //}
 
         auto rewriteResults = RewriteExpression(Expr, *ExprCtxStorage, SessionCtx, GetExprRoot());
         if (rewriteResults.empty()) {

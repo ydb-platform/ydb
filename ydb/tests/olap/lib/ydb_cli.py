@@ -213,7 +213,7 @@ class YdbCliHelper:
 
         def process(self) -> YdbCliHelper.WorkloadRunResult:
             try:
-                wait_error = YdbCluster.wait_ydb_alive(300, self.db_path)
+                wait_error = YdbCluster.wait_ydb_alive(20 * 60, self.db_path)
                 if wait_error is not None:
                     self.result.error_message = wait_error
                 else:

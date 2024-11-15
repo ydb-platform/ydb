@@ -1291,28 +1291,23 @@ public:
     TFuture<TGenericResult> Backup(const TString& cluster, const NYql::TBackupSettings& settings) override {
         CHECK_PREPARED_DDL(Backup);
 
-        // FIXME(+active)
         try {
             if (cluster != SessionCtx->GetCluster()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
 
-            TString path;
-
-            if (!settings.Name.StartsWith(SessionCtx->GetDatabase())) {
-                path = JoinPath({SessionCtx->GetDatabase(), ".backups/collections", settings.Name});
-            } else {
-                path = settings.Name;
-            }
-
-            TString error;
             std::pair<TString, TString> pathPair;
-            if (!NSchemeHelpers::SplitTablePath(path, GetDatabase(), pathPair, error, true)) {
-                return MakeFuture(ResultFromError<TGenericResult>(error));
+            if (settings.Name.StartsWith("/")) {
+                TString error;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, GetDatabase(), pathPair, error, true)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+            } else {
+                pathPair.second = ".backups/collections/" + settings.Name;
             }
 
             NKikimrSchemeOp::TModifyScheme tx;
-            tx.SetWorkingDir(pathPair.first);
+            tx.SetWorkingDir(GetDatabase());
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpBackupBackupCollection);
 
             auto& op = *tx.MutableBackupBackupCollection();

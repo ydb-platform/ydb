@@ -17,6 +17,7 @@
 #include <ydb/core/http_proxy/http_service.h>
 #include <ydb/core/http_proxy/metrics_actor.h>
 #include <ydb/core/mon/sync_http_mon.h>
+#include <ydb/core/ymq/actor/auth_multi_factory.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/tests/counters.h>
@@ -703,6 +704,11 @@ private:
         actorId = as->Register(NKikimr::NFolderService::CreateFolderServiceActor(folderServiceConfig, "cloud4"));
         as->RegisterLocalService(NSQS::MakeSqsFolderServiceID(), actorId);
 
+        NActors::TActorSystemSetup::TLocalServices services {};
+        MultiAuthFactory = std::make_unique<NKikimr::NSQS::TMultiAuthFactory>();
+        MultiAuthFactory->Initialize(services, *AppData(as), AppData(as)->SqsConfig);
+        AppData(as)->SqsAuthFactory = MultiAuthFactory.get();
+
         for (ui32 i = 0; i < ActorRuntime->GetNodeCount(); i++) {
             auto nodeId = ActorRuntime->GetNodeId(i);
 
@@ -742,6 +748,7 @@ public:
     std::unique_ptr<grpc::Server> AccessServiceServer;
     std::unique_ptr<grpc::Server> IamTokenServer;
     std::unique_ptr<grpc::Server> DatabaseServiceServer;
+    std::unique_ptr<NKikimr::NSQS::TMultiAuthFactory> MultiAuthFactory;
     TAutoPtr<TMon> Monitoring;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters = {};
     THolder<NYdbGrpc::TGRpcServer> GRpcServer;

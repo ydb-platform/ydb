@@ -64,7 +64,7 @@ set_property(
   ydb-core-statistics-aggregator-ut
   PROPERTY
   SPLIT_FACTOR
-  10
+  60
 )
 
 add_yunittest(

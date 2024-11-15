@@ -616,9 +616,8 @@ TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx
         ctx
     );
     auto validateIntParam = [&ctx=ctx](auto&& value) {
-        ui64 val; // matches dq_tasks.proto
-        Y_UNUSED(val);
-        if (!TryIntFromString<10>(value.StringValue(), val)) {
+        // matches dq_tasks.proto
+        if (!TryFromString<ui64>(value.StringValue())) {
             ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << "Expected integer, but got: " << value.StringValue()));
             return false;
         }

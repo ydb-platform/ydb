@@ -186,4 +186,4 @@ TConclusion<bool> TNormalizer::DoInitImpl(const TNormalizationController&, NTabl
     return true;
 }
 
-}   // namespace NKikimr::NOlap::NNormalizer::NBrokenBlobs
+} // namespace NKikimr::NOlap::NNormalizer::NBrokenBlobs

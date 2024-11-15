@@ -1,20 +1,23 @@
 #pragma once
 
-#include "task.h"
 #include "events.h"
+#include "task.h"
+
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 
-#include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/log.h>
+
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
 class TBlobsForRead {
 private:
     THashMap<TString, THashMap<TBlobRange, std::vector<std::shared_ptr<ITask>>>> BlobTasks;
+
 public:
     std::vector<std::shared_ptr<ITask>> ExtractTasksAll() {
         THashMap<ui64, std::shared_ptr<ITask>> tasks;
@@ -59,6 +62,7 @@ private:
     ui64 TabletId;
     NActors::TActorId Parent;
     TBlobsForRead BlobTasks;
+
 public:
     TReadCoordinatorActor(ui64 tabletId, const TActorId& parent);
 
@@ -83,4 +87,4 @@ public:
     ~TReadCoordinatorActor();
 };
 
-}
+} // namespace NKikimr::NOlap::NBlobOperations::NRead

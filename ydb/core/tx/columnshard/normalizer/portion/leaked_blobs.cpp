@@ -10,6 +10,26 @@
 
 namespace NKikimr::NOlap {
 
+class TLeakedBlobsNormalizerChanges: public INormalizerChanges {
+    THashMap<ui64, TPortionDataAccessor> BrokenPortions;
+    std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> Schemas;
+
+public:
+    TLeakedBlobsNormalizerChanges() {
+    }
+
+    bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TNormalizationController& /*normController*/) const override {
+        return true;
+    }
+
+    void ApplyOnComplete(const TNormalizationController& /* normController */) const override {
+    }
+
+    ui64 GetSize() const override {
+        return 0;
+    }
+};
+
 class TRemoveLeakedBlobsActor: public TActorBootstrapped<TRemoveLeakedBlobsActor> {
 private:
     TVector<TTabletChannelInfo> Channels;
@@ -62,7 +82,8 @@ public:
             ;
 
         if (CurrentChannel == Channels.end()) {
-            // TODO: notify completion
+            TActorContext::AsActorContext().Send(
+                CSActorId, std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(std::make_shared<TLeakedBlobsNormalizerChanges>()));
             PassAway();
             return;
         }
@@ -89,14 +110,16 @@ public:
             return;
         }
 
-        auto request = MakeHolder<TEvBlobStorage::TEvCollectGarbage>(CSTabletId, RecordGeneration,
-            CurrentChannel->Channel, collect, collectGeneration,
-            collectStep, nullptr, leakedBlobs, TInstant::Max());
+        AFL_VERIFY(AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert())("reason", "writes should be disabled");
 
-        SendToBSProxy(ctx, CurrentGroup->GroupID, request.Release());
+        // auto request = MakeHolder<TEvBlobStorage::TEvCollectGarbage>(CSTabletId, RecordGeneration,
+        //     CurrentChannel->Channel, collect, collectGeneration,
+        //     collectStep, nullptr, leakedBlobs, TInstant::Max());
+
+        // SendToBSProxy(ctx, CurrentGroup->GroupID, request.Release());
     }
 
-    void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& /*ev*/, const TActorContext& ctx) {
         ProcessNextGroup(ctx);
     }
 
@@ -116,6 +139,24 @@ TLeakedBlobsNormalizer::TLeakedBlobsNormalizer(const TNormalizationController::T
     , ActorId(info.GetActorId())
     , DsGroupSelector(info.GetStorageInfo()) {
 }
+
+class TRemoveLeakedBlobsTask: public INormalizerTask {
+    TVector<TTabletChannelInfo> Channels;
+    THashSet<TLogoBlobID> CSBlobIDs;
+    ui64 TabletId;
+    TActorId ActorId;
+
+public:
+    TRemoveLeakedBlobsTask(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, ui64 tabletId, TActorId actorId)
+        : Channels(std::move(channels))
+        , CSBlobIDs(std::move(csBlobIDs))
+        , TabletId(tabletId)
+        , ActorId(actorId) {
+    }
+    void Start(const TNormalizationController& /*controller*/, const TNormalizationContext& /*nCtx*/) override {
+        NActors::TActivationContext::Register(new TRemoveLeakedBlobsActor(std::move(Channels), std::move(CSBlobIDs), ActorId, TabletId));
+    }
+};
 
 TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
@@ -144,12 +185,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(c
         return conclusion;
     }
 
-    NActors::TActivationContext::Register(new TRemoveLeakedBlobsActor(std::move(Channels), std::move(csBlobIDs), ActorId, TabletId));
-
-    // TODO: create waiter task
-    std::vector<INormalizerTask::TPtr> result;
-
-    return result;
+    return std::vector<INormalizerTask::TPtr>{
+        std::make_shared<TRemoveLeakedBlobsTask>(std::move(Channels), std::move(csBlobIDs), TabletId, ActorId)
+    };
 }
 
 TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(

@@ -33,7 +33,7 @@ def get_unique_path_for_current_test(output_path, sub_folder):
         test_name = yatest.common.context.test_name or ""
     except Exception:
         test_name = ""
-    
+
     test_name = test_name.replace(':', '_')
     return os.path.join(output_path, test_name, sub_folder)
 

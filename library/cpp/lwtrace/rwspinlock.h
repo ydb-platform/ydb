@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/deprecated/atomic/atomic.h>
+#include <atomic>
 
 #include <util/system/spinlock.h>
 
@@ -27,7 +27,7 @@
 //    * writer can release lock (State = 0: -> READING)
 
 struct TRWSpinLock {
-    TAtomic State; // must be initialized by 'TRWSpinLock myLock = {0};' construction
+    std::atomic_int State;
 
     void Init() noexcept {
         State = 0;
@@ -35,8 +35,8 @@ struct TRWSpinLock {
 
     void AcquireRead() noexcept {
         while (true) {
-            TAtomic a = AtomicGet(State);
-            if ((a & 1) == 0 && AtomicCas(&State, a + 2, a)) {
+            int a = State.load();
+            if ((a & 1) == 0 && State.compare_exchange_strong(a, a + 2)) {
                 break;
             }
             SpinLockPause();
@@ -44,25 +44,34 @@ struct TRWSpinLock {
     }
 
     void ReleaseRead() noexcept {
-        AtomicAdd(State, -2);
+        State.fetch_add(-2);
     }
 
     void AcquireWrite() noexcept {
         while (true) {
-            TAtomic a = AtomicGet(State);
-            if ((a & 1) == 0 && AtomicCas(&State, a + 1, a)) {
+            int a = State.load();
+            if ((a & 1) == 0 && State.compare_exchange_strong(a, a + 1)) {
                 break;
             }
             SpinLockPause();
         }
 
+<<<<<<< HEAD
         while (!AtomicCas(&State, TAtomicBase(-1), 1)) {
             SpinLockPause();
+=======
+        while (true) {
+            int a = 1;
+            if (State.compare_exchange_strong(a, -1)) {
+                break;
+            }
+            sw.Sleep();
+>>>>>>> f7a16641f3f... use C++ atomic with proper default constructor
         }
     }
 
     void ReleaseWrite() noexcept {
-        AtomicSet(State, 0);
+        State.store(0);
     }
 };
 

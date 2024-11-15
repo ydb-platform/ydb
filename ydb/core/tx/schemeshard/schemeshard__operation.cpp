@@ -980,29 +980,31 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
 
     // # Generates MkDirs based on transaction-specific requirements
     if (DispatchOp(tx, [&](auto traits) { return traits.CreateAdditionalDirs; })) {
-        for (const auto& [parentPathStr, pathStrs] : DispatchOp(tx, [&](auto traits) { return traits.GetRequiredPaths(tx, context); })) {
-            const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
-            {
-                TPath::TChecker checks = parentPath.Check();
-                checks
-                    .NotUnderDomainUpgrade()
-                    .IsAtLocalSchemeShard()
-                    .IsResolved()
-                    .NotDeleted()
-                    .NotUnderDeleting()
-                    .IsCommonSensePath()
-                    .IsLikeDirectory();
+        if (auto requiredPaths = DispatchOp(tx, [&](auto traits) { return traits.GetRequiredPaths(tx, context); }); requiredPaths) {
+            for (const auto& [parentPathStr, pathStrs] : *requiredPaths) {
+                const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
+                {
+                    TPath::TChecker checks = parentPath.Check();
+                    checks
+                        .NotUnderDomainUpgrade()
+                        .IsAtLocalSchemeShard()
+                        .IsResolved()
+                        .NotDeleted()
+                        .NotUnderDeleting()
+                        .IsCommonSensePath()
+                        .IsLikeDirectory();
 
-                if (!checks) {
-                    result.Transaction = tx;
-                    return result;
+                    if (!checks) {
+                        result.Transaction = tx;
+                        return result;
+                    }
                 }
-            }
 
-            for (const auto& pathStr : pathStrs) {
-                TPath path = TPath::Resolve(JoinPath(parentPathStr, pathStr), context.SS);
-                if (!CreateDirs(tx, parentPath, path, createdPaths, result)) {
-                    return result;
+                for (const auto& pathStr : pathStrs) {
+                    TPath path = TPath::Resolve(JoinPath(parentPathStr, pathStr), context.SS);
+                    if (!CreateDirs(tx, parentPath, path, createdPaths, result)) {
+                        return result;
+                    }
                 }
             }
         }

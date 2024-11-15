@@ -26,7 +26,7 @@ struct TSchemeTxTraitsFallback {
         return false;
     }
 
-    static THashMap<TString, THashSet<TString>> GetRequiredPaths(const TTxTransaction& tx, const TOperationContext& context) {
+    static std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths(const TTxTransaction& tx, const TOperationContext& context) {
         Y_UNUSED(tx, context);
         return {};
     }
@@ -301,7 +301,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCol
 
 template <>
 struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection> : public TSchemeTxTraitsFallback {
-    static THashMap<TString, THashSet<TString>> GetRequiredPaths(const TTxTransaction& tx, const TOperationContext& context) {
+    static std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths(const TTxTransaction& tx, const TOperationContext& context) {
         THashMap<TString, THashSet<TString>> paths;
 
         const auto& backupOp = tx.GetBackupBackupCollection();

@@ -108,36 +108,37 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
     if (partitionNode->HierarhicalParents.size() == 0 && partitionNode->Children.size() == 0) {
         SendCommit(topicInitInfo, commitRequest, ctx);
     } else {
-        Kqp.Consumer = ClientId;
-        Kqp.DataBase = Request().GetDatabaseName().GetOrElse(TString()); // savnik if empty?
-        Kqp.Path = topic;
+        std::vector<TKqpHelper::TCommitInfo> commits;
 
         for (auto& parent: partitionNode->HierarhicalParents) {
             TKqpHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>()};
-            Commits.push_back(commit);
+            commits.push_back(commit);
         }
 
         for (auto& child: partitionNode->Children) {
             TKqpHelper::TCommitInfo commit {.PartitionId = child->Id, .Offset = 0};
-            Commits.push_back(commit);
+            commits.push_back(commit);
         }
 
         TKqpHelper::TCommitInfo commit {.PartitionId = partitionNode->Id, .Offset = commitRequest->Getoffset()};
-        Commits.push_back(commit);
+        commits.push_back(commit);
+
+        // savnik if empty database?
+        Kqp = std::make_unique<TKqpHelper>(Request().GetDatabaseName().GetOrElse(TString()), ClientId, topic, commits);
 
         SendDistributedTxOffsets(ctx);
     }
 }
 
 void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx) {
-    if (!Kqp.Handle(ev, ctx)) {
+    if (!Kqp->Handle(ev, ctx)) {
         AnswerError("empty list of topics", PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx); // savnik
     }
-    Kqp.BeginTransaction(ctx);
+    Kqp->BeginTransaction(ctx);
 }
 
 void TCommitOffsetActor::SendDistributedTxOffsets(const TActorContext& ctx) {
-    Kqp.SendCreateSessionRequest(ctx);
+    Kqp->SendCreateSessionRequest(ctx);
 }
 
 void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topic::CommitOffsetRequest* commitRequest, const TActorContext& ctx) {
@@ -177,16 +178,15 @@ void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topi
 
 void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
+    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) { // savnik finish this part!
+        Ydb::Topic::CommitOffsetResult result;
+        Request().SendResult(result, record.GetYdbStatus());
+        Die(ctx);
+    }
 
-    // savnik set error record.GetYdbStatus()
-    if (Kqp.Step == 0) {
-        Kqp.Step++;
-        Kqp.SendCommits(ev,Commits, ctx);
-    } else if (Kqp.Step == 1) {
-        Kqp.Step++;
-        Kqp.CommitTx(ctx);
-    } else {
-        Kqp.CloseKqpSession(ctx);
+    auto step = Kqp->Handle(ev, ctx);
+
+    if (step == TKqpHelper::ECurrentStep::DONE) {
         Ydb::Topic::CommitOffsetResult result;
         Request().SendResult(result, Ydb::StatusIds::SUCCESS);
         Die(ctx);
@@ -213,15 +213,14 @@ void TCommitOffsetActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActo
 
 
 void TCommitOffsetActor::AnswerError(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx) {
-
     Ydb::Topic::CommitOffsetResponse response;
     response.mutable_operation()->set_ready(true);
     auto issue = response.mutable_operation()->add_issues();
     FillIssue(issue, errorCode, errorReason);
-    response.mutable_operation()->set_status(ConvertPersQueueInternalCodeToStatus(errorCode));
-    Reply(ConvertPersQueueInternalCodeToStatus(errorCode), response.operation().issues(), ctx);
+    auto status = ConvertPersQueueInternalCodeToStatus(errorCode);
+    response.mutable_operation()->set_status(status);
+    Reply(status, response.operation().issues(), ctx);
 }
-
 
 void TCommitOffsetActor::Handle(TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx) {
     AnswerError(ev->Get()->Reason, ev->Get()->ErrorCode, ctx);

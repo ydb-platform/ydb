@@ -1,8 +1,7 @@
 #pragma once
 
 #include "events.h"
-#include "ydb/core/kqp/common/simple/services.h"
-#include "ydb/services/metadata/service.h"
+#include "kqp_commit_offset_helper.h"
 
 
 #include <ydb/core/kqp/common/events/events.h>
@@ -15,126 +14,6 @@
 namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace NKikimr::NGRpcService;
-
-class TKqpHelper {
-
-    public: // savnik
-
-    TString DataBase;
-    TString KqpSessionId;
-    TString Consumer;
-    TString Path;
-    TString TxId;
-
-    int Step = 0;
-
-    struct TCommitInfo {
-        ui64 PartitionId;
-        i64 Offset;
-    };
-
-    void SendCreateSessionRequest(const TActorContext& ctx) {
-        auto ev = MakeCreateSessionRequest();
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-    }
-
-    THolder<NKqp::TEvKqp::TEvCreateSessionRequest> MakeCreateSessionRequest() {
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
-        ev->Record.MutableRequest()->SetDatabase(DataBase);
-        return ev;
-    }
-
-    bool Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& /*ctx*/)  {
-        const auto& record = ev->Get()->Record;
-
-        if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-            return false;
-        }
-
-        KqpSessionId = record.GetResponse().GetSessionId();
-        Y_ABORT_UNLESS(!KqpSessionId.empty());
-
-        return true;
-    }
-
-    void CloseKqpSession(const TActorContext& ctx) {
-        if (KqpSessionId) {
-            auto ev = MakeCloseSessionRequest();
-            ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-
-            KqpSessionId = "";
-        }
-    }
-
-    THolder<NKqp::TEvKqp::TEvCloseSessionRequest> MakeCloseSessionRequest() {
-        auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
-        ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
-        return ev;
-    }
-
-    void SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, std::vector<TCommitInfo> commits, const NActors::TActorContext& ctx)
-    {
-        // if (!AppData(ctx)->FeatureFlags.GetEnableTopicServiceTx()) { // savnik need this check?
-        //     return Reply(Ydb::StatusIds::UNSUPPORTED,
-        //                 "Disabled transaction support for TopicService.",
-        //                 NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-        //                 ctx);
-        // }
-
-        auto& record = ev->Get()->Record;
-        TxId = record.GetResponse().GetTxMeta().id();
-        Y_ABORT_UNLESS(!TxId.empty());
-
-
-        auto offsets = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-        offsets->Record.MutableRequest()->SetDatabase(DataBase);
-        offsets->Record.MutableRequest()->SetSessionId(KqpSessionId);
-        offsets->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_UNDEFINED);
-        offsets->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_TOPIC);
-        offsets->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
-        offsets->Record.MutableRequest()->MutableTopicOperations()->SetConsumer(Consumer);
-
-        // savnik need set something else?
-
-        auto* topic = offsets->Record.MutableRequest()->MutableTopicOperations()->AddTopics();
-
-        topic->set_path(Path);
-
-        for(auto &c: commits) {
-            auto* partition = topic->add_partitions();
-            partition->set_partition_id(c.PartitionId);
-            partition->set_force_commit(true);
-            partition->set_kill_read_session(true);
-            auto* offset = partition->add_partition_offsets();
-            offset->set_end(c.Offset);
-        }
-
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), offsets.Release());
-    }
-
-    void BeginTransaction(const NActors::TActorContext& ctx) {
-        auto begin = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-
-        begin->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
-        begin->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-        begin->Record.MutableRequest()->SetSessionId(KqpSessionId);
-        begin->Record.MutableRequest()->SetDatabase(DataBase);
-
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), begin.Release());
-    }
-
-    void CommitTx(const NActors::TActorContext& ctx) {
-        auto commit = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-
-        commit->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_COMMIT_TX);
-        commit->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
-        commit->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
-        commit->Record.MutableRequest()->SetSessionId(KqpSessionId);
-        commit->Record.MutableRequest()->SetDatabase(DataBase);
-
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), commit.Release());
-    }
-};
 
 class TCommitOffsetActor : public TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest> {
 
@@ -219,8 +98,7 @@ private:
 
     NPersQueue::TTopicsListController TopicsHandler;
 
-    TKqpHelper Kqp;
-    std::vector<TKqpHelper::TCommitInfo> Commits;
+    std::unique_ptr<TKqpHelper> Kqp;
 };
 
 }

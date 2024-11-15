@@ -62,7 +62,7 @@ struct TTopicHolder {
             .MeteringMode = info.MeteringMode,
             .FullConverter = info.TopicNameConverter,
             .Partitions = info.Partitions,
-            .PartitionGraph = info.PartitionGraph // savnik тут будет пусто, т.к. в TTopicInitInfo это поле не сетится. Найти где оно инициализируется и исправить
+            .PartitionGraph = info.PartitionGraph
         };
     }
 };

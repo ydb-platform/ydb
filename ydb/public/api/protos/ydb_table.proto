@@ -461,8 +461,8 @@ message DateTypeColumnModeSettings {
     // The column type must be a date type
     string column_name = 1;
 
-    // Deprecated. Use TtlSettings.tiers instead. If TtlSettings.tiers is not empty,
-    // expire_after_seconds does not take effect
+    // Deprecated, replaced by TtlSettings.tiers. If TtlSettings.tiers is not empty,
+    // expire_after_seconds is ignored
     uint32 expire_after_seconds = 2;
 }
 
@@ -487,8 +487,8 @@ message ValueSinceUnixEpochModeSettings {
     // Interpretation of the value stored in <column_name>
     Unit column_unit = 2;
 
-    // Deprecated. Use TtlSettings.tiers instead. If TtlSettings.tiers is not empty,
-    // expire_after_seconds does not take effect
+    // Deprecated, replaced by TtlSettings.tiers. If TtlSettings.tiers is not empty,
+    // expire_after_seconds is ignored
     uint32 expire_after_seconds = 3;
 }
 
@@ -647,8 +647,7 @@ message CreateTableRequest {
     Ydb.FeatureFlag.Status key_bloom_filter = 16;
     // Read replicas settings for table
     ReadReplicasSettings read_replicas_settings = 17;
-    // Deprecated. Use TTL instead.
-    string tiering = 18;
+    reserved 18; // tiering
     // Is temporary table
     bool temporary = 19;
     // Is table column or row oriented
@@ -727,11 +726,7 @@ message AlterTableRequest {
     repeated string drop_changefeeds = 20;
     // Rename existed index
     repeated RenameIndexItem rename_indexes = 21;
-    // Deprecated. Use ttl_action instead
-    oneof tiering_action {
-        string set_tiering = 22;
-        google.protobuf.Empty drop_tiering = 23;
-    }
+    reserved 22, 23; // tiering_action
 }
 
 message AlterTableResponse {

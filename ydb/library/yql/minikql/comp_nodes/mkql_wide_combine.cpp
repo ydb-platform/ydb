@@ -604,6 +604,8 @@ private:
 
             if (bucket.BucketState != TSpilledBucket::EBucketState::InMemory) {
                 bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
+                SpillingBucketsCount++;
+                InMemoryBucketsCount--;
                 bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
                 for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
                     //releasing values stored in unsafe TUnboxedValue buffer
@@ -632,10 +634,11 @@ private:
                 ui32 bucketNumToSpill = GetLargestInMemoryBucketNumber();
 
                 SplitStateSpillingBucket = bucketNumToSpill;
-                InMemoryBucketsCount--;
 
                 auto& bucket = SpilledBuckets[bucketNumToSpill];
                 bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
+                SpillingBucketsCount++;
+                InMemoryBucketsCount--;
 
                 while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
                     bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
@@ -665,6 +668,7 @@ private:
                 bucket.InMemoryProcessingState->ReadMore<false>();
 
                 bucket.BucketState = TSpilledBucket::EBucketState::SpillingData;
+                SpillingBucketsCount--;
             }
         }
 

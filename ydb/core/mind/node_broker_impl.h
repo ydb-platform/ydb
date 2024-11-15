@@ -288,6 +288,8 @@ private:
                            TTransactionContext &txc);
     void DbUpdateNodeLocation(const TNodeInfo &node,
                               TTransactionContext &txc);
+    void DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
+                              TTransactionContext &txc);
 
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);

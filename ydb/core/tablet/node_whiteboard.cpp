@@ -568,9 +568,17 @@ protected:
 
     void Handle(TEvWhiteboard::TEvNodeStateUpdate::TPtr &ev, const TActorContext &ctx) {
         auto& nodeStateInfo = NodeStateInfo[ev->Get()->Record.GetPeerName()];
-        if (CheckedMerge(nodeStateInfo, ev->Get()->Record) >= 100) {
-            nodeStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+        ui64 previousChangeTime = nodeStateInfo.GetChangeTime();
+        ui64 currentChangeTime = ctx.Now().MilliSeconds();
+        ui64 previousBytesWritten = nodeStateInfo.GetBytesWritten();
+        ui64 currentBytesWritten = ev->Get()->Record.GetBytesWritten();
+        if (previousChangeTime && previousBytesWritten < currentBytesWritten && previousChangeTime < currentChangeTime) {
+            nodeStateInfo.SetWriteThroughput((currentBytesWritten - previousBytesWritten) * 1000 / (currentChangeTime - previousChangeTime));
+        } else {
+            nodeStateInfo.ClearWriteThroughput();
         }
+        nodeStateInfo.MergeFrom(ev->Get()->Record);
+        nodeStateInfo.SetChangeTime(currentChangeTime);
     }
 
     void Handle(TEvWhiteboard::TEvNodeStateDelete::TPtr &ev, const TActorContext &ctx) {

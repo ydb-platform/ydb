@@ -24,6 +24,9 @@ class TJsonAutocomplete : public TViewerPipeClient {
         TString Name;
         NKikimrViewer::EAutocompleteType Type;
         TString Parent;
+        std::optional<ui32> PKIndex;
+        bool NotNull = false;
+        TSysTables::TTableColumnInfo::EDefaultKind Default = TSysTables::TTableColumnInfo::EDefaultKind::DEFAULT_UNDEFINED;
 
         TSchemaWordData(const TString& name, const NKikimrViewer::EAutocompleteType type, const TString& parent = {})
             : Name(name)
@@ -239,7 +242,16 @@ public:
                 }
                 TString path = JoinPath(entry.Path);
                 for (const auto& [id, column] : entry.Columns) {
-                    Dictionary.emplace_back(column.Name, NKikimrViewer::column, path);
+                    auto& dicColumn = Dictionary.emplace_back(column.Name, NKikimrViewer::column, path);
+                    if (column.KeyOrder >= 0) {
+                        dicColumn.PKIndex = column.KeyOrder;
+                    }
+                    if (column.IsNotNullColumn) {
+                        dicColumn.NotNull = true;
+                    }
+                    if (column.DefaultKind != TSysTables::TTableColumnInfo::DEFAULT_UNDEFINED) {
+                        dicColumn.Default = column.DefaultKind;
+                    }
                 }
                 for (const auto& index : entry.Indexes) {
                     Dictionary.emplace_back(index.GetName(), NKikimrViewer::index, path);
@@ -299,6 +311,15 @@ public:
                 entity->SetType(wordData->Type);
                 if (wordData->Parent) {
                     entity->SetParent(wordData->Parent);
+                }
+                if (wordData->PKIndex) {
+                    entity->SetPKIndex(*wordData->PKIndex);
+                }
+                if (wordData->NotNull) {
+                    entity->SetNotNull(wordData->NotNull);
+                }
+                if (wordData->Default != TSysTables::TTableColumnInfo::DEFAULT_UNDEFINED) {
+                    entity->SetDefault(static_cast<NKikimrViewer::TQueryAutocomplete_EDefaultKind>(wordData->Default));
                 }
             }
         }

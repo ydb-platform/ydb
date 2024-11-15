@@ -271,6 +271,15 @@ private:
                     return true;
                 }
 
+                if (name == "data.date.format") {
+                    const auto& value = setting.Tail();
+                    if (!EnsureAtom(value, ctx)) {
+                        return false;
+                    }
+
+                    return true;
+                }
+
                 if (name == "csvdelimiter") {
                     const auto& value = setting.Tail();
                     if (!EnsureAtom(value, ctx)) {
@@ -292,7 +301,7 @@ private:
                 return true;
             };
 
-            if (!EnsureValidSettings(*input->Child(TS3Target::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "data.datetime.formatname", "data.datetime.format", "data.timestamp.formatname", "data.timestamp.format", "csvdelimiter", "filepattern"}, validator, ctx)) {
+            if (!EnsureValidSettings(*input->Child(TS3Target::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "data.datetime.formatname", "data.datetime.format", "data.timestamp.formatname", "data.timestamp.format", "data.date.format", "csvdelimiter", "filepattern"}, validator, ctx)) {
                 return TStatus::Error;
             }
 

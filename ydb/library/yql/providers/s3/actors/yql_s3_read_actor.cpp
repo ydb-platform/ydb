@@ -2228,6 +2228,10 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
             readSpec->Settings.timestamp_format = it->second;
         }
 
+        if (const auto it = settings.find("data.date.format"); settings.cend() != it) {
+            readSpec->Settings.date_format = it->second;
+        }
+
         if (readSpec->Settings.date_time_format_name == NDB::FormatSettings::DateTimeFormat::Unspecified && readSpec->Settings.date_time_format.empty()) {
             readSpec->Settings.date_time_format_name = NDB::FormatSettings::DateTimeFormat::POSIX;
         }

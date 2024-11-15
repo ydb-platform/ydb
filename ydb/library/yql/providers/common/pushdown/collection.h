@@ -9,7 +9,7 @@ namespace NYql::NPushdown {
 
 // Collects subpredicate that we can then push down
 void CollectPredicates(const NNodes::TExprBase& predicate, TPredicateNode& predicateTree,
-                       const TExprNode* lambdaArg, const NNodes::TExprBase& lambdaBody,
+                       const NNodes::TExprBase& lambdaArg, const NNodes::TExprBase& lambdaBody,
                        const TSettings& settings);
 
 } // namespace NYql::NPushdown

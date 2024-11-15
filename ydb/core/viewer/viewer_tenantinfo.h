@@ -44,6 +44,7 @@ class TJsonTenantInfo : public TViewerPipeClient {
     bool Tablets = false;
     bool SystemTablets = false;
     bool Storage = false;
+    bool MemoryStats = false;
     bool Nodes = false;
     bool Users = false;
     bool OffloadMerge = false;
@@ -108,6 +109,7 @@ public:
         Tablets = FromStringWithDefault<bool>(params.Get("tablets"), Tablets);
         SystemTablets = FromStringWithDefault<bool>(params.Get("system_tablets"), Tablets); // Tablets here is by design
         Storage = FromStringWithDefault<bool>(params.Get("storage"), Storage);
+        MemoryStats = FromStringWithDefault<bool>(params.Get("memory"), MemoryStats);
         Nodes = FromStringWithDefault<bool>(params.Get("nodes"), Nodes);
         Users = FromStringWithDefault<bool>(params.Get("users"), Users);
         User = params.Get("user");
@@ -274,7 +276,9 @@ public:
             request->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>());
             request->Record.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresUsedFieldNumber);
             request->Record.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
-            request->Record.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
+            if (MemoryStats) {
+                request->Record.AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
+            }
             SystemStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, request.release()));
         }
     }
@@ -964,6 +968,11 @@ public:
         yaml.AddParameter({
             .Name = "storage",
             .Description = "return storage info",
+            .Type = "boolean",
+        });
+        yaml.AddParameter({
+            .Name = "memory",
+            .Description = "return memory info",
             .Type = "boolean",
         });
         yaml.AddParameter({

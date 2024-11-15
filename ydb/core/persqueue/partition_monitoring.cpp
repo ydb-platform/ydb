@@ -145,6 +145,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                     }
 
                     TABLE_CLASS("table") {
+                        CAPTION() { out << "Gaps"; }
                         TABLEHEAD() {
                             TABLER() {
                                 TABLEH() {out << "GapStartOffset";}
@@ -176,6 +177,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                     }
 
                     TABLE_CLASS("table") {
+                        CAPTION() { out << "Source ids"; }
                         TABLEHEAD() {
                             TABLER() {
                                 TABLEH() {out << "SourceId";}
@@ -209,6 +211,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                     }
 
                     TABLE_CLASS("table") {
+                        CAPTION() { out << "UsersInfo"; }
                         TABLEHEAD() {
                             TABLER() {
                                 TABLEH() {out << "user";}
@@ -249,7 +252,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
         }
     }
 
-    ctx.Send(ev->Sender, new TEvPQ::TEvMonResponse(Partition, {}, out.Str()));
+    ctx.Send(ev->Sender, new TEvPQ::TEvMonResponse(Partition, out.Str()));
 }
 
 } // namespace NKikimr::NPQ

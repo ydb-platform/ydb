@@ -16,11 +16,11 @@ public:
         return NKikimrServices::TActivity::PERSQUEUE_MON_ACTOR;
     }
 
-    TMonitoringProxy(const TActorId& sender, const TString& query, const TMap<ui32, TActorId>& partitions, const TActorId& cache,
+    TMonitoringProxy(const TActorId& sender, const TString& query, const TMap<ui32, TActorId>&& partitions, const TActorId& cache,
                      const TString& topicName, ui64 tabletId, ui32 inflight, TString&& config)
     : Sender(sender)
     , Query(query)
-    , Partitions(partitions)
+    , Partitions(std::move(partitions))
     , Cache(cache)
     , TotalRequests(partitions.size() + 1)
     , TopicName(topicName)
@@ -48,8 +48,6 @@ public:
 private:
 
     void Reply(const TActorContext& ctx) {
-
-
         TStringStream str;
         HTML_APP_PAGE(str, "PersQueue Tablet " << TabletID << " (" << TopicName << ")") {
             NAVIGATION_BAR() {
@@ -64,6 +62,7 @@ private:
                         LAYOUT_COLUMN() {
                             PROPERTIES("Tablet info") {
                                 PROPERTY("Topic", TopicName);
+                                PROPERTY("TabletID", TabletID);
                                 PROPERTY("Inflight", Inflight);
                             }
                         }
@@ -138,20 +137,24 @@ private:
 
 bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx)
 {
-    if (!ev)
+    if (!ev) {
         return true;
+    }
 
     if (ev->Get()->Cgi().Has("kv")) {
         return TKeyValueFlat::OnRenderAppHtmlPage(ev, ctx);
     }
+
     PQ_LOG_I("Handle TEvRemoteHttpInfo: " << ev->Get()->Query);
+
     TMap<ui32, TActorId> res;
     for (auto& p : Partitions) {
         res.emplace(p.first.InternalPartitionId, p.second.Actor);
     }
 
     TString config = SecureDebugStringMultiline(Config);
-    ctx.Register(new TMonitoringProxy(ev->Sender, ev->Get()->Query, res, CacheActor, TopicName, TabletID(), ResponseProxy.size(), std::move(config)));
+    ctx.Register(new TMonitoringProxy(ev->Sender, ev->Get()->Query, std::move(res), CacheActor, TopicName, TabletID(), ResponseProxy.size(), std::move(config)));
+
     return true;
 }
 

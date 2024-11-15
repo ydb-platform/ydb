@@ -1100,8 +1100,10 @@ namespace NKikimr::NYaml {
     void PrepareBlobStorageConfig(NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
         auto* bsConfig = config.MutableBlobStorageConfig();
 
-        if (bsConfig && bsConfig->HasServiceSet()) {  // no autoconfig
-            return;
+        if (bsConfig && bsConfig->HasServiceSet()) {
+            if (bsConfig->GetServiceSet().GroupsSize()) {
+                return;  // no autoconfig
+            }
         }
 
         bsConfig->MutableServiceSet()->AddAvailabilityDomains(1);

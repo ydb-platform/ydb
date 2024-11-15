@@ -3,8 +3,15 @@
 
 namespace NKikimr::NPQ::NApp {
 
-THtmlAppPage::THtmlAppPage(IOutputStream& str, const TString& title)
+THtmlPart::THtmlPart(IOutputStream& str)
     : Str(str) {
+}
+
+THtmlPart::~THtmlPart() {
+}
+
+THtmlAppPage::THtmlAppPage(IOutputStream& str, const TString& title)
+    : THtmlPart(str) {
     Str << R"(
 <HTML>
     <TITLE>)" << title << R"(</TITLE>
@@ -59,7 +66,7 @@ THtmlAppPage::~THtmlAppPage() {
 }
 
 TNavigationBar::TNavigationBar(IOutputStream& str)
-    : Str(str) {
+    : THtmlPart(str) {
     Str << R"(<UL CLASS="nav nav-tabs">)";
 }
 
@@ -111,7 +118,7 @@ TNavigationBarContent::~TNavigationBarContent() {
 }
 
 TProperties::TProperties(IOutputStream& str, const TString& caption)
-    : Str(str) {
+    : THtmlPart(str) {
 
     Str << R"(
 <TABLE CLASS="properties">

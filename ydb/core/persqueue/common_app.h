@@ -5,6 +5,7 @@
 
 
 #define HTML_APP_PAGE(str, title) WITH_SCOPED(__stream, ::NKikimr::NPQ::NApp::THtmlAppPage(str, TStringBuilder() << title))
+#define HTML_PART(str, title) WITH_SCOPED(__stream, ::NKikimr::NPQ::NApp::THtmlPart(str))
 
 #define NAVIGATION_BAR() WITH_SCOPED(__navigationBar, ::NKikimr::NPQ::NApp::TNavigationBar(__stream))
 #define NAVIGATION_TAB(id, caption) __navigationBar.Add(TStringBuilder() << id, caption)
@@ -19,19 +20,24 @@
 
 namespace NKikimr::NPQ::NApp {
 
-struct THtmlAppPage {
-    THtmlAppPage(IOutputStream&, const TString& title);
-    ~THtmlAppPage();
+struct THtmlPart {
+    THtmlPart(IOutputStream&);
+    ~THtmlPart();
 
     inline operator IOutputStream&() noexcept {
         return Str;
     }
 
-private:
+protected:
     IOutputStream& Str;
 };
 
-struct TNavigationBar {
+struct THtmlAppPage : public THtmlPart {
+    THtmlAppPage(IOutputStream&, const TString& title);
+    ~THtmlAppPage();
+};
+
+struct TNavigationBar : public THtmlPart {
     friend struct TNavigationBarContent;
 
     TNavigationBar(IOutputStream&);
@@ -39,12 +45,7 @@ struct TNavigationBar {
 
     void Add(const TString& id, const TString& caption);
 
-    inline operator IOutputStream&() noexcept {
-        return Str;
-    }
-
 private:
-    IOutputStream& Str;
     bool FirstTab = true;
     bool FirstContent = true;
 };
@@ -56,14 +57,11 @@ private:
     TNavigationBar& NavigationBar;
 };
 
-struct TProperties {
+struct TProperties : public THtmlPart {
     TProperties(IOutputStream&, const TString& caption);
     ~TProperties();
 
     void Add(const TString& name, const TString& value);
-
-private:
-    IOutputStream& Str;
 };
 
 }

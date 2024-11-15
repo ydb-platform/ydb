@@ -314,9 +314,10 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCol
 
         auto& collectionPaths = paths[targetPath];
 
-        size_t cutLen = tx.GetWorkingDir().size() + 1;
+        size_t prefixLen = tx.GetWorkingDir().size() + 1;
+
         for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
-            TString itemName = item.GetPath().substr(cutLen, item.GetPath().size() - cutLen);
+            TString itemName = item.GetPath().substr(prefixLen, item.GetPath().size() - prefixLen);
             auto pos = itemName.rfind("/");
             if (pos != std::string::npos) {
                 itemName.resize(pos);

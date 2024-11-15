@@ -26,7 +26,6 @@ void DoCreateStreamImpl(
     TVector<ISubOperation::TPtr>& result,
     const NKikimrSchemeOp::TCreateCdcStream& op,
     const TOperationId& opId,
-    const TPath& workingDirPath,
     const TPath& tablePath,
     const bool acceptExisted,
     const bool initialScan);

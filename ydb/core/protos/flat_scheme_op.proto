@@ -1074,7 +1074,6 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
 
 message TConsistentTableCopyingConfig {
     repeated TCopyTableConfig CopyTableDescriptions = 1;
-    optional string DstBasePath = 2;
 }
 
 message TYTSettings {

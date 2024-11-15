@@ -716,12 +716,10 @@ void DoCreateStreamImpl(
         TVector<ISubOperation::TPtr>& result,
         const NKikimrSchemeOp::TCreateCdcStream& op,
         const TOperationId& opId,
-        const TPath& workingDirPath,
         const TPath& tablePath,
         const bool acceptExisted,
         const bool initialScan)
 {
-    Y_UNUSED(workingDirPath);
     auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamImpl);
     FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);
     result.push_back(CreateNewCdcStreamImpl(NextPartId(opId, result), outTx));
@@ -736,7 +734,8 @@ void DoCreateStream(
         const bool acceptExisted,
         const bool initialScan)
 {
-    DoCreateStreamImpl(result, op, opId, workingDirPath, tablePath, acceptExisted, initialScan);
+    DoCreateStreamImpl(result, op, opId, tablePath, acceptExisted, initialScan);
+
     {
         auto outTx = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStreamAtTable);
         FillModifySchemaForCdc(outTx, op, opId, acceptExisted, initialScan);

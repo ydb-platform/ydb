@@ -1256,12 +1256,72 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvFinishedFromSource::T
     }
 };
 
+class TPortionConstructorV2 {
+private:
+    NOlap::TPortionInfo::TConstPtr PortionInfo;
+    std::optional<NOlap::TColumnChunkLoadContextV2> Records;
+    std::optional<std::vector<NOlap::TIndexChunkLoadContext>> Indexes;
+
+public:
+    TPortionConstructorV2(const NOlap::TPortionInfo::TConstPtr& portionInfo)
+        : PortionInfo(portionInfo) {
+    }
+
+    void SetRecords(NOlap::TColumnChunkLoadContextV2&& records) {
+        AFL_VERIFY(!Records);
+        Records = std::move(records);
+    }
+
+    void SetIndexes(std::vector<NOlap::TIndexChunkLoadContext>&& indexes) {
+        AFL_VERIFY(!Indexes);
+        Indexes = std::move(indexes);
+    }
+
+    NOlap::TPortionDataAccessor BuildAccessor() {
+        AFL_VERIFY(PortionInfo && Records && Indexes);
+        std::vector<NOlap::TColumnChunkLoadContextV1> records = Records->BuildRecordsV1();
+        return NOlap::TPortionAccessorConstructor::BuildForLoading(std::move(PortionInfo), std::move(records), std::move(*Indexes));
+    }
+};
+
+class TAccessorsParsingTask: public NConveyor::ITask {
+private:
+    std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback> FetchCallback;
+    std::vector<TPortionConstructorV2> Portions;
+
+    virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
+        std::vector<NOlap::TPortionDataAccessor> accessors;
+        accessors.reserve(Portions.size());
+        for (auto&& i : Portions) {
+            accessors.emplace_back(i.BuildAccessor());
+        }
+        FetchCallback->OnAccessorsFetched(std::move(accessors));
+        return TConclusionStatus::Success();
+    }
+    virtual void DoOnCannotExecute(const TString& reason) override {
+        AFL_VERIFY(false)("cannot parse metadata", reason);
+    }
+
+public:
+    virtual TString GetTaskClassIdentifier() const override {
+        return "ASKED_METADATA_PARSER";
+    }
+
+    TAccessorsParsingTask(
+        const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& callback, std::vector<TPortionConstructorV2>&& portions)
+        : FetchCallback(callback)
+        , Portions(std::move(portions))
+    {
+
+    }
+};
+
 class TTxAskPortionChunks: public TTransactionBase<TColumnShard> {
 private:
     using TBase = TTransactionBase<TColumnShard>;
     std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback> FetchCallback;
     THashMap<ui64, std::vector<NOlap::TPortionInfo::TConstPtr>> PortionsByPath;
-    std::vector<NOlap::TPortionDataAccessor> FetchedAccessors;
+    std::vector<TPortionConstructorV2> FetchedAccessors;
 
 public:
     TTxAskPortionChunks(TColumnShard* self, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& fetchCallback,
@@ -1275,6 +1335,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
         NIceDb::TNiceDb db(txc.DB);
+        
         TBlobGroupSelector selector(Self->Info());
         bool reask = false;
         for (auto&& i : PortionsByPath) {
@@ -1302,21 +1363,22 @@ public:
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "TTxAskPortionChunks::Execute")("stage", "processing")("size", i.second.size())("path_id", i.first);
             while (i.second.size()) {
                 auto p = i.second.back();
-                std::vector<NOlap::TColumnChunkLoadContextV1> records;
-                std::vector<NOlap::TIndexChunkLoadContext> indexes;
+                TPortionConstructorV2 constructor(p);
                 {
                     auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
                     if (!rowset.IsReady()) {
                         return false;
                     }
                     while (!rowset.EndOfSet()) {
-                        NOlap::TColumnChunkLoadContextV1::BuildFromDBV2(rowset, records);
+                        NOlap::TColumnChunkLoadContextV2 info(rowset);
+                        constructor.SetRecords(std::move(info));
                         if (!rowset.Next()) {
                             return false;
                         }
                     }
                 }
                 {
+                    std::vector<NOlap::TIndexChunkLoadContext> indexes;
                     auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(p->GetPathId(), p->GetPortionId()).Select();
                     if (!rowset.IsReady()) {
                         return false;
@@ -1327,8 +1389,9 @@ public:
                             return false;
                         }
                     }
+                    constructor.SetIndexes(std::move(indexes));
                 }
-                FetchedAccessors.emplace_back(NOlap::TPortionAccessorConstructor::BuildForLoading(p, std::move(records), std::move(indexes)));
+                FetchedAccessors.emplace_back(std::move(constructor));
                 i.second.pop_back();
             }
             AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "TTxAskPortionChunks::Execute")("stage", "finished")("size", i.second.size())(
@@ -1336,7 +1399,7 @@ public:
         }
 
         AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "TTxAskPortionChunks::Execute")("stage", "finished");
-        FetchCallback->OnAccessorsFetched(std::move(FetchedAccessors));
+        NConveyor::TInsertServiceOperator::AsyncTaskToExecute(std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)));
         return true;
     }
     void Complete(const TActorContext& /*ctx*/) override {

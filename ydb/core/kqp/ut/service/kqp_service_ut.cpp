@@ -171,7 +171,6 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
     Y_UNIT_TEST(SessionBusy) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetUseSessionBusyStatus(true);
 
         auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetTableClient();
@@ -191,7 +190,6 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
     Y_UNIT_TEST(SessionBusyRetryOperation) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetUseSessionBusyStatus(true);
 
         auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetTableClient();
@@ -223,7 +221,6 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
     Y_UNIT_TEST(SessionBusyRetryOperationSync) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetUseSessionBusyStatus(true);
 
         auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetTableClient();

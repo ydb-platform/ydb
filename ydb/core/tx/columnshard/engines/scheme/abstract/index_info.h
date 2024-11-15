@@ -16,7 +16,8 @@ public:
     enum class ESpecialColumn : ui32 {
         PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX,
         TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID_INDEX,
-        DELETE_FLAG = NOlap::NPortion::TSpecialColumns::SPEC_COL_DELETE_FLAG_INDEX
+        WRITE_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_WRITE_ID_INDEX,
+        DELETE_FLAG = NOlap::NPortion::TSpecialColumns::SPEC_COL_DELETE_FLAG_INDEX,
     };
 
     using TSystemColumnsSet = ui64;
@@ -28,6 +29,7 @@ public:
 
     static constexpr const char* SPEC_COL_PLAN_STEP = NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP;
     static constexpr const char* SPEC_COL_TX_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_TX_ID;
+    static constexpr const char* SPEC_COL_WRITE_ID = NOlap::NPortion::TSpecialColumns::SPEC_COL_WRITE_ID;
     static constexpr const char* SPEC_COL_DELETE_FLAG = NOlap::NPortion::TSpecialColumns::SPEC_COL_DELETE_FLAG;
 
     static const char* GetDeleteFlagColumnName() {
@@ -35,17 +37,18 @@ public:
     }
 
     static const std::set<ui32>& GetNecessarySystemColumnIdsSet() {
-        static const std::set<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID };
+        static const std::set<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID };
         return result;
     }
 
     static const std::vector<std::string>& GetSnapshotColumnNames() {
-        static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID) };
+        static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID),
+            std::string(SPEC_COL_WRITE_ID) };
         return result;
     }
 
     static const std::vector<ui32>& GetSnapshotColumnIds() {
-        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID };
+        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID };
         return result;
     }
 
@@ -85,8 +88,10 @@ public:
     static void AddSnapshotFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
         static const std::shared_ptr<arrow::Field> ps = arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64());
         static const std::shared_ptr<arrow::Field> txid = arrow::field(SPEC_COL_TX_ID, arrow::uint64());
+        static const std::shared_ptr<arrow::Field> writeId = arrow::field(SPEC_COL_WRITE_ID, arrow::uint64());
         fields.push_back(ps);
         fields.push_back(txid);
+        fields.push_back(writeId);
     }
 
     static void AddDeleteFields(std::vector<std::shared_ptr<arrow::Field>>& fields) {
@@ -94,18 +99,18 @@ public:
     }
 
     static const std::set<ui32>& GetSnapshotColumnIdsSet() {
-        static const std::set<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID };
+        static const std::set<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID };
         return result;
     }
 
     static const std::vector<std::string>& GetSystemColumnNames() {
         static const std::vector<std::string> result = { std::string(SPEC_COL_PLAN_STEP), std::string(SPEC_COL_TX_ID),
-            std::string(SPEC_COL_DELETE_FLAG) };
+            std::string(SPEC_COL_WRITE_ID), std::string(SPEC_COL_DELETE_FLAG) };
         return result;
     }
 
     static const std::vector<ui32>& GetSystemColumnIds() {
-        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID,
+        static const std::vector<ui32> result = { (ui32)ESpecialColumn::PLAN_STEP, (ui32)ESpecialColumn::TX_ID, (ui32)ESpecialColumn::WRITE_ID,
             (ui32)ESpecialColumn::DELETE_FLAG };
         return result;
     }
@@ -133,7 +138,8 @@ public:
     }
 
     std::optional<ui32> GetColumnIdOptional(const std::string& name) const;
-    TString GetColumnName(ui32 id, bool required) const;
+    std::optional<ui32> GetColumnIndexOptional(const std::string& name, const ui32 shift) const;
+    TString GetColumnName(const ui32 id, const bool required) const;
     static std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId);
     static std::shared_ptr<arrow::Field> GetColumnFieldVerified(const ui32 columnId);
 
@@ -142,7 +148,7 @@ public:
 
     static void NormalizeDeletionColumn(NArrow::TGeneralContainer& batch);
 
-    static void AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSnapshot& snapshot);
+    static void AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSnapshot& snapshot, const ui64 insertWriteId);
     static void AddDeleteFlagsColumn(NArrow::TGeneralContainer& batch, const bool isDelete);
 
     static ui64 GetSpecialColumnsRecordSize() {
@@ -150,8 +156,8 @@ public:
     }
 
     static std::shared_ptr<arrow::Schema> ArrowSchemaSnapshot() {
-        static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(
-            arrow::FieldVector{ arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()), arrow::field(SPEC_COL_TX_ID, arrow::uint64()) });
+        static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(arrow::FieldVector{ arrow::field(SPEC_COL_PLAN_STEP, arrow::uint64()),
+                arrow::field(SPEC_COL_TX_ID, arrow::uint64()), arrow::field(SPEC_COL_WRITE_ID, arrow::uint64()) });
         return result;
     }
 
@@ -166,12 +172,13 @@ public:
     }
 
     static bool IsSpecialColumn(const std::string& fieldName) {
-        return fieldName == SPEC_COL_PLAN_STEP || fieldName == SPEC_COL_TX_ID || fieldName == SPEC_COL_DELETE_FLAG;
+        return fieldName == SPEC_COL_PLAN_STEP || fieldName == SPEC_COL_TX_ID || fieldName == SPEC_COL_WRITE_ID ||
+               fieldName == SPEC_COL_DELETE_FLAG;
     }
 
     static bool IsSpecialColumn(const ui32 fieldId) {
         return fieldId == (ui32)ESpecialColumn::PLAN_STEP || fieldId == (ui32)ESpecialColumn::TX_ID ||
-               fieldId == (ui32)ESpecialColumn::DELETE_FLAG;
+               fieldId == (ui32)ESpecialColumn::WRITE_ID || fieldId == (ui32)ESpecialColumn::DELETE_FLAG;
     }
 
     static bool IsNullableVerified(const ui32 /*fieldId*/) {

@@ -6,34 +6,29 @@
 namespace NKikimr::NColumnShard {
 
 bool TTxWrite::InsertOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId) {
-    NKikimrTxColumnShard::TLogicalMetadata meta;
-    meta.SetNumRows(batch->GetRowsCount());
-    meta.SetRawBytes(batch->GetRawBytes());
-    meta.SetDirtyWriteTimeSeconds(batch.GetStartInstant().Seconds());
-    meta.SetSpecialKeysRawData(batch->GetSpecialKeysFullSafe());
-    meta.SetSpecialKeysPayloadData(batch->GetSpecialKeysPayloadSafe());
+    auto userData = batch.BuildInsertionUserData(*Self);
+    NOlap::TInsertedData insertData(writeId, userData);
 
-    const auto& blobRange = batch.GetRange();
-    Y_ABORT_UNLESS(blobRange.GetBlobId().IsValid());
-
-    // First write wins
     TBlobGroupSelector dsGroupSelector(Self->Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-
-    const auto& writeMeta = batch.GetAggregation().GetWriteMeta();
-    meta.SetModificationType(TEnumOperator<NEvWrite::EModificationType>::SerializeToProto(writeMeta.GetModificationType()));
-    *meta.MutableSchemaSubset() = batch.GetAggregation().GetSchemaSubset().SerializeToProto();
-    auto schemeVersion = batch.GetAggregation().GetSchemaVersion();
-    auto tableSchema = Self->TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(schemeVersion);
-
-    auto userData = std::make_shared<NOlap::TUserData>(writeMeta.GetTableId(), blobRange, meta, tableSchema->GetVersion(), batch->GetData());
-    NOlap::TInsertedData insertData(writeId, userData);
     bool ok = Self->InsertTable->Insert(dbTable, std::move(insertData));
     if (ok) {
         Self->UpdateInsertTableCounters();
         return true;
     }
     return false;
+}
+
+bool TTxWrite::CommitOneBlob(TTransactionContext& txc, const NOlap::TWideSerializedBatch& batch, const TInsertWriteId writeId) {
+    auto userData = batch.BuildInsertionUserData(*Self);
+    TBlobGroupSelector dsGroupSelector(Self->Info());
+    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+    NOlap::TCommittedData commitData(userData, Self->GetLastPlannedSnapshot(), Self->Generation(), writeId);
+    if (Self->TablesManager.HasTable(userData->GetPathId())) {
+        Self->InsertTable->CommitEphemeral(dbTable, std::move(commitData));
+    }
+    Self->UpdateInsertTableCounters();
+    return true;
 }
 
 bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
@@ -65,10 +60,17 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
             operation = Self->OperationsManager->GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
             Y_ABORT_UNLESS(operation->GetStatus() == EOperationStatus::Started);
             for (auto&& i : aggr->GetSplittedBlobs()) {
-                const TInsertWriteId insertWriteId = Self->InsertTable->BuildNextWriteId(txc);
-                aggr->AddInsertWriteId(insertWriteId);
-                AFL_VERIFY(InsertOneBlob(txc, i, insertWriteId))("write_id", writeMeta.GetWriteId())("insert_write_id", insertWriteId)(
-                    "size", aggr->GetSplittedBlobs().size());
+                if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
+                    static TAtomicCounter Counter = 0;
+                    const TInsertWriteId insertWriteId = (TInsertWriteId)Counter.Inc();
+                    AFL_VERIFY(CommitOneBlob(txc, i, insertWriteId))("write_id", writeMeta.GetWriteId())("insert_write_id", insertWriteId)(
+                        "size", aggr->GetSplittedBlobs().size());
+                } else {
+                    const TInsertWriteId insertWriteId = Self->InsertTable->BuildNextWriteId(txc);
+                    aggr->AddInsertWriteId(insertWriteId);
+                    AFL_VERIFY(InsertOneBlob(txc, i, insertWriteId))("write_id", writeMeta.GetWriteId())("insert_write_id", insertWriteId)(
+                        "size", aggr->GetSplittedBlobs().size());
+                }
             }
         }
     }
@@ -92,8 +94,6 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
             if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
                 auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID());
                 Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
-                Self->OperationsManager->AddTemporaryTxLink(operation->GetLockId());
-                Self->OperationsManager->CommitTransactionOnExecute(*Self, operation->GetLockId(), txc, Self->GetLastTxSnapshot());
             } else if (operation->GetBehaviour() == EOperationBehaviour::InTxWrite) {
                 NKikimrTxColumnShard::TCommitWriteTxBody proto;
                 proto.SetLockId(operation->GetLockId());
@@ -156,6 +156,7 @@ void TTxWrite::Complete(const TActorContext& ctx) {
                 Self->GetOperationsManager().AddEventForLock(*Self, op->GetLockId(), evWrite);
             }
             if (op->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
+                Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
                 Self->OperationsManager->CommitTransactionOnComplete(*Self, op->GetLockId(), Self->GetLastTxSnapshot());
             }
         }
@@ -163,6 +164,7 @@ void TTxWrite::Complete(const TActorContext& ctx) {
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();
     }
     Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
+    Self->SetupIndexation();
 }
 
 }   // namespace NKikimr::NColumnShard

@@ -948,6 +948,42 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         }
     }
 
+    Y_UNIT_TEST(DisableCDC) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        auto client = setup.MakeClient();
+        auto tableClient = setup.MakeTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/tbl` (
+                `Id` UInt64,
+                `Value` Utf8,
+                PRIMARY KEY (`Id`)
+            );
+        )");
+
+        ExecuteQuery(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/tbl`
+              ADD CHANGEFEED `Feed`
+                WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON'
+                );
+        )");
+
+        TAlterTopicSettings alterSettings;
+        alterSettings
+            .BeginAlterPartitioningSettings()
+                .BeginAlterAutoPartitioningSettings()
+                    .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndAlterAutoPartitioningSettings()
+            .EndAlterTopicPartitioningSettings();
+
+        auto result = client.AlterTopic("/Root/tbl/Feed", alterSettings).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+    }
+
     Y_UNIT_TEST(MidOfRange) {
         auto AsString = [](std::vector<ui16> vs) {
             TStringBuilder a;

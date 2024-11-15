@@ -72,74 +72,65 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::PrepareForModi
         return TConclusionStatus::Fail("empty incoming batch");
     }
 
-    auto status = incomingBatch->ValidateFull();
-    if (!status.ok()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", status.ToString());
-        return TConclusionStatus::Fail("not valid incoming batch: " + status.ToString());
-    }
+#ifndef NDEBUG
+    // its correct (dont check in release) through validation in long tx + validation in kqp streaming
+    NArrow::TStatusValidator::Validate(incomingBatch->ValidateFull());
+#endif
 
     const std::shared_ptr<NArrow::TSchemaLite> dstSchema = GetIndexInfo().ArrowSchema();
-
-    auto batch = NArrow::TColumnOperator().SkipIfAbsent().Extract(incomingBatch, dstSchema->fields());
-
-    for (auto&& i : batch->schema()->fields()) {
-        const ui32 columnId = GetIndexInfo().GetColumnIdVerified(i->name());
-        auto fSchema = GetIndexInfo().GetColumnFieldVerified(columnId);
-        if (!fSchema->Equals(i)) {
-            return TConclusionStatus::Fail(
-                "not equal field types for column '" + i->name() + "': " + i->ToString() + " vs " + fSchema->ToString());
+    std::vector<std::shared_ptr<arrow::Array>> pkColumns;
+    pkColumns.resize(GetIndexInfo().GetReplaceKey()->num_fields());
+    ui32 pkColumnsCount = 0;
+    const auto pred = [&](const ui32 incomingIdx, const i32 targetIdx) {
+        if (targetIdx == -1) {
+            return TConclusionStatus::Success();
         }
-        if (GetIndexInfo().IsNullableVerified(columnId)) {
-            continue;
+        const std::optional<i32> pkFieldIdx = GetIndexInfo().GetPKColumnIndexByIndexVerified(targetIdx);
+        if (!NArrow::HasNulls(incomingBatch->column(incomingIdx))) {
+            if (pkFieldIdx) {
+                AFL_VERIFY(*pkFieldIdx < (i32)pkColumns.size());
+                AFL_VERIFY(!pkColumns[*pkFieldIdx]);
+                pkColumns[*pkFieldIdx] = incomingBatch->column(incomingIdx);
+                ++pkColumnsCount;
+            }
+            return TConclusionStatus::Success();
         }
-        if (NArrow::HasNulls(batch->GetColumnByName(i->name()))) {
-            return TConclusionStatus::Fail("null data for not nullable column '" + i->name() + "'");
+        if (pkFieldIdx) {
+            return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema->field(targetIdx)->name() + "'");
         }
-    }
-
-    AFL_VERIFY(GetIndexInfo().GetPrimaryKey());
-
-    // Check PK is NOT NULL
-    for (auto& field : GetIndexInfo().GetPrimaryKey()->fields()) {
-        auto column = batch->GetColumnByName(field->name());
-        if (!column) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder() << "missing PK column '" << field->name() << "'");
-            return TConclusionStatus::Fail("missing PK column: '" + field->name() + "'");
-        }
-        if (NArrow::HasNulls(column)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder() << "PK column '" << field->name() << "' contains NULLs");
-            return TConclusionStatus::Fail(TStringBuilder() << "PK column '" << field->name() << "' contains NULLs");
-        }
-    }
-
-    batch = NArrow::SortBatch(batch, GetIndexInfo().GetPrimaryKey(), true);
-    Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, GetIndexInfo().GetPrimaryKey()));
-
-    switch (mType) {
-        case NEvWrite::EModificationType::Replace:
-        case NEvWrite::EModificationType::Upsert: {
-            AFL_VERIFY(batch->num_columns() <= dstSchema->num_fields());
-            if (batch->num_columns() < dstSchema->num_fields()) {
-                for (ui32 idx = 0; idx < (ui32)dstSchema->num_fields(); ++idx) {
-                    if (GetIndexInfo().IsNullableVerifiedByIndex(idx)) {
-                        continue;
-                    }
-                    if (GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(idx)) {
-                        continue;
-                    }
-                    if (batch->GetColumnByName(dstSchema->field(idx)->name())) {
-                        continue;
-                    }
-                    return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema->field(idx)->name() + "'");
+        switch (mType) {
+            case NEvWrite::EModificationType::Replace:
+            case NEvWrite::EModificationType::Insert:
+            case NEvWrite::EModificationType::Upsert: {
+                if (GetIndexInfo().IsNullableVerifiedByIndex(targetIdx)) {
+                    return TConclusionStatus::Success();
+                }
+                if (GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx)) {
+                    return TConclusionStatus::Success();
+                } else {
+                    return TConclusionStatus::Fail(
+                        "empty field for non-default column: '" + dstSchema->field(targetIdx)->name() + "'");
                 }
             }
-            return batch;
+            case NEvWrite::EModificationType::Delete:
+            case NEvWrite::EModificationType::Update:
+                return TConclusionStatus::Success();
         }
-        case NEvWrite::EModificationType::Delete:
-        case NEvWrite::EModificationType::Insert:
-        case NEvWrite::EModificationType::Update:
-            return batch;
+    };
+    const auto nameResolver = [&](const std::string& fieldName) -> i32 {
+        return GetIndexInfo().GetColumnIndexOptional(fieldName).value_or(-1);
+    };
+    auto batchConclusion =
+        NArrow::TColumnOperator().SkipIfAbsent().ErrorOnDifferentFieldTypes().AdaptIncomingToDestinationExt(incomingBatch, dstSchema, pred, nameResolver);
+    if (batchConclusion.IsFail()) {
+        return batchConclusion;
     }
+    if (pkColumnsCount < pkColumns.size()) {
+        return TConclusionStatus::Fail("not enough pk fields");
+    }
+    auto batch = NArrow::SortBatch(batchConclusion.DetachResult(), pkColumns, true);
+    Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(batch, GetIndexInfo().GetPrimaryKey()));
+    return batch;
 }
 
 void ISnapshotSchema::AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISnapshotSchema::TPtr& targetSchema) const {

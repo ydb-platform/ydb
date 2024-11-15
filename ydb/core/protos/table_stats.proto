@@ -66,4 +66,8 @@ message TTableStats {
     repeated TChannelStats Channels = 30;
 
     optional TStoragePoolsStats StoragePools = 31;
+
+    // denotes that datashard should be background compacted 
+    // even if it is single parted
+    optional bool HasSchemaChanges = 33;
 }

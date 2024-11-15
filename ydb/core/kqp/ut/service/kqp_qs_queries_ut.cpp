@@ -2351,9 +2351,19 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                     Value2 String,
                     PRIMARY KEY (Key)
                 );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            result = db.ExecuteQuery(R"(
                 UPSERT INTO TestDdlDml2 (Key, Value1, Value2) VALUES (1, "1", "1");
                 SELECT * FROM TestDdlDml2;
                 ALTER TABLE TestDdlDml2 DROP COLUMN Value2;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+
+            result = db.ExecuteQuery(R"(
+                UPSERT INTO TestDdlDml2 (Key, Value1) VALUES (1, "1");
+                SELECT * FROM TestDdlDml2;
                 UPSERT INTO TestDdlDml2 (Key, Value1) VALUES (2, "2");
                 SELECT * FROM TestDdlDml2;
                 CREATE TABLE TestDdlDml33 (
@@ -2363,7 +2373,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 2);
-            CompareYson(R"([[[1u];["1"];["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([[[1u];["1"]]])", FormatResultSetYson(result.GetResultSet(0)));
             CompareYson(R"([[[1u];["1"]];[[2u];["2"]]])", FormatResultSetYson(result.GetResultSet(1)));
             UNIT_ASSERT_EQUAL_C(result.GetIssues().Size(), 0, result.GetIssues().ToString());
 
@@ -2390,7 +2400,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 );
                 UPSERT INTO TestDdlDml4 (Key, Value1, Value2) VALUES (1, "1", "2");
                 SELECT * FROM TestDdlDml4;
-                ALTER TABLE TestDdlDml4 DROP COLUMN Value2;
                 UPSERT INTO TestDdlDml4 (Key, Value1) VALUES (2, "2");
                 SELECT * FROM TestDdlDml5;
             )", TTxControl::NoTx()).ExtractValueSync();
@@ -3037,10 +3046,10 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(TableSink_Htap) {
+    Y_UNIT_TEST_TWIN(TableSink_Htap, withOltpSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
         appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
@@ -3053,7 +3062,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         const TString query = R"(
             CREATE TABLE `/Root/ColumnShard` (
                 Col1 Uint64 NOT NULL,
-                Col2 String,
+                Col2 String NOT NULL,
                 Col3 Int32 NOT NULL,
                 PRIMARY KEY (Col1)
             )
@@ -3062,7 +3071,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
             CREATE TABLE `/Root/DataShard` (
                 Col1 Uint64 NOT NULL,
-                Col2 String,
+                Col2 String NOT NULL,
                 Col3 Int32 NOT NULL,
                 PRIMARY KEY (Col1)
             )
@@ -3073,12 +3082,13 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto client = kikimr.GetQueryClient();
+
         {
             auto result = client.ExecuteQuery(R"(
                 UPSERT INTO `/Root/ColumnShard` (Col1, Col2, Col3) VALUES
-                    (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, NULL, 13);
+                    (1u, "test1", 10), (2u, "test2", 11), (3u, "test3", 12), (4u, "test", 13);
                 UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
-                    (10u, "test1", 10), (20u, "test2", 11), (30u, "test3", 12), (40u, NULL, 13);
+                    (10u, "test1", 10), (20u, "test2", 11), (30u, "test3", 12), (40u, "test", 13);
                 INSERT INTO `/Root/ColumnShard` SELECT * FROM `/Root/DataShard`;
                 REPLACE INTO `/Root/DataShard` SELECT * FROM `/Root/ColumnShard`;
                 SELECT * FROM `/Root/ColumnShard` ORDER BY Col1;

@@ -1699,7 +1699,6 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         NKikimrConfig::TAppConfig appCfg;
-        appCfg.MutableTableServiceConfig()->SetEnableKqpImmediateEffects(true);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(1000)

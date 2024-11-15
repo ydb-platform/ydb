@@ -5661,7 +5661,9 @@ Y_UNIT_TEST(DisableWritesToDatabase) {
 
     // Compaction is a must. Table stats are missing channels usage statistics until the table is compacted at least once.
     CompactTableAndCheckResult(runtime, datashard, tableId);
-    WaitTableStats(runtime, datashard, 1);
+    WaitTableStats(runtime, datashard, [](const NKikimrTableStats::TTableStats& stats) {
+        return stats.GetPartCount() >= 1;
+    });
 
     ExecSQL(server, sender, Sprintf(R"(
                 UPSERT INTO `%s` (Key, Value) VALUES (2u, "Bar");

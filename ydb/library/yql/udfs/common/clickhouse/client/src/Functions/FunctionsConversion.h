@@ -894,6 +894,12 @@ template <>
 inline void parseImpl<DataTypeDate>(DataTypeDate::FieldType & x, ReadBuffer & rb, const DateLUTImpl *, const FormatSettings & format_settings)
 {
     DayNum tmp(0);
+    if (!format_settings.date_format.empty()) {
+        readDateTextFormat(tmp, rb, format_settings.date_format);
+        x = tmp;
+        return;
+    }
+
     readDateText(tmp, rb);
     x = tmp;
 }
@@ -902,6 +908,12 @@ template <>
 inline void parseImpl<DataTypeDate32>(DataTypeDate32::FieldType & x, ReadBuffer & rb, const DateLUTImpl *, const FormatSettings & format_settings)
 {
     ExtendedDayNum tmp(0);
+    if (!format_settings.date_format.empty()) {
+        readDateTextFormat(tmp, rb, format_settings.date_format);
+        x = tmp;
+        return;
+    }
+
     readDateText(tmp, rb);
     x = tmp;
 }

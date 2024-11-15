@@ -203,6 +203,7 @@ std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortion
     }
     std::vector<std::vector<std::shared_ptr<IDBModifier>>> result;
     std::vector<std::shared_ptr<IDBModifier>> modificationsPack;
+    ui32 countPortionsForRemove = 0;
     while (iteration.size()) {
         auto v = iteration.begin()->second;
         const bool isCorrect = (v.size() == SourcesCount);
@@ -212,6 +213,7 @@ std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortion
                 modificationsPack.emplace_back(i.GetModification());
                 if (modificationsPack.size() == 100) {
                     result.emplace_back(std::vector<std::shared_ptr<IDBModifier>>());
+                    countPortionsForRemove += modificationsPack.size();
                     std::swap(result.back(), modificationsPack);
                 }
             }
@@ -221,8 +223,10 @@ std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortion
         }
     }
     if (modificationsPack.size()) {
+        countPortionsForRemove += modificationsPack.size();
         result.emplace_back(std::move(modificationsPack));
     }
+    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("tasks_for_remove", countPortionsForRemove);
     return result;
 }
 

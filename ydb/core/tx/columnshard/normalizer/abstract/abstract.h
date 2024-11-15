@@ -56,7 +56,7 @@ enum class ENormalizerSequentialId: ui32 {
     TablesCleaner,
     DeprecatedPortionsMetadata,
     CleanGranuleId,
-    EmptyPortionsCleaner,
+    DeprecatedEmptyPortionsCleaner,
     CleanInsertionDedup,
     GCCountersNormalizer,
     RestorePortionFromChunks,

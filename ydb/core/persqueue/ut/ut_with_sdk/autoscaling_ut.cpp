@@ -622,6 +622,87 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         readSession2->Close();
     }
 
+    Y_UNIT_TEST(PartitionSplit_OffsetCommit) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicClient client = setup.MakeClient();
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(2)
+                .DownUtilizationPercent(1)
+                .StabilizationWindow(TDuration::Seconds(2))
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings();
+
+        TConsumerSettings<TCreateTopicSettings> consumers(createSettings, TEST_CONSUMER);
+        createSettings.AppendConsumers(consumers);
+
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto msg = TString(1_MB, 'a');
+
+        auto writeSession_1 = CreateWriteSession(client, "producer-1", 0, TEST_TOPIC, false);
+        auto writeSession_2 = CreateWriteSession(client, "producer-2", 0, TEST_TOPIC, false);
+
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 1)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 2)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        }
+
+        {
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 3)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 4)));
+            UNIT_ASSERT(writeSession_1->Write(Msg(msg, 5)));
+            UNIT_ASSERT(writeSession_2->Write(Msg(msg, 6)));
+            Sleep(TDuration::Seconds(5));
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+        }
+
+        auto writeSession2_1 = CreateWriteSession(client, "producer-1", 1, TEST_TOPIC, false);
+        auto writeSession2_2 = CreateWriteSession(client, "producer-2", 1, TEST_TOPIC, false);
+
+        {
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 7)));
+            UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 8)));
+            UNIT_ASSERT(writeSession2_1->Write(Msg(msg, 9)));
+            UNIT_ASSERT(writeSession2_2->Write(Msg(msg, 10)));
+            Sleep(TDuration::Seconds(5));
+            auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            UNIT_ASSERT_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+        }
+
+        auto status = client.CommitOffset(TEST_TOPIC, 1, TEST_CONSUMER, 2).GetValueSync();
+        UNIT_ASSERT(status.IsSuccess());
+
+        auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
+        auto result = client.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER, describeConsumerSettings).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        auto description = result.GetConsumerDescription();
+        UNIT_ASSERT(description.GetPartitions().size() == 5);
+
+        auto stats0 = description.GetPartitions().at(0).GetPartitionConsumerStats();
+        UNIT_ASSERT(stats0.Defined());
+        UNIT_ASSERT(stats0->GetCommittedOffset() == 6);
+
+        auto stats1 = description.GetPartitions().at(1).GetPartitionConsumerStats();
+        UNIT_ASSERT(stats1.Defined());
+        UNIT_ASSERT(stats1->GetCommittedOffset() == 2);
+
+        auto stats3 = description.GetPartitions().at(3).GetPartitionConsumerStats();
+        UNIT_ASSERT(stats3.Defined());
+        UNIT_ASSERT(stats3->GetCommittedOffset() == 0);
+    }
+
     Y_UNIT_TEST(CommitTopPast_BeforeAutoscaleAwareSDK) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopicWithAutoscale(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1, 100);

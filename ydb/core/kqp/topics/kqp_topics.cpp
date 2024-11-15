@@ -27,14 +27,16 @@ static void UpdateSupportivePartition(TMaybe<ui32>& lhs, const TMaybe<ui32>& rhs
 //
 bool TConsumerOperations::IsValid() const
 {
-    return Offsets_.GetNumIntervals() == 1;
+    return Offsets_.GetNumIntervals() <= 1;
 }
 
 std::pair<ui64, ui64> TConsumerOperations::GetOffsetsCommitRange() const
 {
     Y_ABORT_UNLESS(IsValid());
 
-    return {Offsets_.Min(), Offsets_.Max()};
+    if (Offsets_.Empty()) {
+        return {0,0};
+    } else return {Offsets_.Min(), Offsets_.Max()};
 }
 
 bool TConsumerOperations::GetForceCommit() const
@@ -88,7 +90,9 @@ void TConsumerOperations::AddOperationImpl(const TString& consumer,
         Consumer_ = consumer;
     }
 
-    Offsets_.InsertInterval(begin, end);
+    if (end != 0) {
+        Offsets_.InsertInterval(begin, end);
+    }
 
     ForceCommit_ = forceCommit;
     KillReadSession_ = killReadSession;

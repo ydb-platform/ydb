@@ -73,6 +73,7 @@ public:
         i64 Rows = 0;
         i64 Bytes = 0;
         i64 RawBytes = 0;
+        std::vector<i64> ByChannel;
 
         TString DebugString() const {
             return TStringBuilder() << "portions=" << Portions << ";blobs=" << Blobs << ";rows=" << Rows << ";bytes=" << Bytes
@@ -91,6 +92,10 @@ public:
             result.Rows = kff * Rows;
             result.Bytes = kff * Bytes;
             result.RawBytes = kff * RawBytes;
+            result.ByChannel.reserve(ByChannel.size());
+            for (ui64 channelBytes: ByChannel) {
+                result.ByChannel.push_back(channelBytes * kff);
+            }
             return result;
         }
 
@@ -104,6 +109,12 @@ public:
             Rows = SumVerifiedPositive(Rows, item.Rows);
             Bytes = SumVerifiedPositive(Bytes, item.Bytes);
             RawBytes = SumVerifiedPositive(RawBytes, item.RawBytes);
+            if (ByChannel.size() < item.ByChannel.size()) {
+                ByChannel.resize(item.ByChannel.size());
+            }
+            for (ui32 ch = 0; ch < item.ByChannel.size(); ch++) {
+                ByChannel[ch] = SumVerifiedPositive(ByChannel[ch], item.ByChannel[ch]);
+            }
             return *this;
         }
     };

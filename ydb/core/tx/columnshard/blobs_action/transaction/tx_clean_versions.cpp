@@ -47,12 +47,14 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
     NIceDb::TNiceDb db(txc.DB);
     auto table = db.Table<NKikimr::NColumnShard::Schema::SchemaPresetVersionInfo>();
 
-    auto getSchemaPresetInfo = [&](const NOlap::TVersionCounters::TSchemaKey& pkey)->NKikimrTxColumnShard::TSchemaPresetVersionInfo {
-        NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
+    auto getSchemaPresetInfo = [&](const NOlap::TVersionCounters::TSchemaKey& pkey, NKikimrTxColumnShard::TSchemaPresetVersionInfo& info)->bool {
         auto rowset = table.Key(pkey.GetId(), pkey.GetPlanStep(), pkey.GetTxId()).Select();
-        AFL_VERIFY(rowset.IsReady() && !rowset.EndOfSet());
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        AFL_VERIFY(!rowset.EndOfSet());
         Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
-        return info;
+        return true;
     };
 
     auto clearDiff = [&](const NOlap::TVersionCounters::TSchemaKey& key, NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
@@ -62,33 +64,43 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
         table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Update(NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(serialized));
     };
 
-    auto updateDiff = [&](const NOlap::TVersionCounters::TSchemaKey& key, auto&& modifier) {
-        NKikimrTxColumnShard::TSchemaPresetVersionInfo info = getSchemaPresetInfo(key);
+    auto updateDiff = [&](const NOlap::TVersionCounters::TSchemaKey& key, auto&& modifier)->bool {
+        NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
+        if (!getSchemaPresetInfo(key, info)) {
+            return false;
+        }
         modifier(info);
         TString serialized;
         Y_ABORT_UNLESS(info.SerializeToString(&serialized));
         table.Key(key.GetId(), key.GetPlanStep(), key.GetTxId()).Update(NIceDb::TUpdate<Schema::SchemaPresetVersionInfo::InfoProto>(serialized));
+        return true;
     };
 
-    auto getLastSchema = [&](const ui64 schemaVersion)->NKikimrTxColumnShard::TSchemaPresetVersionInfo {
+    auto getLastSchema = [&](const ui64 schemaVersion, NKikimrTxColumnShard::TSchemaPresetVersionInfo& info)->bool {
         auto foundKeys = Self->VersionCounters->GetVersionToKey().find(schemaVersion);
         AFL_VERIFY(foundKeys != Self->VersionCounters->GetVersionToKey().end());
-        return getSchemaPresetInfo(foundKeys->second.back());
+        return getSchemaPresetInfo(foundKeys->second.back(), info);
     };
 
-    auto tryGetSchemas = [&](const std::pair<ui64, ui64>& prevNext, NKikimrTxColumnShard::TSchemaPresetVersionInfo& pinfo, NKikimrTxColumnShard::TSchemaPresetVersionInfo& ninfo)->const std::vector<NOlap::TVersionCounters::TSchemaKey>* {
-        pinfo = getLastSchema(prevNext.first);
+    auto tryGetSchemas = [&](const std::pair<ui64, ui64>& prevNext, NKikimrTxColumnShard::TSchemaPresetVersionInfo& pinfo, NKikimrTxColumnShard::TSchemaPresetVersionInfo& ninfo, const std::vector<NOlap::TVersionCounters::TSchemaKey>*& keys)->bool {
+        keys = nullptr;
+        if (!getLastSchema(prevNext.first, pinfo)) {
+            return false;
+        }
         if (!pinfo.has_schema()) {
-            return nullptr;
+            return true;
         }
 
         auto foundNextKeys = Self->VersionCounters->GetVersionToKey().find(prevNext.second);
         AFL_VERIFY(foundNextKeys != Self->VersionCounters->GetVersionToKey().end());
-        ninfo = getSchemaPresetInfo(*foundNextKeys->second.cbegin());
-        if (!ninfo.has_schema()) {
-            return nullptr;
+        if (!getSchemaPresetInfo(*foundNextKeys->second.cbegin(), ninfo)) {
+            return false;
         }
-        return &foundNextKeys->second;
+        if (!ninfo.has_schema()) {
+            return true;
+        }
+        keys = &foundNextKeys->second;
+        return true;
     };
 
     auto updateDiffsBySchemasDiff = [&](const NOlap::TVersionCounters::TSchemaKey& key, const NKikimrTxColumnShard::TSchemaPresetVersionInfo& pinfo, const NKikimrTxColumnShard::TSchemaPresetVersionInfo& ninfo) {
@@ -147,17 +159,25 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
         });
     };
 
-    auto recalcDiff = [&](const ui64 prevSchemaVersion, const ui64 nextSchemaVersion) {
+    auto recalcDiff = [&](const ui64 prevSchemaVersion, const ui64 nextSchemaVersion)->bool {
         auto foundPrevKeys = Self->VersionCounters->GetVersionToKey().find(prevSchemaVersion);
         AFL_VERIFY(foundPrevKeys != Self->VersionCounters->GetVersionToKey().end());
         auto& key = foundPrevKeys->second.back();
         auto rowset = table.GreaterOrEqual(key.GetId(), key.GetPlanStep(), key.GetTxId()).Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
         recalcDiffByRowset(rowset, prevSchemaVersion, nextSchemaVersion);
+        return true;
     };
 
-    auto recalcDiffNoPrev = [&](const ui64 nextSchemaVersion) {
+    auto recalcDiffNoPrev = [&](const ui64 nextSchemaVersion)->bool {
         auto rowset = table.Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
         recalcDiffByRowset(rowset, 0, nextSchemaVersion);
+        return true;
     };
 
     std::vector<std::pair<ui64, ui64>> prevNextSchemaVersions = GetPrevNextSchemas();
@@ -166,20 +186,30 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
         if (prevNext.first == 0) {
             auto foundNextKeys = Self->VersionCounters->GetVersionToKey().find(prevNext.second);
             AFL_VERIFY(foundNextKeys != Self->VersionCounters->GetVersionToKey().end());
-            NKikimrTxColumnShard::TSchemaPresetVersionInfo info = getSchemaPresetInfo(*foundNextKeys->second.cbegin());
+            NKikimrTxColumnShard::TSchemaPresetVersionInfo info;
+            if (!getSchemaPresetInfo(*foundNextKeys->second.cbegin(), info)) {
+                return false;
+            }
             if (info.has_schema()) {
                 clearDiff(*foundNextKeys->second.cbegin(), info);
             } else {
-                recalcDiffNoPrev(prevNext.second);
+                if (!recalcDiffNoPrev(prevNext.second)) {
+                    return false;
+                }
             }
         } else {
             NKikimrTxColumnShard::TSchemaPresetVersionInfo pinfo;
             NKikimrTxColumnShard::TSchemaPresetVersionInfo ninfo;
-            const std::vector<NOlap::TVersionCounters::TSchemaKey>* keys = tryGetSchemas(prevNext, pinfo, ninfo);
+            const std::vector<NOlap::TVersionCounters::TSchemaKey>* keys;
+            if (!tryGetSchemas(prevNext, pinfo, ninfo, keys)) {
+                return false;
+            }
             if (keys != nullptr) {
                 updateDiffsBySchemasDiff(*keys->cbegin(), pinfo, ninfo);
             } else {
-                recalcDiff(prevNext.first, prevNext.second);
+                if (!recalcDiff(prevNext.first, prevNext.second)) {
+                    return true;
+                }
             }
         }
     }

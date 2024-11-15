@@ -25,6 +25,15 @@ void TRequestBase::AbortDelete(TRequestBase* request, TActorSystem* actorSystem)
         request->Abort(actorSystem);
         break;
     }
+    case ERequestType::RequestLogWrite:
+    {
+        auto* log = static_cast<TLogWrite*>(request);
+        while (log) {
+            auto batch = log->PopFromBatch();
+            log->Abort(actorSystem);
+            log = batch;
+        }
+    }
     default:
         request->Abort(actorSystem);
         delete request;

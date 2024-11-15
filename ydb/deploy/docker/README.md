@@ -31,7 +31,7 @@ ya package --docker ydb/deploy/docker/release/pkg.json
 
 Used base image and included:
 - ydb cli binary
-- ydbd server strip'ed binary
+- ydbd server strip'ed binary baked with build type `Release`
 
 ### Breakpad
 
@@ -41,10 +41,10 @@ Image with google breakpad assets to collect minidump
 ya package --docker ydb/deploy/docker/breakpad/pkg.json
 ```
 
-Used base image and included:
+Used base breakpad image and included:
 
 - ydb cli binary
-- ydbd server strip'ed binary
+- ydbd server binary baked with build flag `DEBUGINFO_LINES_ONLY`
 
 ### Debug
 
@@ -54,6 +54,8 @@ Image with debug symbols and utils for dev purposes
 ya package --docker ydb/deploy/docker/debug/pkg.json
 ```
 
-Extend breakpad image with:
+Used base breakpad image and included:
 - additional packages with debug utils (dnsutils, telnet, netcat-openbsd, iputils-ping, curl)
+- ydb cli binary
+- ydbd server strip'ed binary baked with build type `Release`
 - debug symbols for ydbd binary

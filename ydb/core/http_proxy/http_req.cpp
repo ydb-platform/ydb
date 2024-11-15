@@ -469,7 +469,7 @@ namespace NKikimr::NHttpProxy {
                     auto queueUrl = QueueUrlExtractor(Request);
                     if (!queueUrl.empty()) {
                         auto cloudIdAndResourceId = NKikimr::NYmq::CloudIdAndResourceIdFromQueueUrl(queueUrl);
-                        if (cloudIdAndResourceId.first.Empty()) {
+                        if (cloudIdAndResourceId.first.empty()) {
                             return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Invalid queue url");
                         }
                         CloudId = cloudIdAndResourceId.first;

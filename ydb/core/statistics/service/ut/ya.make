@@ -2,6 +2,8 @@ UNITTEST_FOR(ydb/core/statistics/service)
 
 FORK_SUBTESTS()
 
+SPLIT_FACTOR(60)
+
 IF (WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)

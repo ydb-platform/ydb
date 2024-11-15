@@ -4,7 +4,7 @@ import os
 import re
 import pytest
 import yatest.common
-import ydb.library.yql.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
+import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
 
 from common_test_tools import ASTDIFF_PATH, DATA_PATH, get_program_cfg, get_supported_providers, cut_unstable, get_program
 from yql_utils import is_xfail, is_skip_forceblocks, get_param, get_tables, get_files, KSV_ATTR, execute, yql_binary_path, \

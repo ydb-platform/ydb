@@ -1,9 +1,9 @@
 #include "res_or_pull.h"
 
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/utils/yql_panic.h>
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 
 #include <util/stream/holder.h>
 #include <util/stream/str.h>

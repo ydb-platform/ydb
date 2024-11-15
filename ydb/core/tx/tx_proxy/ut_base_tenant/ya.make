@@ -17,7 +17,7 @@ PEERDIR(
     library/cpp/testing/unittest
     ydb/core/testlib/default
     ydb/core/tx
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 YQL_LAST_ABI_VERSION()

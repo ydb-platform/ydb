@@ -402,8 +402,8 @@ IF (CLANG AND NOT WITH_VALGRIND)
         contrib/libs/apache/orc
         contrib/libs/apache/avro
         library/cpp/sanitizer/include
-        ydb/library/yql/minikql/dom
-        ydb/library/yql/utils
+        yql/essentials/minikql/dom
+        yql/essentials/utils
     )
 
     ADDINCL(

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/core/file_storage/file_storage.h>
-#include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/core/file_storage/file_storage.h>
+#include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/string.h>

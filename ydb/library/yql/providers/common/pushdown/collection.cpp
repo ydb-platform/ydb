@@ -1,7 +1,7 @@
 #include "collection.h"
 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <vector>
 
@@ -360,6 +360,9 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
     } else if (const auto op = node.Maybe<TCoUnaryArithmetic>(); op && settings.IsEnabled(TSettings::EFeatureFlag::UnaryOperators)) {
         return CheckExpressionNodeForPushdown(op.Cast().Arg(), lambdaArg, settings);
     } else if (const auto op = node.Maybe<TCoBinaryArithmetic>(); op && settings.IsEnabled(TSettings::EFeatureFlag::ArithmeticalExpressions)) {
+        if (!settings.IsEnabled(TSettings::EFeatureFlag::DivisionExpressions) && (op.Maybe<TCoDiv>() || op.Maybe<TCoMod>())) {
+            return false;
+        }
         return CheckExpressionNodeForPushdown(op.Cast().Left(), lambdaArg, settings) && CheckExpressionNodeForPushdown(op.Cast().Right(), lambdaArg, settings);
     }
     return false;

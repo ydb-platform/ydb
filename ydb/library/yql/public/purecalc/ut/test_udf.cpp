@@ -3,8 +3,8 @@
 #include <ydb/library/yql/public/purecalc/purecalc.h>
 #include <ydb/library/yql/public/purecalc/io_specs/protobuf/spec.h>
 #include <ydb/library/yql/public/purecalc/ut/protos/test_structs.pb.h>
-#include <ydb/library/yql/public/udf/udf_counter.h>
-#include <ydb/library/yql/public/udf/udf_type_builder.h>
+#include <yql/essentials/public/udf/udf_counter.h>
+#include <yql/essentials/public/udf/udf_type_builder.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 class TMyModule : public NKikimr::NUdf::IUdfModule {

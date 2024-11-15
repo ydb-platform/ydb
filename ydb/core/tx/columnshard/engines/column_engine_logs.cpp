@@ -316,11 +316,13 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     std::shared_ptr<TCleanupPortionsColumnEngineChanges> changes = std::make_shared<TCleanupPortionsColumnEngineChanges>(StoragesManager);
 
     // Add all portions from dropped paths
-    ui64 txSize = 0;
-    const ui64 txSizeLimit = TGlobalLimits::TxWriteLimitBytes / 4;
+    ui64 portionsCount = 0;
+    ui64 chunksCount = 0;
     ui32 skipLocked = 0;
     ui32 portionsFromDrop = 0;
     bool limitExceeded = false;
+    const ui32 maxChunksCount = 100000;
+    const ui32 maxPortionsCount = 1000;
     for (ui64 pathId : pathsToDrop) {
         auto g = GranulesStorage->GetGranuleOptional(pathId);
         if (!g) {
@@ -335,8 +337,9 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 ++skipLocked;
                 continue;
             }
-            if (txSize + info->GetTxVolume() < txSizeLimit || changes->GetPortionsToDrop().empty()) {
-                txSize += info->GetTxVolume();
+            ++portionsCount;
+            chunksCount += info->GetApproxChunksCount(info->GetSchema(VersionedIndex)->GetColumnsCount());
+            if ((portionsCount < maxPortionsCount && chunksCount < maxChunksCount) || changes->GetPortionsToDrop().empty()) {
             } else {
                 limitExceeded = true;
                 break;
@@ -360,8 +363,9 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 continue;
             }
             AFL_VERIFY(it->second[i]->CheckForCleanup(snapshot))("p_snapshot", it->second[i]->GetRemoveSnapshotOptional())("snapshot", snapshot);
-            if (txSize + it->second[i]->GetTxVolume() < txSizeLimit || changes->GetPortionsToDrop().empty()) {
-                txSize += it->second[i]->GetTxVolume();
+            ++portionsCount;
+            chunksCount += it->second[i]->GetApproxChunksCount(it->second[i]->GetSchema(VersionedIndex)->GetColumnsCount());
+            if ((portionsCount < maxPortionsCount && chunksCount < maxChunksCount) || changes->GetPortionsToDrop().empty()) {
             } else {
                 limitExceeded = true;
                 break;
@@ -397,7 +401,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartTtl")("external", pathEviction.size());
 
     TSaverContext saverContext(StoragesManager);
-    NActualizer::TTieringProcessContext context(memoryUsageLimit, saverContext, dataLocksManager, SignalCounters, ActualizationController);
+    NActualizer::TTieringProcessContext context(memoryUsageLimit, saverContext, dataLocksManager, VersionedIndex, SignalCounters, ActualizationController);
     const TDuration actualizationLag = NYDBTest::TControllers::GetColumnShardController()->GetActualizationTasksLag();
     for (auto&& i : pathEviction) {
         auto g = GetGranuleOptional(i.first);

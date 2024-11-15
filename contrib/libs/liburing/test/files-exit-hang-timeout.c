@@ -44,13 +44,12 @@ static void add_accept(struct io_uring *ring, int fd)
 
 	sqe = io_uring_get_sqe(ring);
 	io_uring_prep_accept(sqe, fd, 0, 0, SOCK_NONBLOCK | SOCK_CLOEXEC);
-	sqe->flags |= IOSQE_IO_LINK;
 }
 
 static int setup_io_uring(void)
 {
 	int ret;
-       
+
 	ret = io_uring_queue_init(16, &ring, 0);
 	if (ret) {
 		fprintf(stderr, "Unable to setup io_uring: %s\n", strerror(-ret));

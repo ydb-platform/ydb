@@ -6,18 +6,18 @@
 #include <ydb/library/yql/providers/yt/opt/yql_yt_join.h>
 #include <ydb/library/yql/providers/yt/opt/yql_yt_key_selector.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/core/yql_aggregate_expander.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_opt_window.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_opt_match_recognize.h>
-#include <ydb/library/yql/core/yql_join.h>
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/providers/common/transform/yql_optimize.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/core/yql_aggregate_expander.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_window.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_match_recognize.h>
+#include <yql/essentials/core/yql_join.h>
+#include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 

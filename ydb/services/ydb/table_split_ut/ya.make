@@ -26,8 +26,8 @@ PEERDIR(
     ydb/core/testlib/default
     ydb/core/grpc_services/base
     ydb/core/testlib
-    ydb/library/yql/minikql/dom
-    ydb/library/yql/minikql/jsonpath
+    yql/essentials/minikql/dom
+    yql/essentials/minikql/jsonpath
     ydb/public/lib/experimental
     ydb/public/lib/json_value
     ydb/public/lib/yson_value

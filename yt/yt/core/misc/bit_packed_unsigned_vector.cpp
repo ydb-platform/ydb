@@ -1,7 +1,8 @@
 #include "bit_packed_unsigned_vector.h"
-#include "numeric_helpers.h"
 
 #include <library/cpp/yt/coding/zig_zag.h>
+
+#include <library/cpp/yt/misc/numeric_helpers.h>
 
 namespace NYT {
 

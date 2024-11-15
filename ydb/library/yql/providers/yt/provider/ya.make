@@ -69,38 +69,38 @@ PEERDIR(
     library/cpp/disjoint_sets
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface
-    ydb/library/yql/ast
-    ydb/library/yql/core/extract_predicate
-    ydb/library/yql/public/udf
-    ydb/library/yql/public/udf/tz
-    ydb/library/yql/sql
-    ydb/library/yql/utils
-    ydb/library/yql/utils/log
-    ydb/library/yql/core
-    ydb/library/yql/core/expr_nodes
-    ydb/library/yql/core/issue
-    ydb/library/yql/core/issue/protos
-    ydb/library/yql/core/peephole_opt
-    ydb/library/yql/core/type_ann
-    ydb/library/yql/core/file_storage
-    ydb/library/yql/core/url_lister/interface
-    ydb/library/yql/dq/integration
+    yql/essentials/ast
+    yql/essentials/core/extract_predicate
+    yql/essentials/public/udf
+    yql/essentials/public/udf/tz
+    yql/essentials/sql
+    yql/essentials/utils
+    yql/essentials/utils/log
+    yql/essentials/core
+    yql/essentials/core/expr_nodes
+    yql/essentials/core/issue
+    yql/essentials/core/issue/protos
+    yql/essentials/core/peephole_opt
+    yql/essentials/core/type_ann
+    yql/essentials/core/file_storage
+    yql/essentials/core/url_lister/interface
+    yql/essentials/core/dq_integration
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
-    ydb/library/yql/minikql
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/config
-    ydb/library/yql/providers/common/dq
-    ydb/library/yql/providers/common/mkql
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/providers/common/activation
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/providers/common/schema/expr
-    ydb/library/yql/providers/common/structured_token
-    ydb/library/yql/providers/common/transform
+    yql/essentials/minikql
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/config
+    yql/essentials/providers/common/dq
+    yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/proto
+    yql/essentials/providers/common/activation
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/schema/expr
+    yql/essentials/providers/common/structured_token
+    yql/essentials/providers/common/transform
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
-    ydb/library/yql/providers/result/expr_nodes
+    yql/essentials/providers/result/expr_nodes
     ydb/library/yql/providers/stat/expr_nodes
     ydb/library/yql/providers/yt/common
     ydb/library/yql/providers/yt/expr_nodes

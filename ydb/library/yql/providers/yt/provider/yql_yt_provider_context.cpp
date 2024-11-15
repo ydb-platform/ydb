@@ -1,8 +1,8 @@
 
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider_context.h>
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <util/generic/bitmap.h>
 #include <util/generic/hash_set.h>

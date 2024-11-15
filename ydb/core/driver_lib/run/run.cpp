@@ -98,6 +98,7 @@
 
 #include <ydb/services/auth/grpc_service.h>
 #include <ydb/services/cms/grpc_service.h>
+#include <ydb/services/bsconfig/grpc_service.h>
 #include <ydb/services/dynamic_config/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
 #include <ydb/services/discovery/grpc_service.h>
@@ -146,7 +147,7 @@
 #include <ydb/library/actors/util/memory_track.h>
 #include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <util/charset/wide.h>
 #include <util/folder/dirut.h>
@@ -613,6 +614,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["tablet_service"] = &hasTabletService;
         TServiceCfg hasView = services.empty();
         names["view"] = &hasView;
+        TServiceCfg hasBSConfig = services.empty();
+        names["bsconfig"] = &hasBSConfig;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -901,6 +904,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasView) {
             server.AddService(new NGRpcService::TGRpcViewService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], hasView.IsRlAllowed()));
+        }
+
+        if (hasBSConfig) {
+            server.AddService(new NGRpcService::TBSConfigGRpcService(ActorSystem.Get(), Counters, grpcRequestProxies[0]));
         }
 
         if (ModuleFactories) {

@@ -9,11 +9,11 @@
 #include <ydb/library/yql/providers/yt/lib/schema/schema.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <yt/cpp/mapreduce/interface/config.h>

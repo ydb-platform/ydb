@@ -4,9 +4,9 @@
 
 #include <ydb/library/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <util/generic/xrange.h>
 #include <util/generic/algorithm.h>

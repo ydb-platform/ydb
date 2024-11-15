@@ -9,6 +9,34 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
+    requires CConvertToWorks<T, TErrorAttributes::TValue>
+T TErrorAttributes::Get(TStringBuf key) const
+{
+    auto yson = GetYson(key);
+    try {
+        return NYT::ConvertTo<T>(yson);
+    } catch (const std::exception& ex) {
+        ThrowCannotParseAttributeException(key, ex);
+    }
+}
+
+template <class T>
+    requires CConvertToWorks<T, TErrorAttributes::TValue>
+typename TOptionalTraits<T>::TOptional TErrorAttributes::Find(TStringBuf key) const
+{
+    auto yson = FindYson(key);
+    if (!yson) {
+        return typename TOptionalTraits<T>::TOptional();
+    }
+    try {
+        return NYT::ConvertTo<T>(yson);
+    } catch (const std::exception& ex) {
+        ThrowCannotParseAttributeException(key, ex);
+    }
+}
+
+template <class T>
+    requires CConvertToWorks<T, TErrorAttributes::TValue>
 T TErrorAttributes::GetAndRemove(const TString& key)
 {
     auto result = Get<T>(key);
@@ -17,12 +45,14 @@ T TErrorAttributes::GetAndRemove(const TString& key)
 }
 
 template <class T>
+    requires CConvertToWorks<T, TErrorAttributes::TValue>
 T TErrorAttributes::Get(TStringBuf key, const T& defaultValue) const
 {
     return Find<T>(key).value_or(defaultValue);
 }
 
 template <class T>
+    requires CConvertToWorks<T, TErrorAttributes::TValue>
 T TErrorAttributes::GetAndRemove(const TString& key, const T& defaultValue)
 {
     auto result = Find<T>(key);
@@ -35,6 +65,7 @@ T TErrorAttributes::GetAndRemove(const TString& key, const T& defaultValue)
 }
 
 template <class T>
+    requires CConvertToWorks<T, TErrorAttributes::TValue>
 typename TOptionalTraits<T>::TOptional TErrorAttributes::FindAndRemove(const TString& key)
 {
     auto result = Find<T>(key);

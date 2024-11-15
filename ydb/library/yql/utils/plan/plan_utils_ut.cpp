@@ -1,7 +1,7 @@
 #include "plan_utils.h"
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

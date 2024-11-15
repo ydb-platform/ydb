@@ -9,18 +9,18 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
 #include <ydb/library/yql/providers/generic/proto/range.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/public/udf/arrow/util.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/public/udf/arrow/util.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
 namespace NYql::NDq {

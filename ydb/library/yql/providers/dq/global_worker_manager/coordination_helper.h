@@ -2,7 +2,7 @@
 
 #include <ydb/library/actors/core/actorsystem.h>
 
-#include <ydb/library/yql/providers/common/metrics/metrics_registry.h>
+#include <yql/essentials/providers/common/metrics/metrics_registry.h>
 #include <ydb/library/yql/providers/dq/global_worker_manager/service_node_resolver.h>
 #include <ydb/library/yql/providers/dq/actors/yt/resource_manager.h>
 #include <ydb/library/yql/providers/dq/config/config.pb.h>

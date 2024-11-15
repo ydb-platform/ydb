@@ -3,10 +3,10 @@
 
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <ydb/library/yql/providers/yt/opt/yql_yt_key_selector.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <util/generic/xrange.h>
 

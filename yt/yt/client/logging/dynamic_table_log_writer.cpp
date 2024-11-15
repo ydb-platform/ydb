@@ -24,10 +24,11 @@
 #include <yt/yt/core/logging/formatter.h>
 #include <yt/yt/core/logging/system_log_event_provider.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
 #include <yt/yt/core/misc/proc.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
+
+#include <library/cpp/yt/threading/atomic_object.h>
 
 #include <util/stream/length.h>
 

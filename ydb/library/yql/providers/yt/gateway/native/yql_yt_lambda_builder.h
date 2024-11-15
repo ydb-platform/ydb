@@ -2,8 +2,8 @@
 
 #include <ydb/library/yql/providers/yt/lib/lambda_builder/lambda_builder.h>
 #include <ydb/library/yql/providers/yt/codec/yt_codec_io.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/yt/gateway/lib/user_files.h>
 
 namespace NKikimr::NMiniKQL {

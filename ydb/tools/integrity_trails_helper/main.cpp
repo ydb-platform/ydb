@@ -3,12 +3,12 @@
 #include <util/string/cast.h>
 #include <fstream>
 #include <sstream>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #define USE_CURRENT_UDF_ABI_VERSION true
 #include <ydb/core/tx/datashard/datashard_integrity_trails.h>
-#include <ydb/library/dynumber/dynumber.h>
-#include <ydb/library/yql/core/sql_types/simple_types.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
+#include <yql/essentials/core/sql_types/simple_types.h>
 
 using namespace NKikimr;
 

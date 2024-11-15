@@ -2,7 +2,7 @@
 // basic_serial_port.hpp
 // ~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 // Copyright (c) 2008 Rep Invariant Systems, Inc. (info@repinvariant.com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -354,7 +354,7 @@ public:
   }
 
   /// Get the executor associated with the object.
-  executor_type get_executor() BOOST_ASIO_NOEXCEPT
+  const executor_type& get_executor() BOOST_ASIO_NOEXCEPT
   {
     return impl_.get_executor();
   }
@@ -928,7 +928,7 @@ private:
     {
     }
 
-    executor_type get_executor() const BOOST_ASIO_NOEXCEPT
+    const executor_type& get_executor() const BOOST_ASIO_NOEXCEPT
     {
       return self_->get_executor();
     }
@@ -961,7 +961,7 @@ private:
     {
     }
 
-    executor_type get_executor() const BOOST_ASIO_NOEXCEPT
+    const executor_type& get_executor() const BOOST_ASIO_NOEXCEPT
     {
       return self_->get_executor();
     }

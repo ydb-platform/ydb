@@ -7,9 +7,9 @@ SRCS(
 PEERDIR(
     library/cpp/yson/node
     yt/cpp/mapreduce/interface
-    ydb/library/yql/public/issue
-    ydb/library/yql/utils/log
-    ydb/library/yql/core/issue
+    yql/essentials/public/issue
+    yql/essentials/utils/log
+    yql/essentials/core/issue
 )
 
 IF(LINUX)

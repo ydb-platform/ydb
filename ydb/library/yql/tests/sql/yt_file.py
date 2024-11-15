@@ -14,7 +14,7 @@ from yqlrun import YQLRun
 from utils import get_config, get_parameters_json, DATA_PATH
 from file_common import run_file, run_file_no_cache, get_gateways_config
 
-ASTDIFF_PATH = yql_binary_path('ydb/library/yql/tools/astdiff/astdiff')
+ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 
 
 def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):

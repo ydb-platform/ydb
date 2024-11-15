@@ -3,8 +3,8 @@
 #include "dq_opt_join_hypergraph.h"
 #include "dq_opt_conflict_rules_collector.h"
 
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <memory.h>
 

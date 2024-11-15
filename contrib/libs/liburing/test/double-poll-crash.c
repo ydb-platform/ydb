@@ -115,7 +115,7 @@ static uint64_t r[4] = {0xffffffffffffffff, 0x0, 0x0, 0xffffffffffffffff};
 int main(int argc, char *argv[])
 {
   void *mmap_ret;
-#if !defined(__i386) && !defined(__x86_64__)
+#if (!defined(__i386) && !defined(__x86_64__)) || defined(CONFIG_USE_SANITIZER)
   return T_EXIT_SKIP;
 #endif
 

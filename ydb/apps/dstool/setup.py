@@ -49,7 +49,7 @@ setuptools.setup(
         'ydb/library/yql/protos',
         'ydb/library/yql/providers/common/proto',
         'ydb/library/yql/providers/s3/proto',
-        'ydb/library/yql/public/issue/protos',
+        'yql/essentials/public/issue/protos',
         'ydb/public/api/protos/annotations',
         'ydb/public/api/protos/draft',
         'ydb/public/api/protos',

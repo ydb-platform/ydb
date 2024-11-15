@@ -2,15 +2,15 @@
 
 #include "dq_opt.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_aggregate_expander.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_opt_window.h>
-#include <ydb/library/yql/core/yql_opt_match_recognize.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
-#include <ydb/library/yql/dq/integration/yql_dq_optimization.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_aggregate_expander.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_window.h>
+#include <yql/essentials/core/yql_opt_match_recognize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/dq_integration/yql_dq_optimization.h>
 
 using namespace NYql::NNodes;
 

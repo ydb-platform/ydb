@@ -1,13 +1,13 @@
 #include "spec.h"
 
 #include <ydb/library/yql/public/purecalc/common/names.h>
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
+#include <yql/essentials/minikql/computation/mkql_custom_list.h>
 #include <ydb/library/yql/providers/yt/codec/yt_codec_io.h>
 #include <ydb/library/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 
 #include <library/cpp/yson/node/node_io.h>
 

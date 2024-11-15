@@ -7,12 +7,12 @@
 #include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
 #include <ydb/library/yql/providers/stat/uploader/yql_stat_uploader.h>
 
-#include <ydb/library/yql/providers/common/gateway/yql_provider_gateway.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/core/yql_execution.h>
-#include <ydb/library/yql/core/file_storage/storage.h>
+#include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_execution.h>
+#include <yql/essentials/core/file_storage/storage.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
 

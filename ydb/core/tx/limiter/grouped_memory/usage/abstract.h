@@ -5,6 +5,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/conclusion/status.h>
 
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
@@ -95,6 +96,7 @@ class TStageFeatures {
 private:
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY(ui64, Limit, 0);
+    YDB_READONLY(ui64, HardLimit, 0);
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Usage);
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Waiting);
     std::shared_ptr<TStageFeatures> Owner;
@@ -114,15 +116,20 @@ public:
         return Usage.Val() + Waiting.Val();
     }
 
-    TStageFeatures(
-        const TString& name, const ui64 limit, const std::shared_ptr<TStageFeatures>& owner, const std::shared_ptr<TStageCounters>& counters)
+    TStageFeatures(const TString& name, const ui64 limit, const ui64 hardLimit, const std::shared_ptr<TStageFeatures>& owner,
+        const std::shared_ptr<TStageCounters>& counters)
         : Name(name)
         , Limit(limit)
+        , HardLimit(hardLimit)
         , Owner(owner)
         , Counters(counters) {
     }
 
-    void Allocate(const ui64 volume) {
+    [[nodiscard]] TConclusionStatus Allocate(const ui64 volume) {
+        if (HardLimit < Usage.Val() + volume) {
+            Counters->OnCannotAllocate();
+            return TConclusionStatus::Fail(TStringBuilder() << "limit:" << HardLimit << ";val:" << Usage.Val() << ";delta=" << volume << ";");
+        }
         Waiting.Sub(volume);
         Usage.Add(volume);
         if (Counters) {
@@ -130,8 +137,13 @@ public:
             Counters->Sub(volume, false);
         }
         if (Owner) {
-            Owner->Allocate(volume);
+            const auto ownerResult = Owner->Allocate(volume);
+            if (ownerResult.IsFail()) {
+                Free(volume, true);
+                return ownerResult;
+            }
         }
+        return TConclusionStatus::Success();
     }
 
     void Free(const ui64 volume, const bool allocated) {
@@ -199,6 +211,7 @@ private:
     YDB_READONLY(ui64, Identifier, Counter.Inc());
     YDB_READONLY(ui64, Memory, 0);
     bool Allocated = false;
+    virtual void DoOnAllocationImpossible(const TString& errorMessage) = 0;
     virtual bool DoOnAllocated(
         std::shared_ptr<TAllocationGuard>&& guard, const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) = 0;
 
@@ -214,6 +227,10 @@ public:
 
     bool IsAllocated() const {
         return Allocated;
+    }
+
+    void OnAllocationImpossible(const TString& errorMessage) {
+        DoOnAllocationImpossible(errorMessage);
     }
 
     [[nodiscard]] bool OnAllocated(

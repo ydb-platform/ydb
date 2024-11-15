@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
 #include <util/generic/string.h>
 

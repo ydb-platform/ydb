@@ -6,12 +6,12 @@ SRCS(
 
 PEERDIR(
     library/cpp/yson/node
-    ydb/library/yql/minikql/computation/llvm14
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/sql
-    ydb/library/yql/sql/pg_dummy
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/mkql
+    yql/essentials/minikql/computation/llvm14
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql
+    yql/essentials/sql/pg_dummy
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/mkql
     ydb/library/yql/providers/yt/lib/yson_helpers
     ydb/library/yql/providers/yt/codec/codegen
 )

@@ -1,7 +1,7 @@
-#include <ydb/library/yql/public/udf/udf_helpers.h>
-#include <ydb/library/yql/public/udf/udf_type_printer.h>
-#include <ydb/library/yql/utils/utf8.h>
-#include <ydb/library/yql/minikql/dom/json.h>
+#include <yql/essentials/public/udf/udf_helpers.h>
+#include <yql/essentials/public/udf/udf_type_printer.h>
+#include <yql/essentials/utils/utf8.h>
+#include <yql/essentials/minikql/dom/json.h>
 
 #include <Poco/Util/Application.h>
 

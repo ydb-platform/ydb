@@ -11,7 +11,7 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 
 #include <ydb/library/actors/core/actorid.h>
 

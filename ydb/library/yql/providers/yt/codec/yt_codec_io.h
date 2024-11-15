@@ -1,13 +1,13 @@
 #pragma once
 
 #include "yt_codec.h"
-#include <ydb/library/yql/providers/common/codec/yql_codec_buf.h>
+#include <yql/essentials/providers/common/codec/yql_codec_buf.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
 
 #ifndef MKQL_DISABLE_CODEGEN
-#include <ydb/library/yql/minikql/codegen/codegen.h>
+#include <yql/essentials/minikql/codegen/codegen.h>
 #endif
 
 #include <yt/cpp/mapreduce/interface/io.h>

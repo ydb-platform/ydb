@@ -3,16 +3,16 @@
 #include "yql_generic_mkql_compiler.h"
 #include "yql_generic_predicate_pushdown.h"
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/proto/range.pb.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>
 
 namespace NYql {

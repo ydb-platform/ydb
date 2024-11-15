@@ -3,7 +3,7 @@
 
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 #include <util/string/builder.h>
 #include <util/string/cast.h>

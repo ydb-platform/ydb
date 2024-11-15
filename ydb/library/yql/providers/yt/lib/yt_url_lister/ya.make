@@ -6,10 +6,10 @@ SRCS(
 
 PEERDIR(
     library/cpp/cgiparam
-    ydb/library/yql/core/url_lister/interface
+    yql/essentials/core/url_lister/interface
     ydb/library/yql/providers/yt/lib/init_yt_api
-    ydb/library/yql/utils/fetch
-    ydb/library/yql/utils/log
+    yql/essentials/utils/fetch
+    yql/essentials/utils/log
     yt/cpp/mapreduce/interface
 )
 

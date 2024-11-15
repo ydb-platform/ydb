@@ -47,7 +47,7 @@ private:
 
     NConcurrency::TSyncMap<TKey, TRequestQueuePtr> RequestQueues_;
 
-    TAtomicObject<TRequestQueueThrottlerConfigs> DefaultConfigs_;
+    NThreading::TAtomicObject<TRequestQueueThrottlerConfigs> DefaultConfigs_;
 
     TKeyFromRequestHeaderCallback KeyFromRequestHeader_;
     TReconfigurationCallback ReconfigurationCallback_;

@@ -172,9 +172,11 @@ private:
         ALOG_DEBUG(NKikimrServices::KQP_COMPILE_ACTOR, "Send split result"
             << ", self: " << SelfId()
             << ", owner: " << Owner
-            << (!result.Exprs.empty() ? ", split is successful" : ", split is not successful"));
+            << ", success: " << GetYdbStatus(result)
+            << ", issues: " << result.Issues().ToOneLineString());
 
         auto responseEv = MakeHolder<TEvKqp::TEvSplitResponse>(
+            GetYdbStatus(result), result.Issues(),
             QueryId, std::move(result.Exprs), std::move(result.World), std::move(result.Ctx));
         Send(Owner, responseEv.Release());
 

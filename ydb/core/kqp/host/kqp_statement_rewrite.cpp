@@ -385,6 +385,40 @@ bool NeedToSplit(
     return needToSplit;
 }
 
+bool CheckRewrite(
+        const NYql::TExprNode::TPtr& root,
+        NYql::TExprContext& exprCtx) {
+    ui64 actionsCount = 0;
+    ui64 createTableAsCount = 0;
+    VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
+        if (NYql::NNodes::TCoWrite::Match(node.Get())) {
+            if (IsCreateTableAs(node, exprCtx)) {
+                ++createTableAsCount;
+            }
+            ++actionsCount;
+        }
+        return actionsCount <= 1 && createTableAsCount <= 1;
+    });
+
+    if (createTableAsCount == 0) {
+        exprCtx.AddError(NYql::TIssue(
+            exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
+            "CTAS statement not found."));
+        return false;
+    } else if (createTableAsCount > 1) {
+        exprCtx.AddError(NYql::TIssue(
+            exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
+            "Several CTAS statement can't be used without per-statement mode."));
+        return false;
+    } else if (actionsCount > 1) {
+        exprCtx.AddError(NYql::TIssue(
+            exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
+            "CTAS statement can't be used with other statements without per-statement mode."));
+        return false;
+    }
+    return true;
+}
+
 NYql::TExprNode::TPtr PrepareRewrite(
         const NYql::TExprNode::TPtr& root,
         NYql::TExprContext& exprCtx,
@@ -393,29 +427,14 @@ NYql::TExprNode::TPtr PrepareRewrite(
         const TString& cluster) {
     // CREATE TABLE AS statement can be used only with perstatement execution.
     // Thus we assume that there is only one such statement.
-    ui64 actionsCount = 0;
     NYql::TExprNode::TPtr result = nullptr;
     VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
-        if (NYql::NNodes::TCoWrite::Match(node.Get())) {
-            if (IsCreateTableAs(node, exprCtx)) {
-                if (result) {
-                    exprCtx.AddError(NYql::TIssue(
-                        exprCtx.GetPosition(NYql::NNodes::TExprBase(node).Pos()),
-                        "Several CTAS statement can't be used without per-statement mode."));
-                } else {
-                    result = PrepareCreateTableAs(node, exprCtx, typeCtx, sessionCtx, cluster);
-                }
-            }
-            ++actionsCount;
+        if (NYql::NNodes::TCoWrite::Match(node.Get()) && IsCreateTableAs(node, exprCtx)) {
+            YQL_ENSURE(!result);
+            result = PrepareCreateTableAs(node, exprCtx, typeCtx, sessionCtx, cluster);
         }
-        return actionsCount <= 1;
+        return true;
     });
-
-    if (exprCtx.IssueManager.GetIssues().Empty() && actionsCount > 1) {
-        exprCtx.AddError(NYql::TIssue(
-            exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
-            "CTAS statement can't be used with other statements without per-statement mode."));
-    }
 
     if (!exprCtx.IssueManager.GetIssues().Empty()) {
         return nullptr;

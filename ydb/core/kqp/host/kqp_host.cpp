@@ -439,15 +439,13 @@ public:
 
     TAsyncSplitQueryResult(
         NYql::TExprNode::TPtr expr,
-        NYql::TExprContext& exprCtx,
         THolder<TExprContext> exprCtxStorage,
         TExprNode::TPtr fakeWorld,
         TIntrusivePtr<TTypeAnnotationContext> typesCtx,
         TIntrusivePtr<TKikimrSessionContext> sessionCtx,
         const TString& cluster)
-            : Expr(expr)
-            , ExprCtx(exprCtx)
-            , ExprCtxStorage(std::move(exprCtxStorage))
+            : ExprCtxStorage(std::move(exprCtxStorage))
+            , Expr(expr)
             , FakeWorld(fakeWorld)
             , TypesCtx(std::move(typesCtx))
             , SessionCtx(std::move(sessionCtx))
@@ -459,25 +457,26 @@ public:
     }
 
     TResult GetResult() override {
-        auto prepareData = PrepareRewrite(Expr, ExprCtx, *TypesCtx, SessionCtx, Cluster);
+        auto prepareData = PrepareRewrite(Expr, *ExprCtxStorage, *TypesCtx, SessionCtx, Cluster);
         if (!prepareData) {
-            return TResult{
-                .Ctx = std::move(ExprCtxStorage),
-                .Exprs = {},
-                .World = std::move(FakeWorld),
-            };
+            return ResultFromErrors<TResult>(ExprCtxStorage->IssueManager.GetIssues());
         }
 
-        auto rewriteResults = RewriteExpression(Expr, ExprCtx, SessionCtx, prepareData);
+        auto rewriteResults = RewriteExpression(Expr, *ExprCtxStorage, SessionCtx, prepareData);
+        if (rewriteResults.empty()) {
+            return ResultFromErrors<TResult>(ExprCtxStorage->IssueManager.GetIssues());
+        }
         for (const auto& resultPart : rewriteResults) {
-            YQL_CLOG(DEBUG, ProviderKqp) << "Splitted query part: " << KqpExprToPrettyString(*resultPart, ExprCtx);
+            YQL_CLOG(DEBUG, ProviderKqp) << "Splitted query part: " << KqpExprToPrettyString(*resultPart, *ExprCtxStorage);
         }
 
-        return TResult{
+        TResult result{
             .Ctx = std::move(ExprCtxStorage),
             .Exprs = std::move(rewriteResults),
             .World = std::move(FakeWorld),
         };
+        result.SetSuccess();
+        return result;
     }
 
     NThreading::TFuture<bool> Continue() override {
@@ -485,9 +484,8 @@ public:
     }
 
 private:
-    NYql::TExprNode::TPtr Expr;
-    NYql::TExprContext& ExprCtx;
     THolder<TExprContext> ExprCtxStorage;
+    NYql::TExprNode::TPtr Expr;
     TExprNode::TPtr FakeWorld;
     TIntrusivePtr<TTypeAnnotationContext> TypesCtx;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
@@ -1594,9 +1592,12 @@ private:
             return nullptr;
         }
 
+        if (!CheckRewrite(compileResult.QueryExpr, ctx)) {
+            return nullptr;
+        }
+
         return MakeIntrusive<TAsyncSplitQueryResult>(
             compileResult.QueryExpr,
-            ctx,
             std::move(ExprCtxStorage),
             std::move(FakeWorld),
             TypesCtx,

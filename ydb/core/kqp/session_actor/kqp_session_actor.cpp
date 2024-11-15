@@ -628,7 +628,7 @@ public:
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
         if (!QueryState->SaveAndCheckSplitResult(ev->Get())) {
-            ReplySplitError();
+            ReplySplitError(ev->Get());
             return;
         }
         OnSuccessSplitRequest();
@@ -1921,13 +1921,13 @@ public:
         Cleanup(IsFatalError(record->GetYdbStatus()));
     }
 
-    void ReplySplitError() {
+    void ReplySplitError(TEvKqp::TEvSplitResponse* ev) {
         QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
         auto& record = QueryResponse->Record;
 
-        record.SetYdbStatus(::Ydb::StatusIds::StatusCode::StatusIds_StatusCode_BAD_REQUEST);
+        record.SetYdbStatus(ev->Status);
         auto& response = *record.MutableResponse();
-        AddQueryIssues(response, QueryState->SplittedCtx->IssueManager.GetIssues());
+        AddQueryIssues(response, ev->Issues);
 
         auto txId = TTxId();
         if (auto ctx = Transactions.ReleaseTransaction(txId)) {

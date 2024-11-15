@@ -11,6 +11,10 @@ bool NeedToSplit(
     const NYql::TExprNode::TPtr& root,
     NYql::TExprContext& exprCtx);
 
+bool CheckRewrite(
+    const NYql::TExprNode::TPtr& root,
+    NYql::TExprContext& exprCtx);
+
 NYql::TExprNode::TPtr PrepareRewrite(
     const NYql::TExprNode::TPtr& root,
     NYql::TExprContext& exprCtx,

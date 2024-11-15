@@ -7,6 +7,7 @@
 #include "viewer_tabletinfo.h"
 #include "wb_aggregate.h"
 #include "wb_merge.h"
+#include <ydb/core/base/memory_stats.h>
 
 namespace NKikimr::NViewer {
 
@@ -786,6 +787,7 @@ public:
                 }
 
                 THashSet<TNodeId> tenantNodes;
+                NMemory::TMemoryStatsAggregator tenantMemoryStats;
 
                 for (TNodeId nodeId : tenant.GetNodeIds()) {
                     auto itNodeInfo = nodeSystemStateInfo.find(nodeId);
@@ -834,12 +836,13 @@ public:
                             tenant.SetMemoryLimit(tenant.GetMemoryLimit() + nodeInfo.GetMemoryLimit());
                         }
                         if (nodeInfo.HasMemoryStats()) {
-                            AddMemoryStats(*tenant.MutableMemoryStats(), nodeInfo.GetMemoryStats());
+                            tenantMemoryStats.Add(nodeInfo.GetMemoryStats(), nodeInfo.GetHost());
                         }
                         overall = Max(overall, GetViewerFlag(nodeInfo.GetSystemState()));
                     }
                     tenantNodes.emplace(nodeId);
                 }
+                tenant.MutableMemoryStats()->CopyFrom(tenantMemoryStats.Aggregate());
                 if (tenant.GetType() == NKikimrViewer::Serverless) {
                     tenant.SetStorageAllocatedSize(tenant.GetMetrics().GetStorage());
                     const bool noExclusiveNodes = tenantNodes.empty();
@@ -992,28 +995,6 @@ public:
         });
         yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<NKikimrViewer::TTenantInfo>());
         return yaml;
-    }
-
-private:
-    void AddMemoryStats(NKikimrMemory::TMemoryStats& left, const NKikimrMemory::TMemoryStats& right) {
-        using namespace ::google::protobuf;
-        const Descriptor& descriptor = *NKikimrMemory::TMemoryStats::GetDescriptor();
-        const Reflection& reflection = *NKikimrMemory::TMemoryStats::GetReflection();
-        int fieldCount = descriptor.field_count();
-        for (int index = 0; index < fieldCount; ++index) {
-            const FieldDescriptor* field = descriptor.field(index);
-            if (reflection.HasField(right, field)) {
-                FieldDescriptor::CppType type = field->cpp_type();
-                switch (type) {
-                    case FieldDescriptor::CPPTYPE_UINT64:
-                        reflection.SetUInt64(&left, field,
-                            reflection.GetUInt64(left, field) + reflection.GetUInt64(right, field));
-                        break;
-                    default:
-                        Y_DEBUG_ABORT_UNLESS("Unhandled field type");
-                }
-            }
-        }
     }
 };
 

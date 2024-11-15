@@ -28,6 +28,8 @@ SRCS(
     codecs.cpp
     commit_offset_actor.h
     commit_offset_actor.cpp
+    kqp_commit_offset_helper.h
+    kqp_commit_offset_helper.cpp
     events.h
     persqueue_utils.h
     persqueue_utils.cpp

@@ -22,7 +22,6 @@ target_link_libraries(core-blobstorage-groupinfo PUBLIC
   yutil
   library-actors-core
   cpp-digest-crc32c
-  library-cpp-pop_count
   ydb-core-base
   core-base-services
   core-blobstorage-crypto

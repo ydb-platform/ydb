@@ -19,7 +19,6 @@ target_link_libraries(blobsan PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-cpp-pop_count
   cpp-streams-bzip2
   ydb-core-blobstorage
   core-blobstorage-groupinfo

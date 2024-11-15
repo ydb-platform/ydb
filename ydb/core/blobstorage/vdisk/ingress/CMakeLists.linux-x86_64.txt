@@ -22,7 +22,6 @@ target_link_libraries(blobstorage-vdisk-ingress PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-lwtrace
-  library-cpp-pop_count
   ydb-core-base
   ydb-core-protos
 )

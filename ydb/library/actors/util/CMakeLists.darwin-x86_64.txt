@@ -22,7 +22,6 @@ target_link_libraries(library-actors-util PUBLIC
   yutil
   cpp-containers-absl_flat_hash
   cpp-deprecated-atomic
-  library-cpp-pop_count
 )
 
 target_sources(library-actors-util PRIVATE

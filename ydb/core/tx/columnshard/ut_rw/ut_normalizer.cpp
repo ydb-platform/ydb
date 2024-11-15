@@ -308,7 +308,15 @@ Y_UNIT_TEST_SUITE(Normalizers) {
     }
 
     Y_UNIT_TEST(CleanEmptyPortionsNormalizer) {
-        TestNormalizerImpl<TEmptyPortionsCleaner>();
+        class TLocalNormalizerChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("EmptyPortionsCleaner");
+                repair->SetDescription("Removing unsync portions");
+            }
+        };
+        TestNormalizerImpl<TEmptyPortionsCleaner>(TLocalNormalizerChecker());
     }
 
 

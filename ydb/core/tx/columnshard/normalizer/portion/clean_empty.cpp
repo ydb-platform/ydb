@@ -1,7 +1,7 @@
 #include "clean_empty.h"
 
-#include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 
 namespace NKikimr::NOlap::NSyncChunksWithPortions {
 
@@ -11,13 +11,36 @@ public:
     virtual ~IDBModifier() = default;
 };
 
+class TRemoveV0: public IDBModifier {
+private:
+    const TPortionAddress PortionAddress;
+    std::vector<TColumnChunkLoadContext> Chunks;
+    virtual void Apply(NIceDb::TNiceDb& db) override {
+        for (auto&& i : Chunks) {
+            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v0")("path_id", PortionAddress.GetPathId())(
+                "portion_id", PortionAddress.GetPortionId())("chunk", i.GetAddress().DebugString());
+            db.Table<NColumnShard::Schema::IndexColumns>()
+                .Key(0, 0, i.GetAddress().GetColumnId(), i.GetMinSnapshotDeprecated().GetPlanStep(),
+                    i.GetMinSnapshotDeprecated().GetTxId(), PortionAddress.GetPortionId(), i.GetAddress().GetChunkIdx())
+                .Delete();
+        }
+    }
+
+public:
+    TRemoveV0(const TPortionAddress& portionAddress, const std::vector<TColumnChunkLoadContext>& chunks)
+        : PortionAddress(portionAddress)
+        , Chunks(chunks) {
+    }
+};
+
 class TRemoveV1: public IDBModifier {
 private:
     const TPortionAddress PortionAddress;
     std::vector<TChunkAddress> Chunks;
     virtual void Apply(NIceDb::TNiceDb& db) override {
         for (auto&& i : Chunks) {
-            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v1")("path_id", PortionAddress.GetPathId())("portion_id", PortionAddress.GetPortionId());
+            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v1")("path_id", PortionAddress.GetPathId())(
+                "portion_id", PortionAddress.GetPortionId())("chunk", i.DebugString());
             db.Table<NColumnShard::Schema::IndexColumnsV1>()
                 .Key(PortionAddress.GetPathId(), PortionAddress.GetPortionId(), i.GetColumnId(), i.GetChunkIdx())
                 .Delete();
@@ -64,8 +87,9 @@ public:
 };
 
 namespace {
-bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, std::map<TPortionAddress, std::shared_ptr<IDBModifier>>& resultV1,
-    std::map<TPortionAddress, std::shared_ptr<IDBModifier>>& resultV2, std::map<TPortionAddress, std::shared_ptr<IDBModifier>>& portions) {
+bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, std::map<TPortionAddress, std::shared_ptr<IDBModifier>>& resultV0,
+    std::map<TPortionAddress, std::shared_ptr<IDBModifier>>& resultV1, std::map<TPortionAddress, std::shared_ptr<IDBModifier>>& resultV2,
+    std::map<TPortionAddress, std::shared_ptr<IDBModifier>>& portions, NColumnShard::TBlobGroupSelector& dsGroupSelector) {
     using namespace NColumnShard;
     NIceDb::TNiceDb db(txc.DB);
     if (!Schema::Precharge<Schema::IndexColumnsV1>(db, txc.DB.GetScheme())) {
@@ -77,7 +101,29 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
     if (!Schema::Precharge<Schema::IndexPortions>(db, txc.DB.GetScheme())) {
         return false;
     }
+    if (!Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme())) {
+        return false;
+    }
 
+    {
+        std::map<TPortionAddress, std::vector<TColumnChunkLoadContext>> usedPortions;
+        auto rowset = db.Table<Schema::IndexColumns>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            TColumnChunkLoadContext chunk(rowset, &dsGroupSelector);
+            usedPortions[chunk.GetPortionAddress()].emplace_back(chunk);
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+        std::map<TPortionAddress, std::shared_ptr<IDBModifier>> tasks;
+        for (auto&& i : usedPortions) {
+            tasks.emplace(i.first, std::make_shared<TRemoveV0>(i.first, i.second));
+        }
+        std::swap(resultV0, tasks);
+    }
     {
         std::map<TPortionAddress, std::vector<TChunkAddress>> usedPortions;
         auto rowset = db.Table<Schema::IndexColumnsV1>()
@@ -175,17 +221,25 @@ public:
     }
 };
 
-std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortionsToDelete(NTabletFlatExecutor::TTransactionContext& txc) {
+std::optional<std::vector<std::vector<std::shared_ptr<IDBModifier>>>> GetPortionsToDelete(
+    NTabletFlatExecutor::TTransactionContext& txc, NColumnShard::TBlobGroupSelector& dsGroupSelector) {
     using namespace NColumnShard;
+    std::map<TPortionAddress, std::shared_ptr<IDBModifier>> v0Portions;
     std::map<TPortionAddress, std::shared_ptr<IDBModifier>> v1Portions;
     std::map<TPortionAddress, std::shared_ptr<IDBModifier>> v2Portions;
     std::map<TPortionAddress, std::shared_ptr<IDBModifier>> portions;
-    if (!GetColumnPortionAddresses(txc, v1Portions, v2Portions, portions)) {
+    if (!GetColumnPortionAddresses(txc, v0Portions, v1Portions, v2Portions, portions, dsGroupSelector)) {
         return std::nullopt;
     }
     std::vector<TPortionAddress> pack;
     std::map<TPortionAddress, std::vector<TIterator>> iteration;
-    const ui32 SourcesCount = 3;
+    const bool v0Usage = AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage();
+    const ui32 SourcesCount = v0Usage ? 4 : 3;
+    if (v0Usage) {
+        if (v0Portions.size()) {
+            iteration[v0Portions.begin()->first].emplace_back(v0Portions);
+        }
+    }
     {
         if (v1Portions.size()) {
             iteration[v1Portions.begin()->first].emplace_back(v1Portions);
@@ -259,8 +313,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TCleanEmptyPortionsNormalizer::D
     const TNormalizationController&, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
     AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
-    AFL_VERIFY(!AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage())("config", AppDataVerified().ColumnShardConfig.DebugString());
-    auto batchesToDelete = GetPortionsToDelete(txc);
+    auto batchesToDelete = GetPortionsToDelete(txc, DsGroupSelector);
     if (!batchesToDelete) {
         return TConclusionStatus::Fail("Not ready");
     }

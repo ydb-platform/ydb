@@ -10,9 +10,13 @@ class TCleanEmptyPortionsNormalizer : public TNormalizationController::INormaliz
         return "EmptyPortionsCleaner";
     }
     static inline auto Registrator = INormalizerComponent::TFactory::TRegistrator<TCleanEmptyPortionsNormalizer>(ClassName());
+
+    NColumnShard::TBlobGroupSelector DsGroupSelector;
+
 public:
-    TCleanEmptyPortionsNormalizer(const TNormalizationController::TInitContext&)
-    {}
+    TCleanEmptyPortionsNormalizer(const TNormalizationController::TInitContext& info)
+        : DsGroupSelector(info.GetStorageInfo()) {
+    }
 
     std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
         return std::nullopt;

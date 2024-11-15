@@ -957,6 +957,10 @@ private:
     YDB_READONLY(TSnapshot, MinSnapshotDeprecated, TSnapshot::Zero());
 
 public:
+    TPortionAddress GetPortionAddress() const {
+        return TPortionAddress(PathId, PortionId);
+    }
+
     const TChunkAddress& GetAddress() const {
         return Address;
     }

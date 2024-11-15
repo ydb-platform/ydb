@@ -4,6 +4,8 @@
 #include "common_app.h"
 #include "partition_log.h"
 
+#include <ydb/library/protobuf_printer/security_printer.h>
+
 /******************************************************* MonitoringProxy *********************************************************/
 
 namespace NKikimr::NPQ {
@@ -15,20 +17,22 @@ public:
     }
 
     TMonitoringProxy(const TActorId& sender, const TString& query, const TMap<ui32, TActorId>& partitions, const TActorId& cache,
-                     const TString& topicName, ui64 tabletId, ui32 inflight)
+                     const TString& topicName, ui64 tabletId, ui32 inflight, TString&& config)
     : Sender(sender)
     , Query(query)
     , Partitions(partitions)
     , Cache(cache)
     , TotalRequests(partitions.size() + 1)
-    , TotalResponses(0)
     , TopicName(topicName)
     , TabletID(tabletId)
     , Inflight(inflight)
+    , Config(std::move(config))
+    , TotalResponses(0)
     {
         for (auto& p : Partitions) {
-            Results[p.first].push_back(Sprintf("Partition %u: NO DATA", p.first));
+            PartitionResults[p.first] = Sprintf("Partition %u: NO DATA", p.first);
         }
+        CacheResult = "Cache: NO DATA";
     }
 
     void Bootstrap(const TActorContext& ctx)
@@ -44,48 +48,47 @@ public:
 private:
 
     void Reply(const TActorContext& ctx) {
-        TStringStream str;
-        ui32 mx = 0;
-        for (auto& r: Results) mx = Max<ui32>(mx, r.second.size());
 
-        HTML(str) {
-            TAG(TH2) {str << "PersQueue Tablet";}
-            TAG(TH3) {str << "Topic: " << TopicName;}
-            TAG(TH4) {str << "inflight: " << Inflight;}
-            UL_CLASS("nav nav-tabs") {
-                LI_CLASS("active") {
-                    str << "<a href=\"#main\" data-toggle=\"tab\">main</a>";
+
+        TStringStream str;
+        HTML_APP_PAGE(str, "PersQueue Tablet " << TabletID << " (" << TopicName << ")") {
+            NAVIGATION_BAR() {
+                NAVIGATION_TAB("generic", "Generic Info");
+                NAVIGATION_TAB("cache", "Cache");
+                for (auto& [partitionId, _]: PartitionResults) {
+                    NAVIGATION_TAB("partition_" << partitionId, partitionId);
                 }
-                LI() {
-                    str << "<a href=\"#cache\" data-toggle=\"tab\">cache</a>";
-                }
-                for (auto& r: Results) {
-                    LI() {
-                        str << "<a href=\"#partition_" << r.first << "\" data-toggle=\"tab\">" << r.first << "</a>";
-                    }
-                }
-            }
-            DIV_CLASS("tab-content") {
-                DIV_CLASS_ID("tab-pane fade in active", "main") {
-                    TABLE() {
-                        for (ui32 i = 0; i < mx; ++i) {
-                            TABLER() {
-                                for (auto& r : Results) {
-                                    TABLED() {
-                                        if (r.second.size() > i)
-                                            str << r.second[i];
-                                    }
-                                }
+
+                NAVIGATION_TAB_CONTENT("generic") {
+                    LAYOUT_ROW() {
+                        LAYOUT_COLUMN() {
+                            PROPERTIES("Tablet info") {
+                                PROPERTY("Topic", TopicName);
+                                PROPERTY("Inflight", Inflight);
                             }
                         }
                     }
+
+                    LAYOUT_ROW() {
+                        LAYOUT_COLUMN() {
+                            CONFIGURATION(Config);
+                        }
+                    }
+
+                    LAYOUT_ROW() {
+                        LAYOUT_COLUMN() {
+                            str << "<a href=\"app?TabletID=" << TabletID << "&kv=1\">KV-tablet internals</a>";
+                        }
+                    }
                 }
-                for (auto& s: Str) {
-                    str << s;
+
+                str << CacheResult;
+                for (auto& [_, v] : PartitionResults) {
+                    str << v;
                 }
             }
-            TAG(TH3) {str << "<a href=\"app?TabletID=" << TabletID << "&kv=1\">KV-tablet internals</a>";}
         }
+
         PQ_LOG_D("Answer TEvRemoteHttpInfoRes: to " << Sender << " self " << ctx.SelfID);
         ctx.Send(Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         Die(ctx);
@@ -98,9 +101,11 @@ private:
     void Handle(TEvPQ::TEvMonResponse::TPtr& ev, const TActorContext& ctx)
     {
         if (ev->Get()->Partition.Defined()) {
-            Results[ev->Get()->Partition->InternalPartitionId] = ev->Get()->Res;
+            PartitionResults[ev->Get()->Partition->InternalPartitionId] = std::move(ev->Get()->Str);
+        } else {
+            CacheResult = std::move(ev->Get()->Str);
         }
-        Str.push_back(ev->Get()->Str);
+
         if(++TotalResponses == TotalRequests) {
             Reply(ctx);
         }
@@ -115,17 +120,19 @@ private:
         };
     }
 
-    TActorId Sender;
-    TString Query;
-    TMap<ui32, TVector<TString>> Results;
-    TVector<TString> Str;
-    TMap<ui32, TActorId> Partitions;
-    TActorId Cache;
-    ui32 TotalRequests;
+    const TActorId Sender;
+    const TString Query;
+    const TMap<ui32, TActorId> Partitions;
+    const TActorId Cache;
+    const ui32 TotalRequests;
+    const TString TopicName;
+    const ui64 TabletID;
+    const ui32 Inflight;
+    const TString Config;
+
+    TString CacheResult;
+    TMap<ui32, TString> PartitionResults;
     ui32 TotalResponses;
-    TString TopicName;
-    ui64 TabletID;
-    ui32 Inflight;
 };
 
 
@@ -142,7 +149,9 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     for (auto& p : Partitions) {
         res.emplace(p.first.InternalPartitionId, p.second.Actor);
     }
-    ctx.Register(new TMonitoringProxy(ev->Sender, ev->Get()->Query, res, CacheActor, TopicName, TabletID(), ResponseProxy.size()));
+
+    TString config = SecureDebugStringMultiline(Config);
+    ctx.Register(new TMonitoringProxy(ev->Sender, ev->Get()->Query, res, CacheActor, TopicName, TabletID(), ResponseProxy.size(), std::move(config)));
     return true;
 }
 

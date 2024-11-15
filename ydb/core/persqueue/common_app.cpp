@@ -13,8 +13,6 @@ THtmlPart::~THtmlPart() {
 THtmlAppPage::THtmlAppPage(IOutputStream& str, const TString& title)
     : THtmlPart(str) {
     Str << R"(
-<HTML>
-    <TITLE>)" << title << R"(</TITLE>
     <STYLE>
 .row {
   --bs-gutter-x: 1.5rem;
@@ -46,23 +44,17 @@ THtmlAppPage::THtmlAppPage(IOutputStream& str, const TString& title)
     border-width: 1px;
     border-color: darkgrey;
     padding-bottom: 10px;
+    width: 100%;
 }
 
 .tgrid {
     width: 100%;
     border: 0;
 }
-    </STYLE>
-    <BODY>
-        <H3>)" << title << R"(
-    )";
+    </STYLE>)";
 }
 
 THtmlAppPage::~THtmlAppPage() {
-    Str << R"(
-    <BODY>
-</HTML>
-    )";
 }
 
 TNavigationBar::TNavigationBar(IOutputStream& str)
@@ -107,14 +99,23 @@ TNavigationBarContent::TNavigationBarContent(TNavigationBar& navigationBar, cons
 <DIV CLASS="tab-content">
     <DIV CLASS="tab-pane fade in active container" id=")" << id << R"(">)";
     } else {
-        __stream << R"(    <DIV CLASS="tab-pane fade" id=")" << id << R"(">)";
+        __stream << R"(<DIV CLASS="tab-pane fade" id=")" << id << R"(">)";
     }
 }
 
 TNavigationBarContent::~TNavigationBarContent() {
     auto& __stream = NavigationBar.Str;
-    __stream << R"(</DIV">)";
+    __stream << R"(</DIV>)";
     NavigationBar.FirstContent = false;
+}
+
+TNavigationBarContentPart::TNavigationBarContentPart(IOutputStream& str, const TString& id)
+    : THtmlPart(str) {
+        Str << R"(<DIV CLASS="tab-pane fade" id=")" << id << R"(">)";
+}
+
+TNavigationBarContentPart::~TNavigationBarContentPart() {
+    Str << R"(</DIV>)";
 }
 
 TProperties::TProperties(IOutputStream& str, const TString& caption)
@@ -142,5 +143,20 @@ void TProperties::Add(const TString& name, const TString& value) {
         TABLED() { __stream << value; }
     }
 }
+
+TConfiguration::TConfiguration(IOutputStream& str, const TString& value)
+    : THtmlPart(str) {
+
+    auto& __stream = Str;
+    DIV() {
+        DIV() {
+            Str << "Configuration";
+        }
+        PRE() {
+            Str << value;
+        }
+    }
+}
+
 
 }

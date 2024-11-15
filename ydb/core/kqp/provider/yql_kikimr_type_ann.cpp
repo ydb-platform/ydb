@@ -1348,19 +1348,24 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     auto actualType = (type->GetKind() == ETypeAnnotationKind::Optional) ?
                         type->Cast<TOptionalExprType>()->GetItemType() : type;
 
-                    if (actualType->GetKind() != ETypeAnnotationKind::Data) {
-                        columnTypeError(typeNode.Pos(), name, "Only core YQL data types are currently supported");
+                    
+                    if (actualType->GetKind() != ETypeAnnotationKind::Data
+                        && actualType->GetKind() != ETypeAnnotationKind::Pg)
+                    {
+                        columnTypeError(typeNode.Pos(), name, "Only YQL data types and PG types are currently supported");
                         return TStatus::Error;
                     }
 
-                    auto dataType = actualType->Cast<TDataExprType>();
-
-                    if (!ValidateColumnDataType(dataType, typeNode, name, ctx)) {
-                        return IGraphTransformer::TStatus::Error;
+                    if (actualType->GetKind() == ETypeAnnotationKind::Data) {
+                        if (!ValidateColumnDataType(actualType->Cast<TDataExprType>(), typeNode, name, ctx)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    } else {
+                        // TODO: Validate pg modifiers
                     }
 
                     TKikimrColumnMetadata columnMeta;
-                    // columnMeta.Name = columnName;
+                    columnMeta.Name = name;
                     if (columnTuple.Size() > 2) {
                         const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {

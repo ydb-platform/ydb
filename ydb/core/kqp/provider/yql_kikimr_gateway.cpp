@@ -179,18 +179,20 @@ EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
 bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type& protoType, TString& error) {
     switch (typeNode->GetKind()) {
     case ETypeAnnotationKind::Pg: {
-        const auto pgTypeNode = typeNode->Cast<TPgExprType>();
-        const TString typeName = pgTypeNode->GetName();
-        const auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
+        const auto* pgTypeNode = typeNode->Cast<TPgExprType>();
+        const auto& typeId = pgTypeNode->GetId();
+        const auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(typeId);
         if (typeDesc) {
             Y_ABORT_UNLESS(!notNull, "It is not allowed to create NOT NULL pg columns");
             auto* pg = protoType.mutable_pg_type();
             pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
-            pg->set_type_modifier(NKikimr::NPg::TypeModFromPgTypeName(typeName));
             pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
             pg->set_typlen(0);
             pg->set_typmod(0);
             return true;
+        } else {
+            error = TStringBuilder() << "Unknown pg type: " << FormatType(pgTypeNode);
+            return false;
         }
     }
     case ETypeAnnotationKind::Data: {

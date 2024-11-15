@@ -653,8 +653,8 @@ void TUserActionProcessorFixture::SendProposeTransactionRequest(ui32 partition,
     auto* body = event->Record.MutableTxBody();
     auto* operation = body->MutableOperations()->Add();
     operation->SetPartitionId(partition);
-    operation->SetBegin(begin);
-    operation->SetEnd(end);
+    operation->SetCommitOffsetsBegin(begin);
+    operation->SetCommitOffsetsEnd(end);
     operation->SetConsumer(client);
     operation->SetPath(topic);
     body->SetImmediate(immediate);

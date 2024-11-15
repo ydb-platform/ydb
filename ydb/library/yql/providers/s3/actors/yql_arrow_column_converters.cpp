@@ -262,6 +262,31 @@ std::shared_ptr<arrow::Array> ArrowDate32AsYqlDate(const std::shared_ptr<arrow::
     return builder.Build(true).make_array();
 }
 
+template <bool isOptional>
+std::shared_ptr<arrow::Array> ArrowStringAsYqlDate(const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, const NDB::FormatSettings& formatSettings) {
+    ::NYql::NUdf::TFixedSizeArrayBuilder<ui32, isOptional> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
+    ::NYql::NUdf::TStringBlockReader<arrow::BinaryType, isOptional, NKikimr::NUdf::EDataSlot::String> reader;
+    for (i64 i = 0; i < value->length(); ++i) {
+        NUdf::TBlockItem item = reader.GetItem(*value->data(), i);
+
+        if constexpr (isOptional) {
+            if (!item) {
+                builder.Add(item);
+                continue;
+            }
+        } else if (!item) {
+            throw parquet::ParquetException(TStringBuilder() << "null value for date could not be represented in non-optional type");
+        }
+
+        auto ref = item.AsStringRef();
+        NDB::ReadBufferFromMemory rb{ref.Data(), ref.Size()};
+        uint16_t result = 0;
+        parseImpl<NDB::DataTypeDate>(result, rb, nullptr, formatSettings);
+        builder.Add(NUdf::TBlockItem(static_cast<ui16>(result)));
+    }
+    return builder.Build(true).make_array();
+}
+
 TColumnConverter ArrowUInt32AsYqlDatetime(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional) {
     return [targetType, isOptional](const std::shared_ptr<arrow::Array>& value) {
         return isOptional
@@ -441,6 +466,14 @@ TColumnConverter ArrowDate32AsYqlDate(const std::shared_ptr<arrow::DataType>& ta
     };
 }
 
+TColumnConverter ArrowStringAsYqlDate(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, const NDB::FormatSettings& formatSettings) {
+    return [targetType, isOptional, formatSettings](const std::shared_ptr<arrow::Array>& value) {
+        return isOptional 
+                ? ArrowStringAsYqlDate<true>(targetType, value, formatSettings)
+                : ArrowStringAsYqlDate<false>(targetType, value, formatSettings);
+    };
+}
+
 TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& originalType, const std::shared_ptr<arrow::DataType>& targetType, TType* yqlType, const NDB::FormatSettings& formatSettings) {
     // TODO: support more than 1 optional level
     bool isOptional = false;
@@ -553,6 +586,8 @@ TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& or
         case arrow::Type::STRING:
         case arrow::Type::BINARY: {
             switch (slotItem) {
+                case NUdf::EDataSlot::Date:
+                    return ArrowStringAsYqlDate(targetType, isOptional, formatSettings);
                 case NUdf::EDataSlot::Datetime:
                     return ArrowStringAsYqlDateTime(targetType, isOptional, formatSettings);
                 case NUdf::EDataSlot::Timestamp:

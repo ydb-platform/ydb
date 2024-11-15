@@ -2138,6 +2138,78 @@ Pear;15;33'''
         assert rows[0].items[0].text_value == "apple"
         assert rows[0].items[1].text_value == "2024-04-02"
 
+    @yq_all
+    def test_parquet_converters_to_date(self, kikimr, s3, client, unique_prefix):
+        # date32 -> Date
+
+        # 2024-04-02
+        data = [['apple'], [19815]]
+
+        # Define the schema for the data
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.date32())])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        filename = 'test_parquet_converters_to_date.parquet'
+        pq.write_table(table, yatest.common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "evanevannnn"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT
+                `fruit`, CAST(`ts` as String)
+            FROM
+                `{storage_connection_name}`.`/{filename}`
+            WITH (FORMAT="parquet",
+                SCHEMA=(
+                `fruit` Utf8 NOT NULL,
+                `ts` Date
+                ));
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 1, "invalid count rows"
+        assert rows[0].items[0].text_value == "apple"
+        assert rows[0].items[1].bytes_value == b"2024-04-02"
+
+        # string -> Date
+
+        # 2024-04-02
+        data = [['apple'], ['04/02/2024']]
+
+        # Define the schema for the data
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.string())])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest.common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
+
+        sql = f'''
+            SELECT
+                `fruit`, CAST(`ts` as String)
+            FROM
+                `{storage_connection_name}`.`/{filename}`
+            WITH (FORMAT="parquet",
+                `data.date.format`="%m/%d/%Y",
+                SCHEMA=(
+                `fruit` Utf8 NOT NULL,
+                `ts` Date
+                ));
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 1, "invalid count rows"
+        assert rows[0].items[0].text_value == "apple"
+        assert rows[0].items[1].bytes_value == b"2024-04-02"
+
     @yq_v2
     def test_s3_push_down_parquet(self, kikimr, s3, client, unique_prefix):
         data = [

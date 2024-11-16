@@ -52,9 +52,8 @@ def _set_results_plot(test_info: dict[str, str], suite: str, test: str, refferen
 def _set_logs_command(test_info: dict[str, str], start_time: float, end_time: float):
     hosts = []
     for node in YdbCluster.get_cluster_nodes():
-        ss = node.get('SystemState', {})
-        if 'Storage' in ss.get('Roles', []):
-            hosts.append(ss.get('Host'))
+        if node.role == YdbCluster.Node.Role.STORAGE:
+            hosts.append(node.host)
     hosts_cmd = ' '.join([f'-H {h}' for h in hosts])
     start = datetime.fromtimestamp(start_time, UTC).isoformat()
     end = datetime.fromtimestamp(end_time, UTC).isoformat()

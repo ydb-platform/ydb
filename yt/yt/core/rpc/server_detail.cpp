@@ -70,6 +70,10 @@ void TServiceContextBase::Initialize()
 
     RequestId_ = FromProto<TRequestId>(RequestHeader_->request_id());
     RealmId_ = FromProto<TRealmId>(RequestHeader_->realm_id());
+    MutationId_ = FromProto<TMutationId>(RequestHeader_->mutation_id());
+    ServiceName_ = FromProto<std::string>(RequestHeader_->service());
+    MethodName_ = FromProto<std::string>(RequestHeader_->method());
+
     AuthenticationIdentity_.User = RequestHeader_->has_user() ? RequestHeader_->user() : RootUserName;
     AuthenticationIdentity_.UserTag = RequestHeader_->has_user_tag() ? RequestHeader_->user_tag() : AuthenticationIdentity_.User;
 
@@ -394,14 +398,14 @@ TMutationId TServiceContextBase::GetMutationId() const
     return FromProto<TMutationId>(RequestHeader_->mutation_id());
 }
 
-std::string TServiceContextBase::GetService() const
+const std::string& TServiceContextBase::GetService() const
 {
-    return FromProto<std::string>(RequestHeader_->service());
+    return ServiceName_;
 }
 
-std::string TServiceContextBase::GetMethod() const
+const std::string& TServiceContextBase::GetMethod() const
 {
-    return FromProto<std::string>(RequestHeader_->method());
+    return MethodName_;
 }
 
 TRealmId TServiceContextBase::GetRealmId() const
@@ -606,12 +610,12 @@ TMutationId TServiceContextWrapper::GetMutationId() const
     return UnderlyingContext_->GetMutationId();
 }
 
-std::string TServiceContextWrapper::GetService() const
+const std::string& TServiceContextWrapper::GetService() const
 {
     return UnderlyingContext_->GetService();
 }
 
-std::string TServiceContextWrapper::GetMethod() const
+const std::string& TServiceContextWrapper::GetMethod() const
 {
     return UnderlyingContext_->GetMethod();
 }

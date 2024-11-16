@@ -292,7 +292,15 @@ Y_UNIT_TEST_SUITE(Normalizers) {
     }
 
     Y_UNIT_TEST(PortionsNormalizer) {
-        TestNormalizerImpl<TPortionsCleaner>();
+        class TLocalNormalizerChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("LeakedBlobsNormalizer");
+                repair->SetDescription("Removing leaked blobs");
+            }
+        };
+        TestNormalizerImpl<TPortionsCleaner>(TLocalNormalizerChecker());
     }
 
     Y_UNIT_TEST(SchemaVersionsNormalizer) {

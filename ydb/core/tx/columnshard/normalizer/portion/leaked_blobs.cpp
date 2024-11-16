@@ -21,8 +21,7 @@ public:
     TLeakedBlobsNormalizerChanges(THashSet<TLogoBlobID>&& leaks, const ui64 tabletId, NColumnShard::TBlobGroupSelector dsGroupSelector)
         : Leaks(std::move(leaks))
         , TabletId(tabletId)
-        , DsGroupSelector(dsGroupSelector)
-    {
+        , DsGroupSelector(dsGroupSelector) {
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /*normController*/) const override {
@@ -65,7 +64,8 @@ private:
         for (auto&& i : CSBlobIds) {
             AFL_VERIFY(BSBlobIds.erase(i))("error", "have to use broken blobs repair")("blob_id", i);
         }
-        TActorContext::AsActorContext().Send(CSActorId, std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(
+        TActorContext::AsActorContext().Send(
+            CSActorId, std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(
                            std::make_shared<TLeakedBlobsNormalizerChanges>(std::move(BSBlobIds), CSTabletId, DsGroupSelector)));
         PassAway();
     }
@@ -77,8 +77,7 @@ public:
         , CSBlobIds(std::move(csBlobIDs))
         , CSActorId(csActorId)
         , CSTabletId(csTabletId)
-        , DsGroupSelector(dsGroupSelector)
-    {
+        , DsGroupSelector(dsGroupSelector) {
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -142,11 +141,11 @@ public:
         , CSBlobIDs(std::move(csBlobIDs))
         , TabletId(tabletId)
         , ActorId(actorId)
-        , DsGroupSelector(dsGroupSelector)
-    {
+        , DsGroupSelector(dsGroupSelector) {
     }
     void Start(const TNormalizationController& /*controller*/, const TNormalizationContext& /*nCtx*/) override {
-        NActors::TActivationContext::Register(new TRemoveLeakedBlobsActor(std::move(Channels), std::move(CSBlobIDs), ActorId, TabletId, DsGroupSelector));
+        NActors::TActivationContext::Register(
+            new TRemoveLeakedBlobsActor(std::move(Channels), std::move(CSBlobIDs), ActorId, TabletId, DsGroupSelector));
     }
 };
 
@@ -155,8 +154,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     using namespace NColumnShard;
     AFL_VERIFY(AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
     NIceDb::TNiceDb db(txc.DB);
-    bool ready = true;
-    ready = ready & Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme());
+    const bool ready = Schema::Precharge<Schema::IndexPortions>(db, txc.DB.GetScheme()) &
+            Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme()) & Schema::Precharge<Schema::IndexIndexes>(db, txc.DB.GetScheme());
     if (!ready) {
         return TConclusionStatus::Fail("Not ready");
     }

@@ -1312,8 +1312,8 @@ private:
 
         NProto::TStreamingFeedbackHeader header;
         ToProto(header.mutable_request_id(), RequestId_);
-        header.set_service(ToProto<TProtoStringType>(ServiceName_));
-        header.set_method(ToProto<TProtoStringType>(MethodName_));
+        header.set_service(ToProto(ServiceName_));
+        header.set_method(ToProto(MethodName_));
         if (RealmId_) {
             ToProto(header.mutable_realm_id(), RealmId_);
         }

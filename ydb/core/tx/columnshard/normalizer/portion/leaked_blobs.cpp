@@ -52,7 +52,7 @@ private:
     THashSet<TLogoBlobID> BSBlobIds;
     TActorId CSActorId;
     ui64 CSTabletId;
-    ui32 WaitingCount = 0;
+    i32 WaitingCount = 0;
     THashSet<ui32> WaitingRequests;
     NColumnShard::TBlobGroupSelector DsGroupSelector;
 
@@ -84,12 +84,15 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         WaitingCount = 0;
 
-        for (auto it = Channels.begin(); it != Channels.end() && it->Channel < NKeyValue::BLOB_CHANNEL; ++it) {
+        for (auto it = Channels.begin(); it != Channels.end(); ++it) {
+            if (it->Channel < 2) {
+                continue;
+            }
             for (auto&& i : it->History) {
                 TLogoBlobID from(CSTabletId, 0, 0, it->Channel, 0, 0);
                 TLogoBlobID to(CSTabletId, Max<ui32>(), Max<ui32>(), it->Channel, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
                 auto request = MakeHolder<TEvBlobStorage::TEvRange>(CSTabletId, from, to, false, TInstant::Max(), true);
-                SendToBSProxy(ctx, i.GroupID, request.Release(), ++WaitingCount);
+                SendToBSProxy(SelfId(), i.GroupID, request.Release(), ++WaitingCount);
                 WaitingRequests.emplace(WaitingCount);
             }
         }
@@ -100,9 +103,11 @@ public:
 
     void Handle(TEvBlobStorage::TEvRangeResult::TPtr& ev, const TActorContext& /*ctx*/) {
         TEvBlobStorage::TEvRangeResult* msg = ev->Get();
-        AFL_VERIFY(msg->Status == NKikimrProto::OK);
+        AFL_VERIFY(msg->Status == NKikimrProto::OK)("status", msg->Status)("error", msg->ErrorReason);
+        AFL_VERIFY(--WaitingCount >= 0);
         AFL_VERIFY(WaitingRequests.erase(ev->Cookie));
         for (auto& resp : msg->Responses) {
+            AFL_VERIFY(!resp.Buffer);
             BSBlobIds.emplace(resp.Id);
         }
         CheckFinish();
@@ -112,15 +117,14 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvRangeResult, Handle);
             default:
-                break;
+                AFL_VERIFY(false);
         }
     }
 };
 
 TLeakedBlobsNormalizer::TLeakedBlobsNormalizer(const TNormalizationController::TInitContext& info)
-    : Channels(info.GetStorageInfo()->Channels)
-    , TabletId(info.GetStorageInfo()->TabletID)
-    , ActorId(info.GetActorId())
+    : TBase(info)
+    , Channels(info.GetStorageInfo()->Channels)
     , DsGroupSelector(info.GetStorageInfo()) {
 }
 
@@ -176,7 +180,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     }
 
     return std::vector<INormalizerTask::TPtr>{ std::make_shared<TRemoveLeakedBlobsTask>(
-        std::move(Channels), std::move(csBlobIDs), TabletId, ActorId, DsGroupSelector) };
+        std::move(Channels), std::move(csBlobIDs), TabletId, TabletActorId, DsGroupSelector) };
 }
 
 TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(

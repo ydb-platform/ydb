@@ -7,6 +7,8 @@
 
 namespace NKikimr::NOlap {
 class TLeakedBlobsNormalizer: public TNormalizationController::INormalizerComponent {
+private:
+    using TBase = TNormalizationController::INormalizerComponent;
 public:
     static TString GetClassNameStatic() {
         return "LeakedBlobsNormalizer";
@@ -38,8 +40,6 @@ public:
 
 private:
     TVector<TTabletChannelInfo> Channels;
-    ui64 TabletId;
-    TActorId ActorId;
     TActorId TRemoveLeakedBlobsActorId;
     NColumnShard::TBlobGroupSelector DsGroupSelector;
     THashMap<ui64, TPortionInfoConstructor> Portions;

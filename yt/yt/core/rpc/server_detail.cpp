@@ -208,12 +208,7 @@ TSharedRefArray TServiceContextBase::BuildResponseMessage()
 
     // COMPAT(danilalexeev): legacy RPC codecs.
     if (IsResponseBodySerializedWithCompression()) {
-        if (RequestHeader_->has_response_codec()) {
-            header.set_codec(ToProto(ResponseCodec_));
-        } else {
-            ResponseBody_ = PushEnvelope(ResponseBody_, ResponseCodec_);
-            ResponseAttachments_ = DecompressAttachments(ResponseAttachments_, ResponseCodec_);
-        }
+        header.set_codec(ToProto(ResponseCodec_));
     }
 
     auto message = Error_.IsOK()

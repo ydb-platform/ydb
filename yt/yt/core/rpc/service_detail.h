@@ -336,9 +336,17 @@ protected:
         const auto& underlyingContext = this->GetUnderlyingContext();
         const auto& requestHeader = underlyingContext->GetRequestHeader();
 
-        auto codecId = underlyingContext->GetResponseCodec();
-        auto serializedBody = SerializeProtoToRefWithCompression(*Response_, codecId);
-        underlyingContext->SetResponseBodySerializedWithCompression();
+        // COMPAT(danilalexeev): legacy RPC codecs.
+        NCompression::ECodec attachmentCodecId = NCompression::ECodec::None;
+        auto bodyCodecId = underlyingContext->GetResponseCodec();
+        TSharedRef serializedBody;
+        if (requestHeader.has_response_codec()) {
+            serializedBody = SerializeProtoToRefWithCompression(*Response_, bodyCodecId);
+            attachmentCodecId = bodyCodecId;
+            underlyingContext->SetResponseBodySerializedWithCompression();
+        } else {
+            serializedBody = SerializeProtoToRefWithEnvelope(*Response_, bodyCodecId);
+        }
 
         if (requestHeader.has_response_format()) {
             auto format = TryCheckedEnumCast<EMessageFormat>(requestHeader.response_format());
@@ -363,7 +371,7 @@ protected:
             }
         }
 
-        auto responseAttachments = CompressAttachments(Response_->Attachments(), codecId);
+        auto responseAttachments = CompressAttachments(Response_->Attachments(), attachmentCodecId);
 
         return TSerializedResponse{
             .Body = std::move(serializedBody),

@@ -433,10 +433,10 @@ void TCsvParser::GetValue(TString&& data, TValueBuilder& builder, const TType& t
 }
 
 TValue TCsvParser::BuildList(std::vector<TString>&& lines, const TString& filename, std::optional<ui64> row) const {
-    std::vector<THolder<TTypeParser>> columnTypeParsers;
+    std::vector<std::unique_ptr<TTypeParser>> columnTypeParsers;
     columnTypeParsers.reserve(ResultColumnCount);
     for (const TType* type : ResultLineTypesSorted) {
-        columnTypeParsers.push_back(MakeHolder<TTypeParser>(*type));
+        columnTypeParsers.push_back(std::make_unique<TTypeParser>(*type));
     }
     Ydb::Value listValue;
     auto* listItems = listValue.mutable_items();
@@ -462,10 +462,10 @@ TValue TCsvParser::BuildList(std::vector<TString>&& lines, const TString& filena
         auto typeParserIt = columnTypeParsers.begin();
         auto fieldIt = fields.begin();
         auto nameIt = ResultLineNamesSorted.begin();
-        // fields size equals columnTypeParserssize size, no need for second end check
+        // fields size equals columnTypeParsers size, no need for second end check
         for (; typeParserIt != columnTypeParsers.end(); ++typeParserIt, ++fieldIt, ++nameIt) {
             //typeParser.Reset();
-            *structItems->Add() = FieldToValue(*typeParserIt->Get(), *fieldIt, NullValue, meta, **nameIt).GetProto();
+            *structItems->Add() = FieldToValue(*typeParserIt->get(), *fieldIt, NullValue, meta, **nameIt).GetProto();
         }
         if (row.has_value()) {
             ++row.value();

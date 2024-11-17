@@ -26,6 +26,7 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     TString bcPathStr = JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName()});
 
     const TPath& bcPath = TPath::Resolve(bcPathStr, context.SS);
+    Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
     const auto& bc = context.SS->BackupCollections[bcPath->PathId];
     bool incrBackupEnabled = bc->Description.HasIncrementalBackupConfig();
 
@@ -36,10 +37,12 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.GetPath());
+        Y_ABORT_UNLESS(prefixLen <= item.GetPath().length());
         auto relativeItemPath = item.GetPath().substr(prefixLen, item.GetPath().size() - prefixLen);
         desc.SetDstPath(JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName(), tx.GetBackupBackupCollection().GetTargetDir(), relativeItemPath}));
         desc.SetOmitIndexes(true);
         desc.SetOmitFollowers(true);
+        desc.SetAllowUnderSameOperation(true);
 
         if (incrBackupEnabled) {
             NKikimrSchemeOp::TCreateCdcStream createCdcStreamOp;

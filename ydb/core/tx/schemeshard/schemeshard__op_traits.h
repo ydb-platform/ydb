@@ -310,6 +310,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCol
         const TString& targetPath = JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName()});
 
         const TPath& bcPath = TPath::Resolve(targetPath, context.SS);
+        Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
         const auto& bc = context.SS->BackupCollections[bcPath->PathId];
 
         auto& collectionPaths = paths[targetPath];
@@ -317,6 +318,7 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCol
         size_t prefixLen = tx.GetWorkingDir().size() + 1;
 
         for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+            Y_ABORT_UNLESS(prefixLen <= item.GetPath().length());
             TString itemName = item.GetPath().substr(prefixLen, item.GetPath().size() - prefixLen);
             auto pos = itemName.rfind("/");
             if (pos != std::string::npos) {

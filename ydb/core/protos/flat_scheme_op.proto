@@ -318,6 +318,7 @@ message TTableDescription {
     // on table creation to allow system column names (started with __ydb_)
     // It won't be present on describes and won't be preserved
     optional bool SystemColumnNamesAllowed = 42;
+    optional bool AllowUnderSameOperation = 44 [default = false];
 }
 
 message TDictionaryEncodingSettings {
@@ -1070,6 +1071,7 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
 
     // additionally creates cdc stream on src table consistently with taking snapshot
     optional TCreateCdcStream CreateSrcCdcStream = 6;
+    optional bool AllowUnderSameOperation = 7 [default = false];
 }
 
 message TConsistentTableCopyingConfig {

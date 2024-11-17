@@ -11377,22 +11377,43 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCopyTable(runtime, ++txId, "/MyRoot", "SystemColumnInCopyAllowed", "/MyRoot/SystemColumnAllowed");
     }
 
-    Y_UNIT_TEST(ConsistentCopyTableWithPrefix) { //+
+    Y_UNIT_TEST(BackupBackupCollection) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
-        AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
+        auto defaultCollectionSettings = []() {
+            return R"(
+                Name: "MyCollection1"
+                ExplicitEntryList {
+                    Entries {
+                        Type: ETypeTable
+                        Path: "/MyRoot/Table1"
+                    }
+                    Entries {
+                        Type: ETypeTable
+                        Path: "/MyRoot/DirA/Table2"
+                    }
+                    Entries {
+                        Type: ETypeTable
+                        Path: "/MyRoot/DirA/DirB/Table3"
+                    }
+                }
+                Cluster {}
+            )";
+        };
 
-        AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA", R"(
-              Name: "src1"
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
+        AsyncMkDir(runtime, ++txId, "/MyRoot/DirA", "DirB");
+        AsyncCreateTable(runtime, ++txId, "/MyRoot", R"(
+              Name: "Table1"
               Columns { Name: "key"   Type: "Uint64" }
               Columns { Name: "value0" Type: "Utf8" }
               KeyColumnNames: ["key"]
         )");
         AsyncCreateIndexedTable(runtime, ++txId, "/MyRoot/DirA", R"(
             TableDescription {
-              Name: "src2"
+              Name: "Table2"
               Columns { Name: "key"   Type: "Uint64" }
               Columns { Name: "value0" Type: "Utf8" }
               Columns { Name: "value1" Type: "Utf8" }
@@ -11412,49 +11433,80 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
               DataColumnNames: ["value1"]
             }
         )");
+        AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA/DirB", R"(
+              Name: "Table3"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value0" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+        )");
 
-        TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
-        TestModificationResult(runtime, txId-1, NKikimrScheme::StatusAccepted);
-        TestModificationResult(runtime, txId, NKikimrScheme::StatusAccepted);
+        TestModificationResult(runtime, txId - 4, NKikimrScheme::StatusAccepted);
+        TestModificationResult(runtime, txId - 3, NKikimrScheme::StatusAccepted);
+        TestModificationResult(runtime, txId - 2, NKikimrScheme::StatusAccepted);
+        TestModificationResult(runtime, txId - 1, NKikimrScheme::StatusAccepted);
+        TestModificationResult(runtime, txId - 0, NKikimrScheme::StatusAccepted);
 
-        env.TestWaitNotification(runtime, {txId, txId-1 , txId-2});
+        env.TestWaitNotification(runtime, {txId, txId - 1 , txId - 2, txId - 3, txId - 4});
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
-                           {NLs::PathVersionEqual(7),
-                            NLs::Finished,
-                            NLs::PathExist,
-                            NLs::PathsInsideDomain(9),
-                            NLs::ShardsInsideDomain(5),
-                            NLs::ChildrenCount(2)
-                           });
+        TestMkDir(runtime, ++txId, "/MyRoot", ".backups/collections");
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", defaultCollectionSettings());
 
-        TestConsistentCopyTables(runtime, ++txId, "/", R"(
-                       CopyTableDescriptions {
-                         SrcPath: "/MyRoot/DirA/src1"
-                         DstPath: "/MyRoot/DirA/dst1"
-                       }
-                      CopyTableDescriptions {
-                        SrcPath: "/MyRoot/DirA/src2"
-                        DstPath: "/MyRoot/DirA/dst2"
-                      })");
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot", R"(
+              Name: ".backups/collections/MyCollection1"
+        )");
+
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/dst1"),
-                                              {NLs::PathVersionEqual(3),
-                                               NLs::PathExist,
-                                               NLs::Finished});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/MyCollection1"), {
+            NLs::PathExist,
+            NLs::IsBackupCollection,
+            NLs::ChildrenCount(1),
+            NLs::Finished,
+        });
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/dst2"),
-                                              {NLs::PathVersionEqual(3),
-                                               NLs::PathExist,
-                                               NLs::Finished});
+        auto descr = DescribePath(runtime, "/MyRoot/.backups/collections/MyCollection1").GetPathDescription();
+        UNIT_ASSERT_VALUES_EQUAL(descr.GetChildren().size(), 1);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"),
-                                              {NLs::PathVersionEqual(11),
-                                               NLs::PathExist,
-                                               NLs::Finished,
-                                               NLs::PathExist,
-                                               NLs::PathsInsideDomain(17),
-                                               NLs::ShardsInsideDomain(10)});
+        auto backupDirName = descr.GetChildren(0).GetName().c_str();
+
+        TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s", backupDirName)), {
+            NLs::PathExist,
+            NLs::ChildrenCount(2),
+            NLs::Finished,
+        });
+
+        TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s/Table1", backupDirName)), {
+            NLs::PathExist,
+            NLs::IsTable,
+            NLs::Finished,
+        });
+
+        TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s/DirA", backupDirName)), {
+            NLs::PathExist,
+            NLs::ChildrenCount(2),
+            NLs::Finished,
+        });
+
+        TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s/DirA/Table2", backupDirName)), {
+            NLs::PathExist,
+            NLs::IsTable,
+            NLs::Finished,
+        });
+
+        TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s/DirA/DirB", backupDirName)), {
+            NLs::PathExist,
+            NLs::ChildrenCount(1),
+            NLs::Finished,
+        });
+
+        TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s/DirA/DirB/Table3", backupDirName)), {
+            NLs::PathExist,
+            NLs::IsTable,
+            NLs::Finished,
+        });
+
+        // TODO: validate no index created
     }
 }

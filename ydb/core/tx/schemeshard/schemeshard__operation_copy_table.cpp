@@ -404,8 +404,7 @@ public:
                         .IsCommonSensePath()
                         .IsLikeDirectory();
 
-                    // implicitly consider as part of consistent operation if we have peer op
-                    if (!Transaction.HasCreateCdcStream()) {
+                    if (!Transaction.GetCreateTable().GetAllowUnderSameOperation()) {
                         checks.NotUnderOperation();
                     }
                 }
@@ -781,8 +780,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             .IsTable()
             .IsCommonSensePath(); //forbid copy impl index tables directly
 
-        // implicitly consider as part of consistent operation if we have peer op
-        if (!cdcPeerOp) {
+        if (!copying.GetAllowUnderSameOperation()) {
             checks.NotUnderOperation();
         }
 

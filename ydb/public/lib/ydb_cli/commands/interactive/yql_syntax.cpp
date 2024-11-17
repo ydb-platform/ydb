@@ -5,8 +5,8 @@
 
 namespace NYdb {
     namespace NConsoleClient {
-        using NSQLTranslation::TTranslationSettings;
         using NSQLTranslation::ParseTranslationSettings;
+        using NSQLTranslation::TTranslationSettings;
         using NYql::TIssues;
 
         // Permits invalid special comments
@@ -17,5 +17,5 @@ namespace NYdb {
             return settings.AnsiLexer;
         }
 
-    }
-}
+    } // namespace NConsoleClient
+} // namespace NYdb

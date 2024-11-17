@@ -6,4 +6,4 @@ using namespace NYdb::NConsoleClient;
 
 Y_UNIT_TEST_SUITE(YqlSuggestTests) {
     // TODO: Not implemented
-}
+} // Y_UNIT_TEST_SUITE(YqlSuggestTests)

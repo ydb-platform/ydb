@@ -27,5 +27,5 @@ namespace NYdb {
             TVector<ui32> SymbolsCountBeforeLine;
         };
 
-    }
-}
+    } // namespace NConsoleClient
+} // namespace NYdb

@@ -464,7 +464,7 @@ TValue TCsvParser::BuildList(std::vector<TString>&& lines, const TString& filena
         auto nameIt = ResultLineNamesSorted.begin();
         // fields size equals columnTypeParsers size, no need for second end check
         for (; typeParserIt != columnTypeParsers.end(); ++typeParserIt, ++fieldIt, ++nameIt) {
-            //typeParser.Reset();
+            typeParser.Reset();
             *structItems->Add() = FieldToValue(*typeParserIt->get(), *fieldIt, NullValue, meta, **nameIt).GetProto();
         }
         if (row.has_value()) {

@@ -464,6 +464,10 @@ void TTypeParser::CloseTagged() {
     Impl_->Close<ETypeKind::Tagged>();
 }
 
+void TTypeParser::Reset() {
+    Impl_->Reset();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void FormatTypeInternal(TTypeParser& parser, IOutputStream& out) {

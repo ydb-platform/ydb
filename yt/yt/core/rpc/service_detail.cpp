@@ -22,7 +22,7 @@
 
 #include <yt/yt/core/logging/log_manager.h>
 
-#include <yt/yt/core/misc/crash_handler.h>
+#include <yt/yt/core/misc/codicil.h>
 #include <yt/yt/core/misc/finally.h>
 
 #include <yt/yt/core/net/address.h>
@@ -991,11 +991,20 @@ private:
 
         {
             const auto& authenticationIdentity = GetAuthenticationIdentity();
-            TCodicilGuard codicilGuard(Format("RequestId: %v, Method: %v.%v, AuthenticationIdentity: %v",
-                GetRequestId(),
-                GetService(),
-                GetMethod(),
-                authenticationIdentity));
+            TCodicilGuard codicilGuard([&] (TCodicilFormatter* formatter) {
+                formatter->AppendString("RequestId: ");
+                formatter->AppendGuid(RequestId_);
+                formatter->AppendString(", Service: ");
+                formatter->AppendString(GetService());
+                formatter->AppendString(", Method: ");
+                formatter->AppendString(GetMethod());
+                formatter->AppendString(", User: ");
+                formatter->AppendString(authenticationIdentity.User);
+                if (!authenticationIdentity.UserTag.empty() && authenticationIdentity.UserTag != authenticationIdentity.User) {
+                    formatter->AppendString(", UserTag: ");
+                    formatter->AppendString(authenticationIdentity.UserTag);
+                }
+            });
             TCurrentAuthenticationIdentityGuard identityGuard(&authenticationIdentity);
             handler(this, descriptor.Options);
         }

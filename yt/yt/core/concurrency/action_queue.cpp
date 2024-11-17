@@ -11,7 +11,6 @@
 
 #include <yt/yt/core/ypath/token.h>
 
-#include <yt/yt/core/misc/crash_handler.h>
 #include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/shutdown.h>
 
@@ -712,43 +711,6 @@ private:
 ISuspendableInvokerPtr CreateSuspendableInvoker(IInvokerPtr underlyingInvoker)
 {
     return New<TSuspendableInvoker>(std::move(underlyingInvoker));
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TCodicilGuardedInvoker
-    : public TInvokerWrapper<false>
-{
-public:
-    TCodicilGuardedInvoker(IInvokerPtr invoker, TString codicil)
-        : TInvokerWrapper(std::move(invoker))
-        , Codicil_(std::move(codicil))
-    { }
-
-    using TInvokerWrapper::Invoke;
-
-    void Invoke(TClosure callback) override
-    {
-        UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE(
-            &TCodicilGuardedInvoker::RunCallback,
-            MakeStrong(this),
-            Passed(std::move(callback))));
-    }
-
-private:
-    const TString Codicil_;
-
-    void RunCallback(TClosure callback)
-    {
-        TCurrentInvokerGuard currentInvokerGuard(this);
-        TCodicilGuard codicilGuard(Codicil_);
-        callback();
-    }
-};
-
-IInvokerPtr CreateCodicilGuardedInvoker(IInvokerPtr underlyingInvoker, TString codicil)
-{
-    return New<TCodicilGuardedInvoker>(std::move(underlyingInvoker), std::move(codicil));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

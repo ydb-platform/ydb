@@ -1,0 +1,1 @@
+/home/vityaman/.ya/build/symres/530e36a1c7f29567a819b3749f8852d8/Schema.fbs.cpp

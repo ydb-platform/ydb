@@ -1,0 +1,1 @@
+/home/vityaman/.ya/build/symres/c3e257f6c64417ca72d8b8dd4307c722/build_info.cpp

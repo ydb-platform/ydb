@@ -6,6 +6,7 @@ SRCS(
     yql_highlight.cpp
     yql_position.cpp
     yql_suggest.cpp
+    yql_syntax.cpp
 )
 
 PEERDIR(

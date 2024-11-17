@@ -1,0 +1,1 @@
+/home/vityaman/.ya/build/symres/cf9ef4e548a9cba94dc5111f017b7bc5/all_system_3.cpp

@@ -1,0 +1,1 @@
+/home/vityaman/.ya/build/symres/e7e68434d773212d7bef8d7dea9309af/common.inc

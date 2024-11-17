@@ -1,0 +1,1 @@
+/home/vityaman/.ya/build/symres/befe566ed2fbb7b40376c061bab73ea5/buildinfo_data.h

@@ -1,0 +1,1 @@
+/home/vityaman/.ya/build/symres/dadf51a4c93b21b7e1a83d1a4c3bb528/persqueue_common.pb.h_serialized.cpp

@@ -1,0 +1,1 @@
+/home/vityaman/.ya/build/symres/92a7143403fb52999f260b8e456920ea/stack_common.h_serialized.cpp

@@ -1,5 +1,7 @@
 #include "yql_highlight.h"
 
+#include "yql_syntax.h"
+
 #include <ydb/public/lib/ydb_cli/commands/interactive/yql_position.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -16,9 +18,7 @@
 
 namespace NYdb {
     namespace NConsoleClient {
-        using NSQLTranslation::ParseTranslationSettings;
         using NSQLTranslation::SQL_MAX_PARSER_ERRORS;
-        using NSQLTranslation::TTranslationSettings;
         using NSQLTranslationV1::IsProbablyKeyword;
         using NSQLTranslationV1::MakeLexer;
         using NYql::TIssues;
@@ -82,14 +82,6 @@ namespace NYdb {
             "string|timestamp|tzdate|tzdatetime|tztimestamp|uint16|uint32|uint64|uint8|utf8|uuid|yson|"
             "text|bytes"
             ")$");
-
-        // Permits invalid special comments
-        bool IsAnsiQuery(const TString& queryUtf8) {
-            TTranslationSettings settings;
-            TIssues issues;
-            ParseTranslationSettings(queryUtf8, settings, issues);
-            return settings.AnsiLexer;
-        }
 
         YQLHighlight::ColorSchema YQLHighlight::ColorSchema::Monaco() {
             using replxx::color::rgb666;

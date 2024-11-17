@@ -1,0 +1,1 @@
+/home/vityaman/.ya/build/symres/5bc4636839ad28a54edfc8c7c6e643c6/table_enum.h_serialized.cpp

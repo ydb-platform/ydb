@@ -1,0 +1,1 @@
+/home/vityaman/.ya/build/symres/ef4971a69162bc16e933dd3e68de4cab/ydb_persqueue_cluster_discovery.pb.h_serialized.cpp

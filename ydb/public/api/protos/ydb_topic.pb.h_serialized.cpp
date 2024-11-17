@@ -1,0 +1,1 @@
+/home/vityaman/.ya/build/symres/d389343555c674b86657ddefe91773ab/ydb_topic.pb.h_serialized.cpp

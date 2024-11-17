@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/public/lib/ydb_cli/commands/interactive)
 
 SRCS(
     yql_highlight_ut.cpp
+    yql_suggest_ut.cpp
 )
 
 END()

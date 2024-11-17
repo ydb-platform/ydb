@@ -318,7 +318,7 @@ TCsvParseException FormatError(const std::exception& inputError,
 }
 
 TValue FieldToValue(TTypeParser& parser,
-                    TStringBuf& token,
+                    const TStringBuf& token,
                     const std::optional<TString>& nullValue,
                     const TCsvParser::TParseMetadata& meta,
                     const TString& columnName) {
@@ -366,7 +366,7 @@ TCsvParser::TCsvParser(TVector<TString>&& header, const char delimeter, const st
 {
 }
 
-void TCsvParser::GetParams(TString&& data, TParamsBuilder& builder, const TParseMetadata& meta) const {
+void TCsvParser::BuildParams(TString&& data, TParamsBuilder& builder, const TParseMetadata& meta) const {
     NCsvFormat::CsvSplitter splitter(data, Delimeter);
     auto headerIt = Header.begin();
     do {
@@ -396,7 +396,7 @@ void TCsvParser::GetParams(TString&& data, TParamsBuilder& builder, const TParse
     }
 }
 
-void TCsvParser::GetValue(TString&& data, TValueBuilder& builder, const TType& type, const TParseMetadata& meta) const {
+void TCsvParser::BuildValue(TString&& data, TValueBuilder& builder, const TType& type, const TParseMetadata& meta) const {
     NCsvFormat::CsvSplitter splitter(data, Delimeter);
     auto headerIt = Header.cbegin();
     std::map<TString, TStringBuf> fields;

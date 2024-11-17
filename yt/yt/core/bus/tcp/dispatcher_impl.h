@@ -33,12 +33,12 @@ class TTcpDispatcher::TImpl
 public:
     static const TIntrusivePtr<TImpl>& Get();
 
-    const TBusNetworkCountersPtr& GetCounters(const TString& networkName, bool encrypted);
+    const TBusNetworkCountersPtr& GetCounters(const std::string& networkName, bool encrypted);
 
     void DisableNetworking();
     bool IsNetworkingDisabled();
 
-    const TString& GetNetworkNameForAddress(const NNet::TNetworkAddress& address);
+    const std::string& GetNetworkNameForAddress(const NNet::TNetworkAddress& address);
 
     TTosLevel GetTosLevelForBand(EMultiplexingBand band);
 
@@ -87,7 +87,7 @@ private:
         const TBusNetworkCountersPtr Counters = New<TBusNetworkCounters>();
     };
 
-    NConcurrency::TSyncMap<TString, std::array<TNetworkStatistics, 2>> NetworkStatistics_;
+    NConcurrency::TSyncMap<std::string, std::array<TNetworkStatistics, 2>> NetworkStatistics_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, PeriodicExecutorsLock_);
     NConcurrency::TPeriodicExecutorPtr ProfilingExecutor_;
@@ -96,7 +96,7 @@ private:
     std::atomic<bool> NetworkingDisabled_ = false;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareReaderWriterSpinLock, NetworksLock_);
-    std::vector<std::pair<NNet::TIP6Network, TString>> Networks_;
+    std::vector<std::pair<NNet::TIP6Network, std::string>> Networks_;
 
     struct TBandDescriptor
     {

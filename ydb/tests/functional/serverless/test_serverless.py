@@ -94,7 +94,8 @@ def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
     driver.scheme_client.make_directory(os.path.join(database, "dirA1"))
     driver.scheme_client.make_directory(os.path.join(database, "dirA1", "dirB1"))
 
-    with ydb.SessionPool(driver) as pool:
+    # with ydb.SessionPool(driver) as pool:
+    with ydb.QuerySessionPool(driver) as pool:
         def create_table(session, path):
             session.create_table(
                 path,
@@ -149,7 +150,8 @@ def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, yd
     driver.scheme_client.make_directory(os.path.join(database, "dirA1"))
     driver.scheme_client.make_directory(os.path.join(database, "dirA1", "dirB1"))
 
-    with ydb.SessionPool(driver) as pool:
+    # with ydb.SessionPool(driver) as pool:
+    with ydb.QuerySessionPool(driver) as pool:
         def create_table(session, path):
             session.create_table(
                 path,
@@ -222,7 +224,8 @@ def test_create_table_with_quotas(ydb_hostel_db, ydb_quoted_serverless_db, ydb_e
             .with_primary_key('id')
         )
 
-    with ydb.SessionPool(driver) as pool:
+    # with ydb.SessionPool(driver) as pool:
+    with ydb.QuerySessionPool(driver) as pool:
         pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA0", "table"))
 
         with pool.checkout() as session:
@@ -271,7 +274,8 @@ def test_create_table_with_alter_quotas(ydb_hostel_db, ydb_serverless_db, ydb_en
             .with_primary_key('id')
         )
 
-    with ydb.SessionPool(driver) as pool:
+    # with ydb.SessionPool(driver) as pool:
+    with ydb.QuerySessionPool(driver) as pool:
         pool.retry_operation_sync(create_table, None, os.path.join(database, "dirA0", "table"))
 
         with pool.checkout() as session:
@@ -422,7 +426,8 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         yield driver.table_client.async_bulk_upsert(path, rows, column_types)
 
     driver.scheme_client.make_directory(os.path.join(database, "dirA0"))
-    with ydb.SessionPool(driver) as pool:
+    # with ydb.SessionPool(driver) as pool:
+    with ydb.QuerySessionPool(driver) as pool:
         path = os.path.join(database, "dirA0", "table")
         pool.retry_operation_sync(create_table, None, path)
 
@@ -562,7 +567,8 @@ def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nod
     dir_path = os.path.join(database, "dir")
     driver.scheme_client.make_directory(dir_path)
 
-    with ydb.SessionPool(driver) as pool:
+    # with ydb.SessionPool(driver) as pool:
+    with ydb.QuerySessionPool(driver) as pool:
         def create_table(session, path):
             session.create_table(
                 path,

@@ -1,5 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
@@ -11377,13 +11379,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCopyTable(runtime, ++txId, "/MyRoot", "SystemColumnInCopyAllowed", "/MyRoot/SystemColumnAllowed");
     }
 
-    Y_UNIT_TEST(BackupBackupCollection) {
+    Y_UNIT_TEST_TWIN(BackupBackupCollection, WithIncremental) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;
 
         auto defaultCollectionSettings = []() {
-            return R"(
+            return TString(R"(
                 Name: "MyCollection1"
                 ExplicitEntryList {
                     Entries {
@@ -11400,7 +11402,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                     }
                 }
                 Cluster {}
-            )";
+            )") + (WithIncremental ? TString("IncrementalBackupConfig {} \n") : TString());
         };
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
@@ -11508,5 +11510,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         });
 
         // TODO: validate no index created
+        // TODO: validate no stream created
     }
 }

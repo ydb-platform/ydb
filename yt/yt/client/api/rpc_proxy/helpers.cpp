@@ -523,7 +523,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
         ? TColumnStableName(protoSchema.stable_name())
         : TColumnStableName(protoSchema.name()));
 
-    auto physicalType = CheckedEnumCast<EValueType>(protoSchema.type());
+    auto physicalType = FromProto<EValueType>(protoSchema.type());
 
     TLogicalTypePtr columnType;
     if (protoSchema.has_type_v3()) {
@@ -545,7 +545,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
                 << TErrorAttribute("type", protoSchema.type());
         }
     } else if (protoSchema.has_logical_type()) {
-        auto logicalType = CheckedEnumCast<ESimpleLogicalValueType>(protoSchema.logical_type());
+        auto logicalType = FromProto<ESimpleLogicalValueType>(protoSchema.logical_type());
         columnType = MakeLogicalType(logicalType, protoSchema.required());
         if (protoSchema.has_type() && GetPhysicalType(logicalType) != physicalType) {
             THROW_ERROR_EXCEPTION("Fields \"logical_type\" and \"type\" do not match")
@@ -565,7 +565,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
     schema->SetExpression(YT_PROTO_OPTIONAL(protoSchema, expression));
     schema->SetMaterialized(YT_PROTO_OPTIONAL(protoSchema, materialized));
     schema->SetAggregate(YT_PROTO_OPTIONAL(protoSchema, aggregate));
-    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, CheckedEnumCast<ESortOrder>));
+    schema->SetSortOrder(YT_APPLY_PROTO_OPTIONAL(protoSchema, sort_order, FromProto<ESortOrder>));
     schema->SetGroup(YT_PROTO_OPTIONAL(protoSchema, group));
     schema->SetMaxInlineHunkSize(YT_PROTO_OPTIONAL(protoSchema, max_inline_hunk_size));
 }
@@ -609,14 +609,11 @@ void ToProto(NProto::TTabletInfo* protoTabletInfo, const NTabletClient::TTabletI
 
 void FromProto(NTabletClient::TTabletInfo* tabletInfo, const NProto::TTabletInfo& protoTabletInfo)
 {
-    tabletInfo->TabletId =
-        FromProto<TTabletId>(protoTabletInfo.tablet_id());
+    tabletInfo->TabletId = FromProto<TTabletId>(protoTabletInfo.tablet_id());
     tabletInfo->MountRevision = FromProto<NHydra::TRevision>(protoTabletInfo.mount_revision());
-    tabletInfo->State = CheckedEnumCast<ETabletState>(protoTabletInfo.state());
+    tabletInfo->State = FromProto<ETabletState>(protoTabletInfo.state());
     tabletInfo->PivotKey = FromProto<NTableClient::TLegacyOwningKey>(protoTabletInfo.pivot_key());
-    if (protoTabletInfo.has_cell_id()) {
-        tabletInfo->CellId = FromProto<TTabletCellId>(protoTabletInfo.cell_id());
-    }
+    tabletInfo->CellId = FromProto<TTabletCellId>(protoTabletInfo.cell_id());
 }
 
 void ToProto(
@@ -1373,7 +1370,7 @@ void FromProto(
 
     (*manifest)->SourcePath = protoManifest.source_path();
     (*manifest)->DestinationPath = protoManifest.destination_path();
-    (*manifest)->OrderedMode = CheckedEnumCast<EOrderedTableBackupMode>(protoManifest.ordered_mode());
+    (*manifest)->OrderedMode = FromProto<EOrderedTableBackupMode>(protoManifest.ordered_mode());
 }
 
 void ToProto(
@@ -2198,10 +2195,10 @@ TTableSchemaPtr DeserializeRowsetSchema(
             columns[i].SetStableName(TColumnStableName(entry.name()));
         }
         if (entry.has_logical_type()) {
-            auto simpleLogicalType = CheckedEnumCast<NTableClient::ESimpleLogicalValueType>(entry.logical_type());
+            auto simpleLogicalType = FromProto<NTableClient::ESimpleLogicalValueType>(entry.logical_type());
             columns[i].SetLogicalType(OptionalLogicalType(SimpleLogicalType(simpleLogicalType)));
         } else if (entry.has_type()) {
-            auto simpleLogicalType = CheckedEnumCast<NTableClient::ESimpleLogicalValueType>(entry.type());
+            auto simpleLogicalType = FromProto<NTableClient::ESimpleLogicalValueType>(entry.type());
             columns[i].SetLogicalType(OptionalLogicalType(SimpleLogicalType(simpleLogicalType)));
         }
     }

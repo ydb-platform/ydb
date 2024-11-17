@@ -14,6 +14,7 @@ NO_LTO()
 SRCS(
     actions/cancelation_token.cpp
     actions/cancelable_context.cpp
+    actions/codicil_guarded_invoker.cpp
     actions/current_invoker.cpp
     actions/future.cpp
     actions/invoker_detail.cpp
@@ -118,6 +119,7 @@ SRCS(
     misc/blob_output.cpp
     misc/bloom_filter.cpp
     misc/checksum.cpp
+    misc/codicil.cpp
     misc/config.cpp
     misc/coro_pipe.cpp
     misc/crash_handler.cpp

@@ -112,7 +112,7 @@ IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(IChannelPtr channel, bool
 IChannelPtr TClient::CreateNonRetryingChannelByAddress(const std::string& address) const
 {
     return CreateCredentialsInjectingChannel(
-        Connection_->CreateChannelByAddress(TString(address)),
+        Connection_->CreateChannelByAddress(address),
         ClientOptions_);
 }
 

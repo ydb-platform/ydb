@@ -105,7 +105,7 @@ public:
         return res;
     }
 
-    ISnapshotSchema::TPtr GetLastSchema() const {
+    ISnapshotSchema::TPtr GetLastSchemaVerified() const {
         Y_ABORT_UNLESS(!Snapshots.empty());
         return Snapshots.rbegin()->second;
     }

@@ -186,7 +186,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
                 acc.AddAssembleStep(*result, *DeletionColumns, "SPEC_DELETION", EStageFeaturesIndexes::Fetching, false);
                 result->AddStep(std::make_shared<TDeletionFilter>());
             }
-            acc.AddAssembleStep(*result, columnsFetch, "LAST", EStageFeaturesIndexes::Fetching, true);
+            acc.AddAssembleStep(*result, columnsFetch, "LAST", EStageFeaturesIndexes::Fetching, !exclusiveSource);
         } else {
             return nullptr;
         }
@@ -233,7 +233,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             result->AddStep(std::make_shared<TFilterCutLimit>(GetReadMetadata()->Limit, GetReadMetadata()->IsDescSorted()));
         }
         acc.AddFetchingStep(*result, *FFColumns, EStageFeaturesIndexes::Fetching);
-        acc.AddAssembleStep(*result, *FFColumns, "LAST", EStageFeaturesIndexes::Fetching, true);
+        acc.AddAssembleStep(*result, *FFColumns, "LAST", EStageFeaturesIndexes::Fetching, !exclusiveSource);
     } else {
         result->SetBranchName("merge");
         TColumnsSet columnsFetch = *MergeColumns + *EFColumns;
@@ -267,7 +267,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             }
         }
         acc.AddFetchingStep(*result, *FFColumns, EStageFeaturesIndexes::Fetching);
-        acc.AddAssembleStep(*result, *FFColumns, "LAST", EStageFeaturesIndexes::Fetching, true);
+        acc.AddAssembleStep(*result, *FFColumns, "LAST", EStageFeaturesIndexes::Fetching, !exclusiveSource);
     }
     return result;
 }

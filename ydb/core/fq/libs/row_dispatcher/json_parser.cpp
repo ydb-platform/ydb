@@ -20,7 +20,7 @@ namespace {
 TString LogPrefix = "JsonParser: ";
 
 constexpr ui64 DEFAULT_BATCH_SIZE = 1_MB;
-constexpr ui64 DEFAULT_STATIC_BUFFER_SIZE = 1000000;
+constexpr ui64 DEFAULT_BUFFER_CELL_COUNT = 1000000;
 
 struct TJsonParserBuffer {
     size_t NumberValues = 0;
@@ -269,11 +269,11 @@ namespace NFq {
 
 class TJsonParser::TImpl {
 public:
-    TImpl(const TVector<TString>& columns, const TVector<TString>& types, TCallback parseCallback, ui64 batchSize, TDuration batchCreationTimeout, ui64 staticBufferSize)
+    TImpl(const TVector<TString>& columns, const TVector<TString>& types, TCallback parseCallback, ui64 batchSize, TDuration batchCreationTimeout, ui64 bufferCellCount)
         : Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false)
         , TypeEnv(std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc))
         , BatchSize(batchSize ? batchSize : DEFAULT_BATCH_SIZE)
-        , MaxNumberRows(((staticBufferSize ? staticBufferSize : DEFAULT_STATIC_BUFFER_SIZE) - 1) / columns.size() + 1)
+        , MaxNumberRows(((bufferCellCount ? bufferCellCount : DEFAULT_BUFFER_CELL_COUNT) - 1) / columns.size() + 1)
         , BatchCreationTimeout(batchCreationTimeout)
         , ParseCallback(parseCallback)
         , ParsedValues(columns.size())
@@ -444,8 +444,8 @@ private:
     TVector<TVector<NYql::NUdf::TUnboxedValue>> ParsedValues;
 };
 
-TJsonParser::TJsonParser(const TVector<TString>& columns, const TVector<TString>& types, TCallback parseCallback, ui64 batchSize, TDuration batchCreationTimeout, ui64 staticBufferSize)
-    : Impl(std::make_unique<TJsonParser::TImpl>(columns, types, parseCallback, batchSize, batchCreationTimeout, staticBufferSize))
+TJsonParser::TJsonParser(const TVector<TString>& columns, const TVector<TString>& types, TCallback parseCallback, ui64 batchSize, TDuration batchCreationTimeout, ui64 bufferCellCount)
+    : Impl(std::make_unique<TJsonParser::TImpl>(columns, types, parseCallback, batchSize, batchCreationTimeout, bufferCellCount))
 {}
 
 TJsonParser::~TJsonParser() {
@@ -479,8 +479,8 @@ TString TJsonParser::GetDescription() const {
     return Impl->GetDescription();
 }
 
-std::unique_ptr<TJsonParser> NewJsonParser(const TVector<TString>& columns, const TVector<TString>& types, TJsonParser::TCallback parseCallback, ui64 batchSize, TDuration batchCreationTimeout, ui64 staticBufferSize) {
-    return std::unique_ptr<TJsonParser>(new TJsonParser(columns, types, parseCallback, batchSize, batchCreationTimeout, staticBufferSize));
+std::unique_ptr<TJsonParser> NewJsonParser(const TVector<TString>& columns, const TVector<TString>& types, TJsonParser::TCallback parseCallback, ui64 batchSize, TDuration batchCreationTimeout, ui64 bufferCellCount) {
+    return std::unique_ptr<TJsonParser>(new TJsonParser(columns, types, parseCallback, batchSize, batchCreationTimeout, bufferCellCount));
 }
 
 } // namespace NFq

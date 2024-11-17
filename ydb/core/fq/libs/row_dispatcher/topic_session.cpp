@@ -870,7 +870,7 @@ void TTopicSession::UpdateParser() {
         const auto& parserConfig = Config.GetJsonParser();
         Parser = NewJsonParser(names, types, [this](ui64 rowsOffset, ui64 numberRows, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues) {
             DoFiltering(rowsOffset, numberRows, parsedValues);
-        }, parserConfig.GetBatchSizeBytes(), TDuration::MilliSeconds(parserConfig.GetBatchCreationTimeoutMs()), parserConfig.GetStaticBufferSize());
+        }, parserConfig.GetBatchSizeBytes(), TDuration::MilliSeconds(parserConfig.GetBatchCreationTimeoutMs()), parserConfig.GetBufferCellCount());
     } catch (const NYql::NPureCalc::TCompileError& e) {
         FatalError(e.GetIssues(), nullptr, true);
     }

@@ -46,8 +46,8 @@ public:
         }
     }
 
-    void MakeParser(TVector<TString> columns, TVector<TString> types, TJsonParser::TCallback callback, ui64 batchSize = 1_MB, ui64 staticBufferSize = 1000) {
-        Parser = NFq::NewJsonParser(columns, types, callback, batchSize, TDuration::Hours(1), staticBufferSize);
+    void MakeParser(TVector<TString> columns, TVector<TString> types, TJsonParser::TCallback callback, ui64 batchSize = 1_MB, ui64 bufferCellCount = 1000) {
+        Parser = NFq::NewJsonParser(columns, types, callback, batchSize, TDuration::Hours(1), bufferCellCount);
     }
 
     void MakeParser(TVector<TString> columns, TJsonParser::TCallback callback) {

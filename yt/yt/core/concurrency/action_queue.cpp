@@ -114,10 +114,15 @@ class TSerializedInvoker
     , public TInvokerProfileWrapper
 {
 public:
-    TSerializedInvoker(IInvokerPtr underlyingInvoker, const NProfiling::TTagSet& tagSet, NProfiling::IRegistryImplPtr registry)
+    TSerializedInvoker(
+        IInvokerPtr underlyingInvoker,
+        const NProfiling::TTagSet& tagSet,
+        NProfiling::IRegistryImplPtr registry)
         : TInvokerWrapper(std::move(underlyingInvoker))
         , TInvokerProfileWrapper(std::move(registry), "/serialized", tagSet)
     { }
+
+    using TInvokerWrapper::Invoke;
 
     void Invoke(TClosure callback) override
     {
@@ -174,7 +179,6 @@ private:
     private:
         TIntrusivePtr<TSerializedInvoker> Owner_;
         bool Activated_ = false;
-
     };
 
     void TrySchedule(TGuard<NThreading::TSpinLock>&& guard)
@@ -345,7 +349,12 @@ public:
 
     void Invoke(TClosure callback, i64 /*priority*/) override
     {
-        return UnderlyingInvoker_->Invoke(std::move(callback));
+        Invoke(std::move(callback));
+    }
+
+    void Invoke(TClosure callback) override
+    {
+        UnderlyingInvoker_->Invoke(std::move(callback));
     }
 };
 
@@ -378,7 +387,6 @@ public:
 private:
     const IPrioritizedInvokerPtr UnderlyingInvoker_;
     const i64 Priority_;
-
 };
 
 IInvokerPtr CreateFixedPriorityInvoker(
@@ -407,6 +415,8 @@ public:
         : TInvokerWrapper(std::move(underlyingInvoker))
         , MaxConcurrentInvocations_(maxConcurrentInvocations)
     { }
+
+    using TInvokerWrapper::Invoke;
 
     void Invoke(TClosure callback) override
     {
@@ -715,6 +725,8 @@ public:
         , Codicil_(std::move(codicil))
     { }
 
+    using TInvokerWrapper::Invoke;
+
     void Invoke(TClosure callback) override
     {
         UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE(
@@ -754,6 +766,8 @@ public:
         , Threshold_(DurationToCpuDuration(threshold))
     { }
 
+    using TInvokerWrapper::Invoke;
+
     void Invoke(TClosure callback) override
     {
         UnderlyingInvoker_->Invoke(BIND_NO_PROPAGATE(
@@ -763,8 +777,8 @@ public:
     }
 
 private:
-    NLogging::TLogger Logger;
-    TCpuDuration Threshold_;
+    const NLogging::TLogger Logger;
+    const TCpuDuration Threshold_;
 
     void RunCallback(TClosure callback)
     {

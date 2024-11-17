@@ -796,10 +796,10 @@ private:
     {
         // COMPAT(danilalexeev): legacy RPC codecs
         RequestCodec_ = RequestHeader_->has_request_codec()
-            ? CheckedEnumCast<NCompression::ECodec>(RequestHeader_->request_codec())
+            ? FromProto<NCompression::ECodec>(RequestHeader_->request_codec())
             : NCompression::ECodec::None;
         ResponseCodec_ = RequestHeader_->has_response_codec()
-            ? CheckedEnumCast<NCompression::ECodec>(RequestHeader_->response_codec())
+            ? FromProto<NCompression::ECodec>(RequestHeader_->response_codec())
             : NCompression::ECodec::None;
 
         Service_->IncrementActiveRequestCount();

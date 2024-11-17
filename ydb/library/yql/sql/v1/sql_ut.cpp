@@ -384,6 +384,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
     }
 
+    Y_UNIT_TEST(ExplainQueryPlan) {
+        UNIT_ASSERT(SqlToYql("EXPLAIN SELECT 1;").IsOk());
+        UNIT_ASSERT(SqlToYql("EXPLAIN QUERY PLAN SELECT 1;").IsOk());
+    }
+
     Y_UNIT_TEST(JoinParseCorrect) {
         NYql::TAstParseResult res = SqlToYql(
             "PRAGMA DisableSimpleColumns;"
@@ -3262,6 +3267,12 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
             "<main>:2:22: Warning: GROUP BY will aggregate by column `c` instead of aggregating by SELECT expression with same alias, code: 4532\n"
             "<main>:1:10: Warning: You should probably use alias in GROUP BY instead of using it here. Please consult documentation for more details, code: 4532\n"
             "<main>:1:8: Error: Column `c` must either be a key column in GROUP BY or it should be used in aggregation function\n");
+    }
+
+    Y_UNIT_TEST(ExplainQueryPlan) {
+        NYql::TAstParseResult res = SqlToYql("EXPLAIN Q U E R Y PLAN SELECT 1;");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "<main>:1:8: Error: Unexpected token 'Q' : cannot match to any predicted input");
     }
 
     Y_UNIT_TEST(SelectWithDuplicateGroupingColumns) {

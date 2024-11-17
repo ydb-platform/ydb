@@ -1733,7 +1733,6 @@ RPAREN:        ')';
 QUESTION:      '?';
 COLON:         ':';
 COMMAT:        '@';
-DOUBLE_COMMAT: '@@';
 DOLLAR:        '$';
 LBRACE_CURLY:  '{';
 RBRACE_CURLY:  '}';
@@ -1747,6 +1746,7 @@ fragment BACKSLASH:     '\\';
 fragment QUOTE_DOUBLE:  '"';
 fragment QUOTE_SINGLE:  '\'';
 fragment BACKTICK:      '`';
+fragment DOUBLE_COMMAT: '@@';
 
 // http://www.antlr.org/wiki/pages/viewpage.action?pageId=1782
 fragment A:('a'|'A');

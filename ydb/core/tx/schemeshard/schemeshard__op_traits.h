@@ -310,6 +310,22 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCol
         const TString& targetPath = JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName()});
 
         const TPath& bcPath = TPath::Resolve(targetPath, context.SS);
+        {
+            auto checks = bcPath.Check();
+            checks
+                .NotEmpty()
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotUnderDeleting()
+                .NotUnderOperation()
+                .IsBackupCollection();
+
+            if (!checks) {
+                return {};
+            }
+        }
+
         Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
         const auto& bc = context.SS->BackupCollections[bcPath->PathId];
 

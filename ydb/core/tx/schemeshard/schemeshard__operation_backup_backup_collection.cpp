@@ -15,6 +15,8 @@ TString ToX509String(const TInstant& datetime) {
 }
 
 TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
+    TVector<ISubOperation::TPtr> result;
+
     NKikimrSchemeOp::TModifyScheme modifyScheme;
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables);
     modifyScheme.SetInternal(true);
@@ -26,11 +28,26 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     TString bcPathStr = JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName()});
 
     const TPath& bcPath = TPath::Resolve(bcPathStr, context.SS);
+    {
+        auto checks = bcPath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotUnderDeleting()
+            .NotUnderOperation()
+            .IsBackupCollection();
+
+        if (!checks) {
+            result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+            return result;
+        }
+    }
+
     Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
     const auto& bc = context.SS->BackupCollections[bcPath->PathId];
     bool incrBackupEnabled = bc->Description.HasIncrementalBackupConfig();
-
-    TVector<ISubOperation::TPtr> result;
 
     size_t prefixLen = bcPath.GetDomainPathString().size() + 1;
 

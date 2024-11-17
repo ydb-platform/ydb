@@ -173,7 +173,7 @@ private:
     TString PoolTree;
     NYTree::INodePtr ResourceDelta;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

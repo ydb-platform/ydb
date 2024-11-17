@@ -1,1 +1,0 @@
-/home/vityaman/.ya/build/symres/4dbc51882c371eb10ebc15ec2051ef3e/metric_value_type.h_serialized.h

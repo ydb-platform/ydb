@@ -1,1 +1,0 @@
-/home/vityaman/.ya/build/symres/d8e07c331c8cfe2b41b5e6b008761bea/SQLv1Parser.pb.code8.cc

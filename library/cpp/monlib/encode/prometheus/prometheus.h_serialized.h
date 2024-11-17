@@ -1,1 +1,0 @@
-/home/vityaman/.ya/build/symres/15e48c4ed7b48c334cfcb1ceae434a14/prometheus.h_serialized.h

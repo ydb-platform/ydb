@@ -221,6 +221,29 @@ Pear;15;33'''
         assert result_set.rows[1].items[2].uint32_value == 1666197707
         assert result_set.rows[1].items[3].int32_value == 22
 
+    def validate_date_simple_result(self, result_set):
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 4
+        assert result_set.columns[0].name == "Fruit"
+        assert result_set.columns[0].type.type_id == ydb.Type.STRING
+        assert result_set.columns[1].name == "Price"
+        assert result_set.columns[1].type.type_id == ydb.Type.INT32
+        assert result_set.columns[2].name == "Time"
+        assert result_set.columns[2].type.type_id == ydb.Type.DATE
+        assert result_set.columns[3].name == "Weight"
+        assert result_set.columns[3].type.type_id == ydb.Type.INT32
+
+        assert len(result_set.rows) == 2
+        assert result_set.rows[0].items[0].bytes_value == b"Banana"
+        assert result_set.rows[0].items[1].int32_value == 3
+        assert result_set.rows[0].items[2].uint32_value == 19284
+        assert result_set.rows[0].items[3].int32_value == 100
+
+        assert result_set.rows[1].items[0].bytes_value == b"Apple"
+        assert result_set.rows[1].items[1].int32_value == 2
+        assert result_set.rows[1].items[2].uint32_value == 19285
+        assert result_set.rows[1].items[3].int32_value == 22
+
     def canonize_result(self, s3, s3_path, filename):
         resource = boto3.resource(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
@@ -327,6 +350,123 @@ Pear;15;33'''
             format_setting=format_setting,
         )
         return storage_binding_name
+
+    def create_source_date_binding(
+        self, unique_prefix, client, connection_id, filename, type_format, format
+    ):
+        dateType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))
+        fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
+        priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
+        weightType = ydb.Column(name="Weight", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
+
+        format_setting = {"data.date.format": format}
+        storage_binding_name = unique_prefix + "my_binding"
+        client.create_object_storage_binding(
+            name=storage_binding_name,
+            path=filename,
+            format=type_format,
+            connection_id=connection_id,
+            columns=[dateType, fruitType, priceType, weightType],
+            format_setting=format_setting,
+        )
+        return storage_binding_name
+
+    def create_sink_date_binding(
+        self, unique_prefix, client, connection_id, prefix, type_format, format
+    ):
+        dateType = ydb.Column(name="Time", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.DATE))
+        fruitType = ydb.Column(name="Fruit", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.STRING))
+        priceType = ydb.Column(name="Price", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
+        weightType = ydb.Column(name="Weight", type=ydb.Type(type_id=ydb.Type.PrimitiveTypeId.INT32))
+
+        format_setting = {"data.date.format": format}
+        storage_binding_name = unique_prefix + "insert_my_binding"
+        client.create_object_storage_binding(
+            name=storage_binding_name,
+            path=prefix,
+            format=type_format,
+            connection_id=connection_id,
+            columns=[dateType, fruitType, priceType, weightType],
+            format_setting=format_setting,
+        )
+        return storage_binding_name
+
+    @yq_all
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("date/simple/test.csv", "csv_with_names"),
+            ("date/simple/test.tsv", "tsv_with_names"),
+            ("date/simple/test.json", "json_each_row"),
+            ("date/simple/test.parquet", "parquet"),
+        ],
+    )
+    def test_date_simple(self, kikimr, s3, client, filename, type_format, unique_prefix):
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
+        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+
+        storage_source_binding_name = self.create_source_date_binding(
+            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "%m/%d/%Y"
+        )
+
+        sql = f'''
+            SELECT *
+            FROM bindings.`{storage_source_binding_name}`
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        self.validate_date_simple_result(result_set)
+
+    @yq_all
+    @pytest.mark.parametrize(
+        "filename, type_format",
+        [
+            ("date/simple/test.csv", "csv_with_names"),
+            ("date/simple/test.tsv", "tsv_with_names"),
+            ("date/simple/test.json", "json_each_row"),
+            ("date/simple/test.parquet", "parquet"),
+        ],
+    )
+    def test_date_simple_insert(self, kikimr, s3, client, filename, type_format, unique_prefix):
+        self.create_bucket_and_upload_file(filename, s3, kikimr)
+        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
+
+        storage_source_binding_name = self.create_source_date_binding(
+            unique_prefix, client, connection_response.result.connection_id, filename, type_format, "%m/%d/%Y"
+        )
+        storage_sink_binding_name = self.create_sink_date_binding(
+            unique_prefix,
+            client,
+            connection_response.result.connection_id,
+            "date/simple/" + type_format + "/",
+            type_format,
+            "%m/%d/%Y",
+        )
+
+        sql = f'''
+            INSERT INTO bindings.`{storage_sink_binding_name}`
+            SELECT Time, Fruit, Price, Weight
+            FROM bindings.`{storage_source_binding_name}`
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        sql = f'''
+            SELECT *
+            FROM bindings.`{storage_sink_binding_name}`
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        self.validate_date_simple_result(result_set)
 
     @yq_all
     @pytest.mark.parametrize(
@@ -2007,6 +2147,178 @@ Pear;15;33'''
         assert len(rows) == 1, "invalid count rows"
         assert rows[0].items[0].text_value == "apple"
         assert rows[0].items[1].text_value == "2024-04-02"
+
+    @yq_all
+    def test_parquet_converters_to_date(self, kikimr, s3, client, unique_prefix):
+        # date32 -> Date
+
+        # 2024-04-02
+        data = [['apple'], [19815]]
+
+        # Define the schema for the data
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.date32())])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        filename = 'test_parquet_converters_to_date.parquet'
+        pq.write_table(table, yatest.common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
+
+        kikimr.control_plane.wait_bootstrap(1)
+        storage_connection_name = unique_prefix + "evanevannnn"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT
+                `fruit`, CAST(`ts` as String)
+            FROM
+                `{storage_connection_name}`.`/{filename}`
+            WITH (FORMAT="parquet",
+                SCHEMA=(
+                `fruit` Utf8 NOT NULL,
+                `ts` Date
+                ));
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 1, "invalid count rows"
+        assert rows[0].items[0].text_value == "apple"
+        assert rows[0].items[1].bytes_value == b"2024-04-02"
+
+        # string -> Date
+
+        # 2024-04-02
+        data = [['apple'], ['04/02/2024']]
+
+        # Define the schema for the data
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.string())])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest.common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
+
+        format_sql = f'''
+            SELECT
+                `fruit`, CAST(`ts` as String)
+            FROM
+                `{storage_connection_name}`.`/{filename}`
+            WITH (FORMAT="parquet",
+                `data.date.format`="%m/%d/%Y",
+                SCHEMA=(
+                `fruit` Utf8 NOT NULL,
+                `ts` Date
+                ));
+            '''
+
+        query_id = client.create_query("simple", format_sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 1, "invalid count rows"
+        assert rows[0].items[0].text_value == "apple"
+        assert rows[0].items[1].bytes_value == b"2024-04-02"
+
+        # uint16 -> Date
+
+        # 2024-04-02
+        data = [['apple'], [19815]]
+
+        # Define the schema for the data
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.uint16())])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest.common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 1, "invalid count rows"
+        assert rows[0].items[0].text_value == "apple"
+        assert rows[0].items[1].bytes_value == b"2024-04-02"
+
+        # int32 -> Date
+
+        # 2024-04-02
+        data = [['apple'], [19815]]
+
+        # Define the schema for the data
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.int32())])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest.common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 1, "invalid count rows"
+        assert rows[0].items[0].text_value == "apple"
+        assert rows[0].items[1].bytes_value == b"2024-04-02"
+
+        # uint32 -> Date
+
+        # 2024-04-02
+        data = [['apple'], [19815]]
+
+        # Define the schema for the data
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.uint32())])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest.common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 1, "invalid count rows"
+        assert rows[0].items[0].text_value == "apple"
+        assert rows[0].items[1].bytes_value == b"2024-04-02"
+
+        # int64 -> Date
+
+        # 2024-04-02
+        data = [['apple'], [19815]]
+
+        # Define the schema for the data
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.int64())])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest.common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 1, "invalid count rows"
+        assert rows[0].items[0].text_value == "apple"
+        assert rows[0].items[1].bytes_value == b"2024-04-02"
+
+        # uint64 -> Date
+
+        # 2024-04-02
+        data = [['apple'], [19815]]
+
+        # Define the schema for the data
+        schema = pa.schema([('fruit', pa.string()), ('ts', pa.uint64())])
+
+        table = pa.Table.from_arrays(data, schema=schema)
+        pq.write_table(table, yatest.common.work_path(filename))
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", yatest.common.work_path())
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id, limit=50)
+        rows = data.result.result_set.rows
+        assert len(rows) == 1, "invalid count rows"
+        assert rows[0].items[0].text_value == "apple"
+        assert rows[0].items[1].bytes_value == b"2024-04-02"
 
     @yq_v2
     def test_s3_push_down_parquet(self, kikimr, s3, client, unique_prefix):

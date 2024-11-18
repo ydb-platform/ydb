@@ -1465,6 +1465,7 @@ message TRspGetTableMountInfo
     repeated TReplicaInfo replicas = 6;
     optional string physical_path = 7;
     repeated TIndexInfo indices = 8;
+    optional int32 tablet_count = 9;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

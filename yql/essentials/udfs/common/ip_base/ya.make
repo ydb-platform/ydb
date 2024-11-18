@@ -1,14 +1,3 @@
-IF (YQL_PACKAGED)
-    PACKAGE()
-
-    FROM_SANDBOX(
-        FILE 7319899828 OUT_NOAUTO libip_udf.so
-    )
-
-    END()
-
-ELSE()
-
 YQL_UDF_CONTRIB(ip_udf)
 
     YQL_ABI_VERSION(
@@ -26,8 +15,6 @@ YQL_UDF_CONTRIB(ip_udf)
     )
 
     END()
-
-ENDIF()
 
 RECURSE_FOR_TESTS(
     test

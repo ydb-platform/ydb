@@ -18,4 +18,8 @@ ELSE()
     )
 ENDIF()
 
+PEERDIR(
+    ydb/core/blobstorage/crypto/chacha_512
+)
+
 END()

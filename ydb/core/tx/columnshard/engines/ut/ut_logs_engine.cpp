@@ -38,6 +38,10 @@ private:
     std::map<TPortionAddress, std::map<TChunkAddress, TColumnChunkLoadContextV1>> LoadContexts;
 
 public:
+    virtual void WriteColumns(const NOlap::TPortionInfo& /*portion*/, const NKikimrTxColumnShard::TIndexPortionAccessor& /*proto*/) override {
+
+    }
+
     virtual const IBlobGroupSelector* GetDsGroupSelector() const override {
         return &Default<TFakeGroupSelector>();
     }

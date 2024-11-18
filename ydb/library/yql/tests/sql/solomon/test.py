@@ -84,6 +84,9 @@ def test(suite, case, cfg, solomon):
         assert yqlrun_res.execution_result.exit_code != 0
         return [normalize_source_code_path(sanitize_issues(yqlrun_res.std_err))]
 
+    with open(yqlrun_res.opt_file, 'w') as f:
+        f.write(re.sub(r"""("?_logical_id"?) '\d+""", r"""\1 '0""", yqlrun_res.opt).encode('utf-8'))
+
     return [yatest.common.canonical_file(yqlrun_res.results_file, local=True),
             yatest.common.canonical_file(yqlrun_res.opt_file, local=True, diff_tool=ASTDIFF_PATH),
             yatest.common.canonical_file(yqlrun_res.plan_file, local=True)]

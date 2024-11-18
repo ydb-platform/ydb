@@ -266,7 +266,8 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
     }
 
     std::deque<TPartitionGraph::Node*> queue;
-    for(const auto& p : partitions) {
+
+    for (const auto& p : partitions) {
         auto& node = result[GetPartitionId(p)];
 
         node.Children.reserve(p.ChildPartitionIdsSize());
@@ -284,12 +285,12 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
         }
     }
 
-    while(!queue.empty()) {
+    while (!queue.empty()) {
         auto* n = queue.front();
         queue.pop_front();
 
         bool allCompleted = true;
-        for(auto* c : n->Parents) {
+        for (auto* c : n->Parents) {
             if (c->HierarhicalParents.empty() && !c->Parents.empty()) {
                 allCompleted = false;
                 break;
@@ -297,11 +298,26 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
         }
 
         if (allCompleted) {
-            for(auto* c : n->Parents) {
+            for (auto* c : n->Parents) {
                 n->HierarhicalParents.insert(c->HierarhicalParents.begin(), c->HierarhicalParents.end());
                 n->HierarhicalParents.insert(c);
             }
             queue.insert(queue.end(), n->Children.begin(), n->Children.end());
+        }
+    }
+
+    for (auto& [_, node] : result) {
+        queue.push_back(&node);
+
+        while (!queue.empty()) {
+            auto* current = queue.front();
+            queue.pop_front();
+
+            for (auto* child : current->Children) {
+                if (node.HierarhicalChildren.insert(child).second) {
+                    queue.push_back(child);
+                }
+            }
         }
     }
 

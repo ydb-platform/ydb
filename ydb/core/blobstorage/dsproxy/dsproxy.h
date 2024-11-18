@@ -175,7 +175,6 @@ public:
         return NKikimrServices::TActivity::BS_GROUP_REQUEST;
     }
 
-    template<typename TEv>
     struct TCommonParameters {
         TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
         TIntrusivePtr<TGroupQueues> GroupQueues;
@@ -186,7 +185,7 @@ public:
         TIntrusivePtr<TStoragePoolCounters>& StoragePoolCounters;
         ui32 RestartCounter;
         NWilson::TTraceId TraceId = {};
-        TEv* Event = nullptr;
+        TDerived* Event = nullptr;
         std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay = nullptr;
 
         bool LogAccEnabled = false;
@@ -202,7 +201,7 @@ public:
 public:
     template<typename TGroupRequestParameters>
     TBlobStorageGroupRequestActor(TGroupRequestParameters& params)
-        : TActor(&TThis::InitialStateFunc, params.TypeSpecific.Activity)
+        : TActor<TDerived>(&TThis::InitialStateFunc, params.TypeSpecific.Activity)
         , Info(std::move(params.Common.GroupInfo))
         , GroupQueues(std::move(params.Common.GroupQueues))
         , Mon(std::move(params.Common.Mon))
@@ -677,8 +676,8 @@ void Decrypt(char *destination, const char *source, size_t shift, size_t sizeByt
 void DecryptInplace(TRope& rope, ui32 offset, ui32 shift, ui32 size, const TLogoBlobID& id, const TBlobStorageGroupInfo& info);
 
 struct TBlobStorageGroupRangeParameters {
-    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvRange> Common;
-    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvRange>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvRange>::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_RANGE,
         .Name = "DSProxy.Range",
         .Activity = NKikimrServices::TActivity::BS_GROUP_RANGE
@@ -688,8 +687,8 @@ struct TBlobStorageGroupRangeParameters {
 IActor* CreateBlobStorageGroupRangeRequest(TBlobStorageGroupRangeParameters params);
 
 struct TBlobStorageGroupPutParameters {
-    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvPut> Common;
-    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvPut>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvPut>::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_PUT,
         .Name = "DSProxy.Put",
         .Activity = NKikimrServices::TActivity::BS_PROXY_PUT_ACTOR,
@@ -701,8 +700,8 @@ struct TBlobStorageGroupPutParameters {
 IActor* CreateBlobStorageGroupPutRequest(TBlobStorageGroupPutParameters params);
 
 struct TBlobStorageGroupMultiPutParameters {
-    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvPut> Common;
-    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvPut>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvPut>::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_PUT,
         .Name = "DSProxy.Put",
         .Activity = NKikimrServices::TActivity::BS_PROXY_PUT_ACTOR,
@@ -726,8 +725,8 @@ struct TBlobStorageGroupMultiPutParameters {
 IActor* CreateBlobStorageGroupPutRequest(TBlobStorageGroupMultiPutParameters params);
 
 struct TBlobStorageGroupGetParameters {
-    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvGet> Common;
-    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvGet>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvGet>::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_GET,
         .Name = "DSProxy.Get",
         .Activity = NKikimrServices::TActivity::BS_PROXY_GET_ACTOR,
@@ -737,8 +736,8 @@ struct TBlobStorageGroupGetParameters {
 IActor* CreateBlobStorageGroupGetRequest(TBlobStorageGroupGetParameters params);
 
 struct TBlobStorageGroupPatchParameters {
-    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvPatch> Common;
-    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvPatch>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvPatch>::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_PATCH,
         .Name = "DSProxy.Patch",
         .Activity = NKikimrServices::TActivity::BS_PROXY_PATCH_ACTOR,
@@ -749,8 +748,8 @@ struct TBlobStorageGroupPatchParameters {
 IActor* CreateBlobStorageGroupPatchRequest(TBlobStorageGroupPatchParameters params);
 
 struct TBlobStorageGroupMultiGetParameters {
-    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvGet> Common;
-    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvGet>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvGet>::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_MULTIGET,
         .Name = "DSProxy.MultiGet",
         .Activity = NKikimrServices::TActivity::BS_PROXY_MULTIGET_ACTOR,
@@ -760,8 +759,8 @@ struct TBlobStorageGroupMultiGetParameters {
 IActor* CreateBlobStorageGroupMultiGetRequest(TBlobStorageGroupMultiGetParameters params);
 
 struct TBlobStorageGroupRestoreGetParameters {
-    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvGet> Common;
-    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvGet>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvGet>::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_INDEXRESTOREGET,
         .Name = "DSProxy.IndexRestoreGet",
         .Activity = NKikimrServices::TActivity::BS_PROXY_INDEXRESTOREGET_ACTOR,
@@ -770,8 +769,8 @@ struct TBlobStorageGroupRestoreGetParameters {
 IActor* CreateBlobStorageGroupIndexRestoreGetRequest(TBlobStorageGroupRestoreGetParameters params);
 
 struct TBlobStorageGroupDiscoverParameters {
-    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvDiscover> Common;
-    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvDiscover>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvDiscover>::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_DISCOVER,
         .Name = "DSProxy.Discover",
         .Activity = NKikimrServices::TActivity::BS_GROUP_DISCOVER,
@@ -782,8 +781,8 @@ IActor* CreateBlobStorageGroupMirror3dcDiscoverRequest(TBlobStorageGroupDiscover
 IActor* CreateBlobStorageGroupMirror3of4DiscoverRequest(TBlobStorageGroupDiscoverParameters params);
 
 struct TBlobStorageGroupCollectGarbageParameters {
-    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvCollectGarbage> Common;
-    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvCollectGarbage>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvCollectGarbage>::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_COLLECT,
         .Name = "DSProxy.CollectGarbage",
         .Activity = NKikimrServices::TActivity::BS_GROUP_COLLECT_GARBAGE,
@@ -792,8 +791,8 @@ struct TBlobStorageGroupCollectGarbageParameters {
 IActor* CreateBlobStorageGroupCollectGarbageRequest(TBlobStorageGroupCollectGarbageParameters params);
 
 struct TBlobStorageGroupMultiCollectParameters {
-    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvCollectGarbage> Common;
-    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvCollectGarbage>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvCollectGarbage>::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_MULTICOLLECT,
         .Name = "DSProxy.MultiCollect",
         .Activity = NKikimrServices::TActivity::BS_PROXY_MULTICOLLECT_ACTOR,
@@ -802,8 +801,8 @@ struct TBlobStorageGroupMultiCollectParameters {
 IActor* CreateBlobStorageGroupMultiCollectRequest(TBlobStorageGroupMultiCollectParameters params);
 
 struct TBlobStorageGroupBlockParameters {
-    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvBlock> Common;
-    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvBlock>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvBlock>::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_BLOCK,
         .Name = "DSProxy.Block",
         .Activity = NKikimrServices::TActivity::BS_GROUP_BLOCK,
@@ -812,8 +811,8 @@ struct TBlobStorageGroupBlockParameters {
 IActor* CreateBlobStorageGroupBlockRequest(TBlobStorageGroupBlockParameters params);
 
 struct TBlobStorageGroupStatusParameters {
-    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvStatus> Common;
-    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvStatus>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvStatus>::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_STATUS,
         .Name = "DSProxy.Status",
         .Activity = NKikimrServices::TActivity::BS_PROXY_STATUS_ACTOR,
@@ -822,8 +821,9 @@ struct TBlobStorageGroupStatusParameters {
 IActor* CreateBlobStorageGroupStatusRequest(TBlobStorageGroupStatusParameters params);
 
 struct TBlobStorageGroupAssimilateParameters {
-    TBlobStorageGroupRequestActor::TCommonParameters<TEvBlobStorage::TEvAssimilate> Common;
-    TBlobStorageGroupRequestActor::TTypeSpecificParameters TypeSpecific = {
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvAssimilate>::TCommonParameters Common;
+    TBlobStorageGroupRequestActor<TEvBlobStorage::TEvAssimilate>
+    ::TTypeSpecificParameters TypeSpecific = {
         .LogComponent = NKikimrServices::BS_PROXY_ASSIMILATE,
         .Name = "DSProxy.Assimilate",
         .Activity = NKikimrServices::TActivity::BS_GROUP_ASSIMILATE,

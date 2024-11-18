@@ -510,6 +510,7 @@ public:
         , TimeStatsEnabled(params.TimeStatsEnabled)
         , Tactic(params.Common.Event->Tactic)
         , Stats(std::move(params.Stats))
+        , IsMultiPutMode(false)
         , IncarnationRecords(Info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&Info->GetTopology())
     {
@@ -531,20 +532,12 @@ public:
         , IsManyPuts(true)
         , HandleClass(params.HandleClass)
         , ReportedBytes(0)
-<<<<<<< HEAD
-        , TimeStatsEnabled(timeStatsEnabled)
-        , Tactic(tactic)
-        , Stats(std::move(stats))
-        , IsMultiPutMode(true)
-        , IncarnationRecords(info->GetTotalVDisksNum())
-        , ExpiredVDiskSet(&info->GetTopology())
-=======
         , TimeStatsEnabled(params.TimeStatsEnabled)
         , Tactic(params.Tactic)
         , Stats(std::move(params.Stats))
+        , IsMultiPutMode(true)
         , IncarnationRecords(Info->GetTotalVDisksNum())
         , ExpiredVDiskSet(&Info->GetTopology())
->>>>>>> 4efd4715e9... Wrap ctor arguments in structs (#7631)
     {
         Y_DEBUG_ABORT_UNLESS(params.Events.size() <= MaxBatchedPutRequests);
         for (auto &ev : params.Events) {

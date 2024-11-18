@@ -384,6 +384,10 @@ public:
         return NKikimrServices::TActivity::BS_PROXY_GET_ACTOR;
     }
 
+    static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
+        return mon->ActiveGet;
+    }
+
     static constexpr ERequestType RequestType() {
         return ERequestType::Get;
     }

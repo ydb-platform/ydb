@@ -154,8 +154,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     using namespace NColumnShard;
     AFL_VERIFY(AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
     NIceDb::TNiceDb db(txc.DB);
-    const bool ready = Schema::Precharge<Schema::IndexPortions>(db, txc.DB.GetScheme()) &
-            Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme()) & Schema::Precharge<Schema::IndexIndexes>(db, txc.DB.GetScheme());
+    const bool ready = (int)Schema::Precharge<Schema::IndexPortions>(db, txc.DB.GetScheme()) &
+                       (int)Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme()) &
+                       (int)Schema::Precharge<Schema::IndexIndexes>(db, txc.DB.GetScheme());
     if (!ready) {
         return TConclusionStatus::Fail("Not ready");
     }

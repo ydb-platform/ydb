@@ -451,8 +451,9 @@ TValue TCsvParser::BuildList(std::vector<TString>&& lines, const TString& filena
             if (headerIt == Header.cend()) { // SkipBitMap has same size as Header
                 throw FormatError(yexception() << "Header contains less fields than data. Header: \"" << HeaderRow << "\", data: \"" << line << "\"", meta);
             }
+            TStringBuf nextField = Consume(splitter, meta, *headerIt);
             if (!*skipIt) {
-                fields.emplace_back(Consume(splitter, meta, *headerIt));
+                fields.emplace_back(nextField);
             }
             ++headerIt;
             ++skipIt;

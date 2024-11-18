@@ -6,7 +6,8 @@
 * Report 2013/759, November, 2013, http://eprint.iacr.org/2013/759.pdf
 */
 #include "chacha_512.h"
-#include "secured_block.h"
+
+#include <ydb/core/blobstorage/crypto/secured_block.h>
 
 #include <util/system/align.h>
 #include <util/system/yassert.h>
@@ -15,23 +16,35 @@
 constexpr size_t ChaCha512::KEY_SIZE;
 constexpr size_t ChaCha512::BLOCK_SIZE;
 
-void ChaCha512::SetKey(const ui8* key, size_t size)
-{
+void XorAVX512(void* destination, const void* a, const void* b, ui32 size) {
+    ui8 *dst = (ui8*)destination;
+    const ui8 *srcA = (const ui8*)a;
+    const ui8 *srcB = (const ui8*)b;
+    
+    // Process 64 bytes at a time with AVX-512
+    size_t i;
+    for (i = 0; i + 63 < size; i += 64) {
+        __m512i vA = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(srcA + i));
+        __m512i vB = _mm512_loadu_si512(reinterpret_cast<const __m512i*>(srcB + i));
+        __m512i vXor = _mm512_xor_si512(vA, vB);
+        _mm512_storeu_si512(reinterpret_cast<__m512i*>(dst + i), vXor);
+    }
+
+    // Process remaining bytes
+    for (; i < size; ++i) {
+        dst[i] = srcA[i] ^ srcB[i];
+    }
+}
+
+void ChaCha512::SetKey(const ui8* key, size_t size) {
     Y_ASSERT((size == KEY_SIZE) && "key must be 32 bytes long");
 
-#ifdef __AVX512F__
     q0_ = (vec512)_mm512_broadcast_i32x4(*(__m128i*)chacha_const);
     q1_ = (vec512)_mm512_broadcast_i32x4(((__m128i*)key)[0]);
     q2_ = (vec512)_mm512_broadcast_i32x4(((__m128i*)key)[1]);
-#else
-    Y_UNUSED(key);
-    return;
-#endif
 }
 
-void ChaCha512::SetIV(const ui8* iv, const ui8* blockIdx)
-{
-#ifdef __AVX512F__
+void ChaCha512::SetIV(const ui8* iv, const ui8* blockIdx) {
     ui64 counter = *((ui64*)blockIdx);
     ui32 *nonce = ((ui32*)iv);
     vec128 s3 = (vec128) {
@@ -39,22 +52,16 @@ void ChaCha512::SetIV(const ui8* iv, const ui8* blockIdx)
         ((unsigned int *)nonce)[0], ((unsigned int *)nonce)[1]
     };
     q3_ = ADD512_64(_mm512_broadcast_i32x4((__m128i)s3), _mm512_set_epi64(0,3,0,2,0,1,0,0));
-#else
-    Y_UNUSED(iv);
-    Y_UNUSED(blockIdx);
-#endif
 }
-
 
 void ChaCha512::SetIV(const ui8* iv) {
     const ui8 zero[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     SetIV(iv, zero);
 }
 
-void ChaCha512::EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len)
-{
+void ChaCha512::EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len) {
     ui32 *op=(ui32 *)ciphertext, *ip=(ui32 *)plaintext;
-#ifdef __AVX512F__
+
     for (ui32 j=0; j < len/768; j++) {
         vec512 v0=q0_, v1=q1_, v2=q2_, v3=q3_;
         vec512 v4=q0_, v5=q1_, v6=q2_, v7=ADD512_64(q3_, FOUR);
@@ -197,24 +204,13 @@ void ChaCha512::EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len)
 
         SecureWipeBuffer((ui8*)buf, sizeof(buf));
     }
-
-    return;
-#else
-    Y_UNUSED(ip);
-    Y_UNUSED(op);
-    Y_UNUSED(len);
-    return;
-#endif
 }
 
-void ChaCha512::Encipher(const ui8* plaintext, ui8* ciphertext, size_t len)
-{
+void ChaCha512::Encipher(const ui8* plaintext, ui8* ciphertext, size_t len) {
     EncipherImpl(plaintext, ciphertext, len);
 }
 
 ChaCha512::~ChaCha512() {
-#ifdef __AVX512F__
     SecureWipeBuffer((ui8*)&q1_, 64);
     SecureWipeBuffer((ui8*)&q2_, 64);
-#endif
 }

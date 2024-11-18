@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
             "Expected string: \"" << expectedString << "\", actual string: \"" << actualString << "\"");
     }
 
-    void CommonTestParams(TString&& header, const TString& data, const std::map<TString, TValue>& estimatedResult) {
+    void CommonTestParams(TString&& header, TString&& data, const std::map<TString, TValue>& estimatedResult) {
         std::map<TString, TType> paramTypes;
         for (const auto& [name, value] : estimatedResult) {
             paramTypes.insert({name, value.GetType()});
@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
         }
     }
 
-    void CommonTestValue(TString&& header, const TString& data, const TValue& estimatedResult) {
+    void CommonTestValue(TString&& header, TString&& data, const TValue& estimatedResult) {
         std::map<TString, TType> paramTypes;
         for (auto member : estimatedResult.GetType().GetProto().struct_type().members()) {
             paramTypes.insert({member.name(), member.type()});
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(YdbCliCsvParserTests) {
         AssertValuesEqual(valueBuilder.Build(), estimatedResult);
     }
 
-    void CommonTestBuildList(TString&& header, const std::vector<TString>& data, const TValue& estimatedResult) {
+    void CommonTestBuildList(TString&& header, std::vector<TString>&& data, const TValue& estimatedResult) {
         std::map<TString, TType> columnTypes;
         for (auto member : estimatedResult.GetType().GetProto().list_type().item().struct_type().members()) {
             columnTypes.insert({member.name(), member.type()});

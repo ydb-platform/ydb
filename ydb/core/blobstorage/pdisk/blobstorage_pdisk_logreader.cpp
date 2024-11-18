@@ -793,6 +793,19 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
     restorator.Restore(sector->GetData(), sector->Offset, magic, LastNonce, Owner);
 
     if (!restorator.GoodSectorFlags) {
+        {
+            TGuard<TMutex> guard(PDisk->StateMutex);
+            TOwnerData &ownerData = PDisk->OwnerData[Owner];
+
+            if (ownerData.OnQuarantine) {
+                P_LOG(PRI_WARN, LR019, SelfInfo()
+                    << " In ProcessSectorSet got !restorator.GoodSectorFlags with owner on quarantine",
+                        (LogEndChunkIdx, LogEndChunkIdx), (LogEndSectorIdx, LogEndSectorIdx));
+                ReplyOk();
+                return true;
+            }
+        }
+
         if (IsInitial) {
             P_LOG(PRI_NOTICE, LR018, SelfInfo() << " In ProcessSectorSet got !restorator.GoodSectorFlags",
                     (LastGoodToWriteLogPosition, LastGoodToWriteLogPosition));

@@ -446,16 +446,18 @@ class BaseSuiteRunner(object):
 
     def explain(self, query):
         yql_text = format_yql_statement(query, self.table_path_prefix)
-        return self.pool.execute_with_retries(yql_text, exec_mode=ydb.QueryExecMode.EXPLAIN)
-        # return self.legacy_pool.retry_operation_sync(lambda s: s.explain(yql_text)).query_plan
+        # seems explain not working with query service ?
+        """
+        result_sets = self.pool.execute_with_retries(yql_text, exec_mode=ydb.query.base.QueryExecMode.EXPLAIN)
+        first_set = result_sets[0]
+        print("***", first_set)
+        print("***", first_set.rows)
+        return first_set.rows[0]
+        """
+
+        return self.legacy_pool.retry_operation_sync(lambda s: s.explain(yql_text)).query_plan
 
     def execute_scheme(self, statement_text):
-        """
-        yql_text = format_yql_statement(statement_text, self.table_path_prefix)
-        self.legacy_pool.retry_operation_sync(lambda s: s.execute_scheme(yql_text))
-        yql_text = format_yql_statement(statement_text, self.table_path_prefix_ne)
-        self.legacy_pool.retry_operation_sync(lambda s: s.execute_scheme(yql_text))
-        """
         yql_text = format_yql_statement(statement_text, self.table_path_prefix)
         self.pool.execute_with_retries(yql_text)
         yql_text = format_yql_statement(statement_text, self.table_path_prefix_ne)
@@ -464,9 +466,6 @@ class BaseSuiteRunner(object):
 
     def execute_query(self, statement_text):
         yql_text = format_yql_statement(statement_text, self.table_path_prefix)
-        """
-        result = self.legacy_pool.retry_operation_sync(lambda s: s.transaction().execute(yql_text, commit_tx=True))
-        """
         result = self.pool.execute_with_retries(yql_text)
 
         if len(result) == 1:

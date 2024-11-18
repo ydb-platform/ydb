@@ -28,6 +28,7 @@ target_link_libraries(core-blobstorage-dsproxy PUBLIC
   ydb-core-base
   core-blobstorage-backpressure
   core-blobstorage-base
+  core-blobstorage-common
   core-blobstorage-groupinfo
   core-blobstorage-storagepoolmon
   blobstorage-vdisk-ingress

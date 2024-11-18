@@ -891,7 +891,7 @@ void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJs
         str << ", filter sql:\n" << (*filter)->GetSql();
     }
     if (fieldName) {
-        auto queryId = GetQueryIdByFieldName(*fieldName);
+        auto queryId = GetAnyQueryIdByFieldName(*fieldName);
         str << ", the field (" << *fieldName <<  ") has been added by query: " + queryId;
     }
     LOG_ROW_DISPATCHER_ERROR("FatalError: " << str.Str());

@@ -389,7 +389,7 @@ private:
 
         html << "<h3>Sources</h3>";
         for (const auto& [id, info]: SourcesMap) {
-            html << "<h4>Sink Id: " << id << "</h4>";
+            html << "<h4>Source Id: " << id << "</h4>";
             DUMP(info, Type);
             DUMP(info, LogPrefix);
             DUMP(info, Index);

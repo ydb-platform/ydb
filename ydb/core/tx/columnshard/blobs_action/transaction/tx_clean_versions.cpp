@@ -95,10 +95,12 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
         std::vector<NKikimrSchemeOp::TColumnTableSchemaDiff> diffProtos;
         std::optional<NKikimrSchemeOp::TColumnTableSchema> firstSchema;
         std::optional<NKikimrSchemeOp::TColumnTableSchema> lastSchema;
+        std::optional<ui64> lastSchemaVersion;
         if (!rowset.EndOfSet()) {
             TSchemaPreset::TSchemaPresetVersionInfo info;
             Y_ABORT_UNLESS(info.ParseFromString(rowset.template GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
             ui64 schemaVersion = info.GetSchema().GetVersion();
+            lastSchemaVersion = schemaVersion;
             if ((schemaVersion == prevSchemaVersion) && info.HasSchema()) {
                 firstSchema = info.GetSchema();
             }
@@ -107,6 +109,8 @@ bool TTxSchemaVersionsCleanup::Execute(TTransactionContext& txc, const TActorCon
             TSchemaPreset::TSchemaPresetVersionInfo info;
             Y_ABORT_UNLESS(info.ParseFromString(rowset.template GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
             ui64 schemaVersion = info.GetSchema().GetVersion();
+            AFL_VERIFY(!lastSchemaVersion.has_value() || (*lastSchemaVersion <= schemaVersion));
+            lastSchemaVersion = schemaVersion;
             if (schemaVersion > prevSchemaVersion) {
                 if (info.HasSchema() && firstSchema.has_value()) {
                     lastSchema = info.GetSchema();

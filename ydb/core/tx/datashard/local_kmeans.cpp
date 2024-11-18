@@ -465,14 +465,14 @@ private:
     bool RecomputeClusters()
     {
         Y_ASSERT(K >= 1);
-        ui64 countOfVectors = 0;
-        ui64 countOfReassigned = 0;
+        ui64 vectorsCount = 0;
+        ui64 reassignedCount = 0;
         for (size_t i = 0; auto& aggregate : AggregatedClusters) {
-            countOfVectors += aggregate.Size;
+            vectorsCount += aggregate.Size;
 
-            auto& s = ClusterSizes[i];
-            countOfReassigned += s > aggregate.Size ? s - aggregate.Size : aggregate.Size - s;
-            s = aggregate.Size;
+            auto& clusterSize = ClusterSizes[i];
+            reassignedCount += clusterSize < aggregate.Size ? aggregate.Size - clusterSize : 0;
+            clusterSize = aggregate.Size;
 
             if (aggregate.Size != 0) {
                 this->Fill(Clusters[i], aggregate.Cluster.data(), aggregate.Size);
@@ -480,18 +480,15 @@ private:
             }
             ++i;
         }
-        Y_ASSERT(countOfVectors >= K);
+        Y_ASSERT(vectorsCount >= K);
+        Y_ASSERT(reassignedCount <= vectorsCount);
         if (K == 1) {
             return true;
         }
 
         bool last = Round >= MaxRounds;
         if (!last && Round > 1) {
-            // on all rounds except first every reassigned vector is accounted twice
-            Y_ASSERT(countOfReassigned % 2 == 0);
-            countOfReassigned /= 2;
-            Y_ASSERT(countOfReassigned <= countOfVectors);
-            const auto changes = static_cast<double>(countOfReassigned) / static_cast<double>(countOfVectors);
+            const auto changes = static_cast<double>(reassignedCount) / static_cast<double>(vectorsCount);
             last = changes < MinVectorsNeedsReassigned;
         }
         if (!last) {

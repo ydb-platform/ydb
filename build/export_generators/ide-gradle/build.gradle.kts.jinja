@@ -221,7 +221,8 @@ configurations.testImplementation {
     isTransitive = false
 }
 
-{%  if has_test -%}
+{%- if has_test %}
+
 val testsJar by tasks.registering(Jar::class) {
     dependsOn(JavaPlugin.COMPILE_TEST_JAVA_TASK_NAME)
     archiveClassifier.set("tests")
@@ -236,22 +237,22 @@ tasks.test {
         events("passed", "skipped", "failed")
     }
 }
-
 {%  endif -%}
 
-{%- if target.jar_source_set is defined -%}
+{%- if target.jar_source_set is defined %}
+
 {%-     for source_set in target.jar_source_set -%}
-{%-         set srcdir_glob = split(source_set, ':') -%}
+{%-         set srcdir_glob = split(source_set, ':') %}
 sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
-{%          endfor -%}
+{%-     endfor -%}
 {%- endif -%}
 
 {%  for extra_target in extra_targets -%}
 {%-     if extra_target.jar_source_set is defined -%}
 {%-         for source_set in extra_target.jar_source_set -%}
-{%-             set srcdir_glob = split(source_set, ':') -%}
+{%-             set srcdir_glob = split(source_set, ':') %}
 sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
-{%              endfor -%}
+{%-         endfor -%}
 {%-     endif -%}
 {%- endfor -%}
 
@@ -352,7 +353,7 @@ tasks.named<Test>("test") {
 {#- {% set runs = targets|selectattr("runs") -%} -#}
 {%- set runs = target.runs -%}
 {%- if runs -%}
-{%-     for run in runs -%}
+{%-     for run in runs %}
 
 val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
         group = "build"
@@ -365,11 +366,7 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
 {%                 set real_classpath = real_classpath|replace('.run.cp', '') -%}
 {%                 set real_classpath = real_classpath|replace('.cplst', '') -%}
 {%                 set real_classpath = real_classpath|replace(export_root, '')|replace(arcadia_root, '') -%}
-{%                 set real_gradle_classpath = real_classpath|replace('/', ':') %}
-        val classPath = "{{ real_gradle_classpath }}"
-        val classPathParts = classPath.split(":")
-        classPathParts[classPathParts.size - 2]
-        classpath = files("$project_root{{ real_classpath }}") + project(classPath.replace(":${classPathParts[classPathParts.size - 2]}.jar", "")).configurations.runtimeClasspath.get()
+        classpath = files("$project_root{{ real_classpath }}")
 {%             endfor -%}
 {%         else -%}
         classpath = sourceSets.main.get().runtimeClasspath

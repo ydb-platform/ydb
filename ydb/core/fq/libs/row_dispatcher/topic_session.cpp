@@ -30,18 +30,18 @@ struct TTopicSessionMetrics {
     void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, ui32 partitionId) {
 
         TopicGroup = counters->GetSubgroup("topic", topicPath);
-        SubGroup = TopicGroup->GetSubgroup("partition", ToString(partitionId));
-        InFlyAsyncInputData = SubGroup->GetCounter("InFlyAsyncInputData");
-        InFlySubscribe = SubGroup->GetCounter("InFlySubscribe");
-        ReconnectRate = SubGroup->GetCounter("ReconnectRate", true);
+        PartitionGroup = TopicGroup->GetSubgroup("partition", ToString(partitionId));
+        InFlyAsyncInputData = PartitionGroup->GetCounter("InFlyAsyncInputData");
+        InFlySubscribe = PartitionGroup->GetCounter("InFlySubscribe");
+        ReconnectRate = PartitionGroup->GetCounter("ReconnectRate", true);
         RestartSessionByOffsets = counters->GetCounter("RestartSessionByOffsets", true);
-        SessionDataRate = SubGroup->GetCounter("SessionDataRate", true);
-        WaitEventTimeMs = SubGroup->GetHistogram("WaitEventTimeMs", NMonitoring::ExponentialHistogram(12, 2, 1)); // ~ 1ms -> ~ 4s
+        SessionDataRate = PartitionGroup->GetCounter("SessionDataRate", true);
+        WaitEventTimeMs = PartitionGroup->GetHistogram("WaitEventTimeMs", NMonitoring::ExponentialHistogram(13, 2, 1)); // ~ 1ms -> ~ 8s
         AllSessionsDataRate = counters->GetCounter("AllSessionsDataRate", true);
     }
 
     ::NMonitoring::TDynamicCounterPtr TopicGroup;
-    ::NMonitoring::TDynamicCounterPtr SubGroup;
+    ::NMonitoring::TDynamicCounterPtr PartitionGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;

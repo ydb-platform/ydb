@@ -511,7 +511,6 @@ void TRowDispatcher::UpdateMetrics() {
         auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryId);
         queryGroup->GetCounter("MaxUnreadBytes")->Set(stat.UnreadBytes.Max);
         queryGroup->GetCounter("AvgUnreadBytes")->Set(stat.UnreadBytes.Avg);
-        //queryGroup->GetCounter("DataRate")->Set(stat.ReadBytes.Sum / secs);
     }
 }
 

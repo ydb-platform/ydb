@@ -102,7 +102,7 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
             AsyncInputDataRate = task->GetCounter("AsyncInputDataRate", true);
             ReconnectRate = task->GetCounter("ReconnectRate", true);
             DataRate = task->GetCounter("DataRate", true);
-            WaitEventTimeMs = sink->GetHistogram("WaitEventTimeMs", NMonitoring::ExponentialHistogram(12, 2, 1)); // ~ 1ms -> ~ 4s
+            WaitEventTimeMs = sink->GetHistogram("WaitEventTimeMs", NMonitoring::ExponentialHistogram(13, 2, 1)); // ~ 1ms -> ~ 8s
         }
 
         ~TMetrics() {

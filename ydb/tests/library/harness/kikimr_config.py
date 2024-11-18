@@ -220,7 +220,12 @@ class KikimrConfigGenerator(object):
 
         self.__dynamic_pdisks = dynamic_pdisks
 
-        self.__working_dir = output_path or yatest.common.test_output_path()
+        try:
+            test_path = yatest.common.test_output_path()
+        except Exception:
+            test_path = os.path.abspath("kikimr_working_dir")
+
+        self.__working_dir = output_path or test_path
 
         if not os.path.isdir(self.__working_dir):
             os.makedirs(self.__working_dir)

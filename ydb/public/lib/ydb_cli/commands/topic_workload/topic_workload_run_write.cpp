@@ -88,8 +88,8 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
     config.Opts->AddLongOption("commit-period", "DEPRECATED: use tx-commit-intervall-ms instead. Waiting time between commit in seconds. Default - 1 second")
         .Optional()
         .StoreResult(&Scenario.CommitPeriodSeconds);
-    config.Opts->AddLongOption("tx-commit-interval-ms", "Interval of transaction commit in milliseconds. Default - 1000ms"
-                                                            " Both tx-commit-messages and tx-commit-interval-ms can trigger transaction commit.")
+    config.Opts->AddLongOption("tx-commit-interval-ms", "Interval of transaction commit in milliseconds. "
+                                                            " Both tx-commit-messages and tx-commit-interval-ms can trigger transaction commit. Default: 1000 ms.")
         .Optional()
         .StoreResult(&Scenario.TxCommitIntervalMs);
 

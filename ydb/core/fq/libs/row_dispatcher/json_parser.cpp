@@ -89,7 +89,7 @@ public:
         try {
             Parser = CreateParser(TypeMkql);
         } catch (...) {
-            throw yexception() << "Failed to create parser for column '" << Name << "' with type " << TypeYson << ", description: " << CurrentExceptionMessage();
+            throw NFq::TJsonParserError(Name) << "Failed to create parser for column '" << Name << "' with type " << TypeYson << ", description: " << CurrentExceptionMessage();
         }
     }
 
@@ -100,7 +100,7 @@ public:
 
     void ValidateNumberValues(size_t expectedNumberValues, ui64 firstOffset) const {
         if (Y_UNLIKELY(!IsOptional && ParsedRows.size() < expectedNumberValues)) {
-            throw yexception() << "Failed to parse json messages, found " << expectedNumberValues - ParsedRows.size() << " missing values from offset " << firstOffset << " in non optional column '" << Name << "' with type " << TypeYson;
+            throw NFq::TJsonParserError(Name) << "Failed to parse json messages, found " << expectedNumberValues - ParsedRows.size() << " missing values from offset " << firstOffset << " in non optional column '" << Name << "' with type " << TypeYson;
         }
     }
 
@@ -112,7 +112,7 @@ private:
                 if (const auto dataSlot = dataType->GetDataSlot()) {
                     return GetJsonValueParser(*dataSlot, optional);
                 }
-                throw yexception() << "unsupported data type with id " << dataType->GetSchemeType();
+                throw NFq::TJsonParserError() << "unsupported data type with id " << dataType->GetSchemeType();
             }
 
             case NKikimr::NMiniKQL::TTypeBase::EKind::Optional: {
@@ -120,7 +120,7 @@ private:
             }
 
             default: {
-                throw yexception() << "unsupported type kind " << type->GetKindAsStr();
+                throw NFq::TJsonParserError() << "unsupported type kind " << type->GetKindAsStr();
             }
         }
     }
@@ -179,10 +179,10 @@ private:
                                 break;
 
                             default:
-                                throw yexception() << "number value is not expected for data type " << typeInfo.Name;
+                                throw NFq::TJsonParserError() << "number value is not expected for data type " << typeInfo.Name;
                         }
                     } catch (...) {
-                        throw yexception() << "failed to parse data type " << typeInfo.Name << " from json number (raw: '" << TruncateString(jsonValue.raw_json_token()) << "'), error: " << CurrentExceptionMessage();
+                        throw NFq::TJsonParserError() << "failed to parse data type " << typeInfo.Name << " from json number (raw: '" << TruncateString(jsonValue.raw_json_token()) << "'), error: " << CurrentExceptionMessage();
                     }
                     break;
                 }
@@ -191,7 +191,7 @@ private:
                     const auto rawString = jsonValue.get_string().value();
                     resultValue = NKikimr::NMiniKQL::ValueFromString(dataSlot, rawString);
                     if (Y_UNLIKELY(!resultValue)) {
-                        throw yexception() << "failed to parse data type " << typeInfo.Name << " from json string: '" << TruncateString(rawString) << "'";
+                        throw NFq::TJsonParserError() << "failed to parse data type " << typeInfo.Name << " from json string: '" << TruncateString(rawString) << "'";
                     }
                     LockObject(resultValue);
                     break;
@@ -199,12 +199,12 @@ private:
 
                 case simdjson::builtin::ondemand::json_type::array:
                 case simdjson::builtin::ondemand::json_type::object: {
-                    throw yexception() << "found unexpected nested value (raw: '" << TruncateString(jsonValue.raw_json().value()) << "'), expected data type " <<typeInfo.Name << ", please use Json type for nested values";
+                    throw NFq::TJsonParserError() << "found unexpected nested value (raw: '" << TruncateString(jsonValue.raw_json().value()) << "'), expected data type " <<typeInfo.Name << ", please use Json type for nested values";
                 }
 
                 case simdjson::builtin::ondemand::json_type::boolean: {
                     if (Y_UNLIKELY(dataSlot != NYql::NUdf::EDataSlot::Bool)) {
-                        throw yexception() << "found unexpected bool value, expected data type " << typeInfo.Name;
+                        throw NFq::TJsonParserError() << "found unexpected bool value, expected data type " << typeInfo.Name;
                     }
                     resultValue = NYql::NUdf::TUnboxedValuePod(jsonValue.get_bool().value());
                     break;
@@ -212,7 +212,7 @@ private:
 
                 case simdjson::builtin::ondemand::json_type::null: {
                     if (Y_UNLIKELY(!optional)) {
-                        throw yexception() << "found unexpected null value, expected non optional data type " << typeInfo.Name;
+                        throw NFq::TJsonParserError() << "found unexpected null value, expected non optional data type " << typeInfo.Name;
                     }
                     resultValue = NYql::NUdf::TUnboxedValuePod();
                     break;
@@ -225,7 +225,7 @@ private:
         return [](simdjson::builtin::ondemand::value jsonValue, NYql::NUdf::TUnboxedValue& resultValue) {
             const auto rawJson = jsonValue.raw_json().value();
             if (Y_UNLIKELY(!NYql::NDom::IsValidJson(rawJson))) {
-                throw yexception() << "found bad json value: '" << TruncateString(rawJson) << "'";
+                throw NFq::TJsonParserError() << "found bad json value: '" << TruncateString(rawJson) << "'";
             }
             resultValue = NKikimr::NMiniKQL::MakeString(rawJson);
             LockObject(resultValue);
@@ -235,7 +235,7 @@ private:
     template <typename TResult, typename TJsonNumber>
     static NYql::NUdf::TUnboxedValuePod ParseJsonNumber(TJsonNumber number) {
         if (number < std::numeric_limits<TResult>::min() || std::numeric_limits<TResult>::max() < number) {
-            throw yexception() << "number is out of range";
+            throw NFq::TJsonParserError() << "number is out of range";
         }
         return NYql::NUdf::TUnboxedValuePod(static_cast<TResult>(number));
     }
@@ -349,7 +349,7 @@ public:
             simdjson::ondemand::document_stream documents = Parser.iterate_many(values, size, simdjson::ondemand::DEFAULT_BATCH_SIZE);
             for (auto document : documents) {
                 if (Y_UNLIKELY(parsedRows >= Buffer.NumberValues)) {
-                    throw yexception() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << parsedRows + 1;
+                    throw NFq::TJsonParserError() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << parsedRows + 1;
                 }
                 for (auto item : document.get_object()) {
                     const auto it = ColumnsIndex.find(item.escaped_key().value());
@@ -362,7 +362,7 @@ public:
                     try {
                         columnParser.ParseJsonValue(rowId, item.value(), ParsedValues[columnId][rowId]);
                     } catch (...) {
-                        throw yexception() << "Failed to parse json string at offset " << Buffer.Offsets[rowId] << ", got parsing error for column '" << columnParser.Name << "' with type " << columnParser.TypeYson << ", description: " << CurrentExceptionMessage();
+                        throw NFq::TJsonParserError(columnParser.Name) << "Failed to parse json string at offset " << Buffer.Offsets[rowId] << ", got parsing error for column '" << columnParser.Name << "' with type " << columnParser.TypeYson << ", description: " << CurrentExceptionMessage();
                     }
                 }
 
@@ -375,7 +375,7 @@ public:
             }
 
             if (Y_UNLIKELY(parsedRows != Buffer.NumberValues)) {
-                throw yexception() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << rowId;
+                throw NFq::TJsonParserError() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << rowId;
             }
             if (rowId) {
                 FlushColumns(parsedRows, rowId);

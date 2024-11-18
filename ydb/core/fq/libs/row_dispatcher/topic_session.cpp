@@ -211,7 +211,7 @@ private:
     void DoFiltering(ui64 rowsOffset, ui64 numberRows, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues);
     void SendData(TClientsInfo& info);
     void UpdateParser();
-    void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter, bool addParserDescription);
+    void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter, bool addParserDescription, const TMaybe<TString>& fieldName);
     void SendDataArrived(TClientsInfo& client);
     void StopReadSession();
     TString GetSessionId() const;
@@ -239,6 +239,7 @@ private:
     void UpdateParserSchema(const TParserInputType& inputType);
     void UpdateFieldsIds(TClientsInfo& clientInfo);
     bool CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
+    TString GetAnyQueryIdByFieldName(const TString& fieldName);
 
 private:
 
@@ -540,7 +541,7 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TSessionClose
     LOG_ROW_DISPATCHER_DEBUG(message);
     NYql::TIssues issues;
     issues.AddIssue(message);
-    Self.FatalError(issues.ToOneLineString(), nullptr, false);
+    Self.FatalError(issues.ToOneLineString(), nullptr, false, Nothing());
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
@@ -624,8 +625,10 @@ void TTopicSession::DoParsing(bool force) {
 
     try {
         Parser->Parse();
+    } catch (const NFq::TJsonParserError& e) {
+        FatalError(e.what(), nullptr, true, e.GetField());
     } catch (const std::exception& e) {
-        FatalError(e.what(), nullptr, true);
+        FatalError(e.what(), nullptr, true, Nothing());
     }
 }
 
@@ -642,7 +645,7 @@ void TTopicSession::DoFiltering(ui64 rowsOffset, ui64 numberRows, const TVector<
                 info.Filter->Push(offsets, RebuildJson(info, parsedValues), rowsOffset, numberRows);
             }
         } catch (const std::exception& e) {
-            FatalError(e.what(), &info.Filter, false);
+            FatalError(e.what(), &info.Filter, false, Nothing());
         }
     }
 
@@ -771,11 +774,11 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             }
         }
     } catch (const NYql::NPureCalc::TCompileError& e) {
-        FatalError("Adding new client failed: CompileError: sql: " + e.GetYql() + ", error: " + e.GetIssues(), nullptr, true);
+        FatalError("Adding new client failed: CompileError: sql: " + e.GetYql() + ", error: " + e.GetIssues(), nullptr, true, Nothing());
     } catch (const yexception &ex) {
-        FatalError(TString{"Adding new client failed: "} + ex.what(), nullptr, true);
+        FatalError(TString{"Adding new client failed: "} + ex.what(), nullptr, true, Nothing());
     } catch (...) {
-        FatalError("Adding new client failed, " + CurrentExceptionMessage(), nullptr, true);
+        FatalError("Adding new client failed, " + CurrentExceptionMessage(), nullptr, true, Nothing());
     }
     ConsumerName = ev->Get()->Record.GetSource().GetConsumerName();
     UpdateParser();
@@ -871,12 +874,14 @@ void TTopicSession::UpdateParser() {
         Parser = NewJsonParser(names, types, [this](ui64 rowsOffset, ui64 numberRows, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues) {
             DoFiltering(rowsOffset, numberRows, parsedValues);
         }, parserConfig.GetBatchSizeBytes(), TDuration::MilliSeconds(parserConfig.GetBatchCreationTimeoutMs()), parserConfig.GetBufferCellCount());
+    } catch (const NFq::TJsonParserError& e) {
+        FatalError(e.what(), nullptr, true, e.GetField());
     } catch (const NYql::NPureCalc::TCompileError& e) {
-        FatalError(e.GetIssues(), nullptr, true);
+        FatalError(e.GetIssues(), nullptr, true, Nothing());
     }
 }
 
-void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter, bool addParserDescription) {
+void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter, bool addParserDescription, const TMaybe<TString>& fieldName) {
     TStringStream str;
     str << message;
     if (Parser && addParserDescription) {
@@ -884,6 +889,10 @@ void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJs
     }
     if (filter) {
         str << ", filter sql:\n" << (*filter)->GetSql();
+    }
+    if (fieldName) {
+        auto queryId = GetAnyQueryIdByFieldName(*fieldName);
+        str << ", the field (" << *fieldName <<  ") has been added by query: " + queryId;
     }
     LOG_ROW_DISPATCHER_ERROR("FatalError: " << str.Str());
 
@@ -930,7 +939,7 @@ void TTopicSession::HandleException(const std::exception& e) {
     if (CurrentStateFunc() == &TThis::ErrorState) {
         return;
     }
-    FatalError(TString("Internal error: exception: ") + e.what(), nullptr, false);
+    FatalError(TString("Internal error: exception: ") + e.what(), nullptr, false, Nothing());
 }
 
 void TTopicSession::SendStatistic() {
@@ -985,6 +994,19 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
     }
 
     return true;
+}
+
+TString TTopicSession::GetAnyQueryIdByFieldName(const TString& fieldName) {
+    TSet<std::pair<TString, TString>> namesWithTypes;
+    for (auto& [readActorId, info] : Clients) {
+        for (const auto& name : info.Settings.GetSource().GetColumns()) {
+            if (name != fieldName) {
+                continue;
+            }
+            return info.Settings.GetQueryId();
+        }
+    }
+    return "Unknown";
 }
 
 } // namespace

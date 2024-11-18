@@ -82,7 +82,7 @@ protected:
 
     std::vector<TProbability> MaxRows;
     std::vector<TString> Clusters;
-    std::vector<ui64> ClusterCounts;
+    std::vector<ui64> ClusterSizes;
 
     // Upload
     std::shared_ptr<NTxProxy::TUploadTypes> TargetTypes;
@@ -341,7 +341,7 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
 
     struct TAggregatedCluster {
         TEmbedding Cluster;
-        ui64 Count = 0;
+        ui64 Size = 0;
     };
     std::vector<TAggregatedCluster> AggregatedClusters;
 
@@ -441,7 +441,7 @@ private:
             Clusters.resize(K);
         }
         Y_ASSERT(Clusters.size() == K);
-        ClusterCounts.resize(K, 0);
+        ClusterSizes.resize(K, 0);
         AggregatedClusters.resize(K);
         for (auto& aggregate : AggregatedClusters) {
             aggregate.Cluster.resize(this->Dimensions, 0);
@@ -459,39 +459,39 @@ private:
         for (auto coord : this->GetCoords(embedding)) {
             *coords++ += coord;
         }
-        ++aggregate.Count;
+        ++aggregate.Size;
     }
 
     bool RecomputeClusters()
     {
         Y_ASSERT(K >= 1);
-        ui64 count = 0;
-        ui64 countDiff = 0;
+        ui64 countOfVectors = 0;
+        ui64 countOfReassigned = 0;
         for (size_t i = 0; auto& aggregate : AggregatedClusters) {
-            count += aggregate.Count;
+            countOfVectors += aggregate.Size;
 
-            auto& c = ClusterCounts[i];
-            countDiff += c > aggregate.Count ? c - aggregate.Count : aggregate.Count - c;
-            c = aggregate.Count;
+            auto& s = ClusterSizes[i];
+            countOfReassigned += s > aggregate.Size ? s - aggregate.Size : aggregate.Size - s;
+            s = aggregate.Size;
 
-            if (aggregate.Count != 0) {
-                this->Fill(Clusters[i], aggregate.Cluster.data(), aggregate.Count);
-                Y_ASSERT(aggregate.Count == 0);
+            if (aggregate.Size != 0) {
+                this->Fill(Clusters[i], aggregate.Cluster.data(), aggregate.Size);
+                Y_ASSERT(aggregate.Size == 0);
             }
             ++i;
         }
-        Y_ASSERT(count >= K);
+        Y_ASSERT(countOfVectors >= K);
         if (K == 1) {
             return true;
         }
 
         bool last = Round >= MaxRounds;
         if (!last && Round > 1) {
-            // on all rounds except first every vector is accounted twice
-            Y_ASSERT(countDiff % 2 == 0);
-            countDiff /= 2;
-            Y_ASSERT(countDiff <= count);
-            const auto changes = static_cast<double>(countDiff) / static_cast<double>(count);
+            // on all rounds except first every reassigned vector is accounted twice
+            Y_ASSERT(countOfReassigned % 2 == 0);
+            countOfReassigned /= 2;
+            Y_ASSERT(countOfReassigned <= countOfVectors);
+            const auto changes = static_cast<double>(countOfReassigned) / static_cast<double>(countOfVectors);
             last = changes < MinVectorsNeedsReassigned;
         }
         if (!last) {
@@ -499,14 +499,14 @@ private:
         }
 
         size_t w = 0;
-        for (size_t r = 0; r < ClusterCounts.size(); ++r) {
-            if (ClusterCounts[r] != 0) {
-                ClusterCounts[w] = ClusterCounts[r];
+        for (size_t r = 0; r < ClusterSizes.size(); ++r) {
+            if (ClusterSizes[r] != 0) {
+                ClusterSizes[w] = ClusterSizes[r];
                 Clusters[w] = std::move(Clusters[r]);
                 ++w;
             }
         }
-        ClusterCounts.erase(ClusterCounts.begin() + w, ClusterCounts.end());
+        ClusterSizes.erase(ClusterSizes.begin() + w, ClusterSizes.end());
         Clusters.erase(Clusters.begin() + w, Clusters.end());
         return true;
     }

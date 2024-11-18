@@ -3020,7 +3020,7 @@ bool TKeyValueState::PrepareGetStorageChannelStatusRequest(const TActorContext &
     StoredState.SetChannelGeneration(ExecutorGeneration);
     StoredState.SetChannelStep(NextLogoBlobStep - 1);
 
-    TRequestType::EType requestType = TRequestType::ReadOnly;
+    TRequestType::EType requestType = TRequestType::ReadOnlyInline;
     intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID,
         StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType, std::move(ev->TraceId)));
 
@@ -3164,7 +3164,7 @@ void TKeyValueState::OnEvReadRequest(TEvKeyValue::TEvRead::TPtr &ev, const TActo
                 ++IntermediatesInFlight;
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
-                    << " Enqueue storage read request, Marker# KV56");
+                    << " Enqueue storage read request " << IntermediatesInFlight << '/' << IntermediatesInFlightLimit << ", Marker# KV56");
                 PostponeIntermediate<TEvKeyValue::TEvRead>(std::move(intermediate));
             }
         }

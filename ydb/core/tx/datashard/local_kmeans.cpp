@@ -465,10 +465,10 @@ private:
     bool RecomputeClusters()
     {
         Y_ASSERT(K >= 1);
-        ui64 vectorsCount = 0;
+        ui64 vectorCount = 0;
         ui64 reassignedCount = 0;
         for (size_t i = 0; auto& aggregate : AggregatedClusters) {
-            vectorsCount += aggregate.Size;
+            vectorCount += aggregate.Size;
 
             auto& clusterSize = ClusterSizes[i];
             reassignedCount += clusterSize < aggregate.Size ? aggregate.Size - clusterSize : 0;
@@ -480,15 +480,15 @@ private:
             }
             ++i;
         }
-        Y_ASSERT(vectorsCount >= K);
-        Y_ASSERT(reassignedCount <= vectorsCount);
+        Y_ASSERT(vectorCount >= K);
+        Y_ASSERT(reassignedCount <= vectorCount);
         if (K == 1) {
             return true;
         }
 
         bool last = Round >= MaxRounds;
         if (!last && Round > 1) {
-            const auto changes = static_cast<double>(reassignedCount) / static_cast<double>(vectorsCount);
+            const auto changes = static_cast<double>(reassignedCount) / static_cast<double>(vectorCount);
             last = changes < MinVectorsNeedsReassigned;
         }
         if (!last) {

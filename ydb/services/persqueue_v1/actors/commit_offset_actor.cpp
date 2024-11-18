@@ -115,7 +115,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
             commits.push_back(commit);
         }
 
-        for (auto& child: partitionNode->Children) {
+        for (auto& child: partitionNode->HierarhicalChildren) {
             TKqpHelper::TCommitInfo commit {.PartitionId = child->Id, .Offset = 0};
             commits.push_back(commit);
         }

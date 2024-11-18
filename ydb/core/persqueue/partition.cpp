@@ -175,7 +175,6 @@ NKikimrClient::TKeyValueRequest::EStorageChannel GetChannel(ui32 i) {
     return NKikimrClient::TKeyValueRequest::EStorageChannel(NKikimrClient::TKeyValueRequest::MAIN + i);
 }
 
-
 void AddCheckDiskRequest(TEvKeyValue::TEvRequest *request, ui32 numChannels) {
     for (ui32 i = 0; i < numChannels; ++i) {
         request->Record.AddCmdGetStatus()->SetStorageChannel(GetChannel(i));
@@ -2332,8 +2331,8 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
         bool isAffectedConsumer = AffectedUsers.contains(consumer); // savnik check
         TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
 
-        if (operation.HasOnlyCheckCommitedToFinish() && operation.GetOnlyCheckCommitedToFinish()) {
-            if (static_cast<ui64>(userInfo.Offset) != EndOffset) { // savnik что если откатят коммит пока выполняется транзакция
+        if (operation.HasOnlyCheckCommitedToFinish() && operation.GetOnlyCheckCommitedToFinish() && !IsActive()) {
+            if (static_cast<ui64>(userInfo.Offset) != EndOffset) {
                ok = false;
             }
         } else {

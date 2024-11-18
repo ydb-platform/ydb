@@ -28,14 +28,16 @@ namespace {
 
 struct TTopicSessionMetrics {
     void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, ui32 partitionId) {
+
         TopicGroup = counters->GetSubgroup("topic", topicPath);
         SubGroup = TopicGroup->GetSubgroup("partition", ToString(partitionId));
         InFlyAsyncInputData = SubGroup->GetCounter("InFlyAsyncInputData");
         InFlySubscribe = SubGroup->GetCounter("InFlySubscribe");
         ReconnectRate = SubGroup->GetCounter("ReconnectRate", true);
         RestartSessionByOffsets = counters->GetCounter("RestartSessionByOffsets", true);
-        DataRate = SubGroup->GetCounter("DataRate", true);
+        SessionDataRate = SubGroup->GetCounter("SessionDataRate", true);
         WaitEventTimeMs = SubGroup->GetHistogram("WaitEventTimeMs", NMonitoring::ExponentialHistogram(12, 2, 1)); // ~ 1ms -> ~ 4s
+        AllSessionsDataRate = counters->GetCounter("AllSessionsDataRate", true);
     }
 
     ::NMonitoring::TDynamicCounterPtr TopicGroup;
@@ -44,8 +46,10 @@ struct TTopicSessionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartSessionByOffsets;
-    ::NMonitoring::TDynamicCounters::TCounterPtr DataRate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionDataRate;
     ::NMonitoring::THistogramPtr WaitEventTimeMs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr AllSessionsDataRate;
+
 };
 
 struct TEvPrivate {
@@ -116,9 +120,12 @@ private:
     };
 
     struct TClientsInfo {
-        TClientsInfo(const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev)
+        TClientsInfo(
+            const NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev,
+            NMonitoring::TDynamicCounterPtr& counters)
             : Settings(ev->Get()->Record)
             , ReadActorId(ev->Sender)
+            , FilteredDataRate(counters->GetCounter("FilteredDataRate", true))
         {
             if (Settings.HasOffset()) {
                 NextMessageOffset = Settings.GetOffset();
@@ -136,6 +143,7 @@ private:
         TVector<ui64> FieldsIds;
         TDuration ReconnectPeriod;
         TStats Stat;        // Send (filtered) to read_actor
+        NMonitoring::TDynamicCounters::TCounterPtr FilteredDataRate;    // filtered
     };
 
     struct TTopicEventProcessor {
@@ -207,7 +215,8 @@ public:
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        const NYql::IPqGateway::TPtr& pqGateway);
+        const NYql::IPqGateway::TPtr& pqGateway,
+        ui64 maxBufferSize);
 
     void Bootstrap();
     void PassAway() override;
@@ -298,7 +307,8 @@ TTopicSession::TTopicSession(
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
     IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqGateway::TPtr& pqGateway)
+    const NYql::IPqGateway::TPtr& pqGateway,
+    ui64 maxBufferSize)
     : TopicPath(topicPath)
     , Endpoint(endpoint)
     , Database(database)
@@ -307,7 +317,7 @@ TTopicSession::TTopicSession(
     , Driver(std::move(driver))
     , CredentialsProviderFactory(credentialsProviderFactory)
     , PureCalcProgramFactory(pureCalcProgramFactory)
-    , BufferSize(16_MB)
+    , BufferSize(maxBufferSize)
     , LogPrefix("TopicSession")
     , Config(config)
     , Counters(counters)
@@ -555,7 +565,8 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
 
     Self.SessionStats.Add(dataSize, event.GetMessages().size());
     Self.ClientsStats.Add(dataSize, event.GetMessages().size());
-    Self.Metrics.DataRate->Add(dataSize);
+    Self.Metrics.SessionDataRate->Add(dataSize);
+    Self.Metrics.AllSessionsDataRate->Add(dataSize);
     Self.SendToParsing(event.GetMessages());
 }
 
@@ -715,6 +726,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
         Send(RowDispatcherActorId, event.release());
     } while(!info.Buffer.empty());
     info.Stat.Add(dataSize, eventsSize);
+    info.FilteredDataRate->Add(dataSize);
     info.LastSendedNextMessageOffset = *info.NextMessageOffset;
 }
 
@@ -758,11 +770,11 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             // Parse remains data before adding new client
             DoParsing(true);
         }
-
+        auto counters = Counters->GetSubgroup("queryId", ev->Get()->Record.GetQueryId());
         auto& clientInfo = Clients.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(ev->Sender), 
-            std::forward_as_tuple(ev)).first->second;
+            std::forward_as_tuple(ev, counters)).first->second;
         UpdateFieldsIds(clientInfo);
 
         const auto& source = clientInfo.Settings.GetSource();
@@ -1035,8 +1047,9 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
     IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqGateway::TPtr& pqGateway) {
-    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, pureCalcProgramFactory, counters, pqGateway));
+    const NYql::IPqGateway::TPtr& pqGateway,
+    ui64 maxBufferSize) {
+    return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, pureCalcProgramFactory, counters, pqGateway, maxBufferSize));
 }
 
 } // namespace NFq

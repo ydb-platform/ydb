@@ -1,0 +1,9 @@
+(
+
+(library "joins.yql")
+(import join_module '"joins.yql")
+
+(let world (Apply (bind join_module 'doAllJoinsExceptCrossLink) world 'Input1 'Input2 '('('right 'any))))
+
+(return world)
+)

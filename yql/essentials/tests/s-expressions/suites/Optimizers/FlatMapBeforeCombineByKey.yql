@@ -1,0 +1,19 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let data (AsList (String 'a) (String 'a) (String 'b) (String 'c)))
+(let preMap (lambda '(item) (Just item)))
+(let keyExtractor (lambda '(item) item))
+(let init (lambda '(key item) item))
+(let update (lambda '(key item state) (Concat state item)))
+(let finish (lambda '(key state) (AsList '(key state))))
+(let map (Filter data (lambda '(x) (< x (String 'c)))))
+(let combined (CombineByKey map preMap keyExtractor init update finish))
+(let result (Sort combined (Bool 'true) (lambda '(x) (Nth x '0))))
+(let world (Write! world res_sink (Key) result '()))
+(let world (Commit! world res_sink))
+(return world)
+)

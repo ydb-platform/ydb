@@ -1,0 +1,34 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList (String 'aaa) (String 'bbb) (String 'ccc)))
+(let id (lambda '(x) x))
+# id
+(let world (Write! world res_sink (Key) (Collect (Switch (Iterator list (DependsOn (String 'A))) '1 '('0) id)) '('('type))))
+# clone
+(let world (Write! world res_sink (Key) (Collect (Switch (Iterator list (DependsOn (String 'B))) '1 '('0) id '('0) id)) '('('type))))
+# separate
+(let tupleType (TupleType (DataType 'String) (DataType 'String)))
+(let vt (VariantType tupleType))
+(let vlist (AsList (Variant (String 'aaa) '0 vt) (Variant (String 'bbb) '1 vt) (Variant (String 'ccc) '0 vt)))
+(let handlerSplit1 (lambda '(x) (Map x (lambda '(s) (Concat (String '"#0: ") s)))))
+(let handlerSplit2 (lambda '(x) (Map x (lambda '(s) (Concat (String '"#1: ") s)))))
+(let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'D))) '1 '('1) handlerSplit2 '('0) handlerSplit1)) '('('type))))
+# reunion
+(let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'E))) '1 '('0 '1) id)) '('('type))))
+# reunion and parts
+(let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'F))) '1 '('0 '1) id '('1) handlerSplit2 '('0) handlerSplit1)) '('('type))))
+# multiple outputs
+(let twice (lambda '(x) (FlatMap x (lambda '(s) (AsList 
+   (Variant (Concat (String '"#0: ") s) '0 vt) 
+   (Variant (Concat (String '"#1: ") s) '1 vt)
+   )))))
+(let world (Write! world res_sink (Key) (Collect (Switch (Iterator list (DependsOn (String 'G))) '1 '('0) twice)) '('('type))))
+# split and multiple outputs
+(let world (Write! world res_sink (Key) (Collect (Switch (Iterator list (DependsOn (String 'H))) '1 '('0) twice '('0) twice)) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

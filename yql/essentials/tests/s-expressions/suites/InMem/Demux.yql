@@ -1,0 +1,44 @@
+(
+#comment
+(let res_sink (DataSink 'result))
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let varTuple (VariantType (TupleType (DataType 'String) (DataType 'Bool) (DataType 'Uint32))))
+
+(let varList (AsList
+    (Variant (String 'a1) '0 varTuple)
+    (Variant (Uint32 '3) '2 varTuple)
+    (Variant (String 'a2) '0 varTuple)
+    (Variant (Bool 'false) '1 varTuple)
+    (Variant (Uint32 '1) '2 varTuple)
+    (Variant (String 'a3) '0 varTuple)
+    (Variant (Uint32 '2) '2 varTuple)
+    (Variant (Bool 'true) '1 varTuple)
+    (Variant (Uint32 '4) '2 varTuple)
+))
+
+(let data (Demux varList))
+(let world (Write! world res_sink (Key) data '('('type))))
+
+(let varStruct (VariantType (StructType '('s (DataType 'String)) '('b (DataType 'Bool)) '('u (DataType 'Uint32)))))
+
+(let varList (AsList
+    (Variant (String 'a1) 's varStruct)
+    (Variant (Uint32 '3) 'u varStruct)
+    (Variant (String 'a2) 's varStruct)
+    (Variant (Bool 'false) 'b varStruct)
+    (Variant (Uint32 '1) 'u varStruct)
+    (Variant (String 'a3) 's varStruct)
+    (Variant (Uint32 '2) 'u varStruct)
+    (Variant (Bool 'true) 'b varStruct)
+    (Variant (Uint32 '4) 'u varStruct)
+))
+
+(let data (Demux varList))
+(let world (Write! world res_sink (Key) data '('('type))))
+
+(let world (Commit! world res_sink))
+
+(return world)
+)

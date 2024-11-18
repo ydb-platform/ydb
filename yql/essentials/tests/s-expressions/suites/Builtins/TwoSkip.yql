@@ -1,0 +1,13 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+(let table2 (Skip table1 (Uint64 '1)))
+(let table3 (Skip table2 (Uint64 '2)))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) table3 '('('mode 'append))))
+(let world (Commit! world mr_sink))
+(return world)
+)

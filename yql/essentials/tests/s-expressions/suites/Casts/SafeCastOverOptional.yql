@@ -1,0 +1,76 @@
+(
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let res_sink (DataSink 'result))
+
+# Int32? -> Uint16
+(let targetType (OptionalType (DataType 'Uint16)))
+(let cast (SafeCast (Just (Int32 '1)) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Just (Int32 '1000000)) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Nothing (OptionalType (DataType 'Int32))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# Int32? -> Uint16?
+(let targetType (OptionalType (DataType 'Uint16)))
+(let cast (SafeCast (Just (Int32 '1)) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Just (Int32 '1000000)) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Nothing (OptionalType (DataType 'Int32))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# Int32? -> Uint16???
+(let targetType (OptionalType (OptionalType (OptionalType (DataType 'Uint16)))))
+(let cast (SafeCast (Just (Int32 '1)) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Just (Int32 '1000000)) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Nothing (OptionalType (DataType 'Int32))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# Int32??? -> Uint16?
+(let targetType (OptionalType (DataType 'Uint16)))
+(let cast (SafeCast (Just (Just (Just (Int32 '1)))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Just (Just (Just (Int32 '1000000)))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Nothing (OptionalType (OptionalType (OptionalType (DataType 'Int32))))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Just (Nothing (OptionalType (OptionalType (DataType 'Int32))))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Just (Just (Nothing (OptionalType (DataType 'Int32))))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# Int32??? -> Uint16??
+(let targetType (OptionalType (OptionalType (DataType 'Uint16))))
+(let cast (SafeCast (Just (Just (Just (Int32 '1)))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Just (Just (Just (Int32 '1000000)))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Nothing (OptionalType (OptionalType (OptionalType (DataType 'Int32))))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Just (Nothing (OptionalType (OptionalType (DataType 'Int32))))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Just (Just (Nothing (OptionalType (DataType 'Int32))))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# Int32??? -> Uint16????
+(let targetType (OptionalType (OptionalType (OptionalType (OptionalType (DataType 'Uint16))))))
+(let cast (SafeCast (Just (Just (Just (Int32 '1)))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Just (Just (Just (Int32 '1000000)))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Nothing (OptionalType (OptionalType (OptionalType (DataType 'Int32))))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Just (Nothing (OptionalType (OptionalType (DataType 'Int32))))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+(let cast (SafeCast (Just (Just (Nothing (OptionalType (DataType 'Int32))))) targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

@@ -1,0 +1,30 @@
+(
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let res_sink (DataSink 'result))
+
+# List<Int32> -> List<Uint16> (good)
+(let targetType (ListType (DataType 'Uint16)))
+(let src (AsList (Int32 '1) (Int32 '2) (Int32 '3)))
+(let cast (StrictCast src targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# List<Int32> -> List<Uint16> (fail)
+(let targetType (ListType (DataType 'Uint16)))
+(let src (AsList (Int32 '1) (Int32 '-2) (Int32 '3)))
+(let cast (StrictCast src targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+# List<Int32?> -> List<Uint16> (fail)
+(let targetType (ListType (DataType 'Uint16)))
+(let src (AsList (Just (Int32 '1)) (Null) (Just (Int32 '3))))
+(let cast (StrictCast src targetType))
+(let world (Write! world res_sink (Key) cast '('('type))))
+
+(let world (Commit! world res_sink))
+
+(return world)
+
+)
+

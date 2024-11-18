@@ -1,0 +1,11 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source '((Key '('table (String 'Input))) (Key '('table (String 'Input)))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) table1 '('('take '1) '('autoref))))
+(let world (Commit! world res_sink))
+(return world)
+)

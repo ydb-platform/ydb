@@ -1,0 +1,30 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+(let qrs (QueueCreate (DataType 'String) (Uint64 '5) (Uint64 '0)))
+(let qri (QueueCreate (DataType 'Int32) (Uint64 '5) (Uint64 '0)))
+(let qri (QueuePush qri (Int32 '-5)))
+(let qrs (QueuePush qrs (String '"It")))
+(let qri (QueuePush qri (Int32 '5)))
+(let qrs (QueuePush qrs (String '"is")))
+(let qri (QueuePush qri (Int64 '-33)))
+(let qrs (QueuePush qrs (String '"funny")))
+(let qri (QueuePop qri))
+(let qrs (QueuePop qrs))
+(let qri (QueuePush qri (Int32 '42)))
+(let qri (QueuePop qri))
+(let qrs (QueuePush qrs (String '"bunny")))
+(let qrs (QueuePop qrs))
+
+(let resultInt '((QueuePeek qri (Minus (Uint64 '1))) (QueuePeek qri (Uint64 '0)) (QueuePeek qri (Uint64 '1)) (QueuePeek qri (Uint64 '2))))
+(let resultString '((QueuePeek qrs (Minus (Uint64 '1))) (QueuePeek qrs (Uint64 '0)) (QueuePeek qrs (Uint64 '1)) (QueuePeek qrs (Uint64 '2))))
+
+(let result '(resultInt resultString))
+
+(let world (Write! world res_sink (Key) result '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

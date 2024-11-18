@@ -1,0 +1,24 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+(let write (lambda '(world x y) (block '(
+   (let world (Write! world res_sink (Key) (String '==============) '()))
+   (let world (Write! world res_sink (Key) (== x y) '('('type))))
+   (return world)
+))))
+
+(let world (Apply write world (Null) (Null)))
+(let world (Apply write world (Null) (Nothing (OptionalType (DataType 'String)))))
+(let world (Apply write world (Int32 '0) (Null)))
+(let world (Apply write world '((Null)) '((Null))))
+(let world (Apply write world '((Int32 '1) (Null)) '((Int32 '1) (Null))))
+(let world (Apply write world '((Int32 '1) (Nothing (OptionalType (DataType 'String)))) '((Int32 '1) (Nothing (OptionalType (DataType 'String))))))
+
+
+(let world (Commit! world res_sink))
+(return world)
+)

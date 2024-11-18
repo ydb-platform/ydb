@@ -1,0 +1,13 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list1 (AsList (String 'a) (String 'b) (String 'c)))
+(let map (Map list1 (lambda '(x) (Uint32 '1))))
+(let data (Fold1 map (lambda '(item) item) (lambda '(item state) (+ item state))))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

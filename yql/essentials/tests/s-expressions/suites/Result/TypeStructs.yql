@@ -1,0 +1,16 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let s1 (AsStruct '('a (Uint32 '1)) '('b (String 'qwe))))
+(let s2 (AsStruct '('c (Uint32 '1)) '('d (Just (String 'asd)))))
+(let world (Write! world res_sink (Key) (FormatType (AddMemberType (TypeOf s1) 'q (DataType 'Double))) '()))
+(let world (Write! world res_sink (Key) (FormatType (RemoveMemberType (TypeOf s1) 'a)) '()))
+(let world (Write! world res_sink (Key) (FormatType (ForceRemoveMemberType (TypeOf s1) 'q)) '()))
+(let world (Write! world res_sink (Key) (FormatType (FlattenMembersType '('"p." (TypeOf s1)) '('"q." (TypeOf s2)))) '()))
+(let world (Write! world res_sink (Key) (FormatType (FlattenMembersType '('"p." (TypeOf s1)) '('"q." (OptionalType (TypeOf s2))))) '()))
+(let world (Commit! world res_sink))
+(return world)
+)

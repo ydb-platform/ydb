@@ -1,0 +1,30 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source
+    (Key '('table (String 'Input1)))
+    '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+
+(let table2 (Map table1 (lambda '(item) (block '(
+  (return (AsStruct 
+     '('value (Member item 'key)) 
+     '('subkey (Member item 'subkey)) 
+     '('key (Member item 'value)))))
+))))
+
+(let keyExtractor (lambda '(item) (Member item 'key)))
+(let joinInner (Join table1 table2 keyExtractor keyExtractor 'Inner))
+(let joinLeft (Join table1 table2 keyExtractor keyExtractor 'Left))
+(let joinRight (Join table1 table2 keyExtractor keyExtractor 'Right))
+(let joinFull (Join table1 table2 keyExtractor keyExtractor 'Full))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) (FormatType (TypeOf joinInner)) '()))
+(let world (Write! world res_sink (Key) (FormatType (TypeOf joinLeft)) '()))
+(let world (Write! world res_sink (Key) (FormatType (TypeOf joinRight)) '()))
+(let world (Write! world res_sink (Key) (FormatType (TypeOf joinFull)) '()))
+
+(let world (Commit! world res_sink))
+(return world)
+)

@@ -1,0 +1,32 @@
+{
+    "_yql_read_udf"="DummyLog.ReadRecord";
+    "_yql_read_udf_type_config"="1";
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

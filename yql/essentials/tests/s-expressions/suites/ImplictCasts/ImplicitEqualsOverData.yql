@@ -1,0 +1,30 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+# result is true for all tests below
+
+# To float
+(let value (Uint64 '18446744073709551615))
+(let commonType (DataType 'Float))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# To double
+(let value (Int64 '"-9223372036854775808"))
+(let commonType (DataType 'Double))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# To string
+(let value (Utf8 '"проверка"))
+(let commonType (DataType 'String))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

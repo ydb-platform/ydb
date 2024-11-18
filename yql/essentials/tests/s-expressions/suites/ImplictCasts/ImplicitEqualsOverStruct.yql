@@ -1,0 +1,22 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+# Struct<Int16, Int16>> -> Struct<Uint32, Uint64> (false)
+(let value (AsStruct '('"a" (Int16 '0)) '('"b" (Int16 '"-1"))))
+(let commonType (StructType '('"a" (DataType 'Uint32)) '('"b" (DataType 'Uint64))))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# Struct<Uint16, Uint16>> -> Struct<Uint32, Uint64> (true)
+(let value (AsStruct '('"a" (Uint16 '0)) '('"b" (Uint16 '0))))
+(let commonType (StructType '('"a" (DataType 'Uint32)) '('"b" (DataType 'Uint64))))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

@@ -1,0 +1,41 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let list1 (AsList 
+  (AsStruct '('key1 (Just (Int32 '1))) '('value1 (String 'A))) 
+  (AsStruct '('key1 (Just (Int32 '7))) '('value1 (String 'B))) 
+  (AsStruct '('key1 (Nothing (OptionalType (DataType 'Int32)))) '('value1 (String 'C)))
+  (AsStruct '('key1 (Just (Int32 '4))) '('value1 (String 'D)))   
+  (AsStruct '('key1 (Just (Int32 '4))) '('value1 (String 'E)))
+))
+
+(let list2 (AsList 
+  (AsStruct '('key2 (Int64 '9)) '('value2 (String 'Z))) 
+  (AsStruct '('key2 (Int64 '4)) '('value2 (String 'Y))) 
+  (AsStruct '('key2 (Int64 '3)) '('value2 (String 'X)))
+  (AsStruct '('key2 (Int64 '4)) '('value2 (String 'W)))
+  (AsStruct '('key2 (Int64 '8)) '('value2 (String 'V)))
+))
+
+(let keyExtractor (lambda '(x) (Member x 'key2)))
+(let payloadExtractor (lambda '(x) x))
+
+(let dictOne (ToDict list2 keyExtractor payloadExtractor '('Hashed 'One 'Compact)))
+(let dictMany (ToDict list2 keyExtractor payloadExtractor '('Hashed 'Many 'Compact)))
+(let joinLeftSemi (MapJoinCore (ToFlow list1) dictOne 'LeftSemi '('key1) '('key2) '('key1 'a.key1 'value1 'a.value1) '() '() '()))
+(let joinLeftOnly (MapJoinCore (ToFlow list1) dictOne 'LeftOnly '('key1) '('key2) '('key1 'a.key1 'key1 'another_key 'key1 'yet_another_key) '() '() '()))
+(let joinInnerUnique (MapJoinCore (ToFlow list1) dictOne 'Inner '('key1) '('key2) '('key1 'a.key1 'value1 'a.value1) '('value2 'b.value2) '() '()))
+(let joinLeftUnique (MapJoinCore (ToFlow list1) dictOne 'Left '('key1) '('key2) '('key1 'a.key1) '('key2 'b.key2 'value2 'b.value2) '() '()))
+(let joinInner (MapJoinCore (ToFlow list1) dictMany 'Inner '('key1) '('key2) '('key1 'a.key1 'value1 'a.value1) '('key2 'b.key2) '() '()))
+(let joinLeft (MapJoinCore (ToFlow list1) dictMany 'Left '('key1) '('key2) '('key1 'a.key1) '('key2 'b.key2 'value2 'b.value2) '() '()))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) (Collect joinLeftSemi) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinLeftOnly) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinInnerUnique) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinLeftUnique) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinInner) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinLeft) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

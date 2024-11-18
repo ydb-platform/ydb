@@ -1,0 +1,13 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list1 (AsList (Uint32 '1) (Uint32 '2) (Uint32 '3)))
+(let list2 (AsList (Uint32 '4) (Uint32 '5) (Uint32 '6)))
+(let list3 (AsList (Uint32 '7) (Uint32 '8) (Uint32 '9)))
+(let world (Write! world res_sink (Key) (Collect (Extend (Iterator list1) (Iterator list2) (Iterator list3))) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

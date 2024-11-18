@@ -1,0 +1,24 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+# Variant<Tuple<Int16, Int32>>> -> Variant<Tuple<Uint32, Uint64>> (false)
+(let variantType (VariantType (TupleType (DataType 'Int16) (DataType 'Int32))))
+(let value (Variant (Int32 '"-1") '1 variantType))
+(let commonType (VariantType (TupleType (DataType 'Uint32) (DataType 'Uint64))))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# Variant<Tuple<Uint16, Uint32>>> -> Variant<Tuple<Uint32, Uint64>> (true)
+(let variantType (VariantType (TupleType (DataType 'Uint16) (DataType 'Uint32))))
+(let value (Variant (Uint32 '0) '1 variantType))
+(let commonType (VariantType (TupleType (DataType 'Uint32) (DataType 'Uint64))))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

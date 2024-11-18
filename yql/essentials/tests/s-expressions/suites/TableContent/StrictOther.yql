@@ -1,0 +1,21 @@
+(
+    #comment
+    (let mr_source (DataSource 'yt 'plato))
+    (let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+    (let world (Left! x))
+    (let table1 (Right! x))
+
+    (let r (Right! (Read! world mr_source (Key '('table (String 'Input1))) '('_other) '('('inline)))))
+
+    (let out (FlatMap table1 (lambda '(item) (block '(
+        (let key (Member item 'key))
+        (return (Map r (lambda '(x) (block '(
+            (let value (Lookup (Member x '_other) (String 'value)))
+            (return (AsStruct '('key key) '('value value))) 
+        )))))
+    )))))
+    (let mr_sink (DataSink 'yt 'plato))
+    (let world (Write! world mr_sink (Key '('table (String 'Output))) out '('('mode 'append))))
+    (let world (Commit! world mr_sink))
+    (return world)
+)

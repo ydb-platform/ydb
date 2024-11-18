@@ -1,0 +1,42 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let res_sink (DataSink 'result))
+
+(let x (Read! world mr_source (Key '('table (String 'Input))) (Void) '()))
+(let world (Left! x))
+(let table (Right! x))
+
+(let list (AsList
+    (AsStruct '('a (Uint32 '4)) '('b (String 'c)))
+    (AsStruct '('a (Uint32 '1)) '('b (String 'd)))
+    (AsStruct '('a (Uint32 '3)) '('b (String 'b)))
+))
+
+# Top->Take
+(let world (Write! world res_sink (Key) (Top table (Uint64 '3) '() (lambda '(item) '())) '('('type))))
+(let world (Write! world res_sink (Key) (TopSort table (Uint64 '3) '() (lambda '(item) '())) '('('type))))
+
+# tuple with single item
+(let world (Write! world res_sink (Key) (Top table (Uint64 '3) '((Bool 'True)) (lambda '(item) '((Member item 'key)))) '('('type))))
+(let world (Write! world res_sink (Key) (TopSort table (Uint64 '3) '((Bool 'True)) (lambda '(item) '((Member item 'key)))) '('('type))))
+
+# zero count
+(let world (Write! world res_sink (Key) (Top table (Uint64 '0) (Bool 'True) (lambda '(item) (Member item 'key))) '('('type))))
+(let world (Write! world res_sink (Key) (TopSort table (Uint64 '0) (Bool 'True) (lambda '(item) (Member item 'key))) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (Top (Iterator table (DependsOn (String 'a))) (Uint64 '0) (Bool 'True) (lambda '(item) (Member item 'key)))) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (TopSort (Iterator table (DependsOn (String 'b))) (Uint64 '0) (Bool 'True) (lambda '(item) (Member item 'key)))) '('('type))))
+
+# list <= N
+(let world (Write! world res_sink (Key) (Top list (Uint64 '3) (Bool 'True) (lambda '(item) (Member item 'a))) '('('type))))
+(let world (Write! world res_sink (Key) (TopSort list (Uint64 '3) (Bool 'True) (lambda '(item) (Member item 'a))) '('('type))))
+
+# ExtractMembers
+(let world (Write! world res_sink (Key) (ExtractMembers (Top table (Uint64 '3) (Bool 'True) (lambda '(item) (Member item 'key))) '('key 'value)) '('('type))))
+(let world (Write! world res_sink (Key) (ExtractMembers (TopSort table (Uint64 '3) (Bool 'True) (lambda '(item) (Member item 'key))) '('key 'value)) '('('type))))
+(let world (Write! world res_sink (Key) (ExtractMembers (Top table (Uint64 '3) (Bool 'True) (lambda '(item) (Member item 'key))) '('value)) '('('type))))
+(let world (Write! world res_sink (Key) (ExtractMembers (TopSort table (Uint64 '3) (Bool 'True) (lambda '(item) (Member item 'key))) '('value)) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

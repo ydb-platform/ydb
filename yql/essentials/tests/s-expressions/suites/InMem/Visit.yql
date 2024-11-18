@@ -1,0 +1,59 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(import id_module '"/lib/yql/id.yql")
+(let id (bind id_module 'id))
+
+#comment
+(let res_sink (DataSink 'result))
+(let vt (VariantType (TupleType (DataType 'Int32) (DataType 'String))))
+(let v1 (Variant (Int32 '34) '0 vt))
+(let v2 (Variant (String 'qwe) '1 vt))
+
+(let handler1 (lambda '(x) (Concat (String '"handler1:") (ToString (+ (Uint32 '100) x)))))
+(let handler2 (lambda '(x) (Concat (String '"handler2:") x)))
+
+(let world (Write! world res_sink (Key) (Visit v1 '0 handler1 '1 handler2) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 '0 handler1 '1 handler2) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v1 '0 handler1 (String 'q1)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v1 '1 handler2 (String 'q2)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 '0 handler1 (String 'q3)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 '1 handler2 (String 'q4)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v1 (String 'q5)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 (String 'q6)) '('('type))))
+
+(let world (Write! world res_sink (Key) (Visit (Apply id v1) '0 handler1 '1 handler2) '('('type))))
+(let world (Write! world res_sink (Key) (Visit (Apply id v2) '1 handler2 '0 handler1) '('('type))))
+(let world (Write! world res_sink (Key) (Visit (Apply id v1) '0 handler1 (String 'q1)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit (Apply id v1) '1 handler2 (String 'q2)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit (Apply id v2) '0 handler1 (String 'q3)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit (Apply id v2) '1 handler2 (String 'q4)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit (Apply id v1) (String 'q5)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit (Apply id v2) (String 'q6)) '('('type))))
+
+(let vt (VariantType (StructType '('a (DataType 'Int32)) '('b (DataType 'String)))))
+(let v1 (Variant (Int32 '34) 'a vt))
+(let v2 (Variant (String 'qwe) 'b vt))
+
+(let world (Write! world res_sink (Key) (Visit v1 'a handler1 'b handler2) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 'b handler2 'a handler1) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v1 'a handler1 (String 'r1)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v1 'b handler2 (String 'r2)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 'a handler1 (String 'r3)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 'b handler2 (String 'r4)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v1 (String 'r5)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 (String 'r6)) '('('type))))
+
+(let world (Write! world res_sink (Key) (Visit (Apply id v1) 'a handler1 'b handler2) '('('type))))
+(let world (Write! world res_sink (Key) (Visit (Apply id v2) 'a handler1 'b handler2) '('('type))))
+(let world (Write! world res_sink (Key) (Visit (Apply id v1) 'a handler1 (String 'r1)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit (Apply id v1) 'b handler2 (String 'r2)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit (Apply id v2) 'a handler1 (String 'r3)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit (Apply id v2) 'b handler2 (String 'r4)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit (Apply id v1) (String 'r5)) '('('type))))
+(let world (Write! world res_sink (Key) (Visit (Apply id v2) (String 'r6)) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

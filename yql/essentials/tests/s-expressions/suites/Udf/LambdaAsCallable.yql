@@ -1,0 +1,25 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList (String 'A) (String 'B) (String 'C) (String 'D) (String 'E)))
+(let state (String '""))
+(let fold (Udf 'TypeInspection.Fold (Void)
+    (TupleType
+        (TupleType
+            (TypeOf list)
+            (TypeOf state)
+            (CallableType '() '((DataType 'String)) '((DataType 'String)) '((DataType 'String)))
+        )
+        (StructType)
+        (TupleType)
+    )
+))
+(let func (lambda '(item state) (Concat state item)))
+(let data (Apply fold list state func))
+(let world (Write! world res_sink (Key) data '()))
+(let world (Commit! world res_sink))
+(return world)
+)

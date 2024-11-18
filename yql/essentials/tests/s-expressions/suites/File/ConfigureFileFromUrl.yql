@@ -1,0 +1,11 @@
+# canonize yson here
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let world (Configure! world config 'AddFileByUrl 'Tony 'https://yadi.sk/a/pk0iwMkNuNYgM/57b9c14c6fcc2a565515fab9))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) (Files '/home) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

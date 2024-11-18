@@ -1,0 +1,44 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+(let listVal (AsList (Int32 '0)))
+(let listVal (Append listVal (Int32 '1)))
+
+(let emptyList (List (ListType (DataType 'Int32))))
+(let emptyStream (EmptyIterator (StreamType (DataType 'Int32))))
+(let emptyOptional (Nothing (OptionalType (DataType 'Int32))))
+
+(let notOptLambda (lambda '(x) (< x (Int32 '1))))
+
+# Skip while true: []
+(let res (SkipWhile listVal (lambda '(x) (Bool 'true))))
+(let world (Write! world res_sink (Key) res '('('type))))
+
+# Skip while false: [0, 1]
+(let res (SkipWhile listVal (lambda '(x) (Bool 'false))))
+(let world (Write! world res_sink (Key) res '('('type))))
+
+# Skip from empty list: []
+(let res (SkipWhile emptyList notOptLambda))
+(let world (Write! world res_sink (Key) res '('('type))))
+
+# Skip from empty stream: []
+(let res (SkipWhile emptyStream notOptLambda))
+(let res (Collect res))
+(let world (Write! world res_sink (Key) res '('('type))))
+
+# Skip from empty optional: []
+(let res (SkipWhile emptyOptional notOptLambda))
+(let world (Write! world res_sink (Key) res '('('type))))
+
+# General case: [1]
+(let res (SkipWhile listVal notOptLambda))
+(let world (Write! world res_sink (Key) res '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

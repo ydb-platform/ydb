@@ -1,0 +1,29 @@
+(
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) (Void) '()))
+  (let world (Left! x))
+  (let table1 (Right! x))
+  (let table2 (Skip table1 (Uint32 '1)))
+  (let duplicate (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AsList row row))
+        (return res)
+  ))))
+  (let ttable1 (FlatMap table1 duplicate))
+  (let ttable2 (FlatMap table2 duplicate))
+  (let extend (Extend ttable1 ttable2))
+  (let output (Filter extend (lambda '(row) (< (Member row '"key") (String '500)))))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

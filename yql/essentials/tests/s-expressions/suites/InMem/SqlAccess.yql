@@ -1,0 +1,74 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let t '((Int32 '34) (String 'qwe)))
+(let l (AsList (Int32 '34) (Int32 '56)))
+(let s (AsStruct '('a (String 'ccc)) '('b (Double '3.5))))
+(let d (AsDict
+  '((Just (Uint32 '4)) (String 'aaa))
+  '((Nothing (OptionalType (DataType 'Uint32))) (String 'bbb)))
+)
+
+(let vt1 (VariantType (TupleType (DataType 'Int32) (DataType 'String))))
+(let v1 (Variant (Int32 '34) '0 vt1))
+
+(let vt2 (VariantType (StructType '('a (DataType 'Int32)) '('b (DataType 'String)))))
+(let v2 (Variant (Int32 '34) 'a vt2))
+
+(let world (Write! world res_sink (Key) (SqlAccess 'tuple t '0) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'tuple t '1) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'tuple v1 '0) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'tuple v1 '1) '('('type))))
+
+(let world (Write! world res_sink (Key) (SqlAccess 'tuple (Just t) '0) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'tuple (Just t) '1) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'tuple (Just v1) '0) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'tuple (Just v1) '1) '('('type))))
+
+(let world (Write! world res_sink (Key) (SqlAccess 'tuple (Nothing (OptionalType (TypeOf t))) '0) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'tuple (Nothing (OptionalType (TypeOf t))) '1) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'tuple (Nothing (OptionalType (TypeOf v1))) '0) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'tuple (Nothing (OptionalType (TypeOf v1))) '1) '('('type))))
+
+(let world (Write! world res_sink (Key) (SqlAccess 'struct s 'a) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'struct s 'b) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'struct v2 'a) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'struct v2 'b) '('('type))))
+
+(let world (Write! world res_sink (Key) (SqlAccess 'struct (Just s) 'a) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'struct (Just s) 'b) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'struct (Just v2) 'a) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'struct (Just v2) 'b) '('('type))))
+
+(let world (Write! world res_sink (Key) (SqlAccess 'struct (Nothing (OptionalType (TypeOf s))) 'a) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'struct (Nothing (OptionalType (TypeOf s))) 'b) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'struct (Nothing (OptionalType (TypeOf v2))) 'a) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'struct (Nothing (OptionalType (TypeOf v2))) 'b) '('('type))))
+
+(let world (Write! world res_sink (Key) (SqlAccess 'dict l (Uint64 '0)) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'dict l (Uint64 '1)) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'dict l (Uint64 '2)) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'dict d (Uint32 '4)) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'dict d (Uint32 '5)) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'dict d (Nothing (OptionalType (DataType 'Uint32)))) '('('type))))
+
+(let world (Write! world res_sink (Key) (SqlAccess 'dict (Just l) (Uint64 '0)) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'dict (Just l) (Uint64 '1)) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'dict (Just l) (Uint64 '2)) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'dict (Just d) (Uint32 '4)) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'dict (Just d) (Uint32 '5)) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'dict (Just d) (Nothing (OptionalType (DataType 'Uint32)))) '('('type))))
+
+(let world (Write! world res_sink (Key) (SqlAccess 'dict (Nothing (OptionalType (TypeOf l))) (Uint64 '0)) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'dict (Nothing (OptionalType (TypeOf l))) (Uint64 '1)) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'dict (Nothing (OptionalType (TypeOf l))) (Uint64 '2)) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'dict (Nothing (OptionalType (TypeOf d))) (Uint32 '4)) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'dict (Nothing (OptionalType (TypeOf d))) (Uint32 '5)) '('('type))))
+(let world (Write! world res_sink (Key) (SqlAccess 'dict (Nothing (OptionalType (TypeOf d))) (Nothing (OptionalType (DataType 'Uint32)))) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

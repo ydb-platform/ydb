@@ -1,0 +1,12 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let optBool1 (== (Int32 '0) (/ (Int32 '1) (Int32 '2))))
+(let optBool2 (== (Int32 '0) (/ (Int32 '4) (Int32 '5))))
+(let data (Coalesce (And optBool1 optBool2) (Bool 'false)))
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

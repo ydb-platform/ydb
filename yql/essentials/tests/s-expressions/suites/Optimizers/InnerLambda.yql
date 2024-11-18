@@ -1,0 +1,18 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list1 (AsList (String 'a) (String 'b)))
+(let list2 (AsList (String 'c) (String 'd)))
+(let data (FlatMap list1 (lambda '(x) (block '(
+   (let myList (Map list2 (lambda '(y) (block '(
+       (return (Concat x y)))))))
+   (return myList)
+)))))
+    
+(let world (Write! world res_sink (Key) data '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

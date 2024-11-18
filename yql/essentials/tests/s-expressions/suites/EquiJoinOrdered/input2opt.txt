@@ -1,0 +1,6 @@
+{"key1"=#;subkey1="..";"value2"="P"};
+{"key1"=#;subkey1="..";"value2"="Q"};
+{"key1"=#;subkey1="..";"value2"="R"};
+{"key1"=2;subkey1="..";"value2"="U"};
+{"key1"=4;subkey1="..";"value2"="Y"};
+{"key1"=4;subkey1="..";"value2"="W"};

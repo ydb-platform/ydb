@@ -1,0 +1,44 @@
+#USE plato;
+#INSERT INTO Output SELECT CAST(key as Int32) as item1, value as item2 FROM Input;
+#COMMIT;
+#INSERT INTO Output WITH TRUNCATE SELECT COALESCE(CAST(item1 as String), "") as key, "." as subkey, item2 as value FROM Output;
+
+(
+(let source (DataSource '"yt" '"plato"))
+(let sink (DataSink '"yt" '"plato"))
+(let result (DataSink 'result))
+
+(let r (Read! world source (Key '('table (String '"Input"))) (Void) '()))
+(let world (Left! r))
+(let input (Right! r))
+
+(let conv (lambda '(item) (block '(
+  (let res (Struct))
+  (let res (AddMember res '"item1" (Cast (Member item '"key") 'Int32)))
+  (let res (AddMember res '"item2" (Member item '"value")))
+  (return (AsList res))
+))))
+(let out (FlatMap input conv))
+
+(let world (Write! world sink (Key '('table (String 'Output))) out '('('mode 'renew))))
+(let world (Commit! world sink))
+
+(let r (Read! world source (Key '('table (String 'Output))) (Void) '()))
+(let world (Left! r))
+(let out (Right! r))
+
+(let conv (lambda '(item) (block '(
+  (let res (Struct))
+  (let res (AddMember res '"key" (Coalesce (Cast (Member item '"item1") 'String) (String '""))))
+  (let res (AddMember res '"subkey" (String '".")))
+  (let res (AddMember res '"value" (Member item '"item2")))
+  (return (AsList res))
+
+))))
+(let out (FlatMap out conv))
+
+(let world (Write! world sink (Key '('table (String 'Output))) out '('('mode 'renew))))
+(let world (Commit! world sink))
+(let world (Commit! world result))
+(return world)
+)

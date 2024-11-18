@@ -1,0 +1,15 @@
+(
+(let output5 (block '(
+  (let row (Struct))
+  (let row (AddMember row 'x (Int64 '1)))
+  (let row (AddMember row 'y (Int64 '2)))
+  (let row (AddMember row 'z (Int64 '3)))
+  (let insert1_output (AsList row))
+  (return insert1_output)
+)
+))
+(let sink (DataSink 'yt 'plato))
+(let world (Write! world sink (Key '('table (String 'Output))) output5 '('('mode 'append))))
+(let world (Commit! world sink))
+(return world)
+)

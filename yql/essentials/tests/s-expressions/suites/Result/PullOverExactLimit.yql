@@ -1,0 +1,12 @@
+(
+(let result_sink (DataSink 'result))
+(let plato_sink (DataSink 'yt 'plato))
+
+(let x (Read! world (DataSource 'yt 'plato) (Key '('table (String 'Input))) (Void) '()))
+(let world (Left! x))
+(let data (Take (Right! x) (Uint64 '3)))
+(let world (Write! world result_sink (Key) data '('('type) '('autoref) '('take '3))))
+(let world (Commit! world plato_sink))
+(let world (Commit! world result_sink))
+(return world)
+)

@@ -1,0 +1,40 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let vt (VariantType (TupleType (DataType 'Int32) (DataType 'String))))
+(let v1 (Variant (Int32 '34) '0 vt))
+(let v2 (Variant (String 'qwe) '1 vt))
+
+(let handler (lambda '(x) (Just x)))
+(let listHandler (lambda '(x) (AsList x)))
+
+(let world (Write! world res_sink (Key) (Visit v1 '0 handler (Nothing (OptionalType (DataType 'Int32)))) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v1 '1 handler (Nothing (OptionalType (DataType 'String)))) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 '0 handler (Nothing (OptionalType (DataType 'Int32)))) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 '1 handler (Nothing (OptionalType (DataType 'String)))) '('('type))))
+
+(let world (Write! world res_sink (Key) (Visit v1 '0 listHandler (List (ListType (DataType 'Int32)))) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v1 '1 listHandler (List (ListType (DataType 'String)))) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 '0 listHandler (List (ListType (DataType 'Int32)))) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 '1 listHandler (List (ListType (DataType 'String)))) '('('type))))
+
+(let vt (VariantType (StructType '('a (DataType 'Int32)) '('b (DataType 'String)))))
+(let v1 (Variant (Int32 '34) 'a vt))
+(let v2 (Variant (String 'qwe) 'b vt))
+
+(let world (Write! world res_sink (Key) (Visit v1 'a handler (Nothing (OptionalType (DataType 'Int32)))) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v1 'b handler (Nothing (OptionalType (DataType 'String)))) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 'a handler (Nothing (OptionalType (DataType 'Int32)))) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 'b handler (Nothing (OptionalType (DataType 'String)))) '('('type))))
+
+(let world (Write! world res_sink (Key) (Visit v1 'a listHandler (List (ListType (DataType 'Int32)))) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v1 'b listHandler (List (ListType (DataType 'String)))) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 'a listHandler (List (ListType (DataType 'Int32)))) '('('type))))
+(let world (Write! world res_sink (Key) (Visit v2 'b listHandler (List (ListType (DataType 'String)))) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

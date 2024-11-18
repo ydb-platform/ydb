@@ -1,0 +1,32 @@
+{
+    "_yql_view_key1"="SELECT SimpleUdf::Concat(SimpleUdf::Concat(key, \" - \"), value) FROM self";
+    "_yql_view_key2"="SELECT key || \"key\" FROM self_raw";
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

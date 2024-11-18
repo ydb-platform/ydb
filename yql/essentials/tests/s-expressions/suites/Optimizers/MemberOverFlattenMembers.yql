@@ -1,0 +1,17 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let myStruct1 (AsStruct '('a (String 'z))))
+(let myStruct2 (AsStruct '('b (String 'y))))
+(let flatten (FlattenMembers '('"first_" myStruct1) '('"second_" myStruct2)))
+(let world (Write! world res_sink (Key) flatten '('('type))))
+(let world (Write! world res_sink (Key) (Member flatten 'first_a) '('('type))))
+(let add (AddMember flatten 'c (String 'x)))
+(let world (Write! world res_sink (Key) add '('('type))))
+(let world (Write! world res_sink (Key) (Member add 'second_b) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

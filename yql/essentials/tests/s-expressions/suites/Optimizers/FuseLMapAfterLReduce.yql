@@ -1,0 +1,82 @@
+(
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(import window_module '"/lib/yql/window.yql")
+(import core_module '"/lib/yql/core.yql")
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"Input")))) '('"key") '()))
+  (let world (Left! x))
+  (let table1 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let inputRowsList (block '(
+        (let select (block '(
+          (let inputRowsList (block '(
+            (let select (block '(
+              (let core table1)
+              (let core (FlatMap core (lambda '(row) (AsList (AsStruct '('"key" (Member row '"key")) '('"skey" ("Size" (Member row '"key"))))))))
+              (let core (Aggregate core '('"skey") '('('Count0 (Apply (bind aggregate_module '"count_traits_factory") (TypeOf core) (lambda '(row) (Void)))))))
+              (let core (FlatMap core (lambda '(row) (block '(
+                (let res (AsStruct '('"skey" (Member row '"skey")) '('"cnt" (Member row 'Count0))))
+                (let res (AsList res))
+                (return res)
+              )))))
+              (return core)
+            )))
+            (return select)
+          )))
+          (let core (LMap inputRowsList (lambda '(x) (block '(
+            (let inputType (CallableArgumentType (TypeOf (ScriptUdf 'Python '"f" (CallableType '() '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"pass" (DataType 'Int32)) '('"skey" (DataType 'Uint32))))) '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"skey" (DataType 'Uint32))))) '((DataType 'Int32))) (String '@@
+def f(input,x):
+   for i in list(input):
+      d = i.__dict__
+      d["pass"] = x
+      yield d
+@@))) '0))
+            (let inputRowsList (MatchType inputType 'List (lambda '(y) (ForwardList x)) (lambda '(y) "x")))
+            (return (Apply (ScriptUdf 'Python '"f" (CallableType '() '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"pass" (DataType 'Int32)) '('"skey" (DataType 'Uint32))))) '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"skey" (DataType 'Uint32))))) '((DataType 'Int32))) (String '@@
+def f(input,x):
+   for i in list(input):
+      d = i.__dict__
+      d["pass"] = x
+      yield d
+@@)) inputRowsList (Int32 '"1")))
+          )))))
+          (return core)
+        )))
+        (return select)
+      )))
+      (let core (LMap inputRowsList (lambda '(x) (block '(
+        (let inputType (CallableArgumentType (TypeOf (ScriptUdf 'Python '"f" (CallableType '() '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"pass" (DataType 'Int32)) '('"skey" (DataType 'Uint32))))) '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"pass" (DataType 'Int32)) '('"skey" (DataType 'Uint32))))) '((DataType 'Int32))) (String '@@
+def f(input,x):
+   for i in list(input):
+      d = i.__dict__
+      d["pass"] = x
+      yield d
+@@))) '0))
+        (let inputRowsList (MatchType inputType 'List (lambda '(y) (ForwardList x)) (lambda '(y) "x")))
+        (return (Apply (ScriptUdf 'Python '"f" (CallableType '() '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"pass" (DataType 'Int32)) '('"skey" (DataType 'Uint32))))) '((StreamType (StructType '('"cnt" (DataType 'Uint64)) '('"pass" (DataType 'Int32)) '('"skey" (DataType 'Uint32))))) '((DataType 'Int32))) (String '@@
+def f(input,x):
+   for i in list(input):
+      d = i.__dict__
+      d["pass"] = x
+      yield d
+@@)) inputRowsList (Int32 '"2")))
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

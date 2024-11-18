@@ -1,0 +1,168 @@
+(
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(let world (Configure! world (DataSource '"config") 'SQL '0))
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) '('"assignment_gs_count" '"assignment_assignment_id" '"assignment_last_status_change_time" '"requester_id" '"project_id" '"assignment_gs_weight") '()))
+  (let world (Left! x))
+  (let table5 (Right! x))
+  (let values (block '(
+    (let select (block '(
+      (let core table5)
+      (let core (Filter core (lambda '(row) (Coalesce (">" (Member row '"assignment_gs_count") (Int64 '"0")) (Bool 'false)))))
+      (let core (block '(
+        (return (Aggregate core '('"assignment_assignment_id") '('('Some0 (Apply (bind aggregate_module '"some_traits_factory") (TypeOf core) (lambda '(row) (Member row '"assignment_last_status_change_time")))) '('Some1 (Apply (bind aggregate_module '"some_traits_factory") (TypeOf core) (lambda '(row) (Member row '"requester_id")))) '('Some2 (Apply (bind aggregate_module '"some_traits_factory") (TypeOf core) (lambda '(row) (Member row '"project_id")))) '('Some3 (Apply (bind aggregate_module '"some_traits_factory") (TypeOf core) (lambda '(row) (Member row '"assignment_gs_count")))) '('Some4 (Apply (bind aggregate_module '"some_traits_factory") (TypeOf core) (lambda '(row) (Member row '"assignment_gs_weight")))))))
+      )))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AddMember res '"assignment_id" (Member row '"assignment_assignment_id")))
+        (let res (AddMember res '"date" (SafeCast ("Apply" ("Udf" '"DateTime2.FromSeconds") (Cast (Member row 'Some0) 'Uint32)) (DataType 'Date))))
+        (let res (AddMember res '"requester_id" (Member row 'Some1)))
+        (let res (AddMember res '"project_id" (Member row 'Some2)))
+        (let res (AddMember res '"gs_count" (Member row 'Some3)))
+        (let res (AddMember res '"gs_weight" (Cast (Member row 'Some4) 'Double)))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let sink (DataSink '"yt" '"plato"))
+    (let world (Write! world sink (Key '('table (String '"Output"))) values '('('mode 'renew))))
+    (return world)
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Output"))) (Void) '()))
+  (let world (Left! x))
+  (let table7 (Right! x))
+  (let values (block '(
+    (let select (block '(
+      (let core (block '(
+        (let select (block '(
+          (let core (block '(
+            (let select (block '(
+              (let core table7)
+              (let core (FlatMap core (lambda '(row) (block '(
+                (let res (AsList row))
+                (return res)
+              )))))
+              (return core)
+            )))
+            (return select)
+          )))
+          (let core (block '(
+            (return (Aggregate core '('"date" '"project_id" '"requester_id") '('('Sum8 (Apply (bind aggregate_module '"sum_traits_factory") (TypeOf core) (lambda '(row) (Member row '"gs_count")))) '('Sum9 (Apply (bind aggregate_module '"sum_traits_factory") (TypeOf core) (lambda '(row) (Member row '"gs_weight")))))))
+          )))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (Struct))
+            (let res (AddMember res '"date" (Member row '"date")))
+            (let res (AddMember res '"requester_id" (Member row '"requester_id")))
+            (let res (AddMember res '"project_id" (Member row '"project_id")))
+            (let res (AddMember res '"gs_count" (Member row 'Sum8)))
+            (let res (AddMember res '"gs_weight" (Member row 'Sum9)))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsList row))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let sink (DataSink '"yt" '"plato"))
+    (let world (Write! world sink (Key '('table (String '"Output1"))) values '('('mode 'renew))))
+    (return world)
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Output"))) (Void) '()))
+  (let world (Left! x))
+  (let table7 (Right! x))
+  (let values (block '(
+    (let select (block '(
+      (let core (block '(
+        (let select (block '(
+          (let core (block '(
+            (let select (block '(
+              (let core (block '(
+                (let select (block '(
+                  (let core table7)
+                  (let core (FlatMap core (lambda '(row) (block '(
+                    (let res (AsList row))
+                    (return res)
+                  )))))
+                  (return core)
+                )))
+                (return select)
+              )))
+              (let core (block '(
+                (return (Aggregate core '('"date" '"project_id" '"requester_id") '('('Sum8 (Apply (bind aggregate_module '"sum_traits_factory") (TypeOf core) (lambda '(row) (Member row '"gs_count")))) '('Sum9 (Apply (bind aggregate_module '"sum_traits_factory") (TypeOf core) (lambda '(row) (Member row '"gs_weight")))))))
+              )))
+              (let core (FlatMap core (lambda '(row) (block '(
+                (let res (Struct))
+                (let res (AddMember res '"date" (Member row '"date")))
+                (let res (AddMember res '"requester_id" (Member row '"requester_id")))
+                (let res (AddMember res '"project_id" (Member row '"project_id")))
+                (let res (AddMember res '"gs_count" (Member row 'Sum8)))
+                (let res (AddMember res '"gs_weight" (Member row 'Sum9)))
+                (let res (AsList res))
+                (return res)
+              )))))
+              (return core)
+            )))
+            (return select)
+          )))
+          (let core (block '(
+            (return (Aggregate core '('"date" '"requester_id") '('('Sum11 (Apply (bind aggregate_module '"sum_traits_factory") (TypeOf core) (lambda '(row) (Member row '"gs_count")))) '('Sum12 (Apply (bind aggregate_module '"sum_traits_factory") (TypeOf core) (lambda '(row) (Member row '"gs_weight")))))))
+          )))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (Struct))
+            (let res (AddMember res '"date" (Member row '"date")))
+            (let res (AddMember res '"requester_id" (Member row '"requester_id")))
+            (let res (AddMember res '"gs_count" (Member row 'Sum11)))
+            (let res (AddMember res '"gs_weight" (Member row 'Sum12)))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsList row))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let sink (DataSink '"yt" '"plato"))
+    (let world (Write! world sink (Key '('table (String '"Output2"))) values '('('mode 'renew))))
+    (return world)
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

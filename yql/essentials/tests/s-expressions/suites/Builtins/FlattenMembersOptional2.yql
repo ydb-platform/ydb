@@ -1,0 +1,30 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+(let value (AsStruct '('a (Int8 '1)) '('b (Just (String 'str))) '('c '((Int32 '2) (Int64 '3)))))
+(let flattenMembersResult (FlattenMembers '('"" (Just value))))
+(let world (Write! world res_sink (Key) flattenMembersResult '('('type))))
+
+(let value (Nothing (TypeOf (Just value))))
+(let flattenMembersResult (FlattenMembers '('"x" value)))
+(let world (Write! world res_sink (Key) flattenMembersResult '('('type))))
+
+(let value (AsStruct))
+(let flattenMembersResult (FlattenMembers '('"x" value)))
+(let world (Write! world res_sink (Key) flattenMembersResult '('('type))))
+
+(let value (Just (AsStruct)))
+(let flattenMembersResult (FlattenMembers '('"" value)))
+(let world (Write! world res_sink (Key) flattenMembersResult '('('type))))
+
+(let value (Nothing (TypeOf value)))
+(let flattenMembersResult (FlattenMembers '('"x" value)))
+(let world (Write! world res_sink (Key) flattenMembersResult '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

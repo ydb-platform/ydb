@@ -1,0 +1,13 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let myStruct (AsStruct '('a (String 'z)) '('b (Null))))
+(let typeOfMyStruct (TypeOf myStruct))
+
+(let world (Write! world res_sink (Key) (Member (Just myStruct) 'b) '('('type))))
+(let world (Write! world res_sink (Key) (Member (Nothing (OptionalType typeOfMyStruct)) 'b) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

@@ -1,0 +1,26 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+(let list1 (Map table1 (lambda '(row) (block '(
+    (let res (AsStruct '('foo (FromString (Member row 'key) 'Int32)) '('bar (FromString (Member row 'subkey) 'Int32))))
+    (return res)
+)
+))))
+(let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table2 (Right! x))
+(let list2 (Map table2 (lambda '(row) (block '(
+    (let res (AsStruct '('foo (FromString (Member row 'key) 'Double)) '('jar (Member row 'value))))
+    (return res)
+)
+))))
+(let result (UnionAll list1 list2))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) (FormatType (TypeOf result)) '()))
+(let world (Write! world res_sink (Key) result '()))
+(let world (Commit! world res_sink))
+(return world)
+)

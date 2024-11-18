@@ -1,0 +1,30 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+# result is true for all tests below
+
+# Int32 -> Uint64?? (false)
+(let value (Int32 '"-1"))
+(let commonType (OptionalType (OptionalType (DataType 'Uint64))))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# Just(Int32) -> Uint64?? (false)
+(let value (Just (Int32 '"-1")))
+(let commonType (OptionalType (OptionalType (DataType 'Uint64))))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# Nothing(Int32)? -> Uint64?? (true)
+(let value (Just (Nothing (OptionalType (DataType 'Int32)))))
+(let commonType (OptionalType (OptionalType (DataType 'Uint64))))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

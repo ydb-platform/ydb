@@ -1,0 +1,54 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let emptyInt32 (Nothing (OptionalType (DataType 'Int32))))
+(let emptyString (Nothing (OptionalType (DataType 'String))))
+
+(let list1 (AsList
+  (AsStruct '('key1 (Just (Int32 '1))) '('value1 (Just (String 'A))) '('key2 emptyInt32) '('value2 emptyString) '('_yql_table_index (Uint32 '0)) '('_yql_join_column_0 (Just (Int32 '1))))
+  (AsStruct '('key1 (Just (Int32 '1))) '('value1 (Just (String 'B))) '('key2 emptyInt32) '('value2 emptyString) '('_yql_table_index (Uint32 '0)) '('_yql_join_column_0 (Just (Int32 '1))))
+))
+
+(let list2 (AsList
+  (AsStruct '('key1 emptyInt32) '('value1 emptyString) '('key2 (Just (Int32 '1))) '('value2 (Just (String 'X))) '('_yql_table_index (Uint32 '1)) '('_yql_join_column_0 (Just (Int32 '1))))
+  (AsStruct '('key1 emptyInt32) '('value1 emptyString) '('key2 (Just (Int32 '1))) '('value2 (Just (String 'Y))) '('_yql_table_index (Uint32 '1)) '('_yql_join_column_0 (Just (Int32 '1))))
+))
+
+(let list12 (AsList
+  (AsStruct '('key1 (Just (Int32 '1))) '('value1 (Just (String 'A))) '('key2 emptyInt32) '('value2 emptyString) '('_yql_table_index (Uint32 '0)) '('_yql_join_column_0 (Just (Int32 '1))))
+  (AsStruct '('key1 emptyInt32) '('value1 emptyString) '('key2 (Just (Int32 '1))) '('value2 (Just (String 'X))) '('_yql_table_index (Uint32 '1)) '('_yql_join_column_0 (Just (Int32 '1))))
+  (AsStruct '('key1 (Just (Int32 '1))) '('value1 (Just (String 'B))) '('key2 emptyInt32) '('value2 emptyString) '('_yql_table_index (Uint32 '0)) '('_yql_join_column_0 (Just (Int32 '1))))
+  (AsStruct '('key1 emptyInt32) '('value1 emptyString) '('key2 (Just (Int32 '1))) '('value2 (Just (String 'Y))) '('_yql_table_index (Uint32 '1)) '('_yql_join_column_0 (Just (Int32 '1))))
+))
+
+(let writeRes (lambda '(world list) (block '(
+(let joinInner (CommonJoinCore (ToFlow list) 'Inner '('key1 'value1) '('key2 'value2) '() '('_yql_join_column_0) '('('sorted 'right)) '_yql_table_index))
+(let joinLeft (CommonJoinCore (ToFlow list) 'Left '('key1 'value1) '('key2 'value2) '() '('_yql_join_column_0) '('('sorted 'right)) '_yql_table_index))
+(let joinRight (CommonJoinCore (ToFlow list) 'Right '('key1 'value1) '('key2 'value2) '() '('_yql_join_column_0) '('('sorted 'right)) '_yql_table_index))
+(let joinFull (CommonJoinCore (ToFlow list) 'Full '('key1 'value1) '('key2 'value2) '() '('_yql_join_column_0) '('('sorted 'right)) '_yql_table_index))
+(let joinLeftOnly (CommonJoinCore (ToFlow list) 'LeftOnly '('key1 'value1) '() '() '('_yql_join_column_0) '('('sorted 'right)) '_yql_table_index))
+(let joinLeftSemi (CommonJoinCore (ToFlow list) 'LeftSemi '('key1 'value1) '() '() '('_yql_join_column_0) '('('sorted 'right)) '_yql_table_index))
+(let joinRightOnly (CommonJoinCore (ToFlow list) 'RightOnly '() '('key2 'value2) '() '('_yql_join_column_0) '('('sorted 'right)) '_yql_table_index))
+(let joinRightSemi (CommonJoinCore (ToFlow list) 'RightSemi '() '('key2 'value2) '() '('_yql_join_column_0) '('('sorted 'right)) '_yql_table_index))
+(let joinExclusion (CommonJoinCore (ToFlow list) 'Exclusion '('key1 'value1) '('key2 'value2) '() '('_yql_join_column_0) '('('sorted 'right)) '_yql_table_index))
+(let joinCross (CommonJoinCore (ToFlow list) 'Cross '('key1 'value1) '('key2 'value2) '() '('_yql_join_column_0) '('('sorted 'right)) '_yql_table_index))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) (Collect joinInner) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinLeft) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinRight) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinFull) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinLeftOnly) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinLeftSemi) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinRightOnly) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinRightSemi) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinExclusion) '('('type))))
+(let world (Write! world res_sink (Key) (Collect joinCross) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+))))
+
+(let world (Apply writeRes world list1))
+(let world (Apply writeRes world list2))
+(let world (Apply writeRes world list12))
+(return world)
+)

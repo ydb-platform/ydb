@@ -1,0 +1,13 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let udf (Udf 'Pire.Match (String '.?\d.?)))
+(let world (Write! world res_sink (Key) (Apply udf (String 'abc)) '()))
+(let world (Write! world res_sink (Key) (Apply udf (String 'x6y)) '()))
+(let world (Write! world res_sink (Key) (FormatType (TypeOf udf)) '()))
+(let world (Commit! world res_sink))
+(return world)
+)

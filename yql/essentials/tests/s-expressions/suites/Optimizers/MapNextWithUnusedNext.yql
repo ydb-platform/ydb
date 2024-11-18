@@ -1,0 +1,14 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let lst (AsList (Int32 '0) (Int32 '1) (Int32 '2) (Int32 '3)))
+(let lst (Iterator lst))
+(let lst (MapNext lst (lambda '(current next) (+ current (Int32 '1)))))
+(let lst (ForwardList lst))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) lst '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

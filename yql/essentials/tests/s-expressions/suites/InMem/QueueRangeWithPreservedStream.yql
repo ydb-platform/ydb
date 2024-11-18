@@ -1,0 +1,32 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let res_sink (DataSink 'result))
+
+(let list (AsList
+    (Uint32 '1)
+    (Uint32 '1)
+    (Uint32 '2)
+    (Uint32 '3)
+    (Uint32 '5)
+    (Uint32 '8)
+))
+
+(let base_stream (Iterator list))
+
+(let queue (QueueCreate (ListItemType (TypeOf list)) (Void) (Uint64 '0)))
+
+(let stream (PreserveStream base_stream queue (Uint64 '100500)))
+
+(let update (lambda '(item state) (block '(
+    (let cumulative_sum (+ item state))
+    (let queue_content (Collect (QueueRange queue (Uint64 '0) (Uint64 '100500) (DependsOn item))))
+    (return '('(item cumulative_sum queue_content) cumulative_sum))
+))))
+
+(let result (FoldMap stream (Uint32 '0) update))
+
+(let world (Write! world res_sink (Key) (Collect result) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

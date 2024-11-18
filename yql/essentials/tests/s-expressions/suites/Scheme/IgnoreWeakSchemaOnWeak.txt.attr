@@ -1,0 +1,9 @@
+{
+    "schema"=<"strict" = %false; "unique_keys" = %false>
+    [
+        {"type"="any"; "name"="a"; "sort_order"="ascending"};
+        {"type"="any"; "name"="b"; "sort_order"="ascending"};
+        {"type"="any"; "name"="c"; "sort_order"="ascending"}
+    ];
+    "schema_mode"="weak"
+}

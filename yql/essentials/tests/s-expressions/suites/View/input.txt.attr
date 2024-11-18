@@ -1,0 +1,33 @@
+{
+    "_yql_view_trivial"="SELECT key, subkey, value FROM self";
+    "_yql_view_key1"="SELECT key || \"key\" FROM self";
+    "_yql_view_noread"="SELECT 1 as key, 2 as value";
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

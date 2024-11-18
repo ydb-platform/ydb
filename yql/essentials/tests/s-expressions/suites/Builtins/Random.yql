@@ -1,0 +1,23 @@
+# canonize yson here
+(
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+(let table1map (Map table1 (lambda '(item) (block '(
+   (let newValue (Member item 'value))
+   (let newValue (Concat (Concat newValue (String '" ")) (ToString 
+     (Coalesce (ToIntegral (* (Uint64 '1000) (Random (DependsOn item))) (DataType 'Uint64)) (Uint64 '0)))))
+   (let newValue (Concat (Concat newValue (String '" ")) (ToString (RandomNumber (DependsOn item)))))
+   (let newValue (Concat (Concat newValue (String '" ")) (ToString (RandomUuid (DependsOn item)))))
+   (let s (Struct))
+   (let s (AddMember s 'key (Member item 'key)))
+   (let s (AddMember s 'subkey (ToString (RandomNumber))))
+   (let s (AddMember s 'value newValue))
+   (return s)
+)))))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) table1map '('('mode 'append))))
+(let world (Commit! world mr_sink))
+(return world)
+)

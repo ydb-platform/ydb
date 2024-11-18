@@ -1,0 +1,21 @@
+# program
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(import agg_module '"/lib/yql/aggregate.yql")
+(let list (AsList
+(AsStruct '('key (Uint32 '1)) '('value (Uint32 '2)))
+(AsStruct '('key (Uint32 '2)) '('value (Uint32 '3)))
+(AsStruct '('key (Uint32 '1)) '('value (Uint32 '4)))
+(AsStruct '('key (Uint32 '3)) '('value (Uint32 '10)))
+(AsStruct '('key (Uint32 '2)) '('value (Uint32 '5)))
+(AsStruct '('key (Uint32 '2)) '('value (Uint32 '5)))
+))
+(let count_traits (Apply (bind agg_module 'count_all_traits_factory) (ListType (StructMemberType (ListItemType (TypeOf list)) 'value)) (lambda '(v) v)))
+(let res_sink (DataSink 'result))
+(let resKey (Aggregate list '('key) '('('count_value count_traits 'value))))
+(let world (Write! world res_sink (Key) resKey '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

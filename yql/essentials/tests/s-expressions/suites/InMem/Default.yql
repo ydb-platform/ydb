@@ -1,0 +1,38 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let test (lambda '(world type) (block '(
+  (let world (Write! world res_sink (Key) (Default (DataType type)) '('('type))))
+  (let world (Write! world res_sink (Key) (Default (OptionalType (DataType type))) '('('type))))
+  (return world)
+))))
+
+(let world (Apply test world 'Bool))
+(let world (Apply test world 'Int8))
+(let world (Apply test world 'Uint8))
+(let world (Apply test world 'Int16))
+(let world (Apply test world 'Uint16))
+(let world (Apply test world 'Int32))
+(let world (Apply test world 'Uint32))
+(let world (Apply test world 'Int64))
+(let world (Apply test world 'Uint64))
+(let world (Apply test world 'Float))
+(let world (Apply test world 'Double))
+(let world (Apply test world 'String))
+(let world (Apply test world 'Utf8))
+# yson & json don't have a default value
+(let world (Apply test world 'Date))
+(let world (Apply test world 'Datetime))
+(let world (Apply test world 'Timestamp))
+(let world (Apply test world 'Interval))
+(let world (Apply test world 'TzDate))
+(let world (Apply test world 'TzDatetime))
+(let world (Apply test world 'TzTimestamp))
+(let world (Apply test world 'Uuid))
+
+(let world (Commit! world res_sink))
+(return world)
+)

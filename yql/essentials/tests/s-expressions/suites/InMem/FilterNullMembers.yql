@@ -1,0 +1,15 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList 
+  (AsStruct '('key (Just (Uint32 '1))) '('value (String 'a)))
+  (AsStruct '('key (Nothing (OptionalType (DataType 'Uint32)))) '('value (String 'a)))
+))
+
+(let world (Write! world res_sink (Key) (FilterNullMembers list '('key)) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

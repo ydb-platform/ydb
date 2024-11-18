@@ -1,0 +1,16 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let filter (lambda '(name) (And (>= name (String '"Input1")) (<= name (String '"Input3")))))
+(let x (Read! world mr_source (Key '('table (MrTableRangeStrict '"" filter))) (Void) '()))
+(let world (Left! x))
+(let tables (Right! x))
+(let length (Length tables))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) (Just (AsStruct '('value length))) '()))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) length '()))
+(let world (Commit! world mr_sink))
+(let world (Commit! world res_sink))
+(return world)
+)

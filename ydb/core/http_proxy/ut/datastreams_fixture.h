@@ -66,8 +66,8 @@ T GetByPath(const NJson::TJsonValue& msg, TStringBuf path) {
     }
 }
 
-
 class THttpProxyTestMock : public NUnitTest::TBaseFixture {
+    friend class THttpProxyTestMockForSQS;
 public:
     THttpProxyTestMock() = default;
     ~THttpProxyTestMock() = default;
@@ -80,12 +80,12 @@ public:
         InitAll();
     }
 
-    void InitAll() {
+    void InitAll(bool yandexCloudMode = true) {
         AccessServicePort = PortManager.GetPort(8443);
         AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
-        InitKikimr();
+        InitKikimr(yandexCloudMode);
         InitAccessServiceService();
-        InitHttpServer();
+        InitHttpServer(yandexCloudMode);
     }
 
     static TString FormAuthorizationStr(const TString& region) {
@@ -364,7 +364,7 @@ private:
         return resultSet;
     }
 
-    void InitKikimr() {
+    void InitKikimr(bool yandexCloudMode) {
         AuthFactory = std::make_shared<TIamAuthFactory>();
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
@@ -375,7 +375,7 @@ private:
         appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
 
         appConfig.MutableSqsConfig()->SetEnableSqs(true);
-        appConfig.MutableSqsConfig()->SetYandexCloudMode(true);
+        appConfig.MutableSqsConfig()->SetYandexCloudMode(yandexCloudMode);
         appConfig.MutableSqsConfig()->SetEnableDeadLetterQueues(true);
 
         auto limit = appConfig.MutablePQConfig()->AddValidRetentionLimits();
@@ -638,7 +638,7 @@ private:
         AccessServiceServer = builder.BuildAndStart();
     }
 
-    void InitHttpServer() {
+    void InitHttpServer(bool yandexCloudMode) {
         NKikimrConfig::TServerlessProxyConfig config;
         config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central1");
         config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central-1");
@@ -648,7 +648,7 @@ private:
         config.MutableHttpConfig()->SetAccessServiceEndpoint(TStringBuilder() << "127.0.0.1:" << AccessServicePort);
         config.SetTestMode(true);
         config.MutableHttpConfig()->SetPort(HttpServicePort);
-        config.MutableHttpConfig()->SetYandexCloudMode(true);
+        config.MutableHttpConfig()->SetYandexCloudMode(yandexCloudMode);
         config.MutableHttpConfig()->SetYmqEnabled(true);
 
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYdb::CreateOAuthCredentialsProviderFactory("proxy_sa@builtin");
@@ -752,4 +752,10 @@ public:
     ui16 DatabaseServicePort = 0;
     ui16 MonPort = 0;
     ui16 KikimrGrpcPort = 0;
+};
+
+class THttpProxyTestMockForSQS : public THttpProxyTestMock {
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(false);
+    }
 };

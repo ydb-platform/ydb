@@ -99,7 +99,6 @@ target_sources(core-cms-console PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/logger.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/modifications_validator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/net_classifier_updater.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/shared_cache_configurator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/tx_processor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/util.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/config_helpers.h
@@ -122,7 +121,6 @@ target_sources(core-cms-console PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/log_settings_configurator.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/logger.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/modifications_validator.h
-  ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/shared_cache_configurator.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/tx_processor.h
   ${PROJECT_SOURCE_DIR}/ydb/core/cms/console/util.h
 )

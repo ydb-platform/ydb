@@ -59,6 +59,7 @@ target_link_libraries(ydb-core-persqueue PUBLIC
 
 target_sources(ydb-core-persqueue PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/blob.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/common_app.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/cluster_tracker.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/event_helpers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/fetch_request_actor.cpp
@@ -80,12 +81,14 @@ target_sources(ydb-core-persqueue PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/percentile_counter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq_database.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq_impl_app.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq_impl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq_l2_cache.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/pq_rl_helpers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/quota_tracker.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/read_balancer__balancing_app.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/read_balancer__balancing.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/read_balancer_app.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/read_balancer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/account_read_quoter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/persqueue/read_quoter.cpp

@@ -12,28 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(chacha_512)
-add_subdirectory(ut)
-
-add_library(core-blobstorage-crypto)
-
-
-target_link_libraries(core-blobstorage-crypto PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  contrib-libs-t1ha
-  library-cpp-sse
-  blobstorage-crypto-chacha_512
-  library-actors-util
-)
-
-target_sources(core-blobstorage-crypto PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/crypto/crypto.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/crypto/poly1305.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha_vec.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/crypto/poly1305_vec.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/crypto/secured_block.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/crypto/crypto.h
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

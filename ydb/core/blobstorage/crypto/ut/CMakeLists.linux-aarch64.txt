@@ -25,6 +25,7 @@ target_link_libraries(ydb-core-blobstorage-crypto-ut PUBLIC
   yutil
   cpp-testing-unittest_main
   core-blobstorage-crypto
+  blobstorage-crypto-chacha_512
 )
 
 target_allocator(ydb-core-blobstorage-crypto-ut

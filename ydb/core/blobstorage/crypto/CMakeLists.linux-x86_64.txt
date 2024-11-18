@@ -12,6 +12,7 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(chacha_512)
 add_subdirectory(ut)
 
 add_library(core-blobstorage-crypto)
@@ -23,6 +24,7 @@ target_link_libraries(core-blobstorage-crypto PUBLIC
   yutil
   contrib-libs-t1ha
   library-cpp-sse
+  blobstorage-crypto-chacha_512
   library-actors-util
 )
 
@@ -31,7 +33,6 @@ target_sources(core-blobstorage-crypto PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/crypto/crypto.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/crypto/poly1305.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha_vec.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/crypto/chacha_512.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/crypto/poly1305_vec.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/crypto/secured_block.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/crypto/crypto.h

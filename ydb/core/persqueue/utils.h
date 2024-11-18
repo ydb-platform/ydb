@@ -48,7 +48,9 @@ public:
         // Direct children of this node
         std::vector<Node*> Children;
         // All parents include parents of parents and so on
-        std::set<Node*> HierarhicalParents;
+        std::set<Node*> HierarhicalParents; // savnik rename to Ancestors?
+        // All children include children of children and so on
+        std::set<Node*> HierarhicalChildren;
 
         bool IsRoot() const;
         bool IsParent(ui32 partitionId) const;

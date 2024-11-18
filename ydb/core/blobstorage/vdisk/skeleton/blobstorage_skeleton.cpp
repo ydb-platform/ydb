@@ -2613,7 +2613,28 @@ namespace NKikimr {
         //    state. We don't care about sync quorum anymore, it's responsibility of blobstorage
         //    proxy to perform some action if too many vdisks become unavailable.
 
-        STRICT_STFUNC(StateLocalRecovery,
+class TInstantCounter {
+    ::NMonitoring::TDynamicCounters::TCounterPtr Counter;
+    TInstant Start;
+
+public:
+    TInstantCounter(::NMonitoring::TDynamicCounters::TCounterPtr counter)
+        : Counter(counter)
+        , Start(TInstant::Now())
+    {}
+
+    ~TInstantCounter() {
+        *Counter += (TInstant::Now() - Start).MicroSeconds();
+    }
+};
+
+#define COUNTED_STRICT_STFUNC(NAME, COUNTER, HANDLERS)  \
+    void NAME(STFUNC_SIG) {                             \
+        TInstantCounter t(COUNTER);                     \
+        STRICT_STFUNC_BODY(HANDLERS)                    \
+    }
+
+        COUNTED_STRICT_STFUNC(StateLocalRecovery, SkeletonBusyTimeUs,
             // We should not get these requests while performing LocalRecovery
             // TEvBlobStorage::TEvVPut
             // TEvDelLogoBlobDataSyncLog
@@ -2654,7 +2675,7 @@ namespace NKikimr {
             hFunc(TEvReplInvoke, HandleReplNotInProgress)
         )
 
-        STRICT_STFUNC(StateSyncGuidRecovery,
+        COUNTED_STRICT_STFUNC(StateSyncGuidRecovery, SkeletonBusyTimeUs,
             HFunc(TEvBlobStorage::TEvVPut, HandlePutSyncGuidRecovery)
             HFunc(TEvHullLogHugeBlob, Handle)
             HFunc(TEvDelLogoBlobDataSyncLog, Handle)
@@ -2707,7 +2728,7 @@ namespace NKikimr {
             hFunc(TEvReplInvoke, HandleReplNotInProgress)
         )
 
-        STRICT_STFUNC(StateNormal,
+        COUNTED_STRICT_STFUNC(StateNormal, SkeletonBusyTimeUs,
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
             HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvBlobStorage::TEvVMovedPatch, Handle)
@@ -2777,7 +2798,7 @@ namespace NKikimr {
             CFunc(TEvStartBalancing::EventType, RunBalancing)
         )
 
-        STRICT_STFUNC(StateDatabaseError,
+        COUNTED_STRICT_STFUNC(StateDatabaseError, SkeletonBusyTimeUs,
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             CFunc(TEvBlobStorage::EvCompactionFinished, LevelIndexCompactionFinished)
             CFunc(TEvBlobStorage::EvWakeupEmergencyPutQueue, WakeupEmergencyPutQueue)
@@ -2833,6 +2854,7 @@ namespace NKikimr {
             , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(
                 VCtx->VDiskCounters, "subsystem", "interface"))
             , EnableVPatch(cfg->EnableVPatch)
+            , SkeletonBusyTimeUs(VCtx->VDiskCounters->GetSubgroup("subsystem", "cpu")->GetCounter("skeletonBusyTimeUs"))
         {}
 
         virtual ~TSkeleton() {
@@ -2895,6 +2917,8 @@ namespace NKikimr {
         std::unordered_map<TString, TSnapshotInfo> Snapshots;
         TSnapshotExpirationMap SnapshotExpirationMap;
         std::deque<TMonotonic> SnapshotExpirationCheckSchedule;
+
+        ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonBusyTimeUs;
     };
 
     ////////////////////////////////////////////////////////////////////////////

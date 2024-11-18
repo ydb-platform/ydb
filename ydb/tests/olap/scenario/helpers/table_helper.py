@@ -4,7 +4,8 @@ from ydb.tests.olap.scenario.helpers.scenario_tests_helper import (
     TestContext,
 )
 from abc import abstractmethod, ABC
-from typing import override, Dict
+from typing import override, Dict, Iterable, Optional
+from datetime import timedelta
 
 
 class CreateTableLikeObject(ScenarioTestHelper.IYqlble):
@@ -537,30 +538,7 @@ class AlterTableLikeObject(ScenarioTestHelper.IYqlble):
 
         return self(DropColumn(column))
 
-    def set_tiering(self, tiering_rule: str) -> AlterTableLikeObject:
-        """Set a tiering policy.
-
-        The method is similar to calling {AlterTableLikeObject.action} with a {SetSetting} instance.
-
-        Args:
-            tiering_rule: Name of a TIERING_RULE object.
-
-        Returns:
-            self."""
-
-        return self(SetSetting('TIERING', f'"{tiering_rule}"'))
-
-    def reset_tiering(self) -> AlterTableLikeObject:
-        """Remove a tiering policy.
-
-        The method is similar to calling {AlterTableLikeObject.action} with a {SetSetting} instance.
-
-        Returns:
-            self."""
-
-        return self(ResetSetting('TIERING'))
-
-    def set_ttl(self, interval: str, column: str) -> AlterTableLikeObject:
+    def set_ttl(self, tiers: Iterable[(timedelta, Optional[str])], column: str) -> AlterTableLikeObject:
         """Set TTL for rows.
 
         The method is similar to calling {AlterTableLikeObject.action} with a {SetSetting} instance.
@@ -570,8 +548,16 @@ class AlterTableLikeObject(ScenarioTestHelper.IYqlble):
 
         Returns:
             self."""
+        
+        def make_tier_literal(delay: timedelta, storage_path: Optional[str]):
+            delay_literal = f'Interval("PT{delay.total_seconds()}S")'
+            if storage_path:
+                return delay_literal + ' TO EXTERNAL DATA SOURCE ' + storage_path
+            else:
+                return delay_literal + ' DELETE'
 
-        return self(SetSetting('TTL', f'Interval("{interval}") ON `{column}`'))
+        tiers_literal = ', '.join(map(lambda x: make_tier_literal(*x), tiers))
+        return self(SetSetting('TTL', f'{tiers_literal} ON {column}'))
 
     def add_column_family(self, column_family: ScenarioTestHelper.ColumnFamily) -> AlterTableLikeObject:
         """Add a column_family.

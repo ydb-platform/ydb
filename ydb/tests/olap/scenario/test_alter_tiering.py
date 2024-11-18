@@ -10,15 +10,10 @@ from ydb.tests.olap.scenario.helpers import (
 from helpers.thread_helper import TestThread
 from helpers.tiering_helper import (
     ObjectStorageParams,
-    AlterTier,
-    CreateTierIfNotExists,
-    AlterTieringRule,
-    CreateTieringRuleIfNotExists,
-    TierConfig,
-    TieringPolicy,
-    TieringRule,
-    DropTier,
-    DropTieringRule,
+    CreateExternalDataSource,
+    DropExternalDataSource,
+    UpsertSecret,
+    DropSecret
 )
 import helpers.data_generators as dg
 from helpers.table_helper import (
@@ -31,9 +26,21 @@ from ydb import PrimitiveType, StatusCode
 import boto3
 import datetime
 import random
-from typing import Iterable, Optional
-import itertools
+from typing import Iterable
 from string import ascii_lowercase
+
+
+class TestLoop:
+    def __init__(self, duration: datetime.timedelta):
+        self._deadline = datetime.datetime.now() + duration
+
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        if datetime.datetime.now() < self._deadline:
+            return None
+        return StopIteration
 
 
 class TestAlterTiering(BaseTestSet):
@@ -43,7 +50,6 @@ class TestAlterTiering(BaseTestSet):
         .with_column(name='writer', type=PrimitiveType.Uint32, not_null=True)
         .with_column(name='value', type=PrimitiveType.Uint64, not_null=True)
         .with_column(name='data', type=PrimitiveType.String, not_null=True)
-        .with_column(name='timestamp2', type=PrimitiveType.Timestamp, not_null=True)
         .with_key_columns('timestamp', 'writer', 'value')
     )
 
@@ -52,63 +58,52 @@ class TestAlterTiering(BaseTestSet):
         for i in range(count):
             sth.execute_scheme_query(DropTable(f'store/{prefix}_{i}'))
 
-    def _loop_upsert(self, ctx: TestContext, table: str, writer_id: int, duration: datetime.timedelta, allow_scan_errors: bool = False):
-        deadline = datetime.datetime.now() + duration
-        expected_scan_status = {StatusCode.SUCCESS, StatusCode.GENERIC_ERROR} if allow_scan_errors else {StatusCode.SUCCESS}
+    def _loop_bulk_upsert(self, ctx: TestContext, table: str, writer_id: int, duration: datetime.timedelta, allow_scan_errors: bool = False):
+        loop = TestLoop(duration)
         sth = ScenarioTestHelper(ctx)
-        rows_written = 0
-        i = 0
-        while datetime.datetime.now() < deadline:
+
+        for _ in loop:
             sth.bulk_upsert(
                 table,
                 dg.DataGeneratorPerColumn(self.schema1, 1000)
                 .with_column('timestamp', dg.ColumnValueGeneratorLambda(lambda: int(datetime.datetime.now().timestamp() * 1000000)))
                 .with_column('writer', dg.ColumnValueGeneratorConst(writer_id))
-                .with_column('value', dg.ColumnValueGeneratorSequential(rows_written))
+                .with_column('value', dg.ColumnValueGeneratorSequential())
                 .with_column('data', dg.ColumnValueGeneratorConst(random.randbytes(1024)))
-                .with_column('timestamp2', dg.ColumnValueGeneratorRandom(null_probability=0))
             )
-            rows_written += 1000
-            i += 1
-            scan_result = sth.execute_scan_query(f'SELECT COUNT(*) FROM `{sth.get_full_path(table)}` WHERE writer == {writer_id}', expected_status=expected_scan_status)
-            assert scan_result.result_set.rows[0][0] == rows_written
 
-    def _loop_change_tiering_rule(self, ctx: TestContext, table: str, tiering_rules: Iterable[str], duration: datetime.timedelta):
-        deadline = datetime.datetime.now() + duration
+    def _loop_select(self, ctx: TestContext, table: str, writer_id: int, duration: datetime.timedelta, allow_scan_errors: bool = False):
+        loop = TestLoop(duration)
         sth = ScenarioTestHelper(ctx)
-        while datetime.datetime.now() < deadline:
-            for tiering_rule in tiering_rules:
-                if tiering_rule is not None:
-                    sth.execute_scheme_query(AlterTable(table).set_tiering(tiering_rule), retries=10)
-                else:
-                    sth.execute_scheme_query(AlterTable(table).reset_tiering(), retries=10)
-            sth.execute_scheme_query(AlterTable(table).reset_tiering(), retries=10)
 
-    def _loop_alter_tiering_rule(self, ctx: TestContext, tiering_rule: str, default_column_values: Iterable[str], config_values: Iterable[TieringPolicy], duration: datetime.timedelta):
-        deadline = datetime.datetime.now() + duration
+        expected_scan_status = {StatusCode.SUCCESS, StatusCode.GENERIC_ERROR} if allow_scan_errors else {StatusCode.SUCCESS}
+
+        for _ in loop:
+            sth.execute_scan_query(f'SELECT COUNT(*) FROM `{sth.get_full_path(table)}`', expected_status=expected_scan_status)
+
+    def _loop_set_ttl(self, ctx: TestContext, table: str, sources: Iterable[str], duration: datetime.timedelta):
+        loop = TestLoop(duration)
         sth = ScenarioTestHelper(ctx)
-        for default_column, config in zip(itertools.cycle(default_column_values), itertools.cycle(config_values)):
-            if datetime.datetime.now() >= deadline:
-                break
-            sth.execute_scheme_query(AlterTieringRule(tiering_rule, default_column, config), retries=10)
 
-    def _loop_alter_column(self, ctx: TestContext, store: str, duration: datetime.timedelta):
+        for _ in loop:
+            for source in sources:
+                sth.execute_scheme_query(AlterTable(table).set_ttl([datetime.timedelta(days=10), source], 'timestamp'), retries=10)
+            sth.execute_scheme_query(AlterTable(table).reset_ttl(), retries=10)
+
+    def _loop_add_drop_column(self, ctx: TestContext, store: str, duration: datetime.timedelta):
+        loop = TestLoop(duration)
+        sth = ScenarioTestHelper(ctx)
+
         column_name = 'tmp_column_' + ''.join(random.choice(ascii_lowercase) for _ in range(8))
         data_types = [PrimitiveType.Int8, PrimitiveType.Uint64, PrimitiveType.Datetime, PrimitiveType.Utf8]
 
-        deadline = datetime.datetime.now() + duration
-        sth = ScenarioTestHelper(ctx)
-        while datetime.datetime.now() < deadline:
+        for _ in loop:
             sth.execute_scheme_query(AlterTableStore(store).add_column(sth.Column(column_name, random.choice(data_types))), retries=10)
             sth.execute_scheme_query(AlterTableStore(store).drop_column(column_name), retries=10)
 
-    def _override_tier(self, sth, name, config):
-        sth.execute_scheme_query(CreateTierIfNotExists(name, config))
-        sth.execute_scheme_query(AlterTier(name, config))
-
-    def _override_tiering_rule(self, sth, name, default_column, config):
-        sth.execute_scheme_query(CreateTieringRuleIfNotExists(name, default_column, config))
-        sth.execute_scheme_query(AlterTieringRule(name, default_column, config))
+    def _override_external_data_source(self, sth, path, config):
+        sth.execute_scheme_query(DropExternalDataSource(path, True))
+        sth.execute_scheme_query(CreateExternalDataSource(path, config))
 
     def _make_s3_client(self, access_key, secret_key, endpoint):
         session = boto3.Session(
@@ -117,9 +112,12 @@ class TestAlterTiering(BaseTestSet):
             region_name='ru-central1',
         )
         return session.client('s3', endpoint_url=endpoint)
+    
+    def _get_test_prefix(self):
+        return type(self).__name__;
 
     def _count_objects(self, bucket_config: ObjectStorageParams):
-        s3 = self._make_s3_client(bucket_config.access_key, bucket_config.secret_key, bucket_config.endpoint)
+        s3 = self._make_s3_client(bucket_config.access_key_secret, bucket_config.secret_key_secret, bucket_config.endpoint)
         paginator = s3.get_paginator('list_objects_v2')
         page_iterator = paginator.paginate(Bucket=bucket_config.bucket)
 
@@ -147,37 +145,26 @@ class TestAlterTiering(BaseTestSet):
 
         assert len(s3_buckets) == 2, f'expected 2 bucket configs, got {len(s3_buckets)}'
 
+        sth = ScenarioTestHelper(ctx)
+
+        access_key_secret = self._get_test_prefix() + '_access_key'
+        secret_key_secret = self._get_test_prefix() + '_secret_key'
+        sth.execute_scheme_query(UpsertSecret(access_key_secret, s3_access_key))
+        sth.execute_scheme_query(UpsertSecret(secret_key_secret, s3_secret_key))
+
         s3_configs = [
             ObjectStorageParams(
-                scheme='HTTP',
-                verify_ssl=False,
                 endpoint=s3_endpoint,
                 bucket=bucket,
-                access_key=s3_access_key,
-                secret_key=s3_secret_key
+                access_key_secret=s3_access_key,
+                secret_key_secret=s3_secret_key
             ) for bucket in s3_buckets
         ]
 
-        sth = ScenarioTestHelper(ctx)
-
-        tiers: list[str] = []
+        sources: list[str] = []
         for i, s3_config in enumerate(s3_configs):
-            tiers.append(f'TestAlterTiering:tier{i}')
-            self._override_tier(sth, tiers[-1], TierConfig(tiers[-1], s3_config))
-
-        tiering_policy_configs: list[TieringPolicy] = []
-        tiering_policy_configs.append(TieringPolicy().with_rule(TieringRule(tiers[0], '1s')))
-        tiering_policy_configs.append(TieringPolicy().with_rule(TieringRule(tiers[1], '1s')))
-        tiering_policy_configs.append(TieringPolicy().with_rule(TieringRule(tiers[0], '100000d')))
-        tiering_policy_configs.append(TieringPolicy().with_rule(TieringRule(tiers[1], '100000d')))
-        tiering_policy_configs.append(TieringPolicy().with_rule(TieringRule(tiers[0], '1s')).with_rule(TieringRule(tiers[1], '100000d')))
-        tiering_policy_configs.append(TieringPolicy().with_rule(TieringRule(tiers[1], '1s')).with_rule(TieringRule(tiers[0], '100000d')))
-
-        tiering_rules: list[Optional[str]] = []
-        for i, config in enumerate(tiering_policy_configs):
-            tiering_rules.append(f'TestAlterTiering:tiering_rule{i}')
-            self._override_tiering_rule(sth, tiering_rules[-1], 'timestamp', config)
-        tiering_rules.append(None)
+            sources.append(f'{self._get_test_prefix()}EDS{i}')
+            self._override_external_data_source(sth, sources[-1], s3_config)
 
         if not is_standalone_tables:
             sth.execute_scheme_query(CreateTableStore('store').with_schema(self.schema1))
@@ -191,13 +178,6 @@ class TestAlterTiering(BaseTestSet):
                 tables.append(f'store/table{i}')
             tables_for_tiering_modification.append(tables[-1])
             sth.execute_scheme_query(CreateTable(tables[-1]).with_schema(self.schema1))
-        for i, tiering_rule in enumerate([tiering_rules[0], tiering_rules[1]]):
-            if is_standalone_tables:
-                tables.append(f'extra_table{i}')
-            else:
-                tables.append(f'store/extra_table{i}')
-            sth.execute_scheme_query(CreateTable(tables[-1]).with_schema(self.schema1))
-            sth.execute_scheme_query(AlterTable(tables[-1]).set_tiering(tiering_rule))
 
         if any(self._count_objects(bucket) != 0 for bucket in s3_configs):
             assert any(sth.get_table_rows_count(table) != 0 for table in tables), \
@@ -205,21 +185,15 @@ class TestAlterTiering(BaseTestSet):
 
         threads = []
 
-        # "Alter table drop column" causes scan failures
-        threads.append(TestThread(target=self._loop_alter_column, args=[ctx, 'store', test_duration]))
+        threads.append(TestThread(target=self._loop_add_drop_column, args=[ctx, 'store', test_duration]))
         for table in tables_for_tiering_modification:
             threads.append(TestThread(
-                target=self._loop_change_tiering_rule,
-                args=[ctx, table, random.sample(tiering_rules, len(tiering_rules)), test_duration]
+                target=self._loop_set_ttl,
+                args=[ctx, table, random.sample(sources, len(sources)), test_duration]
             ))
         for i, table in enumerate(tables):
             for writer in range(n_writers):
-                threads.append(TestThread(target=self._loop_upsert, args=[ctx, table, i * n_writers + writer, test_duration, allow_s3_unavailability]))
-        for tiering_rule in tiering_rules:
-            threads.append(TestThread(
-                target=self._loop_alter_tiering_rule,
-                args=[ctx, tiering_rule, random.sample(['timestamp', 'timestamp2'], 2), random.sample(tiering_policy_configs, len(tiering_policy_configs)), test_duration]
-            ))
+                threads.append(TestThread(target=self._loop_bulk_upsert, args=[ctx, table, i * n_writers + writer, test_duration, allow_s3_unavailability]))
 
         for thread in threads:
             thread.start()
@@ -229,16 +203,14 @@ class TestAlterTiering(BaseTestSet):
         assert any(self._count_objects(bucket) != 0 for bucket in s3_configs)
 
         for table in tables:
-            sth.execute_scheme_query(AlterTable(table).reset_tiering())
-
-        for tiering in tiering_rules:
-            sth.execute_scheme_query(DropTieringRule(tiering))
-        for tier in tiers:
-            sth.execute_scheme_query(DropTier(tier))
+            sth.execute_scheme_query(AlterTable(table).reset_ttl())
 
         for table in tables:
             sth.execute_scheme_query(DropTable(table))
         if not is_standalone_tables:
             sth.execute_scheme_query(DropTableStore('store'))
+
+        sth.execute_scheme_query(DropSecret(access_key_secret, s3_access_key))
+        sth.execute_scheme_query(DropSecret(secret_key_secret, s3_secret_key))
 
         assert all(self._count_objects(bucket) == 0 for bucket in s3_configs)

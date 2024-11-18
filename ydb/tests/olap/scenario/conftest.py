@@ -1,6 +1,7 @@
 import logging
 import inspect
 import pytest
+import threading
 import time
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import TestContext, ScenarioTestHelper
@@ -57,6 +58,20 @@ class YdbClusterInstance():
 
 
 class BaseTestSet:
+    class TestThread(threading.Thread):
+        def run(self) -> None:
+            self.exc = None
+            try:
+                self.ret = self._target(*self._args, **self._kwargs)
+            except BaseException as e:
+                self.exc = e
+
+        def join(self, timeout=None):
+            super().join(timeout)
+            if self.exc:
+                raise self.exc
+            return self.ret
+
     @classmethod
     def get_suite_name(cls):
         return cls.__name__

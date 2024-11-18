@@ -62,11 +62,16 @@ void CollectAndDumpMemoryProfile(const TString& memoryProfilePath, tcmalloc::Pro
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
 void MemoryProfileTimeoutHandler(int /*signal*/)
 {
-    WriteToStderr("*** Process hung during dumping heap profile ***\n");
-    AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
+    AbortProcessDramatically(
+        EProcessExitCode::GenericError,
+        "Process hung while dumping heap profile");
 }
+
+} // namespace
 
 void SetupMemoryProfileTimeout(int timeout)
 {
@@ -177,22 +182,23 @@ private:
         auto childPid = fork();
 
         if (childPid == 0) {
+            NFs::MakeDirectoryRecursive(Options_.HeapDumpDirectory);
             SetupMemoryProfileTimeout(Options_.Timeout.Seconds());
             CollectAndDumpMemoryProfile(profilePaths->HeapProfilePath, tcmalloc::ProfileType::kHeap);
             CollectAndDumpMemoryProfile(profilePaths->PeakProfilePath, tcmalloc::ProfileType::kPeakHeap);
             DumpProfilePaths(profilePaths, profilePathsFile);
 
             Cerr << "TTCMallocLimitHandler: Heap profiles are written" << Endl;
-            AbortProcess(ToUnderlying(EProcessExitCode::OK));
+            AbortProcessSilently(EProcessExitCode::OK);
         }
 
         if (childPid < 0) {
             Cerr << "TTCMallocLimitHandler: Fork failed: " << LastSystemErrorText() << Endl;
-            AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
+            AbortProcessSilently(EProcessExitCode::GenericError);
         }
 
         ExecWaitForChild(childPid);
-        AbortProcess(ToUnderlying(EProcessExitCode::OK));
+        AbortProcessSilently(EProcessExitCode::OK);
     }
 
     auto MakeSuffixFormatter(const TString& timestamp) const

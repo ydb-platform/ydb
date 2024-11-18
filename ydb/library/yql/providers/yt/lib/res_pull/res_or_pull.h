@@ -1,9 +1,9 @@
 #pragma once
 
 #include <ydb/library/yql/providers/yt/codec/yt_codec_io.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
+#include <yql/essentials/public/udf/udf_value.h>
 
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 #include <library/cpp/yson/node/node_io.h>
 

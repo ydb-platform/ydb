@@ -14,7 +14,6 @@
 #include <netinet/udp.h>
 #include <arpa/inet.h>
 #include <net/if.h>
-#include <error.h>
 
 #include "liburing.h"
 #include "helpers.h"
@@ -43,7 +42,7 @@ static int setup_ctx(struct ctx *ctx, struct q_entries *q)
 	if (posix_memalign(&ctx->mem, 4096, 2*1024*1024))
 		return T_EXIT_FAIL;
 
-	ctx->pre = ctx->mem + 4096 - sizeof(unsigned long);
+	ctx->pre = ctx->mem + 4096 - sizeof(unsigned long long);
 	*ctx->pre = PRE_RED;
 
 	ctx->ring_mem = ctx->mem + 4096;
@@ -69,6 +68,7 @@ static int setup_ctx(struct ctx *ctx, struct q_entries *q)
 static void clean_ctx(struct ctx *ctx)
 {
 	io_uring_queue_exit(&ctx->ring);
+	free(ctx->mem);
 }
 
 static int check_red(struct ctx *ctx, unsigned long i)
@@ -95,10 +95,12 @@ static int test(struct q_entries *q)
 	int j, ret, batch;
 
 	ret = setup_ctx(&ctx, q);
-	if (ret == T_EXIT_SKIP)
+	if (ret == T_EXIT_SKIP) {
+		clean_ctx(&ctx);
 		return T_EXIT_SKIP;
-	else if (ret != T_EXIT_PASS)
+	} else if (ret != T_EXIT_PASS) {
 		return ret;
+	}
 
 	batch = 64;
 	if (batch > q->sqes)

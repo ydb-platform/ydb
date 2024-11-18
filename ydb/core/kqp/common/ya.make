@@ -36,12 +36,12 @@ PEERDIR(
     ydb/core/tx/sharding
     ydb/library/yql/dq/expr_nodes
     ydb/library/aclib
-    ydb/library/yql/core/issue
-    ydb/library/yql/core/services
+    yql/essentials/core/issue
+    yql/essentials/core/services
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/common
-    ydb/library/yql/dq/integration
-    ydb/library/yql/parser/pg_wrapper/interface
+    yql/essentials/core/dq_integration
+    yql/essentials/parser/pg_wrapper/interface
     ydb/public/lib/operation_id
     ydb/public/lib/operation_id/protos
     ydb/core/grpc_services/cancelation

@@ -22,9 +22,9 @@ PEERDIR(
     ydb/library/mkql_proto/protos
 #    ydb/library/mkql_proto/ut/helpers
     ydb/public/api/protos
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/parser/pg_wrapper/interface
-    ydb/library/yql/public/decimal
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/public/decimal
 )
 
 YQL_LAST_ABI_VERSION()

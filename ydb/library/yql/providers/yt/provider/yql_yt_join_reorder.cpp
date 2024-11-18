@@ -3,14 +3,14 @@
 #include "yql_yt_join_impl.h"
 #include "yql_yt_helpers.h"
 
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/optimizer.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/parser/pg_wrapper/interface/optimizer.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/yt/opt/yql_yt_join.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider_context.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 

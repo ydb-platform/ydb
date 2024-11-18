@@ -12,7 +12,7 @@ from yql_utils import replace_vals, yql_binary_path, is_xfail, get_param, \
 from utils import get_config, DATA_PATH
 from file_common import run_file, run_file_no_cache
 
-ASTDIFF_PATH = yql_binary_path('ydb/library/yql/tools/astdiff/astdiff')
+ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 DQRUN_PATH = yql_binary_path('ydb/library/yql/tools/dqrun/dqrun')
 
 def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):

@@ -13,8 +13,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
-#include <ydb/library/uuid/uuid.h>
-#include <ydb/library/binary_json/write.h>
+#include <yql/essentials/types/uuid/uuid.h>
+#include <yql/essentials/types/binary_json/write.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -2433,6 +2433,49 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         createAndCheck(999, 99);
     }
 
+    Y_UNIT_TEST(CreateTableWithPgColumn) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto createAndCheck = [&](const TString& typeName) {
+            TString tableName = TStringBuilder() << "/Root/TableWithPgColumn_" << typeName;
+            auto createQuery = TStringBuilder() << Sprintf(R"(
+            CREATE TABLE `%s` (
+                Key Uint64,
+                Value %s,
+                PRIMARY KEY (Key)
+            );)", tableName.c_str(), typeName.c_str());
+            auto createResult = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::SUCCESS, createResult.GetIssues().ToString());
+
+            TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
+            UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            auto tableDesc = describe.GetTableDescription();
+            TVector<TTableColumn> columns = tableDesc.GetTableColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+            TType valueType = columns[1].Type;
+            TTypeParser parser(valueType);
+            auto kind = parser.GetKind();
+            UNIT_ASSERT_EQUAL(kind, TTypeParser::ETypeKind::Pg);
+            const auto& pgType = parser.GetPg();
+            UNIT_ASSERT_VALUES_EQUAL(pgType.TypeName, typeName);
+        };
+
+        createAndCheck("pgbool");
+        createAndCheck("pgint2");
+        createAndCheck("pgint4");
+        createAndCheck("pgint8");
+        createAndCheck("pgnumeric");
+        createAndCheck("pgfloat4");
+        createAndCheck("pgfloat8");
+        createAndCheck("pgtext");
+        createAndCheck("pgjson");
+        createAndCheck("pgtimestamp");
+        createAndCheck("pgvarchar");
+    }
+
     void AlterTableAddIndex(EIndexTypeSql type) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
@@ -3134,6 +3177,72 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         checkColumn(4, 2, 1);
         checkColumn(5, 22,9);
         checkColumn(6, 35, 10);
+    }
+
+    Y_UNIT_TEST(AlterTableWithPgColumn) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/TableWithPgColumn";
+        {
+            auto query = TStringBuilder() << R"(
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto addColumn = [&] (const TString& typeName) {
+            TString columnName = TStringBuilder() << "Column_" << typeName;
+            auto query = TStringBuilder() << Sprintf(R"(
+            ALTER TABLE `%s`
+                 ADD COLUMN %s %s
+            )", tableName.c_str(), columnName.c_str(), typeName.c_str());
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+
+        addColumn("pgbool");
+        addColumn("pgint2");
+        addColumn("pgint4");
+        addColumn("pgint8");
+        addColumn("pgnumeric");
+        addColumn("pgfloat4");
+        addColumn("pgfloat8");
+        addColumn("pgtext");
+        addColumn("pgjson");
+        addColumn("pgtimestamp");
+        addColumn("pgvarchar");
+
+        TDescribeTableResult describe = session.DescribeTable(tableName).GetValueSync();
+        UNIT_ASSERT_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+        auto tableDesc = describe.GetTableDescription();
+        TVector<TTableColumn> columns = tableDesc.GetTableColumns();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 13);
+
+        auto checkColumn = [&] (ui64 columnIdx, const TString& typeName) {
+            TType valueType = columns[columnIdx].Type;
+            TTypeParser parser(valueType);
+            auto kind = parser.GetKind();
+            UNIT_ASSERT_VALUES_EQUAL(kind, TTypeParser::ETypeKind::Pg);
+            const auto& pgType = parser.GetPg();
+            UNIT_ASSERT_VALUES_EQUAL(pgType.TypeName, typeName);
+        };
+
+        checkColumn(2, "pgbool");
+        checkColumn(3, "pgint2");
+        checkColumn(4, "pgint4");
+        checkColumn(5, "pgint8");
+        checkColumn(6, "pgnumeric");
+        checkColumn(7, "pgfloat4");
+        checkColumn(8, "pgfloat8");
+        checkColumn(9, "pgtext");
+        checkColumn(10, "pgjson");
+        checkColumn(11, "pgtimestamp");
+        checkColumn(12, "pgvarchar");
     }
 
     Y_UNIT_TEST(CreateUserWithPassword) {
@@ -9125,8 +9234,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTypes) {
         testHelper.CreateTable(testTable);
         std::string jsonString = R"({"col1": "val1", "obj": {"obj_col2_int": 16}})";
         auto maybeJsonDoc = NBinaryJson::SerializeToBinaryJson(jsonString);
-        Y_ABORT_UNLESS(maybeJsonDoc.IsSuccess());
-        const std::string jsonBin(maybeJsonDoc->Data(), maybeJsonDoc->Size());
+        Y_ABORT_UNLESS(std::holds_alternative<NBinaryJson::TBinaryJson>(maybeJsonDoc));
+        const auto& value = std::get<NBinaryJson::TBinaryJson>(maybeJsonDoc);
+        const std::string jsonBin(value.Data(), value.Size());
         {
             TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
             tableInserter.AddRow().Add(1).AddNull().Add(jsonString);

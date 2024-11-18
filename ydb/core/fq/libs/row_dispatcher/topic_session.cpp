@@ -6,8 +6,8 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/dq/runtime/dq_async_stats.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
@@ -158,7 +158,7 @@ private:
     ui32 PartitionId;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
+    IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     NYql::ITopicClient::TPtr TopicClient;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     const i64 BufferSize;
@@ -190,7 +190,7 @@ public:
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-        NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
+        IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const NYql::IPqGateway::TPtr& pqGateway);
 
@@ -208,7 +208,7 @@ private:
     void SubscribeOnNextEvent();
     void SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
     void DoParsing(bool force = false);
-    void DoFiltering(const TVector<ui64>& offsets, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues);
+    void DoFiltering(ui64 rowsOffset, ui64 numberRows, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues);
     void SendData(TClientsInfo& info);
     void UpdateParser();
     void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter, bool addParserDescription);
@@ -235,7 +235,7 @@ private:
 
     void SendStatistic();
     void SendSessionError(NActors::TActorId readActorId, const TString& message);
-    TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> RebuildJson(const TClientsInfo& info, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues);
+    TVector<const TVector<NYql::NUdf::TUnboxedValue>*> RebuildJson(const TClientsInfo& info, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues);
     void UpdateParserSchema(const TParserInputType& inputType);
     void UpdateFieldsIds(TClientsInfo& clientInfo);
     bool CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
@@ -281,7 +281,7 @@ TTopicSession::TTopicSession(
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
+    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway)
     : TopicPath(topicPath)
@@ -422,8 +422,8 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
     CreateTopicSession();
 }
 
-TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> TTopicSession::RebuildJson(const TClientsInfo& info, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues) {
-    TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> result;
+TVector<const TVector<NYql::NUdf::TUnboxedValue>*> TTopicSession::RebuildJson(const TClientsInfo& info, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues) {
+    TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result;
     const auto& offsets = ParserSchema.FieldsMap;
     result.reserve(info.FieldsIds.size());
     for (auto fieldId : info.FieldsIds) {
@@ -623,21 +623,23 @@ void TTopicSession::DoParsing(bool force) {
     LOG_ROW_DISPATCHER_TRACE("SendToParsing, first offset: " << Parser->GetOffsets().front() << ", number values in buffer " << Parser->GetOffsets().size());
 
     try {
-        const auto& parsedValues = Parser->Parse();
-        DoFiltering(Parser->GetOffsets(), parsedValues);
+        Parser->Parse();
     } catch (const std::exception& e) {
         FatalError(e.what(), nullptr, true);
     }
 }
 
-void TTopicSession::DoFiltering(const TVector<ui64>& offsets, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues) {
+void TTopicSession::DoFiltering(ui64 rowsOffset, ui64 numberRows, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues) {
+    const auto& offsets = Parser->GetOffsets();
+    Y_ENSURE(rowsOffset < offsets.size(), "Invalid first row ofset");
+    Y_ENSURE(numberRows, "Expected non empty parsed batch");
     Y_ENSURE(parsedValues, "Expected non empty schema");
-    LOG_ROW_DISPATCHER_TRACE("SendToFiltering, first offset: " << offsets.front() << ", last offset: " << offsets.back());
+    LOG_ROW_DISPATCHER_TRACE("SendToFiltering, first offset: " << offsets[rowsOffset] << ", last offset: " << offsets[rowsOffset + numberRows - 1]);
 
     for (auto& [actorId, info] : Clients) {
         try {
             if (info.Filter) {
-                info.Filter->Push(offsets, RebuildJson(info, parsedValues));
+                info.Filter->Push(offsets, RebuildJson(info, parsedValues), rowsOffset, numberRows);
             }
         } catch (const std::exception& e) {
             FatalError(e.what(), &info.Filter, false);
@@ -737,10 +739,11 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             std::forward_as_tuple(ev)).first->second;
         UpdateFieldsIds(clientInfo);
 
-        TString predicate = clientInfo.Settings.GetSource().GetPredicate();
+        const auto& source = clientInfo.Settings.GetSource();
+        TString predicate = source.GetPredicate();
 
         // TODO: remove this when the re-parsing is removed from pq read actor
-        if (predicate.empty() && HasJsonColumns(clientInfo.Settings.GetSource())) {
+        if (predicate.empty() && HasJsonColumns(source)) {
             predicate = "WHERE TRUE";
         }
 
@@ -752,7 +755,9 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 [&, actorId = clientInfo.ReadActorId](ui64 offset, const TString& json){
                     Send(SelfId(), new NFq::TEvPrivate::TEvDataAfterFilteration(offset, json, actorId));
                 },
-                PureCalcProgramFactory);
+                PureCalcProgramFactory,
+                {.EnabledLLVM = source.GetEnabledLLVM()}
+            );
         } else {
             ClientsWithoutPredicate.insert(ev->Sender);
         }
@@ -863,7 +868,9 @@ void TTopicSession::UpdateParser() {
 
         LOG_ROW_DISPATCHER_TRACE("Init JsonParser with columns: " << JoinSeq(',', names));
         const auto& parserConfig = Config.GetJsonParser();
-        Parser = NewJsonParser(names, types, parserConfig.GetBatchSizeBytes(), TDuration::MilliSeconds(parserConfig.GetBatchCreationTimeoutMs()));
+        Parser = NewJsonParser(names, types, [this](ui64 rowsOffset, ui64 numberRows, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues) {
+            DoFiltering(rowsOffset, numberRows, parsedValues);
+        }, parserConfig.GetBatchSizeBytes(), TDuration::MilliSeconds(parserConfig.GetBatchCreationTimeoutMs()), parserConfig.GetBufferCellCount());
     } catch (const NYql::NPureCalc::TCompileError& e) {
         FatalError(e.GetIssues(), nullptr, true);
     }
@@ -993,7 +1000,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
+    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway) {
     return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, pureCalcProgramFactory, counters, pqGateway));

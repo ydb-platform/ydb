@@ -1640,6 +1640,7 @@ class Linker(object):
     BFD = 'bfd'
     LLD = 'lld'
     GOLD = 'gold'
+    MOLD = 'mold'
 
     def __init__(self, tc, build):
         """
@@ -1651,6 +1652,9 @@ class Linker(object):
         self.type = self._get_default_linker_type()
 
     def _get_default_linker_type(self):
+        if (self.build.host.is_linux or self.build.host.is_macos) and is_positive('USE_MOLD_LINKER'):
+            return Linker.MOLD
+
         if not self.tc.is_from_arcadia or is_positive('EXPORT_CMAKE'):
             # External (e.g. system) toolchain: disable linker selection logic
             return None
@@ -2067,7 +2071,11 @@ class MSVCCompiler(MSVC, Compiler):
                 '-fms-compatibility-version=19.21',
                 # for msvc compatibility
                 # https://clang.llvm.org/docs/UsersManual.html#microsoft-extensions
-                '-fdelayed-template-parsing',
+                # '-fdelayed-template-parsing',
+                '-Wno-deprecated-this-capture',
+                '-Wno-c++11-narrowing-const-reference',
+                '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
+                '-Wno-invalid-offsetof',
             ]
             if target.is_x86:
                 flags.append('-m32')

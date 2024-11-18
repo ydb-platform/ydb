@@ -1,18 +1,20 @@
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
+#include <google/protobuf/descriptor.pb.h>
+#include <jinja2cpp/reflected_value.h>
+#include <jinja2cpp/template.h>
+#include <jinja2cpp/template_env.h>
+#include <jinja2cpp/value.h>
+
 #include <util/stream/file.h>
 #include <util/stream/output.h>
 #include <util/string/builder.h>
 #include <util/system/src_location.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <google/protobuf/descriptor.pb.h>
 
-#include <jinja2cpp/template_env.h>
-#include <jinja2cpp/template.h>
-#include <jinja2cpp/value.h>
-#include <jinja2cpp/reflected_value.h>
 #include <cstdint>
+#include <iostream>
 #include <string>
 #include <vector>
-#include <iostream>
 
 std::string replace(
     const std::string& str,

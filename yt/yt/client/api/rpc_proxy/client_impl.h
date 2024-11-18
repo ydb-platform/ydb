@@ -572,11 +572,8 @@ public:
     TFuture<TShuffleHandlePtr> StartShuffle(
         const TString& account,
         int partitionCount,
+        NObjectClient::TTransactionId parentTransactionId,
         const TStartShuffleOptions& options) override;
-
-    TFuture<void> FinishShuffle(
-        const TShuffleHandlePtr& shuffleHandle,
-        const TFinishShuffleOptions& options) override;
 
     TFuture<IRowBatchReaderPtr> CreateShuffleReader(
         const TShuffleHandlePtr& shuffleHandle,

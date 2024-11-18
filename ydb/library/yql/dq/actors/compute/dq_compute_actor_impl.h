@@ -17,11 +17,11 @@
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/actors/compute/dq_request_context.h>
 
@@ -200,6 +200,28 @@ protected:
         if (ownMemoryQuota) {
             MemoryQuota = InitMemoryQuota();
         }
+    }
+
+    ~TDqComputeActorBase() override {
+        if (Terminated) {
+            return;
+        }
+        Free();
+    }
+
+    void Free() {
+        auto guard = BindAllocator();
+        if (!guard) {
+            return;
+        }
+#define CLEANUP(what) decltype(what) what##_; what.swap(what##_);
+        CLEANUP(InputChannelsMap);
+        CLEANUP(SourcesMap);
+        CLEANUP(InputTransformsMap);
+        CLEANUP(OutputChannelsMap);
+        CLEANUP(SinksMap);
+        CLEANUP(OutputTransformsMap);
+#undef CLEANUP
     }
 
     void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
@@ -504,19 +526,8 @@ protected:
                 }
             }
 
-            {
-                if (guard) {
-                    // free MKQL memory then destroy TaskRunner and Allocator
-#define CLEANUP(what) decltype(what) what##_; what.swap(what##_);
-                    CLEANUP(InputChannelsMap);
-                    CLEANUP(SourcesMap);
-                    CLEANUP(InputTransformsMap);
-                    CLEANUP(OutputChannelsMap);
-                    CLEANUP(SinksMap);
-                    CLEANUP(OutputTransformsMap);
-#undef CLEANUP
-                }
-            }
+            // free MKQL memory then destroy TaskRunner and Allocator
+            Free();
         }
 
         if (RuntimeSettings.TerminateHandler) {

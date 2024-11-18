@@ -1,20 +1,20 @@
 #include "yt_codec_cg.h"
 
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/codec.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_buf.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
+#include <yql/essentials/providers/common/codec/yql_codec_buf.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 
 #ifndef MKQL_DISABLE_CODEGEN
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/codegen/codegen.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_builder.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
+#include <yql/essentials/minikql/codegen/codegen.h>
 
-#include <ydb/library/binary_json/read.h>
-#include <ydb/library/binary_json/write.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/binary_json/write.h>
 
 #include <library/cpp/resource/resource.h>
 
@@ -67,11 +67,12 @@ extern "C" void YtCodecReadJsonDocument(void* vbuf, void* vpod) {
     buf.ReadMany(json.AsStringRef().Data(), size);
 
     const auto binaryJson = NBinaryJson::SerializeToBinaryJson(json.AsStringRef());
-    if (binaryJson.IsFail()) {
+    if (std::holds_alternative<TString>(binaryJson)) {
         YQL_ENSURE(false, "Invalid JSON stored for JsonDocument type");
     }
 
-    TStringBuf binaryJsonRef(binaryJson->Data(), binaryJson->Size());
+    const auto& value = std::get<NBinaryJson::TBinaryJson>(binaryJson);
+    TStringBuf binaryJsonRef(value.Data(), value.Size());
     pod = MakeString(binaryJsonRef);
 }
 

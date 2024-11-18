@@ -69,7 +69,7 @@ PEERDIR(
     ydb/core/tablet_flat/test/libs/exec
     ydb/core/tablet_flat/test/libs/table
     ydb/core/testlib/default
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 END()

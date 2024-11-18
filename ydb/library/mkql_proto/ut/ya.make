@@ -14,7 +14,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/mkql_proto/ut/helpers
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
     ydb/core/yql_testlib
 )
 

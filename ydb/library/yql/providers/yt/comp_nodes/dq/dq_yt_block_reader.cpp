@@ -2,19 +2,19 @@
 #include "stream_decoder.h"
 #include "dq_yt_rpc_helpers.h"
 
-#include <ydb/library/yql/public/udf/arrow/block_builder.h>
+#include <yql/essentials/public/udf/arrow/block_builder.h>
 
 #include <ydb/library/yql/providers/yt/codec/yt_arrow_converter.h>
 #include <ydb/library/yql/providers/yt/codec/yt_codec.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_block_impl.h>
-#include <ydb/library/yql/minikql/mkql_stats_registry.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_block_impl.h>
+#include <yql/essentials/minikql/mkql_stats_registry.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 
 #include <yt/yt/core/concurrency/thread_pool.h>
 #include <yt/yt/core/threading/thread.h>

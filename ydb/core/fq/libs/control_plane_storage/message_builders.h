@@ -3,7 +3,7 @@
 #include <util/datetime/base.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>

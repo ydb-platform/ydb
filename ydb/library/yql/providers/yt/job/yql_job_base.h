@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/public/udf/udf_validate.h>
-#include <ydb/library/yql/public/udf/udf_counter.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/public/udf/udf_validate.h>
+#include <yql/essentials/public/udf/udf_counter.h>
+#include <yql/essentials/minikql/mkql_node_visitor.h>
 
 #include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/cpp/mapreduce/interface/operation.h>

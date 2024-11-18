@@ -6,7 +6,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
 #include <util/stream/str.h>
 #include <util/string/join.h>

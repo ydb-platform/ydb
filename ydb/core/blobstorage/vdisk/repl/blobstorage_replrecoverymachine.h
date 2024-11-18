@@ -4,6 +4,8 @@
 #include "blobstorage_hullreplwritesst.h"
 #include "blobstorage_repl.h"
 
+#include <bit>
+
 namespace NKikimr {
 
     namespace NRepl {
@@ -158,7 +160,7 @@ namespace NKikimr {
                 }
 
                 Y_DEBUG_ABORT_UNLESS((item.PartsMask >> groupType.TotalPartCount()) == 0);
-                const ui32 presentParts = PopCount(item.PartsMask);
+                const ui32 presentParts = std::popcount(item.PartsMask);
                 bool canRestore = presentParts >= groupType.MinimalRestorablePartCount();
 
                 // first of all, count present parts and recover only if there are enough of these parts

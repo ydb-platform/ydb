@@ -1,8 +1,8 @@
 #include "predicate_node.h"
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/pushdown/collection.h>
 
 namespace NYql::NPushdown {
@@ -51,7 +51,7 @@ TMaybeNode<TCoLambda> MakePushdownPredicate(const TCoLambda& lambda, TExprContex
 
     TCoOptionalIf optionalIf = maybeOptionalIf.Cast();
     NPushdown::TPredicateNode predicateTree(optionalIf.Predicate());
-    NPushdown::CollectPredicates(optionalIf.Predicate(), predicateTree, lambdaArg.Get(), TExprBase(lambdaArg), settings);
+    NPushdown::CollectPredicates(optionalIf.Predicate(), predicateTree, TExprBase(lambdaArg), TExprBase(lambdaArg), settings);
     YQL_ENSURE(predicateTree.IsValid(), "Collected filter predicates are invalid");
 
     NPushdown::TPredicateNode predicateToPush = SplitForPartialPushdown(predicateTree, ctx, pos, settings);

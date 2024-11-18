@@ -1,6 +1,6 @@
 #include "yql_yt_file_services.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 #include <util/system/guard.h>
 #include <util/system/fs.h>

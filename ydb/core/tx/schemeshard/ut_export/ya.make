@@ -25,7 +25,7 @@ IF (NOT OS_WINDOWS)
         ydb/core/tx
         ydb/core/tx/schemeshard/ut_helpers
         ydb/core/wrappers/ut_helpers
-        ydb/library/yql/public/udf/service/exception_policy
+        yql/essentials/public/udf/service/exception_policy
     )
     SRCS(
         ut_export.cpp

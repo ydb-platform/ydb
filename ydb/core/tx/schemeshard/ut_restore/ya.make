@@ -21,8 +21,8 @@ PEERDIR(
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/wrappers/ut_helpers
     ydb/core/ydb_convert
-    ydb/library/yql/sql/pg
-    ydb/library/yql/parser/pg_wrapper
+    yql/essentials/sql/pg
+    yql/essentials/parser/pg_wrapper
 )
 
 SRCS(

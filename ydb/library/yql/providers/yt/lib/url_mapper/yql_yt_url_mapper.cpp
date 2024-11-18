@@ -1,6 +1,6 @@
 #include "yql_yt_url_mapper.h"
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 #include <library/cpp/uri/http_url.h>
 #include <library/cpp/cgiparam/cgiparam.h>

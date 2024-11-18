@@ -21,7 +21,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <util/system/hostname.h>
 #include <ydb/library/actors/core/mon.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 
 namespace NKikimr::NViewer {

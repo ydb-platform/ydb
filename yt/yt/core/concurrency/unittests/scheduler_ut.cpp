@@ -703,7 +703,7 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
     resetState();
 
     maxConcurrentInvocations = finalMaxConcurrentInvocations;
-    SetMaxConcurrentInvocations(invoker, maxConcurrentInvocations);
+    invoker->SetMaxConcurrentInvocations(maxConcurrentInvocations);
 
     if (!invokeSecondBatchRightAway) {
         invokeSecondBatch();
@@ -733,7 +733,7 @@ TEST_P(TBoundedConcurrencyInvokerParametrizedReconfigureTest, SetMaxConcurrentIn
 TEST_F(TBoundedConcurrencyInvokerTest, ReconfigureBeforeFirstInvocation)
 {
     auto invoker = CreateBoundedConcurrencyInvoker(Queue1->GetInvoker(), 0);
-    SetMaxConcurrentInvocations(invoker, 1);
+    invoker->SetMaxConcurrentInvocations(1);
 
     auto promise = NewPromise<void>();
 

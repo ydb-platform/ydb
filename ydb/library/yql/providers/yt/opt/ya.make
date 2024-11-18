@@ -7,9 +7,9 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/providers/yt/lib/row_spec
-    ydb/library/yql/core/expr_nodes
-    ydb/library/yql/core
-    ydb/library/yql/ast
+    yql/essentials/core/expr_nodes
+    yql/essentials/core
+    yql/essentials/ast
 )
 
 

@@ -17,15 +17,15 @@ PEERDIR(
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/io
     contrib/libs/apache/arrow
-    ydb/library/yql/minikql
-    ydb/library/yql/public/udf
-    ydb/library/yql/utils
-    ydb/library/yql/public/result_format
-    ydb/library/yql/public/udf/arrow
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/codec/arrow
-    ydb/library/yql/providers/common/schema/mkql
-    ydb/library/yql/providers/common/schema/parser
+    yql/essentials/minikql
+    yql/essentials/public/udf
+    yql/essentials/utils
+    yql/essentials/public/result_format
+    yql/essentials/public/udf/arrow
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/codec/arrow
+    yql/essentials/providers/common/schema/mkql
+    yql/essentials/providers/common/schema/parser
     ydb/library/yql/providers/yt/common
     ydb/library/yql/providers/yt/lib/mkql_helpers
     ydb/library/yql/providers/yt/lib/skiff

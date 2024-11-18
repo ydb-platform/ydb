@@ -8,10 +8,10 @@ DEPENDS(
     ydb/apps/ydbd
     ydb/public/tools/ydb_recipe
     ydb/library/yql/udfs/common/datetime
-    ydb/library/yql/udfs/common/datetime2
-    ydb/library/yql/udfs/common/pire
-    ydb/library/yql/udfs/common/re2
-    ydb/library/yql/udfs/common/string
+    yql/essentials/udfs/common/datetime2
+    yql/essentials/udfs/common/pire
+    yql/essentials/udfs/common/re2
+    yql/essentials/udfs/common/string
 )
 
 SRCS(
@@ -23,7 +23,7 @@ PEERDIR(
     library/cpp/testing/unittest
     ydb/core/protos
     ydb/library/grpc/client
-    ydb/library/yql/public/udf/service/stub
+    yql/essentials/public/udf/service/stub
     ydb/public/lib/yson_value
 )
 

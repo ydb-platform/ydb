@@ -320,7 +320,7 @@ class ScenarioTestHelper:
             assert sth.check_if_ydb_alive()
         """
 
-        return YdbCluster.check_if_ydb_alive(timeout) is None
+        return YdbCluster.check_if_ydb_alive(timeout)[0] is None
 
     def execute_scheme_query(
         self,

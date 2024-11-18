@@ -10,7 +10,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <sys/poll.h>
+#include <poll.h>
 
 #include "liburing.h"
 #include "helpers.h"

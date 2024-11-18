@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h> 
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h> 
 
 namespace NYql::NDq {
 

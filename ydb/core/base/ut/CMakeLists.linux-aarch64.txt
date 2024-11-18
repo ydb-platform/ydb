@@ -49,6 +49,7 @@ target_sources(ydb-core-base-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/base/blobstorage_grouptype_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/localdb_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/logoblob_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/ut/memory_stats_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/statestorage_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/statestorage_guardian_impl_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/ut/table_index_ut.cpp

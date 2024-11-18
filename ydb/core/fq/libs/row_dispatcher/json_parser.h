@@ -6,6 +6,22 @@
 
 namespace NFq {
 
+class TJsonParserError: public yexception {
+public:
+    TJsonParserError() = default;
+    TJsonParserError(const std::string& fieldName)
+        : FieldName(fieldName)
+    {}
+
+    TMaybe<TString> GetField() const noexcept {
+        return FieldName;
+    }
+
+private:
+    const TMaybe<TString> FieldName;
+};
+
+
 class TJsonParser {
 public:
     TJsonParser(const TVector<TString>& columns, const TVector<TString>& types, ui64 batchSize, TDuration batchCreationTimeout);

@@ -95,6 +95,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, MaxDPccpDPTableSize);
 
     REGISTER_SETTING(*this, MaxTasksPerStage);
+    REGISTER_SETTING(*this, MaxSequentialReadsInFlight);
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
@@ -145,6 +146,10 @@ bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {
 
 bool TKikimrSettings::HasOptUseFinalizeByKey() const {
     return GetFlagValue(OptUseFinalizeByKey.Get().GetOrElse(true)) != EOptionalFlag::Disabled;
+}
+
+bool TKikimrSettings::HasMaxSequentialReadsInFlight() const {
+    return !MaxSequentialReadsInFlight.Get().Empty();
 }
 
 EOptionalFlag TKikimrSettings::GetOptPredicateExtract() const {

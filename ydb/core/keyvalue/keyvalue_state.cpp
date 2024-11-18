@@ -3020,7 +3020,7 @@ bool TKeyValueState::PrepareGetStorageChannelStatusRequest(const TActorContext &
     StoredState.SetChannelGeneration(ExecutorGeneration);
     StoredState.SetChannelStep(NextLogoBlobStep - 1);
 
-    TRequestType::EType requestType = TRequestType::ReadOnlyInline;
+    TRequestType::EType requestType = TRequestType::ReadOnly;
     intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID,
         StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType, std::move(ev->TraceId)));
 
@@ -3244,14 +3244,14 @@ void TKeyValueState::OnEvGetStorageChannelStatus(TEvKeyValue::TEvGetStorageChann
     ResourceMetrics->Network.Increment(ev->Get()->Record.ByteSize());
     ResourceMetrics->TryUpdate(ctx);
 
-    TRequestType::EType requestType = TRequestType::ReadOnlyInline;
+    TRequestType::EType requestType = TRequestType::ReadOnly;
     CountRequestIncoming(requestType);
 
     if (PrepareGetStorageChannelStatusRequest(ctx, ev, intermediate, info)) {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletId
             << " Create GetStorageChannelStatus request, Marker# KV75");
         RegisterRequestActor(ctx, std::move(intermediate), info, ExecutorGeneration);
-        ++RoInlineIntermediatesInFlight;
+        ++IntermediatesInFlight;
         CountRequestTakeOffOrEnqueue(requestType);
     } else {
         intermediate->UpdateStat();

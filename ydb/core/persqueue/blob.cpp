@@ -834,7 +834,8 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 off
     , MaxBlobSize(maxBlobSize)
 {
     Y_ABORT_UNLESS_EX(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0,
-                      "NewHead.Offset=%" PRIu64 ", Head.NextOffset=%" PRIu64 ", NewHead.PartNo=%" PRIu16 ", headCleared=%d, needCompactHead=%d, Head.PackedSize=%" PRIu32,
+                      "Partition=%s, NewHead.Offset=%" PRIu64 ", Head.NextOffset=%" PRIu64 ", NewHead.PartNo=%" PRIu16 ", headCleared=%d, needCompactHead=%d, Head.PackedSize=%" PRIu32,
+                      Partition.ToString().data(),
                       NewHead.Offset,
                       Head.GetNextOffset(),
                       NewHead.PartNo,

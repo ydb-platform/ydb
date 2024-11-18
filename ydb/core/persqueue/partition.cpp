@@ -2225,7 +2225,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         auto& first = t.WriteInfo->BlobsFromHead.front();
         NewHead.PartNo = first.GetPartNo();
 
-        Parameters->HeadCleared = !t.WriteInfo->BodyKeys.empty();
+        Parameters->HeadCleared = Parameters->HeadCleared || !t.WriteInfo->BodyKeys.empty();
 
         PQ_LOG_D("new TPartitionedBlob: " <<
                  "NewHead=" << NewHead <<

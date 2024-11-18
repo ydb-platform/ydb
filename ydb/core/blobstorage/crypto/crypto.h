@@ -98,11 +98,7 @@ using TT1ha0Avx2Hasher = TT1ha0HasherBase<ET1haFunc::T1HA0_AVX2>;
 ////////////////////////////////////////////////////////////////////////////
 
 class TStreamCypher {
-    alignas(16) ui8 Leftover[BLOCK_BYTES];
-    alignas(16) ui64 Key[4];
-    alignas(16) i64 Nonce;
-    std::unique_ptr<std::variant<ChaChaVec, ChaCha512>> Cypher;
-    ui32 UnusedBytes;
+public:
     static const bool HasAVX512;
 public:
     TStreamCypher();
@@ -120,6 +116,12 @@ public:
 private:
     void Encipher(const ui8* plaintext, ui8* ciphertext, size_t len);
     void SetKeyAndIV(const ui64 blockIdx);
+
+    alignas(16) ui8 Leftover[BLOCK_BYTES];
+    alignas(16) ui64 Key[4];
+    alignas(16) i64 Nonce;
+    std::unique_ptr<std::variant<ChaChaVec, ChaCha512>> Cypher;
+    ui32 UnusedBytes;
 };
 
 } // NKikimr

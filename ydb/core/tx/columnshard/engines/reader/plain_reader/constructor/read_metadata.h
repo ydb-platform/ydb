@@ -116,7 +116,7 @@ public:
     std::shared_ptr<TReadStats> ReadStats;
 
     TReadMetadata(const ui64 pathId, const std::shared_ptr<TVersionedIndex> info, const TSnapshot& snapshot, const ESorting sorting, const TProgramContainer& ssaProgram)
-        : TBase(info, sorting, ssaProgram, info->GetSchema(snapshot), snapshot)
+        : TBase(info, sorting, ssaProgram, info->GetSchemaVerified(snapshot), snapshot)
         , PathId(pathId)
         , ReadStats(std::make_shared<TReadStats>())
     {

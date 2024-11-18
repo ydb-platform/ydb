@@ -9,7 +9,7 @@ namespace NKikimr::NOlap::NReader::NPlain {
 NKikimr::TConclusionStatus TIndexScannerConstructor::ParseProgram(
     const TVersionedIndex* vIndex, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
     AFL_VERIFY(vIndex);
-    auto& indexInfo = vIndex->GetSchema(Snapshot)->GetIndexInfo();
+    auto& indexInfo = vIndex->GetSchemaVerified(Snapshot)->GetIndexInfo();
     TIndexColumnResolver columnResolver(indexInfo);
     return TBase::ParseProgram(vIndex, proto.GetOlapProgramType(), proto.GetOlapProgram(), read, columnResolver);
 }

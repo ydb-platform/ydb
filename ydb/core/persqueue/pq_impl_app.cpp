@@ -118,7 +118,11 @@ private:
                                 TABLEBODY() {
                                     for (auto& tx : Transactions) {
                                         TABLER() {
-                                            TABLED() {str << tx.TxId;}
+                                            TABLED() {
+                                                HREF(TStringBuilder() << "?TxId=" << tx.TxId) {
+                                                    str << tx.TxId;
+                                                }
+                                            }
                                             TABLED() {str << tx.Step;}
                                             TABLED() {str << (int)tx.State;}
                                             TABLED() {str << tx.MinStep;}
@@ -185,6 +189,31 @@ private:
     ui32 TotalResponses;
 };
 
+bool TPersQueue::OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
+    auto txIdStr = ev->Get()->Cgi().Get("TxId");
+
+    TStringStream str;
+
+    char *endptr;
+    const ui64 txId = strtoull(txIdStr.c_str(), &endptr, 10);
+    if (*endptr) {
+        str << "Wrong id: '" << txIdStr << "'";
+    } else {
+        auto* tx = Txs.FindPtr(txId);
+        if (tx) {
+            HTML_APP_PAGE(str, "PersQueue Tablet " << TabletID() << " (" << TopicName << ") Transaction id " << txId) {
+                PRE() {
+                    str << SecureDebugStringMultiline(tx->Serialize());
+                }
+            }
+        } else {
+            str << "Transaction " << txId << " not found";
+        }
+    }
+
+    ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
+    return true;
+}
 
 bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx)
 {
@@ -194,6 +223,10 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
 
     if (ev->Get()->Cgi().Has("kv")) {
         return TKeyValueFlat::OnRenderAppHtmlPage(ev, ctx);
+    }
+
+    if (ev->Get()->Cgi().Has("TxId")) {
+        return OnRenderAppHtmlPageTx(ev, ctx);
     }
 
     PQ_LOG_I("Handle TEvRemoteHttpInfo: " << ev->Get()->Query);

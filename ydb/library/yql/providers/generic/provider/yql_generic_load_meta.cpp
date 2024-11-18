@@ -29,7 +29,7 @@ namespace NYql {
         using TPtr = std::shared_ptr<TGenericTableDescription>;
 
         NConnectorCommon::TDataSourceInstance DataSourceInstance;
-        NConnectorCommon::TDescribeTableResponse Response;
+        NConnector::NApi::TDescribeTableResponse Response;
     };
 
     class TGenericLoadTableMetadataTransformer: public TGraphTransformerBase {
@@ -94,7 +94,7 @@ namespace NYql {
                 const auto it = State_->Configuration->ClusterNamesToClusterConfigs.find(clusterName);
                 YQL_ENSURE(State_->Configuration->ClusterNamesToClusterConfigs.cend() != it, "cluster not found: " << clusterName);
 
-                NConnectorCommon::TDescribeTableRequest request;
+                NConnector::NApi::TDescribeTableRequest request;
                 FillDescribeTableRequest(request, it->second, item.second);
 
                 auto promise = NThreading::NewPromise();
@@ -219,7 +219,7 @@ namespace NYql {
         }
 
     private:
-        const TStructExprType* ParseTableMeta(const NConnectorCommon::TSchema& schema, const std::string_view& cluster,
+        const TStructExprType* ParseTableMeta(const NConnector::NApi::TSchema& schema, const std::string_view& cluster,
                                               const std::string_view& table, TExprContext& ctx, TVector<TString>& columnOrder) try {
             TVector<const TItemExprType*> items;
 
@@ -245,7 +245,7 @@ namespace NYql {
             return nullptr;
         }
 
-        void FillDescribeTableRequest(NConnectorCommon::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig,
+        void FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig,
                                       const TString& tablePath) {
             const auto dataSourceKind = clusterConfig.GetKind();
             auto dsi = request.mutable_data_source_instance();
@@ -259,7 +259,7 @@ namespace NYql {
             FillTablePath(request, clusterConfig, tablePath);
         }
 
-        void FillCredentials(NConnectorCommon::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
+        void FillCredentials(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
             auto dsi = request.mutable_data_source_instance();
 
             // If login/password is provided, just copy them into request:
@@ -327,14 +327,14 @@ namespace NYql {
             request.set_schema(schema);
         }
 
-        void GetServiceName(NConnectorCommon::TOracleDataSourceOptions& request, const TGenericClusterConfig& clusterConfig) {
+        void GetServiceName(NConnector::NApi::TOracleDataSourceOptions& request, const TGenericClusterConfig& clusterConfig) {
             const auto it = clusterConfig.GetDataSourceOptions().find("service_name");
             if (it != clusterConfig.GetDataSourceOptions().end()) {
                 request.set_service_name(it->second);
             }
         }
 
-        void FillDataSourceOptions(NConnectorCommon::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
+        void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig) {
             const auto dataSourceKind = clusterConfig.GetKind();
             switch (dataSourceKind) {
                 case NConnectorCommon::CLICKHOUSE:
@@ -364,19 +364,19 @@ namespace NYql {
             }
         }
 
-        void FillTypeMappingSettings(NConnectorCommon::TDescribeTableRequest& request) {
+        void FillTypeMappingSettings(NConnector::NApi::TDescribeTableRequest& request) {
             const TString dateTimeFormat =
                 State_->Configuration->DateTimeFormat.Get().GetOrElse(TGenericSettings::TDefault::DateTimeFormat);
             if (dateTimeFormat == "string") {
-                request.mutable_type_mapping_settings()->set_date_time_format(NConnectorCommon::STRING_FORMAT);
+                request.mutable_type_mapping_settings()->set_date_time_format(NConnector::NApi::STRING_FORMAT);
             } else if (dateTimeFormat == "YQL") {
-                request.mutable_type_mapping_settings()->set_date_time_format(NConnectorCommon::YQL_FORMAT);
+                request.mutable_type_mapping_settings()->set_date_time_format(NConnector::NApi::YQL_FORMAT);
             } else {
                 ythrow yexception() << "Unexpected date/time format: '" << dateTimeFormat << "'";
             }
         }
 
-        void FillTablePath(NConnectorCommon::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig,
+        void FillTablePath(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig,
                            const TString& tablePath) {
             request.mutable_data_source_instance()->set_database(clusterConfig.GetDatabaseName());
             request.set_table(tablePath);

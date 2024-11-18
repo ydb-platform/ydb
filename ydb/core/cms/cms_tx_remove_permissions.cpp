@@ -46,25 +46,23 @@ public:
                 auto& request = it->second.Request;
                 
                 if (request.GetEvictVDisks()) {
-                    const TString host = permission.Action.GetHost();
-                    auto ret = Self->ResetHostMarkers(host, txc, ctx);
-                    std::move(ret.begin(), ret.end(), std::back_inserter(HostUpdateMarkers));
-
-                    RemoveRequest(db, requestId, ctx, TStringBuilder() << "Remove request"
-                        << ": id# " << requestId
-                        << ", reason# " << "permission " << id << " was removed");
-                }
-
-                if (request.GetDecomissionPDisk()) {
-                    for (auto& device : permission.Action.GetDevices()) {
-                        TPDiskID pdiskId = TPDiskInfo::NameToId(device);
-
-                        auto ret = Self->ResetPDiskMarkers(pdiskId, txc, ctx);
-                        std::move(ret.begin(), ret.end(), std::back_inserter(PDiskUpdateMarkers));
+                    const TString& host = permission.Action.GetHost();
+                    if (permission.Action.GetType() != NKikimrCms::TAction::REPLACE_DEVICES) {
+                        auto ret = Self->ResetHostMarkers(host, txc, ctx);
+                        std::move(ret.begin(), ret.end(), std::back_inserter(HostUpdateMarkers));
 
                         RemoveRequest(db, requestId, ctx, TStringBuilder() << "Remove request"
                             << ": id# " << requestId
-                            << ", reason# " << "permission " << id << " was removed");
+                            << ", reason# " << "permission " << id << " was removed");   
+                    } else {
+                        for (auto& device : permission.Action.GetDevices()) {
+                            auto ret = Self->ResetPDiskMarkers(host, device, txc, ctx);
+                            std::move(ret.begin(), ret.end(), std::back_inserter(PDiskUpdateMarkers));
+
+                            RemoveRequest(db, requestId, ctx, TStringBuilder() << "Remove request"
+                                << ": id# " << requestId
+                                << ", reason# " << "permission " << id << " was removed");
+                        }
                     }
                 }
             }

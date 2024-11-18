@@ -314,10 +314,11 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
         for (ui32 pdiskIndex = 0; pdiskIndex < pdisks; ++pdiskIndex) {
             auto pdiskId = nodeId * pdisks + pdiskIndex;
             auto &pdisk = node.PDiskStateInfo[pdiskId];
+            TString pdiskPath = TStringBuilder() << "/" << nodeId << "/pdisk-" << pdiskId << ".data";
             pdisk.SetPDiskId(pdiskId);
             pdisk.SetCreateTime(now.GetValue());
             pdisk.SetChangeTime(now.GetValue());
-            pdisk.SetPath("/pdisk.data");
+            pdisk.SetPath(pdiskPath);
             pdisk.SetGuid(1);
             pdisk.SetAvailableSize(100ULL << 30);
             pdisk.SetTotalSize(200ULL << 30);
@@ -326,7 +327,7 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
             auto &pdiskConfig = *config->AddPDisk();
             pdiskConfig.SetNodeId(nodeId);
             pdiskConfig.SetPDiskId(pdiskId);
-            pdiskConfig.SetPath("/pdisk.data");
+            pdiskConfig.SetPath(pdiskPath);
             pdiskConfig.SetGuid(1);
             pdiskConfig.SetDriveStatus(NKikimrBlobStorage::ACTIVE);
 
@@ -951,6 +952,39 @@ void TCmsTestEnv::CheckBSCUpdateRequests(std::set<ui32> expectedNodes,
         TStringBuilder() << "Sentinel sent wrong update requests to BSC: "
                         << "expected# " << expectedRequests
                         << ", actual# " << actualRequests
+    );
+}
+
+
+void TCmsTestEnv::CheckBSCUpdateDriveRequests(std::set<std::pair<ui32, ui32>> expectedDrives,
+                                         NKikimrBlobStorage::EDriveStatus expectedStatus)
+{
+    using TBSCRequests = std::map<NKikimrBlobStorage::EDriveStatus, std::set<std::pair<ui32, ui32>>>;
+
+    TBSCRequests expectedRequests = { {expectedStatus, expectedDrives} };
+    TBSCRequests actualRequests;
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([&](IEventHandle& ev) {
+        if (ev.GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+            const auto& request = ev.Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record;
+            bool foundUpdateDriveCommand = false;
+            for (const auto& command : request.GetRequest().GetCommand()) {
+                if (command.HasUpdateDriveStatus()) {
+                    foundUpdateDriveCommand = true;
+                    const auto& update = command.GetUpdateDriveStatus();
+                    actualRequests[update.GetStatus()].insert(std::make_pair<ui32, ui32>(update.GetHostKey().GetNodeId(), update.GetPDiskId()));
+                }
+            }
+            return foundUpdateDriveCommand;
+        }
+        return false;
+    });
+    DispatchEvents(options, TDuration::Minutes(1));
+
+    UNIT_ASSERT_C(
+        actualRequests == expectedRequests,
+        TStringBuilder() << "Sentinel sent wrong update requests to BSC"
     );
 }
 

@@ -74,7 +74,6 @@ struct TRequestOptions {
     bool DryRun;
     bool Schedule;
     bool EvictVDisks;
-    bool DecomissionPDisk;
 
     explicit TRequestOptions(const TString &user, bool partial, bool dry, bool schedule)
         : User(user)
@@ -82,7 +81,6 @@ struct TRequestOptions {
         , DryRun(dry)
         , Schedule(schedule)
         , EvictVDisks(false)
-        , DecomissionPDisk(false)
     {}
 
     explicit TRequestOptions(const TString &user)
@@ -91,11 +89,6 @@ struct TRequestOptions {
 
     TRequestOptions& WithEvictVDisks() {
         EvictVDisks = true;
-        return *this;
-    }
-
-    TRequestOptions& WithDecomissionPDisk() {
-        DecomissionPDisk = true;
         return *this;
     }
 };
@@ -108,7 +101,6 @@ TAutoPtr<NCms::TEvCms::TEvPermissionRequest> MakePermissionRequest(const TReques
     event->Record.SetDryRun(opts.DryRun);
     event->Record.SetSchedule(opts.Schedule);
     event->Record.SetEvictVDisks(opts.EvictVDisks);
-    event->Record.SetDecomissionPDisk(opts.DecomissionPDisk);
     AddActions(event, actions...);
 
     return event;

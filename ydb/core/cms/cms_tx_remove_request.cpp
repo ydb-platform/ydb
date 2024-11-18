@@ -25,16 +25,14 @@ public:
             auto& request = it->second.Request;
             if (request.GetEvictVDisks()) {
                 for (const auto &action : it->second.Request.GetActions()) {
-                    auto ret = Self->ResetHostMarkers(action.GetHost(), txc, ctx);
-                    std::move(ret.begin(), ret.end(), std::back_inserter(HostUpdateMarkers));
-                }
-            }
-
-            if (request.GetDecomissionPDisk()) {
-                for (const auto &action : it->second.Request.GetActions()) {
-                    for (auto &device : action.GetDevices()) {
-                        auto ret = Self->ResetPDiskMarkers(TPDiskInfo::NameToId(device), txc, ctx);
-                        std::move(ret.begin(), ret.end(), std::back_inserter(PDiskUpdateMarkers));
+                    if (action.GetType() != NKikimrCms::TAction::REPLACE_DEVICES) {
+                        auto ret = Self->ResetHostMarkers(action.GetHost(), txc, ctx);
+                        std::move(ret.begin(), ret.end(), std::back_inserter(HostUpdateMarkers));   
+                    } else {
+                        for (auto &device : action.GetDevices()) {
+                            auto ret = Self->ResetPDiskMarkers(action.GetHost(), device, txc, ctx);
+                            std::move(ret.begin(), ret.end(), std::back_inserter(PDiskUpdateMarkers));
+                        }
                     }
                 }
             }

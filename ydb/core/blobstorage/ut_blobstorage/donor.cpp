@@ -357,7 +357,7 @@ Y_UNIT_TEST_SUITE(Donor) {
         auto baseConfig = env.FetchBaseConfig();
 
         for (const auto& slot : baseConfig.GetVSlot()) {
-            if (vdiskId.GroupID == slot.groupid() && vdiskId.VDisk == slot.GetVDiskIdx()) {
+            if (vdiskId.GroupID.GetRawId() == slot.groupid() && vdiskId.VDisk == slot.GetVDiskIdx()) {
                 auto& slotId = slot.GetVSlotId();
                 env.SetVDiskReadOnly(slotId.GetNodeId(), slotId.GetPDiskId(), slotId.GetVSlotId(), vdiskId, true);
                 break;

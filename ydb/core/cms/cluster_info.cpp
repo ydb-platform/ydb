@@ -725,22 +725,10 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
 
             if (HasPDisk(device))
                 item = &PDiskRef(device);
-            else if (HasVDisk(device))
+            else if (HasPDisk(action.GetHost(), device))
+                item = &PDiskRef(action.GetHost(), device);
+            else if (action.GetType() != TAction::REPLACE_DEVICES && HasVDisk(device))
                 item = &VDiskRef(device);
-
-            if (item)
-                res.insert(item);
-            else if (ctx)
-                LOG_ERROR(*ctx, NKikimrServices::CMS, "FindLockedItems: unknown device %s", device.data());
-        }
-        break;
-
-    case TAction::DECOMISSION_DISK:
-        for (const auto &device : action.GetDevices()) {
-            TLockableItem *item = nullptr;
-
-            if (HasPDisk(device))
-                item = &PDiskRef(device);
 
             if (item)
                 res.insert(item);

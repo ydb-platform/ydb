@@ -978,6 +978,10 @@ private:
         return PDiskRef(id);
     }
 
+    TPDiskInfo &PDiskRef(const TString &hostName, const TString &path) {
+        return PDiskRef(HostNamePathToPDiskId(hostName, path));
+    }
+
     TVDiskInfo &VDiskRef(const TVDiskID &vdId) {
         Y_ABORT_UNLESS(HasVDisk(vdId));
         return *VDisks.find(vdId)->second;
@@ -1044,8 +1048,7 @@ inline bool ActionRequiresHost(NKikimrCms::TAction::EType type) {
     return type != NKikimrCms::TAction::ADD_HOST
         && type != NKikimrCms::TAction::ADD_DEVICES
         && type != NKikimrCms::TAction::REPLACE_DEVICES
-        && type != NKikimrCms::TAction::REMOVE_DEVICES
-        && type != NKikimrCms::TAction::DECOMISSION_DISK;
+        && type != NKikimrCms::TAction::REMOVE_DEVICES;
 }
 
 inline bool ActionRequiresHost(const NKikimrCms::TAction &action) {

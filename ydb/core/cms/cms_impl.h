@@ -85,8 +85,8 @@ public:
     TVector<THostMarkers> SetHostMarker(const TString &host, NKikimrCms::EMarker marker, TTransactionContext &txc, const TActorContext &ctx);
     TVector<THostMarkers> ResetHostMarkers(const TString &host, TTransactionContext &txc, const TActorContext &ctx);
 
-    TVector<TPDiskMarkers> SetPDiskMarker(TPDiskID pdiskId, NKikimrCms::EMarker marker, TTransactionContext &txc, const TActorContext &ctx);
-    TVector<TPDiskMarkers> ResetPDiskMarkers(TPDiskID pdiskId, TTransactionContext &txc, const TActorContext &ctx);
+    TVector<TPDiskMarkers> SetPDiskMarker(const TString &host, const TString &device, NKikimrCms::EMarker marker, TTransactionContext &txc, const TActorContext &ctx);
+    TVector<TPDiskMarkers> ResetPDiskMarkers(const TString &host, const TString &device, TTransactionContext &txc, const TActorContext &ctx);
     
     void SentinelUpdateMarkers(TVector<THostMarkers> &&hostMarkers, TVector<TPDiskMarkers> &&pdiskMarkers, const TActorContext &ctx);
 
@@ -307,8 +307,6 @@ private:
         TString &error,
         const TActorContext &ctx);
     bool CheckEvictVDisks(const NKikimrCms::TAction &action,
-        TErrorInfo &error) const;
-    bool CheckDecomissionPDisk(const NKikimrCms::TAction &action,
         TErrorInfo &error) const;
     bool CheckAction(const NKikimrCms::TAction &action,
         const TActionOptions &opts,

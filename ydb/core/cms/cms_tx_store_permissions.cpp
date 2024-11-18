@@ -73,14 +73,14 @@ public:
                 << ", action# " << actionStr);
 
             if (Scheduled && Scheduled->Request.GetEvictVDisks()) {
-                auto ret = Self->SetHostMarker(permission.GetAction().GetHost(), NKikimrCms::MARKER_DISK_FAULTY, txc, ctx);
-                std::move(ret.begin(), ret.end(), std::back_inserter(HostUpdateMarkers));
-            }
-
-            if (Scheduled && Scheduled->Request.GetDecomissionPDisk()) {
-                for (auto& device : permission.GetAction().GetDevices()) {
-                    auto ret = Self->SetPDiskMarker(TPDiskInfo::NameToId(device), NKikimrCms::MARKER_DISK_READONLY_FAULTY, txc, ctx);
-                    std::move(ret.begin(), ret.end(), std::back_inserter(PDiskUpdateMarkers));
+                if (permission.GetAction().GetType() != NKikimrCms::TAction::REPLACE_DEVICES) {
+                    auto ret = Self->SetHostMarker(permission.GetAction().GetHost(), NKikimrCms::MARKER_DISK_FAULTY, txc, ctx);
+                    std::move(ret.begin(), ret.end(), std::back_inserter(HostUpdateMarkers));
+                } else {
+                    for (auto& device : permission.GetAction().GetDevices()) {
+                        auto ret = Self->SetPDiskMarker(permission.GetAction().GetHost(), device, NKikimrCms::MARKER_DISK_READONLY_FAULTY, txc, ctx);
+                        std::move(ret.begin(), ret.end(), std::back_inserter(PDiskUpdateMarkers));
+                    }
                 }
             }
         }
@@ -91,7 +91,7 @@ public:
 
             auto& request = Scheduled->Request;
 
-            if (request.ActionsSize() || request.GetEvictVDisks() || request.GetDecomissionPDisk()) {
+            if (request.ActionsSize()) {
                 ui64 order = Scheduled->Order;
                 i32 priority = Scheduled->Priority;
                 TString requestStr;
@@ -112,16 +112,14 @@ public:
 
                 if (request.GetEvictVDisks()) {
                     for (const auto &action : request.GetActions()) {
-                        auto ret = Self->SetHostMarker(action.GetHost(), NKikimrCms::MARKER_DISK_FAULTY, txc, ctx);
-                        std::move(ret.begin(), ret.end(), std::back_inserter(HostUpdateMarkers));
-                    }
-                }
-
-                if (request.GetDecomissionPDisk()) {
-                    for (const auto &action : request.GetActions()) {
-                        for (auto& device : action.GetDevices()) {
-                            auto ret = Self->SetPDiskMarker(TPDiskInfo::NameToId(device), NKikimrCms::MARKER_DISK_READONLY_FAULTY, txc, ctx);
-                            std::move(ret.begin(), ret.end(), std::back_inserter(PDiskUpdateMarkers));
+                        if (action.GetType() != NKikimrCms::TAction::REPLACE_DEVICES) {
+                            auto ret = Self->SetHostMarker(action.GetHost(), NKikimrCms::MARKER_DISK_FAULTY, txc, ctx);
+                            std::move(ret.begin(), ret.end(), std::back_inserter(HostUpdateMarkers));
+                        } else {
+                            for (auto& device : action.GetDevices()) {
+                                auto ret = Self->SetPDiskMarker(action.GetHost(), device, NKikimrCms::MARKER_DISK_READONLY_FAULTY, txc, ctx);
+                                std::move(ret.begin(), ret.end(), std::back_inserter(PDiskUpdateMarkers));
+                            }
                         }
                     }
                 }

@@ -11,7 +11,6 @@
 #define CHACHA_ROUNDS 8
 #endif
 
-#ifdef __AVX512F__
 typedef unsigned vec128 __attribute__ ((vector_size (16)));
 #define XOR128(a,b)	(vec128)_mm_xor_si128((__m128i)a, (__m128i)b)
 #define LOAD128(m)	(vec128)_mm_loadu_si128((__m128i*)(m))
@@ -116,7 +115,8 @@ typedef long long __m512i __attribute__ ((__vector_size__ (64), __may_alias__));
             _mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(3,2,1,0,7,6,5,4), (__m512i)(v1)), 0xff0f,	\
             _mm512_mask_mov_epi32(_mm512_permutexvar_epi64(_mm512_set_epi64(5,4,3,2,1,0,7,6), (__m512i)(v0)), 0xfff0,	\
             (__m512i)(v3))))));
-#endif
+
+void XorAVX512(void* destination, const void* a, const void* b, ui32 size);
 
 class ChaCha512
 {
@@ -141,8 +141,7 @@ public:
 private:
     void EncipherImpl(const ui8* plaintext, ui8* ciphertext, size_t len);
 
-#ifdef __AVX512F__
     vec512 q0_, q1_, q2_, q3_;
-#endif
+    
     ui8 rounds_;
 };

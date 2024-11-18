@@ -174,6 +174,16 @@ private:
         html << "<pre>" << ComputeActorState.DebugString() << "</pre>";
 
 #define DUMP(P, X) html << #X ": " << P.X << "<br />"
+        html << "<h4>ProcessSourcesState</h4>";
+        DUMP(ProcessSourcesState, Inflight);
+        html << "<h4>ProcessOutputsState</h4>";
+        DUMP(ProcessOutputsState, Inflight);
+        DUMP(ProcessOutputsState, ChannelsReady);
+        DUMP(ProcessOutputsState, HasDataToSend);
+        DUMP(ProcessOutputsState, AllOutputsFinished);
+        DUMP(ProcessOutputsState, LastRunStatus);
+        DUMP(ProcessOutputsState, LastPopReturnedNoData);
+
         html << "<h3>Watermarks</h3>";
         for (const auto& [time, id]: WatermarkTakeInputChannelDataRequests) {
             html << "WatermarkTakeInputChannelDataRequests: " << time.ToString() << " " << id << "<br />";
@@ -343,6 +353,54 @@ private:
                 html << "DqOutputChannel.PopStats.SpilledRows: " << popStats.SpilledRows << "<br />";
                 html << "DqOutputChannel.PopStats.SpilledBlobs: " << popStats.SpilledBlobs << "<br />";
                 dumpOutputStats("DqOutputChannel.PopStats."sv, popStats);
+            }
+        }
+
+        html << "<h3>Sinks</h3>";
+        for (const auto& [id, info]: SinksMap) {
+            html << "<h4>Sink Id: " << id << "</h4>";
+            DUMP(info, Type);
+            DUMP(info, FreeSpaceBeforeSend);
+            DUMP(info, Finished);
+            DUMP(info, FinishIsAcknowledged);
+            DUMP(info, PopStarted);
+            if (info.Buffer) {
+                const auto& buffer = *info.Buffer;
+                html << "DqOutputBuffer.OutputIndex: " << buffer.GetOutputIndex() << "<br />";
+                html << "DqOutputBuffer.IsFull: " << buffer.IsFull() << "<br />";
+                html << "DqOutputBuffer.OutputType: " << (buffer.GetOutputType() ? buffer.GetOutputType()->GetKindAsStr() : TString{"unknown"})  << "<br />";
+                html << "DqOutputBuffer.IsFinished: " << buffer.IsFinished() << "<br />";
+                html << "DqOutputBuffer.HasData: " << buffer.HasData() << "<br />";
+
+                const auto& pushStats = buffer.GetPushStats();
+                dumpOutputStats("DqOutputBuffer.PushStats."sv, pushStats);
+
+                const auto& popStats = buffer.GetPopStats();
+                dumpOutputStats("DqOutputBuffer.PopStats."sv, popStats);
+            }
+            if (info.AsyncOutput) {
+                const auto& output = *info.AsyncOutput;
+                html << "AsyncOutput.OutputIndex: " << output.GetOutputIndex() << "<br />";
+                html << "AsyncOutput.FreeSpace: " << output.GetFreeSpace() << "<br />";
+                const auto& egressStats = output.GetEgressStats();
+                dumpAsyncStats("AsyncOutput.EgressStats."sv, egressStats);
+            }
+        }
+
+        html << "<h3>Sources</h3>";
+        for (const auto& [id, info]: SourcesMap) {
+            html << "<h4>Sink Id: " << id << "</h4>";
+            DUMP(info, Type);
+            DUMP(info, LogPrefix);
+            DUMP(info, Index);
+            DUMP(info, Finished);
+            html << "IsPausedByWatermark: " << info.IsPausedByWatermark() << "<br />";
+            html << "FreeSpace: " << info.GetFreeSpace() << "<br />";
+            if (info.AsyncInput) {
+                const auto& input = *info.AsyncInput;
+                html << "AsyncInput.InputIndex: " << input.GetInputIndex() << "<br />";
+                const auto& ingressStats = input.GetIngressStats();
+                dumpAsyncStats("AsyncInput.IngressStats."sv, ingressStats);
             }
         }
 #undef DUMP

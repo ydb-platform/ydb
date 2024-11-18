@@ -1663,6 +1663,18 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
     }
 
+    Y_UNIT_TEST_F(TestSendMessageEmptyQueueUrl, THttpProxyTestMockForSQS) {
+        NJson::TJsonValue sendMessageReq;
+        sendMessageReq["QueueUrl"] = "";
+        auto body = "MessageBody-0";
+        sendMessageReq["MessageBody"] = body;
+        sendMessageReq["MessageDeduplicationId"] = "MessageDeduplicationId-0";
+        sendMessageReq["MessageGroupId"] = "MessageGroupId-0";
+
+        auto res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+    }
+
     Y_UNIT_TEST_F(TestReceiveMessage, THttpProxyTestMock) {
         auto createQueueReq = CreateSqsCreateQueueRequest();
         auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", createQueueReq, FormAuthorizationStr("ru-central1"));

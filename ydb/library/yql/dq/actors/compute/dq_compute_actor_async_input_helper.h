@@ -35,7 +35,7 @@ public:
         , IssuesBuffer(IssuesBufferSize)
         , WatermarksMode(watermarksMode) {}
 
-    bool IsPausedByWatermark() {
+    bool IsPausedByWatermark() const {
         return PendingWatermark.Defined();
     }
 

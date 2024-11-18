@@ -67,6 +67,7 @@ struct TKikimrSettings {
 
 
     NCommon::TConfSetting<ui32, false> MaxTasksPerStage;
+    NCommon::TConfSetting<ui32, false> MaxSequentialReadsInFlight;
 
     /* Runtime */
     NCommon::TConfSetting<bool, true> ScanQuery;
@@ -84,7 +85,7 @@ struct TKikimrSettings {
     bool HasOptEnableOlapProvideComputeSharding() const;
     bool HasOptUseFinalizeByKey() const;
     bool HasOptEnableConstantFolding() const;
-
+    bool HasMaxSequentialReadsInFlight() const;
 
     EOptionalFlag GetOptPredicateExtract() const;
     EOptionalFlag GetUseLlvm() const;

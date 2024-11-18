@@ -74,6 +74,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, MaxDPccpDPTableSize);
 
     REGISTER_SETTING(*this, MaxTasksPerStage);
+    REGISTER_SETTING(*this, MaxSequentialReadsInFlight);
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
@@ -130,6 +131,9 @@ bool TKikimrSettings::HasOptEnableConstantFolding() const {
     return GetOptionalFlagValue(OptEnableConstantFolding.Get()) == EOptionalFlag::Enabled;
 }
 
+bool TKikimrSettings::HasMaxSequentialReadsInFlight() const {
+    return !MaxSequentialReadsInFlight.Get().Empty();
+}
 
 EOptionalFlag TKikimrSettings::GetOptPredicateExtract() const {
     return GetOptionalFlagValue(OptEnablePredicateExtract.Get());

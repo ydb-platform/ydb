@@ -19,12 +19,12 @@
 #include <yt/yt/core/concurrency/thread_affinity.h>
 
 #include <yt/yt/core/misc/finally.h>
-#include <library/cpp/yt/threading/atomic_object.h>
 
 #include <yt/yt/core/tracing/public.h>
 
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
@@ -178,7 +178,7 @@ private:
     TEnumIndexedArray<EMultiplexingBand, TBandBucket> Buckets_;
 
     std::atomic<bool> TerminationFlag_ = false;
-    TAtomicObject<TError> TerminationError_;
+    NThreading::TAtomicObject<TError> TerminationError_;
 
     TSessionPtr GetOrCreateSession(const TSendOptions& options)
     {
@@ -687,7 +687,7 @@ private:
         std::array<TBucket, BucketCount> RequestBuckets_;
 
         std::atomic<bool> TerminationFlag_ = false;
-        TAtomicObject<TError> TerminationError_;
+        NThreading::TAtomicObject<TError> TerminationError_;
 
 
         TFuture<void> GetBusReadyFuture()

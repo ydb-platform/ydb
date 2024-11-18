@@ -10,9 +10,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
-namespace NKikimr {
-namespace NSharedCache {
-
+namespace NKikimr::NSharedCache {
     using EPriority = NTabletFlatExecutor::NBlockIO::EPriority;
 
     enum EEv {
@@ -128,7 +126,6 @@ namespace NSharedCache {
 
         THashMap<TLogoBlobID, TActions> Actions;
     };
-}
 }
 
 template<> inline

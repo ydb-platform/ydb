@@ -1,14 +1,13 @@
 #include "schemeshard__operation.h"
-#include "schemeshard__operation_part.h"
 
-#include "schemeshard__operation_side_effects.h"
-#include "schemeshard__operation_memory_changes.h"
+#include "schemeshard__dispatch_op.h"
 #include "schemeshard__operation_db_changes.h"
-
+#include "schemeshard__operation_memory_changes.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard__operation_side_effects.h"
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -792,6 +791,7 @@ bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, T
 
     while (path != parentPath) {
         if (createdPaths.contains(path.PathString())) {
+            path.Rise();
             continue;
         }
 
@@ -854,8 +854,6 @@ bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, T
 
 // # Generates additional MkDirs for transactions
 TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context) {
-    using namespace NGenerated;
-
     TSplitTransactionsResult result;
     THashSet<TString> createdPaths;
 

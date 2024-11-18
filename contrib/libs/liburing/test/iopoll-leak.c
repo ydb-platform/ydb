@@ -27,6 +27,8 @@ static int do_iopoll(const char *fname)
 
 	fd = open(fname, O_RDONLY | O_DIRECT);
 	if (fd < 0) {
+		if (errno == EINVAL || errno == EPERM || errno == EACCES)
+			return T_EXIT_SKIP;
 		perror("open");
 		return T_EXIT_SKIP;
 	}
@@ -40,6 +42,8 @@ static int do_iopoll(const char *fname)
 	io_uring_submit(&ring);
 
 	close(fd);
+	free(iov->iov_base);
+	free(iov);
 	return T_EXIT_PASS;
 }
 

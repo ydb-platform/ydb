@@ -47,8 +47,10 @@ int main(int argc, char *argv[])
 	p.flags = IORING_SETUP_NO_MMAP;
 	ret = io_uring_queue_init_mem(1, &ring, &p, ring_mem, 16384);
 	if (ret < 0) {
-		if (ret == -EINVAL || ret == -ENOMEM)
+		if (ret == -EINVAL || ret == -ENOMEM) {
+			free(ring_mem);
 			return T_EXIT_SKIP;
+		}
 		fprintf(stderr, "queue init failed %d\n", ret);
 		return T_EXIT_FAIL;
 	}
@@ -63,8 +65,10 @@ int main(int argc, char *argv[])
 
 	ret = io_uring_register_buf_ring(&ring, &reg, 0);
 	if (ret) {
-		if (ret == -EINVAL)
+		if (ret == -EINVAL) {
+			free(ring_mem);
 			return T_EXIT_SKIP;
+		}
 		fprintf(stderr, "reg buf ring: %d\n", ret);
 		return T_EXIT_FAIL;
 	}
@@ -74,8 +78,10 @@ int main(int argc, char *argv[])
 	br = mmap(NULL, ring_size, PROT_READ | PROT_WRITE,
 				MAP_SHARED | MAP_POPULATE, ring.ring_fd, off);
 	if (br == MAP_FAILED) {
-		if (errno == ENOMEM)
+		if (errno == ENOMEM) {
+			free(ring_mem);
 			return T_EXIT_SKIP;
+		}
 		perror("mmap");
 		return T_EXIT_FAIL;
 	}
@@ -120,5 +126,6 @@ int main(int argc, char *argv[])
 	io_uring_cqe_seen(&ring, cqe);
 
 	io_uring_queue_exit(&ring);
+	free(ring_mem);
 	return T_EXIT_PASS;
 }

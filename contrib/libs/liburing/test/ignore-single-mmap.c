@@ -3,7 +3,7 @@
 /*
  * 6.10-rc merge window had a bug where the rewritten mmap support caused
  * rings allocated with > 1 page, but asking for smaller mappings, would
- * cause -EFAULT to be returned rather than a succesful map. This hit
+ * cause -EFAULT to be returned rather than a successful map. This hit
  * applications either using an ancient liburing with IORING_FEAT_SINGLE_MMAP
  * support, or application just ignoring that feature flag and still doing
  * 3 mmap operations to map the ring.

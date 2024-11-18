@@ -8,14 +8,12 @@
 #include <ydb/core/blobstorage/crypto/chacha.h>
 #include <ydb/core/blobstorage/crypto/poly1305.h>
 #define ChaChaVec ChaCha
+#define ChaCha512 ChaCha
 #define Poly1305Vec Poly1305
 #define CHACHA_BPI 1
-#elif __AVX512F__
-#include <ydb/core/blobstorage/crypto/chacha_vec.h>
-#include <ydb/core/blobstorage/crypto/chacha_512.h>
-#include <ydb/core/blobstorage/crypto/poly1305_vec.h>
 #else
 #include <ydb/core/blobstorage/crypto/chacha_vec.h>
+#include <ydb/core/blobstorage/crypto/chacha_512/chacha_512.h>
 #include <ydb/core/blobstorage/crypto/poly1305_vec.h>
 #endif
 
@@ -103,11 +101,7 @@ class TStreamCypher {
     alignas(16) ui8 Leftover[BLOCK_BYTES];
     alignas(16) ui64 Key[4];
     alignas(16) i64 Nonce;
-#ifdef __AVX512F__
     std::unique_ptr<std::variant<ChaChaVec, ChaCha512>> Cypher;
-#else
-    std::unique_ptr<ChaChaVec> Cypher;
-#endif
     ui32 UnusedBytes;
     static const bool HasAVX512;
 public:

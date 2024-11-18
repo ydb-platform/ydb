@@ -309,6 +309,11 @@ namespace {
                 result.Cycle = value == "1" ? true : false;
             } else if (name == "increment") {
                 result.Increment = FromString<i64>(value);
+            } else if (name == "restart") {
+                result.Restart = true;
+                if (!value.empty()) {
+                    result.RestartValue = FromString<i64>(value);
+                }
             }
         }
         return result;
@@ -1390,8 +1395,11 @@ public:
                         auto typeNode = columnTuple.Item(1);
                         auto columnType = typeNode.Ref().GetTypeAnn();
                         auto type = columnType->Cast<TTypeExprType>()->GetType();
-                        auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
-                        auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
+                        auto notNull = type->GetKind() != ETypeAnnotationKind::Optional
+                            && type->GetKind() != ETypeAnnotationKind::Pg; // pg types always optional
+                        auto actualType = type->GetKind() == ETypeAnnotationKind::Optional
+                            ? type->Cast<TOptionalExprType>()->GetItemType()
+                            : type;
 
                         TString error;
                         if (!SetColumnType(actualType, notNull, *add_column->mutable_type(), error)) {

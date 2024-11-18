@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 
@@ -61,7 +62,7 @@ public:
     }
 };
 
-class IDataAccessorRequestsSubscriber {
+class IDataAccessorRequestsSubscriber: public NColumnShard::TMonitoringObjectsCounter<IDataAccessorRequestsSubscriber> {
 private:
     THashSet<ui64> RequestIds;
 
@@ -95,7 +96,6 @@ public:
 class TFakeDataAccessorsSubscriber: public IDataAccessorRequestsSubscriber {
 private:
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& /*result*/) override {
-
     }
 };
 
@@ -117,6 +117,12 @@ private:
     THashMap<ui64, TPortionDataAccessor> PortionAccessors;
 
 public:
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "portions_count=" << Portions.size();
+        return sb;
+    }
+
     TPathFetchingState(const ui64 pathId)
         : PathId(pathId) {
     }
@@ -161,7 +167,7 @@ public:
     }
 };
 
-class TDataAccessorsRequest {
+class TDataAccessorsRequest: public NColumnShard::TMonitoringObjectsCounter<TDataAccessorsRequest> {
 private:
     static inline TAtomicCounter Counter = 0;
     ui32 FetchStage = 0;
@@ -191,6 +197,15 @@ private:
     }
 
 public:
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "request_id=" << RequestId << ";";
+        for (auto&& i : PathIdStatus) {
+            sb << i.first << "={" << i.second.DebugString() << "};";
+        }
+        return sb;
+    }
+
     TDataAccessorsRequest() = default;
 
     bool HasSubscriber() const {

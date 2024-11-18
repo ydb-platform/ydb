@@ -18,4 +18,8 @@ spec:
         unitKind: ssd    # please double check this field with disk kind on your selected nodes
   storageClusterRef:
     name: {{ storage_name }}
-
+  volumes:
+  - name: coredumps
+    hostPath:
+      path: /coredumps
+      type: Directory

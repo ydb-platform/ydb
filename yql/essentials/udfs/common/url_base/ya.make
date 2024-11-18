@@ -1,9 +1,3 @@
-IF (YQL_PACKAGED)
-    PACKAGE()
-        FROM_SANDBOX(FILE 7319908145 OUT_NOAUTO liburl_udf.so
-        )
-    END()
-ELSE ()
 YQL_UDF_CONTRIB(url_udf)
     
     YQL_ABI_VERSION(
@@ -22,8 +16,6 @@ YQL_UDF_CONTRIB(url_udf)
     )
     
     END()
-ENDIF ()
-
 
 RECURSE_FOR_TESTS(
     test

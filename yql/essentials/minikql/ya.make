@@ -61,17 +61,18 @@ PEERDIR(
     library/cpp/packedtypes
     library/cpp/resource
     library/cpp/yson
-    yql/essentials/types/binary_json
-    yql/essentials/types/dynumber
-    yql/essentials/types/uuid
     yql/essentials/core/pg_settings
+    yql/essentials/core/sql_types
     yql/essentials/minikql/dom
     yql/essentials/parser/pg_catalog
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/udf
     yql/essentials/public/udf/tz
+    yql/essentials/types/binary_json
+    yql/essentials/types/dynumber
+    yql/essentials/types/uuid
     yql/essentials/utils
-    yql/essentials/core/sql_types
+    yql/essentials/utils/memory_profiling
 )
 
 IF (MKQL_RUNTIME_VERSION)

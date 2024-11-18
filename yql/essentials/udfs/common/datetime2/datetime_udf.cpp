@@ -40,7 +40,7 @@ public:
     static TResult DateCore(ui16 value) {
         return value * ui32(86400) * TResult(ScaleAfterSeconds);
     }
-    
+
     template<typename TTzDate>
     static TResult TzBlockCore(TBlockItem tzDate);
 
@@ -75,7 +75,7 @@ public:
         static auto name = TStringRef(TFuncName, std::strlen(TFuncName));
         return name;
     }
-    
+
     template<typename TTzDate, typename TOutput>
     static auto MakeTzBlockExec() {
         using TReader = TTzDateBlockReader<TTzDate, /*Nullable*/ false>;
@@ -563,7 +563,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     // Split
 
     template<typename TUserDataType, bool Nullable>
-    using TSplitArgReader = std::conditional_t<TTzDataType<TUserDataType>::Result, 
+    using TSplitArgReader = std::conditional_t<TTzDataType<TUserDataType>::Result,
         TTzDateBlockReader<TUserDataType, Nullable>,
         TFixedSizeBlockReader<typename TDataType<TUserDataType>::TLayout, Nullable>>;
 
@@ -627,7 +627,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                 const auto* retType = builder.Resource(TMResourceName);
                 const auto* blockRetType = builder.Block(false)->Item(retType).Build();
                 builder.Returns(blockRetType);
-                
+
                 if (!typesOnly) {
                     builder.Implementation(new TSimpleArrowUdfImpl({blockArgType}, retType, block.IsScalar(),
                             TSplitKernelExec<TUserDataType>::Do, builder, TString(name), arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE));
@@ -639,7 +639,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                 } else {
                     builder.Returns(builder.Resource(TMResourceName));
                 }
-                
+
                 if (!typesOnly) {
                     builder.Implementation(new TSplit<TUserDataType>(builder.GetSourcePosition()));
                 }
@@ -854,9 +854,9 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     }
 
     // Make*
-    
+
     template<typename TUserDataType, bool Nullable>
-    using TMakeResBuilder = std::conditional_t<TTzDataType<TUserDataType>::Result, 
+    using TMakeResBuilder = std::conditional_t<TTzDataType<TUserDataType>::Result,
         TTzDateArrayBuilder<TUserDataType, Nullable>,
         TFixedSizeArrayBuilder<typename TDataType<TUserDataType>::TLayout, Nullable>>;
 
@@ -1009,7 +1009,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     GET_METHOD(Year, ui16)
     GET_METHOD(DayOfYear, ui16)
     GET_METHOD(Month, ui8)
-    
+
     // template<typename TValue>
     // TValue GetMonthNameValue(size_t idx) {
     //     static const std::array<TValue, 12U> monthNames = {{
@@ -1077,7 +1077,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     //     return TUnboxedValuePod(GetDay(args[0]));
     // }
     // END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TGetDayOfMonth, TGetDayOfMonthKernelExec::Do, arrow::compute::NullHandling::INTERSECTION);
-    
+
     SIMPLE_STRICT_UDF(TGetDayOfMonth, ui8(TAutoMap<TResource<TMResourceName>>)) {
         Y_UNUSED(valueBuilder);
         return TUnboxedValuePod(GetDay(args[0]));
@@ -1267,7 +1267,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     };
 
     // From*
-    
+
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TFromSeconds, TOptional<TTimestamp>(TAutoMap<ui32>)) {
         Y_UNUSED(valueBuilder);
         auto res = args[0].Get<ui32>();
@@ -1277,7 +1277,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         return TUnboxedValuePod((ui64)(res * 1000000ull));
     }
 
-    using TFromSecondsKernel = TUnaryUnsafeFixedSizeFilterKernel<ui32, ui64, 
+    using TFromSecondsKernel = TUnaryUnsafeFixedSizeFilterKernel<ui32, ui64,
         [] (ui32 seconds) { return std::make_pair(ui64(seconds * 1000000ull), ValidateDatetime(seconds)); }>;
     END_SIMPLE_ARROW_UDF(TFromSeconds, TFromSecondsKernel::Do);
 
@@ -1290,7 +1290,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         return TUnboxedValuePod(res * 1000u);
     }
 
-    using TFromMillisecondsKernel = TUnaryUnsafeFixedSizeFilterKernel<ui64, ui64, 
+    using TFromMillisecondsKernel = TUnaryUnsafeFixedSizeFilterKernel<ui64, ui64,
         [] (ui64 milliseconds) { return std::make_pair(ui64(milliseconds * 1000u), milliseconds < MAX_TIMESTAMP / 1000u); }>;
     END_SIMPLE_ARROW_UDF(TFromMilliseconds, TFromMillisecondsKernel::Do);
 
@@ -1303,12 +1303,12 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         return TUnboxedValuePod(res);
     }
 
-    using TFromMicrosecondsKernel = TUnaryUnsafeFixedSizeFilterKernel<ui64, ui64, 
+    using TFromMicrosecondsKernel = TUnaryUnsafeFixedSizeFilterKernel<ui64, ui64,
         [] (ui64 timestamp) { return std::make_pair(timestamp, ValidateTimestamp(timestamp)); }>;
     END_SIMPLE_ARROW_UDF(TFromMicroseconds, TFromMicrosecondsKernel::Do);
 
     template <typename TInput, i64 Multiplier>
-    using TIntervalFromKernel = TUnaryUnsafeFixedSizeFilterKernel<TInput, i64, 
+    using TIntervalFromKernel = TUnaryUnsafeFixedSizeFilterKernel<TInput, i64,
         [] (TInput interval) { return std::make_pair(i64(interval * Multiplier), ValidateInterval(interval)); }>;
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TIntervalFromDays, TOptional<TInterval>(TAutoMap<i32>)) {
@@ -1359,7 +1359,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         Y_UNUSED(valueBuilder);
         return TUnboxedValuePod(i32(args[0].Get<i64>() / UsecondsInDay));
     }
-    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TToDays, 
+    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TToDays,
     (UnaryPreallocatedExecImpl<i64, i32, [] (i64 arg) { return i32(arg / UsecondsInDay); }>),
     arrow::compute::NullHandling::INTERSECTION);
 
@@ -1367,7 +1367,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         Y_UNUSED(valueBuilder);
         return TUnboxedValuePod(i32(args[0].Get<i64>() / UsecondsInHour));
     }
-    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TToHours, 
+    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TToHours,
     (UnaryPreallocatedExecImpl<i64, i32, [] (i64 arg) { return i32(arg / UsecondsInHour); }>),
     arrow::compute::NullHandling::INTERSECTION);
 
@@ -1375,7 +1375,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         Y_UNUSED(valueBuilder);
         return TUnboxedValuePod(i32(args[0].Get<i64>() / UsecondsInMinute));
     }
-    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TToMinutes, 
+    END_SIMPLE_ARROW_UDF_WITH_NULL_HANDLING(TToMinutes,
     (UnaryPreallocatedExecImpl<i64, i32, [] (i64 arg) { return i32(arg / UsecondsInMinute); }>),
     arrow::compute::NullHandling::INTERSECTION);
 
@@ -1395,6 +1395,17 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         }
     };
 
+    template<auto Core>
+    TUnboxedValue SimpleDatetimeToDatetimeUdf(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) {
+        auto result = args[0];
+        auto& storage = Reference(result);
+        if (auto res = Core(storage, *valueBuilder)) {
+            storage = res.GetRef();
+            return result;
+        }
+        return TUnboxedValuePod{};
+    }
+
     TMaybe<TTMStorage> StartOfYear(TTMStorage storage, const IValueBuilder& valueBuilder) {
         storage.Month = 1;
         storage.Day = 1;
@@ -1408,15 +1419,30 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         return storage;
     }
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TStartOfYear, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
-        auto result = args[0];
-        auto& storage = Reference(result);
-        if (auto res = StartOfYear(storage, *valueBuilder)) {
-            storage = res.GetRef();
-            return result;
-        }
-        return TUnboxedValuePod{};
+        return SimpleDatetimeToDatetimeUdf<StartOfYear>(valueBuilder, args);
     }
     END_SIMPLE_ARROW_UDF(TStartOfYear, TStartOfKernelExec<StartOfYear>::Do);
+
+    void SetEndOfDay(TTMStorage& storage) {
+        storage.Hour = 23;
+        storage.Minute = 59;
+        storage.Second = 59;
+        storage.Microsecond = 999999;
+    }
+
+    TMaybe<TTMStorage> EndOfYear(TTMStorage storage, const IValueBuilder& valueBuilder) {
+        storage.Month = 12;
+        storage.Day = 31;
+        SetEndOfDay(storage);
+        if (!storage.Validate(valueBuilder.GetDateBuilder())) {
+            return {};
+        }
+        return storage;
+    }
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TEndOfYear, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+        return SimpleDatetimeToDatetimeUdf<EndOfYear>(valueBuilder, args);
+    }
+    END_SIMPLE_ARROW_UDF(TEndOfYear, TStartOfKernelExec<EndOfYear>::Do);
 
     TMaybe<TTMStorage> StartOfQuarter(TTMStorage storage, const IValueBuilder& valueBuilder) {
         storage.Month = (storage.Month - 1) / 3 * 3 + 1;
@@ -1431,16 +1457,24 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         return storage;
     }
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TStartOfQuarter, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
-        auto result = args[0];
-        auto& storage = Reference(result);
-        if (auto res = StartOfQuarter(storage, *valueBuilder)) {
-            storage = res.GetRef();
-            return result;
-        }
-        return TUnboxedValuePod{};
+        return SimpleDatetimeToDatetimeUdf<StartOfQuarter>(valueBuilder, args);
     }
     END_SIMPLE_ARROW_UDF(TStartOfQuarter, TStartOfKernelExec<StartOfQuarter>::Do);
-    
+
+    TMaybe<TTMStorage> EndOfQuarter(TTMStorage storage, const IValueBuilder& valueBuilder) {
+        storage.Month = ((storage.Month - 1) / 3 + 1) * 3;
+        storage.Day = NMiniKQL::GetMonthLength(storage.Month, NMiniKQL::IsLeapYear(storage.Year));
+        SetEndOfDay(storage);
+        if (!storage.Validate(valueBuilder.GetDateBuilder())) {
+            return {};
+        }
+        return storage;
+    }
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TEndOfQuarter, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+        return SimpleDatetimeToDatetimeUdf<EndOfQuarter>(valueBuilder, args);
+    }
+    END_SIMPLE_ARROW_UDF(TEndOfQuarter, TStartOfKernelExec<EndOfQuarter>::Do);
+
     TMaybe<TTMStorage> StartOfMonth(TTMStorage storage, const IValueBuilder& valueBuilder) {
         storage.Day = 1;
         storage.Hour = 0;
@@ -1453,23 +1487,13 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         return storage;
     }
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TStartOfMonth, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
-        auto result = args[0];
-        auto& storage = Reference(result);
-        if (auto res = StartOfMonth(storage, *valueBuilder)) {
-            storage = res.GetRef();
-            return result;
-        }
-        return TUnboxedValuePod{};
+        return SimpleDatetimeToDatetimeUdf<StartOfMonth>(valueBuilder, args);
     }
     END_SIMPLE_ARROW_UDF(TStartOfMonth, TStartOfKernelExec<StartOfMonth>::Do);
-    
+
     TMaybe<TTMStorage> EndOfMonth(TTMStorage storage, const IValueBuilder& valueBuilder) {
         storage.Day = NMiniKQL::GetMonthLength(storage.Month, NMiniKQL::IsLeapYear(storage.Year));
-        storage.Hour = 0;
-        storage.Minute = 0;
-        storage.Second = 0;
-        storage.Microsecond = 0;
-
+        SetEndOfDay(storage);
         if (!storage.Validate(valueBuilder.GetDateBuilder())) {
             return {};
         }
@@ -1477,16 +1501,10 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     }
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TEndOfMonth, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
-        auto result = args[0];
-        auto& storage = Reference(result);
-        if (auto res = EndOfMonth(storage, *valueBuilder)) {
-            storage = res.GetRef();
-            return result;
-        }
-        return TUnboxedValuePod{};
+        return SimpleDatetimeToDatetimeUdf<EndOfMonth>(valueBuilder, args);
     }
     END_SIMPLE_ARROW_UDF(TEndOfMonth, TStartOfKernelExec<EndOfMonth>::Do);
-    
+
     TMaybe<TTMStorage> StartOfWeek(TTMStorage storage, const IValueBuilder& valueBuilder) {
         const ui32 shift = 86400u * (storage.DayOfWeek - 1u);
         if (shift > storage.ToDatetime(valueBuilder.GetDateBuilder())) {
@@ -1497,20 +1515,36 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         storage.Minute = 0;
         storage.Second = 0;
         storage.Microsecond = 0;
+        if (!storage.Validate(valueBuilder.GetDateBuilder())) {
+            return {};
+        }
         return storage;
     }
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TStartOfWeek, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
-        auto result = args[0];
-        auto& storage = Reference(result);
-        if (auto res = StartOfWeek(storage, *valueBuilder)) {
-            storage = res.GetRef();
-            return result;
-        }
-        return TUnboxedValuePod{};
+        return SimpleDatetimeToDatetimeUdf<StartOfWeek>(valueBuilder, args);
     }
     END_SIMPLE_ARROW_UDF(TStartOfWeek, TStartOfKernelExec<StartOfWeek>::Do);
-    
+
+    TMaybe<TTMStorage> EndOfWeek(TTMStorage storage, const IValueBuilder& valueBuilder) {
+        const ui32 shift = 86400u * (7u - storage.DayOfWeek);
+        auto dt = storage.ToDatetime(valueBuilder.GetDateBuilder());
+        if (NUdf::MAX_DATETIME - shift <= dt) {
+            return {};
+        }
+        storage.FromDatetime(valueBuilder.GetDateBuilder(), dt + shift, storage.TimezoneId);
+        SetEndOfDay(storage);
+        if (!storage.Validate(valueBuilder.GetDateBuilder())) {
+            return {};
+        }
+        return storage;
+    }
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TEndOfWeek, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+        return SimpleDatetimeToDatetimeUdf<EndOfWeek>(valueBuilder, args);
+    }
+    END_SIMPLE_ARROW_UDF(TEndOfWeek, TStartOfKernelExec<EndOfWeek>::Do);
+
     TMaybe<TTMStorage> StartOfDay(TTMStorage storage, const IValueBuilder& valueBuilder) {
         storage.Hour = 0;
         storage.Minute = 0;
@@ -1524,16 +1558,24 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     }
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TStartOfDay, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
-        auto result = args[0];
-        auto& storage = Reference(result);
-        if (auto res = StartOfDay(storage, *valueBuilder)) {
-            storage = res.GetRef();
-            return result;
-        }
-        return TUnboxedValuePod{};
+        return SimpleDatetimeToDatetimeUdf<StartOfDay>(valueBuilder, args);
     }
     END_SIMPLE_ARROW_UDF(TStartOfDay, TStartOfKernelExec<StartOfDay>::Do);
-    
+
+    TMaybe<TTMStorage> EndOfDay(TTMStorage storage, const IValueBuilder& valueBuilder) {
+        SetEndOfDay(storage);
+        auto& builder = valueBuilder.GetDateBuilder();
+        if (!storage.Validate(builder)) {
+            return {};
+        }
+        return storage;
+    }
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TEndOfDay, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>)) {
+        return SimpleDatetimeToDatetimeUdf<EndOfDay>(valueBuilder, args);
+    }
+    END_SIMPLE_ARROW_UDF(TEndOfDay, TStartOfKernelExec<EndOfDay>::Do);
+
     TMaybe<TTMStorage> StartOf(TTMStorage storage, ui64 interval, const IValueBuilder& valueBuilder) {
         if (interval >= 86400000000ull) {
             // treat as StartOfDay
@@ -1586,7 +1628,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         return TUnboxedValuePod{};
     }
     END_SIMPLE_ARROW_UDF(TStartOf, TStartOfBinaryKernelExec::Do);
-    
+
     struct TTimeOfDayKernelExec : TUnaryKernelExec<TTimeOfDayKernelExec, TReaderTraits::TResource<false>, TFixedSizeArrayBuilder<TDataType<TInterval>::TLayout, false>> {
         template<typename TSink>
         static void Process(const IValueBuilder* valueBuilder, TBlockItem item, const TSink& sink) {
@@ -1614,7 +1656,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             sink(Core(date, arg.Get<i32>(), valueBuilder->GetDateBuilder()));
         }
     };
-    
+
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TShiftYears, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, i32)) {
         return DoAddYears(args[0], args[1].Get<i32>(), valueBuilder->GetDateBuilder());
     }
@@ -1703,8 +1745,6 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
             if (!typesOnly) {
                 builder.Implementation(new TFormat(builder.GetSourcePosition()));
             }
-
-            builder.IsStrict();
 
             return true;
         }
@@ -2377,7 +2417,11 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         TShiftQuarters,
         TShiftMonths,
 
+        TEndOfYear,
+        TEndOfQuarter,
         TEndOfMonth,
+        TEndOfWeek,
+        TEndOfDay,
 
         TToUnits<ToSecondsName, ui32, 1>,
         TToUnits<ToMillisecondsName, ui64, 1000>,

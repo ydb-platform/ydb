@@ -2071,7 +2071,11 @@ class MSVCCompiler(MSVC, Compiler):
                 '-fms-compatibility-version=19.21',
                 # for msvc compatibility
                 # https://clang.llvm.org/docs/UsersManual.html#microsoft-extensions
-                '-fdelayed-template-parsing',
+                # '-fdelayed-template-parsing',
+                '-Wno-deprecated-this-capture',
+                '-Wno-c++11-narrowing-const-reference',
+                '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
+                '-Wno-invalid-offsetof',
             ]
             if target.is_x86:
                 flags.append('-m32')

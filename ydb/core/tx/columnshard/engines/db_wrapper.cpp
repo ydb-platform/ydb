@@ -99,8 +99,8 @@ void TDbWrapper::WritePortion(const NOlap::TPortionInfo& portion) {
 
 void TDbWrapper::ErasePortion(const NOlap::TPortionInfo& portion) {
     NIceDb::TNiceDb db(Database);
-    using IndexPortions = NColumnShard::Schema::IndexPortions;
-    db.Table<IndexPortions>().Key(portion.GetPathId(), portion.GetPortionId()).Delete();
+    db.Table<NColumnShard::Schema::IndexPortions>().Key(portion.GetPathId(), portion.GetPortionId()).Delete();
+    db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(portion.GetPathId(), portion.GetPortionId()).Delete();
 }
 
 void TDbWrapper::EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) {
@@ -285,6 +285,15 @@ TConclusion<THashMap<ui64, std::map<NOlap::TSnapshot, TGranuleShardingInfo>>> TD
         }
     }
     return result;
+}
+
+void TDbWrapper::WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto) {
+    NIceDb::TNiceDb db(Database);
+    using IndexColumnsV2 = NColumnShard::Schema::IndexColumnsV2;
+    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
+    db.Table<IndexColumnsV2>()
+        .Key(portion.GetPathId(), portion.GetPortionId())
+        .Update(NIceDb::TUpdate<IndexColumnsV2::Metadata>(proto.SerializeAsString()));
 }
 
 }   // namespace NKikimr::NOlap

@@ -5,7 +5,7 @@
 #include <library/cpp/monlib/counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-namespace NKikimr::NCache {
+namespace NKikimr::NSharedCache {
 
 // TODO: remove template args and make some page base class
 

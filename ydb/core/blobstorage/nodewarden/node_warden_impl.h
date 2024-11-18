@@ -179,10 +179,19 @@ namespace NKikimr::NStorage {
         class TPDiskMetadataInteractionActor;
 
         TControlWrapper SlowDiskThreshold;
+        TControlWrapper SlowDiskThresholdHDD;
+        TControlWrapper SlowDiskThresholdSSD;
+
         TControlWrapper PredictedDelayMultiplier;
+        TControlWrapper PredictedDelayMultiplierHDD;
+        TControlWrapper PredictedDelayMultiplierSSD;
+    
+        TControlWrapper MaxNumOfSlowDisks;
+        TControlWrapper MaxNumOfSlowDisksHDD;
+        TControlWrapper MaxNumOfSlowDisksSSD;
+
         TControlWrapper LongRequestThresholdMs;
         TControlWrapper LongRequestReportingDelayMs;
-        TControlWrapper MaxNumOfSlowDisks;
 
     public:
         struct TGroupRecord;

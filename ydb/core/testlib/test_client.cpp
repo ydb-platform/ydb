@@ -267,6 +267,7 @@ namespace Tests {
             appData.HiveConfig.MergeFrom(Settings->AppConfig->GetHiveConfig());
             appData.GraphConfig.MergeFrom(Settings->AppConfig->GetGraphConfig());
             appData.SqsConfig.MergeFrom(Settings->AppConfig->GetSqsConfig());
+            appData.SharedCacheConfig.MergeFrom(Settings->AppConfig->GetSharedCacheConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -276,7 +277,10 @@ namespace Tests {
         });
 
         const bool mockDisk = (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode;
-        SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, Settings->CacheParams, Settings->EnableForceFollowers);
+        if (!Settings->AppConfig->HasSharedCacheConfig()) {
+            Settings->AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(32_MB);
+        }
+        SetupTabletServices(*Runtime, &app, mockDisk, Settings->CustomDiskParams, &Settings->AppConfig->GetSharedCacheConfig(), Settings->EnableForceFollowers);
 
         // WARNING: must be careful about modifying app data after actor system starts
 

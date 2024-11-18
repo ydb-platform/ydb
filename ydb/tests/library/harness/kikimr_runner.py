@@ -24,6 +24,20 @@ from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_
 logger = logging.getLogger(__name__)
 
 
+def get_unique_path_for_current_test(output_path, sub_folder):
+    # TODO: remove current function, don't rely on test environment, use explicit paths
+    # we can't remove it now, because it is used in Arcadia
+    import yatest.common
+    import os
+    try:
+        test_name = yatest.common.context.test_name or ""
+    except Exception:
+        test_name = ""
+
+    test_name = test_name.replace(':', '_')
+    return os.path.join(output_path, test_name, sub_folder)
+
+
 def ensure_path_exists(path):
     # NOTE: can't switch to os.makedirs(path, exist_ok=True) as some tests
     # are still running under python2 (exist_ok was added in py3.2)

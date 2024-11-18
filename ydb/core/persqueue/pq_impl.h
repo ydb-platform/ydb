@@ -552,9 +552,6 @@ private:
     void SetupTransactionExecutionTimeCounter(NMonitoring::TDynamicCounterPtr counters,
                                               const TVector<NPersQueue::TPQLabelsInfo>& labels,
                                               const TVector<std::pair<TString, TString>>& subgroups);
-    void SetupTransactionWriteInfoCounter(NMonitoring::TDynamicCounterPtr counters,
-                                          const TVector<NPersQueue::TPQLabelsInfo>& labels,
-                                          const TVector<std::pair<TString, TString>>& subgroups);
     void SetupTransactionStartedCounter(NMonitoring::TDynamicCounterPtr counters,
                                         const TVector<NPersQueue::TPQLabelsInfo>& labels,
                                         const TVector<std::pair<TString, TString>>& subgroups);
@@ -567,12 +564,10 @@ private:
 
     void IncTxStarted();
     void IncTxCompleted();
-    void AccountTxWriteInfoCreateTime();
     void AccountTxResponseTime(const TDistributedTransaction& tx);
 
     THashMap<NKikimrPQ::TTransaction::EState, THolder<TPercentileCounter>> TxExecutionTime;
     THolder<TPercentileCounter> TxResponseTime;
-    THolder<TPercentileCounter> TxWriteInfoCreateTime;
     THolder<NKikimr::NPQ::TMultiCounter> TxStarted;
     THolder<NKikimr::NPQ::TMultiCounter> TxCompleted;
 };

@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/grpc
     ydb/library/db_pool/protos
+    ydb/library/yql/providers/common/db_id_async_resolver
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/yt/comp_nodes/dq

@@ -1,12 +1,8 @@
-#include <ydb/core/base/path.h>
 #include <ydb/core/base/table_vector_index.h>
-#include <ydb/core/change_exchange/change_exchange.h>
-#include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
+#include <ydb/core/base/table_index.h>
+
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
-#include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 
 
 using namespace NKikimr;

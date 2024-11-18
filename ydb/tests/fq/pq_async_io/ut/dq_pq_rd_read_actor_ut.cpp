@@ -90,7 +90,7 @@ struct TFixture : public TPqIoTestFixture {
 
     void MockCoordinatorChanged(NActors::TActorId coordinatorId) {
         CaSetup->Execute([&](TFakeActor& actor) {
-            auto event = new NFq::TEvRowDispatcher::TEvCoordinatorChanged(coordinatorId);
+            auto event = new NFq::TEvRowDispatcher::TEvCoordinatorChanged(coordinatorId, 0);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, LocalRowDispatcherId, event));
         });
     }

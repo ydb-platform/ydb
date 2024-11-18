@@ -170,19 +170,21 @@ public:
         auto request = std::make_unique<THttpRequest>(requestId);
 
         auto urlRef = NHttp::ParseUrl(url);
+        auto host = CreateHost(urlRef.Host, urlRef.PortStr);
 
-        request->Connect(CreateHost(urlRef.Host, urlRef.PortStr), config.SocketTimeout);
+        request->Connect(host, config.SocketTimeout);
         request->SmallRequest(header, body);
         return std::make_unique<TDefaultHttpResponse>(std::move(request));
     }
 
     IHttpRequestPtr StartRequest(const TString& url, const TString& requestId, const THttpConfig& config, const THttpHeader& header) override
     {
+        auto urlRef = NHttp::ParseUrl(url);
+        auto host = CreateHost(urlRef.Host, urlRef.PortStr);
+
         auto request = std::make_unique<THttpRequest>(requestId);
 
-        auto urlRef = NHttp::ParseUrl(url);
-
-        request->Connect(CreateHost(urlRef.Host, urlRef.PortStr), config.SocketTimeout);
+        request->Connect(host, config.SocketTimeout);
         auto stream = request->StartRequest(header);
         return std::make_unique<TDefaultHttpRequest>(std::move(request), stream);
     }

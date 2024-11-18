@@ -2,7 +2,7 @@
 
 #include "common.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/public/udf/udf_value.h>
 
 namespace NFq {
 
@@ -21,7 +21,7 @@ public:
 
     ~TJsonFilter();
 
-    void Push(const TVector<ui64>& offsets, const TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*>& values);
+    void Push(const TVector<ui64>& offsets, const TVector<const TVector<NYql::NUdf::TUnboxedValue>*>& values, ui64 rowsOffset, ui64 numberRows);
     TString GetSql();
 
 private:

@@ -42,7 +42,7 @@ class TDqComputeStorageActor : public NActors::TActorBootstrapped<TDqComputeStor
 
     struct TLoadingBlobInfo {
         bool RemoveAfterRead;
-        NThreading::TPromise<std::optional<TRope>> BlobPromise;
+        NThreading::TPromise<std::optional<TChunkedBuffer>> BlobPromise;
         TInstant OpBegin;
     };
     // void promise that completes when block is removed
@@ -110,7 +110,7 @@ private:
 
     void HandleWork(TEvPut::TPtr& ev) {
         auto& msg = *ev->Get();
-        ui64 size = msg.Blob_.size();
+        ui64 size = msg.Blob_.Size();
         auto opBegin = TInstant::Now();
 
         SendInternal(SpillingActorId_, new TEvDqSpilling::TEvWrite(NextBlobId, std::move(msg.Blob_)));
@@ -213,7 +213,8 @@ private:
             UpdateStatsAfterBlobDeletion(msg.Blob.Size(), msg.BlobId);
         }
 
-        TRope res(TString(reinterpret_cast<const char*>(msg.Blob.Data()), msg.Blob.Size()));
+        auto owner = std::make_shared<TBuffer>(std::move(msg.Blob));
+        TChunkedBuffer res(TStringBuf(reinterpret_cast<const char*>(owner->Data()), owner->Size()), owner);
 
         auto& promise = blobInfo.BlobPromise;
         promise.SetValue(std::move(res));

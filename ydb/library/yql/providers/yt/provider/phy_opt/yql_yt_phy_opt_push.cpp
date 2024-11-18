@@ -1,9 +1,9 @@
 #include "yql_yt_phy_opt.h"
 
 #include <ydb/library/yql/providers/yt/provider/yql_yt_helpers.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NYql {
 

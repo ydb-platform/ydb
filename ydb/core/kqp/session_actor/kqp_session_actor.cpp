@@ -627,7 +627,10 @@ public:
 
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
-        QueryState->SaveAndCheckSplitResult(ev->Get());
+        if (!QueryState->SaveAndCheckSplitResult(ev->Get())) {
+            ReplySplitError(ev->Get());
+            return;
+        }
         OnSuccessSplitRequest();
     }
 
@@ -899,7 +902,8 @@ public:
             const auto& parameters = QueryState->GetYdbParameters();
             QueryState->QueryData->ParseParameters(parameters);
             if (QueryState->CompileResult && QueryState->CompileResult->GetAst() && QueryState->CompileResult->GetAst()->PgAutoParamValues) {
-                for(const auto& [name, param] : *QueryState->CompileResult->GetAst()->PgAutoParamValues) {
+                const auto& params = dynamic_cast<TKqpAutoParamBuilder*>(QueryState->CompileResult->GetAst()->PgAutoParamValues.Get())->Values;
+                for(const auto& [name, param] : params) {
                     if (!parameters.contains(name)) {
                         QueryState->QueryData->AddTypedValueParam(name, param);
                     }
@@ -1919,6 +1923,25 @@ public:
         record->SetConsumedRu(1);
 
         Cleanup(IsFatalError(record->GetYdbStatus()));
+    }
+
+    void ReplySplitError(TEvKqp::TEvSplitResponse* ev) {
+        QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
+        auto& record = QueryResponse->Record;
+
+        record.SetYdbStatus(ev->Status);
+        auto& response = *record.MutableResponse();
+        AddQueryIssues(response, ev->Issues);
+
+        auto txId = TTxId();
+        if (auto ctx = Transactions.ReleaseTransaction(txId)) {
+            ctx->Invalidate();
+            Transactions.AddToBeAborted(std::move(ctx));
+        }
+
+        FillTxInfo(record.MutableResponse());
+
+        Cleanup(false);
     }
 
     void ReplyProcessError(const TEvKqp::TEvQueryRequest::TPtr& request, Ydb::StatusIds::StatusCode ydbStatus,

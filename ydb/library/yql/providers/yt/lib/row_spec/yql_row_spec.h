@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/ast/yql_constraint.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_constraint.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
 #include <library/cpp/yson/node/node.h>
 

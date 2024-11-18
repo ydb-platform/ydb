@@ -1,11 +1,11 @@
 #include "yql_kikimr_gateway.h"
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
@@ -102,6 +102,7 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
             YQL_ENSURE(field.Value().Maybe<TCoAtom>());
             settings.ColumnName = field.Value().Cast<TCoAtom>().StringValue();
         } else if (name == "expireAfter") {
+            // TODO (yentsovsemyon): remove this clause after extending TTL syntax in YQL
             YQL_ENSURE(field.Value().Maybe<TCoInterval>());
             auto value = FromString<i64>(field.Value().Cast<TCoInterval>().Literal().Value());
             if (value < 0) {
@@ -110,6 +111,33 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
             }
 
             settings.ExpireAfter = TDuration::FromValue(value);
+        } else if (name == "tiers") {
+            YQL_ENSURE(field.Value().Maybe<TExprList>());
+            auto listNode = field.Value().Cast<TExprList>();
+
+            for (size_t i = 0; i < listNode.Size(); ++i) {
+                auto tierNode = listNode.Item(i);
+
+                YQL_ENSURE(tierNode.Maybe<TCoNameValueTupleList>());
+                for (const auto& tierField : tierNode.Cast<TCoNameValueTupleList>()) {
+                    auto tierFieldName = tierField.Name().Value();
+                    if (tierFieldName == "storageName") {
+                        error = "TTL cannot contain tiered storage: tiering in TTL syntax is not supported";
+                        return false;
+                    } else if (tierFieldName == "evictionDelay") {
+                        YQL_ENSURE(tierField.Value().Maybe<TCoInterval>());
+                        auto value = FromString<i64>(tierField.Value().Cast<TCoInterval>().Literal().Value());
+                        if (value < 0) {
+                            error = "Interval value cannot be negative";
+                            return false;
+                        }
+                        settings.ExpireAfter = TDuration::FromValue(value);
+                    } else {
+                        error = TStringBuilder() << "Unknown field: " << tierFieldName;
+                        return false;
+                    }
+                }
+            }
         } else if (name == "columnUnit") {
             YQL_ENSURE(field.Value().Maybe<TCoAtom>());
             auto value = field.Value().Cast<TCoAtom>().StringValue();
@@ -179,18 +207,20 @@ EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
 bool SetColumnType(const TTypeAnnotationNode* typeNode, bool notNull, Ydb::Type& protoType, TString& error) {
     switch (typeNode->GetKind()) {
     case ETypeAnnotationKind::Pg: {
-        const auto pgTypeNode = typeNode->Cast<TPgExprType>();
-        const TString typeName = pgTypeNode->GetName();
-        const auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeName(typeName);
+        const auto* pgTypeNode = typeNode->Cast<TPgExprType>();
+        const auto& typeId = pgTypeNode->GetId();
+        const auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(typeId);
         if (typeDesc) {
             Y_ABORT_UNLESS(!notNull, "It is not allowed to create NOT NULL pg columns");
             auto* pg = protoType.mutable_pg_type();
             pg->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
-            pg->set_type_modifier(NKikimr::NPg::TypeModFromPgTypeName(typeName));
             pg->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
             pg->set_typlen(0);
             pg->set_typmod(0);
             return true;
+        } else {
+            error = TStringBuilder() << "Unknown pg type: " << FormatType(pgTypeNode);
+            return false;
         }
     }
     case ETypeAnnotationKind::Data: {

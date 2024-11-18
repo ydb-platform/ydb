@@ -1,6 +1,6 @@
 #include "dq_function_provider.h"
 
-#include <ydb/library/yql/providers/common/transform/yql_visit.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <ydb/library/yql/providers/function/expr_nodes/dq_function_expr_nodes.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 

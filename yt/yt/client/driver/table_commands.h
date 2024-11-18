@@ -606,4 +606,23 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TGetTableMountInfoCommandOptions
+{ };
+
+class TGetTableMountInfoCommand
+    : public TTypedCommand<TGetTableMountInfoCommandOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetTableMountInfoCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYTree::TYPath Path_;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

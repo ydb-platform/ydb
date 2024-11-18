@@ -53,6 +53,11 @@ TTosLevel TTcpDispatcher::GetTosLevelForBand(EMultiplexingBand band)
     return Impl_->GetTosLevelForBand(band);
 }
 
+int TTcpDispatcher::GetMultiplexingParallelism(EMultiplexingBand band, int multiplexingParallelism)
+{
+    return Impl_->GetMultiplexingParallelism(band, multiplexingParallelism);
+}
+
 NYTree::IYPathServicePtr TTcpDispatcher::GetOrchidService()
 {
     return Impl_->GetOrchidService();

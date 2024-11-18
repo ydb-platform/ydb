@@ -15,6 +15,7 @@ struct TopicSessionClientStatistic {
 
 struct TopicSessionCommonStatistic {
     ui64 UnreadBytes = 0;
+    ui64 RestartSessionByOffsets = 0;
 };
 
 struct TopicSessionParams {

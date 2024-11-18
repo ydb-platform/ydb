@@ -2,6 +2,7 @@
 
 #include "appdata.h"
 #include "runtime.h"
+#include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/util/defs.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
@@ -17,12 +18,6 @@ namespace NFake {
         ui64 SectorSize = 0;
         ui64 ChunkSize = 0;
         ui64 DiskSize = 0;
-    };
-
-    struct TCaches {
-        std::optional<ui64> Shared = 32_MB; // Shared cache limit, bytes
-        ui64 ScanQueue = 512_MB; // Scan queue in flight limit, bytes
-        ui64 AsyncQueue = 512_MB; // Async queue in flight limit, bytes
     };
 
     struct INode {
@@ -47,7 +42,7 @@ namespace NFake {
     void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupTabletPipePerNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex, bool forceFollowers = false);
     void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrResourceBroker::TResourceBrokerConfig& resourceBrokerConfig);
-    void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, NFake::TCaches caches);
+    void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, const NSharedCache::TSharedCacheConfig& sharedCacheConfig);
     void SetupNodeWhiteboard(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupMonitoringProxy(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupGRpcProxyStatus(TTestActorRuntime& runtime, ui32 nodeIndex);
@@ -60,7 +55,7 @@ namespace NFake {
 
     // StateStorage, NodeWarden, TabletResolver, ResourceBroker, SharedPageCache
     void SetupBasicServices(TTestActorRuntime &runtime, TAppPrepare &app, bool mockDisk = false,
-                            NFake::INode *factory = nullptr, NFake::TStorage storage = {}, NFake::TCaches caches = {}, bool forceFollowers = false);
+                            NFake::INode *factory = nullptr, NFake::TStorage storage = {}, const NSharedCache::TSharedCacheConfig* sharedCacheConfig = nullptr, bool forceFollowers = false);
 
     ///
     class TStrandedPDiskServiceFactory : public IPDiskServiceFactory {

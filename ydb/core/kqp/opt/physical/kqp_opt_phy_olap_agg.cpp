@@ -4,7 +4,7 @@
 
 #include <ydb/core/formats/arrow/ssa_runtime_version.h>
 
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <vector>

@@ -397,7 +397,8 @@ class TBoundedConcurrencyInvoker;
 YT_DEFINE_THREAD_LOCAL(TBoundedConcurrencyInvoker*, CurrentBoundedConcurrencyInvoker);
 
 class TBoundedConcurrencyInvoker
-    : public TInvokerWrapper<false>
+    : public IBoundedConcurrencyInvoker
+    , public TInvokerWrapper<true>
 {
 public:
     TBoundedConcurrencyInvoker(
@@ -420,7 +421,7 @@ public:
         }
     }
 
-    void SetMaxConcurrentInvocations(int newMaxConcurrentInvocations)
+    void SetMaxConcurrentInvocations(int newMaxConcurrentInvocations) override
     {
         // XXX(apachee): Check that newMaxConcurrentInvocations >= 0? Verify? If condition with throw?
 
@@ -546,26 +547,13 @@ private:
     }
 };
 
-TTaggedInterface<IInvoker, TBoundedConcurrencyInvokerTag> CreateBoundedConcurrencyInvoker(
+IBoundedConcurrencyInvokerPtr CreateBoundedConcurrencyInvoker(
     IInvokerPtr underlyingInvoker,
     int maxConcurrentInvocations)
 {
-    return TTaggedInterface<IInvoker, TBoundedConcurrencyInvokerTag>(New<TBoundedConcurrencyInvoker>(
+    return New<TBoundedConcurrencyInvoker>(
         std::move(underlyingInvoker),
-        maxConcurrentInvocations));
-}
-
-void SetMaxConcurrentInvocations(
-    TTaggedInterface<IInvoker, TBoundedConcurrencyInvokerTag> invoker,
-    int maxConcurrentInvocations)
-{
-#ifdef NDEBUG
-    auto boundedConcurrencyInvoker = static_cast<TBoundedConcurrencyInvoker*>(invoker.Get());
-#else
-    auto boundedConcurrencyInvoker = dynamic_cast<TBoundedConcurrencyInvoker*>(invoker.Get());
-    YT_VERIFY(boundedConcurrencyInvoker);
-#endif
-    boundedConcurrencyInvoker->SetMaxConcurrentInvocations(maxConcurrentInvocations);
+        maxConcurrentInvocations);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -582,6 +570,12 @@ public:
     void Invoke(TClosure callback) override
     {
         Queue_.Enqueue(std::move(callback));
+        ScheduleMore();
+    }
+
+    void Invoke(TMutableRange<TClosure> callbacks) override
+    {
+        Queue_.EnqueueAll(std::move(callbacks));
         ScheduleMore();
     }
 

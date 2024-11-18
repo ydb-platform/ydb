@@ -20,6 +20,39 @@ static void child(long usleep_time)
 	exit(0);
 }
 
+static int test_invalid_infop(struct io_uring *ring)
+{
+	struct io_uring_sqe *sqe;
+	struct io_uring_cqe *cqe;
+	siginfo_t *si = (siginfo_t *) (uintptr_t) 0x1234;
+	int ret, w;
+	pid_t pid;
+
+	pid = fork();
+	if (!pid) {
+		child(200000);
+		exit(0);
+	}
+
+	sqe = io_uring_get_sqe(ring);
+	io_uring_prep_waitid(sqe, P_PID, pid, si, WEXITED, 0);
+	sqe->user_data = 1;
+	io_uring_submit(ring);
+
+	ret = io_uring_wait_cqe(ring, &cqe);
+	if (ret) {
+		fprintf(stderr, "cqe wait: %d\n", ret);
+		return T_EXIT_FAIL;
+	}
+	if (cqe->res != -EFAULT) {
+		fprintf(stderr, "Bad return on invalid infop: %d\n", cqe->res);
+		return T_EXIT_FAIL;
+	}
+	io_uring_cqe_seen(ring, cqe);
+	wait(&w);
+	return T_EXIT_PASS;
+}
+
 /*
  * Test linked timeout with child not exiting in time
  */
@@ -28,9 +61,9 @@ static int test_noexit(struct io_uring *ring)
 	struct io_uring_sqe *sqe;
 	struct io_uring_cqe *cqe;
 	struct __kernel_timespec ts;
+	int ret, i, w;
 	siginfo_t si;
 	pid_t pid;
-	int ret, i;
 
 	pid = fork();
 	if (!pid) {
@@ -68,6 +101,7 @@ static int test_noexit(struct io_uring *ring)
 		io_uring_cqe_seen(ring, cqe);
 	}
 
+	wait(&w);
 	return T_EXIT_PASS;
 }
 
@@ -80,7 +114,7 @@ static int test_double(struct io_uring *ring)
 	struct io_uring_cqe *cqe;
 	siginfo_t si;
 	pid_t p1, p2;
-	int ret;
+	int ret, w;
 
 	/* p1 will exit shortly */
 	p1 = fork();
@@ -117,6 +151,7 @@ static int test_double(struct io_uring *ring)
 	}
 
 	io_uring_cqe_seen(ring, cqe);
+	wait(&w);
 	return T_EXIT_PASS;
 }
 
@@ -168,7 +203,7 @@ static int test_cancel(struct io_uring *ring)
 {
 	struct io_uring_sqe *sqe;
 	struct io_uring_cqe *cqe;
-	int ret, i;
+	int ret, i, w;
 	pid_t pid;
 
 	pid = fork();
@@ -206,6 +241,7 @@ static int test_cancel(struct io_uring *ring)
 		io_uring_cqe_seen(ring, cqe);
 	}
 
+	wait(&w);
 	return T_EXIT_PASS;
 }
 
@@ -217,10 +253,12 @@ static int test_cancel_race(struct io_uring *ring, int async)
 {
 	struct io_uring_sqe *sqe;
 	struct io_uring_cqe *cqe;
-	int ret, i;
+	int ret, i, to_wait, total_forks;
 	pid_t pid;
 
+	total_forks = 0;
 	for (i = 0; i < 10; i++) {
+		total_forks++;
 		pid = fork();
 		if (!pid) {
 			child(getpid() & 1);
@@ -244,16 +282,20 @@ static int test_cancel_race(struct io_uring *ring, int async)
 
 	io_uring_submit(ring);
 
+	to_wait = total_forks;
 	for (i = 0; i < 2; i++) {
 		ret = io_uring_wait_cqe(ring, &cqe);
 		if (ret) {
 			fprintf(stderr, "cqe wait: %d\n", ret);
 			return T_EXIT_FAIL;
 		}
-		if (cqe->user_data == 1 && !(cqe->res == -ECANCELED ||
-					     cqe->res == 0)) {
-			fprintf(stderr, "cqe1 res: %d\n", cqe->res);
-			return T_EXIT_FAIL;
+		if (cqe->user_data == 1) {
+			if (!cqe->res)
+				to_wait--;
+			if (!(cqe->res == -ECANCELED || cqe->res == 0)) {
+				fprintf(stderr, "cqe1 res: %d\n", cqe->res);
+				return T_EXIT_FAIL;
+			}
 		}
 		if (cqe->user_data == 2 &&
 		    !(cqe->res == 1 || cqe->res == 0 || cqe->res == -ENOENT ||
@@ -262,6 +304,12 @@ static int test_cancel_race(struct io_uring *ring, int async)
 			return T_EXIT_FAIL;
 		}
 		io_uring_cqe_seen(ring, cqe);
+	}
+
+	for (i = 0; i < to_wait; i++) {
+		int w;
+
+		wait(&w);
 	}
 
 	return T_EXIT_PASS;
@@ -358,6 +406,12 @@ int main(int argc, char *argv[])
 	ret = test_cancel(&ring);
 	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "test_cancel failed\n");
+		return T_EXIT_FAIL;
+	}
+
+	ret = test_invalid_infop(&ring);
+	if (ret == T_EXIT_FAIL) {
+		fprintf(stderr, "test_invalid_infop failed\n");
 		return T_EXIT_FAIL;
 	}
 

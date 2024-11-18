@@ -6,15 +6,15 @@ SRCS(
 
 PEERDIR(
     library/cpp/yson/node
-    ydb/library/yql/ast
-    ydb/library/yql/core/expr_nodes_gen
-    ydb/library/yql/core
-    ydb/library/yql/core/expr_nodes
-    ydb/library/yql/core/issue
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/providers/common/schema
-    ydb/library/yql/providers/common/schema/expr
+    yql/essentials/ast
+    yql/essentials/core/expr_nodes_gen
+    yql/essentials/core
+    yql/essentials/core/expr_nodes
+    yql/essentials/core/issue
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/schema
+    yql/essentials/providers/common/schema/expr
     ydb/library/yql/providers/yt/common
     ydb/library/yql/providers/yt/expr_nodes
 )

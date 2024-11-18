@@ -351,6 +351,8 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `flag`')
         filter = 'time * (field2 - field1) != 0'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`time` * (`field2` - `field1`)) <> 0')
+        filter = '(field1 % field2) / 5 = 1'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((`field1` % `field2`) / 5) = 1')
         filter = ' event IS NOT DISTINCT FROM "event2"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE `event` IS NOT DISTINCT FROM \\"event2\\"')
         filter = ' event IS DISTINCT FROM "event1"'
@@ -371,6 +373,10 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE COALESCE(`event` = \\"event2\\", TRUE)')
         filter = ' COALESCE(event = "event2", data = "hello2", TRUE)'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE COALESCE(`event` = \\"event2\\", `data` = \\"hello2\\", TRUE)')
+        filter = " event ?? '' REGEXP @@e.*e.*t2@@"
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE COALESCE(`event`, \\"\\") REGEXP \\"e.*e.*t2\\"')
+        filter = " event ?? '' REGEXP data ?? '' OR time = 102"
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (COALESCE(`event`, \\"\\") REGEXP COALESCE(`data`, \\"\\") OR `time` = 102)')
 
     @yq_v1
     def test_filter_missing_fields(self, kikimr, client):

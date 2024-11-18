@@ -212,7 +212,9 @@ void PipeReaderToWriterByBatches(
                 continue;
             }
 
-            if (!batch->IsEmpty() && pipeDelay != TDuration::Zero()) {
+            auto rowsRead = batch->GetRowCount();
+
+            if (pipeDelay != TDuration::Zero()) {
                 TDelayedExecutor::WaitForDuration(pipeDelay);
             }
 
@@ -228,6 +230,7 @@ void PipeReaderToWriterByBatches(
             }
 
             if (optionsUpdater) {
+                options.MaxRowsPerRead = rowsRead;
                 optionsUpdater(&options, timer.GetElapsedTime());
             }
         }

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/string.h>

@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.80.0)
+VERSION(1.83.0)
 
-ORIGINAL_SOURCE(https://github.com/boostorg/asio/archive/boost-1.80.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/boostorg/asio/archive/boost-1.83.0.tar.gz)
 
 PEERDIR(
     contrib/libs/openssl

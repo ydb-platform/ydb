@@ -5,7 +5,7 @@
 #include <ydb/core/ymq/base/events_writer.h>
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/pdisk_io/aio.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 
 
 int main(int argc, char **argv) {

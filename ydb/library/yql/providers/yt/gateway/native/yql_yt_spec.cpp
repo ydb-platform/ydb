@@ -1,8 +1,8 @@
 #include "yql_yt_spec.h"
 
 #include <ydb/library/yql/providers/yt/common/yql_configuration.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
@@ -572,7 +572,7 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
     }
 
     const TString binTmpFolder = settings->BinaryTmpFolder.Get().GetOrElse(TString());
-    const TString binCacheFolder = settings->BinaryCacheFolder.Get().GetOrElse(TString());
+    const TString binCacheFolder = settings->_BinaryCacheFolder.Get(cluster).GetOrElse(TString());
     if (!localRun && (binTmpFolder || binCacheFolder)) {
         TString bin = mrJobBin.empty() ? GetPersistentExecPath() : mrJobBin;
         const auto binSize = TFileStat(bin).Size;

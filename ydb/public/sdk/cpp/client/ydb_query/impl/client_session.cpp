@@ -4,7 +4,7 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/plain_status/status.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NYdb::NQuery {
 

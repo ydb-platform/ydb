@@ -1,6 +1,6 @@
 #include "config_clusters.h"
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>

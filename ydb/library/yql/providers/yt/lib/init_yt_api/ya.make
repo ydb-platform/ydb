@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/utils/log
+    yql/essentials/utils/log
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/client
     library/cpp/yson/node

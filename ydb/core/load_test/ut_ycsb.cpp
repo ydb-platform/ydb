@@ -7,7 +7,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
-#include <ydb/library/yql/minikql/mkql_node_printer.h>
+#include <yql/essentials/minikql/mkql_node_printer.h>
 
 namespace NKikimr {
 

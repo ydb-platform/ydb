@@ -1,6 +1,6 @@
 #include "yql_yt_qb2.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <util/string/join.h>
 #include <util/generic/hash.h>

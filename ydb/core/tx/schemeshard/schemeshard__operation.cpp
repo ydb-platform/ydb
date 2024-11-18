@@ -1,10 +1,10 @@
 #include "schemeshard__operation.h"
-#include "schemeshard__operation_part.h"
 
-#include "schemeshard__operation_side_effects.h"
-#include "schemeshard__operation_memory_changes.h"
+#include "schemeshard__dispatch_op.h"
 #include "schemeshard__operation_db_changes.h"
-
+#include "schemeshard__operation_memory_changes.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard__operation_side_effects.h"
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
@@ -87,6 +87,94 @@ NKikimrScheme::TEvModifySchemeTransaction GetRecordForPrint(const NKikimrScheme:
     return recordForPrint;
 }
 
+bool TSchemeShard::ProcessOperationParts(
+    const TVector<ISubOperation::TPtr>& parts,
+    const TTxId& txId,
+    const NKikimrScheme::TEvModifySchemeTransaction& record,
+    bool prevProposeUndoSafe,
+    TOperation::TPtr& operation,
+    THolder<TProposeResponse>& response,
+    TOperationContext& context)
+{
+    auto selfId = SelfTabletId();
+    const TString owner = record.HasOwner() ? record.GetOwner() : BUILTIN_ACL_ROOT;
+
+    if (parts.size() > 1) {
+        // allow altering impl index tables as part of consistent operation
+        context.IsAllowedPrivateTables = true;
+    }
+
+    for (auto& part : parts) {
+        TString errStr;
+        if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
+            response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
+            response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+        } else {
+            response = part->Propose(owner, context);
+        }
+
+        Y_ABORT_UNLESS(response);
+
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "IgniteOperation"
+                            << ", opId: " << operation->NextPartId()
+                            << ", propose status:" << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
+                            << ", reason: " << response->Record.GetReason()
+                            << ", at schemeshard: " << selfId);
+
+        if (response->IsDone()) {
+            operation->AddPart(part); //at ApplyOnExecute parts is erased
+            context.OnComplete.DoneOperation(part->GetOperationId()); //mark it here by self for sure
+        } else if (response->IsConditionalAccepted()) {
+            //happens on retries, we answer like AlreadyExist or StatusSuccess with error message and do nothing in operation
+            operation->AddPart(part); //at ApplyOnExecute parts is erased
+            context.OnComplete.DoneOperation(part->GetOperationId()); //mark it here by self for sure
+        } else if (response->IsAccepted()) {
+            operation->AddPart(part);
+            //context.OnComplete.ActivateTx(partOpId) ///TODO maybe it is good idea
+        } else {
+            if (!operation->Parts.empty()) {
+                LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "Abort operation: IgniteOperation fail to propose a part"
+                                << ", opId: " << part->GetOperationId()
+                                << ", at schemeshard:  " << selfId
+                                << ", already accepted parts: " << operation->Parts.size()
+                                << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
+                                << ", with reason: " << response->Record.GetReason()
+                                << ", tx message: " << SecureDebugString(record));
+            }
+
+            Y_VERIFY_S(context.IsUndoChangesSafe(),
+                        "Operation is aborted and all changes should be reverted"
+                            << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
+                            << ", opId: " << part->GetOperationId()
+                            << ", at schemeshard:  " << selfId
+                            << ", already accepted parts: " << operation->Parts.size()
+                            << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
+                            << ", with reason: " << response->Record.GetReason()
+                            << ", tx message: " << SecureDebugString(record));
+
+            AbortOperationPropose(txId, context);
+
+            return false;
+        }
+
+        // Check suboperations for undo safety. Log first unsafe suboperation in the schema transaction.
+        if (prevProposeUndoSafe && !context.IsUndoChangesSafe()) {
+            prevProposeUndoSafe = false;
+
+            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Operation part proposed ok, but propose itself is undo unsafe"
+                    << ", suboperation type: " << NKikimrSchemeOp::EOperationType_Name(part->GetTransaction().GetOperationType())
+                    << ", opId: " << part->GetOperationId()
+                    << ", at schemeshard:  " << selfId
+            );
+        }
+    }
+
+    return true;
+}
+
 THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request, TOperationContext& context) {
     THolder<TProposeResponse> response = nullptr;
 
@@ -124,6 +212,11 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     }
 
     TVector<TTxTransaction> transactions;
+    TVector<TTxTransaction> generatedTransactions;
+
+    // # Phase One
+    // Generate MkDir transactions based on object name.
+
     for (const auto& transaction : record.GetTransaction()) {
         auto splitResult = operation->SplitIntoTransactions(transaction, context);
         if (splitResult.Status != NKikimrScheme::StatusSuccess) {
@@ -132,89 +225,39 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
             return std::move(response);
         }
 
-        std::move(splitResult.Transactions.begin(), splitResult.Transactions.end(), std::back_inserter(transactions));
+        std::move(splitResult.Transactions.begin(), splitResult.Transactions.end(), std::back_inserter(generatedTransactions));
+        if (splitResult.Transaction) {
+            transactions.push_back(*splitResult.Transaction);
+        }
     }
 
-    const TString owner = record.HasOwner() ? record.GetOwner() : BUILTIN_ACL_ROOT;
-
-    bool prevProposeUndoSafe = true;
+    //
 
     Operations[txId] = operation; //record is erased at ApplyOnExecute if all parts are done at propose
+    bool prevProposeUndoSafe = true;
+
+    // # Phase Two
+    // For generated MkDirs parts are constructed and proposed.
+    // It is done to simplify checks in dependent (splitted) transactions
+
+    for (const auto& transaction : generatedTransactions) {
+        auto parts = operation->ConstructParts(transaction, context);
+        operation->PreparedParts += parts.size();
+
+        if (!ProcessOperationParts(parts, txId, record, prevProposeUndoSafe, operation, response, context)) {
+            return std::move(response);
+        }
+    }
+
+    // # Phase Three
+    // For all initial transactions parts are constructed and proposed
 
     for (const auto& transaction : transactions) {
         auto parts = operation->ConstructParts(transaction, context);
+        operation->PreparedParts += parts.size();
 
-        if (parts.size() > 1) {
-            // allow altering impl index tables as part of consistent operation
-            context.IsAllowedPrivateTables = true;
-        }
-
-        for (auto& part : parts) {
-            TString errStr;
-            if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
-                response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
-                response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
-            } else {
-                response = part->Propose(owner, context);
-            }
-
-            Y_ABORT_UNLESS(response);
-
-            LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "IgniteOperation"
-                             << ", opId: " << operation->NextPartId()
-                             << ", propose status:" << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
-                             << ", reason: " << response->Record.GetReason()
-                             << ", at schemeshard: " << selfId);
-
-            if (response->IsDone()) {
-                operation->AddPart(part); //at ApplyOnExecute parts is erased
-                context.OnComplete.DoneOperation(part->GetOperationId()); //mark it here by self for sure
-            } else if (response->IsConditionalAccepted()) {
-                //happens on retries, we answer like AlreadyExist or StatusSuccess with error message and do nothing in operation
-                operation->AddPart(part); //at ApplyOnExecute parts is erased
-                context.OnComplete.DoneOperation(part->GetOperationId()); //mark it here by self for sure
-            } else if (response->IsAccepted()) {
-                operation->AddPart(part);
-                //context.OnComplete.ActivateTx(partOpId) ///TODO maybe it is good idea
-            } else {
-                if (!operation->Parts.empty()) {
-                    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                                "Abort operation: IgniteOperation fail to propose a part"
-                                    << ", opId: " << part->GetOperationId()
-                                    << ", at schemeshard:  " << selfId
-                                    << ", already accepted parts: " << operation->Parts.size()
-                                    << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
-                                    << ", with reason: " << response->Record.GetReason()
-                                    << ", tx message: " << SecureDebugString(record));
-                }
-
-                Y_VERIFY_S(context.IsUndoChangesSafe(),
-                           "Operation is aborted and all changes should be reverted"
-                               << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
-                               << ", opId: " << part->GetOperationId()
-                               << ", at schemeshard:  " << selfId
-                               << ", already accepted parts: " << operation->Parts.size()
-                               << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
-                               << ", with reason: " << response->Record.GetReason()
-                               << ", tx message: " << SecureDebugString(record));
-
-                AbortOperationPropose(txId, context);
-
-                return std::move(response);
-            }
-
-            // Check suboperations for undo safety. Log first unsafe suboperation in the schema transaction.
-            if (prevProposeUndoSafe && !context.IsUndoChangesSafe()) {
-                prevProposeUndoSafe = false;
-
-                LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Operation part proposed ok, but propose itself is undo unsafe"
-                        << ", suboperation type: " << NKikimrSchemeOp::EOperationType_Name(part->GetTransaction().GetOperationType())
-                        << ", opId: " << part->GetOperationId()
-                        << ", at schemeshard:  " << selfId
-                );
-            }
+        if (!ProcessOperationParts(parts, txId, record, prevProposeUndoSafe, operation, response, context)) {
+            return std::move(response);
         }
     }
 
@@ -743,194 +786,15 @@ TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& t
     return result;
 }
 
-TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context) {
-    TSplitTransactionsResult result;
-
-    const TPath parentPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
-    {
-        TPath::TChecker checks = parentPath.Check();
-        checks
-            .NotUnderDomainUpgrade()
-            .IsAtLocalSchemeShard()
-            .IsResolved()
-            .NotDeleted()
-            .NotUnderDeleting()
-            .IsCommonSensePath()
-            .IsLikeDirectory();
-
-        if (!checks) {
-            result.Transactions.push_back(tx);
-            return result;
-        }
-    }
-
-    TString targetName;
-
-    switch (tx.GetOperationType()) {
-    case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
-        targetName = tx.GetMkDir().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
-        if (tx.GetCreateTable().HasCopyFromTable()) {
-            result.Transactions.push_back(tx);
-            return result;
-        }
-        targetName = tx.GetCreateTable().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
-        targetName = tx.GetCreatePersQueueGroup().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
-        targetName = tx.GetSubDomain().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume:
-        targetName = tx.GetCreateRtmrVolume().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume:
-        targetName = tx.GetCreateBlockStoreVolume().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
-        targetName = tx.GetCreateFileStore().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus:
-        targetName = tx.GetKesus().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume:
-        targetName = tx.GetCreateSolomonVolume().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable:
-        targetName = tx.GetCreateIndexedTable().GetTableDescription().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
-        targetName = tx.GetCreateColumnStore().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
-        targetName = tx.GetCreateColumnTable().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
-        targetName = tx.GetCreateExternalTable().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
-        targetName = tx.GetCreateExternalDataSource().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
-        targetName = tx.GetCreateView().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
-        targetName = tx.GetCreateResourcePool().GetName();
-        break;
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
-        targetName = tx.GetCreateBackupCollection().GetName();
-        break;
-    default:
-        result.Transactions.push_back(tx);
-        return result;
-    }
-
-    if (!targetName || targetName.StartsWith('/') || targetName.EndsWith('/')) {
-        result.Transactions.push_back(tx);
-        return result;
-    }
-
-    TPath path = TPath::Resolve(JoinPath(tx.GetWorkingDir(), targetName), context.SS);
-    {
-        TPath::TChecker checks = path.Check();
-        checks.IsAtLocalSchemeShard();
-
-        bool exists = false;
-        if (path.IsResolved()) {
-            checks.IsResolved();
-            exists = !path.IsDeleted();
-        } else {
-            checks
-                .NotEmpty()
-                .NotResolved();
-        }
-
-        if (checks && !exists) {
-            checks.IsValidLeafName();
-        }
-
-        if (!checks) {
-            result.Status = checks.GetStatus();
-            result.Reason = checks.GetError();
-            result.Transactions.push_back(tx);
-            return result;
-        }
-
-        const TString name = path.LeafName();
-        path.Rise();
-
-        TTxTransaction create(tx);
-        create.SetWorkingDir(path.PathString());
-        create.SetFailOnExist(tx.GetFailOnExist());
-
-        switch (tx.GetOperationType()) {
-        case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
-            create.MutableMkDir()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
-            create.MutableCreateTable()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
-            create.MutableCreatePersQueueGroup()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain:
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain:
-            create.MutableSubDomain()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume:
-            create.MutableCreateRtmrVolume()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlockStoreVolume:
-            create.MutableCreateBlockStoreVolume()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
-            create.MutableCreateFileStore()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus:
-            create.MutableKesus()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume:
-            create.MutableCreateSolomonVolume()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable:
-            create.MutableCreateIndexedTable()->MutableTableDescription()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore:
-            create.MutableCreateColumnStore()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
-            create.MutableCreateColumnTable()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable:
-            create.MutableCreateExternalTable()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource:
-            create.MutableCreateExternalDataSource()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateView:
-            create.MutableCreateView()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool:
-            create.MutableCreateResourcePool()->SetName(name);
-            break;
-        case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection:
-            create.MutableCreateBackupCollection()->SetName(name);
-            break;
-        default:
-            Y_ABORT("Invariant violation");
-        }
-
-        result.Transactions.push_back(create);
-
-        if (exists) {
-            return result;
-        }
-    }
+bool CreateDirs(const TTxTransaction& tx, const TPath& parentPath, TPath path, THashSet<TString>& createdPaths, TOperation::TSplitTransactionsResult& result) {
+    auto initialSize = result.Transactions.size();
 
     while (path != parentPath) {
+        if (createdPaths.contains(path.PathString())) {
+            path.Rise();
+            continue;
+        }
+
         TPath::TChecker checks = path.Check();
         checks
             .NotUnderDomainUpgrade()
@@ -966,10 +830,11 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
             result.Status = checks.GetStatus();
             result.Reason = checks.GetError();
             result.Transactions.clear();
-            result.Transactions.push_back(tx);
-            return result;
+            result.Transaction = tx;
+            return false;
         }
 
+        createdPaths.emplace(path.PathString());
         const TString name = path.LeafName();
         path.Rise();
 
@@ -982,7 +847,148 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
         result.Transactions.push_back(mkdir);
     }
 
-    Reverse(result.Transactions.begin(), result.Transactions.end());
+    Reverse(result.Transactions.begin() + initialSize, result.Transactions.end());
+
+    return true;
+}
+
+// # Generates additional MkDirs for transactions
+TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context) {
+    TSplitTransactionsResult result;
+    THashSet<TString> createdPaths;
+
+    // # Generates MkDirs based on WorkingDir and path
+    //     WorkingDir  |        TxType.ObjectName
+    //  /Root/some_dir | other_dir/another_dir/object_name
+    //                  ^---------^----------^
+    // MkDir('/Root/some_dir', 'other_dir') and MkDir('/Root/some_dir/other_dir', 'another_dir') will be generated
+    // tx.WorkingDir will be changed to '/Root/some_dir/other_dir/another_dir'
+    // tx.TxType.ObjectName will be changed to 'object_name'
+    if (DispatchOp(tx, [&](auto traits) { return traits.CreateDirsFromName; })) {
+        TString targetName;
+
+        if (!DispatchOp(tx, [&](auto traits) {
+                auto name = traits.GetTargetName(tx);
+                if (name) {
+                    targetName = *name;
+                    return true;
+                }
+                return false;
+            }))
+        {
+            result.Transaction = tx;
+            return result;
+        }
+
+        if (!targetName || targetName.StartsWith('/') || targetName.EndsWith('/')) {
+            result.Transaction = tx;
+            return result;
+        }
+
+        const TPath parentPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
+        {
+            TPath::TChecker checks = parentPath.Check();
+            checks
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting()
+                .IsCommonSensePath()
+                .IsLikeDirectory();
+
+            if (!checks) {
+                result.Transaction = tx;
+                return result;
+            }
+        }
+
+        TPath path = TPath::Resolve(JoinPath(tx.GetWorkingDir(), targetName), context.SS);
+        {
+            TPath::TChecker checks = path.Check();
+            checks.IsAtLocalSchemeShard();
+
+            bool exists = false;
+            if (path.IsResolved()) {
+                checks.IsResolved();
+                exists = !path.IsDeleted();
+            } else {
+                checks
+                    .NotEmpty()
+                    .NotResolved();
+            }
+
+            if (checks && !exists) {
+                checks.IsValidLeafName();
+            }
+
+            if (!checks) {
+                result.Status = checks.GetStatus();
+                result.Reason = checks.GetError();
+                result.Transaction = tx;
+                return result;
+            }
+
+            const TString name = path.LeafName();
+            path.Rise();
+
+            TTxTransaction create(tx);
+            create.SetWorkingDir(path.PathString());
+            create.SetFailOnExist(tx.GetFailOnExist());
+
+            if (!DispatchOp(tx, [&](auto traits) {
+                    return traits.SetName(create, name);
+                }))
+            {
+                Y_ABORT("Invariant violation");
+            }
+
+            result.Transaction = create;
+
+            if (exists) {
+                return result;
+            }
+        }
+
+        if (!CreateDirs(tx, parentPath, path, createdPaths, result)) {
+            return result;
+        }
+    }
+
+    // # Generates MkDirs based on transaction-specific requirements
+    if (DispatchOp(tx, [&](auto traits) { return traits.CreateAdditionalDirs; })) {
+        for (const auto& [parentPathStr, pathStrs] : DispatchOp(tx, [&](auto traits) { return traits.GetRequiredPaths(tx); })) {
+            const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
+            {
+                TPath::TChecker checks = parentPath.Check();
+                checks
+                    .NotUnderDomainUpgrade()
+                    .IsAtLocalSchemeShard()
+                    .IsResolved()
+                    .NotDeleted()
+                    .NotUnderDeleting()
+                    .IsCommonSensePath()
+                    .IsLikeDirectory();
+
+                if (!checks) {
+                    result.Transaction = tx;
+                    return result;
+                }
+            }
+
+            for (const auto& pathStr : pathStrs) {
+                TPath path = TPath::Resolve(JoinPath(parentPathStr, pathStr), context.SS);
+                if (!CreateDirs(tx, parentPath, path, createdPaths, result)) {
+                    return result;
+                }
+            }
+        }
+    }
+
+    if (!result.Transaction) {
+        result.Transaction = tx;
+    }
+
     return result;
 }
 

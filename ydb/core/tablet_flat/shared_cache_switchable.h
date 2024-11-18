@@ -4,7 +4,7 @@
 #include <library/cpp/monlib/counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-namespace NKikimr::NCache {
+namespace NKikimr::NSharedCache {
 
 template <typename TPage, typename TPageTraits>
 class TSwitchableCache : public ICacheCache<TPage> {

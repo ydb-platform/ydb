@@ -6,7 +6,7 @@ import yql_utils
 import cyson
 
 import yatest.common
-import ydb.library.yql.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
+import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
 
 from google.protobuf import text_format
 from yql_utils import execute_sql, get_supported_providers, get_tables, get_files, get_http_files, \

@@ -41,6 +41,14 @@ public:
         auto activeStats = ColumnEngine.GetTotalStats().Active();
         tableStats.SetRowCount(activeStats.Rows);
         tableStats.SetDataSize(activeStats.Bytes);
+        for (ui32 ch = 0; ch < activeStats.ByChannel.size(); ch++) {
+            ui64 dataSize = activeStats.ByChannel[ch];
+            if (dataSize > 0) {
+                auto item = tableStats.AddChannels();
+                item->SetChannel(ch);
+                item->SetDataSize(dataSize);
+            }
+        }
     }
 };
 

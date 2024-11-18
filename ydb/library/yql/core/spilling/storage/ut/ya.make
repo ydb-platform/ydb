@@ -18,7 +18,7 @@ SRCS(
  )
 
 PEERDIR(
-    ydb/library/yql/utils/log
+    yql/essentials/utils/log
 )
 
 YQL_LAST_ABI_VERSION()

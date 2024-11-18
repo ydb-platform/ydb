@@ -2,7 +2,7 @@
 // dispatch.hpp
 // ~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -17,6 +17,7 @@
 
 #include <boost/asio/detail/config.hpp>
 #include <boost/asio/async_result.hpp>
+#include <boost/asio/detail/initiate_dispatch.hpp>
 #include <boost/asio/detail/type_traits.hpp>
 #include <boost/asio/execution_context.hpp>
 #include <boost/asio/execution/executor.hpp>
@@ -26,12 +27,6 @@
 
 namespace boost {
 namespace asio {
-namespace detail {
-
-class initiate_dispatch;
-template <typename> class initiate_dispatch_with_executor;
-
-} // namespace detail
 
 /// Submits a completion token or function object for execution.
 /**
@@ -63,10 +58,7 @@ template <typename> class initiate_dispatch_with_executor;
  * @code auto alloc = get_associated_allocator(handler); @endcode
  *
  * @li If <tt>execution::is_executor<Ex>::value</tt> is true, performs
- * @code execution::execute(
- *     prefer(ex,
- *       execution::blocking.possibly,
- *       execution::allocator(alloc)),
+ * @code prefer(ex, execution::allocator(alloc)).execute(
  *     std::forward<CompletionHandler>(completion_handler)); @endcode
  *
  * @li If <tt>execution::is_executor<Ex>::value</tt> is false, performs
@@ -82,7 +74,11 @@ BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(NullaryToken, void()) dispatch(
     BOOST_ASIO_MOVE_ARG(NullaryToken) token)
   BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
     async_initiate<NullaryToken, void()>(
-        declval<detail::initiate_dispatch>(), token)));
+        declval<detail::initiate_dispatch>(), token)))
+{
+  return async_initiate<NullaryToken, void()>(
+      detail::initiate_dispatch(), token);
+}
 
 /// Submits a completion token or function object for execution.
 /**
@@ -126,11 +122,8 @@ BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(NullaryToken, void()) dispatch(
  * handler_ that is a decay-copy of @c completion_handler, and a function call
  * operator that performs:
  * @code auto a = get_associated_allocator(handler_);
- * execution::execute(
- *     prefer(executor_,
- *       execution::blocking.possibly,
- *       execution::allocator(a)),
- *     std::move(handler_)); @endcode
+ * prefer(executor_, execution::allocator(a)).execute(std::move(handler_));
+ * @endcode
  *
  * @li If <tt>execution::is_executor<Ex1>::value</tt> is false, constructs a
  * function object @c f with a member @c work_ that is initialised with
@@ -141,11 +134,7 @@ BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(NullaryToken, void()) dispatch(
  * work_.reset(); @endcode
  *
  * @li If <tt>execution::is_executor<Ex>::value</tt> is true, performs
- * @code execution::execute(
- *     prefer(ex,
- *       execution::blocking.possibly,
- *       execution::allocator(alloc)),
- *     std::move(f)); @endcode
+ * @code prefer(ex, execution::allocator(alloc)).execute(std::move(f)); @endcode
  *
  * @li If <tt>execution::is_executor<Ex>::value</tt> is false, performs
  * @code ex.dispatch(std::move(f), alloc); @endcode
@@ -165,7 +154,11 @@ BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(NullaryToken, void()) dispatch(
     >::type = 0)
   BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
     async_initiate<NullaryToken, void()>(
-        declval<detail::initiate_dispatch_with_executor<Executor> >(), token)));
+        declval<detail::initiate_dispatch_with_executor<Executor> >(), token)))
+{
+  return async_initiate<NullaryToken, void()>(
+      detail::initiate_dispatch_with_executor<Executor>(ex), token);
+}
 
 /// Submits a completion token or function object for execution.
 /**
@@ -195,13 +188,17 @@ BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(NullaryToken, void()) dispatch(
   BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
     async_initiate<NullaryToken, void()>(
         declval<detail::initiate_dispatch_with_executor<
-          typename ExecutionContext::executor_type> >(), token)));
+          typename ExecutionContext::executor_type> >(), token)))
+{
+  return async_initiate<NullaryToken, void()>(
+      detail::initiate_dispatch_with_executor<
+        typename ExecutionContext::executor_type>(
+          ctx.get_executor()), token);
+}
 
 } // namespace asio
 } // namespace boost
 
 #include <boost/asio/detail/pop_options.hpp>
-
-#include <boost/asio/impl/dispatch.hpp>
 
 #endif // BOOST_ASIO_DISPATCH_HPP

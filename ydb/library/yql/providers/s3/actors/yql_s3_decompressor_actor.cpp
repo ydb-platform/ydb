@@ -5,7 +5,7 @@
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/events/events.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <util/generic/size_literals.h>
 

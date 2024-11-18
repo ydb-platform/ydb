@@ -2,8 +2,8 @@
 
 #include "dq_opt.h"
 
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 namespace NYql::NDq {
 

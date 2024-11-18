@@ -18,8 +18,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
 #include <ydb/core/cms/console/console.h>
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
 
 #include <util/stream/null.h>
 

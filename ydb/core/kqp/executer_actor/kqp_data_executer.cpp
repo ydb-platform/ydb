@@ -29,7 +29,7 @@
 
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 
 namespace NKikimr {
@@ -191,6 +191,7 @@ public:
 
     bool ForceAcquireSnapshot() const {
         const bool forceSnapshot = (
+            !GetSnapshot().IsValid() &&
             ReadOnlyTx &&
             !ImmediateTx &&
             !HasPersistentChannels &&
@@ -2035,10 +2036,6 @@ private:
         THashMap<ui64, TVector<NDqProto::TDqTask*>> datashardTasks;  // shardId -> [task]
         THashMap<ui64, TVector<ui64>> remoteComputeTasks;  // shardId -> [task]
         TVector<ui64> computeTasks;
-
-        if (StreamResult) {
-            InitializeChannelProxies();
-        }
 
         for (auto& task : TasksGraph.GetTasks()) {
             auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);

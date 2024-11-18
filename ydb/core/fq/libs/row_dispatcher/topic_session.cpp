@@ -6,8 +6,8 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/dq/runtime/dq_async_stats.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
@@ -34,6 +34,7 @@ struct TTopicSessionMetrics {
         RowsRead = SubGroup->GetCounter("RowsRead", true);
         InFlySubscribe = SubGroup->GetCounter("InFlySubscribe");
         ReconnectRate = SubGroup->GetCounter("ReconnectRate", true);
+        RestartSessionByOffsets = counters->GetCounter("RestartSessionByOffsets", true);
     }
 
     ~TTopicSessionMetrics() {
@@ -45,6 +46,7 @@ struct TTopicSessionMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr RowsRead;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReconnectRate;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RestartSessionByOffsets;
 };
 
 struct TEvPrivate {
@@ -142,6 +144,11 @@ private:
         TParserInputType InputType;
     };
 
+    struct TFieldDescription {
+        ui64 IndexInParserSchema = 0;
+        TString Type;
+    };
+
     bool InflightReconnect = false;
     TDuration ReconnectPeriod;
     const TString TopicPath;
@@ -151,7 +158,7 @@ private:
     ui32 PartitionId;
     NYdb::TDriver Driver;
     std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
+    IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     NYql::ITopicClient::TPtr TopicClient;
     std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
     const i64 BufferSize;
@@ -168,9 +175,10 @@ private:
     const ::NMonitoring::TDynamicCounterPtr Counters;
     TTopicSessionMetrics Metrics;
     TParserSchema ParserSchema;
-    THashMap<TString, ui64> FieldsIndexes;
+    THashMap<TString, TFieldDescription> FieldsIndexes;
     NYql::IPqGateway::TPtr PqGateway;
     TMaybe<TString> ConsumerName;
+    ui64 RestartSessionByOffsets = 0;
 
 public:
     explicit TTopicSession(
@@ -182,7 +190,7 @@ public:
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-        NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
+        IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const NYql::IPqGateway::TPtr& pqGateway);
 
@@ -200,10 +208,10 @@ private:
     void SubscribeOnNextEvent();
     void SendToParsing(const TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages);
     void DoParsing(bool force = false);
-    void DoFiltering(const TVector<ui64>& offsets, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues);
+    void DoFiltering(ui64 rowsOffset, ui64 numberRows, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues);
     void SendData(TClientsInfo& info);
     void UpdateParser();
-    void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter, bool addParserDescription);
+    void FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter, bool addParserDescription, const TMaybe<TString>& fieldName);
     void SendDataArrived(TClientsInfo& client);
     void StopReadSession();
     TString GetSessionId() const;
@@ -227,10 +235,11 @@ private:
 
     void SendStatistic();
     void SendSessionError(NActors::TActorId readActorId, const TString& message);
-    TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> RebuildJson(const TClientsInfo& info, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues);
+    TVector<const TVector<NYql::NUdf::TUnboxedValue>*> RebuildJson(const TClientsInfo& info, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues);
     void UpdateParserSchema(const TParserInputType& inputType);
     void UpdateFieldsIds(TClientsInfo& clientInfo);
     bool CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev);
+    TString GetAnyQueryIdByFieldName(const TString& fieldName);
 
 private:
 
@@ -273,7 +282,7 @@ TTopicSession::TTopicSession(
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
+    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway)
     : TopicPath(topicPath)
@@ -414,8 +423,8 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvCreateSession::TPtr&) {
     CreateTopicSession();
 }
 
-TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> TTopicSession::RebuildJson(const TClientsInfo& info, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues) {
-    TVector<const NKikimr::NMiniKQL::TUnboxedValueVector*> result;
+TVector<const TVector<NYql::NUdf::TUnboxedValue>*> TTopicSession::RebuildJson(const TClientsInfo& info, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues) {
+    TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result;
     const auto& offsets = ParserSchema.FieldsMap;
     result.reserve(info.FieldsIds.size());
     for (auto fieldId : info.FieldsIds) {
@@ -532,7 +541,7 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TSessionClose
     LOG_ROW_DISPATCHER_DEBUG(message);
     NYql::TIssues issues;
     issues.AddIssue(message);
-    Self.FatalError(issues.ToOneLineString(), nullptr, false);
+    Self.FatalError(issues.ToOneLineString(), nullptr, false, Nothing());
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
@@ -615,24 +624,28 @@ void TTopicSession::DoParsing(bool force) {
     LOG_ROW_DISPATCHER_TRACE("SendToParsing, first offset: " << Parser->GetOffsets().front() << ", number values in buffer " << Parser->GetOffsets().size());
 
     try {
-        const auto& parsedValues = Parser->Parse();
-        DoFiltering(Parser->GetOffsets(), parsedValues);
+        Parser->Parse();
+    } catch (const NFq::TJsonParserError& e) {
+        FatalError(e.what(), nullptr, true, e.GetField());
     } catch (const std::exception& e) {
-        FatalError(e.what(), nullptr, true);
+        FatalError(e.what(), nullptr, true, Nothing());
     }
 }
 
-void TTopicSession::DoFiltering(const TVector<ui64>& offsets, const TVector<NKikimr::NMiniKQL::TUnboxedValueVector>& parsedValues) {
+void TTopicSession::DoFiltering(ui64 rowsOffset, ui64 numberRows, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues) {
+    const auto& offsets = Parser->GetOffsets();
+    Y_ENSURE(rowsOffset < offsets.size(), "Invalid first row ofset");
+    Y_ENSURE(numberRows, "Expected non empty parsed batch");
     Y_ENSURE(parsedValues, "Expected non empty schema");
-    LOG_ROW_DISPATCHER_TRACE("SendToFiltering, first offset: " << offsets.front() << ", last offset: " << offsets.back());
+    LOG_ROW_DISPATCHER_TRACE("SendToFiltering, first offset: " << offsets[rowsOffset] << ", last offset: " << offsets[rowsOffset + numberRows - 1]);
 
     for (auto& [actorId, info] : Clients) {
         try {
             if (info.Filter) {
-                info.Filter->Push(offsets, RebuildJson(info, parsedValues));
+                info.Filter->Push(offsets, RebuildJson(info, parsedValues), rowsOffset, numberRows);
             }
         } catch (const std::exception& e) {
-            FatalError(e.what(), &info.Filter, false);
+            FatalError(e.what(), &info.Filter, false, Nothing());
         }
     }
 
@@ -683,14 +696,16 @@ void TTopicSession::SendData(TClientsInfo& info) {
 }
 
 void TTopicSession::UpdateFieldsIds(TClientsInfo& info) {
-    for (auto name : info.Settings.GetSource().GetColumns()) {
+    const auto& source = info.Settings.GetSource();
+    for (size_t i = 0; i < source.ColumnsSize(); ++i) {
+        const auto& name = source.GetColumns().Get(i);
         auto it = FieldsIndexes.find(name);
         if (it == FieldsIndexes.end()) {
             auto nextIndex = FieldsIndexes.size();
             info.FieldsIds.push_back(nextIndex);
-            FieldsIndexes[name] = nextIndex;
+            FieldsIndexes[name] = {nextIndex, source.GetColumnTypes().Get(i)};
         } else {
-            info.FieldsIds.push_back(it->second);
+            info.FieldsIds.push_back(it->second.IndexInParserSchema);
         }
     }
 }
@@ -727,10 +742,11 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             std::forward_as_tuple(ev)).first->second;
         UpdateFieldsIds(clientInfo);
 
-        TString predicate = clientInfo.Settings.GetSource().GetPredicate();
+        const auto& source = clientInfo.Settings.GetSource();
+        TString predicate = source.GetPredicate();
 
         // TODO: remove this when the re-parsing is removed from pq read actor
-        if (predicate.empty() && HasJsonColumns(clientInfo.Settings.GetSource())) {
+        if (predicate.empty() && HasJsonColumns(source)) {
             predicate = "WHERE TRUE";
         }
 
@@ -742,7 +758,9 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 [&, actorId = clientInfo.ReadActorId](ui64 offset, const TString& json){
                     Send(SelfId(), new NFq::TEvPrivate::TEvDataAfterFilteration(offset, json, actorId));
                 },
-                PureCalcProgramFactory);
+                PureCalcProgramFactory,
+                {.EnabledLLVM = source.GetEnabledLLVM()}
+            );
         } else {
             ClientsWithoutPredicate.insert(ev->Sender);
         }
@@ -750,15 +768,17 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         if (ReadSession) {
             if (clientInfo.Settings.HasOffset() && (clientInfo.Settings.GetOffset() <= LastMessageOffset)) {
                 LOG_ROW_DISPATCHER_INFO("New client has less offset (" << clientInfo.Settings.GetOffset() << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
+                Metrics.RestartSessionByOffsets->Inc();
+                ++RestartSessionByOffsets;
                 StopReadSession();
             }
         }
     } catch (const NYql::NPureCalc::TCompileError& e) {
-        FatalError("Adding new client failed: CompileError: sql: " + e.GetYql() + ", error: " + e.GetIssues(), nullptr, true);
+        FatalError("Adding new client failed: CompileError: sql: " + e.GetYql() + ", error: " + e.GetIssues(), nullptr, true, Nothing());
     } catch (const yexception &ex) {
-        FatalError(TString{"Adding new client failed: "} + ex.what(), nullptr, true);
+        FatalError(TString{"Adding new client failed: "} + ex.what(), nullptr, true, Nothing());
     } catch (...) {
-        FatalError("Adding new client failed, " + CurrentExceptionMessage(), nullptr, true);
+        FatalError("Adding new client failed, " + CurrentExceptionMessage(), nullptr, true, Nothing());
     }
     ConsumerName = ev->Get()->Record.GetSource().GetConsumerName();
     UpdateParser();
@@ -816,7 +836,7 @@ void TTopicSession::UpdateParserSchema(const TParserInputType& inputType) {
     ui64 offset = 0;
     for (const auto& [name, type]: inputType) {
         Y_ENSURE(FieldsIndexes.contains(name));
-        ui64 index = FieldsIndexes[name];
+        ui64 index = FieldsIndexes[name].IndexInParserSchema;
         ParserSchema.FieldsMap[index] = offset++;
     }
     ParserSchema.InputType = inputType;
@@ -851,13 +871,17 @@ void TTopicSession::UpdateParser() {
 
         LOG_ROW_DISPATCHER_TRACE("Init JsonParser with columns: " << JoinSeq(',', names));
         const auto& parserConfig = Config.GetJsonParser();
-        Parser = NewJsonParser(names, types, parserConfig.GetBatchSizeBytes(), TDuration::MilliSeconds(parserConfig.GetBatchCreationTimeoutMs()));
+        Parser = NewJsonParser(names, types, [this](ui64 rowsOffset, ui64 numberRows, const TVector<TVector<NYql::NUdf::TUnboxedValue>>& parsedValues) {
+            DoFiltering(rowsOffset, numberRows, parsedValues);
+        }, parserConfig.GetBatchSizeBytes(), TDuration::MilliSeconds(parserConfig.GetBatchCreationTimeoutMs()), parserConfig.GetBufferCellCount());
+    } catch (const NFq::TJsonParserError& e) {
+        FatalError(e.what(), nullptr, true, e.GetField());
     } catch (const NYql::NPureCalc::TCompileError& e) {
-        FatalError(e.GetIssues(), nullptr, true);
+        FatalError(e.GetIssues(), nullptr, true, Nothing());
     }
 }
 
-void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter, bool addParserDescription) {
+void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJsonFilter>* filter, bool addParserDescription, const TMaybe<TString>& fieldName) {
     TStringStream str;
     str << message;
     if (Parser && addParserDescription) {
@@ -865,6 +889,10 @@ void TTopicSession::FatalError(const TString& message, const std::unique_ptr<TJs
     }
     if (filter) {
         str << ", filter sql:\n" << (*filter)->GetSql();
+    }
+    if (fieldName) {
+        auto queryId = GetAnyQueryIdByFieldName(*fieldName);
+        str << ", the field (" << *fieldName <<  ") has been added by query: " + queryId;
     }
     LOG_ROW_DISPATCHER_ERROR("FatalError: " << str.Str());
 
@@ -911,12 +939,13 @@ void TTopicSession::HandleException(const std::exception& e) {
     if (CurrentStateFunc() == &TThis::ErrorState) {
         return;
     }
-    FatalError(TString("Internal error: exception: ") + e.what(), nullptr, false);
+    FatalError(TString("Internal error: exception: ") + e.what(), nullptr, false, Nothing());
 }
 
 void TTopicSession::SendStatistic() {
     TopicSessionStatistic stat;
     stat.Common.UnreadBytes = UnreadBytes;
+    stat.Common.RestartSessionByOffsets = RestartSessionByOffsets;
     stat.SessionKey = TopicSessionParams{Endpoint, Database, TopicPath, PartitionId};
     stat.Clients.reserve(Clients.size());
     for (auto& [readActorId, info] : Clients) {
@@ -944,14 +973,40 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
         SendSessionError(ev->Sender, "Internal error: such a client already exists");
         return false;
     }
-    if (!Config.GetWithoutConsumer()
-        && ConsumerName 
-        && ConsumerName != ev->Get()->Record.GetSource().GetConsumerName()) {
-        LOG_ROW_DISPATCHER_INFO("Different consumer, expected " <<  ConsumerName << ", actual " << ev->Get()->Record.GetSource().GetConsumerName() << ", send error");
+
+    const auto& source = ev->Get()->Record.GetSource();
+    if (!Config.GetWithoutConsumer() && ConsumerName && ConsumerName != source.GetConsumerName()) {
+        LOG_ROW_DISPATCHER_INFO("Different consumer, expected " <<  ConsumerName << ", actual " << source.GetConsumerName() << ", send error");
         SendSessionError(ev->Sender, TStringBuilder() << "Use the same consumer in all queries via RD (current consumer " << ConsumerName << ")");
         return false;
     }
+
+    Y_ENSURE(source.ColumnsSize() == source.ColumnTypesSize());
+    for (size_t i = 0; i < source.ColumnsSize(); ++i) {
+        const auto& name = source.GetColumns().Get(i);
+        const auto& type = source.GetColumnTypes().Get(i);
+        const auto it = FieldsIndexes.find(name);
+        if (it != FieldsIndexes.end() && it->second.Type != type) {
+            LOG_ROW_DISPATCHER_INFO("Different column `" << name << "` type, expected " << it->second.Type << ", actual " << type << ", send error");
+            SendSessionError(ev->Sender, TStringBuilder() << "Use the same column type in all queries via RD, current type for column `" << name << "` is " << it->second.Type << " (requested type is " << type <<")");
+            return false;
+        }
+    }
+
     return true;
+}
+
+TString TTopicSession::GetAnyQueryIdByFieldName(const TString& fieldName) {
+    TSet<std::pair<TString, TString>> namesWithTypes;
+    for (auto& [readActorId, info] : Clients) {
+        for (const auto& name : info.Settings.GetSource().GetColumns()) {
+            if (name != fieldName) {
+                continue;
+            }
+            return info.Settings.GetQueryId();
+        }
+    }
+    return "Unknown";
 }
 
 } // namespace
@@ -967,7 +1022,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
-    NYql::NPureCalc::IProgramFactoryPtr pureCalcProgramFactory,
+    IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYql::IPqGateway::TPtr& pqGateway) {
     return std::unique_ptr<NActors::IActor>(new TTopicSession(topicPath, endpoint, database, config, rowDispatcherActorId, partitionId, std::move(driver), credentialsProviderFactory, pureCalcProgramFactory, counters, pqGateway));

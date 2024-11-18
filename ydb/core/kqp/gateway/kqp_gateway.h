@@ -14,7 +14,7 @@
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <ydb/library/actors/wilson/wilson_trace.h>
 #include <ydb/library/actors/core/actorid.h>

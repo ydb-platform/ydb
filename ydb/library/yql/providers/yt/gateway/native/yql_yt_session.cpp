@@ -3,7 +3,7 @@
 #include <ydb/library/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <ydb/library/yql/providers/yt/lib/init_yt_api/init.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <util/system/env.h>
 

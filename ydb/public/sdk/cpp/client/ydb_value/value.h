@@ -155,9 +155,6 @@ public:
     const TString& GetTag();
     void CloseTagged();
 
-    // Allows to perform consequtive parsings from the same parser
-    void Reset();
-
 private:
     class TImpl;
     std::unique_ptr<TImpl> Impl_;

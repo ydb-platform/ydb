@@ -31,9 +31,9 @@ public:
                const std::map<TString, TType>* destinationTypes = nullptr,
                const std::map<TString, TString>* paramSources = nullptr);
 
-    void BuildParams(TString&& data, TParamsBuilder& builder, const TParseMetadata& meta) const;
-    void BuildValue(TString&& data, TValueBuilder& builder, const TType& type, const TParseMetadata& meta) const;
-    TValue BuildList(std::vector<TString>&& lines, const TString& filename,
+    void BuildParams(const TString& data, TParamsBuilder& builder, const TParseMetadata& meta) const;
+    void BuildValue(const TString& data, TValueBuilder& builder, const TType& type, const TParseMetadata& meta) const;
+    TValue BuildList(const std::vector<TString>& lines, const TString& filename,
                      std::optional<ui64> row = std::nullopt) const;
     void BuildLineType();
 

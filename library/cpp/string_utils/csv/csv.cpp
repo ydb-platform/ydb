@@ -4,8 +4,8 @@ TStringBuf NCsvFormat::CsvSplitter::Consume() {
     if (Begin == End) {
         return nullptr;
     }
-    TString::iterator TokenStart = Begin;
-    TString::iterator TokenEnd = Begin;
+    TString::const_iterator TokenStart = Begin;
+    TString::const_iterator TokenEnd = Begin;
     if (Quote == '\0') {
         while (1) {
             if (TokenEnd == End || *TokenEnd == Delimeter) {

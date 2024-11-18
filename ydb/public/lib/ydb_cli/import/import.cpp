@@ -477,7 +477,7 @@ TStatus TImportFileClient::UpsertCsv(IInputStream& input,
     std::vector<TString> buffer;
 
     auto upsertCsvFunc = [&](std::vector<TString>&& buffer, ui64 row) {
-        return UpsertTValueBuffer(dbPath, parser.BuildList(std::move(buffer), filePath, row)).ExtractValueSync();
+        return UpsertTValueBuffer(dbPath, parser.BuildList(buffer, filePath, row)).ExtractValueSync();
     };
 
     while (TString line = splitter.ConsumeLine()) {
@@ -569,7 +569,7 @@ TStatus TImportFileClient::UpsertCsvByBlocks(const TString& filePath,
     for (size_t threadId = 0; threadId < splitter.GetSplitCount(); ++threadId) {
         auto loadCsv = [&, threadId] () {
             auto upsertCsvFunc = [&](std::vector<TString>&& buffer) {
-                return UpsertTValueBuffer(dbPath, parser.BuildList(std::move(buffer), filePath));
+                return UpsertTValueBuffer(dbPath, parser.BuildList(buffer, filePath));
             };
             std::vector<TAsyncStatus> inFlightRequests;
             std::vector<TString> buffer;

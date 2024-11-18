@@ -366,7 +366,7 @@ TCsvParser::TCsvParser(TVector<TString>&& header, const char delimeter, const st
 {
 }
 
-void TCsvParser::BuildParams(TString&& data, TParamsBuilder& builder, const TParseMetadata& meta) const {
+void TCsvParser::BuildParams(const TString& data, TParamsBuilder& builder, const TParseMetadata& meta) const {
     NCsvFormat::CsvSplitter splitter(data, Delimeter);
     auto headerIt = Header.begin();
     do {
@@ -396,7 +396,7 @@ void TCsvParser::BuildParams(TString&& data, TParamsBuilder& builder, const TPar
     }
 }
 
-void TCsvParser::BuildValue(TString&& data, TValueBuilder& builder, const TType& type, const TParseMetadata& meta) const {
+void TCsvParser::BuildValue(const TString& data, TValueBuilder& builder, const TType& type, const TParseMetadata& meta) const {
     NCsvFormat::CsvSplitter splitter(data, Delimeter);
     auto headerIt = Header.cbegin();
     std::map<TString, TStringBuf> fields;
@@ -432,7 +432,7 @@ void TCsvParser::BuildValue(TString&& data, TValueBuilder& builder, const TType&
     builder.EndStruct();
 }
 
-TValue TCsvParser::BuildList(std::vector<TString>&& lines, const TString& filename, std::optional<ui64> row) const {
+TValue TCsvParser::BuildList(const std::vector<TString>& lines, const TString& filename, std::optional<ui64> row) const {
     std::vector<std::unique_ptr<TTypeParser>> columnTypeParsers;
     columnTypeParsers.reserve(ResultColumnCount);
     for (const TType* type : ResultLineTypesSorted) {
@@ -441,7 +441,7 @@ TValue TCsvParser::BuildList(std::vector<TString>&& lines, const TString& filena
     Ydb::Value listValue;
     auto* listItems = listValue.mutable_items();
     listItems->Reserve(lines.size());
-    for (auto&& line : lines) {
+    for (const auto& line : lines) {
         std::vector<TStringBuf> fields;
         NCsvFormat::CsvSplitter splitter(line, Delimeter);
         TParseMetadata meta {row, filename};
@@ -465,7 +465,6 @@ TValue TCsvParser::BuildList(std::vector<TString>&& lines, const TString& filena
         auto nameIt = ResultLineNamesSorted.begin();
         // fields size equals columnTypeParsers size, no need for second end check
         for (; typeParserIt != columnTypeParsers.end(); ++typeParserIt, ++fieldIt, ++nameIt) {
-            typeParserIt->get()->Reset();
             *structItems->Add() = FieldToValue(*typeParserIt->get(), *fieldIt, NullValue, meta, **nameIt).GetProto();
         }
         if (row.has_value()) {

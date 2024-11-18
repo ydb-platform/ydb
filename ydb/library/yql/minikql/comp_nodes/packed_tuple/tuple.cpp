@@ -22,17 +22,12 @@ namespace {
 
 // Transpose 8x8 bit-matrix packed in ui64 integer
 Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
-    if (x == 0xFFFFFFFFFFFFFFFFLL) {
+    /// fast path
+    if (x == ~0ull) {
         return x;
     }
 
-    // a b A B aa bb AA BB
-    // c d C D cc dd CC DD
-    // ->
-    // a c A C aa cc AA CC
-    // b d B D bb dd BB DD
-    // a b A B aa bb AA BB // c d C D cc dd CC DD
-    // a c A C aa cc AA CC // b d B D bb dd BB DD
+    /// transpose 1x1 diagonal elements in 2x2 block
     x = ((x &
           0b10101010'01010101'10101010'01010101'10101010'01010101'10101010'01010101ull)) |
         ((x &
@@ -41,22 +36,8 @@ Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
         ((x &
           0b00000000'10101010'00000000'10101010'00000000'10101010'00000000'10101010ull)
          << 7);
-    // a1 a2 b1 b2 A1 A2 B1 B2
-    // a3 a4 b3 b4 A3 A4 B3 B4
-    // c1 c2 d1 d2 C1 C2 D1 D2
-    // c3 c4 d3 d4 C3 C4 D3 D4
-    // ->
-    // a1 a2 c1 c2 A1 A2 C1 C2
-    // a3 a4 c3 c4 A3 A4 C3 C4
-    // b1 b2 d1 d2 B1 B2 D1 D2
-    // b3 b4 d3 d4 B3 B4 D3 D4
-    //
-    //
-    // a1 a2 b1 b2 A1 A2 B1 B2 // a3 a4 b3 b4 A3 A4 B3 B4 // c1 c2 d1 d2 C1 C2
-    // D1 D2 // c3 c4 d3 d4 C3 C4 D3 D4
-    // ->
-    // a1 a2 c1 c2 A1 A2 C1 C2 // a3 a4 c3 c4 A3 A4 C3 C4 // b1 b2 d1 d2 B1 B2
-    // D1 D2 // b3 b4 d3 d4 B3 B4 D3 D4
+
+    /// transpose 2x2 diagonal elements in 4x4 block
     x = ((x &
           0b1100110011001100'0011001100110011'1100110011001100'0011001100110011ull)) |
         ((x &
@@ -65,6 +46,8 @@ Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
         ((x &
           0b0000000000000000'1100110011001100'0000000000000000'1100110011001100ull)
          << 14);
+
+    /// transpose 4x4 diagonal elements in 8x8 block
     x = ((x &
           0b11110000111100001111000011110000'00001111000011110000111100001111ull)) |
         ((x &
@@ -73,6 +56,7 @@ Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
         ((x &
           0b00000000000000000000000000000000'11110000111100001111000011110000ull)
          << 28);
+
     return x;
 }
 
@@ -81,7 +65,7 @@ void transposeBitmatrix(ui8 dst[], const ui8 *src[], const size_t row_size) {
     for (size_t ind = 0; ind != 8; ++ind) {
         x |= ui64(*src[ind]) << (ind * 8);
     }
-    
+
     x = transposeBitmatrix(x);
 
     for (size_t ind = 0; ind != 8; ++ind) {
@@ -227,11 +211,16 @@ TTupleLayoutFallback<TTraits>::TTupleLayoutFallback(
         }
     }
 
-    /// TODO: dynamic configuration
-    BlockRows_ = 256;
+    BlockRows_ = 128 * std::max(1ul, 128ul / TotalRowSize);
     const bool use_simd = true;
 
-    std::vector<const TColumnDesc *> block_fallback;
+    // pack optimization for small tuple
+    const size_t max_simd_tuple_size =
+        use_simd && TSimd<ui8>::SIZE > TotalRowSize
+            ? TSimd<ui8>::SIZE - TotalRowSize
+            : 0;
+
+    std::vector<const TColumnDesc *> fallback_cols;
     std::queue<const TColumnDesc *> next_cols;
 
     size_t fixed_cols_left =
@@ -242,45 +231,37 @@ TTupleLayoutFallback<TTraits>::TTupleLayoutFallback(
                                    (col.SizeType == EColumnSizeType::Fixed);
                         });
 
-    size_t prev_tuple_size;
-    size_t curr_tuple_size = 0;
-
-    const auto manage_block_packing = [&](const std::vector<TColumnDesc>
-                                              &columns) {
-        for (size_t col_ind = 0;
-             col_ind != columns.size() &&
-             columns[col_ind].SizeType == EColumnSizeType::Fixed;) {
+    const auto small_tuple_packing = [&](const std::vector<TColumnDesc>
+                                             &columns) {
+        for (const auto &col : columns) {
+            if (col.SizeType != EColumnSizeType::Fixed) {
+                break;
+            }
             --fixed_cols_left;
-            next_cols.push(&columns[col_ind]);
-            prev_tuple_size = curr_tuple_size;
-            curr_tuple_size = next_cols.back()->Offset +
-                              next_cols.back()->DataSize -
-                              next_cols.front()->Offset;
 
-            ++col_ind;
-            if (curr_tuple_size >= TSimd<ui8>::SIZE ||
-                next_cols.size() == kSIMDMaxCols || !fixed_cols_left) {
-                const bool oversize = curr_tuple_size > TSimd<ui8>::SIZE;
-                const size_t tuple_size =
-                    oversize ? prev_tuple_size : curr_tuple_size;
-                const size_t tuple_cols = next_cols.size() - oversize;
+            size_t tuple_size = next_cols.empty()
+                                    ? 0
+                                    : next_cols.back()->DataSize +
+                                          next_cols.back()->Offset -
+                                          next_cols.front()->Offset;
+            const size_t tuple_size_with_col =
+                next_cols.empty()
+                    ? col.DataSize
+                    : col.DataSize + col.Offset - next_cols.front()->Offset;
 
-                if (!use_simd || !tuple_cols ||
-                    (Columns.size() != next_cols.size() &&
-                     tuple_size < TSimd<ui8>::SIZE * 7 / 8) ||
-                    tuple_size > TSimd<ui8>::SIZE ||
-                    (!SIMDBlock_.empty() &&
-                     TotalRowSize - next_cols.front()->Offset <
-                         TSimd<ui8>::SIZE)) {
-                    block_fallback.push_back(next_cols.front());
-                    next_cols.pop();
-                    continue;
-                }
+            const bool col_pushed = tuple_size_with_col <= max_simd_tuple_size;
+            if (col_pushed) {
+                next_cols.push(&col);
+                tuple_size = tuple_size_with_col;
+            }
 
-                SIMDDesc simd_desc;
-                simd_desc.Cols = tuple_cols;
-                simd_desc.PermMaskOffset = SIMDPermMasks_.size();
+            if (!SIMDSmallTuple_.Cols && next_cols.size() > 1 &&
+                tuple_size <= max_simd_tuple_size &&
+                (!col_pushed || !fixed_cols_left)) {
+                SIMDSmallTupleDesc simd_desc;
+                simd_desc.Cols = next_cols.size();
                 simd_desc.RowOffset = next_cols.front()->Offset;
+                simd_desc.SmallTupleSize = tuple_size;
 
                 const TColumnDesc *col_descs[kSIMDMaxCols];
                 ui32 col_max_size = 0;
@@ -291,21 +272,20 @@ TTupleLayoutFallback<TTraits>::TTupleLayoutFallback(
                     next_cols.pop();
                 }
 
+                const auto tuples_per_register = std::max(
+                    1ul, 1ul + (TSimd<ui8>::SIZE - tuple_size) / TotalRowSize);
+
                 simd_desc.InnerLoopIters = std::min(
                     size_t(kSIMDMaxInnerLoopSize),
-                    (TSimd<ui8>::SIZE / col_max_size) /
-                        std::max(size_t(1u), size_t(TSimd<ui8>::SIZE / TotalRowSize)));
-
-                const auto tuples_per_register =
-                    std::max(1u, TSimd<ui8>::SIZE / TotalRowSize);
+                    (TSimd<ui8>::SIZE / col_max_size) / tuples_per_register);
 
                 for (ui8 col_ind = 0; col_ind != simd_desc.Cols; ++col_ind) {
                     const auto &col_desc = col_descs[col_ind];
                     const size_t offset =
                         col_desc->Offset - simd_desc.RowOffset;
 
-                    BlockFixedColsSizes_.push_back(col_desc->DataSize);
                     BlockColsOffsets_.push_back(offset);
+                    BlockFixedColsSizes_.push_back(col_desc->DataSize);
                     BlockColumnsOrigInds_.push_back(col_desc->OriginalIndex);
                 }
 
@@ -313,37 +293,103 @@ TTupleLayoutFallback<TTraits>::TTupleLayoutFallback(
                      ++packing_flag) {
                     for (ui8 col_ind = 0; col_ind != simd_desc.Cols;
                          ++col_ind) {
-                        const auto &col_desc = col_descs[col_ind];
+                        const auto col_desc = col_descs[col_ind];
                         const size_t offset =
                             col_desc->Offset - simd_desc.RowOffset;
 
                         for (ui8 ind = 0; ind != simd_desc.InnerLoopIters;
                              ++ind) {
-                            SIMDPermMasks_.push_back(
-                                SIMDPack<TTraits>::BuildTuplePerm(
-                                    col_desc->DataSize,
-                                    TotalRowSize - col_desc->DataSize, offset,
-                                    ind * col_desc->DataSize *
-                                        tuples_per_register,
-                                    packing_flag % 2));
+                            auto perm = SIMDPack<TTraits>::BuildTuplePerm(
+                                col_desc->DataSize,
+                                TotalRowSize - col_desc->DataSize, tuple_size,
+                                offset,
+                                ind * col_desc->DataSize * tuples_per_register,
+                                packing_flag % 2);
+                            SIMDPermMasks_.push_back(perm);
                         }
                     }
                 }
 
-                SIMDBlock_.push_back(simd_desc);
+                SIMDSmallTuple_ = simd_desc;
+            }
+
+            if (!col_pushed) {
+                next_cols.push(&col);
+            }
+        }
+    };
+
+    const auto transpose_packing = [&](const std::vector<TColumnDesc> &columns,
+                                       bool payload) {
+        ui32 colsize = 0;
+
+        for (const auto &col : columns) {
+            if (col.SizeType != EColumnSizeType::Fixed) {
+                break;
+            }
+
+            if (colsize != col.DataSize) {
+                while (!next_cols.empty()) {
+                    fallback_cols.push_back(next_cols.front());
+                    next_cols.pop();
+                }
+
+                if (use_simd && std::find(SIMDTranspositionsColSizes_.begin(),
+                                          SIMDTranspositionsColSizes_.end(),
+                                          col.DataSize) !=
+                                    SIMDTranspositionsColSizes_.end()) {
+                    colsize = col.DataSize;
+                }
+            }
+
+            if (colsize == col.DataSize) {
+                next_cols.push(&col);
+                if (next_cols.size() * colsize == TSimd<ui8>::SIZE) {
+                    const auto ind =
+                        payload * SIMDTranspositionsColSizes_.size() +
+                        std::find(SIMDTranspositionsColSizes_.begin(),
+                                  SIMDTranspositionsColSizes_.end(), colsize) -
+                        SIMDTranspositionsColSizes_.begin();
+                    if (SIMDTranspositions_[ind].Cols == 0) {
+                        SIMDTranspositions_[ind].RowOffset =
+                            next_cols.front()->Offset;
+                    }
+                    SIMDTranspositions_[ind].Cols += next_cols.size();
+
+                    while (!next_cols.empty()) {
+                        const auto col_desc = next_cols.front();
+                        BlockColsOffsets_.push_back(col_desc->Offset);
+                        BlockFixedColsSizes_.push_back(col_desc->DataSize);
+                        BlockColumnsOrigInds_.push_back(
+                            col_desc->OriginalIndex);
+                        next_cols.pop();
+                    }
+                }
+            } else {
+                fallback_cols.push_back(&col);
             }
         }
 
         while (!next_cols.empty()) {
-            block_fallback.push_back(next_cols.front());
+            fallback_cols.push_back(next_cols.front());
             next_cols.pop();
         }
     };
 
-    manage_block_packing(KeyColumns);
-    manage_block_packing(PayloadColumns);
+    if (max_simd_tuple_size) {
+        small_tuple_packing(KeyColumns);
+        small_tuple_packing(PayloadColumns);
 
-    for (const auto col_desc_p : block_fallback) {
+        while (!next_cols.empty()) {
+            fallback_cols.push_back(next_cols.front());
+            next_cols.pop();
+        }
+    } else {
+        transpose_packing(KeyColumns, 0);
+        transpose_packing(PayloadColumns, 1);
+    }
+
+    for (const auto col_desc_p : fallback_cols) {
         BlockColsOffsets_.push_back(col_desc_p->Offset);
         BlockFixedColsSizes_.push_back(col_desc_p->DataSize);
         BlockColumnsOrigInds_.push_back(col_desc_p->OriginalIndex);
@@ -640,18 +686,20 @@ void TTupleLayoutFallback<TTraits>::Pack(
         const size_t cur_block_size = std::min(count - row_ind, BlockRows_);
         size_t cols_past = 0;
 
-        for (const auto &simd_block : SIMDBlock_) {
+        if (SIMDSmallTuple_.Cols) {
+
 #define CASE(i, j)                                                             \
     case i *kSIMDMaxCols + j:                                                  \
-        SIMDPack<TTraits>::template PackTupleOrImpl<i + 1, j + 1>(             \
-            block_columns.data() + cols_past, res + simd_block.RowOffset,      \
+        SIMDPack<TTraits>::template PackTupleOr<i + 1, j + 1>(                 \
+            block_columns.data() + cols_past, res + SIMDSmallTuple_.RowOffset, \
             cur_block_size, BlockFixedColsSizes_.data() + cols_past,           \
-            BlockColsOffsets_.data() + cols_past, TotalRowSize,                \
-            SIMDPermMasks_.data() + simd_block.PermMaskOffset, start);         \
+            BlockColsOffsets_.data() + cols_past,                              \
+            SIMDSmallTuple_.SmallTupleSize, TotalRowSize,                      \
+            SIMDPermMasks_.data(), start);                                     \
         break;
 
-            switch ((simd_block.InnerLoopIters - 1) * kSIMDMaxCols +
-                    simd_block.Cols - 1) {
+            switch ((SIMDSmallTuple_.InnerLoopIters - 1) * kSIMDMaxCols +
+                    SIMDSmallTuple_.Cols - 1) {
                 MULTI_8(MULTI_8_I, CASE)
 
             default:
@@ -660,7 +708,21 @@ void TTupleLayoutFallback<TTraits>::Pack(
 
 #undef CASE
 
-            cols_past += simd_block.Cols;
+            cols_past += SIMDSmallTuple_.Cols;
+        }
+
+        for (size_t trnsps_ind = 0; trnsps_ind != SIMDTranspositions_.size();
+             ++trnsps_ind) {
+            if (SIMDTranspositions_[trnsps_ind].Cols) {
+                SIMDPack<TTraits>::PackColSize(
+                    block_columns.data() + cols_past,
+                    res + SIMDTranspositions_[trnsps_ind].RowOffset,
+                    cur_block_size,
+                    SIMDTranspositionsColSizes_
+                        [trnsps_ind % SIMDTranspositionsColSizes_.size()],
+                    SIMDTranspositions_[trnsps_ind].Cols, TotalRowSize, start);
+                cols_past += SIMDTranspositions_[trnsps_ind].Cols;
+            }
         }
 
         PackTupleFallbackColImpl(
@@ -819,18 +881,20 @@ void TTupleLayoutFallback<TTraits>::Unpack(
         const size_t cur_block_size = std::min(count - row_ind, BlockRows_);
         size_t cols_past = 0;
 
-        for (const auto &simd_block : SIMDBlock_) {
+        if (SIMDSmallTuple_.Cols) {
+
 #define CASE(i, j)                                                             \
     case i *kSIMDMaxCols + j:                                                  \
-        SIMDPack<TTraits>::template UnpackTupleOrImpl<i + 1, j + 1>(           \
-            res + simd_block.RowOffset, block_columns.data() + cols_past,      \
+        SIMDPack<TTraits>::template UnpackTupleOr<i + 1, j + 1>(               \
+            res + SIMDSmallTuple_.RowOffset, block_columns.data() + cols_past, \
             cur_block_size, BlockFixedColsSizes_.data() + cols_past,           \
-            BlockColsOffsets_.data() + cols_past, TotalRowSize,                \
-            SIMDPermMasks_.data() + simd_block.PermMaskOffset + i * j, start); \
+            BlockColsOffsets_.data() + cols_past,                              \
+            SIMDSmallTuple_.SmallTupleSize, TotalRowSize,                      \
+            SIMDPermMasks_.data() + (i + 1) * (j + 1), start);                 \
         break;
 
-            switch ((simd_block.InnerLoopIters - 1) * kSIMDMaxCols +
-                    simd_block.Cols - 1) {
+            switch ((SIMDSmallTuple_.InnerLoopIters - 1) * kSIMDMaxCols +
+                    SIMDSmallTuple_.Cols - 1) {
                 MULTI_8(MULTI_8_I, CASE)
 
             default:
@@ -839,7 +903,20 @@ void TTupleLayoutFallback<TTraits>::Unpack(
 
 #undef CASE
 
-            cols_past += simd_block.Cols;
+            cols_past += SIMDSmallTuple_.Cols;
+        }
+
+        for (size_t trnsps_ind = 0; trnsps_ind != SIMDTranspositions_.size();
+             ++trnsps_ind) {
+            if (SIMDTranspositions_[trnsps_ind].Cols) {
+                SIMDPack<TTraits>::UnpackColSize(
+                    res + SIMDTranspositions_[trnsps_ind].RowOffset,
+                    block_columns.data() + cols_past, cur_block_size,
+                    SIMDTranspositionsColSizes_
+                        [trnsps_ind % SIMDTranspositionsColSizes_.size()],
+                    SIMDTranspositions_[trnsps_ind].Cols, TotalRowSize, start);
+                cols_past += SIMDTranspositions_[trnsps_ind].Cols;
+            }
         }
 
         UnpackTupleFallbackColImpl(

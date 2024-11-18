@@ -172,11 +172,219 @@ Y_UNIT_TEST(Pack) {
 
     CTEST  << "Time for " << (NTuples1) << " transpose (external cycle)= " << microseconds  << "[microseconds]" << Endl;
     CTEST  << "Data size =  " << Tuples1DataBytes / (1024 * 1024) << "[MB]" << Endl;
-    CTEST  << "Calculating speed = " << Tuples1DataBytes / microseconds << "MB/sec" << Endl;
+    CTEST  << "Calculating pack speed = " << Tuples1DataBytes / microseconds << "MB/sec" << Endl;
     CTEST  << Endl;
 
     UNIT_ASSERT(true);
 
+}
+
+Y_UNIT_TEST(PackMany) {
+
+    TScopedAlloc alloc(__LOCATION__);
+
+    constexpr size_t cols_types_num = 4;
+    constexpr size_t cols_cnts[cols_types_num] = {0, 20, 10, 6}; // both Key and Payload
+    const ui64 NTuples1 = 1e6 * 2;
+
+    constexpr size_t cols_sizes[cols_types_num] = {1, 2, 4, 8};
+    constexpr size_t cols_num =
+        2 * [&]<size_t... Is>(const std::index_sequence<Is...> &) {
+            return (... + cols_cnts[Is]);
+        }(std::make_index_sequence<cols_types_num>{});
+
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        CTEST << "Row: [crc32]";
+        ((cols_cnts[Is] ? CTEST << " [" << cols_sizes[Is] << "]x" <<  cols_cnts[Is] : CTEST), ...);
+        CTEST << " [mask byte]x" << (cols_num + 7) / 8;
+        ((cols_cnts[Is] ? CTEST << " [" << cols_sizes[Is] << "]x" <<  cols_cnts[Is] : CTEST), ...);
+        CTEST << Endl;
+    }(std::make_index_sequence<cols_types_num>{});
+    
+    std::vector<TColumnDesc> columns;
+    for (size_t ind = 0; ind != cols_types_num; ++ind) {
+        TColumnDesc desc;
+        desc.DataSize = cols_sizes[ind];
+
+        desc.Role = EColumnRole::Key;
+        for (size_t cnt = 0; cnt != cols_cnts[ind]; ++cnt) {
+            columns.push_back(desc);
+        }
+        desc.Role = EColumnRole::Payload;
+        for (size_t cnt = 0; cnt != cols_cnts[ind]; ++cnt) {
+            columns.push_back(desc);
+        }
+    }
+
+    UNIT_ASSERT_EQUAL(cols_num, columns.size());
+
+    auto tl = TTupleLayout::Create(columns);
+    CTEST << "Row size: " << tl->TotalRowSize << Endl;
+
+    const ui64 Tuples1DataBytes = (tl->TotalRowSize) * NTuples1;
+
+    std::vector<ui8> cols_vecs[cols_num];
+    for (size_t col = 0; col != cols_num; ++col) {
+        const size_t size = columns[col].DataSize * NTuples1;
+        cols_vecs[col].resize(size, 0);
+        for (ui32 i = 0; i < size; ++i) {
+            cols_vecs[col][i] = i;
+        }
+        for (ui32 i = 0; i < NTuples1; ++i) {
+            cols_vecs[col][i * columns[col].DataSize] = i;
+        }
+    }
+
+    const ui8* cols[cols_num];
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        ((cols[Is] = cols_vecs[Is].data()), ...);
+    }(std::make_index_sequence<cols_num>{});
+
+    std::vector<ui8> cols_valid_vecs[cols_num];
+    for (size_t col = 0; col != cols_num; ++col) {
+        cols_valid_vecs[col].resize((NTuples1 + 7)/8, ~0);
+    }
+
+    const ui8* cols_valid[cols_num];
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        ((cols_valid[Is] = cols_valid_vecs[Is].data()), ...);
+    }(std::make_index_sequence<cols_num>{});
+
+    std::vector<ui8> res(Tuples1DataBytes + 64, 0);
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+
+    std::chrono::steady_clock::time_point begin02 = std::chrono::steady_clock::now();
+    tl->Pack(cols, cols_valid, res.data(), overflow, 0, NTuples1);
+    std::chrono::steady_clock::time_point end02 = std::chrono::steady_clock::now();
+
+    ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end02 - begin02).count();
+    if (microseconds == 0) microseconds = 1;
+
+    for (size_t ind = 0; ind != NTuples1; ++ind) {
+        UNIT_ASSERT_EQUAL((ui8)ind, res.data()[tl->TotalRowSize * ind + 4]);
+    }
+
+    CTEST  << "Time for " << (NTuples1) << " transpose (external cycle)= " << microseconds  << "[microseconds]" << Endl;
+    CTEST  << "Data size =  " << Tuples1DataBytes / (1024 * 1024) << "[MB]" << Endl;
+    CTEST  << "Calculating pack-many speed = " << Tuples1DataBytes / microseconds << "[MB/sec]" << Endl;
+    CTEST  << Endl;
+
+    UNIT_ASSERT(true);
+
+}
+
+Y_UNIT_TEST(UnpackMany) {
+
+    TScopedAlloc alloc(__LOCATION__);
+
+    constexpr size_t cols_types_num = 4;
+    constexpr size_t cols_cnts[cols_types_num] = {0, 20, 10, 6}; // both Key and Payload
+    const ui64 NTuples1 = 1e6 * 2;
+
+    constexpr size_t cols_sizes[cols_types_num] = {1, 2, 4, 8};
+    constexpr size_t cols_num =
+        2 * [&]<size_t... Is>(const std::index_sequence<Is...> &) {
+            return (... + cols_cnts[Is]);
+        }(std::make_index_sequence<cols_types_num>{});
+
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        CTEST << "Row: [crc32]";
+        ((cols_cnts[Is] ? CTEST << " [" << cols_sizes[Is] << "]x" <<  cols_cnts[Is] : CTEST), ...);
+        CTEST << " [mask byte]x" << (cols_num + 7) / 8;
+        ((cols_cnts[Is] ? CTEST << " [" << cols_sizes[Is] << "]x" <<  cols_cnts[Is] : CTEST), ...);
+        CTEST << Endl;
+    }(std::make_index_sequence<cols_types_num>{});
+    
+    std::vector<TColumnDesc> columns;
+    for (size_t ind = 0; ind != cols_types_num; ++ind) {
+        TColumnDesc desc;
+        desc.DataSize = cols_sizes[ind];
+
+        desc.Role = EColumnRole::Key;
+        for (size_t cnt = 0; cnt != cols_cnts[ind]; ++cnt) {
+            columns.push_back(desc);
+        }
+        desc.Role = EColumnRole::Payload;
+        for (size_t cnt = 0; cnt != cols_cnts[ind]; ++cnt) {
+            columns.push_back(desc);
+        }
+    }
+
+    UNIT_ASSERT_EQUAL(cols_num, columns.size());
+
+    auto tl = TTupleLayout::Create(columns);
+    CTEST << "Row size: " << tl->TotalRowSize << Endl;
+
+    const ui64 Tuples1DataBytes = (tl->TotalRowSize) * NTuples1;
+
+    std::vector<ui8> cols_vecs[cols_num];
+    for (size_t col = 0; col != cols_num; ++col) {
+        const size_t size = columns[col].DataSize * NTuples1;
+        cols_vecs[col].resize(size, 0);
+        for (ui32 i = 0; i < size; ++i) {
+            cols_vecs[col][i] = i;
+        }
+    }
+
+    const ui8* cols[cols_num];
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        ((cols[Is] = cols_vecs[Is].data()), ...);
+    }(std::make_index_sequence<cols_num>{});
+
+    std::vector<ui8> cols_valid_vecs[cols_num];
+    for (size_t col = 0; col != cols_num; ++col) {
+        cols_valid_vecs[col].resize((NTuples1 + 7)/8, ~0);
+    }
+
+    const ui8* cols_valid[cols_num];
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        ((cols_valid[Is] = cols_valid_vecs[Is].data()), ...);
+    }(std::make_index_sequence<cols_num>{});
+
+    std::vector<ui8> res(Tuples1DataBytes + 64, 0);
+    std::vector<ui8, TMKQLAllocator<ui8>> overflow;
+    tl->Pack(cols, cols_valid, res.data(), overflow, 0, NTuples1);
+
+    std::vector<ui8> cols_new_vecs[cols_num];
+    for (size_t col = 0; col != cols_num; ++col) {
+        const size_t size = columns[col].DataSize * NTuples1;
+        cols_new_vecs[col].resize(size, 13);
+    }
+
+    ui8* cols_new[cols_num];
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        ((cols_new[Is] = cols_new_vecs[Is].data()), ...);
+    }(std::make_index_sequence<cols_num>{});
+
+    std::vector<ui8> cols_new_valid_vecs[cols_num];
+    for (size_t col = 0; col != cols_num; ++col) {
+        cols_new_valid_vecs[col].resize((NTuples1 + 7)/8, 13);
+    }
+
+    ui8* cols_new_valid[cols_num];
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        ((cols_new_valid[Is] = cols_new_valid_vecs[Is].data()), ...);
+    }(std::make_index_sequence<cols_num>{});
+
+
+    std::chrono::steady_clock::time_point begin02 = std::chrono::steady_clock::now();
+    tl->Unpack(cols_new, cols_new_valid, res.data(), overflow, 0, NTuples1);
+    std::chrono::steady_clock::time_point end02 = std::chrono::steady_clock::now();
+    ui64 microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end02 - begin02).count();
+
+    if (microseconds == 0) microseconds = 1;
+
+    CTEST  << "Time for " << (NTuples1) << " transpose (external cycle)= " << microseconds  << "[microseconds]" << Endl;
+    CTEST  << "Data size =  " << Tuples1DataBytes / (1024 * 1024) << "[MB]" << Endl;
+    CTEST  << "Calculating unpack-many speed = " << Tuples1DataBytes / microseconds << "[MB/sec]" << Endl;
+    CTEST  << Endl;
+
+    [&]<size_t... Is>(const std::index_sequence<Is...>&) {
+        const bool data_check = ((std::memcmp(cols[Is], cols_new[Is], cols_vecs[Is].size()) == 0) && ...);
+        UNIT_ASSERT(data_check);
+        const bool valid_check = ((std::memcmp(cols_valid[Is], cols_new_valid[Is], cols_valid_vecs[Is].size()) == 0) && ...);
+        UNIT_ASSERT(valid_check); 
+    }(std::make_index_sequence<cols_num>{});
 }
 
 Y_UNIT_TEST(Unpack) {
@@ -215,9 +423,9 @@ Y_UNIT_TEST(Unpack) {
 
     for (ui32 i = 0; i < NTuples1; ++i) {
         col1[i] = i;
-        col2[i] = i;
-        col3[i] = i;
-        col4[i] = i;
+        col2[i] = i ^ 1;
+        col3[i] = i ^ 7;
+        col4[i] = i ^ 13;
     }
 
     const ui8* cols[4];
@@ -273,7 +481,7 @@ Y_UNIT_TEST(Unpack) {
 
     CTEST  << "Time for " << (NTuples1) << " transpose (external cycle)= " << microseconds  << "[microseconds]" << Endl;
     CTEST  << "Data size =  " << Tuples1DataBytes / (1024 * 1024) << "[MB]" << Endl;
-    CTEST  << "Calculating speed = " << Tuples1DataBytes / microseconds << "MB/sec" << Endl;
+    CTEST  << "Calculating unpack speed = " << Tuples1DataBytes / microseconds << "MB/sec" << Endl;
     CTEST  << Endl;
 
     UNIT_ASSERT(std::memcmp(col1.data(), col1_new.data(), sizeof(ui64) * col1.size()) == 0);

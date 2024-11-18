@@ -117,14 +117,23 @@ template <typename TTrait> struct TTupleLayoutFallback : public TTupleLayout {
     std::vector<size_t> BlockFixedColsSizes_;
     std::vector<size_t> BlockColumnsOrigInds_;
 
-    struct SIMDDesc {
+    struct SIMDSmallTupleDesc {
+        ui8 Cols = 0;
         ui8 InnerLoopIters;
-        ui8 Cols;
-        size_t PermMaskOffset;
+        size_t SmallTupleSize;
         size_t RowOffset;
     };
-    std::vector<SIMDDesc> SIMDBlock_;       // SIMD iterations description
-    std::vector<TSimd<ui8>> SIMDPermMasks_; // SIMD precomputed masks
+    SIMDSmallTupleDesc SIMDSmallTuple_;
+    std::vector<TSimd<ui8>> SIMDPermMasks_; // small tuple precomputed masks
+
+    struct SIMDTransposeDesc {
+        ui8 Cols = 0;
+        size_t RowOffset;
+    };
+    // [1, 2, 4, 8] bytes x [Key, Payload]
+    std::array<SIMDTransposeDesc, 8> SIMDTranspositions_;
+    static constexpr std::array<size_t, 4> SIMDTranspositionsColSizes_ = {1, 2,
+                                                                          4, 8};
 };
 
 template <>

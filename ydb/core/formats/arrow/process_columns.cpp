@@ -77,10 +77,7 @@ TConclusion<std::shared_ptr<TDataContainer>> AdaptColumnsImpl(
             columns.push_back(srcBatch->column(index));
             fields.emplace_back(field);
             auto srcField = srcBatch->schema()->field(index);
-            if (field->Equals(srcField)) {
-                AFL_VERIFY(columns.back()->type()->Equals(field->type()))("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")(
-                    "column", field->name())("column_type", field->type()->ToString())("incoming_type", columns.back()->type()->ToString());
-            } else {
+            if (!field->type()->Equals(srcField->type())) {
                 AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")(
                     "column", field->name())("column_type", field->ToString(true))("incoming_type", srcField->ToString(true));
                 return TConclusionStatus::Fail("incompatible column types");
@@ -286,13 +283,13 @@ TConclusion<std::shared_ptr<TDataContainer>> AdaptIncomingToDestinationExtImpl(c
             const auto& dstField = dstSchema->GetFieldByIndexVerified(dstIndex);
             switch (differentColumnTypesPolicy) {
                 case TColumnOperator::ECheckFieldTypesPolicy::Verify:
-                    AFL_VERIFY(dstField->Equals(srcField))("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")(
+                    AFL_VERIFY(dstField->type()->Equals(srcField->type()))("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")(
                         "dst_column", dstField->ToString(true))("src_column", srcField->ToString(true));
                     break;
                 case TColumnOperator::ECheckFieldTypesPolicy::Error:
-                    if (!dstField->Equals(srcField)) {
+                    if (!dstField->type()->Equals(srcField->type())) {
                         AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_use_incoming_batch")("reason", "invalid_column_type")(
-                            "dst_column", dstField->ToString(true))("src_column", srcField->ToString(true));
+                            "dst_column", dstField->type()->ToString())("src_column", srcField->type()->ToString())("name", srcField->name());
                         return TConclusionStatus::Fail("incompatible column types for '" + dstField->name() + "'");
                     }
                     break;

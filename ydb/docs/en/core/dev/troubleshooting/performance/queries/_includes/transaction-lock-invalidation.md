@@ -1,4 +1,4 @@
-1. Open the **DB overview** Grafana dashboard.
+1. Open the **[DB overview](../../../../../reference/observability/metrics/grafana-dashboards.md#dboverview)** Grafana dashboard.
 
 1. See if the **Transaction Locks Invalidation** chart shows any spikes.
 

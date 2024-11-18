@@ -101,6 +101,16 @@ Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consist
 
 The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#distributed-transaction-implementation).
 
+### Interactive transactions {#interactive-transaction}
+
+The term **interactive transactions** refers to transactions that are split into multiple queries and involve data processing by an application between these queries. For example:
+
+1. Select some data.
+1. Process the selected data in the application.
+1. Update some data in the database.
+1. Commit the transaction in a separate query.
+
+
 ### Multi-version concurrency control {#mvcc}
 
 [**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method {{ ydb-short-name }} used to allow multiple concurrent transactions to access the database simultaneously without interfering with each other. It is described in more detail in a separate article [{#T}](mvcc.md).

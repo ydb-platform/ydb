@@ -27,9 +27,23 @@ Consider the following solutions to address shard overload:
 
 * If the problematic table is not partitioned by load, enable partitioning by load.
 
+    {% note tip %}
+
+    A table is not partitioned by load, if you see the `Partitioning by load: false` line on the **Diagnostics > Info** tab in the **Embedded UI** or the  `ydb scheme describe` command output.
+
+    {% endnote %}
+
 * If the table has reached the maximum number of partitions, increase the partition limit.
 
+    {% note tip %}
+
+    To determine the number of partitions in the table, see the `PartCount` value on the **Diagnostics > Info** tab in the **Embedded UI**.
+
+    {% endnote %}
+
+
 Both operations can be performed by executing an [`ALTER TABLE ... SET`](../../../../yql/reference/syntax/alter_table/set.md) query.
+
 
 ### For the imbalanced primary key {#pk-recommendations}
 

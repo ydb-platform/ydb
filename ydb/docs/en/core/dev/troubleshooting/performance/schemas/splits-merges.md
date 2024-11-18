@@ -6,7 +6,7 @@
 
 {% endif %}
 
-Each [row-oriented table](../../../../concepts/datamodel/table.md#row-oriented-tables) partition in {{ ydb-short-name }} is processed by a [data shard](../../../../concepts/glossary.md#data-shard) tablet. {{ ydb-short-name }} supports automatic splitting and merging of data shards which allows it to seamlessly adapt to changes in workloads. However, these operations are not free and might have a short-term negative impact on query latencies.
+Each [row-oriented table](../../../../concepts/datamodel/table.md#row-oriented-tables) partition in {{ ydb-short-name }} is processed by a [data shard](../../../../concepts/glossary.md#data-shard) tablet. {{ ydb-short-name }} supports automatic [splitting and merging](../../../../concepts/datamodel/table.md#partitioning) of data shards which allows it to seamlessly adapt to changes in workloads. However, these operations are not free and might have a short-term negative impact on query latencies.
 
 When {{ ydb-short-name }} splits a partition, it replaces the original partition with two new partitions covering the same range of primary keys. Now, two data shards process the range of primary keys that was previously handled by a single data shard, thereby adding more computing resources for the table.
 
@@ -27,6 +27,6 @@ When configuring [table partitioning](../../../../concepts/datamodel/table.md#pa
 
 ## Recommendations
 
-If the user load on {{ ydb-short-name }} has not changed, consider adjusting the gap between the min and max limits for the number of table partitions to the recommended 20% difference.
+If the user load on {{ ydb-short-name }} has not changed, consider adjusting the gap between the min and max limits for the number of table partitions to the recommended 20% difference. Use the [`ALTER TABLE table_name SET (key = value)`](../../../../yql/reference/syntax/alter_table/set.md) YQL statement to update the [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](../../../../concepts/datamodel/table.md#auto_partitioning_min_partitions_count) and [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](../../../../concepts/datamodel/table.md#auto_partitioning_max_partitions_count) parameters.
 
 If you want to avoid splitting and merging data shards, you can set the min limit to the max limit value or disable partitioning by load.

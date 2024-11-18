@@ -1,12 +1,18 @@
-# Updating {{ ydb-short-name }}
+# Rolling restart
 
-{{ ydb-short-name }} clusters can be updated without any downtime, which is possible because {{ ydb-short-name }} is a distributed system that supports rolling restart. To ensure continuous data availability for querying, {{ ydb-short-name }} includes a component that tracks all outages and nodes taken offline for maintenance, such as restarts. This component halts new maintenance requests if they might risk data availability.
+{{ ydb-short-name }} clusters can be updated without downtime, which is possible because {{ ydb-short-name }} normally has redundant components and supports rolling restart procedure. To ensure continuous data availability, {{ ydb-short-name }} includes Cluster Management System (CMS) that tracks all outages and nodes taken offline for maintenance, such as restarts. CMS halts new maintenance requests if they might risk data availability.
 
 However, even if data is always available, the restart of all nodes in a relatively short period of time might have a noticeable impact on overall performance. Each [tablet](../../../../concepts/glossary.md#tablet) running on a restarted node is relaunched on a different node. Moving a tablet between nodes takes time and may affect latencies of queries involving it. See recommendations [for rolling restart](#rolling-restart).
 
 Furthermore, a new {{ ydb-short-name }} version may handle queries differently. While performance generally improves with each update, certain corner cases may occasionally end up with degraded performance. See recommendations [for new version performance](#version-performance).
 
 ## Diagnostics
+
+{% note warning %}
+
+Diagnostics of {{ ydb-short-name }} rolling restarts and updates relies only on secondary symptoms. To be absolutely sure, contact your database administrator.
+
+{% endnote %}
 
 To check if the {{ ydb-short-name }} cluster is currently being updated:
 
@@ -17,6 +23,13 @@ To check if the {{ ydb-short-name }} cluster is currently being updated:
     Also, see if the nodes with the higher {{ ydb-short-name }} version have the lower uptime value.
 
     ![](_assets/updates.png)
+
+{% note alert %}
+
+Low uptime value of a {{ ydb-short-name }} node might also indicate other problems. For example, see [{#T}](../hardware/insufficient-memory.md).
+
+{% endnote %}
+
 
 ## Recommendations
 

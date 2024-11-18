@@ -2,15 +2,12 @@
 
 {{ ydb-short-name }} automatically balances the load by moving tablets from overloaded nodes to other nodes. This process is managed by [Hive](../../../../concepts/glossary.md#hive). When Hive moves tablets, queries affecting those tablets might experience increased latencies while they wait for the tablet to get initialized on the new node.
 
-[//]: # (This information is taken from a draft topic Concepts > Hive.)
-[//]: # (TODO: When the above-mentioned topic is merged, remove the info from here and add a link.)
-
 {{ ydb-short-name }} considers usage of the following hardware resources for balancing nodes:
 
 - CPU
 - Memory
 - Network
-- [Counter](*counter)
+- [Count](*count)
 
 Autobalancing occurs in the following cases:
 
@@ -86,6 +83,5 @@ Adjust Hive balancer settings:
     {% endnote %}
 
 
-
-[*counter]: A virtual resource is used for balancing tablets that lack other hardware resource metrics (such as CPU, memory, or network) and for column shards. If a tablet uses this resource, its value is always set to 1.
+[*count]: Count is a virtual resource for distributing tablets of the same type evenly between nodes.
 

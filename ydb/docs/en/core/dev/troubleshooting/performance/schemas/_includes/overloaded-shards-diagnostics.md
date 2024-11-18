@@ -1,44 +1,80 @@
-1. Analyze the **Overloaded shard count** chart in the **DB overview** Grafana dashboard.
+1. Use the Embedded UI or Grafana to see if the {{ ydb-short-name }} nodes are overloaded:
 
-    ![](../_assets/overloaded-shards-dashboard.png)
+    - In the **[DB overview](../../../../../reference/observability/metrics/grafana-dashboards.md#dboverview)** Grafana dashboard, analyze the **Overloaded shard count** chart.
 
-    The chart indicates whether the {{ ydb-short-name }} cluster has overloaded shards, but it does not specify which table's shards are overloaded.
+        ![](../_assets/overloaded-shards-dashboard.png)
 
-2. To identify the table with overloaded shards, follow these steps:
+        The chart indicates whether the {{ ydb-short-name }} cluster has overloaded shards, but it does not specify which table's shards are overloaded.
 
-    1. In the [Embedded UI](../../../../../reference/embedded-ui/index.md), go to the **Databases** tab and click on the database.
+        {% note tip %}
 
-    2. On the **Navigation** tab, ensure the required database is selected.
+        Use Grafana to set up alert notifications when {{ ydb-short-name }} data shards get overloaded.
 
-    3. Open the **Diagnostics** tab.
+        {% endnote %}
 
-    4. Open the **Top shards** tab.
 
-    5. In the **Immediate** and **Historical** tabs, sort the shards by the **CPUCores** column and analyze the information.
+    - In the [Embedded UI](../../../../../reference/embedded-ui/index.md):
 
-    ![](../_assets/partitions-by-cpu.png)
+        1. Go to the **Databases** tab and click on the database.
 
-    Additionally, the information about overloaded shards is provided as a system table. For more information, see [{#T}](../../../../system-views.md#top-overload-partitions).
+        1. On the **Navigation** tab, ensure the required database is selected.
 
-    {% endnote %}
+        1. Open the **Diagnostics** tab.
 
-3. To pinpoint the schema issue, follow these steps:
+        1. Open the **Top shards** tab.
 
-    1. Retrieve information about the problematic table using the [{{ ydb-short-name }} CLI](../../../../../reference/ydb-cli/index.md). Run the following command:
+        1. In the **Immediate** and **Historical** tabs, sort the shards by the **CPUCores** column and analyze the information.
 
-        ```bash
-        ydb scheme describe <table_name>
-        ```
+        ![](../_assets/partitions-by-cpu.png)
 
-    2. In the command output, analyze the **Auto partitioning settings**:
+        Additionally, the information about overloaded shards is provided as a system table. For more information, see [{#T}](../../../../system-views.md#top-overload-partitions).
 
-        * `Partitioning by size`
-        * `Partitioning by load`
-        * `Max partitions count`
+1. To pinpoint the schema issue, use the [Embedded UI](../../../../../reference/embedded-ui/index.md) or [{{ ydb-short-name }} CLI](../../../../../reference/ydb-cli/index.md):
 
-        If the table does not have these options, see [Recommendations for table configuration](../overloaded-shards.md#table-config).
+    - In the [Embedded UI](../../../../../reference/embedded-ui/index.md):
 
-4. Analyze whether primary key values increment monotonically:
+        1. On the **Databases** tab, click on the database.
+
+        1. On the **Navigation** tab, select the required table.
+
+        1. Open the **Diagnostics** tab.
+
+        1. On the **Describe** tab, navigate to `root > PathDescription > Table > PartitionConfig > PartitioningPolicy`.
+
+            ![Describe](../_assets/describe.png)
+
+        1. Analyze the **PartitioningPolicy** values:
+
+            - `SizeToSplit`
+            - `SplitByLoadSettings`
+            - `MaxPartitionsCount`
+
+            If the table does not have these options, see [Recommendations for table configuration](../overloaded-shards.md#table-config).
+
+        {% note info %}
+
+        You can also find this information on the **Diagnostics > Info** tab.
+
+        {% endnote %}
+
+
+    - In the [{{ ydb-short-name }} CLI](../../../../../reference/ydb-cli/index.md):
+
+        1. To retrieve information about the problematic table, run the following command:
+
+            ```bash
+            ydb scheme describe <table_name>
+            ```
+
+        2. In the command output, analyze the **Auto partitioning settings**:
+
+            - `Partitioning by size`
+            - `Partitioning by load`
+            - `Max partitions count`
+
+            If the table does not have these options, see [Recommendations for table configuration](../overloaded-shards.md#table-config).
+
+1. Analyze whether primary key values increment monotonically:
 
     - Check the data type of the primary key column. `Serial` data types are used for autoincrementing values.
 

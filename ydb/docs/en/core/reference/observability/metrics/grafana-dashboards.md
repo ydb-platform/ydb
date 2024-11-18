@@ -8,6 +8,24 @@ General database dashboard.
 
 Download the [dbstatus.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/dbstatus.json) file with the **DB status** dashboard.
 
+
+## DB overview {#dboverview}
+
+General database dashboard by categories:
+
+- Health
+- API
+- API details
+- CPU
+- CPU pools
+- Memory
+- Storage
+- DataShard
+- DataShard details
+- Latency
+
+Download the [dboverview.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/dboverview.json) file with the **DB overview** dashboard.
+
 ## Actors {#actors}
 
 CPU utilization in an actor system.

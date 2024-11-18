@@ -39,6 +39,7 @@ namespace {
                 // Split features
                 EFlag::SplitOrOperator
             );
+            EnableFunction("Re2.Grep");  // For REGEXP pushdown
         }
     };
 

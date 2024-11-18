@@ -180,7 +180,10 @@ namespace NKikimr {
         Y_DEBUG_ABORT_UNLESS(MinREALHugeBlobInBytes);
         const ui32 partSize = Info->Type.PartSize(ev->Get()->Id);
 
-        if (EnablePutBatching && partSize < MinREALHugeBlobInBytes && partSize <= MaxBatchedPutSize) {
+        TInstant now = TActivationContext::Now();
+
+        if (Controls.EnablePutBatching.Update(now) && partSize < MinREALHugeBlobInBytes &&
+                partSize <= MaxBatchedPutSize) {
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
             TEvBlobStorage::TEvPut::ETactic tactic = ev->Get()->Tactic;
             Y_ABORT_UNLESS((ui64)handleClass <= PutHandleClassCount);
@@ -278,7 +281,7 @@ namespace NKikimr {
                     .Event = ev->Get(),
                     .ExecutionRelay = ev->Get()->ExecutionRelay
                 },
-                .UseVPatch = static_cast<bool>(EnableVPatch.Update(now))
+                .UseVPatch = static_cast<bool>(Controls.EnableVPatch.Update(now))
             }),
             ev->Get()->Deadline
         );
@@ -554,7 +557,7 @@ namespace NKikimr {
         ++*Mon->EventStopPutBatching;
         LWPROBE(DSProxyBatchedPutRequest, BatchedPutRequestCount, GroupId.GetRawId());
         BatchedPutRequestCount = 0;
-        EnablePutBatching.Update(TActivationContext::Now());
+        Controls.EnablePutBatching.Update(TActivationContext::Now());
     }
 
     void TBlobStorageGroupProxy::Handle(TEvStopBatchingGetRequests::TPtr& ev) {

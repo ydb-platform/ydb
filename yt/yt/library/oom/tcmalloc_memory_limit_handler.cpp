@@ -35,10 +35,14 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
 TString MakeIncompletePath(const TString& path)
 {
     return NYT::Format("%v_incomplete", path);
 }
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -205,7 +209,7 @@ private:
     {
         return NYT::MakeFormatterWrapper([this, &timestamp] (TStringBuilderBase* builder) {
             if (Options_.FilenameSuffix) {
-                builder->AppendFormat("%v_", Options_.FilenameSuffix);
+                builder->AppendFormat("%v_", *Options_.FilenameSuffix);
             }
             FormatValue(builder, timestamp, "v");
         });

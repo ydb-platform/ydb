@@ -278,7 +278,7 @@ TTraceContext* GetCurrentTraceContext();
 //! Flushes the elapsed time of the current trace context (if any).
 void FlushCurrentTraceContextElapsedTime();
 
-//!
+//! Returns a trace context from #storage (null if there is none).
 TTraceContext* TryGetTraceContextFromPropagatingStorage(const NConcurrency::TPropagatingStorage& storage);
 
 //! Creates a new trace context. If the current trace context exists, it becomes the parent of the

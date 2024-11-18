@@ -110,7 +110,7 @@ namespace NYql::NConnector::NTest {
             "login"_a = login,
             "password"_a = password,
             "use_tls"_a = useTls ? "TRUE" : "FALSE",
-            "protocol"_a = NYql::NConnector::NApi::EProtocol_Name(protocol),
+            "protocol"_a = NConnectorCommon::EProtocol_Name(protocol),
             "service_account_id"_a = serviceAccountId,
             "service_account_id_signature"_a = serviceAccountIdSignature,
             "source_type"_a = ToString(NYql::EDatabaseType::ClickHouse),

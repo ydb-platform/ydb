@@ -117,11 +117,11 @@ namespace NYql::NDq {
         void Bootstrap() {
             auto dsi = LookupSource.data_source_instance();
             YQL_CLOG(INFO, ProviderGeneric) << "New generic proivider lookup source actor(ActorId=" << SelfId() << ") for"
-                                            << " kind=" << NYql::NConnector::NApi::EDataSourceKind_Name(dsi.kind())
+                                            << " kind=" << NConnectorCommon::EDataSourceKind_Name(dsi.kind())
                                             << ", endpoint=" << dsi.endpoint().ShortDebugString()
                                             << ", database=" << dsi.database()
                                             << ", use_tls=" << ToString(dsi.use_tls())
-                                            << ", protocol=" << NYql::NConnector::NApi::EProtocol_Name(dsi.protocol())
+                                            << ", protocol=" << NConnectorCommon::EProtocol_Name(dsi.protocol())
                                             << ", table=" << LookupSource.table();
             Become(&TGenericLookupActor::StateFunc);
         }

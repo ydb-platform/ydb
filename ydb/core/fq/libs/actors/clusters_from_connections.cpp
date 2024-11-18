@@ -1,7 +1,6 @@
 #include "clusters_from_connections.h"
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_cluster_config.h>
 #include <yql/essentials/utils/url_builder.h>
 #include <ydb/library/actors/http/http.h>
@@ -126,21 +125,21 @@ void FillGenericClusterConfigBase(
     // In YQv1 we just hardcode the appropriate protocols here.
     // In YQv2 protocol can be configured via `CREATE EXTERNAL DATA SOURCE` params.
     switch (dataSourceKind) {
-        case NYql::NConnector::NApi::CLICKHOUSE:
-            clusterCfg.SetProtocol(common.GetUseNativeProtocolForClickHouse() ? NYql::NConnector::NApi::EProtocol::NATIVE : NYql::NConnector::NApi::EProtocol::HTTP);
+        case NConnectorCommon::CLICKHOUSE:
+            clusterCfg.SetProtocol(common.GetUseNativeProtocolForClickHouse() ? NConnectorCommon::EProtocol::NATIVE : NConnectorCommon::EProtocol::HTTP);
             break;
-        case NYql::NConnector::NApi::GREENPLUM:
-            clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
+        case NConnectorCommon::GREENPLUM:
+            clusterCfg.SetProtocol(NConnectorCommon::EProtocol::NATIVE);
             break;
-        case NYql::NConnector::NApi::MYSQL:
-            clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
+        case NConnectorCommon::MYSQL:
+            clusterCfg.SetProtocol(NConnectorCommon::EProtocol::NATIVE);
             break;
-        case NYql::NConnector::NApi::POSTGRESQL:
-            clusterCfg.SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
+        case NConnectorCommon::POSTGRESQL:
+            clusterCfg.SetProtocol(NConnectorCommon::EProtocol::NATIVE);
             break;
         default:
             ythrow yexception() << "Unexpected data source kind: '" 
-                                << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind) << "'";
+                                << NConnectorCommon::EDataSourceKind_Name(dataSourceKind) << "'";
     }
 
     ValidateGenericClusterConfig(clusterCfg, "NFq::FillGenericClusterFromConfig");
@@ -224,8 +223,8 @@ void AddClustersFromConnections(
         case FederatedQuery::ConnectionSetting::kYdbDatabase: {
             const auto& db = conn.content().setting().ydb_database();
             auto* clusterCfg = gatewaysConfig.MutableGeneric()->AddClusterMapping();
-            clusterCfg->SetKind(NYql::NConnector::NApi::EDataSourceKind::YDB);
-            clusterCfg->SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
+            clusterCfg->SetKind(NConnectorCommon::EDataSourceKind::YDB);
+            clusterCfg->SetProtocol(NConnectorCommon::EProtocol::NATIVE);
             clusterCfg->SetName(connectionName);
             clusterCfg->SetDatabaseId(db.database_id());
             clusterCfg->SetUseSsl(!common.GetDisableSslForGenericDataSources());
@@ -239,7 +238,7 @@ void AddClustersFromConnections(
                 *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
                 conn.content().setting().clickhouse_cluster(),
                 connectionName,
-                NYql::NConnector::NApi::EDataSourceKind::CLICKHOUSE,
+                NConnectorCommon::EDataSourceKind::CLICKHOUSE,
                 authToken,
                 accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
@@ -272,7 +271,7 @@ void AddClustersFromConnections(
                 *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
                 conn.content().setting().postgresql_cluster(),
                 connectionName,
-                NYql::NConnector::NApi::EDataSourceKind::POSTGRESQL,
+                NConnectorCommon::EDataSourceKind::POSTGRESQL,
                 authToken,
                 accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
@@ -284,7 +283,7 @@ void AddClustersFromConnections(
                 *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
                 conn.content().setting().greenplum_cluster(),
                 connectionName,
-                NYql::NConnector::NApi::EDataSourceKind::GREENPLUM,
+                NConnectorCommon::EDataSourceKind::GREENPLUM,
                 authToken,
                 accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
@@ -296,7 +295,7 @@ void AddClustersFromConnections(
                 *gatewaysConfig.MutableGeneric()->AddClusterMapping(),
                 conn.content().setting().mysql_cluster(),
                 connectionName,
-                NYql::NConnector::NApi::EDataSourceKind::MYSQL,
+                NConnectorCommon::EDataSourceKind::MYSQL,
                 authToken,
                 accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);

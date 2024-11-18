@@ -6,6 +6,17 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+// FIXME: simplify this after YQ-3839 is completed
+#if __has_include(<yql/essentials/providers/common/proto/connector/common/data_source.pb.h>)
+    #error #include <yql/essentials/providers/common/proto/connector/common/data_source.pb.h>
+
+    namespace NConnectorCommon = NYql::NConnector::NCommon;
+#else
+    #include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
+
+    namespace NConnectorCommon = NYql::NConnector::NApi;
+#endif
+
 namespace NYql::NDq {
 
     template <typename TDerived>

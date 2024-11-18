@@ -21,21 +21,21 @@ namespace NYql {
 
     namespace {
 
-        TString GetSourceType(NYql::NConnector::NApi::TDataSourceInstance dsi) {
+        TString GetSourceType(NConnectorCommon::TDataSourceInstance dsi) {
             switch (dsi.kind()) {
-                case NYql::NConnector::NApi::CLICKHOUSE:
+                case NConnectorCommon::CLICKHOUSE:
                     return "ClickHouseGeneric";
-                case NYql::NConnector::NApi::POSTGRESQL:
+                case NConnectorCommon::POSTGRESQL:
                     return "PostgreSqlGeneric";
-                case NYql::NConnector::NApi::MYSQL:
+                case NConnectorCommon::MYSQL:
                     return "MySqlGeneric";
-                case NYql::NConnector::NApi::YDB:
+                case NConnectorCommon::YDB:
                     return "YdbGeneric";
-                case NYql::NConnector::NApi::GREENPLUM:
+                case NConnectorCommon::GREENPLUM:
                     return "GreenplumGeneric";
-                case NYql::NConnector::NApi::MS_SQL_SERVER:
+                case NConnectorCommon::MS_SQL_SERVER:
                     return "MsSQLServerGeneric";
-                case NYql::NConnector::NApi::ORACLE:
+                case NConnectorCommon::ORACLE:
                     return "OracleGeneric";
                 default:
                     ythrow yexception() << "Data source kind is unknown or not specified";

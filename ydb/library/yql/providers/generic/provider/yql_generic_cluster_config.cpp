@@ -6,7 +6,6 @@
 #include <util/string/cast.h>
 #include <util/generic/yexception.h>
 
-#include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
 #include "yql_generic_cluster_config.h"
@@ -200,9 +199,9 @@ namespace NYql {
 
     void ParseProtocol(const THashMap<TString, TString>& properties,
                        NYql::TGenericClusterConfig& clusterConfig) {
-        using namespace NConnector::NApi;
+        using namespace NConnectorCommon;
 
-        if (IsIn({EDataSourceKind::GREENPLUM, EDataSourceKind::YDB, EDataSourceKind::MYSQL, EDataSourceKind::MS_SQL_SERVER, EDataSourceKind::ORACLE}, clusterConfig.GetKind())) {
+        if (IsIn({GREENPLUM, YDB, MYSQL, MS_SQL_SERVER, ORACLE}, clusterConfig.GetKind())) {
             clusterConfig.SetProtocol(EProtocol::NATIVE);
             return;
         }
@@ -314,7 +313,7 @@ namespace NYql {
             "context"_a = context,
             "msg"_a = msg,
             "name"_a = clusterConfig.GetName(),
-            "kind"_a = NConnector::NApi::EDataSourceKind_Name(clusterConfig.GetKind()),
+            "kind"_a = NConnectorCommon::EDataSourceKind_Name(clusterConfig.GetKind()),
             "host"_a = clusterConfig.GetEndpoint().Gethost(),
             "port"_a = clusterConfig.GetEndpoint().Getport(),
             "database_id"_a = clusterConfig.GetDatabaseId(),
@@ -325,28 +324,28 @@ namespace NYql {
             "token"_a = ToString(clusterConfig.GetToken().size()),
             "use_ssl"_a = clusterConfig.GetUseSsl() ? "TRUE" : "FALSE",
             "database_name"_a = clusterConfig.GetDatabaseName(),
-            "protocol"_a = NConnector::NApi::EProtocol_Name(clusterConfig.GetProtocol()));
+            "protocol"_a = NConnectorCommon::EProtocol_Name(clusterConfig.GetProtocol()));
     }
 
-    static const TSet<NConnector::NApi::EDataSourceKind> managedDatabaseKinds{
-        NConnector::NApi::EDataSourceKind::CLICKHOUSE,
-        NConnector::NApi::EDataSourceKind::GREENPLUM,
-        NConnector::NApi::EDataSourceKind::MYSQL,
-        NConnector::NApi::EDataSourceKind::POSTGRESQL,
-        NConnector::NApi::EDataSourceKind::YDB,
+    static const TSet<NConnectorCommon::EDataSourceKind> managedDatabaseKinds{
+        NConnectorCommon::CLICKHOUSE,
+        NConnectorCommon::GREENPLUM,
+        NConnectorCommon::MYSQL,
+        NConnectorCommon::POSTGRESQL,
+        NConnectorCommon::YDB,
     };
 
-    static const TSet<NConnector::NApi::EDataSourceKind> traditionalRelationalDatabaseKinds{
-        NConnector::NApi::EDataSourceKind::CLICKHOUSE,
-        NConnector::NApi::EDataSourceKind::GREENPLUM,
-        NConnector::NApi::EDataSourceKind::MS_SQL_SERVER,
-        NConnector::NApi::EDataSourceKind::MYSQL,
-        NConnector::NApi::EDataSourceKind::ORACLE,
-        NConnector::NApi::EDataSourceKind::POSTGRESQL,
+    static const TSet<NConnectorCommon::EDataSourceKind> traditionalRelationalDatabaseKinds{
+        NConnectorCommon::CLICKHOUSE,
+        NConnectorCommon::GREENPLUM,
+        NConnectorCommon::MS_SQL_SERVER,
+        NConnectorCommon::MYSQL,
+        NConnectorCommon::ORACLE,
+        NConnectorCommon::POSTGRESQL,
     };
 
-    bool DataSourceMustHaveDataBaseName(const NConnector::NApi::EDataSourceKind& sourceKind) {
-        return traditionalRelationalDatabaseKinds.contains(sourceKind) && sourceKind != NConnector::NApi::ORACLE;
+    bool DataSourceMustHaveDataBaseName(const NConnectorCommon::EDataSourceKind& sourceKind) {
+        return traditionalRelationalDatabaseKinds.contains(sourceKind) && sourceKind != NConnectorCommon::ORACLE;
     }
 
     void ValidateGenericClusterConfig(
@@ -407,7 +406,7 @@ namespace NYql {
         // YDB:
         // * set database name when working with on-prem YDB instance;
         // * but set database ID when working with managed YDB.
-        if (clusterConfig.GetKind() == NConnector::NApi::YDB) {
+        if (clusterConfig.GetKind() == NConnectorCommon::YDB) {
             if (clusterConfig.HasDatabaseName() && clusterConfig.HasDatabaseId()) {
                 return ValidationError(
                     clusterConfig,
@@ -425,7 +424,7 @@ namespace NYql {
 
         // Oracle:
         // * always set service_name for oracle;
-        if (clusterConfig.GetKind() == NConnector::NApi::ORACLE) {
+        if (clusterConfig.GetKind() == NConnectorCommon::ORACLE) {
             if (!clusterConfig.GetDataSourceOptions().contains("service_name")) {
                 return ValidationError(
                     clusterConfig,
@@ -450,14 +449,14 @@ namespace NYql {
             return ValidationError(clusterConfig, context, "empty field 'Name'");
         }
 
-        if (clusterConfig.GetKind() == NConnector::NApi::EDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED) {
+        if (clusterConfig.GetKind() == NConnectorCommon::DATA_SOURCE_KIND_UNSPECIFIED) {
             return ValidationError(clusterConfig, context, "empty field 'Kind'");
         }
 
         // TODO: validate Credentials.basic.password after ClickHouse recipe fix
         // TODO: validate DatabaseName field during https://st.yandex-team.ru/YQ-2494
 
-        if (clusterConfig.GetProtocol() == NConnector::NApi::EProtocol::PROTOCOL_UNSPECIFIED) {
+        if (clusterConfig.GetProtocol() == NConnectorCommon::EProtocol::PROTOCOL_UNSPECIFIED) {
             return ValidationError(clusterConfig, context, "empty field 'Protocol'");
         }
     }

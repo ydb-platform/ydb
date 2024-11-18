@@ -82,7 +82,7 @@ protected:
 
     std::vector<TProbability> MaxRows;
     std::vector<TString> Clusters;
-    std::vector<ui64> Counts;
+    std::vector<ui64> ClusterCounts;
 
     // Upload
     std::shared_ptr<NTxProxy::TUploadTypes> TargetTypes;
@@ -441,7 +441,7 @@ private:
             Clusters.resize(K);
         }
         Y_ASSERT(Clusters.size() == K);
-        Counts.resize(K, 0);
+        ClusterCounts.resize(K, 0);
         AggregatedClusters.resize(K);
         for (auto& aggregate : AggregatedClusters) {
             aggregate.Cluster.resize(this->Dimensions, 0);
@@ -470,7 +470,7 @@ private:
         for (size_t i = 0; auto& aggregate : AggregatedClusters) {
             count += aggregate.Count;
 
-            auto& c = Counts[i];
+            auto& c = ClusterCounts[i];
             countDiff += c > aggregate.Count ? c - aggregate.Count : aggregate.Count - c;
             c = aggregate.Count;
 
@@ -485,13 +485,12 @@ private:
             return true;
         }
 
-        // on all rounds except first every vector is accounted twice
-        Y_ASSERT(Round == 1 || countDiff % 2 == 0);
-        countDiff /= 2;
-        Y_ASSERT(countDiff <= count);
-
         bool last = Round >= MaxRounds;
         if (!last && Round > 1) {
+            // on all rounds except first every vector is accounted twice
+            Y_ASSERT(countDiff % 2 == 0);
+            countDiff /= 2;
+            Y_ASSERT(countDiff <= count);
             const auto changes = static_cast<double>(countDiff) / static_cast<double>(count);
             last = changes < MinVectorsNeedsReassigned;
         }
@@ -500,14 +499,14 @@ private:
         }
 
         size_t w = 0;
-        for (size_t r = 0; r < Counts.size(); ++r) {
-            if (Counts[r] != 0) {
-                Counts[w] = Counts[r];
+        for (size_t r = 0; r < ClusterCounts.size(); ++r) {
+            if (ClusterCounts[r] != 0) {
+                ClusterCounts[w] = ClusterCounts[r];
                 Clusters[w] = std::move(Clusters[r]);
                 ++w;
             }
         }
-        Counts.erase(Counts.begin() + w, Counts.end());
+        ClusterCounts.erase(ClusterCounts.begin() + w, ClusterCounts.end());
         Clusters.erase(Clusters.begin() + w, Clusters.end());
         return true;
     }

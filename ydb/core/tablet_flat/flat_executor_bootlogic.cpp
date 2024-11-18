@@ -181,7 +181,7 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPage
     Y_ABORT_UNLESS(success, "IPageCollection queued twice for loading");
 
     Ops->Send(
-        MakeSharedPageCacheId(),
+        NSharedCache::MakeSharedPageCacheId(),
         new NSharedCache::TEvRequest(
             NBlockIO::EPriority::Fast,
             req,

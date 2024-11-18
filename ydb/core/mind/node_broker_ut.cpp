@@ -159,9 +159,9 @@ void SetupServices(TTestActorRuntime &runtime,
         SetupNodeWhiteboard(runtime, nodeIndex);
         SetupTabletResolver(runtime, nodeIndex);
         SetupResourceBroker(runtime, nodeIndex, {});
-        SetupSharedPageCache(runtime, nodeIndex, NFake::TCaches{
-            .Shared = 1,
-        });
+        NSharedCache::TSharedCacheConfig sharedCacheConfig;
+        sharedCacheConfig.SetMemoryLimit(0);
+        SetupSharedPageCache(runtime, nodeIndex, sharedCacheConfig);
         SetupSchemeCache(runtime, nodeIndex, DOMAIN_NAME);
     }
 

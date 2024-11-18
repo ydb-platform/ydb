@@ -2427,7 +2427,10 @@ public:
                 TNodeInfo& node = *nodeInfo;
                 TNodeId id = node.Id;
 
-                if (!node.IsAlive() && TInstant::MilliSeconds(node.Statistics.GetLastAliveTimestamp()) < aliveLine) {
+                if (!node.IsAlive()
+                    && TInstant::MilliSeconds(node.Statistics.GetLastAliveTimestamp()) < aliveLine
+                    && !node.Down
+                    && !node.Freeze) {
                     continue;
                 }
 

@@ -132,11 +132,14 @@ public:
         }
     }
 
-    void ExpectSessionError(NActors::TActorId readActorId, TString message) {
+    TString ExpectSessionError(NActors::TActorId readActorId, TMaybe<TString> message = Nothing()) {
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionError>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
-        UNIT_ASSERT_STRING_CONTAINS(TString(eventHolder->Get()->Record.GetMessage()), message);
+        if (message) {
+            UNIT_ASSERT_STRING_CONTAINS(TString(eventHolder->Get()->Record.GetMessage()), *message);
+        }
+        return eventHolder->Get()->Record.GetMessage();
     }
 
     void ExpectNewDataArrived(TSet<NActors::TActorId> readActorIds) {
@@ -303,6 +306,21 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         PQWrite(data, topicName);
 
         ExpectSessionError(ReadActorId1, "INCORRECT_TYPE: The JSON element does not have the requested type.");
+        StopSession(ReadActorId1, source);
+    }
+
+    Y_UNIT_TEST_F(WrongFieldType, TFixture) {
+        const TString topicName = "wrong_field";
+        PQCreateStream(topicName);
+        Init(topicName);
+        auto source = BuildSource(topicName);
+        StartSession(ReadActorId1, source);
+
+        const std::vector<TString> data = {"{\"dt\":100}"};
+        PQWrite(data, topicName);
+        auto error = ExpectSessionError(ReadActorId1);
+        UNIT_ASSERT_STRING_CONTAINS(error, "Failed to parse json messages, found 1 missing values");
+        UNIT_ASSERT_STRING_CONTAINS(error, "the field (value) has been added by query");
         StopSession(ReadActorId1, source);
     }
 

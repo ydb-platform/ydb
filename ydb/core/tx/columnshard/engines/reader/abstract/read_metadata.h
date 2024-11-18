@@ -118,13 +118,13 @@ public:
     ISnapshotSchema::TPtr GetLoadSchemaVerified(const TPortionInfo& porition) const;
 
     const std::shared_ptr<NArrow::TSchemaLite>& GetBlobSchema(const ui64 version) const {
-        return GetIndexVersions().GetSchema(version)->GetIndexInfo().ArrowSchema();
+        return GetIndexVersions().GetSchemaVerified(version)->GetIndexInfo().ArrowSchema();
     }
 
     const TIndexInfo& GetIndexInfo(const std::optional<TSnapshot>& version = {}) const {
         AFL_VERIFY(ResultIndexSchema);
         if (version && version < RequestSnapshot) {
-            return GetIndexVersions().GetSchema(*version)->GetIndexInfo();
+            return GetIndexVersions().GetSchemaVerified(*version)->GetIndexInfo();
         }
         return ResultIndexSchema->GetIndexInfo();
     }

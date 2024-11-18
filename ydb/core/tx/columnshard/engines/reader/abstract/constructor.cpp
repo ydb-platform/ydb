@@ -39,7 +39,7 @@ NKikimr::TConclusionStatus IScannerConstructor::ParseProgram(const TVersionedInd
             }
             //its possible dont use columns from filter where pk field compare with null and remove from PKFilter and program, but stay in kqp columns request
             if (vIndex) {
-                for (auto&& i : vIndex->GetSchema(read.GetSnapshot())->GetIndexInfo().GetReplaceKey()->field_names()) {
+                for (auto&& i : vIndex->GetSchemaVerified(read.GetSnapshot())->GetIndexInfo().GetReplaceKey()->field_names()) {
                     const TString cId(i.data(), i.size());
                     namesChecker.erase(cId);
                     programColumns.erase(cId);

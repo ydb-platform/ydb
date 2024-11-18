@@ -206,7 +206,7 @@ public:
 
     const NOlap::TIndexInfo& GetIndexInfo(const NOlap::TSnapshot& version) const {
         Y_ABORT_UNLESS(!!PrimaryIndex);
-        return PrimaryIndex->GetVersionedIndex().GetSchema(version)->GetIndexInfo();
+        return PrimaryIndex->GetVersionedIndex().GetSchemaVerified(version)->GetIndexInfo();
     }
 
     const std::unique_ptr<NOlap::IColumnEngine>& GetPrimaryIndex() const {

@@ -81,8 +81,6 @@ public:
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
-    virtual ui64 PredictAccessorMemoryBytes() const = 0;
-
     bool AddTxConflict() {
         if (!Context->GetCommonContext()->HasLock()) {
             return false;
@@ -317,9 +315,6 @@ private:
     }
 
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
-    virtual ui64 PredictAccessorMemoryBytes() const override {
-        return Portion->PredictMetadataMemorySize(Schema->GetColumnsCount());
-    }
 
 public:
     virtual bool NeedAccessorsFetching() const override {
@@ -458,9 +453,6 @@ public:
 
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/) override {
         return false;
-    }
-    virtual ui64 PredictAccessorMemoryBytes() const override {
-        return 0;
     }
 
     virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const override {

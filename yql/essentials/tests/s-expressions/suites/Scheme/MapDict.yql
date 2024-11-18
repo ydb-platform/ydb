@@ -1,0 +1,20 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+(let table1low (Map table1 (lambda '(item) (block '(
+    (let s (Struct))
+    (let s (AddMember s 'key (Member item 'key)))
+    (let s (AddMember s 'subkey (Member item 'subkey)))
+    (let keys (DictKeys (Member item 'value)))
+    (let keys (Sort keys (Bool 'True) (lambda '(x) x)))
+    (let s (AddMember s 'value keys))
+    (return s)
+)))))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) table1low '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

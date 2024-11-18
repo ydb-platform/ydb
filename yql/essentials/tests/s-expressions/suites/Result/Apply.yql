@@ -1,0 +1,26 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let f1 (lambda '(x y) (block '(
+    (return (+ x y))
+))))
+
+(let f2 (lambda '(x) (block '(
+    (return (Apply f1 x (Uint64 '2)))
+))))
+
+(let writer (lambda '(world data) (block '(
+   (let world (Write! world res_sink (Key) data '()))
+   (let world (Commit! world res_sink))
+   (return world)
+))))
+
+(let data1 (Apply f2 (Uint64 '3)))
+(let data2 (Apply f2 (Uint64 '4)))
+(let world (Apply writer world data1))
+(let world (Apply writer world data2))
+(return world)
+)

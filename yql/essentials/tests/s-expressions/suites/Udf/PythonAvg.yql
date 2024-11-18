@@ -1,0 +1,57 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# prepare python udf
+(let ui32 (DataType 'Uint32))
+(let dbl (DataType 'Double))
+(let rt (ResourceType 'Python2))
+
+(let udfScript (String '@@
+class AvgCalc:
+    def __init__(self):
+        self.__count = 0
+        self.__sum = 0
+
+    def add(self, value):
+        self.__sum = self.__sum + value
+        self.__count = self.__count + 1
+
+    def result(self):
+        return self.__sum / float(self.__count)
+
+def avg_create():
+    return AvgCalc()
+
+def avg_add(avg, value):
+    avg.add(value)
+    return avg
+
+def avg_result(avg):
+    return avg.result()
+
+@@))
+
+(let avgCreate (ScriptUdf 'Python 'avg_create (CallableType '() '(rt)) udfScript))
+(let avgAdd (ScriptUdf 'Python 'avg_add (CallableType '() '(rt) '(rt) '(ui32)) udfScript))
+(let avgResult (ScriptUdf 'Python 'avg_result (CallableType '() '(dbl) '(rt)) udfScript))
+
+# data
+(let x (Uint32 '10))
+(let y (Uint32 '30))
+(let z (Uint32 '5))
+
+# call udfs
+(let avg (Apply avgCreate))
+(let avg (Apply avgAdd avg x))
+(let avg (Apply avgAdd avg y))
+(let avg (Apply avgAdd avg z))
+(let result (Apply avgResult avg))
+
+# output result with type
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) result '( '('type) )))
+
+# finish
+(return (Commit! world res_sink))
+)

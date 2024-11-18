@@ -1,0 +1,24 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let init_min (lambda '(x) (Member x 'value)))
+(let init_count (lambda '(x) (Uint64 '1)))
+(let update_min (lambda '(x y) (Min (Member x 'value) y)))
+(let update_count (lambda '(x y) (+ y (Uint64 '1))))
+(let id (lambda '(x) x))
+(let merge_min (lambda '(x y) (Min x y)))
+(let merge_count (lambda '(x y) (+ x y)))
+(let list (AsList 
+(AsStruct '('key (Uint32 '1)) '('value (Just (Uint32 '2))))
+))
+(let list (Take list (Uint64 '0)))
+(let min (AggregationTraits (ListItemType (TypeOf list)) init_min update_min id id merge_min id (Null)))
+(let count (AggregationTraits (ListItemType (TypeOf list)) init_count update_count id id merge_count id (Uint64 '0)))
+(let resAll (Aggregate list '() '('('minvalue min) '('count count))))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) resAll '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

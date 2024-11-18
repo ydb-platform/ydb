@@ -1,0 +1,4 @@
+(
+    (let world (Write! world (DataSink '"yt" '"plato") (Key '('table (String '"Output"))) (Void) '('('mode 'drop))))
+    (return (Commit! world (DataSink '"yt" '"plato")))
+)

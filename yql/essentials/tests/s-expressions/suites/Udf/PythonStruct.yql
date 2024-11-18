@@ -1,0 +1,33 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# prepare python udf
+(let ui32 (DataType 'Uint32))
+(let str (DataType 'String))
+(let personType (StructType '('name str) '('age ui32)))
+(let udfType (CallableType '() '(personType) '(str) '(ui32)))
+(let udfScript (String '@@
+
+class Person:
+    def __init__(self, name, age):
+        self.name = name
+        self.age = age
+
+def NewPerson(name, age):
+    return Person(name, age)
+
+@@))
+(let udf (ScriptUdf 'Python 'NewPerson udfType udfScript))
+
+# call udf
+(let result (Apply udf (String 'Jamel) (Uint32 '99)))
+
+# output result with type
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) result '()))
+
+# finish
+(let world (Commit! world res_sink))
+(return world)
+)

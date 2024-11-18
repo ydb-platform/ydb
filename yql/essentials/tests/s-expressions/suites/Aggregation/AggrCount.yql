@@ -1,0 +1,33 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let x (Int32 '34))
+(let jx (Just x))
+(let n (Nothing (TypeOf jx)))
+
+(let world (Write! world res_sink (Key) (AggrCountInit x) '('('type))))
+(let world (Write! world res_sink (Key) (AggrCountInit jx) '('('type))))
+(let world (Write! world res_sink (Key) (AggrCountInit n) '('('type))))
+
+(let world (Write! world res_sink (Key) (AggrCountUpdate x (Uint64 '10)) '('('type))))
+(let world (Write! world res_sink (Key) (AggrCountUpdate jx (Uint64 '10)) '('('type))))
+(let world (Write! world res_sink (Key) (AggrCountUpdate n (Uint64 '10)) '('('type))))
+
+(let cx (Callable (ParseType '"()->Int32") (lambda '() x)))
+(let cjx (Callable (ParseType '"()->Int32?") (lambda '() jx)))
+(let cn (Callable (ParseType '"()->Int32?") (lambda '() n)))
+
+(let world (Write! world res_sink (Key) (AggrCountInit (Apply cx)) '('('type))))
+(let world (Write! world res_sink (Key) (AggrCountInit (Apply cjx)) '('('type))))
+(let world (Write! world res_sink (Key) (AggrCountInit (Apply cn)) '('('type))))
+
+(let world (Write! world res_sink (Key) (AggrCountUpdate (Apply cx) (Uint64 '10)) '('('type))))
+(let world (Write! world res_sink (Key) (AggrCountUpdate (Apply cjx) (Uint64 '10)) '('('type))))
+(let world (Write! world res_sink (Key) (AggrCountUpdate (Apply cn) (Uint64 '10)) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

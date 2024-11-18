@@ -1,0 +1,22 @@
+(
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let res_sink (DataSink 'result))
+
+
+(let yson1 (Apply (Udf '"Yson2.Parse") (String '"#") (Just (NamedApply (Udf 'Yson2.Options) '() (AsStruct '('"AutoConvert" (Just (Bool '"false"))) '('"Strict" (Just (Bool '"false"))))))))
+(let yson2 (Apply (Udf '"Yson2.Parse") (String '"[]") (Just (NamedApply (Udf 'Yson2.Options) '() (AsStruct '('"AutoConvert" (Just (Bool '"false"))) '('"Strict" (Just (Bool '"false"))))))))
+
+
+(let targetType (ListType (ResourceType 'Yson2.Node)))
+(let src (AsList (Just yson1) (Just yson2)))
+(let cast (SafeCast src targetType))
+(let world (Write! world res_sink (Key) (Map cast (lambda '(item) (Apply (Udf '"Yson2.Serialize") item))) '('('type))))
+
+(let world (Commit! world res_sink))
+
+(return world)
+
+)
+

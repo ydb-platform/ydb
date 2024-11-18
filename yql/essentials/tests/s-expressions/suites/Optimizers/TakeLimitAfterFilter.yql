@@ -1,0 +1,23 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source
+    (Key '('table (String 'Input)))
+    (Void) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+
+(let table1 (Filter table1 (lambda '(x) (< (Member x 'key) (String '800)))))
+(let table2x (Skip (Take table1 (Uint64 '2)) (Uint64 '1)))
+(let table2y (Take table1 (Uint64 '3)))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink
+    (Key)
+    table2x '()))
+    
+(let world (Write! world res_sink
+    (Key)
+    table2y '()))
+
+(let world (Commit! world res_sink))
+(return world)
+)

@@ -1,0 +1,11 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let ct (ParseType '"(Uint32?,Uint32)->Uint32"))
+(let callable (Callable ct (lambda '(x y) (Coalesce x y))))
+(let world (Write! world res_sink (Key) (Apply callable (Null) (Uint32 '2)) '()))
+(let world (Commit! world res_sink))
+(return world)
+)

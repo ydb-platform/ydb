@@ -1,0 +1,23 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList
+'((Just (Uint32 '2)) (Just (String 'D)))
+'((Nothing (OptionalType (DataType 'Uint32))) (Just (String 'E)))
+'((Just (Uint32 '3)) (Just (String 'A)))
+'((Just (Uint32 '3)) (Nothing (OptionalType (DataType 'String))))
+'((Just (Uint32 '2)) (Just (String 'B)))
+'((Just (Uint32 '3)) (Just (String 'A)))
+))
+
+(let keyExtractor (lambda '(x) x))
+(let handler (lambda '(key list) (Just '(key list))))
+(let data (GroupByKey list keyExtractor handler))
+
+(let world (Write! world res_sink (Key) data '()))
+(let world (Commit! world res_sink))
+(return world)
+)

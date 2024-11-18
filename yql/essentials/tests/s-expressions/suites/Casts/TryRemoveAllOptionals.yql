@@ -1,0 +1,55 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+### Tuple
+
+# (Int8?, String?, (Int32, Int64)?) (success)
+(let value '((Just (Int8 '1)) (Just (String 'str)) (Just '((Int32 '2) (Int64 '3)))))
+(let tryRemoveAllOptionalsResult (TryRemoveAllOptionals value))
+(let world (Write! world res_sink (Key) tryRemoveAllOptionalsResult '('('type))))
+
+# (Int8?, String, (Int32, Int64)?) (success)
+(let value '((Just (Int8 '1)) (String 'str) (Just '((Int32 '2) (Int64 '3)))))
+(let tryRemoveAllOptionalsResult (TryRemoveAllOptionals value))
+(let world (Write! world res_sink (Key) tryRemoveAllOptionalsResult '('('type))))
+
+# (Int8?, Nothing(String?), (Int32, Int64)?) (fail)
+(let value '((Just (Int8 '1)) (Nothing (OptionalType (DataType 'String))) (Just '((Int32 '2) (Int64 '3)))))
+(let tryRemoveAllOptionalsResult (TryRemoveAllOptionals value))
+(let world (Write! world res_sink (Key) tryRemoveAllOptionalsResult '('('type))))
+
+# () (success)
+(let value '())
+(let tryRemoveAllOptionalsResult (TryRemoveAllOptionals value))
+(let world (Write! world res_sink (Key) tryRemoveAllOptionalsResult '('('type))))
+
+
+### Struct
+
+# Struct<Int8?, String?, (Int32, Int64)?> (success)
+(let value (AsStruct '('a (Just (Int8 '1))) '('b (Just (String 'str))) '('c (Just '((Int32 '2) (Int64 '3))))))
+(let tryRemoveAllOptionalsResult (TryRemoveAllOptionals value))
+(let world (Write! world res_sink (Key) tryRemoveAllOptionalsResult '('('type))))
+
+# Struct<Int8?, String, (Int32, Int64)?> (success)
+(let value (AsStruct '('a (Just (Int8 '1))) '('b (String 'str)) '('c (Just '((Int32 '2) (Int64 '3))))))
+(let tryRemoveAllOptionalsResult (TryRemoveAllOptionals value))
+(let world (Write! world res_sink (Key) tryRemoveAllOptionalsResult '('('type))))
+
+# Struct<Int8?, Nothing(String?), (Int32, Int64)?> (fail)
+(let value (AsStruct '('a (Just (Int8 '1))) '('b (Nothing (OptionalType (DataType 'String)))) '('c (Just '((Int32 '2) (Int64 '3))))))
+(let tryRemoveAllOptionalsResult (TryRemoveAllOptionals value))
+(let world (Write! world res_sink (Key) tryRemoveAllOptionalsResult '('('type))))
+
+# Struct<> (success)
+(let value (Struct))
+(let tryRemoveAllOptionalsResult (TryRemoveAllOptionals value))
+(let world (Write! world res_sink (Key) tryRemoveAllOptionalsResult '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

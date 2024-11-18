@@ -1,0 +1,35 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let init (lambda '(x) (Member x 'value)))
+(let init_distinct (lambda '(x) x))
+(let update_min (lambda '(x y) (Min (Member x 'value) y)))
+(let update_sum_distinct (lambda '(x y) (+ x y)))
+(let save (lambda '(x) x))
+(let load (lambda '(x) x))
+(let merge_min (lambda '(x y) (Min x y)))
+(let merge_sum (lambda '(x y) (+ x y)))
+(let finish (lambda '(x) x))
+(let finish_min2 (lambda '(x) '(x (* (Uint32 '2) x))))
+(let list (AsList 
+(AsStruct '('key (Uint32 '1)) '('value (Uint32 '2)))
+(AsStruct '('key (Uint32 '2)) '('value (Uint32 '3)))
+(AsStruct '('key (Uint32 '1)) '('value (Uint32 '4)))
+(AsStruct '('key (Uint32 '3)) '('value (Uint32 '10)))
+(AsStruct '('key (Uint32 '2)) '('value (Uint32 '5)))
+(AsStruct '('key (Uint32 '2)) '('value (Uint32 '5)))
+))
+# non-distinct processes row
+(let min (AggregationTraits (ListItemType (TypeOf list)) init update_min save load merge_min finish_min2 (Null)))
+# distinct process one column and requires data/data? type
+(let sum (AggregationTraits (StructMemberType (ListItemType (TypeOf list)) 'value) init_distinct update_sum_distinct save load merge_sum finish (Null)))
+(let resAll (Aggregate list '() '('('('minvalue 'minvalue2) min) '('distsum sum 'value))))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) resAll '('('type))))
+(let resKey (Aggregate list '('key) '('('('minvalue 'minvalue2) min) '('distsum sum 'value))))
+(let world (Write! world res_sink (Key) resKey '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

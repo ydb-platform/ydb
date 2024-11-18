@@ -1,0 +1,15 @@
+(
+    #comment
+    (let mr_source (DataSource 'yt 'plato))
+    (let table1 (Right! (Read! world mr_source (Key '('table (String 'Input))) (Void) '('('inline)))))
+    (let tresh (String '300))
+    (let table1low (FlatMap table1 (lambda '(item) (block '(
+           (let intValueOpt (Member item 'key))
+           (return (ListIf (< intValueOpt tresh) item))
+    )))))
+    (let mr_sink (DataSink 'yt 'plato))
+    (let world (Write! world mr_sink (Key '('table (String 'Output))) table1low '('('mode 'append))))
+    (let world (Commit! world mr_sink))
+    (return world)
+)
+

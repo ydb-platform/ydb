@@ -1,0 +1,26 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let mr_sink (DataSink 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let tableLeft (Right! x))
+
+(let sorted (Sort tableLeft (Bool 'true) (lambda '(item) (Member item '"key"))))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) sorted '('('mode 'append))))
+(let world (Commit! world mr_sink))
+
+(let x (Read! world mr_source (Key '('table (String '"Output"))) (Void) '()))
+(let world (Left! x))
+(let tableRight (Right! x))
+
+(let tableLeft (Take tableLeft (Uint64 '3)))
+(let tableRight (Filter tableRight (lambda '(item) (Coalesce (< (Member item '"key") (String '"100")) (Bool 'false)))))
+
+(let join (EquiJoin '(tableLeft 'a) '(tableRight 'b) '('Inner '"a" '"b" '('"a" '"value") '('"b" '"value" ) '()) '()))
+(let join (Sort join (Bool 'true) (lambda '(item) (Member item '"a.key"))))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) (Take join (Uint64 '2)) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

@@ -1,0 +1,32 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let mr_sink (DataSink 'yt 'plato))
+(let res_sink (DataSink 'result))
+(let source_any (DataSource 'yt '"$all"))
+
+(let world (Configure! world source_any '"Attr" '"inferschema" '"1"))
+(let world (Configure! world source_any '"Attr" '"maxrowweight" '"128m"))
+
+(let x1 (Read! world mr_source (Key
+    '('table (String 'InputView))
+) (Void) '()))
+
+(let world (Left! x1))
+(let data (Right! x1))
+
+(let world (Write! world res_sink (Key) data '()))
+(let world (Commit! world res_sink))
+
+(let x2 (Read! world mr_source (Key
+    '('table (String 'InputView))
+) (Void) '()))
+
+(let world (Left! x2))
+(let data (Right! x2))
+
+(let world (Write! world res_sink (Key) data '()))
+(let world (Commit! world res_sink))
+
+(let world (Commit! world mr_sink))
+(return world)
+)

@@ -1,0 +1,52 @@
+(
+
+(library "alterto.yql")
+(import alterto_module '"alterto.yql")
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let res_sink (DataSink 'result))
+
+# Int32? -> Uint16
+(let world (Apply (bind alterto_module 'doAlterTo) world (Just (Int32 '1)) (DataType 'Uint16) (Uint16 '12345)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Just (Int32 '1000000)) (DataType 'Uint16) (Uint16 '12345)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Nothing (OptionalType (DataType 'Int32))) (DataType 'Uint16) (Uint16 '12345)))
+
+# Int32? -> Uint16?
+(let targetType (OptionalType (DataType 'Uint16)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Just (Int32 '1)) targetType (Just (Uint16 '12345))))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Just (Int32 '1000000)) targetType (Just (Uint16 '12345))))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Nothing (OptionalType (DataType 'Int32))) targetType (Just (Uint16 '12345))))
+
+# Int32? -> Uint16???
+(let targetType (OptionalType (OptionalType (OptionalType (DataType 'Uint16)))))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Just (Int32 '1)) targetType (Just (Just (Just (Uint16 '12345))))))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Just (Int32 '1000000)) targetType (Just (Just (Just (Uint16 '12345))))))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Nothing (OptionalType (DataType 'Int32))) targetType (Just (Just (Just (Uint16 '12345))))))
+
+# Int32??? -> Uint16?
+(let targetType (OptionalType (DataType 'Uint16)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Just (Just (Just (Int32 '1)))) targetType (Just (Uint16 '12345))))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Just (Just (Just (Int32 '1000000)))) targetType (Just (Uint16 '12345))))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Nothing (OptionalType (OptionalType (OptionalType (DataType 'Int32))))) targetType (Just (Uint16 '12345))))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Just (Nothing (OptionalType (OptionalType (DataType 'Int32))))) targetType (Just (Uint16 '12345)))) 
+(let world (Apply (bind alterto_module 'doAlterTo) world (Just (Just (Nothing (OptionalType (DataType 'Int32))))) targetType (Just (Uint16 '12345))))
+
+# Int32? -> Null
+(let targetType (NullType))
+(let alterToResult (AlterTo (Just (Int32 '1))  targetType (lambda '(x) (String '"converted")) (String '"not converted")))
+(let world (Write! world res_sink (Key) alterToResult '('('type))))
+(let alterToResult (AlterTo (Nothing (OptionalType (DataType 'Int32))) targetType (lambda '(x) (String '"converted")) (String '"not converted")))
+(let world (Write! world res_sink (Key) alterToResult '('('type))))
+
+# Int64? -> Null?
+(let targetType (NullType))
+(let alterToResult (AlterTo (Just (Int64 '1))  targetType (lambda '(x) (String '"converted")) (String '"not converted")))
+(let world (Write! world res_sink (Key) alterToResult '('('type))))
+(let alterToResult (AlterTo (Nothing (OptionalType (DataType 'Int64))) targetType (lambda '(x) (String '"converted")) (String '"not converted")))
+(let world (Write! world res_sink (Key) alterToResult '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

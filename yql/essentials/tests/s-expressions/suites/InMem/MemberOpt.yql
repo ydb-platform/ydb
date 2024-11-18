@@ -1,0 +1,25 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let s (AsStruct
+  '('a (String 'aaa))
+  '('b (Just (Uint32 '4)))
+  '('c (Nothing (OptionalType (DataType 'Uint32)))))
+)
+
+(let js (Just s))
+(let n (Nothing (TypeOf js)))
+
+(let world (Write! world res_sink (Key) (Member s 'a) '()))
+(let world (Write! world res_sink (Key) (Member js 'a) '()))
+(let world (Write! world res_sink (Key) (Member js 'b) '()))
+(let world (Write! world res_sink (Key) (Member js 'c) '()))
+(let world (Write! world res_sink (Key) (Member n 'a) '()))
+(let world (Write! world res_sink (Key) (Member n 'c) '()))
+
+(let world (Commit! world res_sink))
+(return world)
+)

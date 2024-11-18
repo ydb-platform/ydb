@@ -1,0 +1,24 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+(let tresh (Int32 'x"64000000"))
+(let table1low (FlatMap table1 (lambda '(item) (block '(
+   (let intValueOpt (FromString (Member item 'key) 'Int32))
+   (let ret (FlatMap intValueOpt (lambda '(item2) (block '(
+      (return (ListIf (< item2 tresh) item))
+   )))))
+   (return ret)
+)))))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) table1low '('('mode 'append))))
+(let world (Commit! world mr_sink))
+(let x (Read! world mr_source (Key '('table (String 'Output))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table2 (Right! x))
+(let world (Write! world mr_sink (Key '('table (String 'Output2))) table2 '('('mode 'append))))
+(let world (Commit! world mr_sink))
+(return world)
+)

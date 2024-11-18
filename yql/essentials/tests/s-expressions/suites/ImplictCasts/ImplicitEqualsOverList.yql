@@ -1,0 +1,24 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+# List<Uint16> -> List<Int16> (false)
+(let value (AsList (Uint16 '32767)))
+(let value (Append value (Uint16 '32768)))
+(let commonType (ListType (DataType 'Int16)))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+# List<Uint16> -> List<UInt32> (true)
+(let value (AsList (Uint16 '32767)))
+(let value (Append value (Uint16 '32768)))
+(let commonType (ListType (DataType 'Uint32)))
+(let imlicitEqualsResult (Exists (StrictCast value commonType)))
+(let world (Write! world res_sink (Key) imlicitEqualsResult '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

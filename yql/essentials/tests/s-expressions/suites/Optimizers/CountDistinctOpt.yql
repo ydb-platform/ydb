@@ -1,0 +1,53 @@
+(
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) '('"key") '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core (block '(
+        (let select (block '(
+          (let core table0)
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (Struct))
+            (let res (AddMember res '"key" (Cast (Member row '"key") 'Int32)))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )))
+      (let core (block '(
+        (let Count1_create (lambda '(row) (AggrCountInit row)))
+        (let Count1_update (lambda '(row state) (AggrCountUpdate row state)))
+        (let Count1_save (lambda '(state) state))
+        (let Count1_load (lambda '(item) item))
+        (let Count1_merge (lambda '(a b) (OptionalReduce a b (lambda '(a b) (+ a b)))))
+        (let Count1_finish (lambda '(state) state))
+        (return (Aggregate core '() '('('Count1 (AggregationTraits (StructMemberType (ListItemType (TypeOf core)) '"key") Count1_create Count1_update Count1_save Count1_load Count1_merge Count1_finish (Uint64 '0)) '"key"))))
+      )))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AddMember res '"column0" (Member row 'Count1)))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

@@ -1,0 +1,26 @@
+#USE plato;
+#DROP TABLE Output;
+#INSERT INTO Output SELECT key FROM Input;
+
+(
+(let source (DataSource '"yt" '"plato"))
+(let sink (DataSink '"yt" '"plato"))
+(let result (DataSink 'result))
+
+(let conv (lambda '(item) (block '(
+  (let res (Struct))
+  (let res (AddMember res '"key" (Member item '"key")))
+  (return (AsList res))
+))))
+
+(let world (Write! world sink (Key '('table (String 'Output))) (Void) '('('mode 'drop))))
+
+(let r (Read! world source (Key '('table (String '"Input"))) (Void) '()))
+(let world (Left! r))
+(let input (Right! r))
+(let out (FlatMap input conv))
+(let world (Write! world sink (Key '('table (String 'Output))) out '('('mode 'append))))
+(let world (Commit! world sink))
+
+(return world)
+)

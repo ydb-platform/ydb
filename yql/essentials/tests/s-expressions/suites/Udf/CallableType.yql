@@ -1,0 +1,18 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let t1 (DataType 'Uint32))
+(let o1 (OptionalType t1))
+(let str (DataType 'String))
+(let s1 (StructType '('key str) '('subkey str) '('value str)))
+(let c1 (CallableType '() '(t1) '(o1) '(s1)))
+(let world (Write! world res_sink (Key) (FormatType c1) '()))
+(let world (Write! world res_sink (Key) (FormatType (CallableResultType c1)) '()))
+(let world (Write! world res_sink (Key) (FormatType (CallableArgumentType c1 '0)) '()))
+(let world (Write! world res_sink (Key) (FormatType (CallableArgumentType c1 '1)) '()))
+(let world (Commit! world res_sink))
+(return world)
+)

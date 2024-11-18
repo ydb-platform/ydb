@@ -1,0 +1,57 @@
+(
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(import window_module '"/lib/yql/window.yql")
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"Input")))) '('"value" '"key" '"subkey") '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core (EquiJoin '((block '(
+        (let select (block '(
+          (let core table0)
+          (let core (Filter core (lambda '(row) (Coalesce ("<" (Member row '"value") (String '"r")) (Bool 'false)))))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (AsStruct '('"key" (Member row '"key")) '('"subkey" ("Concat" (Member row '"subkey") (String '"a")))))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )) '"a") '((block '(
+        (let select (block '(
+          (let core table0)
+          (let core (Filter core (lambda '(row) (Coalesce (">" (Member row '"value") (String '"c")) (Bool 'false)))))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (AsStruct '('"key" (Member row '"key")) '('"subkey" ("Concat" (Member row '"subkey") (String '"b")))))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )) '"b") '('Inner '"a" '"b" '('"a" '"key") '('"b" '"key") '()) '()))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"k1" (SqlColumn row '"key" '"a")) '('"a.subkey" (SqlColumn row '"subkey" '"a")) '('"b.subkey" (SqlColumn row '"subkey" '"b"))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"k1" '"a.subkey" '"b.subkey")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

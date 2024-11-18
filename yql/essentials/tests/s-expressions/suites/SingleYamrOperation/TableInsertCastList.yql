@@ -1,0 +1,53 @@
+(
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) '('"key") '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let values (block '(
+    (let select (block '(
+      (let core table0)
+      (let core (Filter core (lambda '(row) (Coalesce ("<" (Member row '"key") (String '"100")) (Bool 'false)))))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AddMember res '"value" (MatchType (Member row '"key") 'Optional (lambda '(item) (Coalesce (Map item (lambda '(val) (IfType val (DataType 'String) (lambda '(item) (FromString item '"Int64")) (lambda '(item) (Just (Convert item '"Int64")))))) (Nothing (OptionalType (DataType '"Int64"))))) (lambda '(item) (IfType item (DataType 'String) (lambda '(item) (FromString item '"Int64")) (lambda '(item) (Convert item '"Int64")))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let sink (DataSink '"yt" '"plato"))
+    (let world (Write! world sink (Key '('table (String '"Output"))) values '('('mode 'append))))
+    (return (Commit! world sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) '('"key") '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let values (block '(
+    (let select (block '(
+      (let core table0)
+      (let core (Filter core (lambda '(row) (Coalesce (">=" (Member row '"key") (String '"100")) (Bool 'false)))))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AddMember res '"value" (Int64 '"1")))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let sink (DataSink '"yt" '"plato"))
+    (let world (Write! world sink (Key '('table (String '"Output"))) values '('('mode 'append))))
+    (return (Commit! world sink))
+  )))
+  (return world)
+)))
+(return world)
+)

@@ -1,0 +1,20 @@
+(
+#comment
+(let res_sink (DataSink 'result))
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let list1 (AsList (String 'a1) (String 'a2) (String 'a3)))
+(let list2 (AsList (Bool 'true) (Bool 'false)))
+(let list3 (AsList (Uint32 '1) (Uint32 '2) (Uint32 '3) (Uint32 '4)))
+
+(let data (Mux '(list1 list2 list3)))
+(let world (Write! world res_sink (Key) data '('('type))))
+
+(let data (Mux (AsStruct '('a list1) '('b list2) '('c list3))))
+(let world (Write! world res_sink (Key) data '('('type))))
+
+(let world (Commit! world res_sink))
+
+(return world)
+)

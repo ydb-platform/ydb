@@ -1,0 +1,13 @@
+(
+#comment
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (MrTableConcat (Key '('table (String 'Input1))) (Key '('table (String 'Input2)))) (Void) '()))
+(let world (Left! x))
+(let core (Right! x))
+(let core (Aggregate core '('"age") '('('cnt (Apply (bind aggregate_module '"count_traits_factory") (TypeOf core) (lambda '(row) (Void)))))))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) core '()))
+(let world (Commit! world mr_sink))
+(return world)
+)

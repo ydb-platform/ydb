@@ -1,0 +1,9 @@
+(
+
+(library "joins.yql")
+(import join_module '"joins.yql")
+
+(let world (Apply (bind join_module 'doAllJoinsExceptCross) world 'InputInt8 'InputUint32))
+
+(return world)
+)

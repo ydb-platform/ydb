@@ -1,0 +1,19 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source 
+(Key '('table (MrTableRange '"" (lambda '($i) (And (>= $i (String '"Input1")) (<= $i (String '"Input~")))) '""))) 
+'('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table (Right! x))
+(let udf (Udf 'Pire.Match (String '@@.*\d.*@@)))
+(let table (Filter table (lambda '(item) (block '(
+   (let value (Member item 'value))
+   (return (Apply udf value))
+)))))
+(let tableLimit (Take table (Uint64 '9)))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) tableLimit '('('mode 'append))))
+(let world (Commit! world mr_sink))
+(return world)
+)

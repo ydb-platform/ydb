@@ -1,0 +1,32 @@
+(
+    #comment
+    (let mr_source (DataSource 'yt 'plato))
+    (let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+    (let world (Left! x))
+    (let table1 (Right! x))
+
+    (let mrtc (Right! (Read! world mr_source (Key '('table (String 'Input))) (Void) '('('inline)))))
+    (let filter (FlatMap mrtc (lambda '(item) (block '(
+           (let value (Member item 'value))
+           (return (ListIf (< value (String 'qqq)) item))
+    )))))
+    (let filter (ToDict mrtc (lambda '(x) (Member x 'value)) (lambda '(x) (Member x 'subkey)) '('Hashed 'One 'Compact)))
+
+    (let preMap (lambda '(item) (Just item)))
+    (let keyExtractor (lambda '(item) (Member item 'key)))
+    (let init (lambda '(key item) (Contains filter (Member item 'value))))
+    (let update (lambda '(key item state) (And state (Contains filter (Member item 'value)))))
+    (let finish (lambda '(key state) (block '(
+        (let s (Struct))
+        (let s (AddMember s 'key key))
+        (let s (AddMember s 'subkey (String '.)))
+        (let s (AddMember s 'value (ToString state)))
+        (return (Just s))
+    ))))
+    (let out (CombineByKey table1 preMap keyExtractor init update finish))
+
+    (let mr_sink (DataSink 'yt 'plato))
+    (let world (Write! world mr_sink (Key '('table (String 'Output))) out '('('mode 'append))))
+    (let world (Commit! world mr_sink))
+    (return world)
+)

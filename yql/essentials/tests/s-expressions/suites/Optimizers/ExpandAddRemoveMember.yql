@@ -1,0 +1,17 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let func (lambda '() (AsStruct '('a (String '1)) '('b (Int32 '2)))))
+(let type (CallableType '() '((StructType '('a (DataType 'String)) '('b (DataType 'Int32))))))
+(let call (Callable type func))
+(let data (Apply call))
+(let data1 (AddMember data 'd (Bool 'True)))
+(let data2 (ForceRemoveMember data 'a))
+(let data2 (ForceRemoveMember data2 'x))
+(let world (Write! world res_sink (Key) '(data1 data2) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

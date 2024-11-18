@@ -1,0 +1,192 @@
+(
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"hits"))) (Void) '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let values (block '(
+    (let select (block '(
+      (let core (block '(
+        (let select (block '(
+          (let core (EquiJoin '((block '(
+            (let select (block '(
+              (let core table0)
+              (let core (block '(
+                (return (Aggregate core '('"url") '()))
+              )))
+              (let core (FlatMap core (lambda '(row) (block '(
+                (let res (Struct))
+                (let res (AddMember res '"Url" (Member row '"url")))
+                (let res (AddMember res '"Date" (String '"2016-10-25")))
+                (let res (AsList res))
+                (return res)
+              )))))
+              (return core)
+            )))
+            (return select)
+          )) '"target") '(table0 '"history") '('Inner '"target" '"history" '('"target" '"Url") '('"history" '"url") '()) '()))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (Struct))
+            (let res (SelectMembers row '('"history.")))
+            (let res (AddMember res '"Url" (Member row '"target.Url")))
+            (let res (AddMember res '"Date" (Member row '"target.Date")))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsList row))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let sink (DataSink '"yt" '"plato"))
+    (let world (Write! world sink (Key '('table (String '"out1"))) values '('('mode 'renew))))
+    (return world)
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let hahn_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world hahn_sink))
+  (return world)
+)))
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"out1"))) '('"Url" '"Date") '()))
+  (let world (Left! x))
+  (let table3 (Right! x))
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"hits"))) '('"url") '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let values (block '(
+    (let select (block '(
+      (let core (Map (EquiJoin '((Map (block '(
+        (let select (block '(
+          (let core table3)
+          (let core (block '(
+            (return (Aggregate core '('"Date" '"Url") '()))
+          )))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (Struct))
+            (let res (AddMember res '"Url" (Member row '"Url")))
+            (let res (AddMember res '"Date" (Member row '"Date")))
+            (let res (AddMember res '"Host" ("Apply" ("Udf" '"Url.GetHost") (Member row '"Url"))))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )) (lambda '(row) (block '(
+        (let row (AddMember row '"_equijoin_column_0" ("Apply" ("Udf" '"Url.GetHost") (Member row '"Url"))))
+        (return row)
+      )))) '"pool") '((block '(
+        (let select (block '(
+          (let core (Map (EquiJoin '((block '(
+            (let select (block '(
+              (let core (block '(
+                (let select (block '(
+                  (let core table3)
+                  (let core (block '(
+                    (return (Aggregate core '('"Date" '"Url") '()))
+                  )))
+                  (let core (FlatMap core (lambda '(row) (block '(
+                    (let res (Struct))
+                    (let res (AddMember res '"Url" (Member row '"Url")))
+                    (let res (AddMember res '"Date" (Member row '"Date")))
+                    (let res (AddMember res '"Host" ("Apply" ("Udf" '"Url.GetHost") (Member row '"Url"))))
+                    (let res (AsList res))
+                    (return res)
+                  )))))
+                  (return core)
+                )))
+                (return select)
+              )))
+              (let core (block '(
+                (return (Aggregate core '('"Host") '()))
+              )))
+              (let core (FlatMap core (lambda '(row) (block '(
+                (let res (Struct))
+                (let res (AddMember res '"Host" (Member row '"Host")))
+                (let res (AddMember res '"Date" (String '"2016-10-25")))
+                (let res (AsList res))
+                (return res)
+              )))))
+              (return core)
+            )))
+            (return select)
+          )) '"hosts") '((Map table0 (lambda '(row) (block '(
+            (let row (AddMember row '"_equijoin_column_0" ("Apply" ("Udf" '"Url.GetHost") (Member row '"url"))))
+            (return row)
+          )))) '"all_hits") '('Left '"hosts" '"all_hits" '('"hosts" '"Host") '('"all_hits" '"_equijoin_column_0") '()) '()) (lambda '(row) (block '(
+            (let row (ForceRemoveMember row '"all_hits._equijoin_column_0"))
+            (return row)
+          )))))
+          (let core (block '(
+            (let Count4_create (lambda '(row) (Uint64 '1)))
+            (let Count4_update (lambda '(row state) (OptionalReduce state (Uint64 '1) (lambda '(a b) (+ a b)))))
+            (let Count4_save (lambda '(state) state))
+            (let Count4_load (lambda '(item) item))
+            (let Count4_merge (lambda '(a b) (OptionalReduce a b (lambda '(a b) (+ a b)))))
+            (let Count4_finish (lambda '(state) state))
+            (let Count5_create (lambda '(row) (Convert (Exists row) 'Uint64)))
+            (let Count5_update (lambda '(row state) (OptionalReduce state (Convert (Exists row) 'Uint64) (lambda '(a b) (+ a b)))))
+            (let Count5_save (lambda '(state) state))
+            (let Count5_load (lambda '(item) item))
+            (let Count5_merge (lambda '(a b) (OptionalReduce a b (lambda '(a b) (+ a b)))))
+            (let Count5_finish (lambda '(state) state))
+            (return (Aggregate core '('"hosts.Date" '"hosts.Host") '('('Count4 (AggregationTraits (ListItemType (TypeOf core)) Count4_create Count4_update Count4_save Count4_load Count4_merge Count4_finish (Uint64 '0))) '('Count5 (AggregationTraits (StructMemberType (ListItemType (TypeOf core)) '"all_hits.url") Count5_create Count5_update Count5_save Count5_load Count5_merge Count5_finish (Uint64 '0)) '"all_hits.url"))))
+          )))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (Struct))
+            (let res (AddMember res '"Host" (Member row '"hosts.Host")))
+            (let res (AddMember res '"Date" (Member row '"hosts.Date")))
+            (let res (AddMember res '"url_day_count" (Member row 'Count4)))
+            (let res (AddMember res '"url_count" (Member row 'Count5)))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )) '"host") '('Left '"pool" '"host" '('"pool" '"_equijoin_column_0" '"pool" '"Date") '('"host" '"Host" '"host" '"Date") '()) '()) (lambda '(row) (block '(
+        (let row (ForceRemoveMember row '"pool._equijoin_column_0"))
+        (return row)
+      )))))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsList row))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let sink (DataSink '"yt" '"plato"))
+    (let world (Write! world sink (Key '('table (String '"out2"))) values '('('mode 'renew))))
+    (return world)
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let hahn_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world hahn_sink))
+  (return world)
+)))
+(let world (block '(
+  (let sink (DataSink '"yt" '"plato"))
+  (let world (Write! world sink (Key '('table (String '"out1"))) (Void) '('('mode 'drop))))
+  (return world)
+)))
+(let world (block '(
+  (let hahn_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world hahn_sink))
+  (return world)
+)))
+(return world)
+)

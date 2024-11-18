@@ -1,0 +1,35 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let res_sink (DataSink 'result))
+
+(let list (AsList (String 'a) (String 'b) (String 'c)))
+
+(let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table (Right! x))
+
+(let inner1 (FlatMap table (lambda '(row) (OptionalIf (> (Member row 'key) (String '100)) (AsStruct '('key1 (Member row 'key)))))))
+
+(let inner2 (FlatMap table (lambda '(row) (Just (AsStruct '('key1 (Member row 'key)))))))
+
+(let outer (lambda '(input) (FlatMap input (lambda '(row)
+    (Just
+        (AsStruct
+            '('key (Member row 'key1))
+            '('value (ToOptional (Collect (Condense
+                (Iterator list (DependsOn row))
+                (String '"")
+                (lambda '(item state) (Bool 'False))
+                (lambda '(item state) (Concat state item))
+            ))))
+        )
+    )
+))))
+
+
+(let world (Write! world res_sink (Key) (Apply outer inner1) '('('type))))
+(let world (Write! world res_sink (Key) (Apply outer inner2) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

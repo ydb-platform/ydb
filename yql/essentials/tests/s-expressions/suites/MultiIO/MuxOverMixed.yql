@@ -1,0 +1,35 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let mr_sink (DataSink 'yt 'plato))
+
+(let x (Read! world mr_source (Key '('table (String 'Input1))) (Void) '()))
+(let world (Left! x))
+(let data (Right! x))
+
+(let data1 (Filter data (lambda '(item) (block '(
+    (let intValue (FromString (Member item 'key) 'Int32))
+    (let res (Coalesce (Equal (% intValue (Int32 '2)) (Int32 '0)) (Bool 'false)))
+   (return res)
+)))))
+
+(let data2 (AsList
+    (AsStruct '('key (String 'k1)) '('subkey (String 's1)) '('value (String 'v1)))
+    (AsStruct '('key (String 'k2)) '('subkey (String 's2)) '('value (String 'v2)))
+    (AsStruct '('key (String 'k3)) '('subkey (String 's3)) '('value (String 'v3)))
+))
+
+(let data (Mux '(data1 data2)))
+
+(let data (Map data (lambda '(item) (block '(
+    (let res (Visit item
+        '0 (lambda '(x) x)
+        '1 (lambda '(x) x)
+    ))
+   (return res)
+)))))
+
+(let world (Write! world mr_sink (Key '('table (String 'Output1))) data '('('mode 'renew))))
+
+(let world (Commit! world mr_sink))
+(return world)
+)

@@ -1,0 +1,30 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let t1 (TupleType (OptionalType (DataType 'Uint32)) (DataType 'String)))
+(let t2 (DataType 'String))
+(let d1 (DictType t1 t2))
+(let d2 (Dict d1
+  '('((Just (Uint32 '4)) (String 'ggg)) (String 'aaa))
+  '('((Just (Uint32 '4)) (String 'hhh)) (String 'bbb))
+  '('((Just (Uint32 '4)) (String 'ggg)) (String 'ccc))
+  '('((Nothing (OptionalType (DataType 'Uint32))) (String 'rrr)) (String 'ddd))
+))
+
+(let world (Write! world res_sink (Key) (Contains d2 '((Just (Uint32 '4)) (String 'ggg))) '()))
+(let world (Write! world res_sink (Key) (Contains d2 '((Just (Uint32 '5)) (String 'ggg))) '()))
+(let world (Write! world res_sink (Key) (Contains d2 '((Just (Uint32 '4)) (String 'sss))) '()))
+(let world (Write! world res_sink (Key) (Contains d2 '((Nothing (OptionalType (DataType 'Uint32))) (String 'rrr))) '()))
+(let world (Write! world res_sink (Key) (Contains d2 '((Nothing (OptionalType (DataType 'Uint32))) (String 'qqq))) '()))
+(let world (Write! world res_sink (Key) (Lookup d2 '((Just (Uint32 '4)) (String 'ggg))) '()))
+(let world (Write! world res_sink (Key) (Lookup d2 '((Just (Uint32 '5)) (String 'ggg))) '()))
+(let world (Write! world res_sink (Key) (Lookup d2 '((Just (Uint32 '4)) (String 'sss))) '()))
+(let world (Write! world res_sink (Key) (Lookup d2 '((Nothing (OptionalType (DataType 'Uint32))) (String 'rrr))) '()))
+(let world (Write! world res_sink (Key) (Lookup d2 '((Nothing (OptionalType (DataType 'Uint32))) (String 'qqq))) '()))
+
+(let world (Commit! world res_sink))
+(return world)
+)

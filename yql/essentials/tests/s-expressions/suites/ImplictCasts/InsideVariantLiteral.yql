@@ -1,0 +1,29 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let res_sink (DataSink 'result))
+
+# Variant over struct
+
+(let vt (ParseType '"Variant<Int64, Struct<A:Int64, B:Double>>"))
+(let vt2 (ParseType '"Variant<Int32, Struct<A:Int32, B:Double>>"))
+
+(let testcase1 (AsList (Variant (Int64 '10) '0 vt)))
+(let testcase1 (Append testcase1 (Variant (Int32 '11) '0 vt2)))
+(let testcase1 (Append testcase1 (Variant (AsStruct '('A (Int64 '25)) '('B (Double '15.5))) '1 vt2)))
+
+# Variant over tuple
+
+(let vts (ParseType '"Variant<A:Int64, B:Struct<A:Int64, B:Double>>"))
+(let vts2 (ParseType '"Variant<A:Int32, B:Struct<A:Int32, B:Double>>"))
+(let vts3 (ParseType '"Variant<A:Int32>"))
+
+(let testcase2 (AsList (Variant (Int64 '10) 'A vts)))
+(let testcase2 (Append testcase2 (Variant (Int32 '11) 'A vts2)))
+(let testcase2 (Append testcase2 (Variant (AsStruct '('A (Int64 '25)) '('B (Double '15.5))) 'B vts2)))
+(let testcase2 (Append testcase2 (Variant (Int32 '11) 'A vts3)))
+
+(let world (Write! world res_sink (Key) '(testcase1 testcase2) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

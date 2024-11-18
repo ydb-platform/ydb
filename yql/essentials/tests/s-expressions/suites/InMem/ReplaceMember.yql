@@ -1,0 +1,13 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let s (AsStruct '('a (String 'ccc)) '('b (Double '3.5))))
+(let world (Write! world res_sink (Key) (ReplaceMember s 'a (Int32 '7)) '('('type))))
+(let world (Write! world res_sink (Key) (ReplaceMember s 'b (String 'aaa)) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

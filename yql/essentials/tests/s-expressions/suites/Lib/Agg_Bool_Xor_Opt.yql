@@ -1,0 +1,28 @@
+# program
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(import agg_module '"/lib/yql/aggregate.yql")
+(let list (AsList
+(AsStruct '('key (Uint32 '0)) '('value (Just (Bool '0))))
+(AsStruct '('key (Uint32 '0)) '('value (Just (Bool '0))))
+(AsStruct '('key (Uint32 '1)) '('value (Just (Bool '1))))
+(AsStruct '('key (Uint32 '1)) '('value (Just (Bool '0))))
+(AsStruct '('key (Uint32 '2)) '('value (Nothing (OptionalType (DataType 'Bool)))))
+(AsStruct '('key (Uint32 '2)) '('value (Just (Bool '0))))
+(AsStruct '('key (Uint32 '2)) '('value (Just (Bool '1))))
+(AsStruct '('key (Uint32 '3)) '('value (Nothing (OptionalType (DataType 'Bool)))))
+(AsStruct '('key (Uint32 '4)) '('value (Just (Bool '1))))
+(AsStruct '('key (Uint32 '4)) '('value (Just (Bool '1))))
+(AsStruct '('key (Uint32 '5)) '('value (Just (Bool '0))))
+(AsStruct '('key (Uint32 '5)) '('value (Just (Bool '0))))
+(AsStruct '('key (Uint32 '5)) '('value (Nothing (OptionalType (DataType 'Bool)))))
+))
+(let xor_traits (Apply (bind agg_module 'xor_traits_factory) (TypeOf list) (lambda '(row) (Member row 'value))))
+(let res_sink (DataSink 'result))
+(let resKey (Aggregate list '('key) '('('xor_value xor_traits))))
+(let world (Write! world res_sink (Key) resKey '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

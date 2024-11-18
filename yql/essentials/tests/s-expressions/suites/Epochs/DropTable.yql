@@ -1,0 +1,45 @@
+#USE plato;
+#INSERT INTO Output SELECT CAST(key as Int32) as item1, value as item2 FROM Input;
+#COMMIT;
+#DROP TABLE Output;
+#COMMIT;
+#INSERT INTO Output SELECT CAST(key as Int32) as item3, value as item4 FROM Input;
+
+(
+(let source (DataSource '"yt" '"plato"))
+(let sink (DataSink '"yt" '"plato"))
+(let result (DataSink 'result))
+
+(let conv1 (lambda '(item) (block '(
+  (let res (Struct))
+  (let res (AddMember res '"item1" (Cast (Member item '"key") 'Int32)))
+  (let res (AddMember res '"item2" (Member item '"value")))
+  (return (AsList res))
+))))
+
+(let conv2 (lambda '(item) (block '(
+  (let res (Struct))
+  (let res (AddMember res '"item3" (Cast (Member item '"key") 'Int32)))
+  (let res (AddMember res '"item4" (Member item '"value")))
+  (return (AsList res))
+))))
+
+(let r (Read! world source (Key '('table (String '"Input"))) (Void) '()))
+(let world (Left! r))
+(let input (Right! r))
+(let out (FlatMap input conv1))
+(let world (Write! world sink (Key '('table (String 'Output))) out '('('mode 'append))))
+(let world (Commit! world sink))
+
+(let world (Write! world sink (Key '('table (String 'Output))) (Void) '('('mode 'drop))))
+(let world (Commit! world sink))
+
+(let r (Read! world source (Key '('table (String '"Input"))) (Void) '()))
+(let world (Left! r))
+(let input (Right! r))
+(let out (FlatMap input conv2))
+(let world (Write! world sink (Key '('table (String 'Output))) out '('('mode 'append))))
+
+(let world (Commit! world sink))
+(return world)
+)

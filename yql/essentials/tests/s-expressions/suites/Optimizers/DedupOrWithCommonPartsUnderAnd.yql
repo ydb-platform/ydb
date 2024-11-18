@@ -1,0 +1,16 @@
+(
+(let $1 (DataSink 'result))
+(let $2 (Write! world $1 (Key) (Unordered (EnsurePersistable (OrderedFlatMap (OrderedFilter (Right! (Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"Input")))) (Void) '())) (lambda '($3) (Coalesce
+    (And
+        (And
+            (Or (== (Member $3 '"key") (String '"075")) (== (Member $3 '"subkey") (String '"4")))
+            (Or (== (String '"075") (Member $3 '"key")) (== (String '"xyz") (Member $3 '"value")))
+        )
+        (Or
+            (Or (== (String '"075") (Member $3 '"key")) (== (Member $3 '"value") (String '"xyz")))
+            (== (Member $3 '"key") (String '"200"))
+        )
+    )
+(Bool 'false)))) (lambda '($4) (AsList $4))))) '('('type) '('autoref))))
+(return (CommitAll! (Commit! $2 $1)))
+)

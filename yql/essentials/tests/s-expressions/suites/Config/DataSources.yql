@@ -1,0 +1,11 @@
+(
+#comment
+(let config (DataSource 'config))
+(let x (Read! world config (Key '('data_sources)) '() '()))
+(let world (Left! x))
+(let data (Right! x))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) data '()))
+(let world (Commit! world res_sink))
+(return world)
+)

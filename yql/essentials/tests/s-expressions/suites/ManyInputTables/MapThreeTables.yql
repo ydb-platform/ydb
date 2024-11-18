@@ -1,0 +1,28 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input1))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+(let x (Read! world mr_source (Key '('table (String 'Input2))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table2 (Right! x))
+(let x (Read! world mr_source (Key '('table (String 'Input3))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table3 (Right! x))
+(let tresh (Int32 '100))
+(let result (FlatMap (Extend table1 (Extend table2 table3)) (lambda '(item) (block '(
+   (let intValueOpt (FromString (Member item 'key) 'Int32))
+   (let ret (FlatMap intValueOpt (lambda '(item2) (block '(
+      (return (ListIf (< item2 tresh) item))
+   )))))
+   (return ret)
+)))))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) result '()))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) result '()))
+(let world (Commit! world mr_sink))
+(let world (Commit! world res_sink))
+(return world)
+)

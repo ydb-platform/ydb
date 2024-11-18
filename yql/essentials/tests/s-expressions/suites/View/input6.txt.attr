@@ -1,0 +1,31 @@
+{
+    "_yql_view_my"="$udfScript=\"def f(row):\n\treturn {'myvalue':b'm' + row.value}\n\";$udf=Python::f(Callable<(Struct<key:String,subkey:String,value:String>)->Struct<myvalue:String>>, $udfScript);PROCESS self USING $udf(TableRow());";
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

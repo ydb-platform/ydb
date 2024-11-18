@@ -1,0 +1,50 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(import id_module '"/lib/yql/id.yql")
+(let id (bind id_module 'id))
+
+(let res_sink (DataSink 'result))
+(let vt (VariantType (TupleType (DataType 'Int32) (DataType 'Int32))))
+(let v1 (Variant (Int32 '34) '0 vt))
+(let v2 (Variant (Int32 '42) '1 vt))
+(let jv1 (Just v1))
+(let jv2 (Just v2))
+(let n (Nothing (TypeOf jv1)))
+
+(let world (Write! world res_sink (Key) (VariantItem v1) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem v2) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem jv1) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem jv2) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem n) '('('type))))
+
+(let world (Write! world res_sink (Key) (VariantItem (Apply id v1)) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem (Apply id v2)) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem (Apply id jv1)) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem (Apply id jv2)) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem (Apply id n)) '('('type))))
+
+(let vt (VariantType (StructType '('a (DataType 'Int32)) '('b (DataType 'Int32)))))
+(let v1 (Variant (Int32 '34) 'a vt))
+(let v2 (Variant (Int32 '42) 'b vt))
+(let jv1 (Just v1))
+(let jv2 (Just v2))
+(let n (Nothing (TypeOf jv1)))
+
+(let world (Write! world res_sink (Key) (VariantItem v1) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem v2) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem jv1) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem jv2) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem n) '('('type))))
+
+(let world (Write! world res_sink (Key) (VariantItem (Apply id v1)) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem (Apply id v2)) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem (Apply id jv1)) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem (Apply id jv2)) '('('type))))
+(let world (Write! world res_sink (Key) (VariantItem (Apply id n)) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

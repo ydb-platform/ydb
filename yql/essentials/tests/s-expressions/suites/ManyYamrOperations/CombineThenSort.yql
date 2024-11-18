@@ -1,0 +1,30 @@
+(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) '('"key" '"subkey" '"value") '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+
+  (let map (FlatMap table0 (lambda '(row) (block '(
+    (let key (MatchType (Member row '"key") 'Optional (lambda '(item) (Coalesce (Map item (lambda '(val) (IfType val (DataType 'String) (lambda '(item) (FromString item '"Int64")) (lambda '(item) (Just (Convert item '"Int64")))))) (Nothing (OptionalType (DataType '"Int64"))))) (lambda '(item) (IfType item (DataType 'String) (lambda '(item) (FromString item '"Int64")) (lambda '(item) (Convert item '"Int64"))))))
+    (let res (Struct))
+    (let res (AddMember res '"Avg1" '(key (Convert (Exists key) 'Uint64))))
+    (let res (AsList res))
+    (return res)
+  )))))
+  (let combine (CombineByKey map (lambda '(row) (Just row)) (lambda '(row) (Uint64 '0)) (lambda '(key row) row) (lambda '(key row state) state) (lambda '(key state) (Just state))))
+  (let result (FlatMap combine (lambda '(row) (block '(
+    (let p0 (Nth (Member row 'Avg1) '0))
+    (let p1 (Nth (Member row 'Avg1) '1))
+    (let res (Struct))
+    (let res (AddMember res '"keyAvg" (
+        FlatMap p0 (lambda '(value) (Just (Coalesce (Div (Convert value 'Double) (Convert p1 'Double)) (Double '0))))
+    )))
+    (let res (AsList res))
+    (return res)
+  )))))
+  (let sortAfterCombine (Sort result (Bool 'false) (lambda '(x) (Member x 'keyAvg) )))
+  (let result_sink (DataSink 'result))
+  (let world (Write! world result_sink (Key) sortAfterCombine '('('type) '('autoref))))
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return (Commit! world result_sink))
+)

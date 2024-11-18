@@ -1,0 +1,20 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let t (AsList
+  (String 'a)
+  (String 'b)
+))
+
+(let jt (Just t))
+(let n (Nothing (TypeOf jt)))
+
+(let world (Write! world res_sink (Key) (ToIndexDict jt) '('('type))))
+(let world (Write! world res_sink (Key) (ToIndexDict n) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

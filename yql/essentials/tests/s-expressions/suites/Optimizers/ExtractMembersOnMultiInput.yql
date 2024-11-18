@@ -1,0 +1,22 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let x1 (Read! world mr_source (Key '('table (String 'Input1))) '('key 'subkey 'value) '()))
+(let x2 (Read! world mr_source (Key '('table (String 'Input2))) '('key 'subkey 'value) '()))
+(let world (Left! x1))
+(let table1 (RemoveSystemMembers (Right! x1)))
+(let table2 (RemoveSystemMembers (Right! x2)))
+
+(let joinType '('LeftOnly '"t" '"d" '('"t" '"key") '('"d" '"key") '()))
+(let $67 '('"rename" '"t.key" '"key"))
+(let $68 '('"rename" '"t.subkey" '"subkey"))
+(let $69 '('"rename" '"t.value" '"value"))
+(let rename '($67 $68 $69))
+
+(let join (EquiJoin '(table1 '"t") '((FlatMap (Extend (ExtractMembers table1 '('"key")) (ExtractMembers table2 '('"key"))) (lambda '($159) (Just (AsStruct '('"key" (Member $159 '"key")))))) '"d") joinType rename))
+(let out (Extend table1 table2 join))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) out '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

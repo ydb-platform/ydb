@@ -1,0 +1,3 @@
+{
+    "_yql_row_spec"={"SortMembers"=["key";"subkey"];"SortedBy"=["key";"subkey"];"SortDirections"=[1;1];"SortedByTypes"=[["OptionalType";["DataType";"String"]];["OptionalType";["DataType";"Int32"]]];"Type"=["StructType";[["key";["OptionalType";["DataType";"String"]]];["subkey";["OptionalType";["DataType";"Int32"]]];["value3";["OptionalType";["DataType";"Int64"]]]]]}
+}

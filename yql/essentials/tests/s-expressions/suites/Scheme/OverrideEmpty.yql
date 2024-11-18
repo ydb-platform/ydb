@@ -1,0 +1,5 @@
+(
+    (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) (Void) '()))
+    (let world (Write! (Left! x) (DataSink '"yt" '"plato") (Key '('table (String '"Output"))) (FlatMap (Right! x) (lambda '(item) (AsList item))) '('('mode 'renew))))
+    (return (Commit! world (DataSink '"yt" '"plato")))
+)

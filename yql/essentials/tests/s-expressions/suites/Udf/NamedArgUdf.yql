@@ -1,0 +1,44 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let udf (Udf 'SimpleUdf.NamedArgs ))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) (FormatType (TypeOf udf)) '('('type))))
+(let world (Write! world res_sink (Key) (NamedApply udf 
+  '((Uint32 '1)) 
+  (AsStruct)) 
+'()))
+(let world (Write! world res_sink (Key) (NamedApply udf 
+  '((Uint32 '1) (Uint32 '2)) 
+  (AsStruct)) 
+'()))
+(let world (Write! world res_sink (Key) (NamedApply udf 
+  '((Uint32 '1)) 
+  (AsStruct '('C (Uint32 '3)))) 
+'()))
+(let world (Write! world res_sink (Key) (NamedApply udf 
+  '((Uint32 '1)) 
+  (AsStruct '('C (Uint32 '3)) '('D (Uint32 '4)))) 
+'()))
+(let world (Write! world res_sink (Key) (NamedApply udf 
+  '((Uint32 '1)) 
+  (AsStruct '('D (Uint32 '4)))) 
+'()))
+(let world (Write! world res_sink (Key) (NamedApply udf 
+  '((Uint32 '1) (Uint32 '2)) 
+  (AsStruct '('D (Uint32 '4)))) 
+'()))
+(let world (Write! world res_sink (Key) (NamedApply udf 
+  '((Uint32 '1) (Uint32 '2) (Uint32 '3)) 
+  (AsStruct)) 
+'()))
+(let world (Write! world res_sink (Key) (NamedApply udf 
+  '((Uint32 '1) (Uint32 '2) (Uint32 '3) (Uint32 '4)) 
+  (AsStruct))  
+'()))
+
+(let world (Commit! world res_sink))
+(return world)
+)

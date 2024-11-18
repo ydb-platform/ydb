@@ -1,0 +1,54 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(import id_module '"/lib/yql/id.yql")
+(let id (bind id_module 'id))
+
+(let res_sink (DataSink 'result))
+(let vt (VariantType (TupleType (DataType 'Int32) (DataType 'String))))
+(let v1 (Variant (Int32 '34) '0 vt))
+(let v2 (Variant (String 'qwe) '1 vt))
+(let jv1 (Just v1))
+(let jv2 (Just v2))
+(let n (Nothing (TypeOf jv1)))
+
+(let world (Write! world res_sink (Key) (Guess v1 '0) '('('type))))
+(let world (Write! world res_sink (Key) (Guess v2 '1) '('('type))))
+(let world (Write! world res_sink (Key) (Guess jv1 '0) '('('type))))
+(let world (Write! world res_sink (Key) (Guess jv2 '1) '('('type))))
+(let world (Write! world res_sink (Key) (Guess n '0) '('('type))))
+(let world (Write! world res_sink (Key) (Guess n '1) '('('type))))
+
+(let world (Write! world res_sink (Key) (Guess (Apply id v1) '0) '('('type))))
+(let world (Write! world res_sink (Key) (Guess (Apply id v2) '1) '('('type))))
+(let world (Write! world res_sink (Key) (Guess (Apply id jv1) '0) '('('type))))
+(let world (Write! world res_sink (Key) (Guess (Apply id jv2) '1) '('('type))))
+(let world (Write! world res_sink (Key) (Guess (Apply id n) '0) '('('type))))
+(let world (Write! world res_sink (Key) (Guess (Apply id n) '1) '('('type))))
+
+(let vt (VariantType (StructType '('a (DataType 'Int32)) '('b (DataType 'String)))))
+(let v1 (Variant (Int32 '34) 'a vt))
+(let v2 (Variant (String 'qwe) 'b vt))
+(let jv1 (Just v1))
+(let jv2 (Just v2))
+(let n (Nothing (TypeOf jv1)))
+
+(let world (Write! world res_sink (Key) (Guess v1 'a) '('('type))))
+(let world (Write! world res_sink (Key) (Guess v2 'b) '('('type))))
+(let world (Write! world res_sink (Key) (Guess jv1 'a) '('('type))))
+(let world (Write! world res_sink (Key) (Guess jv2 'b) '('('type))))
+(let world (Write! world res_sink (Key) (Guess n 'a) '('('type))))
+(let world (Write! world res_sink (Key) (Guess n 'b) '('('type))))
+
+(let world (Write! world res_sink (Key) (Guess (Apply id v1) 'a) '('('type))))
+(let world (Write! world res_sink (Key) (Guess (Apply id v2) 'b) '('('type))))
+(let world (Write! world res_sink (Key) (Guess (Apply id jv1) 'a) '('('type))))
+(let world (Write! world res_sink (Key) (Guess (Apply id jv2) 'b) '('('type))))
+(let world (Write! world res_sink (Key) (Guess (Apply id n) 'a) '('('type))))
+(let world (Write! world res_sink (Key) (Guess (Apply id n) 'b) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

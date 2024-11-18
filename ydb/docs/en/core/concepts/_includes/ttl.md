@@ -4,7 +4,21 @@ This section describes how the TTL mechanism works and what its limits are. It a
 
 ## How it works {#how-it-works}
 
-{{ ydb-short-name }} allows you to specify a TTL column in both [row-oriented](../datamodel/table.md#row-oriented-tables) and [column-oriented](../datamodel/table.md#column-oriented-tables) tables. Values in TTL columns determine the table rows lifetime.
+The table's TTL is defined by a sequence of storage tiers. For each tier in the sequence, an expression is specified; when the expression triggers, the row is assigned that tier. TTL automatically performs the specified action when a tier is assigned to a row: it moves the row to external storage or deletes it. External storage is represented by the external data source object. Deletion can only be specified for the last tier.
+
+{% note info %}
+
+Currently, only an Object Storage is available as external storage.
+
+{% endnote %}
+
+{{ ydb-short-name }} allows you to specify, for both row-oriented and columnar tables, a column (TTL column) whose values are used in TTL expressions. The expression triggers when the specified number of seconds have passed since the time recorded in the TTL column.
+
+{% note info %}
+
+Automatic data eviction to external storage is available only for column-oriented tables. For row-oriented tables, this functionality is under development.
+
+{% endnote %}
 
 {% note warning %}
 
@@ -15,12 +29,12 @@ An item with the `NULL` value in the TTL column is never deleted.
 The timestamp for deleting a table item is determined by the formula:
 
 ```text
-expiration_time = valueof(ttl_column) + expire_after_seconds
+eviction_time = valueof(ttl_column) + evict_after_seconds
 ```
 
 {% note info %}
 
-TTL doesn't guarantee that the item will be deleted exactly at `expiration_time`, it might happen later. If it's important to exclude logically obsolete but not yet physically deleted items from the selection, use query-level filtering.
+TTL doesn't guarantee that the item will be deleted exactly at `eviction_time`, it might happen later. If it's important to exclude logically obsolete but not yet physically deleted items from the selection, use query-level filtering.
 
 {% endnote %}
 
@@ -173,6 +187,45 @@ The example below shows how to use the `modified_at` column with a numeric type 
   ```python
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
   ```
+
+{% endlist %}
+
+### Enabling eviction to Object Storage for an existing table {#enable-tiering-on-existing-tables}
+
+{% note info %}
+
+This functionality is only available for column-oriented tables. For row-oriented tables, this functionality is under development.
+
+{% endnote %}
+
+In the following example, rows of the table `mytable` will be moved to the bucket described in the external data source `/Root/s3_cold_data` one hour after the time recorded in the column `created_at`, and will be deleted after 24 hours:
+
+{% list tabs group=tool %}
+
+- YQL
+
+  ```yql
+  ALTER TABLE `mytable` SET (TTL = Interval("PT1H") TO EXTERNAL DATA SOURCE `/Root/s3_cold_data`, Interval(PT24H) DELETE ON modified_at AS SECONDS);
+  ```
+
+{% if oss == true %}
+
+- C++
+
+  ```c++
+  session.AlterTable(
+      "mytable",
+      TAlterTableSettings()
+          .BeginAlterTtlSettings()
+              .Set("created_at", {
+                      TTtlTierSettings(TDuration::Hours(1), TTtlEvictToExternalStorageAction("/Root/s3_cold_data")),
+                      TTtlTierSettings(TDuration::Hours(24), TTtlDeleteAction("/Root/s3_cold_data"))
+                  })
+          .EndAlterTtlSettings()
+  );
+  ```
+
+{% endif %}
 
 {% endlist %}
 

@@ -135,7 +135,7 @@ CREATE TABLE article (
 
 | Имя параметра | Тип | Допустимые значения | Возможность<br/>изменения | Возможность<br/>сброса |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |
-| `TTL` | Expression | `Interval("<literal>") ON <column> [AS <unit>]` | Да | Да |
+| `TTL` | Expression | `<tier>, ..., <tier> ON <column> [AS <unit>]`, где `<tier>` — `Inteval("<literal>") TO EXTERNAL DATA SOURCE <path_to_source>` или `Inteval("<literal>") TO DELETE`. Краткая форма:  `Interval("<literal>") ON <column> [AS <unit>]` — задаёт удаление данных | Да | Да |
 
 Где `<unit>` — единица измерения, указывается только для колонок с [числовым типом](../../../concepts/ttl.md#restrictions):
 

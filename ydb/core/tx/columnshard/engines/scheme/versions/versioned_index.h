@@ -73,7 +73,7 @@ public:
         return sb;
     }
 
-    ISnapshotSchema::TPtr GetSchema(const ui64 version) const {
+    ISnapshotSchema::TPtr GetSchemaOptional(const ui64 version) const {
         auto it = SnapshotByVersion.find(version);
         return it == SnapshotByVersion.end() ? nullptr : it->second;
     }
@@ -84,7 +84,7 @@ public:
         return it->second;
     }
 
-    ISnapshotSchema::TPtr GetSchema(const TSnapshot& version) const {
+    ISnapshotSchema::TPtr GetSchemaVerified(const TSnapshot& version) const {
         for (auto it = Snapshots.rbegin(); it != Snapshots.rend(); ++it) {
             if (it->first <= version) {
                 return it->second;

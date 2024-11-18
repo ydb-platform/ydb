@@ -105,6 +105,10 @@ public:
         return Id.BlobId.BlobSize();
     }
 
+    ui32 Channel() const {
+        return Id.BlobId.Channel();
+    }
+
     TLogoBlobID GetLogoBlobId() const {
         return Id.BlobId;
     }

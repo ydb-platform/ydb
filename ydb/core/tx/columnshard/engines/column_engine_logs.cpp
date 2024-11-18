@@ -98,6 +98,19 @@ void TColumnEngineForLogs::UpdatePortionStats(
     TColumnEngineStats& engineStats, const TPortionInfo& portionInfo, EStatsUpdateType updateType, const TPortionInfo* exPortionInfo) const {
     TColumnEngineStats::TPortionsStats deltaStats = DeltaStats(portionInfo);
 
+    ui64 totalBlobsSize = 0;
+    ui32 blobCount = portionInfo.GetBlobIdsCount();
+    for (ui32 i = 0; i < blobCount; i++) {
+        const auto& blob = portionInfo.GetBlobId(i);
+        ui32 channel = blob.Channel();
+        if (deltaStats.ByChannel.size() <= channel) {
+            deltaStats.ByChannel.resize(channel + 1);
+        }
+        deltaStats.ByChannel[channel] += blob.BlobSize();
+        totalBlobsSize += blob.BlobSize();
+    }
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "update_portion")("blobs_size", totalBlobsSize)("portion_bytes", deltaStats.Bytes)("portion_raw_bytes", deltaStats.RawBytes);
+
     Y_ABORT_UNLESS(!exPortionInfo || exPortionInfo->GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
     Y_ABORT_UNLESS(portionInfo.GetMeta().Produced != TPortionMeta::EProduced::UNSPECIFIED);
 

@@ -279,40 +279,40 @@ Y_UNIT_TEST_SUITE(TJsonParserTests) {
 
     Y_UNIT_TEST_F(MissingFieldsValidation, TFixture) {
         MakeParser({"a1", "a2"}, {"[DataType; String]", "[DataType; Uint64]"});
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": "hello1", "a2": null, "event": "event1"})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a2' with type [DataType; Uint64], description: (yexception) found unexpected null value, expected non optional data type Uint64");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a2": 105, "event": "event1"})"), yexception, "Failed to parse json messages, found 1 missing values from offset 42 in non optional column 'a1' with type [DataType; String]");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": "hello1", "a2": null, "event": "event1"})"), TJsonParserError, "Failed to parse json string at offset 42, got parsing error for column 'a2' with type [DataType; Uint64], description: (NFq::TJsonParserError) found unexpected null value, expected non optional data type Uint64");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a2": 105, "event": "event1"})"), TJsonParserError, "Failed to parse json messages, found 1 missing values from offset 42 in non optional column 'a1' with type [DataType; String]");
     }
 
     Y_UNIT_TEST_F(TypeKindsValidation, TFixture) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             MakeParser({"a2", "a1"}, {"[OptionalType; [DataType; String]]", "[ListType; [DataType; String]]"}),
-            yexception,
-            "Failed to create parser for column 'a1' with type [ListType; [DataType; String]], description: (yexception) unsupported type kind List"
+            NFq::TJsonParserError,
+            "Failed to create parser for column 'a1' with type [ListType; [DataType; String]], description: (NFq::TJsonParserError) unsupported type kind List"
         );
     }
 
     Y_UNIT_TEST_F(NumbersValidation, TFixture) {
         MakeParser({"a1", "a2"}, {"[OptionalType; [DataType; String]]", "[DataType; Uint8]"});
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": 456, "a2": 42})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a1' with type [OptionalType; [DataType; String]], description: (yexception) failed to parse data type String from json number (raw: '456'), error: (yexception) number value is not expected for data type String");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": "456", "a2": -42})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a2' with type [DataType; Uint8], description: (yexception) failed to parse data type Uint8 from json number (raw: '-42'), error: (simdjson::simdjson_error) INCORRECT_TYPE: The JSON element does not have the requested type.");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": "str", "a2": 99999})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a2' with type [DataType; Uint8], description: (yexception) failed to parse data type Uint8 from json number (raw: '99999'), error: (yexception) number is out of range");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": 456, "a2": 42})"), NFq::TJsonParserError, "Failed to parse json string at offset 42, got parsing error for column 'a1' with type [OptionalType; [DataType; String]], description: (NFq::TJsonParserError) failed to parse data type String from json number (raw: '456'), error: (NFq::TJsonParserError) number value is not expected for data type String");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": "456", "a2": -42})"), NFq::TJsonParserError, "Failed to parse json string at offset 42, got parsing error for column 'a2' with type [DataType; Uint8], description: (NFq::TJsonParserError) failed to parse data type Uint8 from json number (raw: '-42'), error: (simdjson::simdjson_error) INCORRECT_TYPE: The JSON element does not have the requested type.");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": "str", "a2": 99999})"), NFq::TJsonParserError, "Failed to parse json string at offset 42, got parsing error for column 'a2' with type [DataType; Uint8], description: (NFq::TJsonParserError) failed to parse data type Uint8 from json number (raw: '99999'), error: (NFq::TJsonParserError) number is out of range");
     }
 
     Y_UNIT_TEST_F(NestedJsonValidation, TFixture) {
         MakeParser({"a1", "a2"}, {"[OptionalType; [DataType; Json]]", "[OptionalType; [DataType; String]]"});
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": {"key": "value"}, "a2": {"key2": "value2"}})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a2' with type [OptionalType; [DataType; String]], description: (yexception) found unexpected nested value (raw: '{\"key2\": \"value2\"}'), expected data type String, please use Json type for nested values");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": {"key" "value"}, "a2": "str"})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a1' with type [OptionalType; [DataType; Json]], description: (simdjson::simdjson_error) TAPE_ERROR: The JSON document has an improper structure: missing or superfluous commas, braces, missing keys, etc.");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": {"key": "value"}, "a2": {"key2": "value2"}})"), NFq::TJsonParserError, "Failed to parse json string at offset 42, got parsing error for column 'a2' with type [OptionalType; [DataType; String]], description: (NFq::TJsonParserError) found unexpected nested value (raw: '{\"key2\": \"value2\"}'), expected data type String, please use Json type for nested values");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": {"key" "value"}, "a2": "str"})"), NFq::TJsonParserError, "Failed to parse json string at offset 42, got parsing error for column 'a1' with type [OptionalType; [DataType; Json]], description: (simdjson::simdjson_error) TAPE_ERROR: The JSON document has an improper structure: missing or superfluous commas, braces, missing keys, etc.");
     }
 
     Y_UNIT_TEST_F(BoolsValidation, TFixture) {
         MakeParser({"a1", "a2"}, {"[OptionalType; [DataType; String]]", "[DataType; Bool]"});
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": true, "a2": false})"), yexception, "Failed to parse json string at offset 42, got parsing error for column 'a1' with type [OptionalType; [DataType; String]], description: (yexception) found unexpected bool value, expected data type String");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a1": true, "a2": false})"), NFq::TJsonParserError, "Failed to parse json string at offset 42, got parsing error for column 'a1' with type [OptionalType; [DataType; String]], description: (NFq::TJsonParserError) found unexpected bool value, expected data type String");
     }
 
     Y_UNIT_TEST_F(ThrowExceptionByError, TFixture) {
         MakeParser({"a"});
         UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"(ydb)"), simdjson::simdjson_error, "INCORRECT_TYPE: The JSON element does not have the requested type.");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a": "value1"} {"a": "value2"})"), yexception, "Failed to parse json messages, expected 1 json rows from offset 42 but got 2");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(PushToParser(42, R"({"a": "value1"} {"a": "value2"})"), NFq::TJsonParserError, "Failed to parse json messages, expected 1 json rows from offset 42 but got 2");
     }
 }
 

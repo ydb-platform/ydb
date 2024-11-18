@@ -371,11 +371,11 @@ class TRealBlockDevice : public IBlockDevice {
                 Device.CompletionThread->Schedule(action);
             } else {
                 if (action->CanHandleResult()) {
-                    action->Exec(Device.PCtx->ActorSystem);
+                    action->Exec(Device.ActorSystem);
                 } else {
                     TString errorReason = action->ErrorReason;
 
-                    action->Release(Device.PCtx->ActorSystem);
+                    action->Release(Device.ActorSystem);
 
                     if (!Device.QuitCounter.IsBlocked()) {
                         Device.BecomeErrorState(TStringBuilder()

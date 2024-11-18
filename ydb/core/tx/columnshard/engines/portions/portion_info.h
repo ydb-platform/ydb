@@ -351,7 +351,7 @@ public:
         return SchemaVersion;
     }
 
-    void SetSchemaVersion(ui64 schemaVersion) {
+    void SetSchemaVersion(const ui64 schemaVersion) {
         SchemaVersion = schemaVersion;
     }
 

@@ -88,11 +88,11 @@ public:
     std::set<ui32> GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const;
     std::vector<ui32> ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const;
 
-    virtual bool IsCompatibleWithNext(const ISnapshotSchema&) const {
+    virtual bool IsReplaceableByNext(const ISnapshotSchema&) const {
         return false;
     };
 
-    virtual bool IsCompatibleWithPrev(const TSnapshotSchema&) const {
+    virtual bool IsReplaceableByPrev(const TSnapshotSchema&) const {
         return false;
     }
 };

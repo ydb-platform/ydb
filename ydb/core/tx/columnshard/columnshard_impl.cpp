@@ -519,6 +519,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     //  !!!!!! MUST BE FIRST THROUGH DATA HAVE TO BE SAME IN SESSIONS AFTER TABLET RESTART
     SharingSessionsManager->Start(*this);
 
+    SetupLightSchemaActualization();
     SetupIndexation();
     SetupCompaction({});
     SetupCleanupPortions();
@@ -800,6 +801,9 @@ void TColumnShard::SetupCompaction(const std::set<ui64>& pathIds) {
             NPrioritiesQueue::TCompServiceOperator::Ask(PrioritizationClientId, priority, std::make_shared<TCompactionAllocated>(SelfId()));
         }
     }
+}
+
+void TColumnShard::SetupLightSchemaActualization() {
     Execute(new TTxSetCompatibleSchemaVersions(this));
 }
 

@@ -55,10 +55,10 @@ THashMap<ui64, ui64> TVersionedIndex::GetCompatibleSchemaVersions() const {
         auto prev = cur;
         prev++;
         for (; prev != SnapshotByVersion.crend(); prev++) {
-            bool compatible = prev->second->IsCompatibleWithNext(*cur->second);
-            if (compatible) {
-                result[prev->first] = cur->first;
+            if (!prev->second->IsReplaceableByNext(*cur->second)) {
+                break;
             }
+            result[prev->first] = cur->first;
         }
         cur = prev;
     }

@@ -49,7 +49,7 @@ ui64 TSnapshotSchema::GetVersion() const {
     return IndexInfo.GetVersion();
 }
 
-bool TSnapshotSchema::IsCompatibleWithNextVersion(const TSnapshotSchema& nextSchema) const {
+bool TSnapshotSchema::IsReplaceableByNextVersion(const TSnapshotSchema& nextSchema) const {
     const auto& nextFields = nextSchema.GetSchema()->fields();
     const auto& curFields = Schema->fields();
     const ui32 curFieldCount = curFields.size();

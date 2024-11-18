@@ -96,6 +96,7 @@ class TTxRemoveSharedBlobs;
 class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
 class TTxBlobsWritingFinished;
+class TTxSetCompatibleSchemaVersions;
 
 namespace NLoading {
 class TInsertTableInitializer;
@@ -174,6 +175,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
     friend class TWaitEraseTablesTxSubscriber;
+    friend class TTxSetCompatibleSchemaVersions;
 
     friend class NOlap::TCleanupPortionsColumnEngineChanges;
     friend class NOlap::TCleanupTablesColumnEngineChanges;
@@ -575,6 +577,7 @@ private:
         const NKikimrTxColumnShard::TAlterStore& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
 
     void StartIndexTask(std::vector<const NOlap::TCommittedData*>&& dataToIndex, const i64 bytesToIndex);
+    void SetupLightSchemaActualization();
     void SetupIndexation();
     void SetupCompaction(const std::set<ui64>& pathIds);
     void StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
@@ -677,10 +680,6 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_COLUMNSHARD_ACTOR;
-    }
-
-    void ChangeSchemaVersionsToLastCompatible(NOlap::TDbWrapper& db) {
-        TablesManager.MutablePrimaryIndex().ChangeSchemaVersionsToLastCompatible(db, DataLocksManager);
     }
 
     TColumnShard(TTabletStorageInfo* info, const TActorId& tablet);

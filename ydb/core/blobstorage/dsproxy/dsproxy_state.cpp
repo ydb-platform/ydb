@@ -323,12 +323,28 @@ namespace NKikimr {
         Send(ev->Sender, new TEvProxySessionsState(Sessions ? Sessions->GroupQueues : nullptr));
     }
 
+#define SELECT_CONTROL_BY_DEVICE_TYPE(prefix, info) \
+([&](NPDisk::EDeviceType deviceType) -> i64 {       \
+    TInstant now = TActivationContext::Now();       \
+    switch (deviceType) {                           \
+    case NPDisk::DEVICE_TYPE_ROT:                   \
+        return Controls.prefix##HDD.Update(now);    \
+    case NPDisk::DEVICE_TYPE_SSD:                   \
+    case NPDisk::DEVICE_TYPE_NVME:                  \
+        return Controls.prefix##SSD.Update(now);    \
+    default:                                        \
+        return Controls.prefix.Update(now);         \
+    }                                               \
+})(info ? info->GetDeviceType() : NPDisk::DEVICE_TYPE_UNKNOWN)
+
     TAccelerationParams TBlobStorageGroupProxy::GetAccelerationParams() {
         return TAccelerationParams{
-            .SlowDiskThreshold = .001f * SlowDiskThreshold.Update(TActivationContext::Now()),
-            .PredictedDelayMultiplier = .001f * PredictedDelayMultiplier.Update(TActivationContext::Now()),
-            .MaxNumOfSlowDisks = (ui32)MaxNumOfSlowDisks.Update(TActivationContext::Now()),
+            .SlowDiskThreshold = .001f * SELECT_CONTROL_BY_DEVICE_TYPE(SlowDiskThreshold, Info),
+            .PredictedDelayMultiplier = .001f * SELECT_CONTROL_BY_DEVICE_TYPE(PredictedDelayMultiplier, Info),
+            .MaxNumOfSlowDisks = static_cast<ui32>(SELECT_CONTROL_BY_DEVICE_TYPE(MaxNumOfSlowDisks, Info)),
         };
     }
+
+#undef SELECT_CONTROL_BY_DEVICE_TYPE
 
 } // NKikimr

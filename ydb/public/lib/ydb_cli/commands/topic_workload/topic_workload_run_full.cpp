@@ -98,11 +98,11 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .DefaultValue(false)
         .StoreTrue(&Scenario.UseTransactions);
     config.Opts->AddLongOption("tx-commit-interval-ms", "Interval of transaction commit in milliseconds."
-                                                            "Both tx-commit-messages and tx-commit-interval-ms can trigger transaction commit.")
+                                                            " Both tx-commit-messages and tx-commit-interval-ms can trigger transaction commit.")
         .DefaultValue(1000)
         .StoreResult(&Scenario.TxCommitIntervalMs);
     config.Opts->AddLongOption("tx-commit-messages", "Number of messages to commit transaction. " 
-                                                            "Both tx-commit-messages and tx-commit-interval-ms can trigger transaction commit.")
+                                                            " Both tx-commit-messages and tx-commit-interval-ms can trigger transaction commit.")
         .DefaultValue(1'000'000)
         .StoreResult(&Scenario.CommitMessages);
     config.Opts->AddLongOption("only-topic-in-tx", "Put only topic (without table) in transaction")

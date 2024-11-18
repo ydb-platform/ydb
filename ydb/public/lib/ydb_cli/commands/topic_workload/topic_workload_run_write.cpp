@@ -85,18 +85,21 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .Optional()
         .DefaultValue(false)
         .StoreTrue(&Scenario.UseTransactions);
-    config.Opts->AddLongOption("commit-period", "DEPRECATED: use tx-commit-intervall-ms instead. If both options are specified, tx-commit-intervall-ms will be used. Waiting time between commit in seconds.")
-        .DefaultValue(1)
+    config.Opts->AddLongOption("commit-period", "DEPRECATED: use tx-commit-intervall-ms instead. Waiting time between commit in seconds. Default - 1 second")
+        .Optional()
         .StoreResult(&Scenario.CommitPeriodSeconds);
-    config.Opts->AddLongOption("tx-commit-interval-ms", "Interval of transaction commit in milliseconds."
-                                                            "Both tx-commit-messages and tx-commit-interval-ms can trigger transaction commit.")
-        .DefaultValue(1000)
+    config.Opts->AddLongOption("tx-commit-interval-ms", "Interval of transaction commit in milliseconds. Default - 1000ms"
+                                                            " Both tx-commit-messages and tx-commit-interval-ms can trigger transaction commit.")
+        .Optional()
         .StoreResult(&Scenario.TxCommitIntervalMs);
+
+    config.Opts->MutuallyExclusive("commit-period", "tx-commit-interval-ms");
+
     config.Opts->AddLongOption("commit-messages", "DEPRECATED. Use --tx-commit-messages instead. Number of messages per transaction")
         .DefaultValue(1'000'000)
         .StoreResult(&Scenario.CommitMessages);
     config.Opts->AddLongOption("tx-commit-messages", "Number of messages to commit transaction. " 
-                                                            "Both tx-commit-messages and tx-commit-interval-ms can trigger transaction commit.")
+                                                            " Both tx-commit-messages and tx-commit-interval-ms can trigger transaction commit.")
         .DefaultValue(1'000'000)
         .StoreResult(&Scenario.CommitMessages);
 

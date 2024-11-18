@@ -397,9 +397,17 @@ init {
     }
 }
 
+#define PUSHED_SLOT_ALWAYS_WILL_BE_POPPED(idx) (idx >= QUEUE_SIZE || [](!queue.buffer[idx].isEmpty -> <>(queue.buffer[idx].isEmpty)))
+
+
+
+
 ltl no_overflow {
     [] ((queue.tail - queue.head <= QUEUE_SIZE + CONSUMERS) && 
         (queue.tail <= ELEMENTS + lagged_pops) && 
         (queue.head <= ELEMENTS + lagged_pops) &&
         (lagged_pops <= (ELEMENTS/ (QUEUE_SIZE + CONSUMERS - 1)) * (CONSUMERS - 1)))
+    && PUSHED_SLOT_ALWAYS_WILL_BE_POPPED(0)
+    && PUSHED_SLOT_ALWAYS_WILL_BE_POPPED(1)
+    && PUSHED_SLOT_ALWAYS_WILL_BE_POPPED(2) 
 }

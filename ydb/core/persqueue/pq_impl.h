@@ -93,6 +93,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
+    bool OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx);
 
     void HandleDie(const TActorContext& ctx) override;
 

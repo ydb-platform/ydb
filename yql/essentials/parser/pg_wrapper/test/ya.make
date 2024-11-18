@@ -28,7 +28,7 @@ DATA(
 )
 
 PEERDIR(
-    contrib/ydb/library/yql/tests/common/test_framework
+    yql/essentials/tests/common/test_framework
 )
 
 DEPENDS(

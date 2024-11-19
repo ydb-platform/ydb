@@ -2,6 +2,7 @@
 #include "mkql_rh_hash.h"
 
 // #include <format>
+#include <format>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
@@ -988,8 +989,8 @@ public:
                 }
 
                 const auto initUsage = MemLimit ? ctx.HolderFactory.GetMemoryUsed() : 0ULL;
-                // std::cerr << std::format("{}# - MISHA: StoredBytes: {}, MemLimit: {}, memLimit: {}, continue: {}\n", (void*)this, ptr->StoredDataSize, MemLimit, memLimit, !ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage));
-                // Cerr << "Usage: " << ptr->StoredDataSize << "/" << MemLimit << ".Continue: " << !ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage)<< Endl;
+                std::cerr << std::format("{}# - MISHA: StoredBytes: {}, MemLimit: {}, memLimit: {}, continue: {}\n", (void*)this, ptr->StoredDataSize, MemLimit, initUsage-ptr->StoredDataSize, !ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage));
+                Cerr << "Usage: " << ptr->StoredDataSize << "/" << MemLimit << ".Continue: " << !ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage)<< Endl;
 
                 auto **fields = ctx.WideFields.data() + WideFieldsIndex;
 
@@ -1001,10 +1002,11 @@ public:
                     ptr->InputStatus = Flow->FetchValues(ctx, fields);
                     if constexpr (SkipYields) {
                         if (EFetchResult::Yield == ptr->InputStatus) {
-                            // auto oldStored = ptr->StoredDataSize;
-                            ptr->StoredDataSize += MemLimit ? ui64(ctx.HolderFactory.GetMemoryUsed() - initUsage) : 0UL;
-                            // auto newStored = ptr->StoredDataSize;
-                            // std::cerr << std::format("{}# - MISHA yield, old stored: {}, new stored: {}",(void*)this, oldStored, newStored) << std::endl;
+                            auto oldStored = ptr->StoredDataSize;
+                            const auto usedMemory = ctx.HolderFactory.GetMemoryUsed() - initUsage;
+                            ptr->StoredDataSize += MemLimit && usedMemory > 0 ? usedMemory : 0UL;
+                            auto newStored = ptr->StoredDataSize;
+                            std::cerr << std::format("{}# - MISHA yield, old stored: {}, new stored: {}. Init usage: {}, current usage: {}",(void*)this, oldStored, newStored, initUsage, ctx.HolderFactory.GetMemoryUsed()) << std::endl;
                             return EFetchResult::Yield;
                         } else if (EFetchResult::Finish == ptr->InputStatus) {
                             break;
@@ -1020,6 +1022,7 @@ public:
                 } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage - ptr->StoredDataSize));
 
                 ptr->PushStat(ctx.Stats);
+                std::cerr << std::format("MISHA limit reached. Stored: {}, Init: {}, Current: {}\n", ptr->StoredDataSize, initUsage, ctx.HolderFactory.GetMemoryUsed());
             }
 
             if (const auto values = static_cast<NUdf::TUnboxedValue*>(ptr->Extract())) {
@@ -1037,7 +1040,7 @@ public:
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
-        const auto storedType = Type::getInt64Ty(context);
+        // const auto storedType = Type::getInt64Ty(context);
 
         TLLVMFieldsStructureState stateFields(context);
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
@@ -1138,11 +1141,13 @@ public:
 
                 // Store
                 // TODO: think of MemLimit = 0
+                /*
                 const auto storedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetStored() }, "stored", block);
-                const auto lastStored = new LoadInst(stateType, storedPtr, "lastStored", block);
+                const auto lastStored = new LoadInst(storedType, storedPtr, "lastStored", block);
                 const auto decr = BinaryOperator::CreateSub(GetMemoryUsed(MemLimit, ctx, block), used, "decr", block);
                 const auto inc = BinaryOperator::CreateAdd(lastStored, decr, "inc", block);
                 new StoreInst(inc, storedPtr, block);
+                */
                 
                 result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
                 BranchInst::Create(over, block);
@@ -1279,10 +1284,12 @@ public:
 
             block = test;
 
+            /*
             const auto storedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetStored() }, "stored", block);
             const auto lastStored = new LoadInst(stateType, storedPtr, "lastStored", block);
             const auto decr = BinaryOperator::CreateSub(used, lastStored, "decr", block);
-            const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, decr, ctx, block);
+            */
+            const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, used, ctx, block);
             BranchInst::Create(done, loop, check, block);
 
             block = done;
@@ -1914,9 +1921,9 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
             } else {
                 if (const auto memLimit = AS_VALUE(TDataLiteral, callable.GetInput(1U))->AsValue().Get<i64>(); memLimit >= 0)
                     if (EGraphPerProcess::Single == ctx.GraphPerProcess)
-                        return new TWideCombinerWrapper<true, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(memLimit));
+                        return new TWideCombinerWrapper<true, true>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(memLimit));
                     else
-                        return new TWideCombinerWrapper<false, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(memLimit));
+                        return new TWideCombinerWrapper<false, true>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(memLimit));
                 else
                     if (EGraphPerProcess::Single == ctx.GraphPerProcess)
                         return new TWideCombinerWrapper<true, true>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(-memLimit));

@@ -3324,7 +3324,7 @@ TExprNode::TPtr ExpandCombineByKey(const TExprNode::TPtr& node, TExprContext& ct
         .UpdateHandler(combine.UpdateHandlerLambda())
         .FinishHandler(combine.FinishHandlerLambda())
         .MemLimit()
-            .Value("0")
+            .Value("20000000")
             .Build()
         .Done()
         .Ptr();

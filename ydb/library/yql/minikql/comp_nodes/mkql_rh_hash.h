@@ -293,7 +293,7 @@ private:
             growFactor = 2;
         }
         auto newCapacity = Capacity * growFactor;
-        //  << (void*)this << "- Growing from: " << Capacity << " to: " << newCapacity << Endl;
+        Cerr  << (void*)this << "- Growing from: " << Capacity << " to: " << newCapacity << Endl;
         auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);

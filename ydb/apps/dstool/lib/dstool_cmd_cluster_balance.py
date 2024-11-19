@@ -10,7 +10,7 @@ description = 'Move vdisks out from overpopulated pdisks.'
 class Constants:
     WAITING_TIME = 15
     TIME_BERWEEN_REASSIGNINGS = 0
-    
+
     @classmethod
     def apply_args(cls, args):
         if args.waiting_time:
@@ -36,8 +36,6 @@ def add_options(p):
     p.add_argument('--waiting-time', type=int, default=Constants.WAITING_TIME, help='Time to wait when there are no vdisks to reassign')
     p.add_argument('--time-between-reassignings', type=int, default=Constants.TIME_BERWEEN_REASSIGNINGS, help='Time to wait between reassignings')
     common.add_basic_format_options(p)
-
-
 
 
 class ClusterInfo:
@@ -121,15 +119,18 @@ def list_overpopulated_pdisks(cluster_info):
             overpopulated_pdisks.add(pdisk_id)
     return overpopulated_pdisks
 
+
 def filter_vslots_by_group_ids(vslots, group_ids):
     if group_ids is None:
         return vslots
     return [vslot for vslot in vslots if vslot.GroupId in group_ids]
 
+
 def filter_vslots_by_pdisks(vslots, pdisks):
     if pdisks is None:
         return vslots
     return [vslot for vslot in vslots if common.get_pdisk_id(vslot.VSlotId) in pdisks]
+
 
 def filter_vslots_by_donors_per_pdisk(vslots, cluster_info, max_donors_per_pdisk):
     if max_donors_per_pdisk == 0:
@@ -158,7 +159,7 @@ class IBalancingStrategy:
 
     def list_candidate_vslots(self):
         return self.groups_info.healthy_vslots, False
-    
+
     def filter_must_first_vslots(self, candidate_vslots):
         return candidate_vslots
 
@@ -235,7 +236,7 @@ class BalancingStrategy(IBalancingStrategy):
         cmd.FailDomainIdx = vslot.FailDomainIdx
         cmd.VDiskIdx = vslot.VDiskIdx
 
-    def reassign_vslot(self, vslot, try_blocking):        
+    def reassign_vslot(self, vslot, try_blocking):
         pdisk_id = common.get_pdisk_id(vslot.VSlotId)
         vslot_id = common.get_vslot_id(vslot.VSlotId)
 
@@ -362,30 +363,30 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
         self.pdisk_ids = None
         self.pdisk_type = None
 
-    def calculate_extra_info(self): 
+    def calculate_extra_info(self):
         pdisk_types = set()
         for pdisk in self.cluster_info.pdisk_map.values():
             pdisk_types.add((pdisk.BoxId, pdisk.Type))
-            
+
         if len(pdisk_types) != 1:
             print("All pdisks must be of the same type", file=sys.stderr)
             return True
-        
+
         self.pdisk_type = pdisk_types.pop()
         pdisk_box_id, pdisk_type = self.pdisk_type
-        
+
         self.pdisk_ids = []
         for pdisk_id, pdisk in self.cluster_info.pdisk_map.items():
             if pdisk.BoxId == pdisk_box_id and pdisk.Type == pdisk_type and pdisk.DriveStatus == 1:
                 self.pdisk_ids.append(pdisk_id)
 
         total_pdisks = len(self.pdisk_ids)
-        
+
         self.pdisk_groups_usage = defaultdict(int)
 
         for pdisk_id in self.pdisk_ids:
             self.pdisk_groups_usage[pdisk_id] = 0
-            
+
         vslots = filter_vslots_by_group_ids(self.cluster_info.base_config.VSlot, self.args.group_ids)
 
         for vslot in vslots:
@@ -419,7 +420,7 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
 
     def order_candidate_vslots(self, candidate_vslots):
         return order_vslots_by_pdisk_usage(candidate_vslots, self.pdisk_groups_usage)
-    
+
     def check_success_conditions(self):
         if self.max_vdisks_per_pdisk <= self.ideal_distribution and self.min_vdisks_per_pdisk + 1 >= self.ideal_distribution:
             common.print_if_verbose(self.args, "VDisk distribution is close to ideal", file=sys.stdout)
@@ -448,7 +449,6 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
         ideal_vdisks = self.ideal_distribution
 
         if self.max_vdisks_per_pdisk > ideal_vdisks and current_pool_vdisks <= ideal_vdisks:
-            did_something = True
             common.print_if_verbose(
                 self.args,
                 f"Current pool vdisks {current_pool_vdisks} on pdisk {pdisk_id} is less than ideal {ideal_vdisks}",
@@ -462,7 +462,7 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
         for check_pdisk_id, current_count in self.pdisk_groups_usage.items():
             if check_pdisk_id == pdisk_id:
                 continue
-            
+
             if check_pdisk_id in self.group_pdisks[vslot.GroupId]:
                 continue
 
@@ -470,7 +470,6 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
                 continue
 
             check_pdisk = self.cluster_info.pdisk_map[check_pdisk_id]
-            current_pdisk = self.cluster_info.pdisk_map[pdisk_id]
             if check_pdisk.DriveStatus != 1:
                 continue
 
@@ -485,7 +484,7 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
                 sys.stdout,
             )
             return False
-        
+
         if not target_pdisk:
             common.print_if_verbose(
                 self.args,

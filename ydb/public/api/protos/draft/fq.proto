@@ -516,9 +516,7 @@ message MySQLCluster {
 }
 
 message CloudLoggingConnection {
-    string folder_id = 1;
-    string log_group_name = 2;
-    IamAuth auth = 3;
+    IamAuth auth = 1;
 }
 
 message ConnectionSetting {

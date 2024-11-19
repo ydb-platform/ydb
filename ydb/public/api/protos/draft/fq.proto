@@ -515,7 +515,7 @@ message MySQLCluster {
     IamAuth auth = 5;
 }
 
-message CloudLoggingConnection {
+message CloudLogging {
     IamAuth auth = 1;
 }
 
@@ -542,7 +542,7 @@ message ConnectionSetting {
         PostgreSQLCluster postgresql_cluster = 6;
         GreenplumCluster greenplum_cluster = 7;
         MySQLCluster mysql_cluster = 8;
-        CloudLoggingConnection cloud_logging = 9;
+        CloudLogging cloud_logging = 9;
     }
 }
 

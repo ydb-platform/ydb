@@ -93,6 +93,7 @@
 ```
 
 ### Рекомендованные параметры для ускорения загрузки
+
 ```bash
 {{ ydb-cli }} -p quickstart tools restore -p . -i . --import-data --bandwidth=1GiB
 ```

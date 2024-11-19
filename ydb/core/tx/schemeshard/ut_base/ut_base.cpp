@@ -1,6 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 
 #include <util/generic/size_literals.h>
@@ -11379,7 +11378,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCopyTable(runtime, ++txId, "/MyRoot", "SystemColumnInCopyAllowed", "/MyRoot/SystemColumnAllowed");
     }
 
-    Y_UNIT_TEST_TWIN(BackupBackupCollection, WithIncremental) {
+    Y_UNIT_TEST_FLAG(BackupBackupCollection, WithIncremental) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
         ui64 txId = 100;

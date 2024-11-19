@@ -4,15 +4,7 @@
 
 #include <ydb/core/tx/schemeshard/backup/constants.h>
 
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define RETURN_RESULT_UNLESS(x) if (!(x)) return result;
-
 namespace NKikimr::NSchemeShard {
-
-TString ToX509String(const TInstant& datetime) {
-    return datetime.FormatLocalTime("%Y%m%d%H%M%SZ");
-}
 
 TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     TVector<ISubOperation::TPtr> result;

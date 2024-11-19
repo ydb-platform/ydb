@@ -402,7 +402,9 @@ public:
         }
 
         for (const auto& shardStats : Proto_.table_stats().partition_stats()) {
-            PartitionStats_.emplace_back(TPartitionStats{ shardStats.rows_estimate(), shardStats.store_size(), shardStats.leader_node_id() });
+            PartitionStats_.emplace_back(
+                TPartitionStats{shardStats.rows_estimate(), shardStats.store_size(), shardStats.leader_node_id()}
+            );
         }
 
         TableStats.Rows = Proto_.table_stats().rows_estimate();
@@ -559,6 +561,10 @@ public:
         return TtlSettings_;
     }
 
+    const TMaybe<TString>& GetTiering() const {
+        return Tiering_;
+    }
+
     EStoreType GetStoreType() const {
         return StoreType_;
     }
@@ -639,6 +645,7 @@ private:
     TVector<TIndexDescription> Indexes_;
     TVector<TChangefeedDescription> Changefeeds_;
     TMaybe<TTtlSettings> TtlSettings_;
+    TMaybe<TString> Tiering_;
     TString Owner_;
     TVector<NScheme::TPermissions> Permissions_;
     TVector<NScheme::TPermissions> EffectivePermissions_;
@@ -705,7 +712,7 @@ TMaybe<TTtlSettings> TTableDescription::GetTtlSettings() const {
 }
 
 TMaybe<TString> TTableDescription::GetTiering() const {
-    return Nothing();
+    return Impl_->GetTiering();
 }
 
 EStoreType TTableDescription::GetStoreType() const {
@@ -926,6 +933,10 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
 
     if (const auto& ttl = Impl_->GetTtlSettings()) {
         ttl->SerializeTo(*request.mutable_ttl_settings());
+    }
+
+    if (const auto& tiering = Impl_->GetTiering()) {
+        request.set_tiering(*tiering);
     }
 
     if (Impl_->GetStoreType() == EStoreType::Column) {

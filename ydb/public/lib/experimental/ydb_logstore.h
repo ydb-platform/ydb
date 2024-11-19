@@ -152,6 +152,21 @@ struct TLogTableSharding {
     TLogTableSharding(const Ydb::LogStore::DescribeLogTableResult& desc);
 };
 
+class TTieringSettings {
+private:
+    TString TieringId;
+public:
+    TTieringSettings(const TString& tieringId)
+        : TieringId(tieringId) {
+
+    }
+
+    void SerializeTo(Ydb::LogStore::TieringSettings& proto) const {
+        proto.set_tiering_id(TieringId);
+    }
+
+};
+
 class TLogTableDescription {
 public:
     TLogTableDescription(const TString& schemaPresetName, const TLogTableSharding& sharding);
@@ -185,11 +200,16 @@ public:
         TtlSettings = settings;
         return *this;
     }
+    TLogTableDescription& SetTieringSettings(const TTieringSettings& settings) {
+        TieringSettings = settings;
+        return *this;
+    }
 private:
     const TString SchemaPresetName;
     const TSchema Schema;
     const TLogTableSharding Sharding;
     TMaybe<TTtlSettings> TtlSettings;
+    TMaybe<TTieringSettings> TieringSettings;
     TString Owner;
     TVector<NScheme::TPermissions> Permissions;
     TVector<NScheme::TPermissions> EffectivePermissions;

@@ -1,5 +1,8 @@
-#include "object.h"
 #include "behaviour.h"
+#include "object.h"
+
+#include <ydb/core/ydb_convert/table_settings.h>
+
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 #include <util/folder/path.h>
@@ -59,7 +62,7 @@ TString TObject::GetIndexTablePath() const {
 
 bool TObject::TryProvideTtl(const NKikimrSchemeOp::TColumnTableDescription& csDescription, Ydb::Table::CreateTableRequest* cRequest) {
     if (csDescription.HasTtlSettings() && csDescription.GetTtlSettings().HasEnabled()) {
-        auto& ttl = csDescription.GetTtlSettings().GetEnabled();
+        auto ttl = csDescription.GetTtlSettings().GetEnabled();
         if (!ttl.HasExpireAfterSeconds()) {
             return false;
         }
@@ -73,9 +76,8 @@ bool TObject::TryProvideTtl(const NKikimrSchemeOp::TColumnTableDescription& csDe
             return false;
         }
         if (cRequest) {
-            auto& newTtl = *cRequest->mutable_ttl_settings()->mutable_date_type_column();
-            newTtl.set_column_name("pk_" + ttl.GetColumnName());
-            newTtl.set_expire_after_seconds(ttl.GetExpireAfterSeconds());
+            ttl.SetColumnName("pk_" + ttl.GetColumnName());
+            FillTtlSettings(*cRequest->mutable_ttl_settings(), ttl);
         }
     }
     return true;

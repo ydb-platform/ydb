@@ -18,6 +18,11 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     const Ydb::Table::AlterTableRequest& in,
     Ydb::StatusIds::StatusCode& code, TString& error, bool changed);
 
+
+// out
+void FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TTTLSettings::TEnabled& in);
+void FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& in);
+// in
 template <class TTtlSettingsEnabled>
 bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in,
     Ydb::StatusIds::StatusCode& code, TString& error)
@@ -38,7 +43,7 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
         deleteTier->MutableDelete();
     };
 
-    static const auto& fillColumnUnit = []<class TModeSettings> (TTtlSettingsEnabled& out, const TModeSettings& in) -> bool {
+    static const auto& fillColumnUnit = [&unsupported]<class TModeSettings> (TTtlSettingsEnabled& out, const TModeSettings& in) -> bool {
         #define CASE_UNIT(type) \
             case Ydb::Table::ValueSinceUnixEpochModeSettings::type: \
                 out.SetColumnUnit(NKikimrSchemeOp::TTTLSettings::type); \
@@ -51,8 +56,9 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
         CASE_UNIT(UNIT_NANOSECONDS);
         default:
             return unsupported(TStringBuilder() << "Unsupported unit: "
-                << static_cast<ui32>(in.value_since_unix_epoch().column_unit()));
+                << static_cast<ui32>(in.column_unit()));
         }
+        return true;
 
         #undef CASE_UNIT
     };
@@ -106,10 +112,10 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
     std::optional<ui32> expireInSeconds = 0;
     for (const auto& tier : out.GetTiers()) {
         if (tier.HasDelete()) {
-            expireInSeconds = tier.GetEvictInSeconds();
+            expireInSeconds = tier.GetEvictAfterSeconds();
         }
     }
-    out.SetExpireInSeconds(expireInSeconds.value_or(std::numeric_limits<uint32_t>::max()));
+    out.SetExpireAfterSeconds(expireInSeconds.value_or(std::numeric_limits<uint32_t>::max()));
 
     if constexpr (std::is_same_v<TTtlSettingsEnabled, NKikimrSchemeOp::TTTLSettings::TEnabled>) {
         if (in.run_interval_seconds()) {

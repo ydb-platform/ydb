@@ -469,7 +469,7 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
     return ev;
 }
 
-void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData::TPtr& ev, const TInstant& enqueuedAt) noexcept {
+void TKqpScanFetcherActor::ProcessPendingScanDataItem(TEvKqpCompute::TEvScanData::TPtr& ev, const TInstant& enqueuedAt) {
     auto& msg = *ev->Get();
 
     auto state = InFlightShards.GetShardStateByActorId(ev->Sender);

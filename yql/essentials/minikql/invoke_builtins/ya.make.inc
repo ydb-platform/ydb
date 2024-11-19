@@ -47,7 +47,6 @@ SET(ORIG_SOURCES
 )
 
 PEERDIR(
-    library/cpp/pop_count
     yql/essentials/types/binary_json
     yql/essentials/minikql
     yql/essentials/minikql/arrow
@@ -65,7 +64,7 @@ COPY(
     AUTO
     FROM ${ORIG_SRC_DIR}
     ${ORIG_SOURCES}
-    OUTPUT_INCLUDES 
+    OUTPUT_INCLUDES
     ${BINDIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_impl.h
     ${BINDIR}/yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h
 )

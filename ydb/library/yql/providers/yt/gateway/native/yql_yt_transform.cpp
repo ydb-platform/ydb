@@ -444,7 +444,7 @@ void TGatewayTransformer::ApplyUserJobSpec(NYT::TUserJobSpec& spec, bool localRu
         spec.AddLocalFile(file.first, opts);
     }
     const TString binTmpFolder = Settings_->BinaryTmpFolder.Get().GetOrElse(TString());
-    const TString binCacheFolder = Settings_->BinaryCacheFolder.Get().GetOrElse(TString());
+    const TString binCacheFolder = Settings_->_BinaryCacheFolder.Get(ExecCtx_.Cluster_).GetOrElse(TString());
     if (!localRun && binCacheFolder) {
         auto udfFiles = std::move(*DeferredUdfFiles_);
         TTransactionCache::TEntry::TPtr entry = GetEntry();

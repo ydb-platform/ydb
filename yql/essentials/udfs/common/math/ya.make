@@ -1,9 +1,3 @@
-IF (YQL_PACKAGED)
-    PACKAGE()
-        FROM_SANDBOX(FILE 7319902006 OUT_NOAUTO libmath_udf.so
-        )
-    END()
-ELSE ()
 YQL_UDF_CONTRIB(math_udf)
     
     YQL_ABI_VERSION(
@@ -79,7 +73,6 @@ YQL_UDF_CONTRIB(math_udf)
     )
     
     END()
-ENDIF ()
 
 RECURSE(
     lib

@@ -129,7 +129,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
 
     for (auto&& [_, chunkWithPortionData] : portionsToWrite) {
         package.emplace_back(
-            tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetSchema(chunkWithPortionData.GetMinSnapshotDeprecated())->GetVersion(),
+            tablesManager.GetPrimaryIndexSafe().GetVersionedIndex().GetSchemaVerified(chunkWithPortionData.GetMinSnapshotDeprecated())->GetVersion(),
             std::move(chunkWithPortionData));
         if (package.size() == 100) {
             std::vector<TPatchItem> local;

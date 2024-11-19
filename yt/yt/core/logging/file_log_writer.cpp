@@ -368,7 +368,7 @@ public:
 private:
     static TFileLogWriterConfigPtr ParseConfig(const NYTree::IMapNodePtr& configNode)
     {
-        return ConvertTo<TFileLogWriterConfigPtr>(configNode);
+        return NYT::NYTree::ConvertTo<TFileLogWriterConfigPtr>(configNode);
     }
 };
 

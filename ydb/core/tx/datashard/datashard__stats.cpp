@@ -13,6 +13,7 @@ namespace NKikimr {
 namespace NDataShard {
 
 using namespace NResourceBroker;
+using namespace NSharedCache;
 using namespace NTable;
 
 struct TTableStatsCoroBuilderArgs {

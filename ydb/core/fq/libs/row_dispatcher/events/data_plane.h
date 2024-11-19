@@ -21,7 +21,7 @@ struct TEvRowDispatcher {
         EvNewDataArrived,
         EvGetNextBatch,
         EvMessageBatch,
-        EvStatus,
+        EvStatistics,
         EvStopSession,
         EvSessionError,
         EvCoordinatorChangesSubscribe,
@@ -33,10 +33,12 @@ struct TEvRowDispatcher {
     };
 
     struct TEvCoordinatorChanged : NActors::TEventLocal<TEvCoordinatorChanged, EEv::EvCoordinatorChanged> {
-        TEvCoordinatorChanged(NActors::TActorId coordinatorActorId)
-            : CoordinatorActorId(coordinatorActorId) {
+        TEvCoordinatorChanged(NActors::TActorId coordinatorActorId, ui64 generation)
+            : CoordinatorActorId(coordinatorActorId)
+            , Generation(generation) {
         }
         NActors::TActorId CoordinatorActorId;
+        ui64 Generation = 0;
     };
 
     struct TEvCoordinatorChangesSubscribe : public NActors::TEventLocal<TEvCoordinatorChangesSubscribe, EEv::EvCoordinatorChangesSubscribe> {};
@@ -112,9 +114,9 @@ struct TEvRowDispatcher {
         NActors::TActorId ReadActorId;
     };
 
-    struct TEvStatus : public NActors::TEventPB<TEvStatus,
-        NFq::NRowDispatcherProto::TEvStatus, EEv::EvStatus> {
-        TEvStatus() = default;
+    struct TEvStatistics : public NActors::TEventPB<TEvStatistics,
+        NFq::NRowDispatcherProto::TEvStatistics, EEv::EvStatistics> {
+        TEvStatistics() = default;
         NActors::TActorId ReadActorId;
     };
 

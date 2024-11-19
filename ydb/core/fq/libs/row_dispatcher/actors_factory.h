@@ -24,7 +24,8 @@ struct IActorFactory : public TThrRefBase {
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
         IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
         const ::NMonitoring::TDynamicCounterPtr& counters,
-        const NYql::IPqGateway::TPtr& pqGateway) const = 0;
+        const NYql::IPqGateway::TPtr& pqGateway,
+        ui64 maxBufferSize) const = 0;
 };
 
 IActorFactory::TPtr CreateActorFactory();

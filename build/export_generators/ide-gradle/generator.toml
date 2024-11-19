@@ -8,7 +8,6 @@ copy=[
     "gradlew.bat",
     "gradle/wrapper/gradle-wrapper.jar",
     "gradle/wrapper/gradle-wrapper.properties",
-    ".idea/vcs.xml",
 ]
 
 [targets.EXTRA_ONLY]
@@ -43,6 +42,8 @@ proto_common_version="str"
 
 proto_grpc="flag"
 proto_grpc_version="str"
+proto_kotlin_grpc="flag"
+proto_kotlin_grpc_version="str"
 
 kotlin_version="str"
 with_kotlin="flag"

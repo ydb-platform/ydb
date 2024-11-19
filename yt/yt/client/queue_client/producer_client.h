@@ -47,7 +47,7 @@ struct TProducerSessionOptions
     TBackoffStrategy BackoffStrategy = TBackoffStrategy(TExponentialBackoffOptions{});
 
     //! Acknowledgment callback.
-    TAckCallback AcknowledgmentCallback;
+    TAckCallback AckCallback;
 };
 
 struct IProducerSession
@@ -67,6 +67,7 @@ struct IProducerSession
     //! Cancel writing of all not flushed rows.
     virtual void Cancel() = 0;
 };
+
 DEFINE_REFCOUNTED_TYPE(IProducerSession)
 
 ////////////////////////////////////////////////////////////////////////////////

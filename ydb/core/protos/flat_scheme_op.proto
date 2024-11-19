@@ -1613,6 +1613,15 @@ enum EOperationType {
     ESchemeOpCreateResourcePool = 100;
     ESchemeOpDropResourcePool = 101;
     ESchemeOpAlterResourcePool = 102;
+
+    reserved 103;
+    reserved 104;
+    reserved 105;
+    reserved 106;
+    reserved 107;
+
+    // Move sequence
+    ESchemeOpMoveSequence = 108;
 }
 
 message TApplyIf {
@@ -1794,6 +1803,13 @@ message TModifyScheme {
     optional bool AllowCreateInTempDir = 71 [default = false];
 
     optional TResourcePoolDescription CreateResourcePool = 72;
+
+    reserved 73;
+    reserved 74;
+    reserved 75;
+    reserved 76;
+
+    optional TMove MoveSequence = 77;
 }
 
 message TCopySequence {

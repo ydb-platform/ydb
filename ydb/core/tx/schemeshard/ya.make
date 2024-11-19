@@ -149,6 +149,7 @@ SRCS(
     schemeshard__operation_mkdir.cpp
     schemeshard__operation_modify_acl.cpp
     schemeshard__operation_move_index.cpp
+    schemeshard__operation_move_sequence.cpp
     schemeshard__operation_move_table.cpp
     schemeshard__operation_move_tables.cpp
     schemeshard__operation_move_table_index.cpp

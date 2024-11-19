@@ -220,6 +220,14 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateResourcePool = 174         [(CounterOpts) = {Name: "InFlightOps/CreateResourcePool"}];
     COUNTER_IN_FLIGHT_OPS_TxDropResourcePool = 175           [(CounterOpts) = {Name: "InFlightOps/DropResourcePool"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterResourcePool = 176          [(CounterOpts) = {Name: "InFlightOps/AlterResourcePool"}];
+
+    reserved 177;
+    reserved 178;
+    reserved 179;
+    reserved 180;
+    reserved 181;
+
+    COUNTER_IN_FLIGHT_OPS_TxMoveSequence = 182           [(CounterOpts) = {Name: "InFlightOps/MoveSequence"}];
 }
 
 enum ECumulativeCounters {
@@ -351,6 +359,13 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateResourcePool = 103  [(CounterOpts) = {Name: "FinishedOps/CreateResourcePool"}];
     COUNTER_FINISHED_OPS_TxDropResourcePool = 104    [(CounterOpts) = {Name: "FinishedOps/DropResourcePool"}];
     COUNTER_FINISHED_OPS_TxAlterResourcePool = 105   [(CounterOpts) = {Name: "FinishedOps/AlterResourcePool"}];
+
+    reserved 106;
+    reserved 107;
+    reserved 108;
+    reserved 109;
+
+    COUNTER_FINISHED_OPS_TxMoveSequence = 110        [(CounterOpts) = {Name: "FinishedOps/TxMoveSequence"}];
 }
 
 enum EPercentileCounters {

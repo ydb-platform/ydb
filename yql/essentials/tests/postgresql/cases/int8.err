@@ -1,0 +1,977 @@
+<sql-statement>
+--
+-- INT8
+-- Test int8 64-bit integers.
+--
+CREATE TABLE INT8_TBL(q1 int8, q2 int8);
+</sql-statement>
+<sql-statement>
+INSERT INTO INT8_TBL VALUES('  123   ','  456');
+</sql-statement>
+<sql-statement>
+INSERT INTO INT8_TBL VALUES('123   ','4567890123456789');
+</sql-statement>
+<sql-statement>
+INSERT INTO INT8_TBL VALUES('4567890123456789','123');
+</sql-statement>
+<sql-statement>
+INSERT INTO INT8_TBL VALUES(+4567890123456789,'4567890123456789');
+</sql-statement>
+<sql-statement>
+INSERT INTO INT8_TBL VALUES('+4567890123456789','-4567890123456789');
+</sql-statement>
+<sql-statement>
+-- bad inputs
+INSERT INTO INT8_TBL(q1) VALUES ('      ');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- bad inputs
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type bigint: "      "
+
+        	-- bad inputs
+	^
+<sql-statement>
+INSERT INTO INT8_TBL(q1) VALUES ('xxx');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INT8_TBL(q1) VALUES ('xxx');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type bigint: "xxx"
+
+        	INSERT INTO INT8_TBL(q1) VALUES ('xxx');
+	^
+<sql-statement>
+INSERT INTO INT8_TBL(q1) VALUES ('3908203590239580293850293850329485');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INT8_TBL(q1) VALUES ('3908203590239580293850293850329485');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "3908203590239580293850293850329485" is out of range for type bigint
+
+        	INSERT INTO INT8_TBL(q1) VALUES ('3908203590239580293850293850329485');
+	^
+<sql-statement>
+INSERT INTO INT8_TBL(q1) VALUES ('-1204982019841029840928340329840934');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INT8_TBL(q1) VALUES ('-1204982019841029840928340329840934');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-1204982019841029840928340329840934" is out of range for type bigint
+
+        	INSERT INTO INT8_TBL(q1) VALUES ('-1204982019841029840928340329840934');
+	^
+<sql-statement>
+INSERT INTO INT8_TBL(q1) VALUES ('- 123');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INT8_TBL(q1) VALUES ('- 123');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type bigint: "- 123"
+
+        	INSERT INTO INT8_TBL(q1) VALUES ('- 123');
+	^
+<sql-statement>
+INSERT INTO INT8_TBL(q1) VALUES ('  345     5');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INT8_TBL(q1) VALUES ('  345     5');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type bigint: "  345     5"
+
+        	INSERT INTO INT8_TBL(q1) VALUES ('  345     5');
+	^
+<sql-statement>
+INSERT INTO INT8_TBL(q1) VALUES ('');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INT8_TBL(q1) VALUES ('');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type bigint: ""
+
+        	INSERT INTO INT8_TBL(q1) VALUES ('');
+	^
+<sql-statement>
+SELECT * FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+-- int8/int8 cmp
+SELECT * FROM INT8_TBL WHERE q2 = 4567890123456789;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE q2 <> 4567890123456789;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE q2 < 4567890123456789;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE q2 > 4567890123456789;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE q2 <= 4567890123456789;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE q2 >= 4567890123456789;
+</sql-statement>
+<sql-statement>
+-- int8/int4 cmp
+SELECT * FROM INT8_TBL WHERE q2 = 456;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE q2 <> 456;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE q2 < 456;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE q2 > 456;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE q2 <= 456;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE q2 >= 456;
+</sql-statement>
+<sql-statement>
+-- int4/int8 cmp
+SELECT * FROM INT8_TBL WHERE 123 = q1;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE 123 <> q1;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE 123 < q1;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE 123 > q1;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE 123 <= q1;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE 123 >= q1;
+</sql-statement>
+<sql-statement>
+-- int8/int2 cmp
+SELECT * FROM INT8_TBL WHERE q2 = '456'::int2;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE q2 <> '456'::int2;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE q2 < '456'::int2;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE q2 > '456'::int2;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE q2 <= '456'::int2;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE q2 >= '456'::int2;
+</sql-statement>
+<sql-statement>
+-- int2/int8 cmp
+SELECT * FROM INT8_TBL WHERE '123'::int2 = q1;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE '123'::int2 <> q1;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE '123'::int2 < q1;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE '123'::int2 > q1;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE '123'::int2 <= q1;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT8_TBL WHERE '123'::int2 >= q1;
+</sql-statement>
+<sql-statement>
+SELECT q1 AS plus, -q1 AS minus FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT q1, q2, q1 + q2 AS plus FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT q1, q2, q1 - q2 AS minus FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT q1, q2, q1 * q2 AS multiply FROM INT8_TBL;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMap!
+    	SELECT q1, q2, q1 * q2 AS multiply FROM INT8_TBL;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	SELECT q1, q2, q1 * q2 AS multiply FROM INT8_TBL;
+	^
+<sql-statement>
+SELECT q1, q2, q1 * q2 AS multiply FROM INT8_TBL
+ WHERE q1 < 1000 or (q2 > 0 and q2 < 1000);
+</sql-statement>
+<sql-statement>
+SELECT q1, q2, q1 / q2 AS divide, q1 % q2 AS mod FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT q1, float8(q1) FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT q2, float8(q2) FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT 37 + q1 AS plus4 FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT 37 - q1 AS minus4 FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT 2 * q1 AS "twice int4" FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT q1 * 2 AS "twice int4" FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+-- int8 op int4
+SELECT q1 + 42::int4 AS "8plus4", q1 - 42::int4 AS "8minus4", q1 * 42::int4 AS "8mul4", q1 / 42::int4 AS "8div4" FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+-- int4 op int8
+SELECT 246::int4 + q1 AS "4plus8", 246::int4 - q1 AS "4minus8", 246::int4 * q1 AS "4mul8", 246::int4 / q1 AS "4div8" FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+-- int8 op int2
+SELECT q1 + 42::int2 AS "8plus2", q1 - 42::int2 AS "8minus2", q1 * 42::int2 AS "8mul2", q1 / 42::int2 AS "8div2" FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+-- int2 op int8
+SELECT 246::int2 + q1 AS "2plus8", 246::int2 - q1 AS "2minus8", 246::int2 * q1 AS "2mul8", 246::int2 / q1 AS "2div8" FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT q2, abs(q2) FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT min(q1), min(q2) FROM INT8_TBL;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT min(q1), min(q2) FROM INT8_TBL;
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: min
+        	SELECT min(q1), min(q2) FROM INT8_TBL;
+	^
+<sql-statement>
+SELECT max(q1), max(q2) FROM INT8_TBL;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT max(q1), max(q2) FROM INT8_TBL;
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: max
+        	SELECT max(q1), max(q2) FROM INT8_TBL;
+	^
+<sql-statement>
+-- TO_CHAR()
+--
+SELECT to_char(q1, '9G999G999G999G999G999'), to_char(q2, '9,999,999,999,999,999')
+	FROM INT8_TBL;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- TO_CHAR()
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: to_char
+        	-- TO_CHAR()
+	^
+<sql-statement>
+SELECT to_char(q1, '9G999G999G999G999G999D999G999'), to_char(q2, '9,999,999,999,999,999.999,999')
+	FROM INT8_TBL;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT to_char(q1, '9G999G999G999G999G999D999G999'), to_char(q2, '9,999,999,999,999,999.999,999')
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: to_char
+        	SELECT to_char(q1, '9G999G999G999G999G999D999G999'), to_char(q2, '9,999,999,999,999,999.999,999')
+	^
+<sql-statement>
+SELECT to_char( (q1 * -1), '9999999999999999PR'), to_char( (q2 * -1), '9999999999999999.999PR')
+	FROM INT8_TBL;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT to_char( (q1 * -1), '9999999999999999PR'), to_char( (q2 * -1), '9999999999999999.999PR')
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: to_char
+        	SELECT to_char( (q1 * -1), '9999999999999999PR'), to_char( (q2 * -1), '9999999999999999.999PR')
+	^
+<sql-statement>
+SELECT to_char( (q1 * -1), '9999999999999999S'), to_char( (q2 * -1), 'S9999999999999999')
+	FROM INT8_TBL;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT to_char( (q1 * -1), '9999999999999999S'), to_char( (q2 * -1), 'S9999999999999999')
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: to_char
+        	SELECT to_char( (q1 * -1), '9999999999999999S'), to_char( (q2 * -1), 'S9999999999999999')
+	^
+<sql-statement>
+SELECT to_char(q2, 'MI9999999999999999')     FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(q2, 'FMS9999999999999999')    FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(q2, 'FM9999999999999999THPR') FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(q2, 'SG9999999999999999th')   FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(q2, '0999999999999999')       FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(q2, 'S0999999999999999')      FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(q2, 'FM0999999999999999')     FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(q2, 'FM9999999999999999.000') FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(q2, 'L9999999999999999.000')  FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(q2, 'FM9999999999999999.999') FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(q2, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9') FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(q2, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999') FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT to_char(q2, '999999SG9999999999')     FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+-- check min/max values and overflow behavior
+select '-9223372036854775808'::int8;
+</sql-statement>
+<sql-statement>
+select '-9223372036854775809'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '-9223372036854775809'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "-9223372036854775809" is out of range for type bigint
+
+        	select '-9223372036854775809'::int8;
+	^
+<sql-statement>
+select '9223372036854775807'::int8;
+</sql-statement>
+<sql-statement>
+select '9223372036854775808'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '9223372036854775808'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "9223372036854775808" is out of range for type bigint
+
+        	select '9223372036854775808'::int8;
+	^
+<sql-statement>
+select -('-9223372036854775807'::int8);
+</sql-statement>
+<sql-statement>
+select -('-9223372036854775808'::int8);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select -('-9223372036854775808'::int8);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select -('-9223372036854775808'::int8);
+	^
+<sql-statement>
+select '9223372036854775800'::int8 + '9223372036854775800'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '9223372036854775800'::int8 + '9223372036854775800'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '9223372036854775800'::int8 + '9223372036854775800'::int8;
+	^
+<sql-statement>
+select '-9223372036854775800'::int8 + '-9223372036854775800'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '-9223372036854775800'::int8 + '-9223372036854775800'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '-9223372036854775800'::int8 + '-9223372036854775800'::int8;
+	^
+<sql-statement>
+select '9223372036854775800'::int8 - '-9223372036854775800'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '9223372036854775800'::int8 - '-9223372036854775800'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '9223372036854775800'::int8 - '-9223372036854775800'::int8;
+	^
+<sql-statement>
+select '-9223372036854775800'::int8 - '9223372036854775800'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '-9223372036854775800'::int8 - '9223372036854775800'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '-9223372036854775800'::int8 - '9223372036854775800'::int8;
+	^
+<sql-statement>
+select '9223372036854775800'::int8 * '9223372036854775800'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '9223372036854775800'::int8 * '9223372036854775800'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '9223372036854775800'::int8 * '9223372036854775800'::int8;
+	^
+<sql-statement>
+select '9223372036854775800'::int8 / '0'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '9223372036854775800'::int8 / '0'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  division by zero
+
+        	select '9223372036854775800'::int8 / '0'::int8;
+	^
+<sql-statement>
+select '9223372036854775800'::int8 % '0'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '9223372036854775800'::int8 % '0'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  division by zero
+
+        	select '9223372036854775800'::int8 % '0'::int8;
+	^
+<sql-statement>
+select abs('-9223372036854775808'::int8);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select abs('-9223372036854775808'::int8);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select abs('-9223372036854775808'::int8);
+	^
+<sql-statement>
+select '9223372036854775800'::int8 + '100'::int4;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '9223372036854775800'::int8 + '100'::int4;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '9223372036854775800'::int8 + '100'::int4;
+	^
+<sql-statement>
+select '-9223372036854775800'::int8 - '100'::int4;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '-9223372036854775800'::int8 - '100'::int4;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '-9223372036854775800'::int8 - '100'::int4;
+	^
+<sql-statement>
+select '9223372036854775800'::int8 * '100'::int4;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '9223372036854775800'::int8 * '100'::int4;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '9223372036854775800'::int8 * '100'::int4;
+	^
+<sql-statement>
+select '100'::int4 + '9223372036854775800'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '100'::int4 + '9223372036854775800'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '100'::int4 + '9223372036854775800'::int8;
+	^
+<sql-statement>
+select '-100'::int4 - '9223372036854775800'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '-100'::int4 - '9223372036854775800'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '-100'::int4 - '9223372036854775800'::int8;
+	^
+<sql-statement>
+select '100'::int4 * '9223372036854775800'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '100'::int4 * '9223372036854775800'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '100'::int4 * '9223372036854775800'::int8;
+	^
+<sql-statement>
+select '9223372036854775800'::int8 + '100'::int2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '9223372036854775800'::int8 + '100'::int2;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '9223372036854775800'::int8 + '100'::int2;
+	^
+<sql-statement>
+select '-9223372036854775800'::int8 - '100'::int2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '-9223372036854775800'::int8 - '100'::int2;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '-9223372036854775800'::int8 - '100'::int2;
+	^
+<sql-statement>
+select '9223372036854775800'::int8 * '100'::int2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '9223372036854775800'::int8 * '100'::int2;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '9223372036854775800'::int8 * '100'::int2;
+	^
+<sql-statement>
+select '-9223372036854775808'::int8 / '0'::int2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '-9223372036854775808'::int8 / '0'::int2;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  division by zero
+
+        	select '-9223372036854775808'::int8 / '0'::int2;
+	^
+<sql-statement>
+select '100'::int2 + '9223372036854775800'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '100'::int2 + '9223372036854775800'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '100'::int2 + '9223372036854775800'::int8;
+	^
+<sql-statement>
+select '-100'::int2 - '9223372036854775800'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '-100'::int2 - '9223372036854775800'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '-100'::int2 - '9223372036854775800'::int8;
+	^
+<sql-statement>
+select '100'::int2 * '9223372036854775800'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '100'::int2 * '9223372036854775800'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	select '100'::int2 * '9223372036854775800'::int8;
+	^
+<sql-statement>
+select '100'::int2 / '0'::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '100'::int2 / '0'::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  division by zero
+
+        	select '100'::int2 / '0'::int8;
+	^
+<sql-statement>
+SELECT CAST(q1 AS int4) FROM int8_tbl WHERE q2 = 456;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
+    
+<sql-statement>
+SELECT CAST(q1 AS int4) FROM int8_tbl WHERE q2 <> 456;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
+    
+<sql-statement>
+SELECT CAST(q1 AS int2) FROM int8_tbl WHERE q2 = 456;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
+    
+<sql-statement>
+SELECT CAST(q1 AS int2) FROM int8_tbl WHERE q2 <> 456;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int8_tbl
+    
+<sql-statement>
+SELECT CAST('42'::int2 AS int8), CAST('-37'::int2 AS int8);
+</sql-statement>
+<sql-statement>
+SELECT CAST(q1 AS float4), CAST(q2 AS float8) FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT CAST('36854775807.0'::float4 AS int8);
+</sql-statement>
+<sql-statement>
+SELECT CAST('922337203685477580700.0'::float8 AS int8);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT CAST('922337203685477580700.0'::float8 AS int8);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	SELECT CAST('922337203685477580700.0'::float8 AS int8);
+	^
+<sql-statement>
+SELECT CAST(q1 AS oid) FROM INT8_TBL;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMap!
+    	SELECT CAST(q1 AS oid) FROM INT8_TBL;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  OID out of range
+
+        	SELECT CAST(q1 AS oid) FROM INT8_TBL;
+	^
+<sql-statement>
+SELECT oid::int8 FROM pg_class WHERE relname = 'pg_class';
+</sql-statement>
+<sql-statement>
+-- bit operations
+SELECT q1, q2, q1 & q2 AS "and", q1 | q2 AS "or", q1 # q2 AS "xor", ~q1 AS "not" FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT q1, q1 << 2 AS "shl", q1 >> 3 AS "shr" FROM INT8_TBL;
+</sql-statement>
+<sql-statement>
+-- generate_series
+SELECT * FROM generate_series('+4567890123456789'::int8, '+4567890123456799'::int8);
+</sql-statement>
+<sql-statement>
+SELECT * FROM generate_series('+4567890123456789'::int8, '+4567890123456799'::int8, 0);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT * FROM generate_series('+4567890123456789'::int8, '+4567890123456799'::int8, 0);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  step size cannot equal zero
+
+        	SELECT * FROM generate_series('+4567890123456789'::int8, '+4567890123456799'::int8, 0);
+	^
+<sql-statement>
+SELECT * FROM generate_series('+4567890123456789'::int8, '+4567890123456799'::int8, 2);
+</sql-statement>
+<sql-statement>
+-- corner case
+SELECT (-1::int8<<63)::text;
+</sql-statement>
+<sql-statement>
+SELECT ((-1::int8<<63)+1)::text;
+</sql-statement>
+<sql-statement>
+-- check sane handling of INT64_MIN overflow cases
+SELECT (-9223372036854775808)::int8 * (-1)::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- check sane handling of INT64_MIN overflow cases
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	-- check sane handling of INT64_MIN overflow cases
+	^
+<sql-statement>
+SELECT (-9223372036854775808)::int8 / (-1)::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT (-9223372036854775808)::int8 / (-1)::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	SELECT (-9223372036854775808)::int8 / (-1)::int8;
+	^
+<sql-statement>
+SELECT (-9223372036854775808)::int8 % (-1)::int8;
+</sql-statement>
+<sql-statement>
+SELECT (-9223372036854775808)::int8 * (-1)::int4;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT (-9223372036854775808)::int8 * (-1)::int4;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	SELECT (-9223372036854775808)::int8 * (-1)::int4;
+	^
+<sql-statement>
+SELECT (-9223372036854775808)::int8 / (-1)::int4;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT (-9223372036854775808)::int8 / (-1)::int4;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	SELECT (-9223372036854775808)::int8 / (-1)::int4;
+	^
+<sql-statement>
+SELECT (-9223372036854775808)::int8 % (-1)::int4;
+</sql-statement>
+<sql-statement>
+SELECT (-9223372036854775808)::int8 * (-1)::int2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT (-9223372036854775808)::int8 * (-1)::int2;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	SELECT (-9223372036854775808)::int8 * (-1)::int2;
+	^
+<sql-statement>
+SELECT (-9223372036854775808)::int8 / (-1)::int2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT (-9223372036854775808)::int8 / (-1)::int2;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	SELECT (-9223372036854775808)::int8 / (-1)::int2;
+	^
+<sql-statement>
+SELECT (-9223372036854775808)::int8 % (-1)::int2;
+</sql-statement>
+<sql-statement>
+-- check rounding when casting from float
+SELECT x, x::int8 AS int8_value
+FROM (VALUES (-2.5::float8),
+             (-1.5::float8),
+             (-0.5::float8),
+             (0.0::float8),
+             (0.5::float8),
+             (1.5::float8),
+             (2.5::float8)) t(x);
+</sql-statement>
+<sql-statement>
+-- check rounding when casting from numeric
+SELECT x, x::int8 AS int8_value
+FROM (VALUES (-2.5::numeric),
+             (-1.5::numeric),
+             (-0.5::numeric),
+             (0.0::numeric),
+             (0.5::numeric),
+             (1.5::numeric),
+             (2.5::numeric)) t(x);
+</sql-statement>
+<sql-statement>
+-- test gcd()
+SELECT a, b, gcd(a, b), gcd(a, -b), gcd(b, a), gcd(-b, a)
+FROM (VALUES (0::int8, 0::int8),
+             (0::int8, 29893644334::int8),
+             (288484263558::int8, 29893644334::int8),
+             (-288484263558::int8, 29893644334::int8),
+             ((-9223372036854775808)::int8, 1::int8),
+             ((-9223372036854775808)::int8, 9223372036854775807::int8),
+             ((-9223372036854775808)::int8, 4611686018427387904::int8)) AS v(a, b);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- test gcd()
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: gcd
+        	-- test gcd()
+	^
+<sql-statement>
+SELECT gcd((-9223372036854775808)::int8, 0::int8); -- overflow
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT gcd((-9223372036854775808)::int8, 0::int8); -- overflow
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	SELECT gcd((-9223372036854775808)::int8, 0::int8); -- overflow
+	^
+<sql-statement>
+SELECT gcd((-9223372036854775808)::int8, (-9223372036854775808)::int8); -- overflow
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT gcd((-9223372036854775808)::int8, (-9223372036854775808)::int8); -- overflow
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	SELECT gcd((-9223372036854775808)::int8, (-9223372036854775808)::int8); -- overflow
+	^
+<sql-statement>
+-- test lcm()
+SELECT a, b, lcm(a, b), lcm(a, -b), lcm(b, a), lcm(-b, a)
+FROM (VALUES (0::int8, 0::int8),
+             (0::int8, 29893644334::int8),
+             (29893644334::int8, 29893644334::int8),
+             (288484263558::int8, 29893644334::int8),
+             (-288484263558::int8, 29893644334::int8),
+             ((-9223372036854775808)::int8, 0::int8)) AS v(a, b);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- test lcm()
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: lcm
+        	-- test lcm()
+	^
+<sql-statement>
+SELECT lcm((-9223372036854775808)::int8, 1::int8); -- overflow
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT lcm((-9223372036854775808)::int8, 1::int8); -- overflow
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	SELECT lcm((-9223372036854775808)::int8, 1::int8); -- overflow
+	^
+<sql-statement>
+SELECT lcm(9223372036854775807::int8, 9223372036854775806::int8); -- overflow
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT lcm(9223372036854775807::int8, 9223372036854775806::int8); -- overflow
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	SELECT lcm(9223372036854775807::int8, 9223372036854775806::int8); -- overflow
+	^

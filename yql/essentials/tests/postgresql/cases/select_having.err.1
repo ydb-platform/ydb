@@ -1,0 +1,110 @@
+<sql-statement>
+--
+-- SELECT_HAVING
+--
+-- load test data
+CREATE TABLE test_having (a int, b int, c char(8), d char);
+</sql-statement>
+<sql-statement>
+INSERT INTO test_having VALUES (0, 1, 'XXXX', 'A');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_having VALUES (1, 2, 'AAAA', 'b');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_having VALUES (2, 2, 'AAAA', 'c');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_having VALUES (3, 3, 'BBBB', 'D');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_having VALUES (4, 3, 'BBBB', 'e');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_having VALUES (5, 3, 'bbbb', 'F');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_having VALUES (6, 4, 'cccc', 'g');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_having VALUES (7, 4, 'cccc', 'h');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_having VALUES (8, 4, 'CCCC', 'I');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_having VALUES (9, 4, 'CCCC', 'j');
+</sql-statement>
+<sql-statement>
+SELECT b, c FROM test_having
+	GROUP BY b, c HAVING count(*) = 1 ORDER BY b, c;
+</sql-statement>
+<sql-statement>
+-- HAVING is effectively equivalent to WHERE in this case
+SELECT b, c FROM test_having
+	GROUP BY b, c HAVING b = 3 ORDER BY b, c;
+</sql-statement>
+<sql-statement>
+SELECT lower(c), count(c) FROM test_having
+	GROUP BY lower(c) HAVING count(*) > 2 OR min(a) = max(a)
+	ORDER BY lower(c);
+</sql-statement>
+<sql-statement>
+SELECT c, max(a) FROM test_having
+	GROUP BY c HAVING count(*) > 2 OR min(a) = max(a)
+	ORDER BY c;
+</sql-statement>
+<sql-statement>
+-- test degenerate cases involving HAVING without GROUP BY
+-- Per SQL spec, these should generate 0 or 1 row, even without aggregates
+SELECT min(a), max(a) FROM test_having HAVING min(a) = max(a);
+</sql-statement>
+<sql-statement>
+SELECT min(a), max(a) FROM test_having HAVING min(a) < max(a);
+</sql-statement>
+<sql-statement>
+-- errors: ungrouped column references
+SELECT a FROM test_having HAVING min(a) < max(a);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: AsStruct
+    	-- errors: ungrouped column references
+	^
+        -stdin-:<main>:2:8: Error: At function: Member
+        	SELECT a FROM test_having HAVING min(a) < max(a);
+	       ^
+            -stdin-:<main>:2:8: Error: Member not found: _alias_test_having.a
+            	SELECT a FROM test_having HAVING min(a) < max(a);
+	       ^
+<sql-statement>
+SELECT 1 AS one FROM test_having HAVING a > 1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: PgReplaceUnknown, At function: OrderedMap, At function: OrderedFilter, At function: Coalesce, At function: FromPg
+    	SELECT 1 AS one FROM test_having HAVING a > 1;
+	^
+        -stdin-:<main>:1:43: Error: At function: PgResolvedOp
+        	SELECT 1 AS one FROM test_having HAVING a > 1;
+	                                          ^
+            -stdin-:<main>:1:41: Error: At function: Member
+            	SELECT 1 AS one FROM test_having HAVING a > 1;
+	                                        ^
+                -stdin-:<main>:1:41: Error: Member not found: _alias_test_having.a
+                	SELECT 1 AS one FROM test_having HAVING a > 1;
+	                                        ^
+<sql-statement>
+-- the really degenerate case: need not scan table at all
+SELECT 1 AS one FROM test_having HAVING 1 > 2;
+</sql-statement>
+<sql-statement>
+SELECT 1 AS one FROM test_having HAVING 1 < 2;
+</sql-statement>
+<sql-statement>
+-- and just to prove that we aren't scanning the table:
+SELECT 1 AS one FROM test_having WHERE 1/a = 1 HAVING 1 < 2;
+</sql-statement>
+<sql-statement>
+DROP TABLE test_having;
+</sql-statement>

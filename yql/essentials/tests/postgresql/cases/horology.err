@@ -1,0 +1,1689 @@
+Registering pre-existing tables
+	TIME_TBL
+	TIMESTAMPTZ_TBL
+	TIMESTAMP_TBL
+	INTERVAL_TBL
+	TIMETZ_TBL
+<sql-statement>
+--
+-- HOROLOGY
+--
+SET DateStyle = 'Postgres, MDY';
+</sql-statement>
+<sql-statement>
+SHOW TimeZone;  -- Many of these tests depend on the prevailing setting
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unrecognized configuration parameter "timezone"
+    	SHOW TimeZone;  -- Many of these tests depend on the prevailing setting
+	^
+<sql-statement>
+--
+-- Test various input formats
+--
+SELECT timestamp with time zone '20011227 040506+08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '20011227 040506-08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '20011227 040506.789+08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '20011227 040506.789-08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '20011227T040506+08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '20011227T040506-08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '20011227T040506.789+08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '20011227T040506.789-08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '2001-12-27 04:05:06.789-08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '2001.12.27 04:05:06.789-08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '2001/12/27 04:05:06.789-08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '12/27/2001 04:05:06.789-08';
+</sql-statement>
+<sql-statement>
+-- should fail in mdy mode:
+SELECT timestamp with time zone '27/12/2001 04:05:06.789-08';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- should fail in mdy mode:
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "27/12/2001 04:05:06.789-08"
+HINT:  Perhaps you need a different "datestyle" setting.
+
+        	-- should fail in mdy mode:
+	^
+<sql-statement>
+set datestyle to dmy;
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '27/12/2001 04:05:06.789-08';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT timestamp with time zone '27/12/2001 04:05:06.789-08';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "27/12/2001 04:05:06.789-08"
+HINT:  Perhaps you need a different "datestyle" setting.
+
+        	SELECT timestamp with time zone '27/12/2001 04:05:06.789-08';
+	^
+<sql-statement>
+reset datestyle;
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone 'Y2001M12D27H04M05S06.789+08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone 'Y2001M12D27H04M05S06.789-08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone 'Y2001M12D27H04MM05S06.789+08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone 'Y2001M12D27H04MM05S06.789-08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone 'J2452271+08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone 'J2452271-08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone 'J2452271.5+08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone 'J2452271.5-08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone 'J2452271 04:05:06+08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone 'J2452271 04:05:06-08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone 'J2452271T040506+08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone 'J2452271T040506-08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone 'J2452271T040506.789+08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone 'J2452271T040506.789-08';
+</sql-statement>
+<sql-statement>
+-- German/European-style dates with periods as delimiters
+SELECT timestamp with time zone '12.27.2001 04:05:06.789+08';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '12.27.2001 04:05:06.789-08';
+</sql-statement>
+<sql-statement>
+SET DateStyle = 'German';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '27.12.2001 04:05:06.789+08';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT timestamp with time zone '27.12.2001 04:05:06.789+08';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "27.12.2001 04:05:06.789+08"
+HINT:  Perhaps you need a different "datestyle" setting.
+
+        	SELECT timestamp with time zone '27.12.2001 04:05:06.789+08';
+	^
+<sql-statement>
+SELECT timestamp with time zone '27.12.2001 04:05:06.789-08';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT timestamp with time zone '27.12.2001 04:05:06.789-08';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "27.12.2001 04:05:06.789-08"
+HINT:  Perhaps you need a different "datestyle" setting.
+
+        	SELECT timestamp with time zone '27.12.2001 04:05:06.789-08';
+	^
+<sql-statement>
+SET DateStyle = 'ISO';
+</sql-statement>
+<sql-statement>
+-- As of 7.4, allow time without time zone having a time zone specified
+SELECT time without time zone '040506.789+08';
+</sql-statement>
+<sql-statement>
+SELECT time without time zone '040506.789-08';
+</sql-statement>
+<sql-statement>
+SELECT time without time zone 'T040506.789+08';
+</sql-statement>
+<sql-statement>
+SELECT time without time zone 'T040506.789-08';
+</sql-statement>
+<sql-statement>
+SELECT time with time zone '040506.789+08';
+</sql-statement>
+<sql-statement>
+SELECT time with time zone '040506.789-08';
+</sql-statement>
+<sql-statement>
+SELECT time with time zone 'T040506.789+08';
+</sql-statement>
+<sql-statement>
+SELECT time with time zone 'T040506.789-08';
+</sql-statement>
+<sql-statement>
+SELECT time with time zone 'T040506.789 +08';
+</sql-statement>
+<sql-statement>
+SELECT time with time zone 'T040506.789 -08';
+</sql-statement>
+<sql-statement>
+SET DateStyle = 'Postgres, MDY';
+</sql-statement>
+<sql-statement>
+-- Check Julian dates BC
+SELECT date 'J1520447' AS "Confucius' Birthday";
+</sql-statement>
+<sql-statement>
+SELECT date 'J0' AS "Julian Epoch";
+</sql-statement>
+<sql-statement>
+--
+-- date, time arithmetic
+--
+SELECT date '1981-02-03' + time '04:05:06' AS "Date + Time";
+</sql-statement>
+<sql-statement>
+SELECT date '1991-02-03' + time with time zone '04:05:06 PST' AS "Date + Time PST";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT date '1991-02-03' + time with time zone '04:05:06 PST' AS "Date + Time PST";
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "04:05:06 PST"
+
+        	SELECT date '1991-02-03' + time with time zone '04:05:06 PST' AS "Date + Time PST";
+	^
+<sql-statement>
+SELECT date '2001-02-03' + time with time zone '04:05:06 UTC' AS "Date + Time UTC";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT date '2001-02-03' + time with time zone '04:05:06 UTC' AS "Date + Time UTC";
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time with time zone: "04:05:06 UTC"
+
+        	SELECT date '2001-02-03' + time with time zone '04:05:06 UTC' AS "Date + Time UTC";
+	^
+<sql-statement>
+SELECT date '1991-02-03' + interval '2 years' AS "Add Two Years";
+</sql-statement>
+<sql-statement>
+SELECT date '2001-12-13' - interval '2 years' AS "Subtract Two Years";
+</sql-statement>
+<sql-statement>
+-- subtract time from date should not make sense; use interval instead
+SELECT date '1991-02-03' - time '04:05:06' AS "Subtract Time";
+</sql-statement>
+<sql-statement>
+SELECT date '1991-02-03' - time with time zone '04:05:06 UTC' AS "Subtract Time UTC";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT date '1991-02-03' - time with time zone '04:05:06 UTC' AS "Subtract Time UTC";
+	^
+        -stdin-:<main>:1:26: Error: At function: PgOp
+        	SELECT date '1991-02-03' - time with time zone '04:05:06 UTC' AS "Subtract Time UTC";
+	                         ^
+            -stdin-:<main>:1:26: Error: Unable to find an overload for operator - with given argument type(s): (date,timetz)
+            	SELECT date '1991-02-03' - time with time zone '04:05:06 UTC' AS "Subtract Time UTC";
+	                         ^
+<sql-statement>
+--
+-- timestamp, interval arithmetic
+--
+SELECT timestamp without time zone '1996-03-01' - interval '1 second' AS "Feb 29";
+</sql-statement>
+<sql-statement>
+SELECT timestamp without time zone '1999-03-01' - interval '1 second' AS "Feb 28";
+</sql-statement>
+<sql-statement>
+SELECT timestamp without time zone '2000-03-01' - interval '1 second' AS "Feb 29";
+</sql-statement>
+<sql-statement>
+SELECT timestamp without time zone '1999-12-01' + interval '1 month - 1 second' AS "Dec 31";
+</sql-statement>
+<sql-statement>
+SELECT timestamp without time zone 'Jan 1, 4713 BC' + interval '106000000 days' AS "Feb 23, 285506";
+</sql-statement>
+<sql-statement>
+SELECT timestamp without time zone 'Jan 1, 4713 BC' + interval '107000000 days' AS "Jan 20, 288244";
+</sql-statement>
+<sql-statement>
+SELECT timestamp without time zone 'Jan 1, 4713 BC' + interval '109203489 days' AS "Dec 31, 294276";
+</sql-statement>
+<sql-statement>
+SELECT timestamp without time zone '12/31/294276' - timestamp without time zone '12/23/1999' AS "106751991 Days";
+</sql-statement>
+<sql-statement>
+-- Shorthand values
+-- Not directly usable for regression testing since these are not constants.
+-- So, just try to test parser and hope for the best - thomas 97/04/26
+SELECT (timestamp without time zone 'today' = (timestamp without time zone 'yesterday' + interval '1 day')) as "True";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp without time zone 'today' = (timestamp without time zone 'tomorrow' - interval '1 day')) as "True";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp without time zone 'today 10:30' = (timestamp without time zone 'yesterday' + interval '1 day 10 hr 30 min')) as "True";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp without time zone '10:30 today' = (timestamp without time zone 'yesterday' + interval '1 day 10 hr 30 min')) as "True";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp without time zone 'tomorrow' = (timestamp without time zone 'yesterday' + interval '2 days')) as "True";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp without time zone 'tomorrow 16:00:00' = (timestamp without time zone 'today' + interval '1 day 16 hours')) as "True";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp without time zone '16:00:00 tomorrow' = (timestamp without time zone 'today' + interval '1 day 16 hours')) as "True";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp without time zone 'yesterday 12:34:56' = (timestamp without time zone 'tomorrow' - interval '2 days - 12:34:56')) as "True";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp without time zone '12:34:56 yesterday' = (timestamp without time zone 'tomorrow' - interval '2 days - 12:34:56')) as "True";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp without time zone 'tomorrow' > 'now') as "True";
+</sql-statement>
+<sql-statement>
+-- Convert from date and time to timestamp
+-- This test used to be timestamp(date,time) but no longer allowed by grammar
+-- to enable support for SQL99 timestamp type syntax.
+SELECT date '1994-01-01' + time '11:00' AS "Jan_01_1994_11am";
+</sql-statement>
+<sql-statement>
+SELECT date '1994-01-01' + time '10:00' AS "Jan_01_1994_10am";
+</sql-statement>
+<sql-statement>
+SELECT date '1994-01-01' + timetz '11:00-5' AS "Jan_01_1994_8am";
+</sql-statement>
+<sql-statement>
+SELECT timestamptz(date '1994-01-01', time with time zone '11:00-5') AS "Jan_01_1994_8am";
+</sql-statement>
+<sql-statement>
+SELECT d1 + interval '1 year' AS one_year FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT d1 - interval '1 year' AS one_year FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '1996-03-01' - interval '1 second' AS "Feb 29";
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '1999-03-01' - interval '1 second' AS "Feb 28";
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '2000-03-01' - interval '1 second' AS "Feb 29";
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '1999-12-01' + interval '1 month - 1 second' AS "Dec 31";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp with time zone 'today' = (timestamp with time zone 'yesterday' + interval '1 day')) as "True";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp with time zone 'today' = (timestamp with time zone 'tomorrow' - interval '1 day')) as "True";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp with time zone 'tomorrow' = (timestamp with time zone 'yesterday' + interval '2 days')) as "True";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp with time zone 'tomorrow' > 'now') as "True";
+</sql-statement>
+<sql-statement>
+-- timestamp with time zone, interval arithmetic around DST change
+-- (just for fun, let's use an intentionally nonstandard POSIX zone spec)
+SET TIME ZONE 'CST7CDT,M4.1.0,M10.5.0';
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '2005-04-02 12:00-07' + interval '1 day' as "Apr 3, 12:00";
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '2005-04-02 12:00-07' + interval '24 hours' as "Apr 3, 13:00";
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '2005-04-03 12:00-06' - interval '1 day' as "Apr 2, 12:00";
+</sql-statement>
+<sql-statement>
+SELECT timestamp with time zone '2005-04-03 12:00-06' - interval '24 hours' as "Apr 2, 11:00";
+</sql-statement>
+<sql-statement>
+RESET TIME ZONE;
+</sql-statement>
+<sql-statement>
+SELECT timestamptz(date '1994-01-01', time '11:00') AS "Jan_01_1994_10am";
+</sql-statement>
+<sql-statement>
+SELECT timestamptz(date '1994-01-01', time '10:00') AS "Jan_01_1994_9am";
+</sql-statement>
+<sql-statement>
+SELECT timestamptz(date '1994-01-01', time with time zone '11:00-8') AS "Jan_01_1994_11am";
+</sql-statement>
+<sql-statement>
+SELECT timestamptz(date '1994-01-01', time with time zone '10:00-8') AS "Jan_01_1994_10am";
+</sql-statement>
+<sql-statement>
+SELECT timestamptz(date '1994-01-01', time with time zone '11:00-5') AS "Jan_01_1994_8am";
+</sql-statement>
+<sql-statement>
+SELECT d1 + interval '1 year' AS one_year FROM TIMESTAMPTZ_TBL;
+</sql-statement>
+<sql-statement>
+SELECT d1 - interval '1 year' AS one_year FROM TIMESTAMPTZ_TBL;
+</sql-statement>
+<sql-statement>
+--
+-- time, interval arithmetic
+--
+SELECT CAST(time '01:02' AS interval) AS "+01:02";
+</sql-statement>
+<sql-statement>
+SELECT CAST(interval '02:03' AS time) AS "02:03:00";
+</sql-statement>
+<sql-statement>
+SELECT time '01:30' + interval '02:01' AS "03:31:00";
+</sql-statement>
+<sql-statement>
+SELECT time '01:30' - interval '02:01' AS "23:29:00";
+</sql-statement>
+<sql-statement>
+SELECT time '02:30' + interval '36:01' AS "14:31:00";
+</sql-statement>
+<sql-statement>
+SELECT time '03:30' + interval '1 month 04:01' AS "07:31:00";
+</sql-statement>
+<sql-statement>
+SELECT CAST(time with time zone '01:02-08' AS interval) AS "+00:01";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT CAST(time with time zone '01:02-08' AS interval) AS "+00:01";
+	^
+        -stdin-:<main>:1:47: Error: At function: PgCast
+        	SELECT CAST(time with time zone '01:02-08' AS interval) AS "+00:01";
+	                                              ^
+            -stdin-:<main>:1:47: Error: Cannot cast type timetz into type interval
+            	SELECT CAST(time with time zone '01:02-08' AS interval) AS "+00:01";
+	                                              ^
+<sql-statement>
+SELECT CAST(interval '02:03' AS time with time zone) AS "02:03:00-08";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT CAST(interval '02:03' AS time with time zone) AS "02:03:00-08";
+	^
+        -stdin-:<main>:1:33: Error: At function: PgCast
+        	SELECT CAST(interval '02:03' AS time with time zone) AS "02:03:00-08";
+	                                ^
+            -stdin-:<main>:1:33: Error: Cannot cast type interval into type timetz
+            	SELECT CAST(interval '02:03' AS time with time zone) AS "02:03:00-08";
+	                                ^
+<sql-statement>
+SELECT time with time zone '01:30-08' - interval '02:01' AS "23:29:00-08";
+</sql-statement>
+<sql-statement>
+SELECT time with time zone '02:30-08' + interval '36:01' AS "14:31:00-08";
+</sql-statement>
+<sql-statement>
+-- These two tests cannot be used because they default to current timezone,
+-- which may be either -08 or -07 depending on the time of year.
+-- SELECT time with time zone '01:30' + interval '02:01' AS "03:31:00-08";
+-- SELECT time with time zone '03:30' + interval '1 month 04:01' AS "07:31:00-08";
+-- Try the following two tests instead, as a poor substitute
+SELECT CAST(CAST(date 'today' + time with time zone '05:30'
+            + interval '02:01' AS time with time zone) AS time) AS "07:31:00";
+</sql-statement>
+<sql-statement>
+SELECT CAST(cast(date 'today' + time with time zone '03:30'
+  + interval '1 month 04:01' as timestamp without time zone) AS time) AS "07:31:00";
+</sql-statement>
+<sql-statement>
+SELECT t.d1 AS t, i.f1 AS i, t.d1 + i.f1 AS "add", t.d1 - i.f1 AS "subtract"
+  FROM TIMESTAMP_TBL t, INTERVAL_TBL i
+  WHERE t.d1 BETWEEN '1990-01-01' AND '2001-01-01'
+    AND i.f1 BETWEEN '00:00' AND '23:00'
+  ORDER BY 1,2;
+</sql-statement>
+<sql-statement>
+SELECT t.f1 AS t, i.f1 AS i, t.f1 + i.f1 AS "add", t.f1 - i.f1 AS "subtract"
+  FROM TIME_TBL t, INTERVAL_TBL i
+  ORDER BY 1,2;
+</sql-statement>
+<sql-statement>
+SELECT t.f1 AS t, i.f1 AS i, t.f1 + i.f1 AS "add", t.f1 - i.f1 AS "subtract"
+  FROM TIMETZ_TBL t, INTERVAL_TBL i
+  ORDER BY 1,2;
+</sql-statement>
+<sql-statement>
+-- SQL9x OVERLAPS operator
+-- test with time zone
+SELECT (timestamp with time zone '2000-11-27', timestamp with time zone '2000-11-28')
+  OVERLAPS (timestamp with time zone '2000-11-27 12:00', timestamp with time zone '2000-11-30') AS "True";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp with time zone '2000-11-26', timestamp with time zone '2000-11-27')
+  OVERLAPS (timestamp with time zone '2000-11-27 12:00', timestamp with time zone '2000-11-30') AS "False";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp with time zone '2000-11-27', timestamp with time zone '2000-11-28')
+  OVERLAPS (timestamp with time zone '2000-11-27 12:00', interval '1 day') AS "True";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT (timestamp with time zone '2000-11-27', timestamp with time zone '2000-11-28')
+	^
+        -stdin-:<main>:2:3: Error: At function: PgCall
+        	  OVERLAPS (timestamp with time zone '2000-11-27 12:00', interval '1 day') AS "True";
+	  ^
+            -stdin-:<main>:2:3: Error: Unable to find an overload for proc overlaps with given argument types: (timestamptz,timestamptz,timestamptz,interval)
+            	  OVERLAPS (timestamp with time zone '2000-11-27 12:00', interval '1 day') AS "True";
+	  ^
+<sql-statement>
+SELECT (timestamp with time zone '2000-11-27', interval '12 hours')
+  OVERLAPS (timestamp with time zone '2000-11-27 12:00', timestamp with time zone '2000-11-30') AS "False";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT (timestamp with time zone '2000-11-27', interval '12 hours')
+	^
+        -stdin-:<main>:2:3: Error: At function: PgCall
+        	  OVERLAPS (timestamp with time zone '2000-11-27 12:00', timestamp with time zone '2000-11-30') AS "False";
+	  ^
+            -stdin-:<main>:2:3: Error: Unable to find an overload for proc overlaps with given argument types: (timestamptz,interval,timestamptz,timestamptz)
+            	  OVERLAPS (timestamp with time zone '2000-11-27 12:00', timestamp with time zone '2000-11-30') AS "False";
+	  ^
+<sql-statement>
+SELECT (timestamp with time zone '2000-11-27', interval '12 hours')
+  OVERLAPS (timestamp with time zone '2000-11-27', interval '12 hours') AS "True";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT (timestamp with time zone '2000-11-27', interval '12 hours')
+	^
+        -stdin-:<main>:2:3: Error: At function: PgCall
+        	  OVERLAPS (timestamp with time zone '2000-11-27', interval '12 hours') AS "True";
+	  ^
+            -stdin-:<main>:2:3: Error: Unable to find an overload for proc overlaps with given argument types: (timestamptz,interval,timestamptz,interval)
+            	  OVERLAPS (timestamp with time zone '2000-11-27', interval '12 hours') AS "True";
+	  ^
+<sql-statement>
+SELECT (timestamp with time zone '2000-11-27', interval '12 hours')
+  OVERLAPS (timestamp with time zone '2000-11-27 12:00', interval '12 hours') AS "False";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT (timestamp with time zone '2000-11-27', interval '12 hours')
+	^
+        -stdin-:<main>:2:3: Error: At function: PgCall
+        	  OVERLAPS (timestamp with time zone '2000-11-27 12:00', interval '12 hours') AS "False";
+	  ^
+            -stdin-:<main>:2:3: Error: Unable to find an overload for proc overlaps with given argument types: (timestamptz,interval,timestamptz,interval)
+            	  OVERLAPS (timestamp with time zone '2000-11-27 12:00', interval '12 hours') AS "False";
+	  ^
+<sql-statement>
+-- test without time zone
+SELECT (timestamp without time zone '2000-11-27', timestamp without time zone '2000-11-28')
+  OVERLAPS (timestamp without time zone '2000-11-27 12:00', timestamp without time zone '2000-11-30') AS "True";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp without time zone '2000-11-26', timestamp without time zone '2000-11-27')
+  OVERLAPS (timestamp without time zone '2000-11-27 12:00', timestamp without time zone '2000-11-30') AS "False";
+</sql-statement>
+<sql-statement>
+SELECT (timestamp without time zone '2000-11-27', timestamp without time zone '2000-11-28')
+  OVERLAPS (timestamp without time zone '2000-11-27 12:00', interval '1 day') AS "True";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT (timestamp without time zone '2000-11-27', timestamp without time zone '2000-11-28')
+	^
+        -stdin-:<main>:2:3: Error: At function: PgCall
+        	  OVERLAPS (timestamp without time zone '2000-11-27 12:00', interval '1 day') AS "True";
+	  ^
+            -stdin-:<main>:2:3: Error: Unable to find an overload for proc overlaps with given argument types: (timestamp,timestamp,timestamp,interval)
+            	  OVERLAPS (timestamp without time zone '2000-11-27 12:00', interval '1 day') AS "True";
+	  ^
+<sql-statement>
+SELECT (timestamp without time zone '2000-11-27', interval '12 hours')
+  OVERLAPS (timestamp without time zone '2000-11-27 12:00', timestamp without time zone '2000-11-30') AS "False";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT (timestamp without time zone '2000-11-27', interval '12 hours')
+	^
+        -stdin-:<main>:2:3: Error: At function: PgCall
+        	  OVERLAPS (timestamp without time zone '2000-11-27 12:00', timestamp without time zone '2000-11-30') AS "False";
+	  ^
+            -stdin-:<main>:2:3: Error: Unable to find an overload for proc overlaps with given argument types: (timestamp,interval,timestamp,timestamp)
+            	  OVERLAPS (timestamp without time zone '2000-11-27 12:00', timestamp without time zone '2000-11-30') AS "False";
+	  ^
+<sql-statement>
+SELECT (timestamp without time zone '2000-11-27', interval '12 hours')
+  OVERLAPS (timestamp without time zone '2000-11-27', interval '12 hours') AS "True";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT (timestamp without time zone '2000-11-27', interval '12 hours')
+	^
+        -stdin-:<main>:2:3: Error: At function: PgCall
+        	  OVERLAPS (timestamp without time zone '2000-11-27', interval '12 hours') AS "True";
+	  ^
+            -stdin-:<main>:2:3: Error: Unable to find an overload for proc overlaps with given argument types: (timestamp,interval,timestamp,interval)
+            	  OVERLAPS (timestamp without time zone '2000-11-27', interval '12 hours') AS "True";
+	  ^
+<sql-statement>
+SELECT (timestamp without time zone '2000-11-27', interval '12 hours')
+  OVERLAPS (timestamp without time zone '2000-11-27 12:00', interval '12 hours') AS "False";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT (timestamp without time zone '2000-11-27', interval '12 hours')
+	^
+        -stdin-:<main>:2:3: Error: At function: PgCall
+        	  OVERLAPS (timestamp without time zone '2000-11-27 12:00', interval '12 hours') AS "False";
+	  ^
+            -stdin-:<main>:2:3: Error: Unable to find an overload for proc overlaps with given argument types: (timestamp,interval,timestamp,interval)
+            	  OVERLAPS (timestamp without time zone '2000-11-27 12:00', interval '12 hours') AS "False";
+	  ^
+<sql-statement>
+-- test time and interval
+SELECT (time '00:00', time '01:00')
+  OVERLAPS (time '00:30', time '01:30') AS "True";
+</sql-statement>
+<sql-statement>
+SELECT (time '00:00', interval '1 hour')
+  OVERLAPS (time '00:30', interval '1 hour') AS "True";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT (time '00:00', interval '1 hour')
+	^
+        -stdin-:<main>:2:3: Error: At function: PgCall
+        	  OVERLAPS (time '00:30', interval '1 hour') AS "True";
+	  ^
+            -stdin-:<main>:2:3: Error: Unable to find an overload for proc overlaps with given argument types: (time,interval,time,interval)
+            	  OVERLAPS (time '00:30', interval '1 hour') AS "True";
+	  ^
+<sql-statement>
+SELECT (time '00:00', interval '1 hour')
+  OVERLAPS (time '01:30', interval '1 hour') AS "False";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT (time '00:00', interval '1 hour')
+	^
+        -stdin-:<main>:2:3: Error: At function: PgCall
+        	  OVERLAPS (time '01:30', interval '1 hour') AS "False";
+	  ^
+            -stdin-:<main>:2:3: Error: Unable to find an overload for proc overlaps with given argument types: (time,interval,time,interval)
+            	  OVERLAPS (time '01:30', interval '1 hour') AS "False";
+	  ^
+<sql-statement>
+-- SQL99 seems to want this to be false (and we conform to the spec).
+-- istm that this *should* return true, on the theory that time
+-- intervals can wrap around the day boundary - thomas 2001-09-25
+SELECT (time '00:00', interval '1 hour')
+  OVERLAPS (time '01:30', interval '1 day') AS "False";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- SQL99 seems to want this to be false (and we conform to the spec).
+	^
+        -stdin-:<main>:5:3: Error: At function: PgCall
+        	  OVERLAPS (time '01:30', interval '1 day') AS "False";
+	  ^
+            -stdin-:<main>:5:3: Error: Unable to find an overload for proc overlaps with given argument types: (time,interval,time,interval)
+            	  OVERLAPS (time '01:30', interval '1 day') AS "False";
+	  ^
+<sql-statement>
+CREATE TABLE TEMP_TIMESTAMP (f1 timestamp with time zone);
+</sql-statement>
+<sql-statement>
+-- get some candidate input values
+INSERT INTO TEMP_TIMESTAMP (f1)
+  SELECT d1 FROM TIMESTAMP_TBL
+  WHERE d1 BETWEEN '13-jun-1957' AND '1-jan-1997'
+   OR d1 BETWEEN '1-jan-1999' AND '1-jan-2010';
+</sql-statement>
+<sql-statement>
+SELECT f1 AS "timestamp"
+  FROM TEMP_TIMESTAMP
+  ORDER BY "timestamp";
+</sql-statement>
+<sql-statement>
+SELECT d.f1 AS "timestamp", t.f1 AS "interval", d.f1 + t.f1 AS plus
+  FROM TEMP_TIMESTAMP d, INTERVAL_TBL t
+  ORDER BY plus, "timestamp", "interval";
+</sql-statement>
+<sql-statement>
+SELECT d.f1 AS "timestamp", t.f1 AS "interval", d.f1 - t.f1 AS minus
+  FROM TEMP_TIMESTAMP d, INTERVAL_TBL t
+  WHERE isfinite(d.f1)
+  ORDER BY minus, "timestamp", "interval";
+</sql-statement>
+<sql-statement>
+SELECT d.f1 AS "timestamp",
+   timestamp with time zone '1980-01-06 00:00 GMT' AS gpstime_zero,
+   d.f1 - timestamp with time zone '1980-01-06 00:00 GMT' AS difference
+  FROM TEMP_TIMESTAMP d
+  ORDER BY difference;
+</sql-statement>
+<sql-statement>
+SELECT d1.f1 AS timestamp1, d2.f1 AS timestamp2, d1.f1 - d2.f1 AS difference
+  FROM TEMP_TIMESTAMP d1, TEMP_TIMESTAMP d2
+  ORDER BY timestamp1, timestamp2, difference;
+</sql-statement>
+<sql-statement>
+--
+-- Conversions
+--
+SELECT f1 AS "timestamp", date(f1) AS date
+  FROM TEMP_TIMESTAMP
+  WHERE f1 <> timestamp 'now'
+  ORDER BY date, "timestamp";
+</sql-statement>
+<sql-statement>
+DROP TABLE TEMP_TIMESTAMP;
+</sql-statement>
+<sql-statement>
+--
+-- Comparisons between datetime types, especially overflow cases
+---
+SELECT '2202020-10-05'::date::timestamp;  -- fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	--
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date out of range for timestamp
+
+        	--
+	^
+<sql-statement>
+SELECT '2202020-10-05'::date > '2020-10-05'::timestamp as t;
+</sql-statement>
+<sql-statement>
+SELECT '2020-10-05'::timestamp > '2202020-10-05'::date as f;
+</sql-statement>
+<sql-statement>
+SELECT '2202020-10-05'::date::timestamptz;  -- fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2202020-10-05'::date::timestamptz;  -- fail
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date out of range for timestamp
+
+        	SELECT '2202020-10-05'::date::timestamptz;  -- fail
+	^
+<sql-statement>
+SELECT '2202020-10-05'::date > '2020-10-05'::timestamptz as t;
+</sql-statement>
+<sql-statement>
+SELECT '2020-10-05'::timestamptz > '2202020-10-05'::date as f;
+</sql-statement>
+<sql-statement>
+-- This conversion may work depending on timezone
+SELECT '4714-11-24 BC'::date::timestamptz;
+</sql-statement>
+<sql-statement>
+SET TimeZone = 'UTC-2';
+</sql-statement>
+<sql-statement>
+SELECT '4714-11-24 BC'::date::timestamptz;  -- fail
+</sql-statement>
+<sql-statement>
+SELECT '4714-11-24 BC'::date < '2020-10-05'::timestamptz as t;
+</sql-statement>
+<sql-statement>
+SELECT '2020-10-05'::timestamptz >= '4714-11-24 BC'::date as t;
+</sql-statement>
+<sql-statement>
+SELECT '4714-11-24 BC'::timestamp < '2020-10-05'::timestamptz as t;
+</sql-statement>
+<sql-statement>
+SELECT '2020-10-05'::timestamptz >= '4714-11-24 BC'::timestamp as t;
+</sql-statement>
+<sql-statement>
+RESET TimeZone;
+</sql-statement>
+<sql-statement>
+--
+-- Formats
+--
+SET DateStyle TO 'US,Postgres';
+</sql-statement>
+<sql-statement>
+SHOW DateStyle;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unrecognized configuration parameter "datestyle"
+    	SHOW DateStyle;
+	^
+<sql-statement>
+SELECT d1 AS us_postgres FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SET DateStyle TO 'US,ISO';
+</sql-statement>
+<sql-statement>
+SELECT d1 AS us_iso FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SET DateStyle TO 'US,SQL';
+</sql-statement>
+<sql-statement>
+SHOW DateStyle;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unrecognized configuration parameter "datestyle"
+    	SHOW DateStyle;
+	^
+<sql-statement>
+SELECT d1 AS us_sql FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SET DateStyle TO 'European,Postgres';
+</sql-statement>
+<sql-statement>
+SHOW DateStyle;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unrecognized configuration parameter "datestyle"
+    	SHOW DateStyle;
+	^
+<sql-statement>
+INSERT INTO TIMESTAMP_TBL VALUES('13/06/1957');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIMESTAMP_TBL VALUES('13/06/1957');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "13/06/1957"
+HINT:  Perhaps you need a different "datestyle" setting.
+
+        	INSERT INTO TIMESTAMP_TBL VALUES('13/06/1957');
+	^
+<sql-statement>
+SELECT count(*) as one FROM TIMESTAMP_TBL WHERE d1 = 'Jun 13 1957';
+</sql-statement>
+<sql-statement>
+SELECT d1 AS european_postgres FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SET DateStyle TO 'European,ISO';
+</sql-statement>
+<sql-statement>
+SHOW DateStyle;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unrecognized configuration parameter "datestyle"
+    	SHOW DateStyle;
+	^
+<sql-statement>
+SELECT d1 AS european_iso FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+SET DateStyle TO 'European,SQL';
+</sql-statement>
+<sql-statement>
+SHOW DateStyle;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unrecognized configuration parameter "datestyle"
+    	SHOW DateStyle;
+	^
+<sql-statement>
+SELECT d1 AS european_sql FROM TIMESTAMP_TBL;
+</sql-statement>
+<sql-statement>
+RESET DateStyle;
+</sql-statement>
+<sql-statement>
+--
+-- to_timestamp()
+--
+SELECT to_timestamp('0097/Feb/16 --> 08:14:30', 'YYYY/Mon/DD --> HH:MI:SS');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('97/2/16 8:14:30', 'FMYYYY/FMMM/FMDD FMHH:FMMI:FMSS');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011$03!18 23_38_15', 'YYYY-MM-DD HH24:MI:SS');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('1985 January 12', 'YYYY FMMonth DD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('1985 FMMonth 12', 'YYYY "FMMonth" DD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('1985 \ 12', 'YYYY \\ DD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('My birthday-> Year: 1976, Month: May, Day: 16',
+                    '"My birthday-> Year:" YYYY, "Month:" FMMonth, "Day:" DD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('1,582nd VIII 21', 'Y,YYYth FMRM DD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('15 "text between quote marks" 98 54 45',
+                    E'HH24 "\\"text between quote marks\\"" YY MI SS');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('05121445482000', 'MMDDHH24MISSYYYY');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2000January09Sunday', 'YYYYFMMonthDDFMDay');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('97/Feb/16', 'YYMonDD');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_timestamp('97/Feb/16', 'YYMonDD');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid value "/Feb/16" for "Mon"
+DETAIL:  The given value did not match any of the allowed values for this field.
+
+        	SELECT to_timestamp('97/Feb/16', 'YYMonDD');
+	^
+<sql-statement>
+SELECT to_timestamp('97/Feb/16', 'YY:Mon:DD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('97/Feb/16', 'FXYY:Mon:DD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('97/Feb/16', 'FXYY/Mon/DD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('19971116', 'YYYYMMDD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('20000-1116', 'YYYY-MMDD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('1997 AD 11 16', 'YYYY BC MM DD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('1997 BC 11 16', 'YYYY BC MM DD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('1997 A.D. 11 16', 'YYYY B.C. MM DD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('1997 B.C. 11 16', 'YYYY B.C. MM DD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('9-1116', 'Y-MMDD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('95-1116', 'YY-MMDD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('995-1116', 'YYY-MMDD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2005426', 'YYYYWWD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2005300', 'YYYYDDD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2005527', 'IYYYIWID');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('005527', 'IYYIWID');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('05527', 'IYIWID');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('5527', 'IIWID');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2005364', 'IYYYIDDD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('20050302', 'YYYYMMDD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2005 03 02', 'YYYYMMDD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp(' 2005 03 02', 'YYYYMMDD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('  20050302', 'YYYYMMDD');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011-12-18 11:38 AM', 'YYYY-MM-DD HH12:MI PM');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011-12-18 11:38 PM', 'YYYY-MM-DD HH12:MI PM');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011-12-18 11:38 A.M.', 'YYYY-MM-DD HH12:MI P.M.');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011-12-18 11:38 P.M.', 'YYYY-MM-DD HH12:MI P.M.');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011-12-18 11:38 +05',    'YYYY-MM-DD HH12:MI TZH');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011-12-18 11:38 -05',    'YYYY-MM-DD HH12:MI TZH');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011-12-18 11:38 +05:20', 'YYYY-MM-DD HH12:MI TZH:TZM');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011-12-18 11:38 -05:20', 'YYYY-MM-DD HH12:MI TZH:TZM');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011-12-18 11:38 20',     'YYYY-MM-DD HH12:MI TZM');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011-12-18 11:38 PST', 'YYYY-MM-DD HH12:MI TZ');  -- NYI
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_timestamp('2011-12-18 11:38 PST', 'YYYY-MM-DD HH12:MI TZ');  -- NYI
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  formatting field "TZ" is only supported in to_char
+
+        	SELECT to_timestamp('2011-12-18 11:38 PST', 'YYYY-MM-DD HH12:MI TZ');  -- NYI
+	^
+<sql-statement>
+SELECT to_timestamp('2018-11-02 12:34:56.025', 'YYYY-MM-DD HH24:MI:SS.MS');
+</sql-statement>
+<sql-statement>
+SELECT i, to_timestamp('2018-11-02 12:34:56', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT i, to_timestamp('2018-11-02 12:34:56', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	^
+        -stdin-:<main>:1:11: Error: At function: PgCall
+        	SELECT i, to_timestamp('2018-11-02 12:34:56', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	          ^
+            -stdin-:<main>:1:74: Error: At function: PgOp
+            	SELECT i, to_timestamp('2018-11-02 12:34:56', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                         ^
+                -stdin-:<main>:1:74: Error: Unable to find an overload for operator || with given argument type(s): (unknown,int4)
+                	SELECT i, to_timestamp('2018-11-02 12:34:56', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                         ^
+<sql-statement>
+SELECT i, to_timestamp('2018-11-02 12:34:56.1', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT i, to_timestamp('2018-11-02 12:34:56.1', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	^
+        -stdin-:<main>:1:11: Error: At function: PgCall
+        	SELECT i, to_timestamp('2018-11-02 12:34:56.1', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	          ^
+            -stdin-:<main>:1:76: Error: At function: PgOp
+            	SELECT i, to_timestamp('2018-11-02 12:34:56.1', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                           ^
+                -stdin-:<main>:1:76: Error: Unable to find an overload for operator || with given argument type(s): (unknown,int4)
+                	SELECT i, to_timestamp('2018-11-02 12:34:56.1', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                           ^
+<sql-statement>
+SELECT i, to_timestamp('2018-11-02 12:34:56.12', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT i, to_timestamp('2018-11-02 12:34:56.12', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	^
+        -stdin-:<main>:1:11: Error: At function: PgCall
+        	SELECT i, to_timestamp('2018-11-02 12:34:56.12', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	          ^
+            -stdin-:<main>:1:77: Error: At function: PgOp
+            	SELECT i, to_timestamp('2018-11-02 12:34:56.12', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                            ^
+                -stdin-:<main>:1:77: Error: Unable to find an overload for operator || with given argument type(s): (unknown,int4)
+                	SELECT i, to_timestamp('2018-11-02 12:34:56.12', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                            ^
+<sql-statement>
+SELECT i, to_timestamp('2018-11-02 12:34:56.123', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT i, to_timestamp('2018-11-02 12:34:56.123', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	^
+        -stdin-:<main>:1:11: Error: At function: PgCall
+        	SELECT i, to_timestamp('2018-11-02 12:34:56.123', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	          ^
+            -stdin-:<main>:1:78: Error: At function: PgOp
+            	SELECT i, to_timestamp('2018-11-02 12:34:56.123', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                             ^
+                -stdin-:<main>:1:78: Error: Unable to find an overload for operator || with given argument type(s): (unknown,int4)
+                	SELECT i, to_timestamp('2018-11-02 12:34:56.123', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                             ^
+<sql-statement>
+SELECT i, to_timestamp('2018-11-02 12:34:56.1234', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT i, to_timestamp('2018-11-02 12:34:56.1234', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	^
+        -stdin-:<main>:1:11: Error: At function: PgCall
+        	SELECT i, to_timestamp('2018-11-02 12:34:56.1234', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	          ^
+            -stdin-:<main>:1:79: Error: At function: PgOp
+            	SELECT i, to_timestamp('2018-11-02 12:34:56.1234', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                              ^
+                -stdin-:<main>:1:79: Error: Unable to find an overload for operator || with given argument type(s): (unknown,int4)
+                	SELECT i, to_timestamp('2018-11-02 12:34:56.1234', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                              ^
+<sql-statement>
+SELECT i, to_timestamp('2018-11-02 12:34:56.12345', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT i, to_timestamp('2018-11-02 12:34:56.12345', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	^
+        -stdin-:<main>:1:11: Error: At function: PgCall
+        	SELECT i, to_timestamp('2018-11-02 12:34:56.12345', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	          ^
+            -stdin-:<main>:1:80: Error: At function: PgOp
+            	SELECT i, to_timestamp('2018-11-02 12:34:56.12345', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                               ^
+                -stdin-:<main>:1:80: Error: Unable to find an overload for operator || with given argument type(s): (unknown,int4)
+                	SELECT i, to_timestamp('2018-11-02 12:34:56.12345', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                               ^
+<sql-statement>
+SELECT i, to_timestamp('2018-11-02 12:34:56.123456', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT i, to_timestamp('2018-11-02 12:34:56.123456', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	^
+        -stdin-:<main>:1:11: Error: At function: PgCall
+        	SELECT i, to_timestamp('2018-11-02 12:34:56.123456', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	          ^
+            -stdin-:<main>:1:81: Error: At function: PgOp
+            	SELECT i, to_timestamp('2018-11-02 12:34:56.123456', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                                ^
+                -stdin-:<main>:1:81: Error: Unable to find an overload for operator || with given argument type(s): (unknown,int4)
+                	SELECT i, to_timestamp('2018-11-02 12:34:56.123456', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                                ^
+<sql-statement>
+SELECT i, to_timestamp('2018-11-02 12:34:56.123456789', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT i, to_timestamp('2018-11-02 12:34:56.123456789', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	^
+        -stdin-:<main>:1:11: Error: At function: PgCall
+        	SELECT i, to_timestamp('2018-11-02 12:34:56.123456789', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	          ^
+            -stdin-:<main>:1:84: Error: At function: PgOp
+            	SELECT i, to_timestamp('2018-11-02 12:34:56.123456789', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                                   ^
+                -stdin-:<main>:1:84: Error: Unable to find an overload for operator || with given argument type(s): (unknown,int4)
+                	SELECT i, to_timestamp('2018-11-02 12:34:56.123456789', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
+	                                                                                   ^
+<sql-statement>
+SELECT to_date('1 4 1902', 'Q MM YYYY');  -- Q is ignored
+</sql-statement>
+<sql-statement>
+SELECT to_date('3 4 21 01', 'W MM CC YY');
+</sql-statement>
+<sql-statement>
+SELECT to_date('2458872', 'J');
+</sql-statement>
+<sql-statement>
+--
+-- Check handling of BC dates
+--
+SELECT to_date('44-02-01 BC','YYYY-MM-DD BC');
+</sql-statement>
+<sql-statement>
+SELECT to_date('-44-02-01','YYYY-MM-DD');
+</sql-statement>
+<sql-statement>
+SELECT to_date('-44-02-01 BC','YYYY-MM-DD BC');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('44-02-01 11:12:13 BC','YYYY-MM-DD HH24:MI:SS BC');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('-44-02-01 11:12:13','YYYY-MM-DD HH24:MI:SS');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('-44-02-01 11:12:13 BC','YYYY-MM-DD HH24:MI:SS BC');
+</sql-statement>
+<sql-statement>
+--
+-- Check handling of multiple spaces in format and/or input
+--
+SELECT to_timestamp('2011-12-18 23:38:15', 'YYYY-MM-DD  HH24:MI:SS');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011-12-18  23:38:15', 'YYYY-MM-DD  HH24:MI:SS');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011-12-18   23:38:15', 'YYYY-MM-DD  HH24:MI:SS');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011-12-18  23:38:15', 'YYYY-MM-DD HH24:MI:SS');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011-12-18  23:38:15', 'YYYY-MM-DD  HH24:MI:SS');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2011-12-18  23:38:15', 'YYYY-MM-DD   HH24:MI:SS');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2000+   JUN', 'YYYY/MON');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('  2000 +JUN', 'YYYY/MON');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp(' 2000 +JUN', 'YYYY//MON');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2000  +JUN', 'YYYY//MON');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2000 + JUN', 'YYYY MON');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2000 ++ JUN', 'YYYY  MON');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2000 + + JUN', 'YYYY  MON');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_timestamp('2000 + + JUN', 'YYYY  MON');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid value "+" for "MON"
+DETAIL:  The given value did not match any of the allowed values for this field.
+
+        	SELECT to_timestamp('2000 + + JUN', 'YYYY  MON');
+	^
+<sql-statement>
+SELECT to_timestamp('2000 + + JUN', 'YYYY   MON');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2000 -10', 'YYYY TZH');
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2000 -10', 'YYYY  TZH');
+</sql-statement>
+<sql-statement>
+SELECT to_date('2011 12  18', 'YYYY MM DD');
+</sql-statement>
+<sql-statement>
+SELECT to_date('2011 12  18', 'YYYY MM  DD');
+</sql-statement>
+<sql-statement>
+SELECT to_date('2011 12  18', 'YYYY MM   DD');
+</sql-statement>
+<sql-statement>
+SELECT to_date('2011 12 18', 'YYYY  MM DD');
+</sql-statement>
+<sql-statement>
+SELECT to_date('2011  12 18', 'YYYY  MM DD');
+</sql-statement>
+<sql-statement>
+SELECT to_date('2011   12 18', 'YYYY  MM DD');
+</sql-statement>
+<sql-statement>
+SELECT to_date('2011 12 18', 'YYYYxMMxDD');
+</sql-statement>
+<sql-statement>
+SELECT to_date('2011x 12x 18', 'YYYYxMMxDD');
+</sql-statement>
+<sql-statement>
+SELECT to_date('2011 x12 x18', 'YYYYxMMxDD');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_date('2011 x12 x18', 'YYYYxMMxDD');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid value "x1" for "MM"
+DETAIL:  Value must be an integer.
+
+        	SELECT to_date('2011 x12 x18', 'YYYYxMMxDD');
+	^
+<sql-statement>
+--
+-- Check errors for some incorrect usages of to_timestamp() and to_date()
+--
+-- Mixture of date conventions (ISO week and Gregorian):
+SELECT to_timestamp('2005527', 'YYYYIWID');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	--
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid combination of date conventions
+HINT:  Do not mix Gregorian and ISO week date conventions in a formatting template.
+
+        	--
+	^
+<sql-statement>
+-- Insufficient characters in the source string:
+SELECT to_timestamp('19971', 'YYYYMMDD');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Insufficient characters in the source string:
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  source string too short for "MM" formatting field
+DETAIL:  Field requires 2 characters, but only 1 remain.
+HINT:  If your source string is not fixed-width, try using the "FM" modifier.
+
+        	-- Insufficient characters in the source string:
+	^
+<sql-statement>
+-- Insufficient digit characters for a single node:
+SELECT to_timestamp('19971)24', 'YYYYMMDD');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Insufficient digit characters for a single node:
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid value "1)" for "MM"
+DETAIL:  Field requires 2 characters, but only 1 could be parsed.
+HINT:  If your source string is not fixed-width, try using the "FM" modifier.
+
+        	-- Insufficient digit characters for a single node:
+	^
+<sql-statement>
+-- We don't accept full-length day or month names if short form is specified:
+SELECT to_timestamp('Friday 1-January-1999', 'DY DD MON YYYY');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- We don't accept full-length day or month names if short form is specified:
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid value "da" for "DD"
+DETAIL:  Value must be an integer.
+
+        	-- We don't accept full-length day or month names if short form is specified:
+	^
+<sql-statement>
+SELECT to_timestamp('Fri 1-January-1999', 'DY DD MON YYYY');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_timestamp('Fri 1-January-1999', 'DY DD MON YYYY');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid value "uary" for "YYYY"
+DETAIL:  Value must be an integer.
+
+        	SELECT to_timestamp('Fri 1-January-1999', 'DY DD MON YYYY');
+	^
+<sql-statement>
+SELECT to_timestamp('Fri 1-Jan-1999', 'DY DD MON YYYY');  -- ok
+</sql-statement>
+<sql-statement>
+-- Value clobbering:
+SELECT to_timestamp('1997-11-Jan-16', 'YYYY-MM-Mon-DD');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Value clobbering:
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  conflicting values for "Mon" field in formatting string
+DETAIL:  This value contradicts a previous setting for the same field type.
+
+        	-- Value clobbering:
+	^
+<sql-statement>
+-- Non-numeric input:
+SELECT to_timestamp('199711xy', 'YYYYMMDD');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Non-numeric input:
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid value "xy" for "DD"
+DETAIL:  Value must be an integer.
+
+        	-- Non-numeric input:
+	^
+<sql-statement>
+-- Input that doesn't fit in an int:
+SELECT to_timestamp('10000000000', 'FMYYYY');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Input that doesn't fit in an int:
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value for "YYYY" in source string is out of range
+DETAIL:  Value must be in the range -2147483648 to 2147483647.
+
+        	-- Input that doesn't fit in an int:
+	^
+<sql-statement>
+-- Out-of-range and not-quite-out-of-range fields:
+SELECT to_timestamp('2016-06-13 25:00:00', 'YYYY-MM-DD HH24:MI:SS');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Out-of-range and not-quite-out-of-range fields:
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "2016-06-13 25:00:00"
+
+        	-- Out-of-range and not-quite-out-of-range fields:
+	^
+<sql-statement>
+SELECT to_timestamp('2016-06-13 15:60:00', 'YYYY-MM-DD HH24:MI:SS');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_timestamp('2016-06-13 15:60:00', 'YYYY-MM-DD HH24:MI:SS');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "2016-06-13 15:60:00"
+
+        	SELECT to_timestamp('2016-06-13 15:60:00', 'YYYY-MM-DD HH24:MI:SS');
+	^
+<sql-statement>
+SELECT to_timestamp('2016-06-13 15:50:60', 'YYYY-MM-DD HH24:MI:SS');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_timestamp('2016-06-13 15:50:60', 'YYYY-MM-DD HH24:MI:SS');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "2016-06-13 15:50:60"
+
+        	SELECT to_timestamp('2016-06-13 15:50:60', 'YYYY-MM-DD HH24:MI:SS');
+	^
+<sql-statement>
+SELECT to_timestamp('2016-06-13 15:50:55', 'YYYY-MM-DD HH24:MI:SS');  -- ok
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2016-06-13 15:50:55', 'YYYY-MM-DD HH:MI:SS');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_timestamp('2016-06-13 15:50:55', 'YYYY-MM-DD HH:MI:SS');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  hour "15" is invalid for the 12-hour clock
+HINT:  Use the 24-hour clock, or give an hour between 1 and 12.
+
+        	SELECT to_timestamp('2016-06-13 15:50:55', 'YYYY-MM-DD HH:MI:SS');
+	^
+<sql-statement>
+SELECT to_timestamp('2016-13-01 15:50:55', 'YYYY-MM-DD HH24:MI:SS');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_timestamp('2016-13-01 15:50:55', 'YYYY-MM-DD HH24:MI:SS');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "2016-13-01 15:50:55"
+
+        	SELECT to_timestamp('2016-13-01 15:50:55', 'YYYY-MM-DD HH24:MI:SS');
+	^
+<sql-statement>
+SELECT to_timestamp('2016-02-30 15:50:55', 'YYYY-MM-DD HH24:MI:SS');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_timestamp('2016-02-30 15:50:55', 'YYYY-MM-DD HH24:MI:SS');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "2016-02-30 15:50:55"
+
+        	SELECT to_timestamp('2016-02-30 15:50:55', 'YYYY-MM-DD HH24:MI:SS');
+	^
+<sql-statement>
+SELECT to_timestamp('2016-02-29 15:50:55', 'YYYY-MM-DD HH24:MI:SS');  -- ok
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2015-02-29 15:50:55', 'YYYY-MM-DD HH24:MI:SS');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_timestamp('2015-02-29 15:50:55', 'YYYY-MM-DD HH24:MI:SS');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "2015-02-29 15:50:55"
+
+        	SELECT to_timestamp('2015-02-29 15:50:55', 'YYYY-MM-DD HH24:MI:SS');
+	^
+<sql-statement>
+SELECT to_timestamp('2015-02-11 86000', 'YYYY-MM-DD SSSS');  -- ok
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2015-02-11 86400', 'YYYY-MM-DD SSSS');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_timestamp('2015-02-11 86400', 'YYYY-MM-DD SSSS');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "2015-02-11 86400"
+
+        	SELECT to_timestamp('2015-02-11 86400', 'YYYY-MM-DD SSSS');
+	^
+<sql-statement>
+SELECT to_timestamp('2015-02-11 86000', 'YYYY-MM-DD SSSSS');  -- ok
+</sql-statement>
+<sql-statement>
+SELECT to_timestamp('2015-02-11 86400', 'YYYY-MM-DD SSSSS');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_timestamp('2015-02-11 86400', 'YYYY-MM-DD SSSSS');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "2015-02-11 86400"
+
+        	SELECT to_timestamp('2015-02-11 86400', 'YYYY-MM-DD SSSSS');
+	^
+<sql-statement>
+SELECT to_date('2016-13-10', 'YYYY-MM-DD');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_date('2016-13-10', 'YYYY-MM-DD');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "2016-13-10"
+
+        	SELECT to_date('2016-13-10', 'YYYY-MM-DD');
+	^
+<sql-statement>
+SELECT to_date('2016-02-30', 'YYYY-MM-DD');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_date('2016-02-30', 'YYYY-MM-DD');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "2016-02-30"
+
+        	SELECT to_date('2016-02-30', 'YYYY-MM-DD');
+	^
+<sql-statement>
+SELECT to_date('2016-02-29', 'YYYY-MM-DD');  -- ok
+</sql-statement>
+<sql-statement>
+SELECT to_date('2015-02-29', 'YYYY-MM-DD');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_date('2015-02-29', 'YYYY-MM-DD');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "2015-02-29"
+
+        	SELECT to_date('2015-02-29', 'YYYY-MM-DD');
+	^
+<sql-statement>
+SELECT to_date('2015 365', 'YYYY DDD');  -- ok
+</sql-statement>
+<sql-statement>
+SELECT to_date('2015 366', 'YYYY DDD');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_date('2015 366', 'YYYY DDD');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "2015 366"
+
+        	SELECT to_date('2015 366', 'YYYY DDD');
+	^
+<sql-statement>
+SELECT to_date('2016 365', 'YYYY DDD');  -- ok
+</sql-statement>
+<sql-statement>
+SELECT to_date('2016 366', 'YYYY DDD');  -- ok
+</sql-statement>
+<sql-statement>
+SELECT to_date('2016 367', 'YYYY DDD');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT to_date('2016 367', 'YYYY DDD');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "2016 367"
+
+        	SELECT to_date('2016 367', 'YYYY DDD');
+	^
+<sql-statement>
+SELECT to_date('0000-02-01','YYYY-MM-DD');  -- allowed, though it shouldn't be
+</sql-statement>
+<sql-statement>
+--
+-- Check behavior with SQL-style fixed-GMT-offset time zone (cf bug #8572)
+--
+SET TIME ZONE 'America/New_York';
+</sql-statement>
+<sql-statement>
+SET TIME ZONE '-1.5';
+</sql-statement>
+<sql-statement>
+SHOW TIME ZONE;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unrecognized configuration parameter "timezone"
+    	SHOW TIME ZONE;
+	^
+<sql-statement>
+SELECT '2012-12-12 12:00'::timestamptz;
+</sql-statement>
+<sql-statement>
+SELECT '2012-12-12 12:00 America/New_York'::timestamptz;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '2012-12-12 12:00 America/New_York'::timestamptz;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "america/new_york" not recognized
+
+        	SELECT '2012-12-12 12:00 America/New_York'::timestamptz;
+	^
+<sql-statement>
+SELECT to_char('2012-12-12 12:00'::timestamptz, 'YYYY-MM-DD HH:MI:SS TZ');
+</sql-statement>
+<sql-statement>
+SELECT to_char('2012-12-12 12:00'::timestamptz, 'YYYY-MM-DD SSSS');
+</sql-statement>
+<sql-statement>
+SELECT to_char('2012-12-12 12:00'::timestamptz, 'YYYY-MM-DD SSSSS');
+</sql-statement>
+<sql-statement>
+RESET TIME ZONE;
+</sql-statement>

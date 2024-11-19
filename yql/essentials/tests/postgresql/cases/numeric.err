@@ -1,0 +1,4177 @@
+<sql-statement>
+--
+-- NUMERIC
+--
+CREATE TABLE num_data (id int4, val numeric(210,10));
+</sql-statement>
+<sql-statement>
+CREATE TABLE num_exp_add (id1 int4, id2 int4, expected numeric(210,10));
+</sql-statement>
+<sql-statement>
+CREATE TABLE num_exp_sub (id1 int4, id2 int4, expected numeric(210,10));
+</sql-statement>
+<sql-statement>
+CREATE TABLE num_exp_div (id1 int4, id2 int4, expected numeric(210,10));
+</sql-statement>
+<sql-statement>
+CREATE TABLE num_exp_mul (id1 int4, id2 int4, expected numeric(210,10));
+</sql-statement>
+<sql-statement>
+CREATE TABLE num_exp_sqrt (id int4, expected numeric(210,10));
+</sql-statement>
+<sql-statement>
+CREATE TABLE num_exp_ln (id int4, expected numeric(210,10));
+</sql-statement>
+<sql-statement>
+CREATE TABLE num_exp_log10 (id int4, expected numeric(210,10));
+</sql-statement>
+<sql-statement>
+CREATE TABLE num_exp_power_10_ln (id int4, expected numeric(210,10));
+</sql-statement>
+<sql-statement>
+CREATE TABLE num_result (id1 int4, id2 int4, result numeric(210,10));
+</sql-statement>
+<sql-statement>
+-- ******************************
+-- * The following EXPECTED results are computed by bc(1)
+-- * with a scale of 200
+-- ******************************
+BEGIN TRANSACTION;
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (0,0,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (0,0,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (0,0,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (0,0,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (0,1,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (0,1,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (0,1,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (0,1,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (0,2,'-34338492.215397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (0,2,'34338492.215397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (0,2,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (0,2,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (0,3,'4.31');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (0,3,'-4.31');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (0,3,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (0,3,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (0,4,'7799461.4119');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (0,4,'-7799461.4119');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (0,4,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (0,4,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (0,5,'16397.038491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (0,5,'-16397.038491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (0,5,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (0,5,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (0,6,'93901.57763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (0,6,'-93901.57763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (0,6,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (0,6,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (0,7,'-83028485');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (0,7,'83028485');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (0,7,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (0,7,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (0,8,'74881');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (0,8,'-74881');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (0,8,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (0,8,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (0,9,'-24926804.045047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (0,9,'24926804.045047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (0,9,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (0,9,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (1,0,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (1,0,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (1,0,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (1,0,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (1,1,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (1,1,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (1,1,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (1,1,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (1,2,'-34338492.215397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (1,2,'34338492.215397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (1,2,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (1,2,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (1,3,'4.31');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (1,3,'-4.31');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (1,3,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (1,3,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (1,4,'7799461.4119');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (1,4,'-7799461.4119');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (1,4,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (1,4,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (1,5,'16397.038491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (1,5,'-16397.038491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (1,5,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (1,5,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (1,6,'93901.57763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (1,6,'-93901.57763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (1,6,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (1,6,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (1,7,'-83028485');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (1,7,'83028485');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (1,7,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (1,7,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (1,8,'74881');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (1,8,'-74881');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (1,8,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (1,8,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (1,9,'-24926804.045047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (1,9,'24926804.045047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (1,9,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (1,9,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (2,0,'-34338492.215397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (2,0,'-34338492.215397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (2,0,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (2,0,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (2,1,'-34338492.215397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (2,1,'-34338492.215397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (2,1,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (2,1,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (2,2,'-68676984.430794094');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (2,2,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (2,2,'1179132047626883.596862135856320209');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (2,2,'1.00000000000000000000');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (2,3,'-34338487.905397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (2,3,'-34338496.525397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (2,3,'-147998901.44836127257');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (2,3,'-7967167.56737750510440835266');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (2,4,'-26539030.803497047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (2,4,'-42137953.627297047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (2,4,'-267821744976817.8111137106593');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (2,4,'-4.40267480046830116685');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (2,5,'-34322095.176906047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (2,5,'-34354889.253888047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (2,5,'-563049578578.769242506736077');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (2,5,'-2094.18866914563535496429');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (2,6,'-34244590.637766787');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (2,6,'-34432393.793027307');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (2,6,'-3224438592470.18449811926184222');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (2,6,'-365.68599891479766440940');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (2,7,'-117366977.215397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (2,7,'48689992.784602953');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (2,7,'2851072985828710.485883795');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (2,7,'.41357483778485235518');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (2,8,'-34263611.215397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (2,8,'-34413373.215397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (2,8,'-2571300635581.146276407');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (2,8,'-458.57416721727870888476');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (2,9,'-59265296.260444467');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (2,9,'-9411688.170349627');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (2,9,'855948866655588.453741509242968740');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (2,9,'1.37757299946438931811');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (3,0,'4.31');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (3,0,'4.31');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (3,0,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (3,0,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (3,1,'4.31');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (3,1,'4.31');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (3,1,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (3,1,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (3,2,'-34338487.905397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (3,2,'34338496.525397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (3,2,'-147998901.44836127257');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (3,2,'-.00000012551512084352');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (3,3,'8.62');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (3,3,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (3,3,'18.5761');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (3,3,'1.00000000000000000000');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (3,4,'7799465.7219');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (3,4,'-7799457.1019');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (3,4,'33615678.685289');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (3,4,'.00000055260225961552');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (3,5,'16401.348491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (3,5,'-16392.728491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (3,5,'70671.23589621');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (3,5,'.00026285234387695504');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (3,6,'93905.88763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (3,6,'-93897.26763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (3,6,'404715.7995864206');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (3,6,'.00004589912234457595');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (3,7,'-83028480.69');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (3,7,'83028489.31');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (3,7,'-357852770.35');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (3,7,'-.00000005190989574240');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (3,8,'74885.31');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (3,8,'-74876.69');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (3,8,'322737.11');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (3,8,'.00005755799201399553');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (3,9,'-24926799.735047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (3,9,'24926808.355047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (3,9,'-107434525.43415438020');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (3,9,'-.00000017290624149854');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (4,0,'7799461.4119');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (4,0,'7799461.4119');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (4,0,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (4,0,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (4,1,'7799461.4119');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (4,1,'7799461.4119');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (4,1,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (4,1,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (4,2,'-26539030.803497047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (4,2,'42137953.627297047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (4,2,'-267821744976817.8111137106593');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (4,2,'-.22713465002993920385');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (4,3,'7799465.7219');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (4,3,'7799457.1019');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (4,3,'33615678.685289');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (4,3,'1809619.81714617169373549883');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (4,4,'15598922.8238');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (4,4,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (4,4,'60831598315717.14146161');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (4,4,'1.00000000000000000000');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (4,5,'7815858.450391');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (4,5,'7783064.373409');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (4,5,'127888068979.9935054429');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (4,5,'475.66281046305802686061');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (4,6,'7893362.98953026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (4,6,'7705559.83426974');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (4,6,'732381731243.745115764094');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (4,6,'83.05996138436129499606');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (4,7,'-75229023.5881');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (4,7,'90827946.4119');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (4,7,'-647577464846017.9715');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (4,7,'-.09393717604145131637');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (4,8,'7874342.4119');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (4,8,'7724580.4119');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (4,8,'584031469984.4839');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (4,8,'104.15808298366741897143');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (4,9,'-17127342.633147420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (4,9,'32726265.456947420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (4,9,'-194415646271340.1815956522980');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (4,9,'-.31289456112403769409');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (5,0,'16397.038491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (5,0,'16397.038491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (5,0,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (5,0,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (5,1,'16397.038491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (5,1,'16397.038491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (5,1,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (5,1,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (5,2,'-34322095.176906047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (5,2,'34354889.253888047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (5,2,'-563049578578.769242506736077');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (5,2,'-.00047751189505192446');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (5,3,'16401.348491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (5,3,'16392.728491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (5,3,'70671.23589621');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (5,3,'3804.41728329466357308584');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (5,4,'7815858.450391');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (5,4,'-7783064.373409');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (5,4,'127888068979.9935054429');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (5,4,'.00210232958726897192');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (5,5,'32794.076982');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (5,5,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (5,5,'268862871.275335557081');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (5,5,'1.00000000000000000000');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (5,6,'110298.61612126');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (5,6,'-77504.53913926');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (5,6,'1539707782.76899778633766');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (5,6,'.17461941433576102689');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (5,7,'-83012087.961509');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (5,7,'83044882.038491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (5,7,'-1361421264394.416135');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (5,7,'-.00019748690453643710');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (5,8,'91278.038491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (5,8,'-58483.961509');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (5,8,'1227826639.244571');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (5,8,'.21897461960978085228');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (5,9,'-24910407.006556420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (5,9,'24943201.083538420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (5,9,'-408725765384.257043660243220');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (5,9,'-.00065780749354660427');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (6,0,'93901.57763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (6,0,'93901.57763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (6,0,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (6,0,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (6,1,'93901.57763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (6,1,'93901.57763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (6,1,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (6,1,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (6,2,'-34244590.637766787');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (6,2,'34432393.793027307');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (6,2,'-3224438592470.18449811926184222');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (6,2,'-.00273458651128995823');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (6,3,'93905.88763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (6,3,'93897.26763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (6,3,'404715.7995864206');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (6,3,'21786.90896293735498839907');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (6,4,'7893362.98953026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (6,4,'-7705559.83426974');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (6,4,'732381731243.745115764094');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (6,4,'.01203949512295682469');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (6,5,'110298.61612126');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (6,5,'77504.53913926');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (6,5,'1539707782.76899778633766');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (6,5,'5.72674008674192359679');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (6,6,'187803.15526052');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (6,6,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (6,6,'8817506281.4517452372676676');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (6,6,'1.00000000000000000000');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (6,7,'-82934583.42236974');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (6,7,'83122386.57763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (6,7,'-7796505729750.37795610');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (6,7,'-.00113095617281538980');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (6,8,'168782.57763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (6,8,'19020.57763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (6,8,'7031444034.53149906');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (6,8,'1.25401073209839612184');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (6,9,'-24832902.467417160');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (6,9,'25020705.622677680');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (6,9,'-2340666225110.29929521292692920');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (6,9,'-.00376709254265256789');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (7,0,'-83028485');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (7,0,'-83028485');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (7,0,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (7,0,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (7,1,'-83028485');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (7,1,'-83028485');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (7,1,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (7,1,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (7,2,'-117366977.215397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (7,2,'-48689992.784602953');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (7,2,'2851072985828710.485883795');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (7,2,'2.41794207151503385700');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (7,3,'-83028480.69');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (7,3,'-83028489.31');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (7,3,'-357852770.35');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (7,3,'-19264149.65197215777262180974');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (7,4,'-75229023.5881');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (7,4,'-90827946.4119');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (7,4,'-647577464846017.9715');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (7,4,'-10.64541262725136247686');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (7,5,'-83012087.961509');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (7,5,'-83044882.038491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (7,5,'-1361421264394.416135');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (7,5,'-5063.62688881730941836574');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (7,6,'-82934583.42236974');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (7,6,'-83122386.57763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (7,6,'-7796505729750.37795610');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (7,6,'-884.20756174009028770294');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (7,7,'-166056970');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (7,7,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (7,7,'6893729321395225');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (7,7,'1.00000000000000000000');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (7,8,'-82953604');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (7,8,'-83103366');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (7,8,'-6217255985285');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (7,8,'-1108.80577182462841041118');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (7,9,'-107955289.045047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (7,9,'-58101680.954952580');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (7,9,'2069634775752159.035758700');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (7,9,'3.33089171198810413382');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (8,0,'74881');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (8,0,'74881');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (8,0,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (8,0,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (8,1,'74881');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (8,1,'74881');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (8,1,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (8,1,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (8,2,'-34263611.215397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (8,2,'34413373.215397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (8,2,'-2571300635581.146276407');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (8,2,'-.00218067233500788615');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (8,3,'74885.31');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (8,3,'74876.69');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (8,3,'322737.11');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (8,3,'17373.78190255220417633410');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (8,4,'7874342.4119');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (8,4,'-7724580.4119');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (8,4,'584031469984.4839');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (8,4,'.00960079113741758956');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (8,5,'91278.038491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (8,5,'58483.961509');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (8,5,'1227826639.244571');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (8,5,'4.56673929509287019456');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (8,6,'168782.57763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (8,6,'-19020.57763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (8,6,'7031444034.53149906');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (8,6,'.79744134113322314424');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (8,7,'-82953604');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (8,7,'83103366');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (8,7,'-6217255985285');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (8,7,'-.00090187120721280172');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (8,8,'149762');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (8,8,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (8,8,'5607164161');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (8,8,'1.00000000000000000000');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (8,9,'-24851923.045047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (8,9,'25001685.045047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (8,9,'-1866544013697.195857020');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (8,9,'-.00300403532938582735');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (9,0,'-24926804.045047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (9,0,'-24926804.045047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (9,0,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (9,0,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (9,1,'-24926804.045047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (9,1,'-24926804.045047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (9,1,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (9,1,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (9,2,'-59265296.260444467');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (9,2,'9411688.170349627');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (9,2,'855948866655588.453741509242968740');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (9,2,'.72591434384152961526');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (9,3,'-24926799.735047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (9,3,'-24926808.355047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (9,3,'-107434525.43415438020');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (9,3,'-5783481.21694835730858468677');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (9,4,'-17127342.633147420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (9,4,'-32726265.456947420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (9,4,'-194415646271340.1815956522980');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (9,4,'-3.19596478892958416484');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (9,5,'-24910407.006556420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (9,5,'-24943201.083538420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (9,5,'-408725765384.257043660243220');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (9,5,'-1520.20159364322004505807');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (9,6,'-24832902.467417160');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (9,6,'-25020705.622677680');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (9,6,'-2340666225110.29929521292692920');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (9,6,'-265.45671195426965751280');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (9,7,'-107955289.045047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (9,7,'58101680.954952580');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (9,7,'2069634775752159.035758700');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (9,7,'.30021990699995814689');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (9,8,'-24851923.045047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (9,8,'-25001685.045047420');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (9,8,'-1866544013697.195857020');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (9,8,'-332.88556569820675471748');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_add VALUES (9,9,'-49853608.090094840');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sub VALUES (9,9,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_mul VALUES (9,9,'621345559900192.420120630048656400');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_div VALUES (9,9,'1.00000000000000000000');
+</sql-statement>
+<sql-statement>
+COMMIT TRANSACTION;
+</sql-statement>
+<sql-statement>
+BEGIN TRANSACTION;
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sqrt VALUES (0,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sqrt VALUES (1,'0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sqrt VALUES (2,'5859.90547836712524903505');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sqrt VALUES (3,'2.07605394920266944396');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sqrt VALUES (4,'2792.75158435189147418923');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sqrt VALUES (5,'128.05092147657509145473');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sqrt VALUES (6,'306.43364311096782703406');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sqrt VALUES (7,'9111.99676251039939975230');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sqrt VALUES (8,'273.64392922189960397542');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_sqrt VALUES (9,'4992.67503899937593364766');
+</sql-statement>
+<sql-statement>
+COMMIT TRANSACTION;
+</sql-statement>
+<sql-statement>
+BEGIN TRANSACTION;
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_ln VALUES (0,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_ln VALUES (1,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_ln VALUES (2,'17.35177750493897715514');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_ln VALUES (3,'1.46093790411565641971');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_ln VALUES (4,'15.86956523951936572464');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_ln VALUES (5,'9.70485601768871834038');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_ln VALUES (6,'11.45000246622944403127');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_ln VALUES (7,'18.23469429965478772991');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_ln VALUES (8,'11.22365546576315513668');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_ln VALUES (9,'17.03145425013166006962');
+</sql-statement>
+<sql-statement>
+COMMIT TRANSACTION;
+</sql-statement>
+<sql-statement>
+BEGIN TRANSACTION;
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_log10 VALUES (0,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_log10 VALUES (1,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_log10 VALUES (2,'7.53578122160797276459');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_log10 VALUES (3,'.63447727016073160075');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_log10 VALUES (4,'6.89206461372691743345');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_log10 VALUES (5,'4.21476541614777768626');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_log10 VALUES (6,'4.97267288886207207671');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_log10 VALUES (7,'7.91922711353275546914');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_log10 VALUES (8,'4.87437163556421004138');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_log10 VALUES (9,'7.39666659961986567059');
+</sql-statement>
+<sql-statement>
+COMMIT TRANSACTION;
+</sql-statement>
+<sql-statement>
+BEGIN TRANSACTION;
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_power_10_ln VALUES (0,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_power_10_ln VALUES (1,'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_power_10_ln VALUES (2,'224790267919917955.13261618583642653184');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_power_10_ln VALUES (3,'28.90266599445155957393');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_power_10_ln VALUES (4,'7405685069594999.07733999469386277636');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_power_10_ln VALUES (5,'5068226527.32127265408584640098');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_power_10_ln VALUES (6,'281839893606.99372343357047819067');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_power_10_ln VALUES (7,'1716699575118597095.42330819910640247627');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_power_10_ln VALUES (8,'167361463828.07491320069016125952');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_exp_power_10_ln VALUES (9,'107511333880052007.04141124673540337457');
+</sql-statement>
+<sql-statement>
+COMMIT TRANSACTION;
+</sql-statement>
+<sql-statement>
+BEGIN TRANSACTION;
+</sql-statement>
+<sql-statement>
+INSERT INTO num_data VALUES (0, '0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_data VALUES (1, '0');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_data VALUES (2, '-34338492.215397047');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_data VALUES (3, '4.31');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_data VALUES (4, '7799461.4119');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_data VALUES (5, '16397.038491');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_data VALUES (6, '93901.57763026');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_data VALUES (7, '-83028485');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_data VALUES (8, '74881');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_data VALUES (9, '-24926804.045047420');
+</sql-statement>
+<sql-statement>
+COMMIT TRANSACTION;
+</sql-statement>
+<sql-statement>
+-- ******************************
+-- * Create indices for faster checks
+-- ******************************
+CREATE UNIQUE INDEX num_exp_add_idx ON num_exp_add (id1, id2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unique index creation is not supported yet
+    	-- ******************************
+	^
+<sql-statement>
+CREATE UNIQUE INDEX num_exp_sub_idx ON num_exp_sub (id1, id2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unique index creation is not supported yet
+    	CREATE UNIQUE INDEX num_exp_sub_idx ON num_exp_sub (id1, id2);
+	^
+<sql-statement>
+CREATE UNIQUE INDEX num_exp_div_idx ON num_exp_div (id1, id2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unique index creation is not supported yet
+    	CREATE UNIQUE INDEX num_exp_div_idx ON num_exp_div (id1, id2);
+	^
+<sql-statement>
+CREATE UNIQUE INDEX num_exp_mul_idx ON num_exp_mul (id1, id2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unique index creation is not supported yet
+    	CREATE UNIQUE INDEX num_exp_mul_idx ON num_exp_mul (id1, id2);
+	^
+<sql-statement>
+CREATE UNIQUE INDEX num_exp_sqrt_idx ON num_exp_sqrt (id);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unique index creation is not supported yet
+    	CREATE UNIQUE INDEX num_exp_sqrt_idx ON num_exp_sqrt (id);
+	^
+<sql-statement>
+CREATE UNIQUE INDEX num_exp_ln_idx ON num_exp_ln (id);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unique index creation is not supported yet
+    	CREATE UNIQUE INDEX num_exp_ln_idx ON num_exp_ln (id);
+	^
+<sql-statement>
+CREATE UNIQUE INDEX num_exp_log10_idx ON num_exp_log10 (id);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unique index creation is not supported yet
+    	CREATE UNIQUE INDEX num_exp_log10_idx ON num_exp_log10 (id);
+	^
+<sql-statement>
+CREATE UNIQUE INDEX num_exp_power_10_ln_idx ON num_exp_power_10_ln (id);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unique index creation is not supported yet
+    	CREATE UNIQUE INDEX num_exp_power_10_ln_idx ON num_exp_power_10_ln (id);
+	^
+<sql-statement>
+VACUUM ANALYZE num_exp_add;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	VACUUM ANALYZE num_exp_add;
+	^
+<sql-statement>
+VACUUM ANALYZE num_exp_sub;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	VACUUM ANALYZE num_exp_sub;
+	^
+<sql-statement>
+VACUUM ANALYZE num_exp_div;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	VACUUM ANALYZE num_exp_div;
+	^
+<sql-statement>
+VACUUM ANALYZE num_exp_mul;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	VACUUM ANALYZE num_exp_mul;
+	^
+<sql-statement>
+VACUUM ANALYZE num_exp_sqrt;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	VACUUM ANALYZE num_exp_sqrt;
+	^
+<sql-statement>
+VACUUM ANALYZE num_exp_ln;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	VACUUM ANALYZE num_exp_ln;
+	^
+<sql-statement>
+VACUUM ANALYZE num_exp_log10;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	VACUUM ANALYZE num_exp_log10;
+	^
+<sql-statement>
+VACUUM ANALYZE num_exp_power_10_ln;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	VACUUM ANALYZE num_exp_power_10_ln;
+	^
+<sql-statement>
+-- ******************************
+-- * Now check the behaviour of the NUMERIC type
+-- ******************************
+-- ******************************
+-- * Addition check
+-- ******************************
+DELETE FROM num_result;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+INSERT INTO num_result SELECT t1.id, t2.id, t1.val + t2.val
+    FROM num_data t1, num_data t2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	INSERT INTO num_result SELECT t1.id, t2.id, t1.val + t2.val
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: id
+        	INSERT INTO num_result SELECT t1.id, t2.id, t1.val + t2.val
+	^
+<sql-statement>
+SELECT t1.id1, t1.id2, t1.result, t2.expected
+    FROM num_result t1, num_exp_add t2
+    WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
+    AND t1.result != t2.expected;
+</sql-statement>
+<sql-statement>
+DELETE FROM num_result;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val + t2.val, 10)
+    FROM num_data t1, num_data t2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val + t2.val, 10)
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: id
+        	INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val + t2.val, 10)
+	^
+<sql-statement>
+SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 10) as expected
+    FROM num_result t1, num_exp_add t2
+    WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
+    AND t1.result != round(t2.expected, 10);
+</sql-statement>
+<sql-statement>
+-- ******************************
+-- * Subtraction check
+-- ******************************
+DELETE FROM num_result;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+INSERT INTO num_result SELECT t1.id, t2.id, t1.val - t2.val
+    FROM num_data t1, num_data t2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	INSERT INTO num_result SELECT t1.id, t2.id, t1.val - t2.val
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: id
+        	INSERT INTO num_result SELECT t1.id, t2.id, t1.val - t2.val
+	^
+<sql-statement>
+SELECT t1.id1, t1.id2, t1.result, t2.expected
+    FROM num_result t1, num_exp_sub t2
+    WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
+    AND t1.result != t2.expected;
+</sql-statement>
+<sql-statement>
+DELETE FROM num_result;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val - t2.val, 40)
+    FROM num_data t1, num_data t2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val - t2.val, 40)
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: id
+        	INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val - t2.val, 40)
+	^
+<sql-statement>
+SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 40)
+    FROM num_result t1, num_exp_sub t2
+    WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
+    AND t1.result != round(t2.expected, 40);
+</sql-statement>
+<sql-statement>
+-- ******************************
+-- * Multiply check
+-- ******************************
+DELETE FROM num_result;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+INSERT INTO num_result SELECT t1.id, t2.id, t1.val * t2.val
+    FROM num_data t1, num_data t2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	INSERT INTO num_result SELECT t1.id, t2.id, t1.val * t2.val
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: id
+        	INSERT INTO num_result SELECT t1.id, t2.id, t1.val * t2.val
+	^
+<sql-statement>
+SELECT t1.id1, t1.id2, t1.result, t2.expected
+    FROM num_result t1, num_exp_mul t2
+    WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
+    AND t1.result != t2.expected;
+</sql-statement>
+<sql-statement>
+DELETE FROM num_result;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val * t2.val, 30)
+    FROM num_data t1, num_data t2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val * t2.val, 30)
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: id
+        	INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val * t2.val, 30)
+	^
+<sql-statement>
+SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 30) as expected
+    FROM num_result t1, num_exp_mul t2
+    WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
+    AND t1.result != round(t2.expected, 30);
+</sql-statement>
+<sql-statement>
+-- ******************************
+-- * Division check
+-- ******************************
+DELETE FROM num_result;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+INSERT INTO num_result SELECT t1.id, t2.id, t1.val / t2.val
+    FROM num_data t1, num_data t2
+    WHERE t2.val != '0.0';
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	INSERT INTO num_result SELECT t1.id, t2.id, t1.val / t2.val
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: id
+        	INSERT INTO num_result SELECT t1.id, t2.id, t1.val / t2.val
+	^
+<sql-statement>
+SELECT t1.id1, t1.id2, t1.result, t2.expected
+    FROM num_result t1, num_exp_div t2
+    WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
+    AND t1.result != t2.expected;
+</sql-statement>
+<sql-statement>
+DELETE FROM num_result;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val / t2.val, 80)
+    FROM num_data t1, num_data t2
+    WHERE t2.val != '0.0';
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val / t2.val, 80)
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: id
+        	INSERT INTO num_result SELECT t1.id, t2.id, round(t1.val / t2.val, 80)
+	^
+<sql-statement>
+SELECT t1.id1, t1.id2, t1.result, round(t2.expected, 80) as expected
+    FROM num_result t1, num_exp_div t2
+    WHERE t1.id1 = t2.id1 AND t1.id2 = t2.id2
+    AND t1.result != round(t2.expected, 80);
+</sql-statement>
+<sql-statement>
+-- ******************************
+-- * Square root check
+-- ******************************
+DELETE FROM num_result;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+INSERT INTO num_result SELECT id, 0, SQRT(ABS(val))
+    FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT t1.id1, t1.result, t2.expected
+    FROM num_result t1, num_exp_sqrt t2
+    WHERE t1.id1 = t2.id
+    AND t1.result != t2.expected;
+</sql-statement>
+<sql-statement>
+-- ******************************
+-- * Natural logarithm check
+-- ******************************
+DELETE FROM num_result;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+INSERT INTO num_result SELECT id, 0, LN(ABS(val))
+    FROM num_data
+    WHERE val != '0.0';
+</sql-statement>
+<sql-statement>
+SELECT t1.id1, t1.result, t2.expected
+    FROM num_result t1, num_exp_ln t2
+    WHERE t1.id1 = t2.id
+    AND t1.result != t2.expected;
+</sql-statement>
+<sql-statement>
+-- ******************************
+-- * Logarithm base 10 check
+-- ******************************
+DELETE FROM num_result;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+INSERT INTO num_result SELECT id, 0, LOG(numeric '10', ABS(val))
+    FROM num_data
+    WHERE val != '0.0';
+</sql-statement>
+<sql-statement>
+SELECT t1.id1, t1.result, t2.expected
+    FROM num_result t1, num_exp_log10 t2
+    WHERE t1.id1 = t2.id
+    AND t1.result != t2.expected;
+</sql-statement>
+<sql-statement>
+-- ******************************
+-- * POWER(10, LN(value)) check
+-- ******************************
+DELETE FROM num_result;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_delete' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+INSERT INTO num_result SELECT id, 0, POWER(numeric '10', LN(ABS(round(val,200))))
+    FROM num_data
+    WHERE val != '0.0';
+</sql-statement>
+<sql-statement>
+SELECT t1.id1, t1.result, t2.expected
+    FROM num_result t1, num_exp_power_10_ln t2
+    WHERE t1.id1 = t2.id
+    AND t1.result != t2.expected;
+</sql-statement>
+<sql-statement>
+-- ******************************
+-- * Check behavior with Inf and NaN inputs.  It's easiest to handle these
+-- * separately from the num_data framework used above, because some input
+-- * combinations will throw errors.
+-- ******************************
+WITH v(x) AS
+  (VALUES('0'::numeric),('1'),('-1'),('4.2'),('inf'),('-inf'),('nan'))
+SELECT x1, x2,
+  x1 + x2 AS sum,
+  x1 - x2 AS diff,
+  x1 * x2 AS prod
+FROM v AS v1(x1), v AS v2(x2);
+</sql-statement>
+<sql-statement>
+WITH v(x) AS
+  (VALUES('0'::numeric),('1'),('-1'),('4.2'),('inf'),('-inf'),('nan'))
+SELECT x1, x2,
+  x1 / x2 AS quot,
+  x1 % x2 AS mod,
+  div(x1, x2) AS div
+FROM v AS v1(x1), v AS v2(x2) WHERE x2 != 0;
+</sql-statement>
+<sql-statement>
+SELECT 'inf'::numeric / '0';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 'inf'::numeric / '0';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  division by zero
+
+        	SELECT 'inf'::numeric / '0';
+	^
+<sql-statement>
+SELECT '-inf'::numeric / '0';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '-inf'::numeric / '0';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  division by zero
+
+        	SELECT '-inf'::numeric / '0';
+	^
+<sql-statement>
+SELECT 'nan'::numeric / '0';
+</sql-statement>
+<sql-statement>
+SELECT '0'::numeric / '0';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '0'::numeric / '0';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  division by zero
+
+        	SELECT '0'::numeric / '0';
+	^
+<sql-statement>
+SELECT 'inf'::numeric % '0';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 'inf'::numeric % '0';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  division by zero
+
+        	SELECT 'inf'::numeric % '0';
+	^
+<sql-statement>
+SELECT '-inf'::numeric % '0';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '-inf'::numeric % '0';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  division by zero
+
+        	SELECT '-inf'::numeric % '0';
+	^
+<sql-statement>
+SELECT 'nan'::numeric % '0';
+</sql-statement>
+<sql-statement>
+SELECT '0'::numeric % '0';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '0'::numeric % '0';
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  division by zero
+
+        	SELECT '0'::numeric % '0';
+	^
+<sql-statement>
+SELECT div('inf'::numeric, '0');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT div('inf'::numeric, '0');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  division by zero
+
+        	SELECT div('inf'::numeric, '0');
+	^
+<sql-statement>
+SELECT div('-inf'::numeric, '0');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT div('-inf'::numeric, '0');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  division by zero
+
+        	SELECT div('-inf'::numeric, '0');
+	^
+<sql-statement>
+SELECT div('nan'::numeric, '0');
+</sql-statement>
+<sql-statement>
+SELECT div('0'::numeric, '0');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT div('0'::numeric, '0');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  division by zero
+
+        	SELECT div('0'::numeric, '0');
+	^
+<sql-statement>
+WITH v(x) AS
+  (VALUES('0'::numeric),('1'),('-1'),('4.2'),('-7.777'),('inf'),('-inf'),('nan'))
+SELECT x, -x as minusx, abs(x), floor(x), ceil(x), sign(x), numeric_inc(x) as inc
+FROM v;
+</sql-statement>
+<sql-statement>
+WITH v(x) AS
+  (VALUES('0'::numeric),('1'),('-1'),('4.2'),('-7.777'),('inf'),('-inf'),('nan'))
+SELECT x, round(x), round(x,1) as round1, trunc(x), trunc(x,1) as trunc1
+FROM v;
+</sql-statement>
+<sql-statement>
+-- the large values fall into the numeric abbreviation code's maximal classes
+WITH v(x) AS
+  (VALUES('0'::numeric),('1'),('-1'),('4.2'),('-7.777'),('1e340'),('-1e340'),
+         ('inf'),('-inf'),('nan'),
+         ('inf'),('-inf'),('nan'))
+SELECT substring(x::text, 1, 32)
+FROM v ORDER BY x;
+</sql-statement>
+<sql-statement>
+WITH v(x) AS
+  (VALUES('0'::numeric),('1'),('4.2'),('inf'),('nan'))
+SELECT x, sqrt(x)
+FROM v;
+</sql-statement>
+<sql-statement>
+SELECT sqrt('-1'::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT sqrt('-1'::numeric);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take square root of a negative number
+
+        	SELECT sqrt('-1'::numeric);
+	^
+<sql-statement>
+SELECT sqrt('-inf'::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT sqrt('-inf'::numeric);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take square root of a negative number
+
+        	SELECT sqrt('-inf'::numeric);
+	^
+<sql-statement>
+WITH v(x) AS
+  (VALUES('1'::numeric),('4.2'),('inf'),('nan'))
+SELECT x,
+  log(x),
+  log10(x),
+  ln(x)
+FROM v;
+</sql-statement>
+<sql-statement>
+SELECT ln('0'::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT ln('0'::numeric);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of zero
+
+        	SELECT ln('0'::numeric);
+	^
+<sql-statement>
+SELECT ln('-1'::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT ln('-1'::numeric);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of a negative number
+
+        	SELECT ln('-1'::numeric);
+	^
+<sql-statement>
+SELECT ln('-inf'::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT ln('-inf'::numeric);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of a negative number
+
+        	SELECT ln('-inf'::numeric);
+	^
+<sql-statement>
+WITH v(x) AS
+  (VALUES('2'::numeric),('4.2'),('inf'),('nan'))
+SELECT x1, x2,
+  log(x1, x2)
+FROM v AS v1(x1), v AS v2(x2);
+</sql-statement>
+<sql-statement>
+SELECT log('0'::numeric, '10');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT log('0'::numeric, '10');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of zero
+
+        	SELECT log('0'::numeric, '10');
+	^
+<sql-statement>
+SELECT log('10'::numeric, '0');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT log('10'::numeric, '0');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of zero
+
+        	SELECT log('10'::numeric, '0');
+	^
+<sql-statement>
+SELECT log('-inf'::numeric, '10');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT log('-inf'::numeric, '10');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of a negative number
+
+        	SELECT log('-inf'::numeric, '10');
+	^
+<sql-statement>
+SELECT log('10'::numeric, '-inf');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT log('10'::numeric, '-inf');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of a negative number
+
+        	SELECT log('10'::numeric, '-inf');
+	^
+<sql-statement>
+SELECT log('inf'::numeric, '0');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT log('inf'::numeric, '0');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of zero
+
+        	SELECT log('inf'::numeric, '0');
+	^
+<sql-statement>
+SELECT log('inf'::numeric, '-inf');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT log('inf'::numeric, '-inf');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of a negative number
+
+        	SELECT log('inf'::numeric, '-inf');
+	^
+<sql-statement>
+SELECT log('-inf'::numeric, 'inf');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT log('-inf'::numeric, 'inf');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of a negative number
+
+        	SELECT log('-inf'::numeric, 'inf');
+	^
+<sql-statement>
+WITH v(x) AS
+  (VALUES('0'::numeric),('1'),('2'),('4.2'),('inf'),('nan'))
+SELECT x1, x2,
+  power(x1, x2)
+FROM v AS v1(x1), v AS v2(x2) WHERE x1 != 0 OR x2 >= 0;
+</sql-statement>
+<sql-statement>
+SELECT power('0'::numeric, '-1');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT power('0'::numeric, '-1');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  zero raised to a negative power is undefined
+
+        	SELECT power('0'::numeric, '-1');
+	^
+<sql-statement>
+SELECT power('0'::numeric, '-inf');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT power('0'::numeric, '-inf');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  zero raised to a negative power is undefined
+
+        	SELECT power('0'::numeric, '-inf');
+	^
+<sql-statement>
+SELECT power('-1'::numeric, 'inf');
+</sql-statement>
+<sql-statement>
+SELECT power('-2'::numeric, '3');
+</sql-statement>
+<sql-statement>
+SELECT power('-2'::numeric, '3.3');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT power('-2'::numeric, '3.3');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  a negative number raised to a non-integer power yields a complex result
+
+        	SELECT power('-2'::numeric, '3.3');
+	^
+<sql-statement>
+SELECT power('-2'::numeric, '-1');
+</sql-statement>
+<sql-statement>
+SELECT power('-2'::numeric, '-1.5');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT power('-2'::numeric, '-1.5');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  a negative number raised to a non-integer power yields a complex result
+
+        	SELECT power('-2'::numeric, '-1.5');
+	^
+<sql-statement>
+SELECT power('-2'::numeric, 'inf');
+</sql-statement>
+<sql-statement>
+SELECT power('-2'::numeric, '-inf');
+</sql-statement>
+<sql-statement>
+SELECT power('inf'::numeric, '-2');
+</sql-statement>
+<sql-statement>
+SELECT power('inf'::numeric, '-inf');
+</sql-statement>
+<sql-statement>
+SELECT power('-inf'::numeric, '2');
+</sql-statement>
+<sql-statement>
+SELECT power('-inf'::numeric, '3');
+</sql-statement>
+<sql-statement>
+SELECT power('-inf'::numeric, '4.5');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT power('-inf'::numeric, '4.5');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  a negative number raised to a non-integer power yields a complex result
+
+        	SELECT power('-inf'::numeric, '4.5');
+	^
+<sql-statement>
+SELECT power('-inf'::numeric, '-2');
+</sql-statement>
+<sql-statement>
+SELECT power('-inf'::numeric, '-3');
+</sql-statement>
+<sql-statement>
+SELECT power('-inf'::numeric, '0');
+</sql-statement>
+<sql-statement>
+SELECT power('-inf'::numeric, 'inf');
+</sql-statement>
+<sql-statement>
+SELECT power('-inf'::numeric, '-inf');
+</sql-statement>
+<sql-statement>
+-- ******************************
+-- * miscellaneous checks for things that have been broken in the past...
+-- ******************************
+-- numeric AVG used to fail on some platforms
+SELECT AVG(val) FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT MAX(val) FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT MIN(val) FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT STDDEV(val) FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT VARIANCE(val) FROM num_data;
+</sql-statement>
+<sql-statement>
+-- Check for appropriate rounding and overflow
+CREATE TABLE fract_only (id int, val numeric(4,4));
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (1, '0.0');
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (2, '0.1');
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (3, '1.0');	-- should fail
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (4, '-0.9999');
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (5, '0.99994');
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (6, '0.99995');  -- should fail
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (7, '0.00001');
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (8, '0.00017');
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (9, 'NaN');
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (10, 'Inf');	-- should fail
+</sql-statement>
+<sql-statement>
+INSERT INTO fract_only VALUES (11, '-Inf');	-- should fail
+</sql-statement>
+<sql-statement>
+SELECT * FROM fract_only;
+</sql-statement>
+<sql-statement>
+DROP TABLE fract_only;
+</sql-statement>
+<sql-statement>
+-- Check conversion to integers
+SELECT (-9223372036854775808.5)::int8; -- should fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Check conversion to integers
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	-- Check conversion to integers
+	^
+<sql-statement>
+SELECT (-9223372036854775808.4)::int8; -- ok
+</sql-statement>
+<sql-statement>
+SELECT 9223372036854775807.4::int8; -- ok
+</sql-statement>
+<sql-statement>
+SELECT 9223372036854775807.5::int8; -- should fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 9223372036854775807.5::int8; -- should fail
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	SELECT 9223372036854775807.5::int8; -- should fail
+	^
+<sql-statement>
+SELECT (-2147483648.5)::int4; -- should fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT (-2147483648.5)::int4; -- should fail
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  integer out of range
+
+        	SELECT (-2147483648.5)::int4; -- should fail
+	^
+<sql-statement>
+SELECT (-2147483648.4)::int4; -- ok
+</sql-statement>
+<sql-statement>
+SELECT 2147483647.4::int4; -- ok
+</sql-statement>
+<sql-statement>
+SELECT 2147483647.5::int4; -- should fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 2147483647.5::int4; -- should fail
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  integer out of range
+
+        	SELECT 2147483647.5::int4; -- should fail
+	^
+<sql-statement>
+SELECT (-32768.5)::int2; -- should fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT (-32768.5)::int2; -- should fail
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  smallint out of range
+
+        	SELECT (-32768.5)::int2; -- should fail
+	^
+<sql-statement>
+SELECT (-32768.4)::int2; -- ok
+</sql-statement>
+<sql-statement>
+SELECT 32767.4::int2; -- ok
+</sql-statement>
+<sql-statement>
+SELECT 32767.5::int2; -- should fail
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 32767.5::int2; -- should fail
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  smallint out of range
+
+        	SELECT 32767.5::int2; -- should fail
+	^
+<sql-statement>
+-- Check inf/nan conversion behavior
+SELECT 'NaN'::float8::numeric;
+</sql-statement>
+<sql-statement>
+SELECT 'Infinity'::float8::numeric;
+</sql-statement>
+<sql-statement>
+SELECT '-Infinity'::float8::numeric;
+</sql-statement>
+<sql-statement>
+SELECT 'NaN'::numeric::float8;
+</sql-statement>
+<sql-statement>
+SELECT 'Infinity'::numeric::float8;
+</sql-statement>
+<sql-statement>
+SELECT '-Infinity'::numeric::float8;
+</sql-statement>
+<sql-statement>
+SELECT 'NaN'::float4::numeric;
+</sql-statement>
+<sql-statement>
+SELECT 'Infinity'::float4::numeric;
+</sql-statement>
+<sql-statement>
+SELECT '-Infinity'::float4::numeric;
+</sql-statement>
+<sql-statement>
+SELECT 'NaN'::numeric::float4;
+</sql-statement>
+<sql-statement>
+SELECT 'Infinity'::numeric::float4;
+</sql-statement>
+<sql-statement>
+SELECT '-Infinity'::numeric::float4;
+</sql-statement>
+<sql-statement>
+SELECT '42'::int2::numeric;
+</sql-statement>
+<sql-statement>
+SELECT 'NaN'::numeric::int2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 'NaN'::numeric::int2;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert NaN to smallint
+
+        	SELECT 'NaN'::numeric::int2;
+	^
+<sql-statement>
+SELECT 'Infinity'::numeric::int2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 'Infinity'::numeric::int2;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert infinity to smallint
+
+        	SELECT 'Infinity'::numeric::int2;
+	^
+<sql-statement>
+SELECT '-Infinity'::numeric::int2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '-Infinity'::numeric::int2;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert infinity to smallint
+
+        	SELECT '-Infinity'::numeric::int2;
+	^
+<sql-statement>
+SELECT 'NaN'::numeric::int4;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 'NaN'::numeric::int4;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert NaN to integer
+
+        	SELECT 'NaN'::numeric::int4;
+	^
+<sql-statement>
+SELECT 'Infinity'::numeric::int4;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 'Infinity'::numeric::int4;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert infinity to integer
+
+        	SELECT 'Infinity'::numeric::int4;
+	^
+<sql-statement>
+SELECT '-Infinity'::numeric::int4;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '-Infinity'::numeric::int4;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert infinity to integer
+
+        	SELECT '-Infinity'::numeric::int4;
+	^
+<sql-statement>
+SELECT 'NaN'::numeric::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 'NaN'::numeric::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert NaN to bigint
+
+        	SELECT 'NaN'::numeric::int8;
+	^
+<sql-statement>
+SELECT 'Infinity'::numeric::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT 'Infinity'::numeric::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert infinity to bigint
+
+        	SELECT 'Infinity'::numeric::int8;
+	^
+<sql-statement>
+SELECT '-Infinity'::numeric::int8;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '-Infinity'::numeric::int8;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert infinity to bigint
+
+        	SELECT '-Infinity'::numeric::int8;
+	^
+<sql-statement>
+-- Simple check that ceil(), floor(), and round() work correctly
+CREATE TABLE ceil_floor_round (a numeric);
+</sql-statement>
+<sql-statement>
+INSERT INTO ceil_floor_round VALUES ('-5.5');
+</sql-statement>
+<sql-statement>
+INSERT INTO ceil_floor_round VALUES ('-5.499999');
+</sql-statement>
+<sql-statement>
+INSERT INTO ceil_floor_round VALUES ('9.5');
+</sql-statement>
+<sql-statement>
+INSERT INTO ceil_floor_round VALUES ('9.4999999');
+</sql-statement>
+<sql-statement>
+INSERT INTO ceil_floor_round VALUES ('0.0');
+</sql-statement>
+<sql-statement>
+INSERT INTO ceil_floor_round VALUES ('0.0000001');
+</sql-statement>
+<sql-statement>
+INSERT INTO ceil_floor_round VALUES ('-0.000001');
+</sql-statement>
+<sql-statement>
+SELECT a, ceil(a), ceiling(a), floor(a), round(a) FROM ceil_floor_round;
+</sql-statement>
+<sql-statement>
+DROP TABLE ceil_floor_round;
+</sql-statement>
+<sql-statement>
+-- Check rounding, it should round ties away from zero.
+SELECT i as pow,
+	round((-2.5 * 10 ^ i)::numeric, -i),
+	round((-1.5 * 10 ^ i)::numeric, -i),
+	round((-0.5 * 10 ^ i)::numeric, -i),
+	round((0.5 * 10 ^ i)::numeric, -i),
+	round((1.5 * 10 ^ i)::numeric, -i),
+	round((2.5 * 10 ^ i)::numeric, -i)
+FROM generate_series(-5,5) AS t(i);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- Check rounding, it should round ties away from zero.
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: round
+        	-- Check rounding, it should round ties away from zero.
+	^
+<sql-statement>
+-- Testing for width_bucket(). For convenience, we test both the
+-- numeric and float8 versions of the function in this file.
+-- errors
+SELECT width_bucket(5.0, 3.0, 4.0, 0);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Testing for width_bucket(). For convenience, we test both the
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  count must be greater than zero
+
+        	-- Testing for width_bucket(). For convenience, we test both the
+	^
+<sql-statement>
+SELECT width_bucket(5.0, 3.0, 4.0, -5);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(5.0, 3.0, 4.0, -5);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  count must be greater than zero
+
+        	SELECT width_bucket(5.0, 3.0, 4.0, -5);
+	^
+<sql-statement>
+SELECT width_bucket(3.5, 3.0, 3.0, 888);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(3.5, 3.0, 3.0, 888);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower bound cannot equal upper bound
+
+        	SELECT width_bucket(3.5, 3.0, 3.0, 888);
+	^
+<sql-statement>
+SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, 0);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, 0);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  count must be greater than zero
+
+        	SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, 0);
+	^
+<sql-statement>
+SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, -5);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, -5);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  count must be greater than zero
+
+        	SELECT width_bucket(5.0::float8, 3.0::float8, 4.0::float8, -5);
+	^
+<sql-statement>
+SELECT width_bucket(3.5::float8, 3.0::float8, 3.0::float8, 888);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(3.5::float8, 3.0::float8, 3.0::float8, 888);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower bound cannot equal upper bound
+
+        	SELECT width_bucket(3.5::float8, 3.0::float8, 3.0::float8, 888);
+	^
+<sql-statement>
+SELECT width_bucket('NaN', 3.0, 4.0, 888);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket('NaN', 3.0, 4.0, 888);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  operand, lower bound, and upper bound cannot be NaN
+
+        	SELECT width_bucket('NaN', 3.0, 4.0, 888);
+	^
+<sql-statement>
+SELECT width_bucket(0::float8, 'NaN', 4.0::float8, 888);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(0::float8, 'NaN', 4.0::float8, 888);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  operand, lower bound, and upper bound cannot be NaN
+
+        	SELECT width_bucket(0::float8, 'NaN', 4.0::float8, 888);
+	^
+<sql-statement>
+SELECT width_bucket(2.0, 3.0, '-inf', 888);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(2.0, 3.0, '-inf', 888);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower and upper bounds must be finite
+
+        	SELECT width_bucket(2.0, 3.0, '-inf', 888);
+	^
+<sql-statement>
+SELECT width_bucket(0::float8, '-inf', 4.0::float8, 888);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(0::float8, '-inf', 4.0::float8, 888);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower and upper bounds must be finite
+
+        	SELECT width_bucket(0::float8, '-inf', 4.0::float8, 888);
+	^
+<sql-statement>
+-- normal operation
+CREATE TABLE width_bucket_test (operand_num numeric, operand_f8 float8);
+</sql-statement>
+<sql-statement>
+COPY width_bucket_test (operand_num) FROM stdin;
+-5.2
+-0.0000000001
+0.000000000001
+1
+1.99999999999999
+2
+2.00000000000001
+3
+4
+4.5
+5
+5.5
+6
+7
+8
+9
+9.99999999999999
+10
+10.0000000000001
+\.
+</sql-statement>
+Metacommand \. is not supported
+<sql-statement>
+UPDATE width_bucket_test SET operand_f8 = operand_num::float8;
+</sql-statement>
+-stdin-:<main>: Fatal: Pre type annotation
+
+    -stdin-:<main>: Fatal: tools/enum_parser/enum_serialization_runtime/enum_runtime.cpp:70: Key 'pg_update' not found in enum NYql::EYtSettingType. Valid options are: 'initial', 'infer_scheme', 'force_infer_schema', 'do_not_fail_on_invalid_schema', 'direct_read', 'view', 'mode', 'scheme', 'weak_concat', 'anonymous', 'with_qb', 'inline', 'sample', 'joinLabel', 'ignore_non_existing', 'warn_non_existing', 'xlock', 'unordered', 'nonUnique', 'userschema', 'usercolumns', 'statcolumns', 'syscolumns', 'ignoretypev3', 'memUsage', 'itemsCount', 'rowFactor', 'ordered', 'keyFilter', 'keyFilter2', 'take', 'skip', 'limit', 'sortLimitBy', 'sortBy', 'reduceBy', 'reduceFilterBy', 'forceTransform', 'weakFields', 'sharded', 'combineChunks', 'jobCount', 'joinReduce', 'firstAsPrimary', 'flow', 'keepSorted', 'keySwitch', 'uniqueBy', 'opHash', 'mapOutputType', 'reduceInputType', 'noDq', 'split', 'compression_codec', 'erasure_codec', 'expiration', 'replication_factor', 'user_attrs', 'media', 'primary_medium', 'keep_meta', 'monotonic_keys', 'mutationid'. 
+    
+<sql-statement>
+SELECT
+    operand_num,
+    width_bucket(operand_num, 0, 10, 5) AS wb_1,
+    width_bucket(operand_f8, 0, 10, 5) AS wb_1f,
+    width_bucket(operand_num, 10, 0, 5) AS wb_2,
+    width_bucket(operand_f8, 10, 0, 5) AS wb_2f,
+    width_bucket(operand_num, 2, 8, 4) AS wb_3,
+    width_bucket(operand_f8, 2, 8, 4) AS wb_3f,
+    width_bucket(operand_num, 5.0, 5.5, 20) AS wb_4,
+    width_bucket(operand_f8, 5.0, 5.5, 20) AS wb_4f,
+    width_bucket(operand_num, -25, 25, 10) AS wb_5,
+    width_bucket(operand_f8, -25, 25, 10) AS wb_5f
+    FROM width_bucket_test;
+</sql-statement>
+<sql-statement>
+-- Check positive and negative infinity: we require
+-- finite bucket bounds, but allow an infinite operand
+SELECT width_bucket(0.0::numeric, 'Infinity'::numeric, 5, 10); -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Check positive and negative infinity: we require
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower and upper bounds must be finite
+
+        	-- Check positive and negative infinity: we require
+	^
+<sql-statement>
+SELECT width_bucket(0.0::numeric, 5, '-Infinity'::numeric, 20); -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(0.0::numeric, 5, '-Infinity'::numeric, 20); -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower and upper bounds must be finite
+
+        	SELECT width_bucket(0.0::numeric, 5, '-Infinity'::numeric, 20); -- error
+	^
+<sql-statement>
+SELECT width_bucket('Infinity'::numeric, 1, 10, 10),
+       width_bucket('-Infinity'::numeric, 1, 10, 10);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT width_bucket('Infinity'::numeric, 1, 10, 10),
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: width_bucket
+        	SELECT width_bucket('Infinity'::numeric, 1, 10, 10),
+	^
+<sql-statement>
+SELECT width_bucket(0.0::float8, 'Infinity'::float8, 5, 10); -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(0.0::float8, 'Infinity'::float8, 5, 10); -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower and upper bounds must be finite
+
+        	SELECT width_bucket(0.0::float8, 'Infinity'::float8, 5, 10); -- error
+	^
+<sql-statement>
+SELECT width_bucket(0.0::float8, 5, '-Infinity'::float8, 20); -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT width_bucket(0.0::float8, 5, '-Infinity'::float8, 20); -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  lower and upper bounds must be finite
+
+        	SELECT width_bucket(0.0::float8, 5, '-Infinity'::float8, 20); -- error
+	^
+<sql-statement>
+SELECT width_bucket('Infinity'::float8, 1, 10, 10),
+       width_bucket('-Infinity'::float8, 1, 10, 10);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT width_bucket('Infinity'::float8, 1, 10, 10),
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: width_bucket
+        	SELECT width_bucket('Infinity'::float8, 1, 10, 10),
+	^
+<sql-statement>
+DROP TABLE width_bucket_test;
+</sql-statement>
+<sql-statement>
+-- Simple test for roundoff error when results should be exact
+SELECT x, width_bucket(x::float8, 10, 100, 9) as flt,
+       width_bucket(x::numeric, 10, 100, 9) as num
+FROM generate_series(0, 110, 10) x;
+</sql-statement>
+<sql-statement>
+SELECT x, width_bucket(x::float8, 100, 10, 9) as flt,
+       width_bucket(x::numeric, 100, 10, 9) as num
+FROM generate_series(0, 110, 10) x;
+</sql-statement>
+<sql-statement>
+--
+-- TO_CHAR()
+--
+SELECT to_char(val, '9G999G999G999G999G999')
+	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, '9G999G999G999G999G999D999G999G999G999G999')
+	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, '9999999999999999.999999999999999PR')
+	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, '9999999999999999.999999999999999S')
+	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'MI9999999999999999.999999999999999')     FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FMS9999999999999999.999999999999999')    FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM9999999999999999.999999999999999THPR') FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'SG9999999999999999.999999999999999th')   FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, '0999999999999999.999999999999999')       FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'S0999999999999999.999999999999999')      FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM0999999999999999.999999999999999')     FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM9999999999999999.099999999999999') 	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM9999999999990999.990999999999999') 	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM0999999999999999.999909999999999') 	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM9999999990999999.099999999999999') 	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'L9999999999999999.099999999999999')	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM9999999999999999.99999999999999')	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FMS 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999') FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, '999999SG9999999999')			FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, 'FM9999999999999999.999999999999999')	FROM num_data;
+</sql-statement>
+<sql-statement>
+SELECT to_char(val, '9.999EEEE')				FROM num_data;
+</sql-statement>
+<sql-statement>
+WITH v(val) AS
+  (VALUES('0'::numeric),('-4.2'),('4.2e9'),('1.2e-5'),('inf'),('-inf'),('nan'))
+SELECT val,
+  to_char(val, '9.999EEEE') as numeric,
+  to_char(val::float8, '9.999EEEE') as float8,
+  to_char(val::float4, '9.999EEEE') as float4
+FROM v;
+</sql-statement>
+<sql-statement>
+WITH v(exp) AS
+  (VALUES(-16379),(-16378),(-1234),(-789),(-45),(-5),(-4),(-3),(-2),(-1),(0),
+         (1),(2),(3),(4),(5),(38),(275),(2345),(45678),(131070),(131071))
+SELECT exp,
+  to_char(('1.2345e'||exp)::numeric, '9.999EEEE') as numeric
+FROM v;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	WITH v(exp) AS
+	^
+        -stdin-:<main>:5:3: Error: At function: PgCall
+        	  to_char(('1.2345e'||exp)::numeric, '9.999EEEE') as numeric
+	  ^
+            -stdin-:<main>:5:29: Error: At function: PgCast
+            	  to_char(('1.2345e'||exp)::numeric, '9.999EEEE') as numeric
+	                            ^
+                -stdin-:<main>:5:21: Error: At function: PgOp
+                	  to_char(('1.2345e'||exp)::numeric, '9.999EEEE') as numeric
+	                    ^
+                    -stdin-:<main>:5:21: Error: Unable to find an overload for operator || with given argument type(s): (unknown,int4)
+                    	  to_char(('1.2345e'||exp)::numeric, '9.999EEEE') as numeric
+	                    ^
+<sql-statement>
+WITH v(val) AS
+  (VALUES('0'::numeric),('-4.2'),('4.2e9'),('1.2e-5'),('inf'),('-inf'),('nan'))
+SELECT val,
+  to_char(val, 'MI9999999999.99') as numeric,
+  to_char(val::float8, 'MI9999999999.99') as float8,
+  to_char(val::float4, 'MI9999999999.99') as float4
+FROM v;
+</sql-statement>
+<sql-statement>
+WITH v(val) AS
+  (VALUES('0'::numeric),('-4.2'),('4.2e9'),('1.2e-5'),('inf'),('-inf'),('nan'))
+SELECT val,
+  to_char(val, 'MI99.99') as numeric,
+  to_char(val::float8, 'MI99.99') as float8,
+  to_char(val::float4, 'MI99.99') as float4
+FROM v;
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'FM999.9');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'FM999.');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'FM999');
+</sql-statement>
+<sql-statement>
+-- Check parsing of literal text in a format string
+SELECT to_char('100'::numeric, 'foo999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f\oo999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f\\oo999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f\"oo999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f\\"oo999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f"ool"999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f"\ool"999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f"\\ool"999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f"ool\"999');
+</sql-statement>
+<sql-statement>
+SELECT to_char('100'::numeric, 'f"ool\\"999');
+</sql-statement>
+<sql-statement>
+-- TO_NUMBER()
+--
+SET lc_numeric = 'C';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: lc_numeric
+    	-- TO_NUMBER()
+	^
+<sql-statement>
+SELECT to_number('-34,338,492', '99G999G999');
+</sql-statement>
+<sql-statement>
+SELECT to_number('-34,338,492.654,878', '99G999G999D999G999');
+</sql-statement>
+<sql-statement>
+SELECT to_number('<564646.654564>', '999999.999999PR');
+</sql-statement>
+<sql-statement>
+SELECT to_number('0.00001-', '9.999999S');
+</sql-statement>
+<sql-statement>
+SELECT to_number('5.01-', 'FM9.999999S');
+</sql-statement>
+<sql-statement>
+SELECT to_number('5.01-', 'FM9.999999MI');
+</sql-statement>
+<sql-statement>
+SELECT to_number('5 4 4 4 4 8 . 7 8', '9 9 9 9 9 9 . 9 9');
+</sql-statement>
+<sql-statement>
+SELECT to_number('.01', 'FM9.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('.0', '99999999.99999999');
+</sql-statement>
+<sql-statement>
+SELECT to_number('0', '99.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('.-01', 'S99.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('.01-', '99.99S');
+</sql-statement>
+<sql-statement>
+SELECT to_number(' . 0 1-', ' 9 9 . 9 9 S');
+</sql-statement>
+<sql-statement>
+SELECT to_number('34,50','999,99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('123,000','999G');
+</sql-statement>
+<sql-statement>
+SELECT to_number('123456','999G999');
+</sql-statement>
+<sql-statement>
+SELECT to_number('$1234.56','L9,999.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('$1234.56','L99,999.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('$1,234.56','L99,999.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('1234.56','L99,999.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('1,234.56','L99,999.99');
+</sql-statement>
+<sql-statement>
+SELECT to_number('42nd', '99th');
+</sql-statement>
+<sql-statement>
+RESET lc_numeric;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	RESET lc_numeric;
+	^
+<sql-statement>
+--
+-- Input syntax
+--
+CREATE TABLE num_input_test (n1 numeric);
+</sql-statement>
+<sql-statement>
+-- good inputs
+INSERT INTO num_input_test(n1) VALUES (' 123');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('   3245874    ');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('  -93853');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('555.50');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('-555.50');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('NaN ');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('        nan');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES (' inf ');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES (' +inf ');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES (' -inf ');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES (' Infinity ');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES (' +inFinity ');
+</sql-statement>
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES (' -INFINITY ');
+</sql-statement>
+<sql-statement>
+-- bad inputs
+INSERT INTO num_input_test(n1) VALUES ('     ');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- bad inputs
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: "     "
+
+        	-- bad inputs
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('   1234   %');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES ('   1234   %');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: "   1234   %"
+
+        	INSERT INTO num_input_test(n1) VALUES ('   1234   %');
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('xyz');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES ('xyz');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: "xyz"
+
+        	INSERT INTO num_input_test(n1) VALUES ('xyz');
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('- 1234');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES ('- 1234');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: "- 1234"
+
+        	INSERT INTO num_input_test(n1) VALUES ('- 1234');
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('5 . 0');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES ('5 . 0');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: "5 . 0"
+
+        	INSERT INTO num_input_test(n1) VALUES ('5 . 0');
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('5. 0   ');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES ('5. 0   ');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: "5. 0   "
+
+        	INSERT INTO num_input_test(n1) VALUES ('5. 0   ');
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES ('');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: ""
+
+        	INSERT INTO num_input_test(n1) VALUES ('');
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES (' N aN ');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES (' N aN ');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: " N aN "
+
+        	INSERT INTO num_input_test(n1) VALUES (' N aN ');
+	^
+<sql-statement>
+INSERT INTO num_input_test(n1) VALUES ('+ infinity');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO num_input_test(n1) VALUES ('+ infinity');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: "+ infinity"
+
+        	INSERT INTO num_input_test(n1) VALUES ('+ infinity');
+	^
+<sql-statement>
+SELECT * FROM num_input_test;
+</sql-statement>
+<sql-statement>
+--
+-- Test some corner cases for multiplication
+--
+select 4790999999999999999999999999999999999999999999999999999999999999999999999999999999999999 * 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999;
+</sql-statement>
+<sql-statement>
+select 4789999999999999999999999999999999999999999999999999999999999999999999999999999999999999 * 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999;
+</sql-statement>
+<sql-statement>
+select 4770999999999999999999999999999999999999999999999999999999999999999999999999999999999999 * 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999;
+</sql-statement>
+<sql-statement>
+select 4769999999999999999999999999999999999999999999999999999999999999999999999999999999999999 * 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999;
+</sql-statement>
+<sql-statement>
+select trim_scale((0.1 - 2e-16383) * (0.1 - 3e-16383));
+</sql-statement>
+<sql-statement>
+--
+-- Test some corner cases for division
+--
+select 999999999999999999999::numeric/1000000000000000000000;
+</sql-statement>
+<sql-statement>
+select div(999999999999999999999::numeric,1000000000000000000000);
+</sql-statement>
+<sql-statement>
+select mod(999999999999999999999::numeric,1000000000000000000000);
+</sql-statement>
+<sql-statement>
+select div(-9999999999999999999999::numeric,1000000000000000000000);
+</sql-statement>
+<sql-statement>
+select mod(-9999999999999999999999::numeric,1000000000000000000000);
+</sql-statement>
+<sql-statement>
+select div(-9999999999999999999999::numeric,1000000000000000000000)*1000000000000000000000 + mod(-9999999999999999999999::numeric,1000000000000000000000);
+</sql-statement>
+<sql-statement>
+select mod (70.0,70) ;
+</sql-statement>
+<sql-statement>
+select div (70.0,70) ;
+</sql-statement>
+<sql-statement>
+select 70.0 / 70 ;
+</sql-statement>
+<sql-statement>
+select 12345678901234567890 % 123;
+</sql-statement>
+<sql-statement>
+select 12345678901234567890 / 123;
+</sql-statement>
+<sql-statement>
+select div(12345678901234567890, 123);
+</sql-statement>
+<sql-statement>
+select div(12345678901234567890, 123) * 123 + 12345678901234567890 % 123;
+</sql-statement>
+<sql-statement>
+--
+-- Test some corner cases for square root
+--
+select sqrt(1.000000000000003::numeric);
+</sql-statement>
+<sql-statement>
+select sqrt(1.000000000000004::numeric);
+</sql-statement>
+<sql-statement>
+select sqrt(96627521408608.56340355805::numeric);
+</sql-statement>
+<sql-statement>
+select sqrt(96627521408608.56340355806::numeric);
+</sql-statement>
+<sql-statement>
+select sqrt(515549506212297735.073688290367::numeric);
+</sql-statement>
+<sql-statement>
+select sqrt(515549506212297735.073688290368::numeric);
+</sql-statement>
+<sql-statement>
+select sqrt(8015491789940783531003294973900306::numeric);
+</sql-statement>
+<sql-statement>
+select sqrt(8015491789940783531003294973900307::numeric);
+</sql-statement>
+<sql-statement>
+--
+-- Test code path for raising to integer powers
+--
+select 10.0 ^ -2147483648 as rounds_to_zero;
+</sql-statement>
+<sql-statement>
+select 10.0 ^ -2147483647 as rounds_to_zero;
+</sql-statement>
+<sql-statement>
+select 10.0 ^ 2147483647 as overflows;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select 10.0 ^ 2147483647 as overflows;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value overflows numeric format
+
+        	select 10.0 ^ 2147483647 as overflows;
+	^
+<sql-statement>
+select 117743296169.0 ^ 1000000000 as overflows;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select 117743296169.0 ^ 1000000000 as overflows;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value overflows numeric format
+
+        	select 117743296169.0 ^ 1000000000 as overflows;
+	^
+<sql-statement>
+-- cases that used to return inaccurate results
+select 3.789 ^ 21;
+</sql-statement>
+<sql-statement>
+select 3.789 ^ 35;
+</sql-statement>
+<sql-statement>
+select 1.2 ^ 345;
+</sql-statement>
+<sql-statement>
+select 0.12 ^ (-20);
+</sql-statement>
+<sql-statement>
+select 1.000000000123 ^ (-2147483648);
+</sql-statement>
+<sql-statement>
+select coalesce(nullif(0.9999999999 ^ 23300000000000, 0), 0) as rounds_to_zero;
+</sql-statement>
+<sql-statement>
+select round(((1 - 1.500012345678e-1000) ^ 1.45e1003) * 1e1000);
+</sql-statement>
+<sql-statement>
+-- cases that used to error out
+select 0.12 ^ (-25);
+</sql-statement>
+<sql-statement>
+select 0.5678 ^ (-85);
+</sql-statement>
+<sql-statement>
+select coalesce(nullif(0.9999999999 ^ 70000000000000, 0), 0) as underflows;
+</sql-statement>
+<sql-statement>
+-- negative base to integer powers
+select (-1.0) ^ 2147483646;
+</sql-statement>
+<sql-statement>
+select (-1.0) ^ 2147483647;
+</sql-statement>
+<sql-statement>
+select (-1.0) ^ 2147483648;
+</sql-statement>
+<sql-statement>
+select (-1.0) ^ 1000000000000000;
+</sql-statement>
+<sql-statement>
+select (-1.0) ^ 1000000000000001;
+</sql-statement>
+<sql-statement>
+--
+-- Tests for raising to non-integer powers
+--
+-- special cases
+select 0.0 ^ 0.0;
+</sql-statement>
+<sql-statement>
+select (-12.34) ^ 0.0;
+</sql-statement>
+<sql-statement>
+select 12.34 ^ 0.0;
+</sql-statement>
+<sql-statement>
+select 0.0 ^ 12.34;
+</sql-statement>
+<sql-statement>
+-- NaNs
+select 'NaN'::numeric ^ 'NaN'::numeric;
+</sql-statement>
+<sql-statement>
+select 'NaN'::numeric ^ 0;
+</sql-statement>
+<sql-statement>
+select 'NaN'::numeric ^ 1;
+</sql-statement>
+<sql-statement>
+select 0 ^ 'NaN'::numeric;
+</sql-statement>
+<sql-statement>
+select 1 ^ 'NaN'::numeric;
+</sql-statement>
+<sql-statement>
+-- invalid inputs
+select 0.0 ^ (-12.34);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- invalid inputs
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  zero raised to a negative power is undefined
+
+        	-- invalid inputs
+	^
+<sql-statement>
+select (-12.34) ^ 1.2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select (-12.34) ^ 1.2;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  a negative number raised to a non-integer power yields a complex result
+
+        	select (-12.34) ^ 1.2;
+	^
+<sql-statement>
+-- cases that used to generate inaccurate results
+select 32.1 ^ 9.8;
+</sql-statement>
+<sql-statement>
+select 32.1 ^ (-9.8);
+</sql-statement>
+<sql-statement>
+select 12.3 ^ 45.6;
+</sql-statement>
+<sql-statement>
+select 12.3 ^ (-45.6);
+</sql-statement>
+<sql-statement>
+-- big test
+select 1.234 ^ 5678;
+</sql-statement>
+<sql-statement>
+--
+-- Tests for EXP()
+--
+-- special cases
+select exp(0.0);
+</sql-statement>
+<sql-statement>
+select exp(1.0);
+</sql-statement>
+<sql-statement>
+select exp(1.0::numeric(71,70));
+</sql-statement>
+<sql-statement>
+select exp('nan'::numeric);
+</sql-statement>
+<sql-statement>
+select exp('inf'::numeric);
+</sql-statement>
+<sql-statement>
+select exp('-inf'::numeric);
+</sql-statement>
+<sql-statement>
+select coalesce(nullif(exp(-5000::numeric), 0), 0) as rounds_to_zero;
+</sql-statement>
+<sql-statement>
+select coalesce(nullif(exp(-10000::numeric), 0), 0) as underflows;
+</sql-statement>
+<sql-statement>
+-- cases that used to generate inaccurate results
+select exp(32.999);
+</sql-statement>
+<sql-statement>
+select exp(-32.999);
+</sql-statement>
+<sql-statement>
+select exp(123.456);
+</sql-statement>
+<sql-statement>
+select exp(-123.456);
+</sql-statement>
+<sql-statement>
+-- big test
+select exp(1234.5678);
+</sql-statement>
+<sql-statement>
+--
+-- Tests for generate_series
+--
+select * from generate_series(0.0::numeric, 4.0::numeric);
+</sql-statement>
+<sql-statement>
+select * from generate_series(0.1::numeric, 4.0::numeric, 1.3::numeric);
+</sql-statement>
+<sql-statement>
+select * from generate_series(4.0::numeric, -1.5::numeric, -2.2::numeric);
+</sql-statement>
+<sql-statement>
+-- Trigger errors
+select * from generate_series(-100::numeric, 100::numeric, 0::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Trigger errors
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  step size cannot equal zero
+
+        	-- Trigger errors
+	^
+<sql-statement>
+select * from generate_series(-100::numeric, 100::numeric, 'nan'::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select * from generate_series(-100::numeric, 100::numeric, 'nan'::numeric);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  step size cannot be NaN
+
+        	select * from generate_series(-100::numeric, 100::numeric, 'nan'::numeric);
+	^
+<sql-statement>
+select * from generate_series('nan'::numeric, 100::numeric, 10::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select * from generate_series('nan'::numeric, 100::numeric, 10::numeric);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  start value cannot be NaN
+
+        	select * from generate_series('nan'::numeric, 100::numeric, 10::numeric);
+	^
+<sql-statement>
+select * from generate_series(0::numeric, 'nan'::numeric, 10::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select * from generate_series(0::numeric, 'nan'::numeric, 10::numeric);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  stop value cannot be NaN
+
+        	select * from generate_series(0::numeric, 'nan'::numeric, 10::numeric);
+	^
+<sql-statement>
+select * from generate_series('inf'::numeric, 'inf'::numeric, 10::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select * from generate_series('inf'::numeric, 'inf'::numeric, 10::numeric);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  start value cannot be infinity
+
+        	select * from generate_series('inf'::numeric, 'inf'::numeric, 10::numeric);
+	^
+<sql-statement>
+select * from generate_series(0::numeric, 'inf'::numeric, 10::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select * from generate_series(0::numeric, 'inf'::numeric, 10::numeric);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  stop value cannot be infinity
+
+        	select * from generate_series(0::numeric, 'inf'::numeric, 10::numeric);
+	^
+<sql-statement>
+select * from generate_series(0::numeric, '42'::numeric, '-inf'::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select * from generate_series(0::numeric, '42'::numeric, '-inf'::numeric);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  step size cannot be infinity
+
+        	select * from generate_series(0::numeric, '42'::numeric, '-inf'::numeric);
+	^
+<sql-statement>
+-- Checks maximum, output is truncated
+select (i / (10::numeric ^ 131071))::numeric(1,0)
+	from generate_series(6 * (10::numeric ^ 131071),
+			     9 * (10::numeric ^ 131071),
+			     10::numeric ^ 131071) as a(i);
+</sql-statement>
+<sql-statement>
+-- Check usage with variables
+select * from generate_series(1::numeric, 3::numeric) i, generate_series(i,3) j;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:74: Error: Columns are not allowed in: RANGE FUNCTION
+    	select * from generate_series(1::numeric, 3::numeric) i, generate_series(i,3) j;
+	                                                                         ^
+<sql-statement>
+select * from generate_series(1::numeric, 3::numeric) i, generate_series(1,i) j;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:76: Error: Columns are not allowed in: RANGE FUNCTION
+    	select * from generate_series(1::numeric, 3::numeric) i, generate_series(1,i) j;
+	                                                                           ^
+<sql-statement>
+select * from generate_series(1::numeric, 3::numeric) i, generate_series(1,5,i) j;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:78: Error: Columns are not allowed in: RANGE FUNCTION
+    	select * from generate_series(1::numeric, 3::numeric) i, generate_series(1,5,i) j;
+	                                                                             ^
+<sql-statement>
+--
+-- Tests for LN()
+--
+-- Invalid inputs
+select ln(-12.34);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	--
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of a negative number
+
+        	--
+	^
+<sql-statement>
+select ln(0.0);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select ln(0.0);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of zero
+
+        	select ln(0.0);
+	^
+<sql-statement>
+-- Some random tests
+select ln(1.2345678e-28);
+</sql-statement>
+<sql-statement>
+select ln(0.0456789);
+</sql-statement>
+<sql-statement>
+select ln(0.349873948359354029493948309745709580730482050975);
+</sql-statement>
+<sql-statement>
+select ln(0.99949452);
+</sql-statement>
+<sql-statement>
+select ln(1.00049687395);
+</sql-statement>
+<sql-statement>
+select ln(1234.567890123456789);
+</sql-statement>
+<sql-statement>
+select ln(5.80397490724e5);
+</sql-statement>
+<sql-statement>
+select ln(9.342536355e34);
+</sql-statement>
+<sql-statement>
+--
+-- Tests for LOG() (base 10)
+--
+-- invalid inputs
+select log(-12.34);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	--
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of a negative number
+
+        	--
+	^
+<sql-statement>
+select log(0.0);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select log(0.0);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of zero
+
+        	select log(0.0);
+	^
+<sql-statement>
+-- some random tests
+select log(1.234567e-89);
+</sql-statement>
+<sql-statement>
+select log(3.4634998359873254962349856073435545);
+</sql-statement>
+<sql-statement>
+select log(9.999999999999999999);
+</sql-statement>
+<sql-statement>
+select log(10.00000000000000000);
+</sql-statement>
+<sql-statement>
+select log(10.00000000000000001);
+</sql-statement>
+<sql-statement>
+select log(590489.45235237);
+</sql-statement>
+<sql-statement>
+--
+-- Tests for LOG() (arbitrary base)
+--
+-- invalid inputs
+select log(-12.34, 56.78);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	--
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of a negative number
+
+        	--
+	^
+<sql-statement>
+select log(-12.34, -56.78);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select log(-12.34, -56.78);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of a negative number
+
+        	select log(-12.34, -56.78);
+	^
+<sql-statement>
+select log(12.34, -56.78);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select log(12.34, -56.78);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of a negative number
+
+        	select log(12.34, -56.78);
+	^
+<sql-statement>
+select log(0.0, 12.34);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select log(0.0, 12.34);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of zero
+
+        	select log(0.0, 12.34);
+	^
+<sql-statement>
+select log(12.34, 0.0);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select log(12.34, 0.0);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot take logarithm of zero
+
+        	select log(12.34, 0.0);
+	^
+<sql-statement>
+select log(1.0, 12.34);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select log(1.0, 12.34);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  division by zero
+
+        	select log(1.0, 12.34);
+	^
+<sql-statement>
+-- some random tests
+select log(1.23e-89, 6.4689e45);
+</sql-statement>
+<sql-statement>
+select log(0.99923, 4.58934e34);
+</sql-statement>
+<sql-statement>
+select log(1.000016, 8.452010e18);
+</sql-statement>
+<sql-statement>
+select log(3.1954752e47, 9.4792021e-73);
+</sql-statement>
+<sql-statement>
+--
+-- Tests for scale()
+--
+select scale(numeric 'NaN');
+</sql-statement>
+<sql-statement>
+select scale(numeric 'inf');
+</sql-statement>
+<sql-statement>
+select scale(NULL::numeric);
+</sql-statement>
+<sql-statement>
+select scale(1.12);
+</sql-statement>
+<sql-statement>
+select scale(0);
+</sql-statement>
+<sql-statement>
+select scale(0.00);
+</sql-statement>
+<sql-statement>
+select scale(1.12345);
+</sql-statement>
+<sql-statement>
+select scale(110123.12475871856128);
+</sql-statement>
+<sql-statement>
+select scale(-1123.12471856128);
+</sql-statement>
+<sql-statement>
+select scale(-13.000000000000000);
+</sql-statement>
+<sql-statement>
+--
+-- Tests for min_scale()
+--
+select min_scale(numeric 'NaN') is NULL; -- should be true
+</sql-statement>
+<sql-statement>
+select min_scale(numeric 'inf') is NULL; -- should be true
+</sql-statement>
+<sql-statement>
+select min_scale(0);                     -- no digits
+</sql-statement>
+<sql-statement>
+select min_scale(0.00);                  -- no digits again
+</sql-statement>
+<sql-statement>
+select min_scale(1.0);                   -- no scale
+</sql-statement>
+<sql-statement>
+select min_scale(1.1);                   -- scale 1
+</sql-statement>
+<sql-statement>
+select min_scale(1.12);                  -- scale 2
+</sql-statement>
+<sql-statement>
+select min_scale(1.123);                 -- scale 3
+</sql-statement>
+<sql-statement>
+select min_scale(1.1234);                -- scale 4, filled digit
+</sql-statement>
+<sql-statement>
+select min_scale(1.12345);               -- scale 5, 2 NDIGITS
+</sql-statement>
+<sql-statement>
+select min_scale(1.1000);                -- 1 pos in NDIGITS
+</sql-statement>
+<sql-statement>
+select min_scale(1e100);                 -- very big number
+</sql-statement>
+<sql-statement>
+--
+-- Tests for trim_scale()
+--
+select trim_scale(numeric 'NaN');
+</sql-statement>
+<sql-statement>
+select trim_scale(numeric 'inf');
+</sql-statement>
+<sql-statement>
+select trim_scale(1.120);
+</sql-statement>
+<sql-statement>
+select trim_scale(0);
+</sql-statement>
+<sql-statement>
+select trim_scale(0.00);
+</sql-statement>
+<sql-statement>
+select trim_scale(1.1234500);
+</sql-statement>
+<sql-statement>
+select trim_scale(110123.12475871856128000);
+</sql-statement>
+<sql-statement>
+select trim_scale(-1123.124718561280000000);
+</sql-statement>
+<sql-statement>
+select trim_scale(-13.00000000000000000000);
+</sql-statement>
+<sql-statement>
+select trim_scale(1e100);
+</sql-statement>
+<sql-statement>
+--
+-- Tests for SUM()
+--
+-- cases that need carry propagation
+SELECT SUM(9999::numeric) FROM generate_series(1, 100000);
+</sql-statement>
+<sql-statement>
+SELECT SUM((-9999)::numeric) FROM generate_series(1, 100000);
+</sql-statement>
+<sql-statement>
+--
+-- Tests for GCD()
+--
+SELECT a, b, gcd(a, b), gcd(a, -b), gcd(-b, a), gcd(-b, -a)
+FROM (VALUES (0::numeric, 0::numeric),
+             (0::numeric, numeric 'NaN'),
+             (0::numeric, 46375::numeric),
+             (433125::numeric, 46375::numeric),
+             (43312.5::numeric, 4637.5::numeric),
+             (4331.250::numeric, 463.75000::numeric),
+             ('inf', '0'),
+             ('inf', '42'),
+             ('inf', 'inf')
+     ) AS v(a, b);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: gcd
+        	--
+	^
+<sql-statement>
+--
+-- Tests for LCM()
+--
+SELECT a,b, lcm(a, b), lcm(a, -b), lcm(-b, a), lcm(-b, -a)
+FROM (VALUES (0::numeric, 0::numeric),
+             (0::numeric, numeric 'NaN'),
+             (0::numeric, 13272::numeric),
+             (13272::numeric, 13272::numeric),
+             (423282::numeric, 13272::numeric),
+             (42328.2::numeric, 1327.2::numeric),
+             (4232.820::numeric, 132.72000::numeric),
+             ('inf', '0'),
+             ('inf', '42'),
+             ('inf', 'inf')
+     ) AS v(a, b);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: lcm
+        	--
+	^
+<sql-statement>
+SELECT lcm(9999 * (10::numeric)^131068 + (10::numeric^131068 - 1), 2); -- overflow
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT lcm(9999 * (10::numeric)^131068 + (10::numeric^131068 - 1), 2); -- overflow
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value overflows numeric format
+
+        	SELECT lcm(9999 * (10::numeric)^131068 + (10::numeric^131068 - 1), 2); -- overflow
+	^
+<sql-statement>
+--
+-- Tests for factorial
+--
+SELECT factorial(4);
+</sql-statement>
+<sql-statement>
+SELECT factorial(15);
+</sql-statement>
+<sql-statement>
+SELECT factorial(100000);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT factorial(100000);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value overflows numeric format
+
+        	SELECT factorial(100000);
+	^
+<sql-statement>
+SELECT factorial(0);
+</sql-statement>
+<sql-statement>
+SELECT factorial(-4);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT factorial(-4);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  factorial of a negative number is undefined
+
+        	SELECT factorial(-4);
+	^
+<sql-statement>
+--
+-- Tests for pg_lsn()
+--
+SELECT pg_lsn(23783416::numeric);
+</sql-statement>
+<sql-statement>
+SELECT pg_lsn(0::numeric);
+</sql-statement>
+<sql-statement>
+SELECT pg_lsn(18446744073709551615::numeric);
+</sql-statement>
+<sql-statement>
+SELECT pg_lsn(-1::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_lsn(-1::numeric);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  pg_lsn out of range
+
+        	SELECT pg_lsn(-1::numeric);
+	^
+<sql-statement>
+SELECT pg_lsn(18446744073709551616::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_lsn(18446744073709551616::numeric);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  pg_lsn out of range
+
+        	SELECT pg_lsn(18446744073709551616::numeric);
+	^
+<sql-statement>
+SELECT pg_lsn('NaN'::numeric);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_lsn('NaN'::numeric);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  cannot convert NaN to pg_lsn
+
+        	SELECT pg_lsn('NaN'::numeric);
+	^

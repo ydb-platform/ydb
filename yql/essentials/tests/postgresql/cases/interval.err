@@ -1,0 +1,998 @@
+<sql-statement>
+--
+-- INTERVAL
+--
+SET DATESTYLE = 'ISO';
+</sql-statement>
+<sql-statement>
+SET IntervalStyle to postgres;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: IntervalStyle
+    	SET IntervalStyle to postgres;
+	^
+<sql-statement>
+-- check acceptance of "time zone style"
+SELECT INTERVAL '01:00' AS "One hour";
+</sql-statement>
+<sql-statement>
+SELECT INTERVAL '+02:00' AS "Two hours";
+</sql-statement>
+<sql-statement>
+SELECT INTERVAL '-08:00' AS "Eight hours";
+</sql-statement>
+<sql-statement>
+SELECT INTERVAL '-1 +02:03' AS "22 hours ago...";
+</sql-statement>
+<sql-statement>
+SELECT INTERVAL '-1 days +02:03' AS "22 hours ago...";
+</sql-statement>
+<sql-statement>
+SELECT INTERVAL '1.5 weeks' AS "Ten days twelve hours";
+</sql-statement>
+<sql-statement>
+SELECT INTERVAL '1.5 months' AS "One month 15 days";
+</sql-statement>
+<sql-statement>
+SELECT INTERVAL '10 years -11 month -12 days +13:14' AS "9 years...";
+</sql-statement>
+<sql-statement>
+CREATE TABLE INTERVAL_TBL (f1 interval);
+</sql-statement>
+<sql-statement>
+INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 1 minute');
+</sql-statement>
+<sql-statement>
+INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 5 hour');
+</sql-statement>
+<sql-statement>
+INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 10 day');
+</sql-statement>
+<sql-statement>
+INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 34 year');
+</sql-statement>
+<sql-statement>
+INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 3 months');
+</sql-statement>
+<sql-statement>
+INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 14 seconds ago');
+</sql-statement>
+<sql-statement>
+INSERT INTO INTERVAL_TBL (f1) VALUES ('1 day 2 hours 3 minutes 4 seconds');
+</sql-statement>
+<sql-statement>
+INSERT INTO INTERVAL_TBL (f1) VALUES ('6 years');
+</sql-statement>
+<sql-statement>
+INSERT INTO INTERVAL_TBL (f1) VALUES ('5 months');
+</sql-statement>
+<sql-statement>
+INSERT INTO INTERVAL_TBL (f1) VALUES ('5 months 12 hours');
+</sql-statement>
+<sql-statement>
+-- badly formatted interval
+INSERT INTO INTERVAL_TBL (f1) VALUES ('badly formatted interval');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- badly formatted interval
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "badly formatted interval"
+
+        	-- badly formatted interval
+	^
+<sql-statement>
+INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 30 eons ago');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 30 eons ago');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "@ 30 eons ago"
+
+        	INSERT INTO INTERVAL_TBL (f1) VALUES ('@ 30 eons ago');
+	^
+<sql-statement>
+-- test interval operators
+SELECT * FROM INTERVAL_TBL;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INTERVAL_TBL
+   WHERE INTERVAL_TBL.f1 <> interval '@ 10 days';
+</sql-statement>
+<sql-statement>
+SELECT * FROM INTERVAL_TBL
+   WHERE INTERVAL_TBL.f1 <= interval '@ 5 hours';
+</sql-statement>
+<sql-statement>
+SELECT * FROM INTERVAL_TBL
+   WHERE INTERVAL_TBL.f1 < interval '@ 1 day';
+</sql-statement>
+<sql-statement>
+SELECT * FROM INTERVAL_TBL
+   WHERE INTERVAL_TBL.f1 = interval '@ 34 years';
+</sql-statement>
+<sql-statement>
+SELECT * FROM INTERVAL_TBL
+   WHERE INTERVAL_TBL.f1 >= interval '@ 1 month';
+</sql-statement>
+<sql-statement>
+SELECT * FROM INTERVAL_TBL
+   WHERE INTERVAL_TBL.f1 > interval '@ 3 seconds ago';
+</sql-statement>
+<sql-statement>
+SELECT r1.*, r2.*
+   FROM INTERVAL_TBL r1, INTERVAL_TBL r2
+   WHERE r1.f1 > r2.f1
+   ORDER BY r1.f1, r2.f1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT r1.*, r2.*
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f1
+        	SELECT r1.*, r2.*
+	^
+<sql-statement>
+-- Test intervals that are large enough to overflow 64 bits in comparisons
+CREATE TEMP TABLE INTERVAL_TBL_OF (f1 interval);
+</sql-statement>
+<sql-statement>
+INSERT INTO INTERVAL_TBL_OF (f1) VALUES
+  ('2147483647 days 2147483647 months'),
+  ('2147483647 days -2147483648 months'),
+  ('1 year'),
+  ('-2147483648 days 2147483647 months'),
+  ('-2147483648 days -2147483648 months');
+</sql-statement>
+<sql-statement>
+-- these should fail as out-of-range
+INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('2147483648 days');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- these should fail as out-of-range
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  interval field value out of range: "2147483648 days"
+
+        	-- these should fail as out-of-range
+	^
+<sql-statement>
+INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('-2147483649 days');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('-2147483649 days');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  interval field value out of range: "-2147483649 days"
+
+        	INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('-2147483649 days');
+	^
+<sql-statement>
+INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('2147483647 years');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('2147483647 years');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  interval out of range
+
+        	INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('2147483647 years');
+	^
+<sql-statement>
+INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('-2147483648 years');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('-2147483648 years');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  interval out of range
+
+        	INSERT INTO INTERVAL_TBL_OF (f1) VALUES ('-2147483648 years');
+	^
+<sql-statement>
+-- Test edge-case overflow detection in interval multiplication
+select extract(epoch from '256 microseconds'::interval * (2^55)::float8);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Test edge-case overflow detection in interval multiplication
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  interval out of range
+
+        	-- Test edge-case overflow detection in interval multiplication
+	^
+<sql-statement>
+SELECT r1.*, r2.*
+   FROM INTERVAL_TBL_OF r1, INTERVAL_TBL_OF r2
+   WHERE r1.f1 > r2.f1
+   ORDER BY r1.f1, r2.f1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT r1.*, r2.*
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f1
+        	SELECT r1.*, r2.*
+	^
+<sql-statement>
+CREATE INDEX ON INTERVAL_TBL_OF USING btree (f1);
+</sql-statement>
+<sql-statement>
+SET enable_seqscan TO false;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_seqscan
+    	SET enable_seqscan TO false;
+	^
+<sql-statement>
+EXPLAIN (COSTS OFF)
+SELECT f1 FROM INTERVAL_TBL_OF r1 ORDER BY f1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	EXPLAIN (COSTS OFF)
+	^
+<sql-statement>
+SELECT f1 FROM INTERVAL_TBL_OF r1 ORDER BY f1;
+</sql-statement>
+<sql-statement>
+RESET enable_seqscan;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	RESET enable_seqscan;
+	^
+<sql-statement>
+DROP TABLE INTERVAL_TBL_OF;
+</sql-statement>
+<sql-statement>
+-- Test multiplication and division with intervals.
+-- Floating point arithmetic rounding errors can lead to unexpected results,
+-- though the code attempts to do the right thing and round up to days and
+-- minutes to avoid results such as '3 days 24:00 hours' or '14:20:60'.
+-- Note that it is expected for some day components to be greater than 29 and
+-- some time components be greater than 23:59:59 due to how intervals are
+-- stored internally.
+CREATE TABLE INTERVAL_MULDIV_TBL (span interval);
+</sql-statement>
+<sql-statement>
+COPY INTERVAL_MULDIV_TBL FROM STDIN;
+41 mon 12 days 360:00
+-41 mon -12 days +360:00
+-12 days
+9 mon -27 days 12:34:56
+-3 years 482 days 76:54:32.189
+4 mon
+14 mon
+999 mon 999 days
+\.
+</sql-statement>
+Metacommand \. is not supported
+<sql-statement>
+SELECT span * 0.3 AS product
+FROM INTERVAL_MULDIV_TBL;
+</sql-statement>
+<sql-statement>
+SELECT span * 8.2 AS product
+FROM INTERVAL_MULDIV_TBL;
+</sql-statement>
+<sql-statement>
+SELECT span / 10 AS quotient
+FROM INTERVAL_MULDIV_TBL;
+</sql-statement>
+<sql-statement>
+SELECT span / 100 AS quotient
+FROM INTERVAL_MULDIV_TBL;
+</sql-statement>
+<sql-statement>
+DROP TABLE INTERVAL_MULDIV_TBL;
+</sql-statement>
+<sql-statement>
+SET DATESTYLE = 'postgres';
+</sql-statement>
+<sql-statement>
+SET IntervalStyle to postgres_verbose;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: IntervalStyle
+    	SET IntervalStyle to postgres_verbose;
+	^
+<sql-statement>
+SELECT * FROM INTERVAL_TBL;
+</sql-statement>
+<sql-statement>
+-- test avg(interval), which is somewhat fragile since people have been
+-- known to change the allowed input syntax for type interval without
+-- updating pg_aggregate.agginitval
+select avg(f1) from interval_tbl;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.interval_tbl
+    
+<sql-statement>
+-- test long interval input
+select '4 millenniums 5 centuries 4 decades 1 year 4 months 4 days 17 minutes 31 seconds'::interval;
+</sql-statement>
+<sql-statement>
+-- test long interval output
+-- Note: the actual maximum length of the interval output is longer,
+-- but we need the test to work for both integer and floating-point
+-- timestamps.
+select '100000000y 10mon -1000000000d -100000h -10min -10.000001s ago'::interval;
+</sql-statement>
+<sql-statement>
+-- test justify_hours() and justify_days()
+SELECT justify_hours(interval '6 months 3 days 52 hours 3 minutes 2 seconds') as "6 mons 5 days 4 hours 3 mins 2 seconds";
+</sql-statement>
+<sql-statement>
+SELECT justify_days(interval '6 months 36 days 5 hours 4 minutes 3 seconds') as "7 mons 6 days 5 hours 4 mins 3 seconds";
+</sql-statement>
+<sql-statement>
+-- test justify_interval()
+SELECT justify_interval(interval '1 month -1 hour') as "1 month -1 hour";
+</sql-statement>
+<sql-statement>
+-- test fractional second input, and detection of duplicate units
+SET DATESTYLE = 'ISO';
+</sql-statement>
+<sql-statement>
+SET IntervalStyle TO postgres;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: IntervalStyle
+    	SET IntervalStyle TO postgres;
+	^
+<sql-statement>
+SELECT '1 millisecond'::interval, '1 microsecond'::interval,
+       '500 seconds 99 milliseconds 51 microseconds'::interval;
+</sql-statement>
+<sql-statement>
+SELECT '3 days 5 milliseconds'::interval;
+</sql-statement>
+<sql-statement>
+SELECT '1 second 2 seconds'::interval;              -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '1 second 2 seconds'::interval;              -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "1 second 2 seconds"
+
+        	SELECT '1 second 2 seconds'::interval;              -- error
+	^
+<sql-statement>
+SELECT '10 milliseconds 20 milliseconds'::interval; -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '10 milliseconds 20 milliseconds'::interval; -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "10 milliseconds 20 milliseconds"
+
+        	SELECT '10 milliseconds 20 milliseconds'::interval; -- error
+	^
+<sql-statement>
+SELECT '5.5 seconds 3 milliseconds'::interval;      -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '5.5 seconds 3 milliseconds'::interval;      -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "5.5 seconds 3 milliseconds"
+
+        	SELECT '5.5 seconds 3 milliseconds'::interval;      -- error
+	^
+<sql-statement>
+SELECT '1:20:05 5 microseconds'::interval;          -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '1:20:05 5 microseconds'::interval;          -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "1:20:05 5 microseconds"
+
+        	SELECT '1:20:05 5 microseconds'::interval;          -- error
+	^
+<sql-statement>
+SELECT '1 day 1 day'::interval;                     -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '1 day 1 day'::interval;                     -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "1 day 1 day"
+
+        	SELECT '1 day 1 day'::interval;                     -- error
+	^
+<sql-statement>
+SELECT interval '1-2';  -- SQL year-month literal
+</sql-statement>
+<sql-statement>
+SELECT interval '999' second;  -- oversize leading field is ok
+</sql-statement>
+<sql-statement>
+SELECT interval '999' minute;
+</sql-statement>
+<sql-statement>
+SELECT interval '999' hour;
+</sql-statement>
+<sql-statement>
+SELECT interval '999' day;
+</sql-statement>
+<sql-statement>
+SELECT interval '999' month;
+</sql-statement>
+<sql-statement>
+-- test SQL-spec syntaxes for restricted field sets
+SELECT interval '1' year;
+</sql-statement>
+<sql-statement>
+SELECT interval '2' month;
+</sql-statement>
+<sql-statement>
+SELECT interval '3' day;
+</sql-statement>
+<sql-statement>
+SELECT interval '4' hour;
+</sql-statement>
+<sql-statement>
+SELECT interval '5' minute;
+</sql-statement>
+<sql-statement>
+SELECT interval '6' second;
+</sql-statement>
+<sql-statement>
+SELECT interval '1' year to month;
+</sql-statement>
+<sql-statement>
+SELECT interval '1-2' year to month;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2' day to hour;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2:03' day to hour;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2:03:04' day to hour;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2' day to minute;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT interval '1 2' day to minute;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "1 2"
+
+        	SELECT interval '1 2' day to minute;
+	^
+<sql-statement>
+SELECT interval '1 2:03' day to minute;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2:03:04' day to minute;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2' day to second;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT interval '1 2' day to second;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "1 2"
+
+        	SELECT interval '1 2' day to second;
+	^
+<sql-statement>
+SELECT interval '1 2:03' day to second;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2:03:04' day to second;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2' hour to minute;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT interval '1 2' hour to minute;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "1 2"
+
+        	SELECT interval '1 2' hour to minute;
+	^
+<sql-statement>
+SELECT interval '1 2:03' hour to minute;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2:03:04' hour to minute;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2' hour to second;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT interval '1 2' hour to second;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "1 2"
+
+        	SELECT interval '1 2' hour to second;
+	^
+<sql-statement>
+SELECT interval '1 2:03' hour to second;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2:03:04' hour to second;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2' minute to second;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT interval '1 2' minute to second;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "1 2"
+
+        	SELECT interval '1 2' minute to second;
+	^
+<sql-statement>
+SELECT interval '1 2:03' minute to second;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2:03:04' minute to second;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 +2:03' minute to second;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 +2:03:04' minute to second;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 -2:03' minute to second;
+</sql-statement>
+<sql-statement>
+SELECT interval '1 -2:03:04' minute to second;
+</sql-statement>
+<sql-statement>
+SELECT interval '123 11' day to hour; -- ok
+</sql-statement>
+<sql-statement>
+SELECT interval '123 11' day; -- not ok
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT interval '123 11' day; -- not ok
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "123 11"
+
+        	SELECT interval '123 11' day; -- not ok
+	^
+<sql-statement>
+SELECT interval '123 11'; -- not ok, too ambiguous
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT interval '123 11'; -- not ok, too ambiguous
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "123 11"
+
+        	SELECT interval '123 11'; -- not ok, too ambiguous
+	^
+<sql-statement>
+SELECT interval '123 2:03 -2:04'; -- not ok, redundant hh:mm fields
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT interval '123 2:03 -2:04'; -- not ok, redundant hh:mm fields
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "123 2:03 -2:04"
+
+        	SELECT interval '123 2:03 -2:04'; -- not ok, redundant hh:mm fields
+	^
+<sql-statement>
+-- test syntaxes for restricted precision
+SELECT interval(0) '1 day 01:23:45.6789';
+</sql-statement>
+<sql-statement>
+SELECT interval(2) '1 day 01:23:45.6789';
+</sql-statement>
+<sql-statement>
+SELECT interval '12:34.5678' minute to second(2);  -- per SQL spec
+</sql-statement>
+<sql-statement>
+SELECT interval '1.234' second;
+</sql-statement>
+<sql-statement>
+SELECT interval '1.234' second(2);
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2.345' day to second(2);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT interval '1 2.345' day to second(2);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "1 2.345"
+
+        	SELECT interval '1 2.345' day to second(2);
+	^
+<sql-statement>
+SELECT interval '1 2:03' day to second(2);
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2:03.4567' day to second(2);
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2:03:04.5678' day to second(2);
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2.345' hour to second(2);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT interval '1 2.345' hour to second(2);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "1 2.345"
+
+        	SELECT interval '1 2.345' hour to second(2);
+	^
+<sql-statement>
+SELECT interval '1 2:03.45678' hour to second(2);
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2:03:04.5678' hour to second(2);
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2.3456' minute to second(2);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT interval '1 2.3456' minute to second(2);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type interval: "1 2.3456"
+
+        	SELECT interval '1 2.3456' minute to second(2);
+	^
+<sql-statement>
+SELECT interval '1 2:03.5678' minute to second(2);
+</sql-statement>
+<sql-statement>
+SELECT interval '1 2:03:04.5678' minute to second(2);
+</sql-statement>
+<sql-statement>
+-- test casting to restricted precision (bug #14479)
+SELECT f1, f1::INTERVAL DAY TO MINUTE AS "minutes",
+  (f1 + INTERVAL '1 month')::INTERVAL MONTH::INTERVAL YEAR AS "years"
+  FROM interval_tbl;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.interval_tbl
+    
+<sql-statement>
+-- test inputting and outputting SQL standard interval literals
+SET IntervalStyle TO sql_standard;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: IntervalStyle
+    	-- test inputting and outputting SQL standard interval literals
+	^
+<sql-statement>
+SELECT  interval '0'                       AS "zero",
+        interval '1-2' year to month       AS "year-month",
+        interval '1 2:03:04' day to second AS "day-time",
+        - interval '1-2'                   AS "negative year-month",
+        - interval '1 2:03:04'             AS "negative day-time";
+</sql-statement>
+<sql-statement>
+-- test input of some not-quite-standard interval values in the sql style
+SET IntervalStyle TO postgres;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: IntervalStyle
+    	-- test input of some not-quite-standard interval values in the sql style
+	^
+<sql-statement>
+SELECT  interval '+1 -1:00:00',
+        interval '-1 +1:00:00',
+        interval '+1-2 -3 +4:05:06.789',
+        interval '-1-2 +3 -4:05:06.789';
+</sql-statement>
+<sql-statement>
+-- test output of couple non-standard interval values in the sql style
+SET IntervalStyle TO sql_standard;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: IntervalStyle
+    	-- test output of couple non-standard interval values in the sql style
+	^
+<sql-statement>
+SELECT  interval '1 day -1 hours',
+        interval '-1 days +1 hours',
+        interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds',
+        - interval '1 years 2 months -3 days 4 hours 5 minutes 6.789 seconds';
+</sql-statement>
+<sql-statement>
+-- test outputting iso8601 intervals
+SET IntervalStyle to iso_8601;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: IntervalStyle
+    	-- test outputting iso8601 intervals
+	^
+<sql-statement>
+select  interval '0'                                AS "zero",
+        interval '1-2'                              AS "a year 2 months",
+        interval '1 2:03:04'                        AS "a bit over a day",
+        interval '2:03:04.45679'                    AS "a bit over 2 hours",
+        (interval '1-2' + interval '3 4:05:06.7')   AS "all fields",
+        (interval '1-2' - interval '3 4:05:06.7')   AS "mixed sign",
+        (- interval '1-2' + interval '3 4:05:06.7') AS "negative";
+</sql-statement>
+<sql-statement>
+-- test inputting ISO 8601 4.4.2.1 "Format With Time Unit Designators"
+SET IntervalStyle to sql_standard;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: IntervalStyle
+    	-- test inputting ISO 8601 4.4.2.1 "Format With Time Unit Designators"
+	^
+<sql-statement>
+select  interval 'P0Y'                    AS "zero",
+        interval 'P1Y2M'                  AS "a year 2 months",
+        interval 'P1W'                    AS "a week",
+        interval 'P1DT2H3M4S'             AS "a bit over a day",
+        interval 'P1Y2M3DT4H5M6.7S'       AS "all fields",
+        interval 'P-1Y-2M-3DT-4H-5M-6.7S' AS "negative",
+        interval 'PT-0.1S'                AS "fractional second";
+</sql-statement>
+<sql-statement>
+-- test inputting ISO 8601 4.4.2.2 "Alternative Format"
+SET IntervalStyle to postgres;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: IntervalStyle
+    	-- test inputting ISO 8601 4.4.2.2 "Alternative Format"
+	^
+<sql-statement>
+select  interval 'P00021015T103020'       AS "ISO8601 Basic Format",
+        interval 'P0002-10-15T10:30:20'   AS "ISO8601 Extended Format";
+</sql-statement>
+<sql-statement>
+-- Make sure optional ISO8601 alternative format fields are optional.
+select  interval 'P0002'                  AS "year only",
+        interval 'P0002-10'               AS "year month",
+        interval 'P0002-10-15'            AS "year month day",
+        interval 'P0002T1S'               AS "year only plus time",
+        interval 'P0002-10T1S'            AS "year month plus time",
+        interval 'P0002-10-15T1S'         AS "year month day plus time",
+        interval 'PT10'                   AS "hour only",
+        interval 'PT10:30'                AS "hour minute";
+</sql-statement>
+<sql-statement>
+-- test a couple rounding cases that changed since 8.3 w/ HAVE_INT64_TIMESTAMP.
+SET IntervalStyle to postgres_verbose;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: IntervalStyle
+    	-- test a couple rounding cases that changed since 8.3 w/ HAVE_INT64_TIMESTAMP.
+	^
+<sql-statement>
+select interval '-10 mons -3 days +03:55:06.70';
+</sql-statement>
+<sql-statement>
+select interval '1 year 2 mons 3 days 04:05:06.699999';
+</sql-statement>
+<sql-statement>
+select interval '0:0:0.7', interval '@ 0.70 secs', interval '0.7 seconds';
+</sql-statement>
+<sql-statement>
+-- check that '30 days' equals '1 month' according to the hash function
+select '30 days'::interval = '1 month'::interval as t;
+</sql-statement>
+<sql-statement>
+select interval_hash('30 days'::interval) = interval_hash('1 month'::interval) as t;
+</sql-statement>
+<sql-statement>
+-- numeric constructor
+select make_interval(years := 2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: alternative is not implemented yet : 118
+    	select make_interval(years := 2);
+	       ^
+<sql-statement>
+select make_interval(years := 1, months := 6);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select make_interval(years := 1, months := 6);
+	       ^
+<sql-statement>
+select make_interval(years := 1, months := -1, weeks := 5, days := -7, hours := 25, mins := -180);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select make_interval(years := 1, months := -1, weeks := 5, days := -7, hours := 25, mins := -180);
+	       ^
+<sql-statement>
+select make_interval() = make_interval(years := 0, months := 0, weeks := 0, days := 0, mins := 0, secs := 0.0);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:26: Error: alternative is not implemented yet : 118
+    	select make_interval() = make_interval(years := 0, months := 0, weeks := 0, days := 0, mins := 0, secs := 0.0);
+	                         ^
+<sql-statement>
+select make_interval(hours := -2, mins := -10, secs := -25.3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select make_interval(hours := -2, mins := -10, secs := -25.3);
+	       ^
+<sql-statement>
+select make_interval(years := 'inf'::float::int);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select make_interval(years := 'inf'::float::int);
+	       ^
+<sql-statement>
+select make_interval(months := 'NaN'::float::int);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select make_interval(months := 'NaN'::float::int);
+	       ^
+<sql-statement>
+select make_interval(secs := 'inf');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select make_interval(secs := 'inf');
+	       ^
+<sql-statement>
+select make_interval(secs := 'NaN');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select make_interval(secs := 'NaN');
+	       ^
+<sql-statement>
+select make_interval(secs := 7e12);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: alternative is not implemented yet : 118
+    	select make_interval(secs := 7e12);
+	       ^
+<sql-statement>
+--
+-- test EXTRACT
+--
+SELECT f1,
+    EXTRACT(MICROSECOND FROM f1) AS MICROSECOND,
+    EXTRACT(MILLISECOND FROM f1) AS MILLISECOND,
+    EXTRACT(SECOND FROM f1) AS SECOND,
+    EXTRACT(MINUTE FROM f1) AS MINUTE,
+    EXTRACT(HOUR FROM f1) AS HOUR,
+    EXTRACT(DAY FROM f1) AS DAY,
+    EXTRACT(MONTH FROM f1) AS MONTH,
+    EXTRACT(QUARTER FROM f1) AS QUARTER,
+    EXTRACT(YEAR FROM f1) AS YEAR,
+    EXTRACT(DECADE FROM f1) AS DECADE,
+    EXTRACT(CENTURY FROM f1) AS CENTURY,
+    EXTRACT(MILLENNIUM FROM f1) AS MILLENNIUM,
+    EXTRACT(EPOCH FROM f1) AS EPOCH
+    FROM INTERVAL_TBL;
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(FORTNIGHT FROM INTERVAL '2 days');  -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT EXTRACT(FORTNIGHT FROM INTERVAL '2 days');  -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  interval units "fortnight" not recognized
+
+        	SELECT EXTRACT(FORTNIGHT FROM INTERVAL '2 days');  -- error
+	^
+<sql-statement>
+SELECT EXTRACT(TIMEZONE FROM INTERVAL '2 days');  -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT EXTRACT(TIMEZONE FROM INTERVAL '2 days');  -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  interval units "timezone" not supported
+
+        	SELECT EXTRACT(TIMEZONE FROM INTERVAL '2 days');  -- error
+	^
+<sql-statement>
+SELECT EXTRACT(DECADE FROM INTERVAL '100 y');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(DECADE FROM INTERVAL '99 y');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(DECADE FROM INTERVAL '-99 y');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(DECADE FROM INTERVAL '-100 y');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(CENTURY FROM INTERVAL '100 y');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(CENTURY FROM INTERVAL '99 y');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(CENTURY FROM INTERVAL '-99 y');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(CENTURY FROM INTERVAL '-100 y');
+</sql-statement>
+<sql-statement>
+-- date_part implementation is mostly the same as extract, so only
+-- test a few cases for additional coverage.
+SELECT f1,
+    date_part('microsecond', f1) AS microsecond,
+    date_part('millisecond', f1) AS millisecond,
+    date_part('second', f1) AS second,
+    date_part('epoch', f1) AS epoch
+    FROM INTERVAL_TBL;
+</sql-statement>
+<sql-statement>
+-- internal overflow test case
+SELECT extract(epoch from interval '1000000000 days');
+</sql-statement>

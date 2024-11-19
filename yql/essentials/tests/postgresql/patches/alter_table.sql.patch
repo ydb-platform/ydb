@@ -1,0 +1,73 @@
+--- alter_table.sql	(40977c8f0a0a339864b620914542e2d90392919b)
++++ alter_table.sql	(8a1083b9b852a7dbb540208bd92787ee92f311f7)
+@@ -1730,48 +1730,59 @@ insert into alterlock values (1, 'foo');
+ create table alterlock2 (f3 int primary key, f1 int);
+ insert into alterlock2 values (1, 1);
+ 
+-begin; alter table alterlock alter column f2 set statistics 150;
++begin;
++alter table alterlock alter column f2 set statistics 150;
+ select * from my_locks order by 1;
+ rollback;
+ 
+-begin; alter table alterlock cluster on alterlock_pkey;
++begin;
++alter table alterlock cluster on alterlock_pkey;
+ select * from my_locks order by 1;
+ commit;
+ 
+-begin; alter table alterlock set without cluster;
++begin;
++alter table alterlock set without cluster;
+ select * from my_locks order by 1;
+ commit;
+ 
+-begin; alter table alterlock set (fillfactor = 100);
++begin;
++alter table alterlock set (fillfactor = 100);
+ select * from my_locks order by 1;
+ commit;
+ 
+-begin; alter table alterlock reset (fillfactor);
++begin;
++alter table alterlock reset (fillfactor);
+ select * from my_locks order by 1;
+ commit;
+ 
+-begin; alter table alterlock set (toast.autovacuum_enabled = off);
++begin;
++alter table alterlock set (toast.autovacuum_enabled = off);
+ select * from my_locks order by 1;
+ commit;
+ 
+-begin; alter table alterlock set (autovacuum_enabled = off);
++begin;
++alter table alterlock set (autovacuum_enabled = off);
+ select * from my_locks order by 1;
+ commit;
+ 
+-begin; alter table alterlock alter column f2 set (n_distinct = 1);
++begin;
++alter table alterlock alter column f2 set (n_distinct = 1);
+ select * from my_locks order by 1;
+ rollback;
+ 
+ -- test that mixing options with different lock levels works as expected
+-begin; alter table alterlock set (autovacuum_enabled = off, fillfactor = 80);
++begin;
++alter table alterlock set (autovacuum_enabled = off, fillfactor = 80);
+ select * from my_locks order by 1;
+ commit;
+ 
+-begin; alter table alterlock alter column f2 set storage extended;
++begin;
++alter table alterlock alter column f2 set storage extended;
+ select * from my_locks order by 1;
+ rollback;
+ 
+-begin; alter table alterlock alter column f2 set default 'x';
++begin;
++alter table alterlock alter column f2 set default 'x';
+ select * from my_locks order by 1;
+ rollback;
+ 

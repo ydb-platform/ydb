@@ -727,11 +727,11 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         });
 
         UNIT_ASSERT(json["Successful"].GetArray().size() == 2);
-        auto succesful0 = json["Successful"][0];
-        UNIT_ASSERT(succesful0["Id"] == "Id-0");
-        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageAttributes").empty());
-        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageBody").empty());
-        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MessageId").empty());
+        auto succesful = json["Successful"][0];
+        UNIT_ASSERT(succesful["Id"] == "Id-0");
+        UNIT_ASSERT(!GetByPath<TString>(succesful, "MD5OfMessageAttributes").empty());
+        UNIT_ASSERT(!GetByPath<TString>(succesful, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(succesful, "MessageId").empty());
 
         UNIT_ASSERT(json["Successful"][1]["Id"] == "Id-1");
 

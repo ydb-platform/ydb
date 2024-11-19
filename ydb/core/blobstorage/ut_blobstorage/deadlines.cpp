@@ -6,7 +6,7 @@
 
 #include "ut_helpers.h"
 
-#define Ctest Cerr
+#define Ctest Cnull
 
 Y_UNIT_TEST_SUITE(Deadlines) {
 

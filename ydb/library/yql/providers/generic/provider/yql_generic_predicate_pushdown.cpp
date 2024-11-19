@@ -629,7 +629,7 @@ namespace NYql {
         auto left = FormatExpression(comparison.left_value());
         auto right = FormatExpression(comparison.right_value());
 
-        return left + operation + right;
+        return TStringBuilder() << "(" << left << operation << right << ")";
     }
 
     TString FormatIn(const TPredicate_TIn& in) {
@@ -639,7 +639,7 @@ namespace NYql {
             if (!list.empty()) {
                 list << ", ";
             } else {
-                list << value << " IN (";
+                list << "(" << value << " IN (";
             }
             list << FormatExpression(expr);
         }
@@ -648,14 +648,14 @@ namespace NYql {
             throw yexception() << "failed to format IN statement, no operands";
         }
 
-        list << ")";
+        list << "))";
         return list.Str();
     }
 
     TString FormatRegexp(const TPredicate::TRegexp& regexp) {
         const auto& value = FormatExpression(regexp.value());
         const auto& pattern = FormatExpression(regexp.pattern());
-        return TStringBuilder() << value << " REGEXP " << pattern;
+        return TStringBuilder() << "(" << value << " REGEXP " << pattern << ")";
     }
 
     TString FormatPredicate(const TPredicate& predicate) {

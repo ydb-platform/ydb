@@ -59,6 +59,7 @@ target_sources(ydb-core-blobstorage-ut_blobstorage PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/assimilation.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/block_race.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/counting_events.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/deadlines.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/decommit_3dc.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/defrag.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/discover.cpp

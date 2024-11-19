@@ -110,6 +110,11 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
         matched->Settings = settings.BuildNode(ctx, matched->Settings.Pos());
     }
 
+    if (kqpCtx.Config->HasMaxSequentialReadsInFlight()) {
+        settings.SequentialInFlight = *kqpCtx.Config->MaxSequentialReadsInFlight.Get();
+        matched->Settings = settings.BuildNode(ctx, matched->Settings.Pos());
+    }
+
     TVector<TExprBase> inputs;
     TVector<TCoArgument> args;
     TNodeOnNodeOwnedMap argReplaces;

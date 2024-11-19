@@ -13,7 +13,7 @@ from operator import attrgetter
 LIMIT_ROWS = -1
 
 
-# Return number of days since the epoch "1970-01-01T00:00:00" (default)
+# Return number of days since the epoch
 def data_to_num(val):
     try:
         return mdates.date2num(datetime.strptime(val, "%Y-%m-%d %H:%M:%S.%f"))
@@ -343,10 +343,9 @@ if __name__ == '__main__':
         elif current_argument in ("--read_from_save"):
             read_from_save = current_value
         elif current_argument in ("--pk_min"):
-            border_pk_min = datetime.datetime.strptime(current_value, "%Y-%m-%d %H:%M:%S.%f")
-            print(f"pk_min: {border_pk_min}")
+            border_pk_min = data_to_num(current_value)
         elif current_argument in ("--pk_max"):
-            border_pk_max = datetime.datetime.strptime(current_value, "%Y-%m-%d %H:%M:%S.%f")
+            border_pk_max = data_to_num(current_value)
         elif current_argument in ("--snapshot_plan_step_min"):
             border_snapshot_plan_step_min = int(current_value)
         elif current_argument in ("--snapshot_plan_step_max"):

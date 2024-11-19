@@ -39,6 +39,12 @@ enum class EFrameType
     KeepAlive = 0x02,
 };
 
+struct TRequestContext
+{
+    TString RequestId;
+    TString HostName;
+    TString Method;
+};
 
 class THttpHeader
 {
@@ -171,9 +177,10 @@ public:
     // 'requestId' and 'hostName' are provided for debug reasons
     // (they will appear in some error messages).
     THttpResponse(
-        IInputStream* socketStream,
-        const TString& requestId,
-        const TString& hostName);
+        TRequestContext context,
+        IInputStream* socketStream);
+
+    ~THttpResponse();
 
     const THttpHeaders& Headers() const;
 
@@ -195,13 +202,14 @@ private:
     bool RefreshFrameIfNecessary();
 
 private:
-    const TString RequestId_;
+    class THttpInputWrapped;
 
-    THttpInput HttpInput_;
+private:
+    THolder<THttpInputWrapped> HttpInput_;
 
-    const TString HostName_;
     const bool Unframe_;
 
+    TRequestContext Context_;
     int HttpCode_ = 0;
     TMaybe<TErrorResponse> ErrorResponse_;
     bool IsExhausted_ = false;
@@ -213,18 +221,15 @@ private:
 class THttpRequest
 {
 public:
-    THttpRequest();
-    THttpRequest(const TString& requestId);
+    THttpRequest(TString requestId, TString hostName, THttpHeader header, TDuration socketTimeout);
     ~THttpRequest();
 
     TString GetRequestId() const;
 
-    void Connect(TString hostName, TDuration socketTimeout = TDuration::Zero());
-
-    IOutputStream* StartRequest(const THttpHeader& header);
+    IOutputStream* StartRequest();
     void FinishRequest();
 
-    void SmallRequest(const THttpHeader& header, TMaybe<TStringBuf> body);
+    void SmallRequest(TMaybe<TStringBuf> body);
 
     THttpResponse* GetResponseStream();
 
@@ -235,16 +240,17 @@ public:
     int GetHttpCode();
 
 private:
-    IOutputStream* StartRequestImpl(const THttpHeader& header, bool includeParameters);
+    IOutputStream* StartRequestImpl(bool includeParameters);
 
 private:
     class TRequestStream;
 
 private:
-    const TString RequestId_;
+    const TRequestContext Context_;
+    const THttpHeader Header_;
+    const TString Url_;
+    const TDuration SocketTimeout_;
 
-    TString HostName_;
-    TString Url_;
     TInstant StartTime_;
     TString LoggedAttributes_;
 

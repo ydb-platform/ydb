@@ -13,7 +13,8 @@ FROM breakpad-base AS breakpad-build
 ARG BREAKPAD_GIT_TAG="v2023.06.01"
 RUN \
     mkdir breakpad && cd breakpad && \
-    fetch breakpad && cd src && git checkout tags/${BREAKPAD_GIT_TAG} && \
+    fetch breakpad && cd src && \
+    git checkout -- . && git checkout tags/${BREAKPAD_GIT_TAG} && \
     ./configure && make
 WORKDIR /breakpad/src
 COPY /breakpad_init.cc /breakpad/breakpad_init.cc

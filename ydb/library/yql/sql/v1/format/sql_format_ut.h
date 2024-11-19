@@ -117,8 +117,8 @@ Y_UNIT_TEST(AlterGroup) {
 
 Y_UNIT_TEST(AlterSequence) {
     TCases cases = {
-        {"use plato;alter sequence sequence start with 10 increment 2 restart with 5;","USE plato;\n\nALTER SEQUENCE sequence START WITH 10 INCREMENT 2 RESTART WITH 5;\n"},
-        {"use plato;alter sequence sequence increment 1000 start 100 restart;","USE plato;\n\nALTER SEQUENCE sequence INCREMENT 1000 START 100 RESTART;\n"},
+        {"use plato;alter sequence sequence start with 10, increment 2, restart with 5;","USE plato;\n\nALTER SEQUENCE sequence START WITH 10, INCREMENT 2, RESTART WITH 5;\n"},
+        {"use plato;alter sequence if exists sequence increment 1000, start 100, restart;","USE plato;\n\nALTER SEQUENCE IF EXISTS sequence INCREMENT 1000, START 100, RESTART;\n"},
     };
 
     TSetup setup;

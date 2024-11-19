@@ -28,6 +28,7 @@ std::unique_ptr<NActors::IActor> NewTopicSession(
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
     IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    const NYql::IPqGateway::TPtr& pqGateway);
+    const NYql::IPqGateway::TPtr& pqGateway,
+    ui64 maxBufferSize);
 
 } // namespace NFq

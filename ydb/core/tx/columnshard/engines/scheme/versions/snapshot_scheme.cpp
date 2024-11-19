@@ -76,7 +76,6 @@ bool TSnapshotSchema::IsReplaceableByNextVersion(const TSnapshotSchema& nextSche
         }
         const std::shared_ptr<TColumnFeatures>& features = IndexInfo.GetColumnFeaturesByIndex(fld);
         const std::shared_ptr<TColumnFeatures>& nextFeatures = nextIndexInfo.GetColumnFeaturesByIndex(iter->second.second);
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "column_features")("column_name", curFields[fld]->name())("name", features ? features->GetColumnName() : "")("next_name", nextFeatures ? nextFeatures->GetColumnName() : "")("field_id", fld);
         if (!features != !nextFeatures) {
             return false;
         }

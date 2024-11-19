@@ -239,7 +239,7 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
             } else {
                 TotalErrors++;
                 WindowErrors++;
-                if (Verbose && status.GetStatus() != EStatus::ABORTED) {
+                if (/*Verbose &&*/ status.GetStatus() != EStatus::ABORTED) {
                     Cerr << "Task ID: " << taskId << " Status: " << status.GetStatus() << " " << status.GetIssues().ToString() << Endl;
                 }
                 break;
@@ -482,18 +482,11 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
             Cout << Endl;
         }
     } else {
-        auto session = GetSession();
         for (auto queryInfo : queryInfoList) {
-            auto prepareResult = session.PrepareDataQuery(queryInfo.Query.c_str()).GetValueSync();
-            if (!prepareResult.IsSuccess()) {
-                Cerr << "Prepare failed: " << prepareResult.GetIssues().ToString() << Endl
-                    << "Query:\n" << queryInfo.Query << Endl;
-                return EXIT_FAILURE;
-            }
-
-            auto dataQuery = prepareResult.GetQuery();
-            auto result = dataQuery.Execute(NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
-                                            std::move(queryInfo.Params)).GetValueSync();
+            auto result = QueryClient->ExecuteQuery(
+                queryInfo.Query.c_str(),
+                NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
+                std::move(queryInfo.Params)).GetValueSync();
             if (!result.IsSuccess()) {
                 Cerr << "Query execution failed: " << result.GetIssues().ToString() << Endl
                     << "Query:\n" << queryInfo.Query << Endl;

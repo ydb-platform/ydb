@@ -30,31 +30,62 @@ TStockWorkloadGenerator::TStockWorkloadGenerator(const TStockWorkloadParams* par
     , CustomerIdGenerator(1, MAX_CUSTOMERS)
     , ProductIdGenerator(1, params->ProductCount)
 {
+    if (Params.TableType != "row" && Params.TableType != "column") {
+        ythrow yexception() << "Unknown table type: '" << Params.TableType << "'.";
+    }
     Gen.seed(Now().MicroSeconds());
 }
 
 std::string TStockWorkloadGenerator::GetDDLQueries() const {
     std::string stockPartitionsDdl = "";
-    std::string ordersPartitionsDdl = "WITH (READ_REPLICAS_SETTINGS = \"per_az:1\")";
+    std::string ordersPartitionsDdl = "";
     std::string orderLinesPartitionsDdl = "";
-    if (Params.PartitionsByLoad) {
-        stockPartitionsDdl = std::format(R"(WITH (
-              AUTO_PARTITIONING_BY_LOAD = ENABLED
-            , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {0}
-        ))", Params.MinPartitions);
+
+    if (Params.TableType == "row") { 
+        ordersPartitionsDdl = "WITH (READ_REPLICAS_SETTINGS = \"per_az:1\")";
+        if (Params.PartitionsByLoad) {
+            stockPartitionsDdl = std::format(R"(WITH (
+                STORE = {0}
+                , AUTO_PARTITIONING_BY_LOAD = ENABLED
+                , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {1}
+            )", Params.TableType, Params.MinPartitions);
+            ordersPartitionsDdl = std::format(R"(WITH (
+                STORE = {0}
+                , READ_REPLICAS_SETTINGS = "per_az:1"
+                , AUTO_PARTITIONING_BY_LOAD = ENABLED
+                , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {1}
+                , AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+                , UNIFORM_PARTITIONS = {1}
+            ))", Params.TableType, Params.MinPartitions);
+            orderLinesPartitionsDdl = std::format(R"(WITH (
+                STORE = {0}
+                , AUTO_PARTITIONING_BY_LOAD = ENABLED
+                , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {1}
+                , AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+                , UNIFORM_PARTITIONS = {1}
+            ))", Params.TableType, Params.MinPartitions);
+        }
+    } else if (Params.TableType == "column") {
+         stockPartitionsDdl = std::format(R"(WITH (
+            STORE = {0}
+            , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {1}
+            , AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = {1}
+            , UNIFORM_PARTITIONS = {1}
+        ))", Params.TableType, Params.MinPartitions);
         ordersPartitionsDdl = std::format(R"(WITH (
-              READ_REPLICAS_SETTINGS = "per_az:1"
-            , AUTO_PARTITIONING_BY_LOAD = ENABLED
-            , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {0}
-            , AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
-            , UNIFORM_PARTITIONS = {0}
-        ))", Params.MinPartitions);
+            STORE = {0}
+            , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {1}
+            , AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = {1}
+            , UNIFORM_PARTITIONS = {1}
+        ))", Params.TableType, Params.MinPartitions);
         orderLinesPartitionsDdl = std::format(R"(WITH (
-              AUTO_PARTITIONING_BY_LOAD = ENABLED
-            , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {0}
-            , AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
-            , UNIFORM_PARTITIONS = {0}
-        ))", Params.MinPartitions);
+            STORE = {0}
+            , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {1}
+            , AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = {1}
+            , UNIFORM_PARTITIONS = {1}
+        ))", Params.TableType, Params.MinPartitions);
+    } else {
+        Y_UNREACHABLE();
     }
 
     std::string changefeeds = "";
@@ -65,12 +96,28 @@ std::string TStockWorkloadGenerator::GetDDLQueries() const {
         );)", DbPath);
     }
 
-    return std::format(R"(--!syntax_v1
-        CREATE TABLE `{0}/stock`(product Utf8, quantity Int64, PRIMARY KEY(product)) {1};
-        CREATE TABLE `{0}/orders`(id Uint64, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id), INDEX ix_cust GLOBAL ON (customer, created) COVER (processed)) {2};
-        CREATE TABLE `{0}/orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY KEY(id_order, product)) {3};
-        {4}
-    )", DbPath, stockPartitionsDdl, ordersPartitionsDdl, orderLinesPartitionsDdl, changefeeds);
+    if (Params.TableType == "row") {
+        return std::format(R"(--!syntax_v1
+            CREATE TABLE `{0}/stock`(product Utf8, quantity Int64, PRIMARY KEY(product)) {1};
+            CREATE TABLE `{0}/orders`(id Uint64, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id), INDEX ix_cust GLOBAL ON (customer, created) COVER (processed)) {2};
+            CREATE TABLE `{0}/orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY KEY(id_order, product)) {3};
+            {4}
+        )", DbPath, stockPartitionsDdl, ordersPartitionsDdl, orderLinesPartitionsDdl, changefeeds);
+    } else if (Params.TableType == "column") {
+        Cerr << std::format(R"(--!syntax_v1
+            CREATE TABLE `{0}/stock`(product Utf8 NOT NULL, quantity Int64, PRIMARY KEY(product)) {1};
+            CREATE TABLE `{0}/orders`(id Uint64 NOT NULL, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id)) {2};
+            CREATE TABLE `{0}/orderLines`(id_order Uint64 NOT NULL, product Utf8 NOT NULL, quantity Int64, PRIMARY KEY(id_order, product)) {3};
+            {4}
+        )", DbPath, stockPartitionsDdl, ordersPartitionsDdl, orderLinesPartitionsDdl, changefeeds) << Endl;
+        return std::format(R"(--!syntax_v1
+            CREATE TABLE `{0}/stock`(product Utf8 NOT NULL, quantity Int64, PRIMARY KEY(product)) {1};
+            CREATE TABLE `{0}/orders`(id Uint64 NOT NULL, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id)) {2};
+            CREATE TABLE `{0}/orderLines`(id_order Uint64 NOT NULL, product Utf8 NOT NULL, quantity Int64, PRIMARY KEY(id_order, product)) {3};
+            {4}
+        )", DbPath, stockPartitionsDdl, ordersPartitionsDdl, orderLinesPartitionsDdl, changefeeds);
+    }
+    Y_UNREACHABLE();
 }
 
 TQueryInfoList TStockWorkloadGenerator::GetInitialData() {
@@ -205,15 +252,30 @@ TQueryInfo TStockWorkloadGenerator::ExecuteOrder(const uint64_t orderID) {
 }
 
 TQueryInfo TStockWorkloadGenerator::SelectCustomerHistory(const std::string& customerId, const unsigned int limit) {
-    std::string query = R"(--!syntax_v1
-        DECLARE $cust as Utf8;
-        DECLARE $limit as UInt32;
-        select id, customer, created
-        from orders view ix_cust
-        where customer = $cust
-        order by customer desc, created desc
-        limit $limit;
-    )";
+    const std::string query = [this]() {
+        if (Params.TableType == "row") {
+            return R"(--!syntax_v1
+                DECLARE $cust as Utf8;
+                DECLARE $limit as UInt32;
+                select id, customer, created
+                from orders view ix_cust
+                where customer = $cust
+                order by customer desc, created desc
+                limit $limit;
+            )";
+        } else if (Params.TableType == "column") {
+            return R"(--!syntax_v1
+                DECLARE $cust as Utf8;
+                DECLARE $limit as UInt32;
+                select id, customer, created
+                from orders
+                where customer = $cust
+                order by customer desc, created desc
+                limit $limit;
+            )";
+        }
+        Y_UNREACHABLE();
+    }();
 
     NYdb::TParamsBuilder paramsBuilder;
     paramsBuilder
@@ -318,6 +380,8 @@ void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComman
             .DefaultValue(true).StoreResult(&PartitionsByLoad);
         opts.AddLongOption("enable-cdc", "Create changefeeds on tables.")
             .DefaultValue(false).StoreTrue(&EnableCdc).Hidden();
+        opts.AddLongOption("store", "Tables type ('row' or 'column'). Default: 'row'.")
+            .DefaultValue("row").StoreResult(&TableType).Hidden();
         break;
     case TWorkloadParams::ECommandType::Run:
         switch (static_cast<TStockWorkloadGenerator::EType>(workloadType)) {

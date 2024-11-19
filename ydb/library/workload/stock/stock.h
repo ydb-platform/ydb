@@ -20,6 +20,7 @@ public:
     unsigned int Limit = 0;
     bool PartitionsByLoad = true;
     bool EnableCdc = false;
+    std::string TableType = "row";
 };
 
 class TStockWorkloadGenerator final: public TWorkloadQueryGeneratorBase<TStockWorkloadParams> {

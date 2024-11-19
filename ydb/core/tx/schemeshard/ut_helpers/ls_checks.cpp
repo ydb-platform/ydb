@@ -1139,6 +1139,9 @@ TCheckFunc HasTtlEnabled(const TString& columnName, const TDuration& expireAfter
         UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), columnName);
         UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnUnit(), columnUnit);
         UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), expireAfter.Seconds());
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().TiersSize(), 1);
+        UNIT_ASSERT(ttl.GetEnabled().GetTiers(0).HasDelete());
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetTiers(0).GetEvictAfterSeconds(), expireAfter.Seconds());
     };
 }
 

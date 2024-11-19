@@ -58,8 +58,19 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
             return false;
         }
 
+        ui32 expireInSeconds;
+        if (enabled.TiersSize()) {
+            if (enabled.TiersSize() > 1 || !enabled.GetTiers(0).HasDelete()) {
+                errStr = Sprintf("Eviction to external storage via TTL is not allowed for row-oriented tables");
+                return false;            
+            }
+            expireInSeconds = enabled.GetTiers(0).GetEvictAfterSeconds();
+        } else {
+            expireInSeconds = enabled.GetExpireAfterSeconds();
+        }
+
         const TInstant now = TInstant::Now();
-        if (enabled.GetExpireAfterSeconds() > now.Seconds()) {
+        if (expireInSeconds > now.Seconds()) {
             errStr = Sprintf("TTL should be less than %" PRIu64 " seconds (%" PRIu64 " days, %" PRIu64 " years). The ttl behaviour is undefined before 1970.", now.Seconds(), now.Days(), now.Days() / 365);
             return false;            
         }

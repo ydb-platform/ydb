@@ -158,9 +158,8 @@ afterEvaluate {
     tasks.getByName("extractProto").dependsOn(prepareProto)
 }
 {# To avoid problems when build project with proto #}
-tasks.named("sourcesJar").configure {
-    dependsOn("generateProto")
-}
+tasks.getByName("sourcesJar").dependsOn("generateProto")
+
 {# To disable redundant javadoc (it may fail the build) #}
 tasks.withType<Javadoc>().configureEach {
     isEnabled = false

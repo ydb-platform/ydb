@@ -1,0 +1,5 @@
+{"key"="020";"subkey"="1";"_rest"={"animal"="wombat";"size"="small";"weightMin"=20.;"weightMax"=35.;"wild"=%true};};
+{"key"="075";"subkey"="5";"_rest"={"animal"="dog";"size"="huge";"weightMin"=5.;"weightMax"=75.;"pet"=%true};};
+{"key"="150";"subkey"="4";"_rest"={"animal"="chipmunk";"size"="small";"weightMin"=0.05;"weightMax"=0.15;"wild"=%true};};
+{"key"="500";"subkey"="2";"_rest"={"animal"="hamster";"size"="verysmall";"weightMin"=0.015;"weightMax"=0.045;"pet"=%true};};
+{"key"="800";"subkey"="3";"_rest"={"animal"="dingo";"size"="huge";"weightMin"=10.;"weightMax"=20.;"wild"=%true};};

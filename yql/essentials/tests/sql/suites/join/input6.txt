@@ -1,0 +1,4 @@
+{"key1"="1";"subkey1"="a";"key"="1";"subkey"="a";"value"="value1_1"};
+{"key1"="INVALID";"subkey1"="b";"key"="INVALID";"subkey"="b";"value"="value1_2"};
+{"key1"="3";"subkey1"="c";"key"="3";"subkey"="c";"value"="value1_3"};
+{"key1"="4";"subkey1"="d";"key"="4";"subkey"="d";"value"="value1_4"};

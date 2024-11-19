@@ -1,0 +1,43 @@
+{
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "type_v3" = "string";
+            "required" = %true;
+            "name" = "key";
+        };
+        {
+            "type_v3" = {
+                "type_name" = "tagged";
+                "tag" = "tag";
+                "item" = {
+                    "type_name" = "optional";
+                    "item" = {
+                        "type_name" = "struct";
+                        "members" = [
+                            {
+                                "type" = {
+                                    "type_name" = "optional";
+                                    "item" = "int32";
+                                };
+                                "name" = "b";
+                            };
+                            {
+                                "type" = "string";
+                                "name" = "c";
+                            };
+                            {
+                                "type" = "string";
+                                "name" = "a";
+                            };
+                        ];
+                    };
+                };
+            };
+            "required" = %false;
+            "name" = "subkey";
+        };
+    ];
+}

@@ -1,0 +1,6 @@
+{
+    "_read_schema"=[
+        {"name"="key";"type"="string"};
+        {"name"="value";"type"="string"};
+    ]
+}

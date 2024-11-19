@@ -1,0 +1,32 @@
+{
+    "_yql_view_ksv"="SELECT key as k, subkey as s, value as v FROM self";
+    "_yql_view_key"="SELECT key FROM self";
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

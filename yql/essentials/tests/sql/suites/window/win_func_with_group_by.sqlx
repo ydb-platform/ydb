@@ -1,0 +1,12 @@
+/* postgres can not */
+USE plato;
+
+--INSERT INTO Output
+SELECT
+    RANK(), -- unable to use window function with GROUP BY
+    key
+FROM
+    Input as zz
+GROUP BY
+    key
+;

@@ -1,0 +1,4 @@
+{"id"="000";"name"="vera"};
+{"id"="001";"name"="nadezhda"};
+{"id"="002";"name"="lubov"};
+{"id"="003";"name"="mashina"};

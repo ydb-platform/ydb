@@ -1,0 +1,1 @@
+select key, subkey, case when value != subkey then "WAT" else value end as value from plato.Input;

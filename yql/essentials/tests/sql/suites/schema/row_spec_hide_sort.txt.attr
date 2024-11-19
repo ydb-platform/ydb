@@ -1,0 +1,12 @@
+{
+    "schema"=<"strict"=%false; "schema_mode"="weak"; "unique_keys"=%false>[
+        {"name"="key";"type"="any";"required"=%false;"sort_order"="ascending"};
+    ];
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+            ["key";["DataType";"String"]];
+            ["subkey";["DataType";"String"]];
+            ["value";["DataType";"String"]];
+        ]];
+    };
+}

@@ -1,0 +1,6 @@
+/* postgres can not */
+select
+  key, TablePath() as tab_path, ROW_NUMBER() over w1
+from plato.Input
+window w1 as (order by key)
+order by key;

@@ -1,0 +1,16 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["t_time_sk";["PgType";"int4";];];
+              ["t_time_id";["PgType";"text";];];
+              ["t_time";["PgType";"int4";];];
+              ["t_hour";["PgType";"int4";];];
+              ["t_minute";["PgType";"int4";];];
+              ["t_second";["PgType";"int4";];];
+              ["t_am_pm";["PgType";"text";];];
+              ["t_shift";["PgType";"text";];];
+              ["t_sub_shift";["PgType";"text";];];
+              ["t_meal_time";["PgType";"text";];];
+        ];];
+    }
+}

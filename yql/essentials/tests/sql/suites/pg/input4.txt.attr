@@ -1,0 +1,5 @@
+{
+    "_yql_row_spec"={
+       "Type"=["StructType";[["b_val";["PgType";"text";];];["i_val";["PgType";"text";];];["d_val";["PgType";"text";];];];];
+    }
+}

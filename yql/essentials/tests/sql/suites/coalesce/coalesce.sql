@@ -1,0 +1,1 @@
+select coalesce(cast(value as int), 999) from plato.Input;

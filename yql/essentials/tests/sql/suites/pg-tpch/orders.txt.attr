@@ -1,0 +1,15 @@
+{
+    "_yql_row_spec"={
+       "Type"=["StructType";[
+           ["o_orderkey";["PgType";"int4";];];
+           ["o_custkey";["PgType";"int4";];];
+           ["o_orderstatus";["PgType";"text";];];
+           ["o_totalprice";["PgType";"numeric";];];
+           ["o_orderdate";["PgType";"date";];];
+           ["o_orderpriority";["PgType";"text";];];
+           ["o_clerk";["PgType";"text";];];
+           ["o_shippriority";["PgType";"int4";];];
+           ["o_comment";["PgType";"text";];];
+       ];];
+    }
+}

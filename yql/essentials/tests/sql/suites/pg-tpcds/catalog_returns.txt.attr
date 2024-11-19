@@ -1,0 +1,33 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["cr_returned_date_sk";["PgType";"int4";];];
+              ["cr_returned_time_sk";["PgType";"int4";];];
+              ["cr_item_sk";["PgType";"int4";];];
+              ["cr_refunded_customer_sk";["PgType";"int4";];];
+              ["cr_refunded_cdemo_sk";["PgType";"int4";];];
+              ["cr_refunded_hdemo_sk";["PgType";"int4";];];
+              ["cr_refunded_addr_sk";["PgType";"int4";];];
+              ["cr_returning_customer_sk";["PgType";"int4";];];
+              ["cr_returning_cdemo_sk";["PgType";"int4";];];
+              ["cr_returning_hdemo_sk";["PgType";"int4";];];
+              ["cr_returning_addr_sk";["PgType";"int4";];];
+              ["cr_call_center_sk";["PgType";"int4";];];
+              ["cr_catalog_page_sk";["PgType";"int4";];];
+              ["cr_ship_mode_sk";["PgType";"int4";];];
+              ["cr_warehouse_sk";["PgType";"int4";];];
+              ["cr_reason_sk";["PgType";"int4";];];
+              ["cr_order_number";["PgType";"int4";];];
+              ["cr_return_quantity";["PgType";"int4";];];
+              ["cr_return_amount";["PgType";"numeric";];];
+              ["cr_return_tax";["PgType";"numeric";];];
+              ["cr_return_amt_inc_tax";["PgType";"numeric";];];
+              ["cr_fee";["PgType";"numeric";];];
+              ["cr_return_ship_cost";["PgType";"numeric";];];
+              ["cr_refunded_cash";["PgType";"numeric";];];
+              ["cr_reversed_charge";["PgType";"numeric";];];
+              ["cr_store_credit";["PgType";"numeric";];];
+              ["cr_net_loss";["PgType";"numeric";];];
+        ];];
+    }
+}

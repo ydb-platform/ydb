@@ -1,0 +1,1 @@
+select AsStruct('funny', 1, 100500l, 'bunny')

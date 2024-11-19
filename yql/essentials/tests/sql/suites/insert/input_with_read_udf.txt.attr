@@ -1,0 +1,32 @@
+{
+    "_yql_read_udf"="Dsv.ReadRecord";
+    "_yql_read_udf_run_config"="@@";
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

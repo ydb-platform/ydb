@@ -1,0 +1,16 @@
+/* postgres can not */
+$input = (
+  SELECT AsStruct("a" AS value) AS s, "1" AS value
+  UNION ALL
+  SELECT AsStruct("b" AS value) AS s, "2" AS value
+  UNION ALL
+  SELECT AsStruct("c" AS value) AS s, "3" AS value
+  UNION ALL
+  SELECT AsStruct("b" AS value) AS s, "1" AS value
+  UNION ALL
+  SELECT AsStruct("b" AS value) AS s, "2" AS value
+  UNION ALL
+  SELECT AsStruct("a" AS value) AS s, "3" AS value
+);
+
+SELECT count(*) FROM $input GROUP BY s.value;

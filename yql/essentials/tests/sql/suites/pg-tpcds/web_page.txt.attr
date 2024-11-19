@@ -1,0 +1,20 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["wp_web_page_sk";["PgType";"int4";];];
+              ["wp_web_page_id";["PgType";"text";];];
+              ["wp_rec_start_date";["PgType";"date";];];
+              ["wp_rec_end_date";["PgType";"date";];];
+              ["wp_creation_date_sk";["PgType";"int4";];];
+              ["wp_access_date_sk";["PgType";"int4";];];
+              ["wp_autogen_flag";["PgType";"text";];];
+              ["wp_customer_sk";["PgType";"int4";];];
+              ["wp_url";["PgType";"text";];];
+              ["wp_type";["PgType";"text";];];
+              ["wp_char_count";["PgType";"int4";];];
+              ["wp_link_count";["PgType";"int4";];];
+              ["wp_image_count";["PgType";"int4";];];
+              ["wp_max_ad_count";["PgType";"int4";];];
+        ];];
+    }
+}

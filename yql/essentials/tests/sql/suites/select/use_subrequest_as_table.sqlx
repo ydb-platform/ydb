@@ -1,0 +1,23 @@
+/* postgres can not */
+/* syntax version 1 */
+$script = @@
+def test(src):
+    l = []
+    for i in src:
+        l.append(str(i.test))
+        l.append(str(i.test2))
+    return str(l)
+@@;
+
+$test_table_1 =
+    (
+    SELECT 1 AS test, "a" AS test2
+    UNION ALL
+    SELECT 2 AS test, "b" AS test2
+    );
+
+$callable = Python::test(Callable<(List<Struct<test:Int32,test2:String?>>) -> String?>, $script);
+
+SELECT
+    $callable( $test_table_1 ) -- use as const subrequest should contain one column
+FROM $test_table_1;

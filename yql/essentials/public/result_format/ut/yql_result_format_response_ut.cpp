@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(ParseResponse) {
                 Write = [
                     {
                         Type = type;
-                        Refs = [];
+                        Ref = [];
                     }
                 ]
             };
@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(ParseResponse) {
                     {
                         Data = data;
                         Type = type;
-                        Refs = [];
+                        Ref = [];
                     }
                 ]
             };
@@ -250,7 +250,7 @@ Y_UNIT_TEST_SUITE(ParseResponse) {
                     {
                         Data = data;
                         Type = type;
-                        Refs = [
+                        Ref = [
                             {
                                 "Reference" = [];
                                 "Remove" = %true;
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(ParseResponse) {
                     {
                         Data = data;
                         Type = type;
-                        Refs = [
+                        Ref = [
                             {
                                 "Reference" = [];
                                 "Remove" = %true;
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(ParseResponse) {
                     {
                         Data = data;
                         Type = type;
-                        Refs = [
+                        Ref = [
                             {
                                 "Reference" = ["foo";"bar"];
                                 "Remove" = %false;
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(ParseResponse) {
                     {
                         Data = data;
                         Type = type;
-                        Refs = [
+                        Ref = [
                             {
                                 "Columns" = ["col1";"col2"];
                                 "Reference" = [];

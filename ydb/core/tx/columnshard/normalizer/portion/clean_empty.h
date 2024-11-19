@@ -5,7 +5,8 @@
 namespace NKikimr::NOlap::NSyncChunksWithPortions {
 
 class TCleanEmptyPortionsNormalizer : public TNormalizationController::INormalizerComponent {
-
+private:
+    using TBase = TNormalizationController::INormalizerComponent;
     static TString ClassName() {
         return "EmptyPortionsCleaner";
     }
@@ -15,7 +16,8 @@ class TCleanEmptyPortionsNormalizer : public TNormalizationController::INormaliz
 
 public:
     TCleanEmptyPortionsNormalizer(const TNormalizationController::TInitContext& info)
-        : DsGroupSelector(info.GetStorageInfo()) {
+        : TBase(info)
+        , DsGroupSelector(info.GetStorageInfo()) {
     }
 
     std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {

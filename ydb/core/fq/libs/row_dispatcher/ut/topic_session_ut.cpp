@@ -71,7 +71,8 @@ public:
             CredentialsProviderFactory,
             PureCalcProgramFactory,
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            CreatePqNativeGateway(pqServices)
+            CreatePqNativeGateway(pqServices),
+            16000000
             ).release());
         Runtime.EnableScheduleForActor(TopicSession);
 

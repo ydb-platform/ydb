@@ -37,7 +37,8 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
         std::shared_ptr<NYdb::ICredentialsProviderFactory> /*credentialsProviderFactory*/,
         IPureCalcProgramFactory::TPtr /*pureCalcProgramFactory*/,
         const ::NMonitoring::TDynamicCounterPtr& /*counters*/,
-        const NYql::IPqGateway::TPtr& /*pqGateway*/) const override {
+        const NYql::IPqGateway::TPtr& /*pqGateway*/,
+        ui64 /*maxBufferSize*/) const override {
         auto actorId  = Runtime.AllocateEdgeActor();
         ActorIds.push(actorId);
         return actorId;

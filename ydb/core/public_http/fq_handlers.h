@@ -396,4 +396,94 @@ DECLARE_YQ_GRPC_ACTOR(GetQueryStatus, GetQueryStatus);
 DECLARE_YQ_GRPC_ACTOR_WIHT_EMPTY_RESULT(StopQuery, ControlQuery);
 DECLARE_YQ_GRPC_ACTOR(GetResultData, GetResultData);
 
+// #define RestartArgs FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest, FederatedQuery::ModifyQueryResponse, FQHttp::GetQueryResult, FederatedQuery::ModifyQueryResult
+
+class TRestartQueryRequest : public TActorBootstrapped<TRestartQueryRequest> {
+    THttpRequestContext RequestContext;
+
+    typedef std::function<std::unique_ptr<NGRpcService::TEvProxyRuntimeEvent>(TIntrusivePtr<NYdbGrpc::IRequestContextBase> ctx)> TGrpcProxyEventFactory;
+    TGrpcProxyEventFactory EventFactory;
+
+    NProtobufJson::TJson2ProtoConfig Json2ProtoConfig;
+
+public:
+    TRestartQueryRequest(const THttpRequestContext& ctx, TGrpcProxyEventFactory eventFactory)
+    : RequestContext(ctx)
+    , EventFactory(eventFactory)
+    {
+        Json2ProtoConfig = NProtobufJson::TJson2ProtoConfig()
+            .SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameCamelCase)
+            .SetMapAsObject(true);
+    }
+
+    void Bootstrap(const TActorContext& ctx) {
+        auto describeRequest = std::make_unique<FederatedQuery::DescribeQueryRequest>();
+        if (!Parse<FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest>(*describeRequest)) {
+            throw; // temp sol
+        }
+
+        TIntrusivePtr<TGrpcRequestContextWrapper> requestContext = new TGrpcRequestContextWrapper(
+            RequestContext,
+            std::move(describeRequest),
+            [&](const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
+            Y_ABORT_UNLESS(resp);
+            Y_ABORT_UNLESS(resp->GetArena());
+
+            auto* typedResponse = static_cast<FederatedQuery::DescribeQueryResponse*>(resp);
+
+
+
+            
+
+
+
+            this->Die(ctx);
+        });
+
+
+
+
+    }
+
+    template<typename TGrpcProtoRequestType, typename THttpProtoRequestType>
+    bool Parse(TGrpcProtoRequestType& grpcRequest) {
+        const auto& httpRequest = *RequestContext.GetHttpRequest();
+        try {
+            THttpProtoRequestType request;
+            if (httpRequest.Method == "POST"sv && RequestContext.GetContentType() == APPLICATION_JSON) {
+                NProtobufJson::Json2Proto(httpRequest.Body, request, Json2ProtoConfig);
+            }
+
+            NHttp::TUrlParameters params(httpRequest.URL);
+            for (const auto& [name, value] : params.Parameters) {
+                SetProtoMessageField(request, name, value);
+            }
+            RequestContext.SetDb(TString(params.Get("db")));
+            RequestContext.SetProject(TString(params.Get("project")));
+
+            // path params should overwrite query params in case of conflict
+            for (const auto& [name, value] : RequestContext.GetPathParams()) {
+                SetProtoMessageField(request, name, value);
+            }
+            FqConvert(request, grpcRequest);
+            SetIdempotencyKey(grpcRequest, RequestContext.GetIdempotencyKey());
+
+            return true;
+        } catch (const std::exception& e) {
+            ReplyError(TStringBuilder() << "Error in parsing: " << e.what());
+            return false;
+        }
+    }
+
+    void ReplyError(const TString& error) {
+        RequestContext.ResponseBadRequest(Ydb::StatusIds::BAD_REQUEST, error);
+    }
+
+
+
+
+
+    
+};
+
 } // namespace NKikimr::NPublicHttp

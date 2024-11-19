@@ -168,7 +168,11 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             if (Nodes.contains(nodeId)) {
                 return;
             }
-            HandleNodeDisconnected(nodeId);
+            if (nodeId == SelfId.NodeId()) {
+                HandleNodeConnected(nodeId);      // always сconnected
+            } else {
+                HandleNodeDisconnected(nodeId);
+            }
         }
 
         void TryConnect(ui32 nodeId) {

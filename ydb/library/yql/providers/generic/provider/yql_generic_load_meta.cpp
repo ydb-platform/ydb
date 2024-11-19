@@ -357,7 +357,8 @@ namespace NYql {
                     auto* options = request.mutable_data_source_instance()->mutable_oracle_options();
                     GetServiceName(*options, clusterConfig);
                 } break;
-
+                case NYql::NConnector::NApi::LOGGING:
+                    break;
                 default:
                     ythrow yexception() << "Unexpected data source kind: '" << NYql::NConnector::NApi::EDataSourceKind_Name(dataSourceKind)
                                         << "'";

@@ -302,15 +302,14 @@ void AddClustersFromConnections(
             clusters.emplace(connectionName, GenericProviderName);
             break;
         }
-        case FederatedQuery::ConnectionSetting::kCloudLogging: {
-            const auto& connection = conn.content().setting().cloud_logging();
+        case FederatedQuery::ConnectionSetting::kLogging: {
+            const auto& connection = conn.content().setting().logging();
             auto* clusterCfg = gatewaysConfig.MutableGeneric()->AddClusterMapping();
-            clusterCfg->SetKind(NYql::NConnector::NApi::EDataSourceKind::YC_CLOUD_LOGGING);
+            clusterCfg->SetKind(NYql::NConnector::NApi::EDataSourceKind::LOGGING);
             clusterCfg->SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
             clusterCfg->SetName(connectionName);
             clusterCfg->SetUseSsl(!common.GetDisableSslForGenericDataSources());
             clusterCfg->mutable_datasourceoptions()->insert({TString("folder_id"), TString(connection.folder_id())});
-            clusterCfg->mutable_datasourceoptions()->insert({TString("log_group_name"), TString(connection.log_group_name())});
             FillClusterAuth(*clusterCfg, connection.auth(), authToken, accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
             break;

@@ -202,7 +202,16 @@ namespace NYql {
                        NYql::TGenericClusterConfig& clusterConfig) {
         using namespace NConnector::NApi;
 
-        if (IsIn({EDataSourceKind::GREENPLUM, EDataSourceKind::YDB, EDataSourceKind::MYSQL, EDataSourceKind::MS_SQL_SERVER, EDataSourceKind::ORACLE}, clusterConfig.GetKind())) {
+        if (IsIn(
+            {
+                EDataSourceKind::GREENPLUM,
+                EDataSourceKind::YDB,
+                EDataSourceKind::MYSQL,
+                EDataSourceKind::MS_SQL_SERVER,
+                EDataSourceKind::ORACLE,
+               }, 
+               clusterConfig.GetKind()
+            )) {
             clusterConfig.SetProtocol(EProtocol::NATIVE);
             return;
         }
@@ -260,6 +269,22 @@ namespace NYql {
         clusterConfig.SetServiceAccountIdSignature(it->second);
     }
 
+    void ParseFolderId(const THashMap<TString, TString>& properties,
+                     NYql::TGenericClusterConfig& clusterConfig) {
+        auto it = properties.find("folder_id");
+        if (it == properties.cend()) {
+            // FOLDER_ID is optional field
+            return;
+        }
+
+        if (!it->second) {
+            // FOLDER_ID is optional field
+            return;
+        }
+
+        clusterConfig.mutable_datasourceoptions()->insert({TString("folder_id"), TString(it->second)});
+    }
+
     bool KeyIsSet(const THashMap<TString, TString>& properties, const TString& key) {
         const auto iter = properties.find(key);
         if (iter == properties.cend()) {
@@ -285,6 +310,7 @@ namespace NYql {
         ParseProtocol(properties, clusterConfig);
         ParseServiceAccountId(properties, clusterConfig);
         ParseServiceAccountIdSignature(properties, clusterConfig);
+        ParseFolderId(properties, clusterConfig);
 
         return clusterConfig;
     }
@@ -309,7 +335,9 @@ namespace NYql {
             Token=[{token} char(s)]
             UseSsl={use_ssl},
             DatabaseName={database_name},
-            Protocol={protocol}
+            Protocol={protocol},
+            Schema={schema}
+            FolderId={folder_id}
         )",
             "context"_a = context,
             "msg"_a = msg,
@@ -325,7 +353,10 @@ namespace NYql {
             "token"_a = ToString(clusterConfig.GetToken().size()),
             "use_ssl"_a = clusterConfig.GetUseSsl() ? "TRUE" : "FALSE",
             "database_name"_a = clusterConfig.GetDatabaseName(),
-            "protocol"_a = NConnector::NApi::EProtocol_Name(clusterConfig.GetProtocol()));
+            "protocol"_a = NConnector::NApi::EProtocol_Name(clusterConfig.GetProtocol()),
+            "schema"_a = clusterConfig.datasourceoptions().at("schema"),
+            "folder_id"_a = clusterConfig.datasourceoptions().at("folder_id")
+            );
     }
 
     static const TSet<NConnector::NApi::EDataSourceKind> managedDatabaseKinds{

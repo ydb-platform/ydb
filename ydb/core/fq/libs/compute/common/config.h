@@ -223,7 +223,7 @@ public:
             case FederatedQuery::ConnectionSetting::kGreenplumCluster:
             case FederatedQuery::ConnectionSetting::kMysqlCluster:
             case FederatedQuery::ConnectionSetting::kYdbDatabase:
-            case FederatedQuery::ConnectionSetting::kCloudLogging:
+            case FederatedQuery::ConnectionSetting::kLogging:
                 return true;
             case FederatedQuery::ConnectionSetting::kDataStreams:
             case FederatedQuery::ConnectionSetting::kMonitoring:

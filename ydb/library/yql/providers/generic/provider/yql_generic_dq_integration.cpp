@@ -37,6 +37,8 @@ namespace NYql {
                     return "MsSQLServerGeneric";
                 case NYql::NConnector::NApi::ORACLE:
                     return "OracleGeneric";
+                case NYql::NConnector::NApi::LOGGING:
+                    return "LoggingGeneric";
                 default:
                     ythrow yexception() << "Data source kind is unknown or not specified";
             }
@@ -219,6 +221,9 @@ namespace NYql {
                             break;
                         case NConnector::NApi::ORACLE:
                             properties["SourceType"] = "Oracle";
+                            break;
+                        case NConnector::NApi::LOGGING:
+                            properties["SourceType"] = "Logging";
                             break;
                         case NConnector::NApi::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;

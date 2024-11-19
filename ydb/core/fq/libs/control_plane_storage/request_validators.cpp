@@ -131,23 +131,20 @@ NYql::TIssues ValidateConnectionSetting(
         }
         break;
     }
-    case FederatedQuery::ConnectionSetting::kCloudLogging: {
-        const FederatedQuery::CloudLoggingConnection cloudLogging = setting.cloud_logging();
-        if (!cloudLogging.has_auth() || cloudLogging.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
+    case FederatedQuery::ConnectionSetting::kLogging: {
+        const FederatedQuery::Logging logging = setting.logging();
+        if (!logging.has_auth() || logging.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.cloud_logging.auth field is not specified"));
         }
 
-        if (cloudLogging.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
+        if (logging.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "current iam authorization is disabled"));
         }
 
-        if (!cloudLogging.folder_id()) {
+        if (!logging.folder_id()) {
             issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.cloud_logging.folder_id field is not specified"));
         }
 
-        if (!cloudLogging.log_group_name()) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.cloud_logging.log_group_name field is not specified"));
-        }
         break;
     }
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET: {

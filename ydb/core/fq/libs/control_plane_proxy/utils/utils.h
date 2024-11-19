@@ -37,8 +37,8 @@ TString ExtractServiceAccountIdWithConnection(const T& setting) {
     case FederatedQuery::ConnectionSetting::kMysqlCluster: {
         return GetServiceAccountId(setting.mysql_cluster().auth());
     }
-    case FederatedQuery::ConnectionSetting::kCloudLogging: {
-        return GetServiceAccountId(setting.cloud_logging().auth());
+    case FederatedQuery::ConnectionSetting::kLogging: {
+        return GetServiceAccountId(setting.logging().auth());
     }
     // Do not replace with default. Adding a new connection should cause a compilation error
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:

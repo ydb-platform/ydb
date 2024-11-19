@@ -104,12 +104,6 @@ std::string TStockWorkloadGenerator::GetDDLQueries() const {
             {4}
         )", DbPath, stockPartitionsDdl, ordersPartitionsDdl, orderLinesPartitionsDdl, changefeeds);
     } else if (Params.TableType == "column") {
-        Cerr << std::format(R"(--!syntax_v1
-            CREATE TABLE `{0}/stock`(product Utf8 NOT NULL, quantity Int64, PRIMARY KEY(product)) {1};
-            CREATE TABLE `{0}/orders`(id Uint64 NOT NULL, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id)) {2};
-            CREATE TABLE `{0}/orderLines`(id_order Uint64 NOT NULL, product Utf8 NOT NULL, quantity Int64, PRIMARY KEY(id_order, product)) {3};
-            {4}
-        )", DbPath, stockPartitionsDdl, ordersPartitionsDdl, orderLinesPartitionsDdl, changefeeds) << Endl;
         return std::format(R"(--!syntax_v1
             CREATE TABLE `{0}/stock`(product Utf8 NOT NULL, quantity Int64, PRIMARY KEY(product)) {1};
             CREATE TABLE `{0}/orders`(id Uint64 NOT NULL, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id)) {2};

@@ -136,10 +136,11 @@ TPortionDataAccessor TPortionAccessorConstructor::BuildForLoading(
         };
         bool needSort = false;
         for (auto&& i : records) {
-            if (recordChunks.size() && !pred(recordChunks.back(), i)) {
+            TColumnRecord chunk(i);
+            if (recordChunks.size() && !pred(recordChunks.back(), chunk)) {
                 needSort = true;
             }
-            recordChunks.emplace_back(TColumnRecord(i));
+            recordChunks.emplace_back(std::move(chunk));
         }
         if (needSort) {
             std::sort(recordChunks.begin(), recordChunks.end(), pred);
@@ -153,10 +154,11 @@ TPortionDataAccessor TPortionAccessorConstructor::BuildForLoading(
         };
         bool needSort = false;
         for (auto&& i : indexes) {
-            if (indexChunks.size() && !pred(indexChunks.back(), i)) {
+            auto chunk = i.BuildIndexChunk();
+            if (indexChunks.size() && !pred(indexChunks.back(), chunk)) {
                 needSort = true;
             }
-            indexChunks.emplace_back(i.BuildIndexChunk());
+            indexChunks.emplace_back(std::move(chunk));
         }
         if (needSort) {
             std::sort(indexChunks.begin(), indexChunks.end(), pred);

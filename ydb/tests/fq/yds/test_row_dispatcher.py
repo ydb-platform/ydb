@@ -378,7 +378,7 @@ class TestPqRowDispatcher(TestYdsBase):
         filter = " event ?? '' REGEXP @@e.*e.*t2@@"
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (COALESCE(`event`, \\"\\") REGEXP \\"e.*e.*t2\\")')
         filter = " event ?? '' NOT REGEXP @@e.*e.*t1@@"
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (NOT (COALESCE(`event`, \\"\\") REGEXP \\"e.*e.*t2\\"))')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (NOT (COALESCE(`event`, \\"\\") REGEXP \\"e.*e.*t1\\"))')
         filter = " event ?? '' REGEXP data ?? '' OR time = 102"
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((COALESCE(`event`, \\"\\") REGEXP COALESCE(`data`, \\"\\")) OR (`time` = 102))')
 

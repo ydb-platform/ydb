@@ -2663,7 +2663,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             ttl_settings {
               date_type_column {
                 column_name: "created_at"
-                expire_after_seconds: 3600
+              }
+              tiers {
+                evict_after_seconds: 3600
+                delete {}
               }
             }
         )", {
@@ -2677,7 +2680,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               value_since_unix_epoch {
                 column_name: "modified_at"
                 column_unit: UNIT_SECONDS
-                expire_after_seconds: 7200
+              }
+              tiers {
+                evict_after_seconds: 7200
+                delete {}
               }
             }
         )", {

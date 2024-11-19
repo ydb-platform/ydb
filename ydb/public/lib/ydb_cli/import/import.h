@@ -54,6 +54,7 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
     FLUENT_SETTING_DEFAULT(TString, HeaderRow, "");
     FLUENT_SETTING_DEFAULT(TString, Delimiter, DefaultDelimiter);
     FLUENT_SETTING_DEFAULT(std::optional<TString>, NullValue, std::nullopt);
+    FLUENT_SETTING_DEFAULT(bool, Verbose, false);
 };
 
 class TImportFileClient {
@@ -76,9 +77,10 @@ private:
 
     std::unique_ptr<const NTable::TTableDescription> DbTableInfo;
 
-    std::atomic<ui64> FilesCount;
+    std::atomic<ui64> CurrentFileCount;
+    std::atomic<ui64> TotalBytesRead = 0;
 
-    static constexpr ui32 VerboseModeReadSize = 1 << 27; // 100 MB
+    static constexpr ui32 VerboseModeStepSize = 1 << 27; // 128 MB
 
     using ProgressCallbackFunc = std::function<void (ui64, ui64)>;
 
@@ -94,6 +96,7 @@ private:
                               const TImportFileSettings& settings);
 
     TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValueBuilder& builder);
+    TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValue&& rows);
 
     TStatus UpsertJson(IInputStream &input, const TString &dbPath, const TImportFileSettings &settings,
                     std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback);

@@ -677,7 +677,6 @@ void TTopicSession::DoFiltering(ui64 rowsOffset, ui64 numberRows, const TVector<
 
     for (auto& [actorId, info] : Clients) {
         if (info.NextMessageOffset && lastOffset < info.NextMessageOffset) {        // the batch has already been processed
-            LOG_ROW_DISPATCHER_TRACE("skip batch: lastOffset " << lastOffset << " NextMessageOffset " << info.NextMessageOffset);
             continue;
         }
         try {

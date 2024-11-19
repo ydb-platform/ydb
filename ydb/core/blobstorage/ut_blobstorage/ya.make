@@ -20,6 +20,7 @@ SRCS(
     assimilation.cpp
     block_race.cpp
     counting_events.cpp
+    deadlines.cpp
     decommit_3dc.cpp
     defrag.cpp
     discover.cpp

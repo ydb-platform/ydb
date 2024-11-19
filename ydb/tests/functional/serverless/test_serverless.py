@@ -98,7 +98,7 @@ def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
     with ydb.QuerySessionPool(driver) as pool:
         def create_table(session, path):
             create_table_query = f"""
-            CREATE TABLE {path}
+            CREATE TABLE `{path}`
             (
             id UInt64,
             value_string Utf8,
@@ -132,7 +132,7 @@ def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
         pool.retry_operation_sync(write_some_data, None, os.path.join(database, "dirA1", "dirB1", "table"))
 
         def drop_table(session, path):
-            drop_table_query = f"DROP TABLE {path};"
+            drop_table_query = f"DROP TABLE `{path}`;"
             session.execute(drop_table_query)
             # session.drop_table(
             #     path
@@ -166,7 +166,7 @@ def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, yd
     with ydb.QuerySessionPool(driver) as pool:
         def create_table(session, path):
             create_table_query = f"""
-            CREATE TABLE {path}
+            CREATE TABLE `{path}`
             (
             id UInt64,
             value_string Utf8,
@@ -210,7 +210,7 @@ def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, yd
                 time.sleep(15)
 
         def drop_table(session, path):
-            drop_table_query = f"DROP TABLE {path};"
+            drop_table_query = f"DROP TABLE `{path}`;"
             session.execute(drop_table_query)
             # session.drop_table(
             #     path
@@ -240,7 +240,7 @@ def test_create_table_with_quotas(ydb_hostel_db, ydb_quoted_serverless_db, ydb_e
     def create_table(session, path):
         logger.debug("creating table %s", path)
         create_table_query = f"""
-            CREATE TABLE {path}
+            CREATE TABLE `{path}`
             (
             id UInt64,
             value_string Utf8,
@@ -300,7 +300,7 @@ def test_create_table_with_alter_quotas(ydb_hostel_db, ydb_serverless_db, ydb_en
     def create_table(session, path):
         logger.debug("creating table %s", path)
         create_table_query = f"""
-            CREATE TABLE {path}
+            CREATE TABLE `{path}`
             (
             id UInt64,
             value_string Utf8,
@@ -349,7 +349,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
     def create_table(session, path):
         logger.debug("creating table %s", path)
         create_table_query = f"""
-            CREATE TABLE {path}
+            CREATE TABLE `{path}`
             (
             id UInt64,
             value_string Utf8,
@@ -625,7 +625,7 @@ def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nod
     with ydb.QuerySessionPool(driver) as pool:
         def create_table(session, path):
             create_table_query = f"""
-            CREATE TABLE {path}
+            CREATE TABLE `{path}`
             (
             id UInt64,
             PRIMARY KEY (id)
@@ -645,7 +645,7 @@ def test_create_table_using_exclusive_nodes(ydb_serverless_db_with_exclusive_nod
                 commit_tx=True)
 
         def drop_table(session, path):
-            drop_table_query = f"DROP TABLE {path};"
+            drop_table_query = f"DROP TABLE `{path}`;"
             session.execute(drop_table_query)
             # session.drop_table(
             #     path
@@ -672,7 +672,7 @@ def test_seamless_migration_to_exclusive_nodes(ydb_serverless_db_with_exclusive_
     session = driver.table_client.session().create()
     path = os.path.join(database, "seamless_migration_table")
     create_table_query = f"""
-    CREATE TABLE {path}
+    CREATE TABLE `{path}`
     (
     id UInt64,
     PRIMARY KEY (id)

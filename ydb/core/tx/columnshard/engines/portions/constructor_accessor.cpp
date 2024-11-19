@@ -131,7 +131,7 @@ TPortionDataAccessor TPortionAccessorConstructor::BuildForLoading(
     AFL_VERIFY(portion);
     std::vector<TColumnRecord> recordChunks;
     {
-        const auto pred = [](const TColumnRecord& l, const TColumnRecord& r) {
+        const auto pred = [](const TColumnRecord& l, const TColumnRecord& r) -> bool {
             return l.GetAddress() < r.GetAddress();
         };
         bool needSort = false;
@@ -148,7 +148,7 @@ TPortionDataAccessor TPortionAccessorConstructor::BuildForLoading(
     std::vector<TIndexChunk> indexChunks;
     {
 
-        const auto pred = [](const TIndexChunk& l, const TIndexChunk& r) {
+        const auto pred = [](const TIndexChunk& l, const TIndexChunk& r) ->bool {
             return l.GetAddress() < r.GetAddress();
         };
         bool needSort = false;
@@ -162,7 +162,6 @@ TPortionDataAccessor TPortionAccessorConstructor::BuildForLoading(
             std::sort(indexChunks.begin(), indexChunks.end(), pred);
         }
     }
-    std::sort(indexChunks.begin(), indexChunks.end(), pred);
     return TPortionDataAccessor(portion, std::move(recordChunks), std::move(indexChunks), true);
 }
 

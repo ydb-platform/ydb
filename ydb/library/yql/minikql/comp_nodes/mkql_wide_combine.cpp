@@ -351,7 +351,7 @@ public:
     EFetchResult InputStatus = EFetchResult::One;
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;
-    ui64 StoredDataSize = 0;
+    i64 StoredDataSize = 0;
 
 private:
     std::optional<TStorageIterator> ExtractIt;
@@ -911,6 +911,7 @@ private:
     llvm::IntegerType* ValueType;
     llvm::PointerType* PtrValueType;
     llvm::IntegerType* StatusType;
+    llvm::IntegerType* StoredType;
 protected:
     using TBase::Context;
 public:
@@ -919,7 +920,7 @@ public:
         result.emplace_back(StatusType); //status
         result.emplace_back(PtrValueType); //tongue
         result.emplace_back(PtrValueType); //throat
-        result.emplace_back(PtrValueType); //stored
+        result.emplace_back(StoredType); //stored
         result.emplace_back(Type::getInt32Ty(Context)); //size
         result.emplace_back(Type::getInt32Ty(Context)); //size
         return result;
@@ -938,14 +939,15 @@ public:
     }
 
     llvm::Constant* GetStored() {
-        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 2);
+        return ConstantInt::get(Type::getInt32Ty(Context), TBase::GetFieldsCount() + 3);
     }
 
     TLLVMFieldsStructureState(llvm::LLVMContext& context)
         : TBase(context)
         , ValueType(Type::getInt128Ty(Context))
         , PtrValueType(PointerType::getUnqual(ValueType))
-        , StatusType(Type::getInt32Ty(Context)) {
+        , StatusType(Type::getInt32Ty(Context))
+        , StoredType(Type::getInt64Ty(Context)) {
 
     }
 };
@@ -1040,7 +1042,7 @@ public:
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
-        // const auto storedType = Type::getInt64Ty(context);
+        const auto storedType = Type::getInt64Ty(context);
 
         TLLVMFieldsStructureState stateFields(context);
         const auto stateType = StructType::get(context, stateFields.GetFieldsArray());
@@ -1141,13 +1143,14 @@ public:
 
                 // Store
                 // TODO: think of MemLimit = 0
-                /*
-                const auto storedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetStored() }, "stored", block);
+                //
+                            // const auto usedMemory = ctx.HolderFactory.GetMemoryUsed() - initUsage;
+                            // ptr->StoredDataSize += MemLimit && usedMemory > 0 ? usedMemory : 0UL;
+                const auto storedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetStored() }, "stored_ptr", block);
                 const auto lastStored = new LoadInst(storedType, storedPtr, "lastStored", block);
-                const auto decr = BinaryOperator::CreateSub(GetMemoryUsed(MemLimit, ctx, block), used, "decr", block);
-                const auto inc = BinaryOperator::CreateAdd(lastStored, decr, "inc", block);
+                const auto usedMemory = BinaryOperator::CreateSub(GetMemoryUsed(MemLimit, ctx, block), used, "used_memory", block);
+                const auto inc = BinaryOperator::CreateAdd(lastStored, usedMemory, "inc", block);
                 new StoreInst(inc, storedPtr, block);
-                */
                 
                 result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
                 BranchInst::Create(over, block);

@@ -79,7 +79,7 @@ protected:
             else if (name == ".NKikimrConfig.TImmediateControlsConfig.TVDiskControls")
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TVDiskControls::descriptor(), ctx);
             else if (name == ".NKikimrConfig.TImmediateControlsConfig.TTabletControls")
-                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTabletControls::descriptor(), ctx
+                return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TTabletControls::descriptor(), ctx);
             else if (name == ".NKikimrConfig.TImmediateControlsConfig.TDSProxyControls")
                 return ReplyWithTypeDescription(*NKikimrConfig::TImmediateControlsConfig::TDSProxyControls::descriptor(), ctx);
             else if (name == ".NKikimrConfig.TImmediateControlsConfig.TBlobStorageControllerControls")

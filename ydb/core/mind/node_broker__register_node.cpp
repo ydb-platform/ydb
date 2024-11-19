@@ -60,7 +60,7 @@ public:
 
         if (rec.HasPath() && ScopeId == NActors::TScopeId()) {
             return Error(TStatus::ERROR,
-                         TStringBuilder() << "The database hasn't been created and therefore it couldn't be resolved by its path " << rec.GetPath(),
+                         TStringBuilder() << "Failed to resolve the database by its path. Perhaps the database " << rec.GetPath() << " does not exist",
                          ctx);
         }
 

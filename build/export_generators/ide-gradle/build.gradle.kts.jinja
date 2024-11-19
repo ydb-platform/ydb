@@ -441,10 +441,9 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
 -#}
 }
 
-tasks.named("sourcesJar") {
-    dependsOn(runJav{{ loop.index }})
-}
-tasks.compileJava {
+tasks.getByName("sourcesJar").dependsOn(runJav{{ loop.index }})
+
+tasks.compileJava.configure {
     dependsOn(runJav{{ loop.index }})
 }
 {%     endfor -%}

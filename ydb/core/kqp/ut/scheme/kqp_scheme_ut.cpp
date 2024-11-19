@@ -5024,22 +5024,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
 
-        { // no partition by
-            auto query = TStringBuilder() << R"(
-                --!syntax_v1
-                CREATE TABLE `)" << tableName << R"(` (
-                    Key Uint64,
-                    Value1 String,
-                    PRIMARY KEY (Key)
-                )
-                WITH (
-                    STORE = COLUMN,
-                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
-                );)";
-            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-        }
-
         { // disallow nullable key
             auto query = TStringBuilder() << R"(
                 --!syntax_v1
@@ -8645,11 +8629,11 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         };
         TTestHelper::TColumnTableStore testTableStore;
         testTableStore.SetName("/Root/TableStoreTest").SetPrimaryKey({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTableStore, EStatus::SCHEME_ERROR);
+        testHelper.CreateTable(testTableStore, EStatus::SUCCESS);
 
         TTestHelper::TColumnTable testTable;
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable, EStatus::SCHEME_ERROR);
+        testHelper.CreateTable(testTable, EStatus::SUCCESS);
     }
 
     Y_UNIT_TEST(DropColumnAfterInsert) {

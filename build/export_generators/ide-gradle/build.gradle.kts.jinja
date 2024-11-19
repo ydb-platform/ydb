@@ -3,6 +3,19 @@ buildDir = file(baseBuildDir + project.path.replaceFirst(":", "/").replace(":", 
 subprojects {
     buildDir = file(baseBuildDir + project.path.replaceFirst(":", "/").replace(":", "."))
 }
+
+{%- macro OutDirs(runs, prefix, suffix) -%}
+{%-    if run.args|length and run.out_dir|length -%}
+{%-        for out_dir in run.out_dir -%}
+{#-            search all run arguments ended by /<out_dir> -#}
+{%-            set out_dirs = select_by_ends(run.args, "/" + out_dir) -%}
+{%-            if out_dirs|length %}
+{{ prefix }}{{ out_dirs|first }}{{ suffix }}
+{%-            endif -%}
+{%-        endfor -%}
+{%-    endif -%}
+{%- endmacro %}
+
 {%- set mainClass = target.app_main_class -%}
 {%- set publish = target.publish -%}
 {%- set with_kotlin = target.with_kotlin -%}
@@ -36,7 +49,7 @@ plugins {
 {%- endfor -%}
 
 {#- lombok configuration -#}
-{#- TODO remove annotation_processors -#}
+{#- TODO remove usings annotation_processors semantic -#}
 {%- if ("lombok.launch.AnnotationProcessorHider$AnnotationProcessor" in target.annotation_processors) or (target.use_annotation_processor|length and target.use_annotation_processor|select('startsWith', 'contrib/java/org/projectlombok/lombok')|length) %}
     id("io.freefair.lombok") version "8.6"
 {%- endif -%}
@@ -75,6 +88,7 @@ java {
     }
 }
 {%  endif -%}
+
 {%- if target.with_kotlinc_plugin_allopen|length -%}
 {%-     set allopen_annotations = [] -%}
 {%-     if target.with_kotlinc_plugin_allopen|select('eq', 'preset=spring')|length -%}
@@ -156,7 +170,8 @@ tasks.withType<JavaCompile> {
 
 tasks.withType<JavaExec> {
      jvmArgs?.add("--enable-preview")
- }
+}
+
 tasks.withType<Test> {
     jvmArgs?.add("--enable-preview")
     environment["JAVA_TOOL_OPTIONS"] = "--enable-preview"
@@ -177,9 +192,9 @@ tasks.withType<Javadoc> {
 tasks.withType<JavaCompile> {
 {%-         for javac_flag in javac_flags %}
     options.compilerArgs.add("{{ javac_flag }}")
-{%-         endfor -%}
-{%-     endif %}
+{%-         endfor %}
 }
+{%-     endif -%}
 {%- endif %}
 
 val bucketUsername: String by project
@@ -257,7 +272,29 @@ sourceSets.main.java.srcDirs += "{{ srcdir_glob[0] }}"
 {%- endfor -%}
 
 sourceSets {
-    val test by getting {
+    main {
+        {#-
+            Default by Gradle:
+
+            java.srcDir("src/main/java")
+            resources.srcDir("src/main/resources")
+
+        #}
+{%- if target.runs|length -%}
+{%-     for run in target.runs -%}
+{{         OutDirs(run, '        java.srcDir("', '")') }}
+{%-     endfor -%}
+{%- endif %}
+    }
+
+    test {
+        {#-
+            Default by Gradle:
+
+            java.srcDir("src/test/java")
+            resources.srcDir("src/test/resources")
+
+        #}
         java.srcDir("ut/java")
         resources.srcDir("ut/resources")
         java.srcDir("src/test-integration/java")
@@ -266,6 +303,13 @@ sourceSets {
         resources.srcDir("src/testFixtures/resources")
         java.srcDir("src/intTest/java")
         resources.srcDir("src/intTest/resources")
+{%- for extra_target in extra_targets -%}
+{%-     if extra_target|length -%}
+{%-         for run in extra_target.runs -%}
+{{              OutDirs(run, '        java.srcDir("', '")') }}
+{%-         endfor -%}
+{%-     endif -%}
+{%- endfor %}
     }
 }
 
@@ -275,10 +319,8 @@ dependencies {
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) and "contrib/java/com/google/errorprone/error_prone_annotations" in library.jar -%}
 {%          set errorprone_version = library.jar -%}
 {%          set errorprone_parts = errorprone_version|replace("contrib/java/com/google/errorprone/error_prone_annotations/") -%}
-{%          set errorprone_parts = split(errorprone_parts, '/') -%}
-
+{%          set errorprone_parts = split(errorprone_parts, '/') %}
     errorprone("com.google.errorprone:error_prone_core:{{ errorprone_parts[0] }}")
-
 {%-     endif -%}
 
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or build_contribs) %}
@@ -299,8 +341,8 @@ dependencies {
 {%-         endif -%}
 {%-         if library.excludes.consumer is defined %} {
 {%              for exclude in library.excludes.consumer if exclude.classpath -%}
-{%                  set classpath = exclude.classpath|replace('"','') -%}
-{%                  set classpath_parts = split(classpath, ':') -%}
+{%-                 set classpath = exclude.classpath|replace('"','') -%}
+{%-                 set classpath_parts = split(classpath, ':') -%}
         exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
 {%              endfor -%}
     }
@@ -328,8 +370,8 @@ dependencies {
 {%-             endif -%}
 {%-             if library.excludes.consumer is defined %} {
 {%                  for exclude in library.excludes.consumer if exclude.classpath -%}
-{%                      set classpath = exclude.classpath|replace('"','') -%}
-{%                      set classpath_parts = split(classpath, ':') -%}
+{%-                     set classpath = exclude.classpath|replace('"','') -%}
+{%-                     set classpath_parts = split(classpath, ':') -%}
         exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
 {%                  endfor -%}
     }
@@ -350,65 +392,60 @@ tasks.named<Test>("test") {
 {%  endif -%}
 
 {#- run_java_program -#}
-{#- {% set runs = targets|selectattr("runs") -%} -#}
-{%- set runs = target.runs -%}
-{%- if runs -%}
-{%-     for run in runs %}
+{%- if target.runs|length -%}
+{%-     for run in target.runs %}
 
 val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
-        group = "build"
-        description = "Code generation by run java program"
-
-        mainClass.set("{{ run.args[0] }}")
-{%         if run.classpath -%}
+    group = "build"
+    description = "Code generation by run java program"
+{%-        if run.classpath|length %}
 {%             for classpath in run.classpath -%}
-{%                 set real_classpath = classpath|replace('@', '') -%}
-{%                 set real_classpath = real_classpath|replace('.run.cp', '') -%}
-{%                 set real_classpath = real_classpath|replace('.cplst', '') -%}
-{%                 set real_classpath = real_classpath|replace(export_root, '')|replace(arcadia_root, '') -%}
-        classpath = files("$project_root{{ real_classpath }}")
-{%             endfor -%}
-{%         else -%}
-        classpath = sourceSets.main.get().runtimeClasspath
+{%-                set rel_file_classpath = classpath|replace('@', '')|replace(export_root, '')|replace(arcadia_root, '') %}
+    val classpaths = "$project_root/" + File("$project_root{{ rel_file_classpath }}").readText().trim().replace(":", ":$project_root/")
+    classpath = files(classpaths.split(":"))
+{%-            endfor -%}
+{%         else %}
+    classpath = sourceSets.main.get().runtimeClasspath
+{%-        endif %}
+
+    mainClass.set("{{ run.args[0] }}")
+{%-        if run.args|length > 1 %}
+
+    args = listOf(
+{%-            for arg in run.args -%}
+{%-                if not loop.first %}
+        "{{ arg }}",
+{%-                endif -%}
+{%-            endfor %}
+    )
 {%         endif -%}
-{%         set args = run.args -%}
-{%         if args -%}
-        val argsList = mutableListOf(
-{%             for arg in args -%}
-            "{{ arg }}",
+
+{%-        if run.in_dir %}
+{%             for in_dir in run.in_dir -%}
+    inputs.files(fileTree("{{ in_dir }}"))
 {%             endfor -%}
-        )
-        argsList.removeAt(0)
-        args = argsList
-{%         endif -%}
-{%         if run.in_dir -%}
-{%             for dir in run.in_dir -%}
-        inputs.files(fileTree("{{ dir }}"))
+{%-        endif -%}
+{%-        if run.in %}
+{%             for in_file in run.in -%}
+    inputs.files("{{ in_file }}")
 {%             endfor -%}
-{%         endif -%}
-{%         if run.in -%}
-{%             for file in run.in -%}
-        inputs.files("{{ file }}")
-{%             endfor -%}
-{%         endif -%}
-{%         if run.out_dir -%}
-{%             for dir in run.out_dir -%}
-        outputs.dir("{{ dir }}")
-{%             endfor -%}
-{#-
+{%-        endif -%}
+
+{{         OutDirs(run, '    outputs.dir("', '")') }}
+{#
     Не использованы аттрибуты
     run-cwd="str"
     run-in_dirs_inputs="list"
     run-in_noparse="list"
-    run-out_dir="list"
     run-tool="list"
 -#}
-{%-        endif -%}
-    }
-tasks {
-    build {
-        dependsOn(runJav{{ loop.index }})
-    }
+}
+
+tasks.named("sourcesJar") {
+    dependsOn(runJav{{ loop.index }})
+}
+tasks.compileJava {
+    dependsOn(runJav{{ loop.index }})
 }
 {%     endfor -%}
 {% endif -%}

@@ -456,7 +456,7 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
     }
     auto ddlQueries = workloadGen.GetDDLQueries();
     if (!ddlQueries.empty()) {
-        Cout << "Init tables " << "..."  << Endl;
+        Cout << "Init tables ..."  << Endl;
         if (DryRun) {
             Cout << ddlQueries << Endl;
         } else {
@@ -465,7 +465,7 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
             });
             ThrowOnError(result);
         }
-        Cout << "Init tables " << "...Ok"  << Endl;
+        Cout << "Init tables ...Ok"  << Endl;
     }
 
     auto queryInfoList = workloadGen.GetInitialData();

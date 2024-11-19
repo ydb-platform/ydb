@@ -306,7 +306,7 @@ static void Xor(void* destination, const void* a, const void* b, ui32 size) {
         ++srcB;
     }
 #else
-    if (NX86::HaveAVX512F()) {
+    if (TStreamCypher::HasAVX512) {
         XorAVX512(destination, a, b, size);
     } else {
         ui8 *dst = (ui8*)destination;

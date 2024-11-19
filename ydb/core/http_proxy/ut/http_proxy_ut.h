@@ -1625,6 +1625,20 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
     }
 
+    Y_UNIT_TEST_F(TestGetQueueUrlWithIAM, THttpProxyTestMock) {
+        auto req = CreateSqsGetQueueUrlRequest();
+        req["QueueName"] = "not-existing-queue";
+        auto res = SendHttpRequest("/Root?folderId=XXX", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: Bearer proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        TString resultMessage = GetByPath<TString>(json, "message");
+        UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
+    }
+
     Y_UNIT_TEST_F(TestSendMessage, THttpProxyTestMock) {
         auto createQueueReq = CreateSqsCreateQueueRequest();
         auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
@@ -1645,13 +1659,25 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
         UNIT_ASSERT(!GetByPath<TString>(json, "SequenceNumber").empty());
-        UNIT_ASSERT(!GetByPath<TString>(json, "Md5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
         UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageEmptyQueueUrl, THttpProxyTestMockForSQS) {
+        NJson::TJsonValue sendMessageReq;
+        sendMessageReq["QueueUrl"] = "";
+        auto body = "MessageBody-0";
+        sendMessageReq["MessageBody"] = body;
+        sendMessageReq["MessageDeduplicationId"] = "MessageDeduplicationId-0";
+        sendMessageReq["MessageGroupId"] = "MessageGroupId-0";
+
+        auto res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
     }
 
     Y_UNIT_TEST_F(TestReceiveMessage, THttpProxyTestMock) {
         auto createQueueReq = CreateSqsCreateQueueRequest();
-        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), FormAuthorizationStr("ru-central1"));
+        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", createQueueReq, FormAuthorizationStr("ru-central1"));
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
         NJson::TJsonValue json;
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
@@ -1660,21 +1686,20 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
 
         NJson::TJsonValue sendMessageReq;
         sendMessageReq["QueueUrl"] = resultQueueUrl;
-        auto body = "MessageBody-0";
-        sendMessageReq["MessageBody"] = body;
-        sendMessageReq["MessageBody"] = body;
+        auto body0 = "MessageBody-0";
+        sendMessageReq["MessageBody"] = body0;
 
-        res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), FormAuthorizationStr("ru-central1"));
+        res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", sendMessageReq, FormAuthorizationStr("ru-central1"));
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
-        UNIT_ASSERT(!GetByPath<TString>(json, "Md5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
 
+        NJson::TJsonValue receiveMessageReq;
+        receiveMessageReq["QueueUrl"] = resultQueueUrl;
         for (int i = 0; i < 20; ++i) {
-            NJson::TJsonValue receiveMessageReq;
-            receiveMessageReq["QueueUrl"] = resultQueueUrl;
-            res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", std::move(receiveMessageReq), FormAuthorizationStr("ru-central1"));
-            if (res.Body != TString("{}")) {
-                break;;
+            res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", receiveMessageReq, FormAuthorizationStr("ru-central1"));
+            if (res.Body != "{}") {
+                break;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         }
@@ -1682,7 +1707,89 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body);
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body0);
+    }
+
+    Y_UNIT_TEST_F(TestReceiveMessageWithAttributes, THttpProxyTestMock) {
+        // Test if we process AttributeNames, MessageSystemAttributeNames, MessageAttributeNames correctly.
+
+        auto createQueueReq = CreateSqsCreateQueueRequest();
+        auto res = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", createQueueReq, FormAuthorizationStr("ru-central1"));
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
+
+        auto sendMessage = [this, resultQueueUrl](const TString& body) {
+            NJson::TJsonValue sendMessageReq;
+            sendMessageReq["QueueUrl"] = resultQueueUrl;
+            sendMessageReq["MessageBody"] = body;
+
+            auto res = SendHttpRequest("/Root", "AmazonSQS.SendMessage", sendMessageReq, FormAuthorizationStr("ru-central1"));
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+            UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+        };
+
+        TString body = "MessageBody-0";
+        sendMessage(body);
+
+        auto receiveMessage = [this](NJson::TJsonValue request, const TString& expectedBody) -> NJson::TJsonValue {
+            request["VisibilityTimeout"] = 0;  // Keep the message visible for next ReceiveMessage requests.
+            THttpResult res;
+            for (int i = 0; i < 20; ++i) {
+                res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", request, FormAuthorizationStr("ru-central1"));
+                if (res.Body != "{}") {
+                    break;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            }
+
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], expectedBody);
+            return json;
+        };
+
+        {
+            // Request SentTimestamp message system attribute using deprecated AttributeNames field.
+            NJson::TJsonValue receiveMessageReq;
+            receiveMessageReq["QueueUrl"] = resultQueueUrl;
+            receiveMessageReq["AttributeNames"] = NJson::TJsonArray{"SentTimestamp"};
+            json = receiveMessage(receiveMessageReq, body);
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+        }
+
+        {
+            // Request SentTimestamp message system attribute using MessageSystemAttributeNames field.
+            NJson::TJsonValue receiveMessageReq;
+            receiveMessageReq["QueueUrl"] = resultQueueUrl;
+            receiveMessageReq["MessageSystemAttributeNames"] = NJson::TJsonArray{"SentTimestamp"};
+            json = receiveMessage(receiveMessageReq, body);
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+        }
+
+        {
+            // Request All message system attributes using deprecated AttributeNames field.
+            NJson::TJsonValue receiveMessageReq;
+            receiveMessageReq["QueueUrl"] = resultQueueUrl;
+            receiveMessageReq["AttributeNames"] = NJson::TJsonArray{"All"};
+            json = receiveMessage(receiveMessageReq, body);
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+        }
+
+        {
+            // Request All message system attributes using MessageSystemAttributeNames field.
+            NJson::TJsonValue receiveMessageReq;
+            receiveMessageReq["QueueUrl"] = resultQueueUrl;
+            receiveMessageReq["MessageSystemAttributeNames"] = NJson::TJsonArray{"All"};
+            json = receiveMessage(receiveMessageReq, body);
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+        }
     }
 
     Y_UNIT_TEST_F(TestGetQueueAttributes, THttpProxyTestMock) {
@@ -1698,16 +1805,58 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
         UNIT_ASSERT(resultQueueUrl.EndsWith("ExampleQueueName"));
 
-        NJson::TJsonValue getQueueAttributes;
-        getQueueAttributes["QueueUrl"] = resultQueueUrl;
-        NJson::TJsonArray attributeNames = {"DelaySeconds"};
-        getQueueAttributes["AttributeNames"] = attributeNames;
+        {
+            NJson::TJsonValue getQueueAttributes;
+            getQueueAttributes["QueueUrl"] = resultQueueUrl;
+            NJson::TJsonArray attributeNames = {"DelaySeconds"};
+            getQueueAttributes["AttributeNames"] = attributeNames;
 
-        res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", std::move(getQueueAttributes), FormAuthorizationStr("ru-central1"));
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
-        NJson::TJsonValue resultJson;
-        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &resultJson));
-        UNIT_ASSERT_VALUES_EQUAL(resultJson["Attributes"]["DelaySeconds"], "1");
+            res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", std::move(getQueueAttributes), FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+            NJson::TJsonValue resultJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &resultJson));
+            UNIT_ASSERT_VALUES_EQUAL(resultJson["Attributes"]["DelaySeconds"], "1");
+        }
+
+        {
+            NJson::TJsonValue getQueueAttributes;
+            getQueueAttributes["QueueUrl"] = resultQueueUrl;
+            NJson::TJsonArray attributeNames = {
+                "ApproximateNumberOfMessages",
+                "ApproximateNumberOfMessagesDelayed",
+                "ApproximateNumberOfMessagesNotVisible",
+                "CreatedTimestamp",
+                "DelaySeconds",
+                "MaximumMessageSize",
+                "MessageRetentionPeriod",
+                "ReceiveMessageWaitTimeSeconds",
+                "RedrivePolicy",
+                "VisibilityTimeout",
+                "FifoQueue",
+                "ContentBasedDeduplication",
+                "QueueArn"
+            };
+            getQueueAttributes["AttributeNames"] = attributeNames;
+
+            res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", std::move(getQueueAttributes), FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+            NJson::TJsonValue resultJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &resultJson));
+            UNIT_ASSERT_VALUES_EQUAL(resultJson["Attributes"]["DelaySeconds"], "1");
+        }
+
+        {
+            NJson::TJsonValue getQueueAttributes;
+            getQueueAttributes["QueueUrl"] = resultQueueUrl;
+            NJson::TJsonArray attributeNames = {"All"};
+            getQueueAttributes["AttributeNames"] = attributeNames;
+
+            res = SendHttpRequest("/Root", "AmazonSQS.GetQueueAttributes", std::move(getQueueAttributes), FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+            NJson::TJsonValue resultJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &resultJson));
+            UNIT_ASSERT_VALUES_EQUAL(resultJson["Attributes"]["DelaySeconds"], "1");
+        }
     }
 
     Y_UNIT_TEST_F(TestListQueues, THttpProxyTestMock) {
@@ -1911,9 +2060,13 @@ Y_UNIT_TEST_SUITE(TestHttpProxy) {
         UNIT_ASSERT(json["Successful"].GetArray().size() == 2);
         auto succesful0 = json["Successful"][0];
         UNIT_ASSERT(succesful0["Id"] == "Id-0");
-        UNIT_ASSERT(!GetByPath<TString>(succesful0, "Md5OfMessageAttributes").empty());
-        UNIT_ASSERT(!GetByPath<TString>(succesful0, "Md5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageAttributes").empty());
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageBody").empty());
         UNIT_ASSERT(!GetByPath<TString>(succesful0, "MessageId").empty());
+
+        NJson::TJsonValue receiveMessageReq;
+        receiveMessageReq["QueueUrl"] = resultQueueUrl;
+        res = SendHttpRequest("/Root", "AmazonSQS.ReceiveMessage", std::move(receiveMessageReq), FormAuthorizationStr("ru-central1"));
     }
 
     Y_UNIT_TEST_F(TestDeleteMessageBatch, THttpProxyTestMock) {

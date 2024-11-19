@@ -1,8 +1,9 @@
 #pragma once
+#include <ydb/core/formats/arrow/size_calcer.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/data_events/write_data.h>
-#include <ydb/core/formats/arrow/size_calcer.h>
 
 namespace NKikimr::NOlap {
 
@@ -15,7 +16,8 @@ private:
     std::shared_ptr<arrow::RecordBatch> OriginalBatch;
     std::optional<std::vector<NArrow::TSerializedBatch>> BuildSlices();
     const std::shared_ptr<ISnapshotSchema> ActualSchema;
-    void ReplyError(const TString& message);
+    void ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
+
 protected:
     virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& taskPtr) override;
 
@@ -24,16 +26,14 @@ public:
         return "Write::ConstructBlobs::Slices";
     }
 
-    TBuildSlicesTask(const ui64 tabletId, const NActors::TActorId parentActorId,
-        const NActors::TActorId bufferActorId, NEvWrite::TWriteData&& writeData, const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::shared_ptr<ISnapshotSchema>& actualSchema)
+    TBuildSlicesTask(const ui64 tabletId, const NActors::TActorId parentActorId, const NActors::TActorId bufferActorId,
+        NEvWrite::TWriteData&& writeData, const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<ISnapshotSchema>& actualSchema)
         : WriteData(std::move(writeData))
         , TabletId(tabletId)
         , ParentActorId(parentActorId)
         , BufferActorId(bufferActorId)
         , OriginalBatch(batch)
-        , ActualSchema(actualSchema)
-    {
+        , ActualSchema(actualSchema) {
     }
 };
-}
+}   // namespace NKikimr::NOlap

@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/core/protos
+    ydb/core/formats/arrow
     contrib/libs/apache/arrow
     ydb/library/actors/core
     ydb/core/tx/columnshard/blobs_action/bs

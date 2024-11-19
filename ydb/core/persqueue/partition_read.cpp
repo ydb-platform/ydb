@@ -626,13 +626,13 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
         Y_ABORT_UNLESS(pos != Max<ui32>());
     }
     ui32 lastBlobSize = 0;
-    for (;pos < Head.Batches.size(); ++pos) {
+    for (;pos < Head.GetBatches().size(); ++pos) {
 
         TVector<TClientBlob> blobs;
-        Head.Batches[pos].UnpackTo(&blobs);
+        Head.GetBatch(pos).UnpackTo(&blobs);
         ui32 i = 0;
-        ui64 offset = Head.Batches[pos].GetOffset();
-        ui16 pno = Head.Batches[pos].GetPartNo();
+        ui64 offset = Head.GetBatch(pos).GetOffset();
+        ui16 pno = Head.GetBatch(pos).GetPartNo();
         for (; i < blobs.size(); ++i) {
 
             ui64 curOffset = offset;
@@ -748,8 +748,8 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     auto* read = readEvent->Get();
     const TString& user = read->ClientId;
     auto userInfo = UsersInfoStorage->GetIfExists(user);
-    if(!userInfo) {
-        ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST, TStringBuilder() << "cannot finish read request. Consumer " << read->ClientId << " is gone from partition");
+    if (!userInfo) {
+        ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST, GetConsumerDeletedMessage(read->ClientId));
         Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumerRemoved(user));
         OnReadRequestFinished(read->Cookie, 0, user, ctx);
         return;
@@ -1024,6 +1024,10 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
                                                                      lastOffset, std::move(blobs)));
 
     ctx.Send(BlobCache, request.Release());
+}
+
+TString TPartition::GetConsumerDeletedMessage(TStringBuf consumerName) {
+    return TStringBuilder() << "cannot finish read request. Consumer " << consumerName << " is gone from partition";
 }
 
 } // namespace NKikimr::NPQ

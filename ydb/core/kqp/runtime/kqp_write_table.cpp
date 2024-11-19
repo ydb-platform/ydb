@@ -18,7 +18,7 @@ namespace NKqp {
 namespace {
 
 constexpr ui64 DataShardMaxOperationBytes = 8_MB;
-constexpr ui64 ColumnShardMaxOperationBytes = 8_MB;
+constexpr ui64 ColumnShardMaxOperationBytes = 64_MB;
 constexpr ui64 MaxUnshardedBatchBytes = 0_MB;
 
 class IPayloadSerializer : public TThrRefBase {
@@ -893,14 +893,17 @@ public:
 
         void MakeNextBatches(i64 maxDataSize, ui64 maxCount) {
             YQL_ENSURE(BatchesInFlight == 0);
+            YQL_ENSURE(!IsEmpty());
             i64 dataSize = 0;
+            // For columnshard batch can be slightly larger than the limit.
             while (BatchesInFlight < maxCount
                     && BatchesInFlight < Batches.size()
-                    && dataSize + GetBatch(BatchesInFlight)->GetMemory() <= maxDataSize) {
+                    && (dataSize + GetBatch(BatchesInFlight)->GetMemory() <= maxDataSize || BatchesInFlight == 0)) {
                 dataSize += GetBatch(BatchesInFlight)->GetMemory();
                 ++BatchesInFlight;
             }
-            YQL_ENSURE(BatchesInFlight == Batches.size() || GetBatch(BatchesInFlight)->GetMemory() <= maxDataSize); 
+            YQL_ENSURE(BatchesInFlight != 0);
+            YQL_ENSURE(BatchesInFlight == maxCount || BatchesInFlight == Batches.size() || dataSize + GetBatch(BatchesInFlight)->GetMemory() >= maxDataSize);
         }
 
         const IPayloadSerializer::IBatchPtr& GetBatch(size_t index) const {
@@ -1204,7 +1207,9 @@ private:
         if (force) {
             for (auto& [shardId, batches] : Serializer->FlushBatchesForce()) {
                 for (auto& batch : batches) {
-                    ShardsInfo.GetShard(shardId).PushBatch(std::move(batch));
+                    if (batch && !batch->IsEmpty()) {
+                        ShardsInfo.GetShard(shardId).PushBatch(std::move(batch));
+                    }
                 }
             }
         } else {

@@ -1,5 +1,5 @@
 #include "converter.h"
-#include "switch_type.h"
+#include "switch/switch_type.h"
 
 #include <ydb/library/binary_json/read.h>
 #include <ydb/library/binary_json/write.h>

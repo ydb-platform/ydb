@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     audit_log.cpp
     audit_dml_operations.cpp
+    audit_logins.cpp
     db_metadata_cache.h
     grpc_endpoint_publish_actor.cpp
     grpc_helper.cpp
@@ -74,6 +75,7 @@ SRCS(
     rpc_stream_execute_yql_script.cpp
     rpc_whoami.cpp
     rpc_object_storage.cpp
+    rpc_view.cpp
     table_settings.cpp
 
     rpc_common/rpc_common_kqp_session.cpp

@@ -19,6 +19,7 @@ struct IProviderContext;
 enum class EJoinAlgoType {
     Undefined,
     LookupJoin,
+    LookupJoinReverse,
     MapJoin,
     GraceJoin,
     StreamLookupJoin, //Right part can be updated during an operation. Used mainly for joining streams with lookup tables. Currently impplemented in Dq by LookupInputTransform
@@ -26,7 +27,7 @@ enum class EJoinAlgoType {
 };
 
 //StreamLookupJoin is not a subject for CBO and not not included here
-static constexpr auto AllJoinAlgos = { EJoinAlgoType::MapJoin, EJoinAlgoType::GraceJoin, EJoinAlgoType::LookupJoin, EJoinAlgoType::MergeJoin };
+static constexpr auto AllJoinAlgos = { EJoinAlgoType::LookupJoin, EJoinAlgoType::LookupJoinReverse, EJoinAlgoType::MapJoin, EJoinAlgoType::GraceJoin, EJoinAlgoType::MergeJoin };
 
 namespace NDq {
 
@@ -35,17 +36,22 @@ namespace NDq {
  * attribute name, used in join conditions
 */
 struct TJoinColumn {
-    TString RelName;
-    TString AttributeName;
+    TString RelName{};
+    TString AttributeName{};
+    TString AttributeNameWithAliases{};
+    std::optional<ui32> EquivalenceClass{};
+    bool IsConstant = false;
 
-    TJoinColumn(TString relName, TString attributeName) : RelName(relName),
-        AttributeName(std::move(attributeName)) {}
+    TJoinColumn(TString relName, TString attributeName) : 
+        RelName(relName),
+        AttributeName(attributeName),
+        AttributeNameWithAliases(attributeName) {}
 
     bool operator == (const TJoinColumn& other) const {
         return RelName == other.RelName && AttributeName == other.AttributeName;
     }
 
-    struct HashFunction
+    struct THashFunction
     {
         size_t operator()(const TJoinColumn& c) const
         {

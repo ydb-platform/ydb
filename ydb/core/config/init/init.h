@@ -118,6 +118,7 @@ struct TNodeRegistrationSettings {
     bool FixedNodeID;
     ui32 InterconnectPort;
     NActors::TNodeLocation Location;
+    TString NodeRegistrationToken;
 };
 
 class INodeRegistrationResult {

@@ -188,6 +188,7 @@ enum EServiceKikimr {
     TOKEN_BUILDER = 450;
     TICKET_PARSER = 455;
     BLACKBOX_VALIDATOR = 460;
+    LDAP_AUTH_PROVIDER = 2650;
 
     GRPC_CLIENT = 461;
 
@@ -393,6 +394,8 @@ enum EServiceKikimr {
 
     // Distributed storage debugging
     BS_REQUEST_COST = 2500;
+
+    GROUPED_MEMORY_LIMITER = 2700;
 };
 
 message TActivity {

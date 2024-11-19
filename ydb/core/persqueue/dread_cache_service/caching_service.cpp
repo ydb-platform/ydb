@@ -475,6 +475,10 @@ private:
                 continue; //TODO - no such chunks must be on prod
             }
 
+            if (!proto.has_codec()) {
+                proto.set_codec(NPersQueueCommon::RAW);
+            }
+
             TString sourceId;
             if (!r.GetSourceId().empty()) {
                 sourceId = NPQ::NSourceIdEncoding::Decode(r.GetSourceId());

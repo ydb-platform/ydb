@@ -173,6 +173,7 @@ public:
 
         const TResourcePoolInfo::TPtr resourcePoolInfo = NResourcePool::CreateResourcePool(resourcePoolDescription, 1);
         Y_ABORT_UNLESS(resourcePoolInfo);
+        RETURN_RESULT_UNLESS(NResourcePool::IsResourcePoolInfoValid(result, resourcePoolInfo));
 
         AddPathInSchemeShard(result, dstPath, owner);
         const TPathElement::TPtr resourcePool = CreateResourcePoolPathElement(dstPath);

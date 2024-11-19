@@ -1,0 +1,63 @@
+{
+  "op_name":"LeftJoin (MapJoin)",
+  "args":
+    [
+      {
+        "op_name":"LeftJoin (MapJoin)",
+        "args":
+          [
+            {
+              "op_name":"LeftJoin (MapJoin)",
+              "args":
+                [
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"quotas_browsers_relation"
+                  },
+                  {
+                    "op_name":"TablePointLookup",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"quotas_browsers_relation"
+                        }
+                      ]
+                  }
+                ]
+            },
+            {
+              "op_name":"TablePointLookup",
+              "args":
+                [
+                  {
+                    "op_name":"LeftJoin (MapJoin)",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"quotas_browsers_relation"
+                        },
+                        {
+                          "op_name":"TablePointLookup",
+                          "args":
+                            [
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"quotas_browsers_relation"
+                              }
+                            ]
+                        }
+                      ]
+                  }
+                ]
+            }
+          ]
+      },
+      {
+        "op_name":"TableFullScan",
+        "table":"quota"
+      }
+    ]
+}
+

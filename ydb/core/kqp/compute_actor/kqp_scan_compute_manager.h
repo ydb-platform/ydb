@@ -23,6 +23,7 @@ class TComputeTaskData;
 class TShardScannerInfo {
 private:
     std::optional<TActorId> ActorId;
+    const ui64 ScanId;
     const ui64 TabletId;
     const ui64 Generation;
     i64 DataChunksInFlightCount = 0;
@@ -51,15 +52,16 @@ private:
         }
     }
 public:
-    TShardScannerInfo(TShardState& state, const IExternalObjectsProvider& externalObjectsProvider)
-        : TabletId(state.TabletId)
+    TShardScannerInfo(const ui64 scanId, TShardState& state, const IExternalObjectsProvider& externalObjectsProvider)
+        : ScanId(scanId)
+        , TabletId(state.TabletId)
         , Generation(++state.Generation)
     {
         const bool subscribed = std::exchange(state.SubscribedOnTablet, true);
 
         const auto& keyColumnTypes = externalObjectsProvider.GetKeyColumnTypes();
         auto ranges = state.GetScanRanges(keyColumnTypes);
-        auto ev = externalObjectsProvider.BuildEvKqpScan(0, Generation, ranges);
+        auto ev = externalObjectsProvider.BuildEvKqpScan(ScanId, Generation, ranges);
 
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("tablet_id", TabletId)("generation", Generation)
             ("info", state.ToString(keyColumnTypes))("range", DebugPrintRanges(keyColumnTypes, ranges, *AppData()->TypeRegistry))
@@ -250,6 +252,7 @@ private:
     THashMap<NActors::TActorId, TShardState::TPtr> ShardsByActorId;
     bool IsActiveFlag = true;
     THashMap<ui64, std::shared_ptr<TShardScannerInfo>> ShardScanners;
+    const ui64 ScanId;
     const IExternalObjectsProvider& ExternalObjectsProvider;
 public:
 
@@ -313,7 +316,7 @@ public:
         AFL_ENSURE(state.TabletId);
         AFL_ENSURE(!state.ActorId)("actor_id", state.ActorId);
         state.State = NComputeActor::EShardState::Starting;
-        auto newScanner = std::make_shared<TShardScannerInfo>(state, ExternalObjectsProvider);
+        auto newScanner = std::make_shared<TShardScannerInfo>(ScanId, state, ExternalObjectsProvider);
         AFL_ENSURE(ShardScanners.emplace(state.TabletId, newScanner).second);
     }
 
@@ -356,8 +359,9 @@ public:
         return nullptr;
     }
 
-    TInFlightShards(const IExternalObjectsProvider& externalObjectsProvider)
-        : ExternalObjectsProvider(externalObjectsProvider)
+    TInFlightShards(const ui64 scanId, const IExternalObjectsProvider& externalObjectsProvider)
+        : ScanId(scanId)
+        , ExternalObjectsProvider(externalObjectsProvider)
     {
     }
     bool IsActive() const {

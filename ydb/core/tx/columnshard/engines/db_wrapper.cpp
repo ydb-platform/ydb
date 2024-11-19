@@ -12,7 +12,7 @@ void TDbWrapper::Insert(const TInsertedData& data) {
     NColumnShard::Schema::InsertTable_Insert(db, data);
 }
 
-void TDbWrapper::Commit(const TInsertedData& data) {
+void TDbWrapper::Commit(const TCommittedData& data) {
     NIceDb::TNiceDb db(Database);
     NColumnShard::Schema::InsertTable_Commit(db, data);
 }
@@ -27,7 +27,7 @@ void TDbWrapper::EraseInserted(const TInsertedData& data) {
     NColumnShard::Schema::InsertTable_EraseInserted(db, data);
 }
 
-void TDbWrapper::EraseCommitted(const TInsertedData& data) {
+void TDbWrapper::EraseCommitted(const TCommittedData& data) {
     NIceDb::TNiceDb db(Database);
     NColumnShard::Schema::InsertTable_EraseCommitted(db, data);
 }

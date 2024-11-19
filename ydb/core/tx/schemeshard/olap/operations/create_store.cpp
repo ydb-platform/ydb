@@ -7,6 +7,8 @@
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/mind/hive/hive.h>
 
+#include "checks.h"
+
 using namespace NKikimr;
 using namespace NKikimr::NSchemeShard;
 
@@ -394,9 +396,17 @@ public:
             return result;
         }
 
+        auto domainInfo = parentPath.DomainInfo();
+        const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+
         TProposeErrorCollector errors(*result);
         TOlapStoreInfo::TPtr storeInfo = std::make_shared<TOlapStoreInfo>();
         if (!storeInfo->ParseFromRequest(createDescription, errors)) {
+            return result;
+        }
+
+        if (!NKikimr::NSchemeShard::NOlap::CheckLimits(limits, storeInfo, errStr)) {
+            result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
         }
 

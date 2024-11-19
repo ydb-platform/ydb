@@ -179,6 +179,8 @@ struct TKikimrEvents : TEvents {
         ES_TX_BACKGROUND = 4256, 
         ES_SS_BG_TASKS = 4257, 
         ES_LIMITER = 4258, 
+        //ES_MEMORY = 4259, NB. exists in main
+        ES_GROUPED_ALLOCATIONS_MANAGER = 4260,
     };
 };
 

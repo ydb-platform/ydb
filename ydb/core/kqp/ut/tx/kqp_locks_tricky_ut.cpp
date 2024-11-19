@@ -29,9 +29,14 @@ using NYql::TExprNode;
 
 Y_UNIT_TEST_SUITE(KqpLocksTricky) {
 
-    Y_UNIT_TEST(TestNoLocksIssue) {
+    Y_UNIT_TEST_TWIN(TestNoLocksIssue, withSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
+
         auto setting = NKikimrKqp::TKqpSetting();
         TKikimrSettings settings;
+        settings.SetAppConfig(appConfig);
         settings.SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -123,9 +128,14 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
         }
     }
 
-    Y_UNIT_TEST(TestNoLocksIssueInteractiveTx) {
+    Y_UNIT_TEST_TWIN(TestNoLocksIssueInteractiveTx, withSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
+        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(true);
+
         auto setting = NKikimrKqp::TKqpSetting();
         TKikimrSettings settings;
+        settings.SetAppConfig(appConfig);
         settings.SetUseRealThreads(false);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();

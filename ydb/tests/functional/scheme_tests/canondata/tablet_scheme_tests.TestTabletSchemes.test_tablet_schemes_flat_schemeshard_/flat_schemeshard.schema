@@ -1448,6 +1448,11 @@
                 "ColumnId": 31,
                 "ColumnName": "ServerlessComputeResourcesMode",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 32,
+                "ColumnName": "ColumnTableColumnsLimit",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -1484,7 +1489,8 @@
                     28,
                     29,
                     30,
-                    31
+                    31,
+                    32
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4782,6 +4788,11 @@
                 "ColumnId": 33,
                 "ColumnName": "AlterMainTableTxDone",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 34,
+                "ColumnName": "CreationConfig",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -4820,7 +4831,8 @@
                     30,
                     31,
                     32,
-                    33
+                    33,
+                    34
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7307,6 +7319,11 @@
                 "ColumnId": 3,
                 "ColumnName": "QueryText",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "CapturedContext",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -7315,7 +7332,8 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

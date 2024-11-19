@@ -240,7 +240,8 @@ public:
         const auto& valueTags = ev.ValueTags;
 
         LOG_D("Progress"
-            << ": streamPathId# " << streamPathId);
+            << ": streamPathId# " << streamPathId
+            << ", rows# " << ev.Rows.size());
 
         if (!Self->GetUserTables().contains(tablePathId.LocalPathId)) {
             LOG_W("Cannot progress on unknown table"

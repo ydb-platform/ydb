@@ -1,6 +1,7 @@
 #include "update.h"
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
+#include <ydb/library/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
@@ -35,6 +36,24 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
         if (!targetSchema.Update(*AlterSchema, collector)) {
             return TConclusionStatus::Fail("schema update error: " + collector->GetErrorMessage() + ". in alter constructor STANDALONE_UPDATE");
         }
+    }
+
+    const TString& parentPathStr = context.GetModification()->GetWorkingDir();
+    if (parentPathStr) { // Not empty only if called from Propose, not from ProgressState
+        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.GetSSOperationContext()->SS);
+        auto domainInfo = parentPath.DomainInfo();
+        const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
+        if (targetSchema.GetColumns().GetColumns().size() > limits.MaxColumnTableColumns) {
+            TString errStr = TStringBuilder()
+                << "Too many columns"
+                << ": new: " << targetSchema.GetColumns().GetColumns().size()
+                << ". Limit: " << limits.MaxColumnTableColumns;
+            return TConclusionStatus::Fail(errStr);
+        }
+    }
+
+    if (!CheckTargetSchema(targetSchema)) {
+        return TConclusionStatus::Fail("schema update error: sparsed columns are disabled");
     }
     auto description = originalTable.GetTableInfoVerified().Description;
     targetSchema.Serialize(*description.MutableSchema());

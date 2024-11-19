@@ -294,7 +294,7 @@ void TPQTabletFixture::SendToPipe(const TActorId& sender,
 
 void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionParams& params)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransaction>();
+    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
     THashSet<ui32> partitions;
 
     ActorIdToProto(Ctx->Edge, event->Record.MutableSourceActor());

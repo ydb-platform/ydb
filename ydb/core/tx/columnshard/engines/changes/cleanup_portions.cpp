@@ -17,19 +17,19 @@ void TCleanupPortionsColumnEngineChanges::DoDebugString(TStringOutput& out) cons
 
 void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     THashSet<ui64> pathIds;
-    if (self) {
-        THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
-        for (auto&& p : PortionsToDrop) {
-            p.RemoveFromDatabase(context.DBWrapper);
-
-            p.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
-            pathIds.emplace(p.GetPathId());
-        }
-        for (auto&& i : blobIdsByStorage) {
-            auto action = BlobsAction.GetRemoving(i.first);
-            for (auto&& b : i.second) {
-                action->DeclareRemove((TTabletId)self->TabletID(), b);
-            }
+    if (!self) {
+        return;
+    }
+    THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
+    for (auto&& p : PortionsToDrop) {
+        p.RemoveFromDatabase(context.DBWrapper);
+        p.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
+        pathIds.emplace(p.GetPathId());
+    }
+    for (auto&& i : blobIdsByStorage) {
+        auto action = BlobsAction.GetRemoving(i.first);
+        for (auto&& b : i.second) {
+            action->DeclareRemove((TTabletId)self->TabletID(), b);
         }
     }
 }
@@ -41,9 +41,9 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::T
         }
     }
     if (self) {
-        self->IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
+        self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
         for (auto&& p : PortionsToDrop) {
-            self->IncCounter(NColumnShard::COUNTER_RAW_BYTES_ERASED, p.GetTotalRawBytes());
+            self->Counters.GetTabletCounters()->OnDropPortionEvent(p.GetTotalRawBytes(), p.GetTotalBlobBytes(), p.NumRows());
         }
     }
 }

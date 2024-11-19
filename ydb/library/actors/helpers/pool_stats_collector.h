@@ -215,6 +215,7 @@ private:
         TString Name;
         double Threads;
         double LimitThreads;
+        double DefaultThreads;
 
         void Init(NMonitoring::TDynamicCounters* group, const TString& poolName, ui32 threads) {
             LastElapsedSeconds = 0;
@@ -223,6 +224,7 @@ private:
             Name = poolName;
             Threads = threads;
             LimitThreads = threads;
+            DefaultThreads = threads;
 
             PoolGroup = group->GetSubgroup("execpool", poolName);
 
@@ -292,6 +294,7 @@ private:
 
         void Set(const TExecutorPoolStats& poolStats, const TExecutorThreadStats& stats) {
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
+            double elapsedSeconds = ::NHPTimer::GetSeconds(stats.ElapsedTicks);
             *SentEvents         = stats.SentEvents;
             *ReceivedEvents     = stats.ReceivedEvents;
             *PreemptedEvents     = stats.PreemptedEvents;
@@ -299,7 +302,7 @@ private:
             *DestroyedActors    = stats.PoolDestroyedActors;
             *EmptyMailboxActivation = stats.EmptyMailboxActivation;
             *CpuMicrosec        = stats.CpuUs;
-            *ElapsedMicrosec    = ::NHPTimer::GetSeconds(stats.ElapsedTicks)*1000000;
+            *ElapsedMicrosec    = elapsedSeconds*1000000;
             *ParkedMicrosec     = ::NHPTimer::GetSeconds(stats.ParkedTicks)*1000000;
             *ActorRegistrations = stats.PoolActorRegistrations;
             *ActorsAlive        = stats.PoolActorRegistrations - stats.PoolDestroyedActors;
@@ -364,19 +367,17 @@ private:
             double seconds = UsageTimer.PassedReset();
 
             // TODO[serxa]: It doesn't account for contention. Use 1 - parkedTicksDelta / seconds / numThreads KIKIMR-11916
-            const double currentThreadCount = poolStats.PotentialMaxThreadCount;
-            const double elapsed = NHPTimer::GetSeconds(stats.ElapsedTicks);
-            const double currentUsage = currentThreadCount > 0 ? ((elapsed - LastElapsedSeconds) / seconds / currentThreadCount) : 0;
-            LastElapsedSeconds = elapsed;
+            Threads = poolStats.CurrentThreadCount;
+            LimitThreads = poolStats.PotentialMaxThreadCount;
+            const double currentUsage = LimitThreads > 0 ? ((elapsedSeconds - LastElapsedSeconds) / seconds / LimitThreads) : 0;
 
             // update usage factor according to smoothness
             const double smoothness = 0.5;
             Usage = currentUsage * smoothness + Usage * (1.0 - smoothness);
+            LastElapsedSeconds = elapsedSeconds;
 #else
             Y_UNUSED(stats);
 #endif
-            Threads = poolStats.CurrentThreadCount;
-            LimitThreads = poolStats.PotentialMaxThreadCount;
         }
     };
 

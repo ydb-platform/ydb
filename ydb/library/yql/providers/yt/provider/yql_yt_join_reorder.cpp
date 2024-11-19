@@ -155,11 +155,15 @@ class TYtJoinOptimizerNode: public TJoinOptimizerNode {
 public:
     TYtJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
-        const std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>>& joinConditions,
+        const TVector<NDq::TJoinColumn>& leftKeys,
+        const TVector<NDq::TJoinColumn>& rightKeys,
         const EJoinKind joinType,
         const EJoinAlgoType joinAlgo,
         TYtJoinNodeOp* originalOp)
-        : TJoinOptimizerNode(left, right, joinConditions, joinType, joinAlgo, originalOp != nullptr)
+        : TJoinOptimizerNode(left, right, leftKeys, rightKeys, joinType, joinAlgo,
+            originalOp ? originalOp->LinkSettings.LeftHints.contains("any") : false,
+            originalOp ? originalOp->LinkSettings.RightHints.contains("any") : false,
+            originalOp != nullptr)
         , OriginalOp(originalOp)
     { }
 
@@ -198,7 +202,8 @@ private:
         auto left = ProcessNode(op->Left);
         auto right = ProcessNode(op->Right);
         YQL_ENSURE(op->LeftLabel->ChildrenSize() == op->RightLabel->ChildrenSize());
-        std::set<std::pair<NDq::TJoinColumn, NDq::TJoinColumn>> joinConditions;
+        TVector<NDq::TJoinColumn> leftKeys;
+        TVector<NDq::TJoinColumn> rightKeys;
         for (ui32 i = 0; i < op->LeftLabel->ChildrenSize(); i += 2) {
             auto ltable = op->LeftLabel->Child(i)->Content();
             auto lcolumn = op->LeftLabel->Child(i + 1)->Content();
@@ -206,14 +211,15 @@ private:
             auto rcolumn = op->RightLabel->Child(i + 1)->Content();
             NDq::TJoinColumn lcol{TString(ltable), TString(lcolumn)};
             NDq::TJoinColumn rcol{TString(rtable), TString(rcolumn)};
-            joinConditions.insert({lcol, rcol});
+            leftKeys.push_back(lcol);
+            rightKeys.push_back(rcol);
         }
         bool nonReorderable = op->LinkSettings.ForceSortedMerge;
         Ctx->HasForceSortedMerge = Ctx->HasForceSortedMerge || op->LinkSettings.ForceSortedMerge;
         Ctx->HasHints = Ctx->HasHints || !op->LinkSettings.LeftHints.empty() || !op->LinkSettings.RightHints.empty();
 
         return std::make_shared<TYtJoinOptimizerNode>(
-            left, right, joinConditions, joinKind, EJoinAlgoType::GraceJoin, nonReorderable ? op : nullptr
+            left, right, leftKeys, rightKeys, joinKind, EJoinAlgoType::GraceJoin, nonReorderable ? op : nullptr
             );
     }
 
@@ -275,12 +281,13 @@ TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TVec
             ret = MakeIntrusive<TYtJoinNodeOp>();
             ret->JoinKind = ctx.NewAtom(pos, ConvertToJoinString(op->JoinType));
             TVector<TExprNodePtr> leftLabel, rightLabel;
-            leftLabel.reserve(op->JoinConditions.size() * 2);
-            rightLabel.reserve(op->JoinConditions.size() * 2);
-            for (auto& [left, right] : op->JoinConditions) {
+            leftLabel.reserve(op->LeftJoinKeys.size() * 2);
+            rightLabel.reserve(op->RightJoinKeys.size() * 2);
+            for (auto& left : op->LeftJoinKeys) {
                 leftLabel.emplace_back(ctx.NewAtom(pos, left.RelName));
                 leftLabel.emplace_back(ctx.NewAtom(pos, left.AttributeName));
-
+            }
+            for (auto& right : op->RightJoinKeys) {
                 rightLabel.emplace_back(ctx.NewAtom(pos, right.RelName));
                 rightLabel.emplace_back(ctx.NewAtom(pos, right.AttributeName));
             }

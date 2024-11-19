@@ -40,6 +40,11 @@ public:
         : Result(result) {
     }
 
+    template <class TResultArg>
+    TConclusion(TResultArg& result)
+        : Result(result) {
+    }
+
     const TConclusionStatus& GetError() const {
         auto result = std::get_if<TConclusionStatus>(&Result);
         Y_ABORT_UNLESS(result, "incorrect object for error request");

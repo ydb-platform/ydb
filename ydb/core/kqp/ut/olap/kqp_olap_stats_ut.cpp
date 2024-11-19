@@ -21,10 +21,10 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
 
     class TOlapStatsController : public NYDBTest::NColumnShard::TController {
     public:
-        TDuration GetPeriodicWakeupActivationPeriod(const TDuration /*defaultValue*/) const override {
+        TDuration DoGetPeriodicWakeupActivationPeriod(const TDuration /*defaultValue*/) const override {
             return TDuration::MilliSeconds(10);
         }
-        TDuration GetStatsReportInterval(const TDuration /*defaultValue*/) const override {
+        TDuration DoGetStatsReportInterval(const TDuration /*defaultValue*/) const override {
             return TDuration::MilliSeconds(10);
         }
     };

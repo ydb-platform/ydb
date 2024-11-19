@@ -4,9 +4,9 @@
 #include <ydb/library/conclusion/status.h>
 #include <ydb/services/metadata/abstract/request_features.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
-#include <ydb/core/formats/arrow/common/validation.h>
 
 #include <ydb/library/conclusion/result.h>
+#include <ydb/library/formats/arrow/common/validation.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/status.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -146,6 +146,7 @@ public:
     using TBase::DeserializeFromProto;
 
     static std::shared_ptr<ISerializer> GetDefaultSerializer();
+    static std::shared_ptr<ISerializer> GetFastestSerializer();
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TCompressionOptions& proto);
 

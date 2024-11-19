@@ -46,6 +46,7 @@ struct TEvPrivate {
         EvExportSaveCursor,
 
         EvTaskProcessedResult,
+        EvPingSnapshotsUsage,
 
         EvEnd
     };
@@ -142,8 +143,9 @@ struct TEvPrivate {
 
     struct TEvReadFinished : public TEventLocal<TEvReadFinished, EvReadFinished> {
         explicit TEvReadFinished(ui64 requestCookie, ui64 txId = 0)
-            : RequestCookie(requestCookie), TxId(txId)
-        {}
+            : RequestCookie(requestCookie)
+            , TxId(txId) {
+        }
 
         ui64 RequestCookie;
         ui64 TxId;
@@ -157,17 +159,39 @@ struct TEvPrivate {
         bool Manual;
     };
 
-    class TEvWriteBlobsResult : public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {
+    struct TEvPingSnapshotsUsage: public TEventLocal<TEvPingSnapshotsUsage, EvPingSnapshotsUsage> {
+        TEvPingSnapshotsUsage() = default;
+    };
+
+    class TEvWriteBlobsResult: public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {
+    public:
+        enum EErrorClass {
+            Internal,
+            Request
+        };
     private:
         NColumnShard::TBlobPutResult::TPtr PutResult;
         NOlap::TWritingBuffer WritesBuffer;
         YDB_READONLY_DEF(TString, ErrorMessage);
+        YDB_ACCESSOR(EErrorClass, ErrorClass, EErrorClass::Internal);
+
     public:
+
+        NKikimrDataEvents::TEvWriteResult::EStatus GetWriteResultStatus() const {
+            switch (ErrorClass) {
+                case EErrorClass::Internal:
+                    return NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR;
+                case EErrorClass::Request:
+                    return NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST;
+            }
+        }
         
-        static std::unique_ptr<TEvWriteBlobsResult> Error(const NKikimrProto::EReplyStatus status, NOlap::TWritingBuffer&& writesBuffer, const TString& error) {
-            std::unique_ptr<TEvWriteBlobsResult> result = std::make_unique<TEvWriteBlobsResult>(std::make_shared<NColumnShard::TBlobPutResult>(status), 
-                std::move(writesBuffer));
+        static std::unique_ptr<TEvWriteBlobsResult> Error(
+            const NKikimrProto::EReplyStatus status, NOlap::TWritingBuffer&& writesBuffer, const TString& error, const EErrorClass errorClass) {
+            std::unique_ptr<TEvWriteBlobsResult> result =
+                std::make_unique<TEvWriteBlobsResult>(std::make_shared<NColumnShard::TBlobPutResult>(status), std::move(writesBuffer));
             result->ErrorMessage = error;
+            result->ErrorClass = errorClass;
             return result;
         }
 

@@ -8,6 +8,7 @@
 
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <ydb/library/yql/sql/settings/partitioning.h>
+#include <ydb/library/yql/sql/v1/proto_parser/proto_parser.h>
 
 #include <util/generic/scope.h>
 #include <util/string/join.h>
@@ -53,31 +54,67 @@ TString CollectTokens(const TRule_select_stmt& selectStatement) {
     return tokenCollector.Tokens;
 }
 
-NSQLTranslation::TTranslationSettings CreateViewTranslationSettings(const NSQLTranslation::TTranslationSettings& base) {
-    NSQLTranslation::TTranslationSettings settings;
+bool RecreateContext(
+    TContext& ctx, const NSQLTranslation::TTranslationSettings& settings, const TString& recreationQuery
+) {
+    if (!recreationQuery) {
+        return true;
+    }
+    const TString queryName = "context recreation query";
 
-    settings.ClusterMapping = base.ClusterMapping;
-    settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+    const auto* ast = NSQLTranslationV1::SqlAST(
+        recreationQuery, queryName, ctx.Issues,
+        settings.MaxErrors, settings.AnsiLexer, settings.Arena
+    );
+    if (!ast) {
+        return false;
+    }
 
-    return settings;
+    TSqlQuery queryTranslator(ctx, ctx.Settings.Mode, true);
+    auto node = queryTranslator.Build(static_cast<const TSQLv1ParserAST&>(*ast));
+
+    return node && node->Init(ctx, nullptr) && node->Translate(ctx);
 }
 
-TNodePtr BuildViewSelect(const TRule_select_stmt& query, TContext& ctx) {
-    const auto viewTranslationSettings = CreateViewTranslationSettings(ctx.Settings);
-    TContext viewParsingContext(viewTranslationSettings, {}, ctx.Issues);
-    TSqlSelect select(viewParsingContext, viewTranslationSettings.Mode);
-    TPosition pos;
-    auto source = select.Build(query, pos);
-    if (!source) {
+TNodePtr BuildViewSelect(
+    const TRule_select_stmt& selectStatement,
+    TContext& parentContext,
+    const TString& contextRecreationQuery
+) {
+    TIssues issues;
+    TContext context(parentContext.Settings, {}, issues);
+    if (!RecreateContext(context, context.Settings, contextRecreationQuery)) {
+        parentContext.Issues.AddIssues(issues);
         return nullptr;
     }
-    return BuildSelectResult(
+    issues.Clear();
+
+    // Holds (among other things) subquery references.
+    // These references need to be passed to the parent context
+    // to be able to compile view queries with subqueries.
+    context.PushCurrentBlocks(&parentContext.GetCurrentBlocks());
+
+    context.Settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
+
+    TSqlSelect selectTranslator(context, context.Settings.Mode);
+    TPosition pos = parentContext.Pos();
+    auto source = selectTranslator.Build(selectStatement, pos);
+    if (!source) {
+        parentContext.Issues.AddIssues(issues);
+        return nullptr;
+    }
+    auto node = BuildSelectResult(
         pos,
         std::move(source),
         false,
         false,
-        viewParsingContext.Scoped
+        context.Scoped
     );
+    if (!node) {
+        parentContext.Issues.AddIssues(issues);
+        return nullptr;
+    }
+    return node;
 }
 
 }
@@ -1629,16 +1666,6 @@ namespace {
         return true;
     }
 
-    bool StoreBool(const TRule_table_setting_value& from, TDeferredAtom& to, TContext& ctx) {
-        if (!from.HasAlt_table_setting_value6()) {
-            return false;
-        }
-        // bool_value
-        const TString value = to_lower(ctx.Token(from.GetAlt_table_setting_value6().GetRule_bool_value1().GetToken1()));
-        to = TDeferredAtom(BuildLiteralBool(ctx.Pos(), FromString<bool>(value)), ctx);
-        return true;
-    }
-
     bool StoreSplitBoundary(const TRule_literal_value_list& boundary, TVector<TVector<TNodePtr>>& to,
             TSqlExpression& expr, TContext& ctx) {
         TVector<TNodePtr> boundaryKeys;
@@ -1765,26 +1792,6 @@ namespace {
         return true;
     }
 
-    bool StoreViewOptionsEntry(const TIdentifier& id,
-                               const TRule_table_setting_value& value,
-                               std::map<TString, TDeferredAtom>& features,
-                               TContext& ctx) {
-        const auto name = to_lower(id.Name);
-        const auto publicName = to_upper(name);
-
-        if (features.find(name) != features.end()) {
-            ctx.Error(ctx.Pos()) << publicName << " is a duplicate";
-            return false;
-        }
-
-        if (!StoreBool(value, features[name], ctx)) {
-            ctx.Error(ctx.Pos()) << "Value of " << publicName << " must be a bool";
-            return false;
-        }
-
-        return true;
-    }
-
     template<typename TChar>
     struct TPatternComponent {
         TBasicString<TChar> Prefix;
@@ -1892,6 +1899,17 @@ bool TSqlTranslation::StoreExternalTableSettingsEntry(const TIdentifier& id, con
     return true;
 }
 
+bool TSqlTranslation::ValidateTableSettings(const TTableSettings& settings) {
+    if (settings.PartitionCount) {
+        if (!settings.StoreType || to_lower(settings.StoreType->Name) != "column") {
+            Ctx.Error() << " PARTITION_COUNT can be used only with STORE=COLUMN";
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value,
         TTableSettings& settings, bool alter, bool reset) {
     YQL_ENSURE(value || reset);
@@ -1947,6 +1965,16 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
             return false;
         }
         if (!StoreInt(*value, settings.MaxPartitions, Ctx)) {
+            Ctx.Error() << to_upper(id.Name) << " value should be an integer";
+            return false;
+        }
+    } else if (to_lower(id.Name) == "partition_count") {
+        if (reset) {
+            Ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+
+        if (!StoreInt(*value, settings.PartitionCount, Ctx)) {
             Ctx.Error() << to_upper(id.Name) << " value should be an integer";
             return false;
         }
@@ -2040,7 +2068,8 @@ bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule
         Ctx.Error() << "Unknown table setting: " << id.Name;
         return false;
     }
-    return true;
+
+    return ValidateTableSettings(settings);
 }
 
 bool TSqlTranslation::StoreTableSettingsEntry(const TIdentifier& id, const TRule_table_setting_value& value,
@@ -4354,7 +4383,7 @@ bool TSqlTranslation::BindParameterClause(const TRule_bind_parameter& node, TDef
 }
 
 bool TSqlTranslation::ObjectFeatureValueClause(const TRule_object_feature_value& node, TDeferredAtom& result) {
-    // object_feature_value: an_id_or_type | bind_parameter;
+    // object_feature_value: id_or_type | bind_parameter | STRING_VALUE | bool_value;
     switch (node.Alt_case()) {
         case TRule_object_feature_value::kAltObjectFeatureValue1:
         {
@@ -4377,6 +4406,12 @@ bool TSqlTranslation::ObjectFeatureValueClause(const TRule_object_feature_value&
                 return false;
             }
             result = TDeferredAtom(Ctx.Pos(), strValue->Content);
+            break;
+        }
+        case TRule_object_feature_value::kAltObjectFeatureValue4:
+        {
+            TString value = Ctx.Token(node.GetAlt_object_feature_value4().GetRule_bool_value1().GetToken1());
+            result = TDeferredAtom(BuildLiteralBool(Ctx.Pos(), FromString<bool>(value)), Ctx);
             break;
         }
         case TRule_object_feature_value::ALT_NOT_SET:
@@ -4568,38 +4603,32 @@ bool TSqlTranslation::ValidateExternalTable(const TCreateTableParameters& params
     return true;
 }
 
-bool TSqlTranslation::ParseViewOptions(std::map<TString, TDeferredAtom>& features,
-                                       const TRule_with_table_settings& options) {
-    const auto& firstEntry = options.GetRule_table_settings_entry3();
-    if (!StoreViewOptionsEntry(IdEx(firstEntry.GetRule_an_id1(), *this),
-                               firstEntry.GetRule_table_setting_value3(),
-                               features,
-                               Ctx)) {
-        return false;
-    }
-    for (const auto& block : options.GetBlock4()) {
-        const auto& entry = block.GetRule_table_settings_entry2();
-        if (!StoreViewOptionsEntry(IdEx(entry.GetRule_an_id1(), *this),
-                                   entry.GetRule_table_setting_value3(),
-                                   features,
-                                   Ctx)) {
-            return false;
+bool TSqlTranslation::ParseViewQuery(
+    std::map<TString, TDeferredAtom>& features,
+    const TRule_select_stmt& query
+) {
+    TString queryText = CollectTokens(query);
+    TString contextRecreationQuery;
+    {
+        const auto& service = Ctx.Scoped->CurrService;
+        const auto& cluster = Ctx.Scoped->CurrCluster;
+        const auto effectivePathPrefix = Ctx.GetPrefixPath(service, cluster);
+
+        // TO DO: capture all runtime pragmas in a similar fashion.
+        if (effectivePathPrefix != Ctx.Settings.PathPrefix) {
+            contextRecreationQuery = TStringBuilder() << "PRAGMA TablePathPrefix = \"" << effectivePathPrefix << "\";\n";
+        }
+
+        // TO DO: capture other compilation-affecting statements except USE.
+        if (cluster.GetLiteral() && *cluster.GetLiteral() != Ctx.Settings.DefaultCluster) {
+            contextRecreationQuery = TStringBuilder() << "USE " << *cluster.GetLiteral() << ";\n";
         }
     }
-    if (const auto securityInvoker = features.find("security_invoker");
-        securityInvoker == features.end() || securityInvoker->second.Build()->GetLiteralValue() != "true") {
-        Ctx.Error(Ctx.Pos()) << "SECURITY_INVOKER option must be explicitly enabled";
-        return false;
-    }
-    return true;
-}
+    features["query_text"] = { Ctx.Pos(), contextRecreationQuery + queryText };
 
-bool TSqlTranslation::ParseViewQuery(std::map<TString, TDeferredAtom>& features,
-                                     const TRule_select_stmt& query) {
-    const TString queryText = CollectTokens(query);
-    features["query_text"] = {Ctx.Pos(), queryText};
-
-    const auto viewSelect = BuildViewSelect(query, Ctx);
+    // AST is needed for ready-made validation of CREATE VIEW statement.
+    // Query is stored as plain text, not AST.
+    const auto viewSelect = BuildViewSelect(query, Ctx, contextRecreationQuery);
     if (!viewSelect) {
         return false;
     }
@@ -4712,14 +4741,7 @@ bool TSqlTranslation::ParseResourcePoolSettings(std::map<TString, TDeferredAtom>
 bool TSqlTranslation::ParseResourcePoolSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_action& alterAction) {
     switch (alterAction.Alt_case()) {
         case TRule_alter_resource_pool_action::kAltAlterResourcePoolAction1: {
-            const auto& action = alterAction.GetAlt_alter_resource_pool_action1().GetRule_alter_table_set_table_setting_uncompat1();
-            if (!StoreResourcePoolSettingsEntry(IdEx(action.GetRule_an_id2(), *this), &action.GetRule_table_setting_value3(), result)) {
-                return false;
-            }
-            return true;
-        }
-        case TRule_alter_resource_pool_action::kAltAlterResourcePoolAction2: {
-            const auto& action = alterAction.GetAlt_alter_resource_pool_action2().GetRule_alter_table_set_table_setting_compat1();
+            const auto& action = alterAction.GetAlt_alter_resource_pool_action1().GetRule_alter_table_set_table_setting_compat1();
             if (!StoreResourcePoolSettingsEntry(action.GetRule_alter_table_setting_entry3(), result)) {
                 return false;
             }
@@ -4730,8 +4752,8 @@ bool TSqlTranslation::ParseResourcePoolSettings(std::map<TString, TDeferredAtom>
             }
             return true;
         }
-        case TRule_alter_resource_pool_action::kAltAlterResourcePoolAction3: {
-            const auto& action = alterAction.GetAlt_alter_resource_pool_action3().GetRule_alter_table_reset_table_setting1();
+        case TRule_alter_resource_pool_action::kAltAlterResourcePoolAction2: {
+            const auto& action = alterAction.GetAlt_alter_resource_pool_action2().GetRule_alter_table_reset_table_setting1();
             const TString firstKey = to_lower(IdEx(action.GetRule_an_id3(), *this).Name);
             toReset.insert(firstKey);
             for (const auto& key : action.GetBlock4()) {
@@ -4740,6 +4762,77 @@ bool TSqlTranslation::ParseResourcePoolSettings(std::map<TString, TDeferredAtom>
             return true;
         }
         case TRule_alter_resource_pool_action::ALT_NOT_SET:
+            Y_ABORT("You should change implementation according to grammar changes");
+    }
+}
+
+bool TSqlTranslation::StoreResourcePoolClassifierSettingsEntry(const TIdentifier& id, const TRule_table_setting_value* value, std::map<TString, TDeferredAtom>& result) {
+    YQL_ENSURE(value);
+
+    const TString key = to_lower(id.Name);
+    if (result.find(key) != result.end()) {
+        Ctx.Error() << to_upper(key) << " duplicate keys";
+        return false;
+    }
+
+    switch (value->Alt_case()) {
+        case TRule_table_setting_value::kAltTableSettingValue2:
+            return StoreString(*value, result[key], Ctx, to_upper(key));
+
+        case TRule_table_setting_value::kAltTableSettingValue3:
+            return StoreInt(*value, result[key], Ctx, to_upper(key));
+
+        default:
+            Ctx.Error() << to_upper(key) << " value should be a string literal or integer";
+            return false;
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::StoreResourcePoolClassifierSettingsEntry(const TRule_alter_table_setting_entry& entry, std::map<TString, TDeferredAtom>& result) {
+    const TIdentifier id = IdEx(entry.GetRule_an_id1(), *this);
+    return StoreResourcePoolClassifierSettingsEntry(id, &entry.GetRule_table_setting_value3(), result);
+}
+
+bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDeferredAtom>& result, const TRule_with_table_settings& settingsNode) {
+    const auto& firstEntry = settingsNode.GetRule_table_settings_entry3();
+    if (!StoreResourcePoolClassifierSettingsEntry(IdEx(firstEntry.GetRule_an_id1(), *this), &firstEntry.GetRule_table_setting_value3(), result)) {
+        return false;
+    }
+    for (const auto& block : settingsNode.GetBlock4()) {
+        const auto& entry = block.GetRule_table_settings_entry2();
+        if (!StoreResourcePoolClassifierSettingsEntry(IdEx(entry.GetRule_an_id1(), *this), &entry.GetRule_table_setting_value3(), result)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TSqlTranslation::ParseResourcePoolClassifierSettings(std::map<TString, TDeferredAtom>& result, std::set<TString>& toReset, const TRule_alter_resource_pool_classifier_action& alterAction) {
+    switch (alterAction.Alt_case()) {
+        case TRule_alter_resource_pool_classifier_action::kAltAlterResourcePoolClassifierAction1: {
+            const auto& action = alterAction.GetAlt_alter_resource_pool_classifier_action1().GetRule_alter_table_set_table_setting_compat1();
+            if (!StoreResourcePoolClassifierSettingsEntry(action.GetRule_alter_table_setting_entry3(), result)) {
+                return false;
+            }
+            for (const auto& entry : action.GetBlock4()) {
+                if (!StoreResourcePoolClassifierSettingsEntry(entry.GetRule_alter_table_setting_entry2(), result)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        case TRule_alter_resource_pool_classifier_action::kAltAlterResourcePoolClassifierAction2: {
+            const auto& action = alterAction.GetAlt_alter_resource_pool_classifier_action2().GetRule_alter_table_reset_table_setting1();
+            const TString firstKey = to_lower(IdEx(action.GetRule_an_id3(), *this).Name);
+            toReset.insert(firstKey);
+            for (const auto& key : action.GetBlock4()) {
+                toReset.insert(to_lower(IdEx(key.GetRule_an_id2(), *this).Name));
+            }
+            return true;
+        }
+        case TRule_alter_resource_pool_classifier_action::ALT_NOT_SET:
             Y_ABORT("You should change implementation according to grammar changes");
     }
 }

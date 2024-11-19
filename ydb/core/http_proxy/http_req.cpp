@@ -277,7 +277,7 @@ namespace NKikimr::NHttpProxy {
                               "' iam token size: " << HttpContext.IamToken.size());
                 TMap<TString, TString> peerMetadata {
                     {NYmq::V1::FOLDER_ID, FolderId},
-                    {NYmq::V1::CLOUD_ID, HttpContext.UserName ? HttpContext.UserName : CloudId},
+                    {NYmq::V1::CLOUD_ID, CloudId ? CloudId : HttpContext.UserName },
                     {NYmq::V1::USER_SID, UserSid},
                     {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
                     {NYmq::V1::SECURITY_TOKEN, HttpContext.SecurityToken},
@@ -408,7 +408,7 @@ namespace NKikimr::NHttpProxy {
                             ctx,
                             NKikimrServices::HTTP_PROXY,
                             "Not retrying GRPC response."
-                                << " Code: " << get<1>(errorAndCode) 
+                                << " Code: " << get<1>(errorAndCode)
                                 << ", Error: " << get<0>(errorAndCode);
                         );
 
@@ -434,7 +434,7 @@ namespace NKikimr::NHttpProxy {
                         ctx,
                         NKikimrServices::HTTP_PROXY,
                         TStringBuilder() << "Got cloud auth response."
-                        << " FolderId: " << ev->Get()->FolderId 
+                        << " FolderId: " << ev->Get()->FolderId
                         << " CloudId: " << ev->Get()->CloudId
                         << " UserSid: " << ev->Get()->Sid;
                     );
@@ -462,17 +462,18 @@ namespace NKikimr::NHttpProxy {
 
         public:
             void Bootstrap(const TActorContext& ctx) {
+                PoolId = ctx.SelfID.PoolID();
                 StartTime = ctx.Now();
                 try {
                     HttpContext.RequestBodyToProto(&Request);
                     auto queueUrl = QueueUrlExtractor(Request);
                     if (!queueUrl.empty()) {
                         auto cloudIdAndResourceId = NKikimr::NYmq::CloudIdAndResourceIdFromQueueUrl(queueUrl);
-                        if(cloudIdAndResourceId.Empty()) {
+                        if (cloudIdAndResourceId.first.empty()) {
                             return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Invalid queue url");
                         }
-                        CloudId = cloudIdAndResourceId.Get()->first;
-                        ResourceId = cloudIdAndResourceId.Get()->second;
+                        CloudId = cloudIdAndResourceId.first;
+                        ResourceId = cloudIdAndResourceId.second;
                     }
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
@@ -553,15 +554,14 @@ namespace NKikimr::NHttpProxy {
                         .Counters = nullptr,
                         .AWSSignature = std::move(HttpContext.GetSignature()),
                         .IAMToken = HttpContext.IamToken,
-                        .FolderID = "" 
+                        .FolderID = HttpContext.FolderId,
+                        .RequestFormat = NSQS::TAuthActorData::Json,
+                        .Requester = ctx.SelfID
                     };
 
-                    auto authRequestProxy = MakeHolder<NSQS::THttpProxyAuthRequestProxy>(
-                        std::move(data),
-                        "",
-                        ctx.SelfID);
-
-                    ctx.RegisterWithSameMailbox(authRequestProxy.Release());
+                    AppData(ctx.ActorSystem())->SqsAuthFactory->RegisterAuthActor(
+                        *ctx.ActorSystem(),
+                        std::move(data));
                 }
 
                 ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup());
@@ -1148,10 +1148,15 @@ namespace NKikimr::NHttpProxy {
             SourceAddress = address;
         }
 
-        DatabasePath = Request->URL;
+        DatabasePath = Request->URL.Before('?');
         if (DatabasePath == "/") {
            DatabasePath = "";
         }
+        auto params = TCgiParameters(Request->URL.After('?'));
+        if (auto it = params.Find("folderId"); it != params.end()) {
+            FolderId = it->second;
+        }
+
         //TODO: find out databaseId
         ParseHeaders(Request->Headers);
     }

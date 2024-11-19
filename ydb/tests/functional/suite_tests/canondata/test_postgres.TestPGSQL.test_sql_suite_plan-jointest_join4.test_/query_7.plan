@@ -29,8 +29,8 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "precompute_1_0",
-                                        "Node Type": "Limit-Filter-InnerJoin (MapJoin)-ConstantExpr-Filter-TableRangeScan-ConstantExpr",
+                                        "CTE Name": "precompute_0_0",
+                                        "Node Type": "Limit-Filter-InnerJoin (MapJoin)-Filter-TableRangeScan-ConstantExpr-Filter-ConstantExpr",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -60,26 +60,21 @@
                                                 "Predicate": "item.tt5.f1 == item.tt5.f2 - item.tt6.f2"
                                             },
                                             {
-                                                "Condition": "f1 = f1",
+                                                "Condition": "tt6.f1 = tt5.f1",
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 4
+                                                        "InternalOperatorId": 3
                                                     },
                                                     {
-                                                        "InternalOperatorId": 3
+                                                        "InternalOperatorId": 6
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"
                                             },
                                             {
-                                                "Inputs": [],
-                                                "Name": "ToFlow",
-                                                "ToFlow": "precompute_0_0"
-                                            },
-                                            {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 5
+                                                        "InternalOperatorId": 4
                                                     }
                                                 ],
                                                 "Name": "Filter",
@@ -88,7 +83,7 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "InternalOperatorId": 6
+                                                        "InternalOperatorId": 5
                                                     }
                                                 ],
                                                 "Name": "TableRangeScan",
@@ -102,6 +97,20 @@
                                                 "Inputs": [],
                                                 "Iterator": "precompute_1_0",
                                                 "Name": "Iterator"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 7
+                                                    }
+                                                ],
+                                                "Name": "Filter",
+                                                "Predicate": "Exist(item.f1)"
+                                            },
+                                            {
+                                                "Inputs": [],
+                                                "Name": "ToFlow",
+                                                "ToFlow": "precompute_0_0"
                                             }
                                         ],
                                         "PlanNodeId": 9,

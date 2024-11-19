@@ -760,9 +760,10 @@ private:
 
             TVector<TExprBase> fakeReads;
             auto paramsType = NDq::CollectParameters(programLambda, ctx);
+            NDq::TSpillingSettings spillingSettings{State->Settings->GetEnabledSpillingNodes()};
             *lambda = NDq::BuildProgram(
                 programLambda, *paramsType, compiler, typeEnv, *State->FunctionRegistry,
-                ctx, fakeReads);
+                ctx, fakeReads, spillingSettings);
         }
 
         auto block = MeasureBlock("RuntimeNodeVisitor");

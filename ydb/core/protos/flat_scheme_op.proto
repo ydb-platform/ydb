@@ -11,6 +11,7 @@ import "ydb/core/protos/filestore_config.proto";
 import "ydb/core/protos/channel_purpose.proto";
 import "ydb/core/protos/follower_group.proto";
 import "ydb/core/protos/blob_depot_config.proto";
+import "ydb/core/protos/yql_translation_settings.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_value.proto";
@@ -19,6 +20,7 @@ import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.proto";
 import "ydb/core/tx/columnshard/common/protos/snapshot.proto";
+import "ydb/library/formats/arrow/protos/accessor.proto";
 
 import "google/protobuf/empty.proto";
 
@@ -422,6 +424,7 @@ message TOlapColumnDiff {
     optional TOlapColumn.TSerializer Serializer = 5;
     optional string StorageId = 6;
     optional string DefaultValue = 7;
+    optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
 }
 
 message TOlapColumnDescription {
@@ -441,6 +444,7 @@ message TOlapColumnDescription {
     optional TOlapColumn.TSerializer Serializer = 10;
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
+    optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
 }
 
 message TRequestedBloomFilter {
@@ -452,6 +456,11 @@ message TRequestedMaxIndex {
     optional string ColumnName = 1;
 }
 
+message TRequestedCountMinSketch {
+    // sketch built on the combined data from the set of columns
+    repeated string ColumnNames = 1;
+}
+
 message TOlapIndexRequested {
     optional string Name = 1;
     optional TCompressionOptions Compression = 3;
@@ -461,6 +470,7 @@ message TOlapIndexRequested {
     oneof Implementation {
         TRequestedBloomFilter BloomFilter = 40;
         TRequestedMaxIndex MaxIndex = 41;
+        TRequestedCountMinSketch CountMinSketch = 42;
     }
 }
 
@@ -472,6 +482,10 @@ message TBloomFilter {
 
 message TMaxIndex {
     optional uint32 ColumnId = 1;
+}
+
+message TCountMinSketch {
+    repeated uint32 ColumnIds = 1;
 }
 
 message TOlapIndexDescription {
@@ -487,6 +501,7 @@ message TOlapIndexDescription {
     oneof Implementation {
         TBloomFilter BloomFilter = 41;
         TMaxIndex MaxIndex = 42;
+        TCountMinSketch CountMinSketch = 43;
     }
 }
 
@@ -1801,6 +1816,7 @@ message TDescribeOptions {
     optional bool ReturnChannelsBinding = 8 [default = false];
     optional bool ReturnRangeKey = 9 [default = true];
     optional bool ReturnSetVal = 10 [default = false];
+    optional bool ReturnIndexTableBoundaries = 11 [default = false];
 }
 
 // Request to read scheme for a specific path
@@ -2113,6 +2129,7 @@ message TViewDescription {
     optional NKikimrProto.TPathID PathId = 2;
     optional uint64 Version = 3;
     optional string QueryText = 4;
+    optional NYql.NProto.TTranslationSettings CapturedContext = 5;
 }
 
 message TResourcePoolProperties {

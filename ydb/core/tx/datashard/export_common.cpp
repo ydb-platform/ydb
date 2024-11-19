@@ -66,7 +66,12 @@ TMaybe<Ydb::Table::CreateTableRequest> GenYdbScheme(
     FillPartitioningSettings(scheme, tableDesc);
     FillKeyBloomFilter(scheme, tableDesc);
     FillReadReplicasSettings(scheme, tableDesc);
-    FillSequenceDescription(scheme, tableDesc);
+
+    TString error;
+    Ydb::StatusIds::StatusCode status;
+    if (!FillSequenceDescription(scheme, tableDesc, status, error)) {
+        return Nothing();
+    }
 
     return scheme;
 }

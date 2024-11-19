@@ -1112,6 +1112,7 @@ namespace NSQLTranslationV1 {
         TMaybe<TIdentifier> AutoPartitioningByLoad;
         TNodePtr MinPartitions;
         TNodePtr MaxPartitions;
+        TNodePtr PartitionCount;
         TNodePtr UniformPartitions;
         TVector<TVector<TNodePtr>> PartitionAtKeys;
         TMaybe<TIdentifier> KeyBloomFilter;
@@ -1201,6 +1202,12 @@ namespace NSQLTranslationV1 {
         TTableSettings TableSettings;
         ETableType TableType = ETableType::Table;
         bool Temporary = false;
+    };
+
+    struct TTableRef;
+    struct TAnalyzeParams {
+        std::shared_ptr<TTableRef> Table;
+        TVector<TString> Columns;
     };
 
     struct TAlterTableParameters {

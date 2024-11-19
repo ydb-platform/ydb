@@ -43,6 +43,34 @@ TPipeline::~TPipeline()
     }
 }
 
+void TPipeline::Reset() {
+    ImmediateOps.clear();
+    ActiveOps.clear();
+    ActivePlannedOps.clear();
+    DataTxCache.clear();
+    DelayedAcks.clear();
+    LastPlannedTx = {0, 0};
+    LastCompleteTx = {0, 0};
+    UtmostCompleteTx = {0, 0};
+    KeepSchemaStep = 0;
+    LastCleanupTime = 0;
+    SchemaTx = nullptr;
+    ExecuteBlockers.clear();
+    CandidateOps.clear();
+    CandidateUnits.clear();
+    NextActiveOp = {};
+    SlowOpProfiles.clear();
+    ActiveStreamingTxs.clear();
+    PredictedPlan.clear();
+    WaitingSchemeOpsOrder.clear();
+    WaitingSchemeOps.clear();
+    WaitingDataTxOps.clear();
+    CommittingOps.Reset();
+    CompletingOps.clear();
+    WaitingDataReadIterators.clear();
+    WaitingReadIteratorsById.clear();
+}
+
 bool TPipeline::Load(NIceDb::TNiceDb& db) {
     using Schema = TDataShard::Schema;
 
@@ -2285,11 +2313,15 @@ void TPipeline::AddCommittingOp(const TOperation::TPtr& op) {
     if (!Self->IsMvccEnabled() || op->IsReadOnly())
         return;
 
+    Y_VERIFY_S(!op->GetCommittingOpsVersion(),
+        "Trying to AddCommittingOp " << *op << " more than once");
+
     TRowVersion version = Self->GetReadWriteVersions(op.Get()).WriteVersion;
     if (op->IsImmediate())
         CommittingOps.Add(op->GetTxId(), version);
     else
         CommittingOps.Add(version);
+    op->SetCommittingOpsVersion(version);
 }
 
 void TPipeline::RemoveCommittingOp(const TRowVersion& version) {
@@ -2299,13 +2331,13 @@ void TPipeline::RemoveCommittingOp(const TRowVersion& version) {
 }
 
 void TPipeline::RemoveCommittingOp(const TOperation::TPtr& op) {
-    if (!Self->IsMvccEnabled() || op->IsReadOnly())
-        return;
-
-    if (op->IsImmediate())
-        CommittingOps.Remove(op->GetTxId());
-    else
-        CommittingOps.Remove(TRowVersion(op->GetStep(), op->GetTxId()));
+    if (const auto& version = op->GetCommittingOpsVersion()) {
+        if (op->IsImmediate())
+            CommittingOps.Remove(op->GetTxId(), *version);
+        else
+            CommittingOps.Remove(*version);
+        op->ResetCommittingOpsVersion();
+    }
 }
 
 bool TPipeline::WaitCompletion(const TOperation::TPtr& op) const {

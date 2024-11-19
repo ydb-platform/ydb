@@ -1150,6 +1150,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
                 Columns { Name: "key" Type: "Uint64" NotNull: true }
                 Columns { Name: "modified_at" Type: "Timestamp" }
                 Columns { Name: "saved_at" Type: "Datetime" }
+                Columns { Name: "data" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             }
         )");
@@ -1206,6 +1207,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
                 }
             }
         );
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLEnabledTable"
+            AlterSchema {
+                AlterColumns {Name: "data" DefaultValue: "10"}
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+        env.TestWaitNotification(runtime, txId);
     }
 
     Y_UNIT_TEST(AlterColumnTable_Negative) {

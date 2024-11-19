@@ -4,6 +4,7 @@ SRCS(
     change_exchange.cpp
     change_record.cpp
     change_sender_monitoring.cpp
+    util.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(change_record.h)

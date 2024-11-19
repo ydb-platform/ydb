@@ -73,6 +73,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateSequence::CallableName());
         DataSinkNames.insert(TKiDropSequence::CallableName());
         DataSinkNames.insert(TKiAlterSequence::CallableName());
+        DataSinkNames.insert(TKiAnalyzeTable::CallableName());
 
         CommitModes.insert(CommitModeFlush);
         CommitModes.insert(CommitModeRollback);
@@ -964,3 +965,36 @@ TCoNameValueTupleList TKiExecDataQuerySettings::BuildNode(TExprContext& ctx, TPo
 }
 
 } // namespace NYql
+
+namespace NSQLTranslation {
+
+void Serialize(const TTranslationSettings& settings, NYql::NProto::TTranslationSettings& serializedSettings) {
+    serializedSettings.SetPathPrefix(settings.PathPrefix);
+    serializedSettings.SetSyntaxVersion(settings.SyntaxVersion);
+    serializedSettings.SetAnsiLexer(settings.AnsiLexer);
+    serializedSettings.SetPgParser(settings.PgParser);
+
+    auto* pragmas = serializedSettings.MutablePragmas();
+    pragmas->Clear();
+    pragmas->Add(settings.Flags.begin(), settings.Flags.end());
+}
+
+void Deserialize(const NYql::NProto::TTranslationSettings& serializedSettings, TTranslationSettings& settings) {
+    #define DeserializeSetting(settingName) \
+        if (serializedSettings.Has##settingName()) { \
+            settings.settingName = serializedSettings.Get##settingName(); \
+        }
+
+        DeserializeSetting(PathPrefix);
+        DeserializeSetting(SyntaxVersion);
+        DeserializeSetting(AnsiLexer);
+        DeserializeSetting(PgParser);
+
+    #undef DeserializeSetting
+
+    // overwrite existing pragmas
+    settings.Flags.clear();
+    settings.Flags.insert(serializedSettings.GetPragmas().begin(), serializedSettings.GetPragmas().end());
+}
+
+}

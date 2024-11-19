@@ -140,7 +140,7 @@ private:
     TVector<TCountersByTabletIdMap> CountersByTabletId; // each index is map from tablet to counter value
 };
 
-class TAggregatedLabeledCounters {
+class TAggregatedLabeledCounters : public TThrRefBase {
 public:
     //
     TAggregatedLabeledCounters(ui32 count, const ui8* aggrFunc, const char * const * names, const ui8* types, const TString& groupNames);

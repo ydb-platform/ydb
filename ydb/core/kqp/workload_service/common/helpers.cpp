@@ -1,7 +1,31 @@
 #include "helpers.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/path.h>
+
 
 namespace NKikimr::NKqp::NWorkload {
+
+TString CreateDatabaseId(const TString& database, bool serverless, TPathId pathId) {
+    TString databasePath = CanonizePath(database);
+    TString tennantPath = CanonizePath(AppData()->TenantName);
+    if (databasePath.empty() || databasePath == tennantPath) {
+        return tennantPath;
+    }
+
+    if (serverless) {
+        databasePath = TStringBuilder() << pathId.OwnerId << ":" << pathId.LocalPathId << ":" << databasePath;
+    }
+    return databasePath;
+}
+
+TString DatabaseIdToDatabase(TStringBuf databaseId) {
+    TStringBuf id;
+    TStringBuf database;
+    return databaseId.TrySplit("/", id, database)
+        ? CanonizePath(TString(database))     // Serverless
+        : CanonizePath(TString(databaseId));  // Dedicated
+}
 
 NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message) {
     NYql::TIssue rootIssue(message);
@@ -12,12 +36,7 @@ NYql::TIssues GroupIssues(const NYql::TIssues& issues, const TString& message) {
 }
 
 void ParsePoolSettings(const NKikimrSchemeOp::TResourcePoolDescription& description, NResourcePool::TPoolSettings& poolConfig) {
-    const auto& properties = description.GetProperties().GetProperties();
-    for (auto& [property, value] : NResourcePool::GetPropertiesMap(poolConfig)) {
-        if (auto propertyIt = properties.find(property); propertyIt != properties.end()) {
-            std::visit(NResourcePool::TSettingsParser{propertyIt->second}, value);
-        }
-    }
+    poolConfig = NResourcePool::TPoolSettings(description.GetProperties().GetProperties());
 }
 
 ui64 SaturationSub(ui64 x, ui64 y) {

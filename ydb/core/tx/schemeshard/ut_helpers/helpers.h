@@ -20,6 +20,7 @@
 
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <util/stream/null.h>
 
@@ -48,6 +49,19 @@
     template<bool OPT>                                                                                             \
     void N(NUnitTest::TTestContext&)
 
+#define Y_UNIT_TEST_FLAGS(N, OPT1, OPT2)                                                                           \
+    template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                               \
+    struct TTestRegistration##N {                                                                                  \
+        TTestRegistration##N() {                                                                                   \
+            TCurrentTest::AddTest(#N, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, false>), false);                   \
+            TCurrentTest::AddTest(#N "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, true>), false);          \
+            TCurrentTest::AddTest(#N "-" #OPT1, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, false>), false);          \
+            TCurrentTest::AddTest(#N "-" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, true>), false); \
+        }                                                                                                          \
+    };                                                                                                             \
+    static TTestRegistration##N testRegistration##N;                                                               \
+    template<bool OPT1, bool OPT2>                                                                                 \
+    void N(NUnitTest::TTestContext&)
 
 namespace NSchemeShardUT_Private {
     using namespace NKikimr;
@@ -348,6 +362,7 @@ namespace NSchemeShardUT_Private {
         NKikimrSchemeOp::EIndexType IndexType = NKikimrSchemeOp::EIndexTypeGlobal;
         TVector<TString> IndexColumns;
         TVector<TString> DataColumns;
+        TVector<NYdb::NTable::TGlobalIndexSettings> GlobalIndexSettings = {};
     };
 
     std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal);

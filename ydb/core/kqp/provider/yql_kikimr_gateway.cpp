@@ -367,8 +367,20 @@ static std::shared_ptr<THashMap<TString, Ydb::Topic::Codec>> GetCodecsMapping() 
 
 static std::shared_ptr<THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> GetAutoPartitioningStrategiesMapping() {
     static std::shared_ptr<THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> strategiesMapping;
-    if (strategiesMapping == nullptr) {
-        strategiesMapping = MakeEnumMapping<Ydb::Topic::AutoPartitioningStrategy>(Ydb::Topic::AutoPartitioningStrategy_descriptor(), "auto_partitioning_strategy_");
+    if (!strategiesMapping) {
+        strategiesMapping = MakeEnumMapping<Ydb::Topic::AutoPartitioningStrategy>(
+            Ydb::Topic::AutoPartitioningStrategy_descriptor(), "auto_partitioning_strategy_");
+
+        const TString prefix = "scale_";
+        for (const auto& [key, value] : *strategiesMapping) {
+            if (key.StartsWith(prefix)) {
+                TString newKey = key;
+                newKey.erase(0, prefix.length());
+
+                Y_ABORT_UNLESS(strategiesMapping->find(newKey) == strategiesMapping->end());
+                (*strategiesMapping)[newKey] = value;
+            }
+        }
     }
     return strategiesMapping;
 }

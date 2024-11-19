@@ -5,6 +5,7 @@ PEERDIR(
     ydb/core/discovery
     ydb/core/engine/minikql
     ydb/core/protos
+    ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/replication/common
     ydb/core/tx/replication/ydb_proxy
@@ -60,4 +61,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut_dst_creator
+    ut_target_discoverer
 )

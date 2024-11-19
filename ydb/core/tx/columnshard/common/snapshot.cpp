@@ -35,4 +35,12 @@ TString TSnapshot::SerializeToString() const {
     return SerializeToProto().SerializeAsString();
 }
 
+NKikimr::NOlap::TSnapshot TSnapshot::MaxForPlanStep(const ui64 planStep) noexcept {
+    return TSnapshot(planStep, ::Max<ui64>());
+}
+
+NKikimr::NOlap::TSnapshot TSnapshot::MaxForPlanInstant(const TInstant planInstant) noexcept {
+    return TSnapshot(planInstant.MilliSeconds(), ::Max<ui64>());
+}
+
 };

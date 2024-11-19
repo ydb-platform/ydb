@@ -3,8 +3,7 @@
 #include "defs.h"
 #include "pdiskid.h"
 #include "pdisk_state.h"
-
-#include <ydb/core/protos/blobstorage_config.pb.h>
+#include "pdisk_status.h"
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -12,7 +11,6 @@
 
 namespace NKikimr::NCms::NSentinel {
 
-using EPDiskStatus = NKikimrBlobStorage::EDriveStatus;
 using TLimitsMap = TMap<EPDiskState, ui32>;
 
 class TPDiskStatusComputer {
@@ -29,6 +27,7 @@ public:
     void Reset();
 
     void SetForcedStatus(EPDiskStatus status);
+    bool HasForcedStatus() const;
     void ResetForcedStatus();
 
 private:
@@ -84,7 +83,7 @@ struct TPDiskInfo
     using EIgnoreReason = NKikimrCms::TPDiskInfo::EIgnoreReason;
 
     EPDiskStatus ActualStatus = EPDiskStatus::ACTIVE;
-    EPDiskStatus PrevStatus = EPDiskStatus::ACTIVE;
+    EPDiskStatus PrevStatus = EPDiskStatus::UNKNOWN;
     TInstant LastStatusChange;
     bool StatusChangeFailed = false;
     // means that this pdisk status change last time was the reason of whole request failure

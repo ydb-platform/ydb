@@ -41,13 +41,10 @@
                                                 "Name": "Limit"
                                             },
                                             {
-                                                "Condition": "unique1,stringu1 = i,j",
+                                                "Condition": "onek.stringu1,onek.unique1 = v.i,v.j",
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2
-                                                    },
-                                                    {
-                                                        "Other": "ConstantExpression"
                                                     }
                                                 ],
                                                 "Name": "InnerJoin (MapJoin)"

@@ -64,6 +64,7 @@ enum EIsolationLevel {
     ISOLATION_LEVEL_READ_COMMITTED = 2;
     ISOLATION_LEVEL_READ_UNCOMMITTED = 3;
     ISOLATION_LEVEL_READ_STALE = 4;
+    ISOLATION_LEVEL_SNAPSHOT_RO = 5;
 };
 
 enum EQueryReplyFlags {
@@ -123,6 +124,7 @@ message TQueryRequest {
     optional string UserSID = 33;
     optional uint64 OutputChunkMaxSize = 34;
     optional string PoolId = 35;
+    optional string DatabaseId = 36;
 }
 
 message TKqpPathIdProto {
@@ -278,7 +280,7 @@ message TQueryResponseExtraInfo {
 message TQueryResponse {
     optional bytes SessionId = 1;
     reserved 2; // (deprecated) QueryErrors
-    repeated NKikimrMiniKQL.TResult Results = 3;
+    // repeated NKikimrMiniKQL.TResult Results = 3;
     // optional TQueryProfile Profile = 4; // TODO: Deprecate, use QueryStats
     reserved 4;
     optional bytes PreparedQuery = 5;
@@ -441,7 +443,7 @@ message TEvPingSessionResponse {
 
 message TEvDataQueryStreamPart {
     optional NActorsProto.TActorId GatewayActorId = 1;
-    repeated NKikimrMiniKQL.TResult Results = 2;
+    repeated Ydb.ResultSet Results = 2;
 };
 
 message TCancelQueryRequest {
@@ -584,6 +586,13 @@ message TEvStartKqpTasksRequest {
     optional bool StartAllOrFail = 6 [default = true];
     optional uint64 OutputChunkMaxSize = 7 [default = 0]; // 0 - use some default value 
     optional string SerializedGUCSettings = 8;
+    optional string SchedulerGroup = 9;
+    optional double MemoryPoolPercent = 10 [default = 100];
+    optional string Database = 11;
+    optional double MaxCpuShare = 12;
+    optional string DatabaseId = 17;
+    optional uint64 LockTxId = 13;
+    optional uint32 LockNodeId = 14;
 }
 
 message TEvStartKqpTasksResponse {
@@ -755,15 +764,16 @@ message TKqpTableSinkSettings {
 }
 
 message TKqpStreamLookupSettings {
-     optional NKqpProto.TKqpPhyTableId Table = 1;
-     repeated TKqpColumnMetadataProto KeyColumns = 2;
-     repeated TKqpColumnMetadataProto Columns = 3;
-     optional TKqpSnapshot Snapshot = 4;
-     optional uint64 LockTxId = 5;
-     optional bool ImmediateTx = 6;
-     repeated string LookupKeyColumns = 7;
-     optional NKqpProto.EStreamLookupStrategy LookupStrategy = 8;
-     optional bool AllowInconsistentReads = 9 [default = false];
+    optional NKqpProto.TKqpPhyTableId Table = 1;
+    repeated TKqpColumnMetadataProto KeyColumns = 2;
+    repeated TKqpColumnMetadataProto Columns = 3;
+    optional TKqpSnapshot Snapshot = 4;
+    optional uint64 LockTxId = 5;
+    optional bool ImmediateTx = 6;
+    repeated string LookupKeyColumns = 7;
+    optional NKqpProto.EStreamLookupStrategy LookupStrategy = 8;
+    optional bool AllowInconsistentReads = 9 [default = false];
+    optional uint32 LockNodeId = 10;
 }
 
 message TKqpSequencerSettings {

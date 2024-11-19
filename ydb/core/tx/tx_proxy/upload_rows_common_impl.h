@@ -43,19 +43,77 @@ private:
     NMonitoring::THistogramPtr ReplyDuration;
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
-    NMonitoring::THistogramPtr PackageSize;
+    NMonitoring::THistogramPtr PackageSizeRecordsByRecords;
+    NMonitoring::THistogramPtr PackageSizeCountByRecords;
+
+    NMonitoring::THistogramPtr PreparingDuration;
+    NMonitoring::THistogramPtr WritingDuration;
+    NMonitoring::THistogramPtr CommitDuration;
+    NMonitoring::THistogramPtr PrepareReplyDuration;
 
     THashMap<TString, NMonitoring::TDynamicCounters::TCounterPtr> CodesCount;
 public:
     TUploadCounters();
 
+    class TGuard: TMoveOnly {
+    private:
+        TMonotonic Start = TMonotonic::Now();
+        std::optional<TMonotonic> WritingStarted;
+        std::optional<TMonotonic> CommitStarted;
+        std::optional<TMonotonic> CommitFinished;
+        std::optional<TMonotonic> ReplyFinished;
+        TUploadCounters& Owner;
+    public:
+        TGuard(const TMonotonic start, TUploadCounters& owner)
+            : Start(start)
+            , Owner(owner)
+        {
+
+        }
+
+        void OnWritingStarted() {
+            WritingStarted = TMonotonic::Now();
+            Owner.PreparingDuration->Collect((*WritingStarted - Start).MilliSeconds());
+        }
+
+        void OnCommitStarted() {
+            CommitStarted = TMonotonic::Now();
+            AFL_VERIFY(WritingStarted);
+            Owner.WritingDuration->Collect((*CommitStarted - *WritingStarted).MilliSeconds());
+        }
+
+        void OnCommitFinished() {
+            CommitFinished = TMonotonic::Now();
+            AFL_VERIFY(CommitStarted);
+            Owner.CommitDuration->Collect((*CommitFinished - *CommitStarted).MilliSeconds());
+        }
+
+        void OnReply(const ::Ydb::StatusIds::StatusCode code) {
+            ReplyFinished = TMonotonic::Now();
+            if (CommitFinished) {
+                Owner.PrepareReplyDuration->Collect((*ReplyFinished - *CommitFinished).MilliSeconds());
+            }
+            Owner.ReplyDuration->Collect((*ReplyFinished - Start).MilliSeconds());
+
+            const TString name = ::Ydb::StatusIds::StatusCode_Name(code);
+            auto it = Owner.CodesCount.find(name);
+            Y_ABORT_UNLESS(it != Owner.CodesCount.end());
+            it->second->Add(1);
+        }
+    };
+
+    TGuard BuildGuard(const TMonotonic start) {
+        return TGuard(start, *this);
+    }
+
     void OnRequest(const ui64 rowsCount) const {
         RequestsCount->Add(1);
         RowsCount->Add(rowsCount);
-        PackageSize->Collect(rowsCount);
+        PackageSizeRecordsByRecords->Collect((i64)rowsCount, rowsCount);
+        PackageSizeCountByRecords->Collect(rowsCount);
     }
 
-    void OnReply(const TDuration d, const ::Ydb::StatusIds::StatusCode code) const;
+    void OnReply(const TDuration dFull, const TDuration dDelta, const ::Ydb::StatusIds::StatusCode code) const;
 };
 
 
@@ -123,8 +181,8 @@ namespace NTxProxy {
 TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
     const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
     const TString& databaseName, const TString& path,
-    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult,
-    std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NYql::TIssues> issues);
+    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
+    std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite);
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -148,6 +206,7 @@ private:
     TActorId LeaderPipeCache;
     TDuration Timeout;
     TInstant StartTime;
+    std::optional<TInstant> StartCommitTime;
     TActorId TimeoutTimerActorId;
 
     TAutoPtr<NSchemeCache::TSchemeCacheRequest> ResolvePartitionsResult;
@@ -164,6 +223,8 @@ private:
     std::shared_ptr<NYql::TIssues> Issues = std::make_shared<NYql::TIssues>();
     NLongTxService::TLongTxId LongTxId;
     TUploadCounters UploadCounters;
+    TUploadCounters::TGuard UploadCountersGuard;
+    bool ImmediateWrite = false;
 
 protected:
     enum class EUploadSource {
@@ -216,12 +277,14 @@ public:
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , Timeout((timeout && timeout <= DEFAULT_TIMEOUT) ? timeout : DEFAULT_TIMEOUT)
         , Status(Ydb::StatusIds::SUCCESS)
+        , UploadCountersGuard(UploadCounters.BuildGuard(TMonotonic::Now()))
         , DiskQuotaExceeded(diskQuotaExceeded)
         , Span(std::move(span))
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
         StartTime = TAppData::TimeProvider->Now();
+        ImmediateWrite = AppData(ctx)->FeatureFlags.GetEnableImmediateWritingOnBulkUpsert();
         OnBeforeStart(ctx);
         ResolveTable(GetTable(), ctx);
     }
@@ -741,6 +804,7 @@ private:
     }
 
     void WriteToColumnTable(const NActors::TActorContext& ctx) {
+        UploadCountersGuard.OnWritingStarted();
         TString accessCheckError;
         if (!CheckAccess(accessCheckError)) {
             return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, LogPrefix() << accessCheckError, ctx);
@@ -786,7 +850,7 @@ private:
                     LogPrefix() << "no data or conversion error", ctx);
             }
 
-            auto batch = NArrow::TColumnOperator().NullIfAbsent().Extract(Batch, outputColumns);
+            auto batch = NArrow::TColumnOperator().ErrorIfAbsent().Extract(Batch, outputColumns);
             if (!batch) {
                 for (auto& columnName : outputColumns) {
                     if (Batch->schema()->GetFieldIndex(columnName) < 0) {
@@ -860,8 +924,8 @@ private:
         TBase::Become(&TThis::StateWaitWriteBatchResult);
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
-        DoLongTxWriteSameMailbox(ctx, ctx.SelfID, LongTxId, dedupId,
-            GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
+        DoLongTxWriteSameMailbox(
+            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, ImmediateWrite);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {
@@ -888,12 +952,15 @@ private:
                 RaiseIssue(issue);
             }
             return ReplyWithResult(status, ctx);
+        } else if (ImmediateWrite) {
+            return ReplyWithResult(status, ctx);
+        } else {
+            CommitLongTx(ctx);
         }
-
-        CommitLongTx(ctx);
     }
 
     void CommitLongTx(const TActorContext& ctx) {
+        UploadCountersGuard.OnCommitStarted();
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
         ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvCommitTx(LongTxId), 0, 0, Span.GetTraceId());
         TBase::Become(&TThis::StateWaitCommitLongTx);
@@ -908,6 +975,7 @@ private:
     }
 
     void Handle(NLongTxService::TEvLongTxService::TEvCommitTxResult::TPtr& ev, const NActors::TActorContext& ctx) {
+        UploadCountersGuard.OnCommitFinished();
         const auto* msg = ev->Get();
 
         if (msg->Record.GetStatus() == Ydb::StatusIds::SUCCESS) {
@@ -1263,7 +1331,7 @@ private:
     }
 
     void ReplyWithResult(::Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
-        UploadCounters.OnReply(TAppData::TimeProvider->Now() - StartTime, status);
+        UploadCountersGuard.OnReply(status);
         SendResult(ctx, status);
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "completed with status " << status);
@@ -1271,7 +1339,7 @@ private:
         if (LongTxId != NLongTxService::TLongTxId()) {
             // LongTxId is reset after successful commit
             // If it si still there it means we need to rollback
-            Y_DEBUG_ABORT_UNLESS(status != ::Ydb::StatusIds::SUCCESS);
+            Y_DEBUG_ABORT_UNLESS(status != ::Ydb::StatusIds::SUCCESS || ImmediateWrite);
             RollbackLongTx(ctx);
         }
         Span.EndOk();

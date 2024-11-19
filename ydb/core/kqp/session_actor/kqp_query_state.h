@@ -88,6 +88,7 @@ public:
         }
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
+        UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
     }
 
     // the monotonously growing counter, the ordinal number of the query,
@@ -347,9 +348,12 @@ public:
             return false;
         }
 
-        if (TxCtx->HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
-            YQL_ENSURE(TxCtx->EnableImmediateEffects);
+        if (TxCtx->HasOlapTable) {
+            // HTAP/OLAP transactions always use separate commit.
+            return false;
+        }
 
+        if (TxCtx->HasUncommittedChangesRead || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             if (tx && tx->GetHasEffects()) {
                 YQL_ENSURE(tx->ResultsSize() == 0);
                 // commit can be applied to the last transaction with effects
@@ -491,18 +495,6 @@ public:
         StatementResultIndex += StatementResultSize;
         StatementResultSize = 0;
         PrepareCurrentStatement();
-    }
-
-    void PrepareStatementTransaction(NKqpProto::TKqpPhyTx_EType txType) {
-        if (!HasTxControl()) {
-            switch (txType) {
-                case NKqpProto::TKqpPhyTx::TYPE_SCHEME:
-                    TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
-                    break;
-                default:
-                    TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
-            }
-        }
     }
 
     // validate the compiled query response and ensure that all table versions are not

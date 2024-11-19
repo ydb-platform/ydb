@@ -2,16 +2,17 @@
 
 #include "abstract/merger.h"
 #include "plain/logic.h"
+#include "sparsed/logic.h"
 
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
-#include <ydb/core/formats/arrow/simple_builder/array.h>
-#include <ydb/core/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/formats/arrow/simple_builder/array.h>
+#include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
-std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared_ptr<TSerializationStats>& stats,
+std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,
     const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const ui64 pathId,
     const std::optional<ui64> shardingActualVersion) {
     AFL_VERIFY(Batches.size() == Filters.size());
@@ -30,8 +31,6 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
 
         ui32 idx = 0;
         for (auto&& batch : Batches) {
-            AFL_VERIFY(batch->GetColumnsCount() == resultFiltered->GetColumnsCount())("data", batch->GetColumnsCount())(
-                                                       "schema", resultFiltered->GetColumnsCount());
             {
                 NArrow::NConstruction::IArrayBuilder::TPtr column =
                     std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntConstFiller<arrow::UInt16Type>>>(
@@ -52,43 +51,61 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
 
     std::vector<std::map<ui32, std::vector<TColumnPortionResult>>> chunkGroups;
     chunkGroups.resize(batchResults.size());
-    for (auto&& columnId : resultFiltered->GetColumnIds()) {
-        NActors::TLogContextGuard logGuard(
-            NActors::TLogContextBuilder::Build()("field_name", resultFiltered->GetIndexInfo().GetColumnName(columnId)));
-        auto columnInfo = stats->GetColumnInfo(columnId);
-        std::shared_ptr<IColumnMerger> merger = std::make_shared<TPlainMerger>();
-        //        resultFiltered->BuildColumnMergerVerified(columnId);
 
-        {
-            std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> parts;
-            for (auto&& p : Batches) {
-                parts.emplace_back(p->GetColumnVerified(resultFiltered->GetFieldIndex(columnId)));
+    using TColumnData = std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>;
+    THashMap<ui32, TColumnData> columnsData;
+    {
+        ui32 batchIdx = 0;
+        for (auto&& p : Batches) {
+            ui32 columnIdx = 0;
+            for (auto&& i : p->GetSchema()->GetFields()) {
+                const std::optional<ui32> columnId = resultFiltered->GetIndexInfo().GetColumnIdOptional(i->name());
+                if (columnId) {
+                    auto it = columnsData.find(*columnId);
+                    if (it == columnsData.end()) {
+                        it = columnsData.emplace(*columnId, TColumnData(Batches.size())).first;
+                    }
+                    it->second[batchIdx] = p->GetColumnVerified(columnIdx);
+                }
+                ++columnIdx;
             }
+            ++batchIdx;
+        }
+    }
 
-            merger->Start(parts);
+    TMergingContext mergingContext(batchResults, Batches);
+
+    for (auto&& [columnId, columnData] : columnsData) {
+        if (columnId == (ui32)IIndexInfo::ESpecialColumn::WRITE_ID &&
+            (!HasAppData() || !AppDataVerified().FeatureFlags.GetEnableInsertWriteIdSpecialColumnCompatibility())) {
+            continue;
+        }
+        const TString& columnName = resultFiltered->GetIndexInfo().GetColumnName(columnId);
+        NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("field_name", columnName));
+        auto columnInfo = stats->GetColumnInfo(columnId);
+
+        TColumnMergeContext commonContext(
+            columnId, resultFiltered, NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo);
+        if (OptimizationWritingPackMode) {
+            commonContext.MutableSaver().AddSerializerWithBorder(
+                100, std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED));
+            commonContext.MutableSaver().AddSerializerWithBorder(
+                Max<ui32>(), std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME));
         }
 
-        std::map<std::string, std::vector<NCompaction::TColumnPortionResult>> columnChunks;
+        THolder<IColumnMerger> merger =
+            IColumnMerger::TFactory::MakeHolder(commonContext.GetLoader()->GetAccessorConstructor().GetClassName(), commonContext);
+        AFL_VERIFY(!!merger)("problem", "cannot create merger")(
+            "class_name", commonContext.GetLoader()->GetAccessorConstructor().GetClassName());
+        merger->Start(columnData, mergingContext);
+
         ui32 batchIdx = 0;
         for (auto&& batchResult : batchResults) {
             const ui32 portionRecordsCountLimit =
                 batchResult->num_rows() / (batchResult->num_rows() / NSplitter::TSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
 
-            NArrow::NSerialization::TSerializerContainer externalSaver;
-            if (OptimizationWritingPackMode) {
-                if (batchResult->num_rows() < 100) {
-                    externalSaver = NArrow::NSerialization::TSerializerContainer(
-                        std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED));
-                } else {
-                    externalSaver = NArrow::NSerialization::TSerializerContainer(
-                        std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME));
-                }
-            }
-
-            NCompaction::TColumnMergeContext context(columnId, resultFiltered, portionRecordsCountLimit,
-                NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo, externalSaver);
-
-            chunkGroups[batchIdx][columnId] = merger->Execute(context, batchResult);
+            TChunkMergeContext context(portionRecordsCountLimit, batchIdx, batchResult->num_rows());
+            chunkGroups[batchIdx][columnId] = merger->Execute(context, mergingContext);
             ++batchIdx;
         }
     }
@@ -112,13 +129,6 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
             AFL_VERIFY(i.second.size() == columnChunks.begin()->second.size())("first", columnChunks.begin()->second.size())(
                                               "current", i.second.size())("first_name", columnChunks.begin()->first)("current_name", i.first);
         }
-        auto columnSnapshotPlanStepIdx = batchResult->GetColumnByName(TIndexInfo::SPEC_COL_PLAN_STEP);
-        auto columnSnapshotTxIdx = batchResult->GetColumnByName(TIndexInfo::SPEC_COL_TX_ID);
-        Y_ABORT_UNLESS(columnSnapshotPlanStepIdx);
-        Y_ABORT_UNLESS(columnSnapshotTxIdx);
-        Y_ABORT_UNLESS(columnSnapshotPlanStepIdx->type_id() == arrow::UInt64Type::type_id);
-        Y_ABORT_UNLESS(columnSnapshotTxIdx->type_id() == arrow::UInt64Type::type_id);
-
         std::vector<TGeneralSerializedSlice> batchSlices;
         std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultFiltered, stats));
 
@@ -129,7 +139,7 @@ std::vector<NKikimr::NOlap::TWritePortionInfoWithBlobsResult> TMerger::Execute(c
             }
             batchSlices.emplace_back(portionColumns, schemaDetails, Context.Counters.SplitterCounters);
         }
-        TSimilarPacker slicer(NSplitter::TSplitSettings().GetExpectedPortionSize());
+        NArrow::NSplitter::TSimilarPacker slicer(NSplitter::TSplitSettings().GetExpectedPortionSize());
         auto packs = slicer.Split(batchSlices);
 
         ui32 recordIdx = 0;

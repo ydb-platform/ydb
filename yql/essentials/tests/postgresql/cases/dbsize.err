@@ -1,0 +1,291 @@
+<sql-statement>
+SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+    (VALUES (10::bigint), (1000::bigint), (1000000::bigint),
+            (1000000000::bigint), (1000000000000::bigint),
+            (1000000000000000::bigint)) x(size);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: pg_size_pretty
+        	SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+	^
+<sql-statement>
+SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+    (VALUES (10::numeric), (1000::numeric), (1000000::numeric),
+            (1000000000::numeric), (1000000000000::numeric),
+            (1000000000000000::numeric),
+            (10.5::numeric), (1000.5::numeric), (1000000.5::numeric),
+            (1000000000.5::numeric), (1000000000000.5::numeric),
+            (1000000000000000.5::numeric)) x(size);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: pg_size_pretty
+        	SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+	^
+<sql-statement>
+-- test where units change up
+SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+    (VALUES (10239::bigint), (10240::bigint),
+            (10485247::bigint), (10485248::bigint),
+            (10736893951::bigint), (10736893952::bigint),
+            (10994579406847::bigint), (10994579406848::bigint),
+            (11258449312612351::bigint), (11258449312612352::bigint)) x(size);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- test where units change up
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: pg_size_pretty
+        	-- test where units change up
+	^
+<sql-statement>
+SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+    (VALUES (10239::numeric), (10240::numeric),
+            (10485247::numeric), (10485248::numeric),
+            (10736893951::numeric), (10736893952::numeric),
+            (10994579406847::numeric), (10994579406848::numeric),
+            (11258449312612351::numeric), (11258449312612352::numeric)) x(size);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: pg_size_pretty
+        	SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+	^
+<sql-statement>
+-- pg_size_bytes() tests
+SELECT size, pg_size_bytes(size) FROM
+    (VALUES ('1'), ('123bytes'), ('1kB'), ('1MB'), (' 1 GB'), ('1.5 GB '),
+            ('1TB'), ('3000 TB'), ('1e6 MB')) x(size);
+</sql-statement>
+<sql-statement>
+-- case-insensitive units are supported
+SELECT size, pg_size_bytes(size) FROM
+    (VALUES ('1'), ('123bYteS'), ('1kb'), ('1mb'), (' 1 Gb'), ('1.5 gB '),
+            ('1tb'), ('3000 tb'), ('1e6 mb')) x(size);
+</sql-statement>
+<sql-statement>
+-- negative numbers are supported
+SELECT size, pg_size_bytes(size) FROM
+    (VALUES ('-1'), ('-123bytes'), ('-1kb'), ('-1mb'), (' -1 Gb'), ('-1.5 gB '),
+            ('-1tb'), ('-3000 TB'), ('-10e-1 MB')) x(size);
+</sql-statement>
+<sql-statement>
+-- different cases with allowed points
+SELECT size, pg_size_bytes(size) FROM
+     (VALUES ('-1.'), ('-1.kb'), ('-1. kb'), ('-0. gb'),
+             ('-.1'), ('-.1kb'), ('-.1 kb'), ('-.0 gb')) x(size);
+</sql-statement>
+<sql-statement>
+-- invalid inputs
+SELECT pg_size_bytes('1 AB');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- invalid inputs
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid size: "1 AB"
+DETAIL:  Invalid size unit: "AB".
+HINT:  Valid units are "bytes", "kB", "MB", "GB", and "TB".
+
+        	-- invalid inputs
+	^
+<sql-statement>
+SELECT pg_size_bytes('1 AB A');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_size_bytes('1 AB A');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid size: "1 AB A"
+DETAIL:  Invalid size unit: "AB A".
+HINT:  Valid units are "bytes", "kB", "MB", "GB", and "TB".
+
+        	SELECT pg_size_bytes('1 AB A');
+	^
+<sql-statement>
+SELECT pg_size_bytes('1 AB A    ');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_size_bytes('1 AB A    ');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid size: "1 AB A    "
+DETAIL:  Invalid size unit: "AB A".
+HINT:  Valid units are "bytes", "kB", "MB", "GB", and "TB".
+
+        	SELECT pg_size_bytes('1 AB A    ');
+	^
+<sql-statement>
+SELECT pg_size_bytes('9223372036854775807.9');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_size_bytes('9223372036854775807.9');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	SELECT pg_size_bytes('9223372036854775807.9');
+	^
+<sql-statement>
+SELECT pg_size_bytes('1e100');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_size_bytes('1e100');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  bigint out of range
+
+        	SELECT pg_size_bytes('1e100');
+	^
+<sql-statement>
+SELECT pg_size_bytes('1e1000000000000000000');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_size_bytes('1e1000000000000000000');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value overflows numeric format
+
+        	SELECT pg_size_bytes('1e1000000000000000000');
+	^
+<sql-statement>
+SELECT pg_size_bytes('1 byte');  -- the singular "byte" is not supported
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_size_bytes('1 byte');  -- the singular "byte" is not supported
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid size: "1 byte"
+DETAIL:  Invalid size unit: "byte".
+HINT:  Valid units are "bytes", "kB", "MB", "GB", and "TB".
+
+        	SELECT pg_size_bytes('1 byte');  -- the singular "byte" is not supported
+	^
+<sql-statement>
+SELECT pg_size_bytes('');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_size_bytes('');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid size: ""
+
+        	SELECT pg_size_bytes('');
+	^
+<sql-statement>
+SELECT pg_size_bytes('kb');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_size_bytes('kb');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid size: "kb"
+
+        	SELECT pg_size_bytes('kb');
+	^
+<sql-statement>
+SELECT pg_size_bytes('..');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_size_bytes('..');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid size: ".."
+
+        	SELECT pg_size_bytes('..');
+	^
+<sql-statement>
+SELECT pg_size_bytes('-.');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_size_bytes('-.');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid size: "-."
+
+        	SELECT pg_size_bytes('-.');
+	^
+<sql-statement>
+SELECT pg_size_bytes('-.kb');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_size_bytes('-.kb');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid size: "-.kb"
+
+        	SELECT pg_size_bytes('-.kb');
+	^
+<sql-statement>
+SELECT pg_size_bytes('-. kb');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_size_bytes('-. kb');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid size: "-. kb"
+
+        	SELECT pg_size_bytes('-. kb');
+	^
+<sql-statement>
+SELECT pg_size_bytes('.+912');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_size_bytes('.+912');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid size: ".+912"
+
+        	SELECT pg_size_bytes('.+912');
+	^
+<sql-statement>
+SELECT pg_size_bytes('+912+ kB');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_size_bytes('+912+ kB');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid size: "+912+ kB"
+DETAIL:  Invalid size unit: "+ kB".
+HINT:  Valid units are "bytes", "kB", "MB", "GB", and "TB".
+
+        	SELECT pg_size_bytes('+912+ kB');
+	^
+<sql-statement>
+SELECT pg_size_bytes('++123 kB');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT pg_size_bytes('++123 kB');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid size: "++123 kB"
+
+        	SELECT pg_size_bytes('++123 kB');
+	^

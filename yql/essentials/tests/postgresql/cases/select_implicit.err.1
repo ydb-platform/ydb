@@ -1,0 +1,293 @@
+<sql-statement>
+--
+-- SELECT_IMPLICIT
+-- Test cases for queries with ordering terms missing from the target list.
+-- This used to be called "junkfilter.sql".
+-- The parser uses the term "resjunk" to handle these cases.
+-- - thomas 1998-07-09
+--
+-- load test data
+CREATE TABLE test_missing_target (a int, b int, c char(8), d char);
+</sql-statement>
+<sql-statement>
+INSERT INTO test_missing_target VALUES (0, 1, 'XXXX', 'A');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_missing_target VALUES (1, 2, 'ABAB', 'b');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_missing_target VALUES (2, 2, 'ABAB', 'c');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_missing_target VALUES (3, 3, 'BBBB', 'D');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_missing_target VALUES (4, 3, 'BBBB', 'e');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_missing_target VALUES (5, 3, 'bbbb', 'F');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_missing_target VALUES (6, 4, 'cccc', 'g');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_missing_target VALUES (7, 4, 'cccc', 'h');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_missing_target VALUES (8, 4, 'CCCC', 'I');
+</sql-statement>
+<sql-statement>
+INSERT INTO test_missing_target VALUES (9, 4, 'CCCC', 'j');
+</sql-statement>
+<sql-statement>
+--   w/ existing GROUP BY target
+SELECT c, count(*) FROM test_missing_target GROUP BY test_missing_target.c ORDER BY c;
+</sql-statement>
+<sql-statement>
+--   w/o existing GROUP BY target using a relation name in GROUP BY clause
+SELECT count(*) FROM test_missing_target GROUP BY test_missing_target.c ORDER BY c;
+</sql-statement>
+<sql-statement>
+--   w/o existing GROUP BY target and w/o existing a different ORDER BY target
+--   failure expected
+SELECT count(*) FROM test_missing_target GROUP BY a ORDER BY b;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: OrderedMap, At function: Sort
+    	--   w/o existing GROUP BY target and w/o existing a different ORDER BY target
+	^
+        -stdin-:<main>:3:62: Error: At function: Member
+        	SELECT count(*) FROM test_missing_target GROUP BY a ORDER BY b;
+	                                                             ^
+            -stdin-:<main>:3:62: Error: Member not found: _alias_test_missing_target.b
+            	SELECT count(*) FROM test_missing_target GROUP BY a ORDER BY b;
+	                                                             ^
+<sql-statement>
+--   w/o existing GROUP BY target and w/o existing same ORDER BY target
+SELECT count(*) FROM test_missing_target GROUP BY b ORDER BY b;
+</sql-statement>
+<sql-statement>
+--   w/ existing GROUP BY target using a relation name in target
+SELECT test_missing_target.b, count(*)
+  FROM test_missing_target GROUP BY b ORDER BY b;
+</sql-statement>
+<sql-statement>
+--   w/o existing GROUP BY target
+SELECT c FROM test_missing_target ORDER BY a;
+</sql-statement>
+<sql-statement>
+--   w/o existing ORDER BY target
+SELECT count(*) FROM test_missing_target GROUP BY b ORDER BY b desc;
+</sql-statement>
+<sql-statement>
+--   group using reference number
+SELECT count(*) FROM test_missing_target ORDER BY 1 desc;
+</sql-statement>
+<sql-statement>
+--   order using reference number
+SELECT c, count(*) FROM test_missing_target GROUP BY 1 ORDER BY 1;
+</sql-statement>
+<sql-statement>
+--   group using reference number out of range
+--   failure expected
+SELECT c, count(*) FROM test_missing_target GROUP BY 3;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--   group using reference number out of range
+	^
+        -stdin-:<main>:3:54: Error: GROUP BY: position 3 is not in select list
+        	SELECT c, count(*) FROM test_missing_target GROUP BY 3;
+	                                                     ^
+-stdin-:<main>: Fatal: ydb/library/yql/ast/yql_expr.h:1785: no children
+
+<sql-statement>
+--   group w/o existing GROUP BY and ORDER BY target under ambiguous condition
+--   failure expected
+SELECT count(*) FROM test_missing_target x, test_missing_target y
+	WHERE x.a = y.a
+	GROUP BY b ORDER BY b;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--   group w/o existing GROUP BY and ORDER BY target under ambiguous condition
+	^
+        -stdin-:<main>:5:11: Error: Column reference is ambiguous: b
+        		GROUP BY b ORDER BY b;
+	          ^
+<sql-statement>
+--   order w/ target under ambiguous condition
+--   failure NOT expected
+SELECT a, a FROM test_missing_target
+	ORDER BY a;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--   order w/ target under ambiguous condition
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: a
+        	--   order w/ target under ambiguous condition
+	^
+<sql-statement>
+--   order expression w/ target under ambiguous condition
+--   failure NOT expected
+SELECT a/2, a/2 FROM test_missing_target
+	ORDER BY a/2;
+</sql-statement>
+<sql-statement>
+--   group expression w/ target under ambiguous condition
+--   failure NOT expected
+SELECT a/2, a/2 FROM test_missing_target
+	GROUP BY a/2 ORDER BY a/2;
+</sql-statement>
+<sql-statement>
+--   group w/ existing GROUP BY target under ambiguous condition
+SELECT x.b, count(*) FROM test_missing_target x, test_missing_target y
+	WHERE x.a = y.a
+	GROUP BY x.b ORDER BY x.b;
+</sql-statement>
+<sql-statement>
+--   group w/o existing GROUP BY target under ambiguous condition
+SELECT count(*) FROM test_missing_target x, test_missing_target y
+	WHERE x.a = y.a
+	GROUP BY x.b ORDER BY x.b;
+</sql-statement>
+<sql-statement>
+--   group w/o existing GROUP BY target under ambiguous condition
+--   into a table
+CREATE TABLE test_missing_target2 AS
+SELECT count(*)
+FROM test_missing_target x, test_missing_target y
+	WHERE x.a = y.a
+	GROUP BY x.b ORDER BY x.b;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	--   group w/o existing GROUP BY target under ambiguous condition
+	^
+<sql-statement>
+SELECT * FROM test_missing_target2;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.test_missing_target2
+    
+<sql-statement>
+--  Functions and expressions
+--   w/ existing GROUP BY target
+SELECT a%2, count(b) FROM test_missing_target
+GROUP BY test_missing_target.a%2
+ORDER BY test_missing_target.a%2;
+</sql-statement>
+<sql-statement>
+--   w/o existing GROUP BY target using a relation name in GROUP BY clause
+SELECT count(c) FROM test_missing_target
+GROUP BY lower(test_missing_target.c)
+ORDER BY lower(test_missing_target.c);
+</sql-statement>
+<sql-statement>
+--   w/o existing GROUP BY target and w/o existing a different ORDER BY target
+--   failure expected
+SELECT count(a) FROM test_missing_target GROUP BY a ORDER BY b;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: OrderedMap, At function: Sort
+    	--   w/o existing GROUP BY target and w/o existing a different ORDER BY target
+	^
+        -stdin-:<main>:3:62: Error: At function: Member
+        	SELECT count(a) FROM test_missing_target GROUP BY a ORDER BY b;
+	                                                             ^
+            -stdin-:<main>:3:62: Error: Member not found: _alias_test_missing_target.b
+            	SELECT count(a) FROM test_missing_target GROUP BY a ORDER BY b;
+	                                                             ^
+<sql-statement>
+--   w/o existing GROUP BY target and w/o existing same ORDER BY target
+SELECT count(b) FROM test_missing_target GROUP BY b/2 ORDER BY b/2;
+</sql-statement>
+<sql-statement>
+--   w/ existing GROUP BY target using a relation name in target
+SELECT lower(test_missing_target.c), count(c)
+  FROM test_missing_target GROUP BY lower(c) ORDER BY lower(c);
+</sql-statement>
+<sql-statement>
+--   w/o existing GROUP BY target
+SELECT a FROM test_missing_target ORDER BY upper(d);
+</sql-statement>
+<sql-statement>
+--   w/o existing ORDER BY target
+SELECT count(b) FROM test_missing_target
+	GROUP BY (b + 1) / 2 ORDER BY (b + 1) / 2 desc;
+</sql-statement>
+<sql-statement>
+--   group w/o existing GROUP BY and ORDER BY target under ambiguous condition
+--   failure expected
+SELECT count(x.a) FROM test_missing_target x, test_missing_target y
+	WHERE x.a = y.a
+	GROUP BY b/2 ORDER BY b/2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--   group w/o existing GROUP BY and ORDER BY target under ambiguous condition
+	^
+        -stdin-:<main>:5:11: Error: Column reference is ambiguous: b
+        		GROUP BY b/2 ORDER BY b/2;
+	          ^
+<sql-statement>
+--   group w/ existing GROUP BY target under ambiguous condition
+SELECT x.b/2, count(x.b) FROM test_missing_target x, test_missing_target y
+	WHERE x.a = y.a
+	GROUP BY x.b/2 ORDER BY x.b/2;
+</sql-statement>
+<sql-statement>
+--   group w/o existing GROUP BY target under ambiguous condition
+--   failure expected due to ambiguous b in count(b)
+SELECT count(b) FROM test_missing_target x, test_missing_target y
+	WHERE x.a = y.a
+	GROUP BY x.b/2;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--   group w/o existing GROUP BY target under ambiguous condition
+	^
+        -stdin-:<main>:3:14: Error: Column reference is ambiguous: b
+        	SELECT count(b) FROM test_missing_target x, test_missing_target y
+	             ^
+<sql-statement>
+--   group w/o existing GROUP BY target under ambiguous condition
+--   into a table
+CREATE TABLE test_missing_target3 AS
+SELECT count(x.b)
+FROM test_missing_target x, test_missing_target y
+	WHERE x.a = y.a
+	GROUP BY x.b/2 ORDER BY x.b/2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	--   group w/o existing GROUP BY target under ambiguous condition
+	^
+<sql-statement>
+SELECT * FROM test_missing_target3;
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.test_missing_target3
+    
+<sql-statement>
+--   Cleanup
+DROP TABLE test_missing_target;
+</sql-statement>
+<sql-statement>
+DROP TABLE test_missing_target2;
+</sql-statement>
+<sql-statement>
+DROP TABLE test_missing_target3;
+</sql-statement>

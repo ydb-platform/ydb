@@ -1,0 +1,304 @@
+<sql-statement>
+--
+-- INT2
+--
+CREATE TABLE INT2_TBL(f1 int2);
+</sql-statement>
+<sql-statement>
+INSERT INTO INT2_TBL(f1) VALUES ('0   ');
+</sql-statement>
+<sql-statement>
+INSERT INTO INT2_TBL(f1) VALUES ('  1234 ');
+</sql-statement>
+<sql-statement>
+INSERT INTO INT2_TBL(f1) VALUES ('    -1234');
+</sql-statement>
+<sql-statement>
+INSERT INTO INT2_TBL(f1) VALUES ('34.5');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INT2_TBL(f1) VALUES ('34.5');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type smallint: "34.5"
+
+        	INSERT INTO INT2_TBL(f1) VALUES ('34.5');
+	^
+<sql-statement>
+-- largest and smallest values
+INSERT INTO INT2_TBL(f1) VALUES ('32767');
+</sql-statement>
+<sql-statement>
+INSERT INTO INT2_TBL(f1) VALUES ('-32767');
+</sql-statement>
+<sql-statement>
+-- bad input values -- should give errors
+INSERT INTO INT2_TBL(f1) VALUES ('100000');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- bad input values -- should give errors
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  value "100000" is out of range for type smallint
+
+        	-- bad input values -- should give errors
+	^
+<sql-statement>
+INSERT INTO INT2_TBL(f1) VALUES ('asdf');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INT2_TBL(f1) VALUES ('asdf');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type smallint: "asdf"
+
+        	INSERT INTO INT2_TBL(f1) VALUES ('asdf');
+	^
+<sql-statement>
+INSERT INTO INT2_TBL(f1) VALUES ('    ');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INT2_TBL(f1) VALUES ('    ');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type smallint: "    "
+
+        	INSERT INTO INT2_TBL(f1) VALUES ('    ');
+	^
+<sql-statement>
+INSERT INTO INT2_TBL(f1) VALUES ('- 1234');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INT2_TBL(f1) VALUES ('- 1234');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type smallint: "- 1234"
+
+        	INSERT INTO INT2_TBL(f1) VALUES ('- 1234');
+	^
+<sql-statement>
+INSERT INTO INT2_TBL(f1) VALUES ('4 444');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INT2_TBL(f1) VALUES ('4 444');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type smallint: "4 444"
+
+        	INSERT INTO INT2_TBL(f1) VALUES ('4 444');
+	^
+<sql-statement>
+INSERT INTO INT2_TBL(f1) VALUES ('123 dt');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INT2_TBL(f1) VALUES ('123 dt');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type smallint: "123 dt"
+
+        	INSERT INTO INT2_TBL(f1) VALUES ('123 dt');
+	^
+<sql-statement>
+INSERT INTO INT2_TBL(f1) VALUES ('');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO INT2_TBL(f1) VALUES ('');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type smallint: ""
+
+        	INSERT INTO INT2_TBL(f1) VALUES ('');
+	^
+<sql-statement>
+SELECT * FROM INT2_TBL;
+</sql-statement>
+<sql-statement>
+SELECT * FROM INT2_TBL AS f(a, b);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT * FROM INT2_TBL AS f(a, b);
+	^
+        -stdin-:<main>:1:1: Error: Wrong number of columns, expected: 1, got: 2
+        	SELECT * FROM INT2_TBL AS f(a, b);
+	^
+<sql-statement>
+SELECT * FROM (TABLE int2_tbl) AS s (a, b);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.int2_tbl
+    
+<sql-statement>
+SELECT i.* FROM INT2_TBL i WHERE i.f1 <> int2 '0';
+</sql-statement>
+<sql-statement>
+SELECT i.* FROM INT2_TBL i WHERE i.f1 <> int4 '0';
+</sql-statement>
+<sql-statement>
+SELECT i.* FROM INT2_TBL i WHERE i.f1 = int2 '0';
+</sql-statement>
+<sql-statement>
+SELECT i.* FROM INT2_TBL i WHERE i.f1 = int4 '0';
+</sql-statement>
+<sql-statement>
+SELECT i.* FROM INT2_TBL i WHERE i.f1 < int2 '0';
+</sql-statement>
+<sql-statement>
+SELECT i.* FROM INT2_TBL i WHERE i.f1 < int4 '0';
+</sql-statement>
+<sql-statement>
+SELECT i.* FROM INT2_TBL i WHERE i.f1 <= int2 '0';
+</sql-statement>
+<sql-statement>
+SELECT i.* FROM INT2_TBL i WHERE i.f1 <= int4 '0';
+</sql-statement>
+<sql-statement>
+SELECT i.* FROM INT2_TBL i WHERE i.f1 > int2 '0';
+</sql-statement>
+<sql-statement>
+SELECT i.* FROM INT2_TBL i WHERE i.f1 > int4 '0';
+</sql-statement>
+<sql-statement>
+SELECT i.* FROM INT2_TBL i WHERE i.f1 >= int2 '0';
+</sql-statement>
+<sql-statement>
+SELECT i.* FROM INT2_TBL i WHERE i.f1 >= int4 '0';
+</sql-statement>
+<sql-statement>
+-- positive odds
+SELECT i.* FROM INT2_TBL i WHERE (i.f1 % int2 '2') = int2 '1';
+</sql-statement>
+<sql-statement>
+-- any evens
+SELECT i.* FROM INT2_TBL i WHERE (i.f1 % int4 '2') = int2 '0';
+</sql-statement>
+<sql-statement>
+SELECT i.f1, i.f1 * int2 '2' AS x FROM INT2_TBL i;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMap!
+    	SELECT i.f1, i.f1 * int2 '2' AS x FROM INT2_TBL i;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  smallint out of range
+
+        	SELECT i.f1, i.f1 * int2 '2' AS x FROM INT2_TBL i;
+	^
+<sql-statement>
+SELECT i.f1, i.f1 * int2 '2' AS x FROM INT2_TBL i
+WHERE abs(f1) < 16384;
+</sql-statement>
+<sql-statement>
+SELECT i.f1, i.f1 * int4 '2' AS x FROM INT2_TBL i;
+</sql-statement>
+<sql-statement>
+SELECT i.f1, i.f1 + int2 '2' AS x FROM INT2_TBL i;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMap!
+    	SELECT i.f1, i.f1 + int2 '2' AS x FROM INT2_TBL i;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  smallint out of range
+
+        	SELECT i.f1, i.f1 + int2 '2' AS x FROM INT2_TBL i;
+	^
+<sql-statement>
+SELECT i.f1, i.f1 + int2 '2' AS x FROM INT2_TBL i
+WHERE f1 < 32766;
+</sql-statement>
+<sql-statement>
+SELECT i.f1, i.f1 + int4 '2' AS x FROM INT2_TBL i;
+</sql-statement>
+<sql-statement>
+SELECT i.f1, i.f1 - int2 '2' AS x FROM INT2_TBL i;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMap!
+    	SELECT i.f1, i.f1 - int2 '2' AS x FROM INT2_TBL i;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  smallint out of range
+
+        	SELECT i.f1, i.f1 - int2 '2' AS x FROM INT2_TBL i;
+	^
+<sql-statement>
+SELECT i.f1, i.f1 - int2 '2' AS x FROM INT2_TBL i
+WHERE f1 > -32767;
+</sql-statement>
+<sql-statement>
+SELECT i.f1, i.f1 - int4 '2' AS x FROM INT2_TBL i;
+</sql-statement>
+<sql-statement>
+SELECT i.f1, i.f1 / int2 '2' AS x FROM INT2_TBL i;
+</sql-statement>
+<sql-statement>
+SELECT i.f1, i.f1 / int4 '2' AS x FROM INT2_TBL i;
+</sql-statement>
+<sql-statement>
+-- corner cases
+SELECT (-1::int2<<15)::text;
+</sql-statement>
+<sql-statement>
+SELECT ((-1::int2<<15)+1::int2)::text;
+</sql-statement>
+<sql-statement>
+-- check sane handling of INT16_MIN overflow cases
+SELECT (-32768)::int2 * (-1)::int2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- check sane handling of INT16_MIN overflow cases
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  smallint out of range
+
+        	-- check sane handling of INT16_MIN overflow cases
+	^
+<sql-statement>
+SELECT (-32768)::int2 / (-1)::int2;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT (-32768)::int2 / (-1)::int2;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  smallint out of range
+
+        	SELECT (-32768)::int2 / (-1)::int2;
+	^
+<sql-statement>
+SELECT (-32768)::int2 % (-1)::int2;
+</sql-statement>
+<sql-statement>
+-- check rounding when casting from float
+SELECT x, x::int2 AS int2_value
+FROM (VALUES (-2.5::float8),
+             (-1.5::float8),
+             (-0.5::float8),
+             (0.0::float8),
+             (0.5::float8),
+             (1.5::float8),
+             (2.5::float8)) t(x);
+</sql-statement>
+<sql-statement>
+-- check rounding when casting from numeric
+SELECT x, x::int2 AS int2_value
+FROM (VALUES (-2.5::numeric),
+             (-1.5::numeric),
+             (-0.5::numeric),
+             (0.0::numeric),
+             (0.5::numeric),
+             (1.5::numeric),
+             (2.5::numeric)) t(x);
+</sql-statement>

@@ -1,0 +1,278 @@
+<sql-statement>
+--
+-- encoding-sensitive tests for jsonpath
+--
+SELECT getdatabaseencoding();           -- just to label the results files
+</sql-statement>
+<sql-statement>
+-- checks for double-quoted values
+-- basic unicode input
+SELECT '"\u"'::jsonpath;		-- ERROR, incomplete escape
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- checks for double-quoted values
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid unicode sequence at or near "\u" of jsonpath input
+
+        	-- checks for double-quoted values
+	^
+<sql-statement>
+SELECT '"\u00"'::jsonpath;		-- ERROR, incomplete escape
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '"\u00"'::jsonpath;		-- ERROR, incomplete escape
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid unicode sequence at or near "\u00" of jsonpath input
+
+        	SELECT '"\u00"'::jsonpath;		-- ERROR, incomplete escape
+	^
+<sql-statement>
+SELECT '"\u000g"'::jsonpath;	-- ERROR, g is not a hex digit
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '"\u000g"'::jsonpath;	-- ERROR, g is not a hex digit
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid unicode sequence at or near "\u000" of jsonpath input
+
+        	SELECT '"\u000g"'::jsonpath;	-- ERROR, g is not a hex digit
+	^
+<sql-statement>
+SELECT '"\u0000"'::jsonpath;	-- OK, legal escape
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '"\u0000"'::jsonpath;	-- OK, legal escape
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  unsupported Unicode escape sequence
+DETAIL:  \u0000 cannot be converted to text.
+
+        	SELECT '"\u0000"'::jsonpath;	-- OK, legal escape
+	^
+<sql-statement>
+SELECT '"\uaBcD"'::jsonpath;	-- OK, uppercase and lower case both OK
+</sql-statement>
+<sql-statement>
+-- handling of unicode surrogate pairs
+select '"\ud83d\ude04\ud83d\udc36"'::jsonpath as correct_in_utf8;
+</sql-statement>
+<sql-statement>
+select '"\ud83d\ud83d"'::jsonpath; -- 2 high surrogates in a row
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '"\ud83d\ud83d"'::jsonpath; -- 2 high surrogates in a row
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type jsonpath
+DETAIL:  Unicode high surrogate must not follow a high surrogate.
+
+        	select '"\ud83d\ud83d"'::jsonpath; -- 2 high surrogates in a row
+	^
+<sql-statement>
+select '"\ude04\ud83d"'::jsonpath; -- surrogates in wrong order
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '"\ude04\ud83d"'::jsonpath; -- surrogates in wrong order
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type jsonpath
+DETAIL:  Unicode low surrogate must follow a high surrogate.
+
+        	select '"\ude04\ud83d"'::jsonpath; -- surrogates in wrong order
+	^
+<sql-statement>
+select '"\ud83dX"'::jsonpath; -- orphan high surrogate
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '"\ud83dX"'::jsonpath; -- orphan high surrogate
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type jsonpath
+DETAIL:  Unicode low surrogate must follow a high surrogate.
+
+        	select '"\ud83dX"'::jsonpath; -- orphan high surrogate
+	^
+<sql-statement>
+select '"\ude04X"'::jsonpath; -- orphan low surrogate
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '"\ude04X"'::jsonpath; -- orphan low surrogate
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type jsonpath
+DETAIL:  Unicode low surrogate must follow a high surrogate.
+
+        	select '"\ude04X"'::jsonpath; -- orphan low surrogate
+	^
+<sql-statement>
+--handling of simple unicode escapes
+select '"the Copyright \u00a9 sign"'::jsonpath as correct_in_utf8;
+</sql-statement>
+<sql-statement>
+select '"dollar \u0024 character"'::jsonpath as correct_everywhere;
+</sql-statement>
+<sql-statement>
+select '"dollar \\u0024 character"'::jsonpath as not_an_escape;
+</sql-statement>
+<sql-statement>
+select '"null \u0000 escape"'::jsonpath as not_unescaped;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '"null \u0000 escape"'::jsonpath as not_unescaped;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  unsupported Unicode escape sequence
+DETAIL:  \u0000 cannot be converted to text.
+
+        	select '"null \u0000 escape"'::jsonpath as not_unescaped;
+	^
+<sql-statement>
+select '"null \\u0000 escape"'::jsonpath as not_an_escape;
+</sql-statement>
+<sql-statement>
+-- checks for quoted key names
+-- basic unicode input
+SELECT '$."\u"'::jsonpath;		-- ERROR, incomplete escape
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- checks for quoted key names
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid unicode sequence at or near "\u" of jsonpath input
+
+        	-- checks for quoted key names
+	^
+<sql-statement>
+SELECT '$."\u00"'::jsonpath;	-- ERROR, incomplete escape
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '$."\u00"'::jsonpath;	-- ERROR, incomplete escape
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid unicode sequence at or near "\u00" of jsonpath input
+
+        	SELECT '$."\u00"'::jsonpath;	-- ERROR, incomplete escape
+	^
+<sql-statement>
+SELECT '$."\u000g"'::jsonpath;	-- ERROR, g is not a hex digit
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '$."\u000g"'::jsonpath;	-- ERROR, g is not a hex digit
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid unicode sequence at or near "\u000" of jsonpath input
+
+        	SELECT '$."\u000g"'::jsonpath;	-- ERROR, g is not a hex digit
+	^
+<sql-statement>
+SELECT '$."\u0000"'::jsonpath;	-- OK, legal escape
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '$."\u0000"'::jsonpath;	-- OK, legal escape
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  unsupported Unicode escape sequence
+DETAIL:  \u0000 cannot be converted to text.
+
+        	SELECT '$."\u0000"'::jsonpath;	-- OK, legal escape
+	^
+<sql-statement>
+SELECT '$."\uaBcD"'::jsonpath;	-- OK, uppercase and lower case both OK
+</sql-statement>
+<sql-statement>
+-- handling of unicode surrogate pairs
+select '$."\ud83d\ude04\ud83d\udc36"'::jsonpath as correct_in_utf8;
+</sql-statement>
+<sql-statement>
+select '$."\ud83d\ud83d"'::jsonpath; -- 2 high surrogates in a row
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$."\ud83d\ud83d"'::jsonpath; -- 2 high surrogates in a row
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type jsonpath
+DETAIL:  Unicode high surrogate must not follow a high surrogate.
+
+        	select '$."\ud83d\ud83d"'::jsonpath; -- 2 high surrogates in a row
+	^
+<sql-statement>
+select '$."\ude04\ud83d"'::jsonpath; -- surrogates in wrong order
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$."\ude04\ud83d"'::jsonpath; -- surrogates in wrong order
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type jsonpath
+DETAIL:  Unicode low surrogate must follow a high surrogate.
+
+        	select '$."\ude04\ud83d"'::jsonpath; -- surrogates in wrong order
+	^
+<sql-statement>
+select '$."\ud83dX"'::jsonpath; -- orphan high surrogate
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$."\ud83dX"'::jsonpath; -- orphan high surrogate
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type jsonpath
+DETAIL:  Unicode low surrogate must follow a high surrogate.
+
+        	select '$."\ud83dX"'::jsonpath; -- orphan high surrogate
+	^
+<sql-statement>
+select '$."\ude04X"'::jsonpath; -- orphan low surrogate
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$."\ude04X"'::jsonpath; -- orphan low surrogate
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type jsonpath
+DETAIL:  Unicode low surrogate must follow a high surrogate.
+
+        	select '$."\ude04X"'::jsonpath; -- orphan low surrogate
+	^
+<sql-statement>
+--handling of simple unicode escapes
+select '$."the Copyright \u00a9 sign"'::jsonpath as correct_in_utf8;
+</sql-statement>
+<sql-statement>
+select '$."dollar \u0024 character"'::jsonpath as correct_everywhere;
+</sql-statement>
+<sql-statement>
+select '$."dollar \\u0024 character"'::jsonpath as not_an_escape;
+</sql-statement>
+<sql-statement>
+select '$."null \u0000 escape"'::jsonpath as not_unescaped;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select '$."null \u0000 escape"'::jsonpath as not_unescaped;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  unsupported Unicode escape sequence
+DETAIL:  \u0000 cannot be converted to text.
+
+        	select '$."null \u0000 escape"'::jsonpath as not_unescaped;
+	^
+<sql-statement>
+select '$."null \\u0000 escape"'::jsonpath as not_an_escape;
+</sql-statement>

@@ -69,6 +69,8 @@ std::string MapConnectionType(const FederatedQuery::ConnectionSetting::Connectio
         return "GreenplumCluster";
     case FederatedQuery::ConnectionSetting::ConnectionCase::kMysqlCluster:
         return "MySQLCluster";
+    case FederatedQuery::ConnectionSetting::ConnectionCase::kCloudLogging:
+        return "CloudLogging";
     case FederatedQuery::ConnectionSetting::ConnectionCase::CONNECTION_NOT_SET:
         Y_ENSURE(false, "Invalid connection case " << i32(connectionCase));
     }

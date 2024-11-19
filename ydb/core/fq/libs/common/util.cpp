@@ -138,6 +138,9 @@ TString ExtractServiceAccountId(const FederatedQuery::ConnectionSetting& setting
     case FederatedQuery::ConnectionSetting::kMysqlCluster: {
         return GetServiceAccountId(setting.mysql_cluster().auth());
     }
+    case FederatedQuery::ConnectionSetting::kCloudLogging: {
+        return GetServiceAccountId(setting.cloud_logging().auth());
+    }
     // Do not replace with default. Adding a new connection should cause a compilation error
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
     break;
@@ -173,6 +176,8 @@ TMaybe<TString> GetLogin(const FederatedQuery::ConnectionSetting& setting) {
             return setting.greenplum_cluster().login();
         case FederatedQuery::ConnectionSetting::kMysqlCluster:
             return setting.mysql_cluster().login();
+        case FederatedQuery::ConnectionSetting::kCloudLogging:
+            return {};
     }
 }
 
@@ -196,6 +201,8 @@ TMaybe<TString> GetPassword(const FederatedQuery::ConnectionSetting& setting) {
             return setting.greenplum_cluster().password();
         case FederatedQuery::ConnectionSetting::kMysqlCluster:
             return setting.mysql_cluster().password();
+        case FederatedQuery::ConnectionSetting::kCloudLogging:
+            return {};
     }
 }
 
@@ -219,6 +226,8 @@ EYdbComputeAuth GetYdbComputeAuthMethod(const FederatedQuery::ConnectionSetting&
             return GetBasicAuthMethod(setting.greenplum_cluster().auth());
         case FederatedQuery::ConnectionSetting::kMysqlCluster:
             return GetBasicAuthMethod(setting.mysql_cluster().auth());
+        case FederatedQuery::ConnectionSetting::kCloudLogging:
+            return GetIamAuthMethod(setting.cloud_logging().auth());
     }
 }
 
@@ -240,6 +249,8 @@ FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection) {
         return connection.content().setting().greenplum_cluster().auth();
     case FederatedQuery::ConnectionSetting::kMysqlCluster:
         return connection.content().setting().mysql_cluster().auth();
+    case FederatedQuery::ConnectionSetting::kCloudLogging:
+        return connection.content().setting().cloud_logging().auth();
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         return FederatedQuery::IamAuth{};
     }

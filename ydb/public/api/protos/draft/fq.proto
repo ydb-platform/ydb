@@ -544,7 +544,7 @@ message ConnectionSetting {
         PostgreSQLCluster postgresql_cluster = 6;
         GreenplumCluster greenplum_cluster = 7;
         MySQLCluster mysql_cluster = 8;
-        CloudLoggingConnection cloud_logging_connection = 9;
+        CloudLoggingConnection cloud_logging = 9;
     }
 }
 

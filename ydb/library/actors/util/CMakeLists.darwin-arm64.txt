@@ -32,6 +32,7 @@ target_sources(library-actors-util PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/rc_buf.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/shared_data.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/should_continue.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/spinparkpad.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/threadparkpad.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/affinity.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/cpu_load_log.h
@@ -53,6 +54,7 @@ target_sources(library-actors-util PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/shared_data.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/shared_data_rope_backend.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/should_continue.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/spinparkpad.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/thread.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/threadparkpad.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/thread_load_log.h

@@ -54,6 +54,7 @@ target_sources(ydb-library-actors-core-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/log_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/mon_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/scheduler_actor_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/mailbox_lockfree_ut.cpp
 )
 
 

@@ -75,6 +75,7 @@ target_sources(library-actors-core PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/log_settings.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/log_buffer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/mailbox.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/mailbox_lockfree.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/mon.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/mon_stats.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/monotonic.cpp
@@ -117,8 +118,7 @@ target_sources(library-actors-core PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/log_buffer.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/log_metrics.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/mailbox.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/mailbox_queue_revolving.h
-  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/mailbox_queue_simple.h
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/mailbox_lockfree.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/mon.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/mon_stats.h
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/monotonic.h

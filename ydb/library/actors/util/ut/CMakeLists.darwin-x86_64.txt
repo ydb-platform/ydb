@@ -48,6 +48,7 @@ target_sources(ydb-library-actors-util-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/shared_data_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/shared_data_rope_backend_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/shared_data_native_rope_backend_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/spinparkpad_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/util/unordered_cache_ut.cpp
 )
 

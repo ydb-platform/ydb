@@ -41,13 +41,16 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     const auto& bc = context.SS->BackupCollections[bcPath->PathId];
     bool incrBackupEnabled = bc->Description.HasIncrementalBackupConfig();
 
-    size_t prefixLen = bcPath.GetDomainPathString().size() + 1;
-
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.GetPath());
-        Y_ABORT_UNLESS(prefixLen <= item.GetPath().length());
-        auto relativeItemPath = item.GetPath().substr(prefixLen, item.GetPath().size() - prefixLen);
+        std::pair<TString, TString> paths;
+        TString err;
+        if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
+            result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, err)};
+            return {};
+        }
+        auto& relativeItemPath = paths.second;
         desc.SetDstPath(JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName(), tx.GetBackupBackupCollection().GetTargetDir(), relativeItemPath}));
         desc.SetOmitIndexes(true);
         desc.SetOmitFollowers(true);

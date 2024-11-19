@@ -331,15 +331,17 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCol
 
         auto& collectionPaths = paths[targetPath];
 
-        size_t prefixLen = tx.GetWorkingDir().size() + 1;
-
         for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
-            Y_ABORT_UNLESS(prefixLen <= item.GetPath().length());
-            TString itemName = item.GetPath().substr(prefixLen, item.GetPath().size() - prefixLen);
-            auto pos = itemName.rfind("/");
-            if (pos != std::string::npos) {
-                itemName.resize(pos);
-                collectionPaths.emplace(JoinPath({targetDir, itemName}));
+            std::pair<TString, TString> paths;
+            TString err;
+            if (!TrySplitPathByDb(item.GetPath(), tx.GetWorkingDir(), paths, err)) {
+                return {};
+            }
+
+            auto pathPieces = SplitPath(paths.second);
+            if (pathPieces.size() > 1) {
+                auto parent = ExtractParent(paths.second);
+                collectionPaths.emplace(JoinPath({targetDir, TString(parent)}));
             }
         }
 

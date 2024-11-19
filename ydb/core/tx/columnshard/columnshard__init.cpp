@@ -258,7 +258,7 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
         }
     }
     {
-        NOlap::TNormalizationController::TInitContext initCtx(Self->Info());
+        NOlap::TNormalizationController::TInitContext initCtx(Self->Info(), Self->TabletID(), Self->SelfId());
         Self->NormalizerController.InitNormalizers(initCtx);
     }
 

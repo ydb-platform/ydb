@@ -38,7 +38,6 @@ public:
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TAddExternalContext& context);
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion);
 
-    void ChangeSchemeToCompatible(const THashMap<ui64, ui64>& versionMap, THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions, NOlap::TDbWrapper& db, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager);
 };
 
 }   // namespace NKikimr::NOlap::NActualizer

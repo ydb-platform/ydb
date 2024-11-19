@@ -71,7 +71,10 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
                 }
             }
             auto info = BuildActualizationInfo(*portion);
-            AFL_VERIFY(info);
+            if (!info) {
+                portionsToRemove.emplace(portion->GetPortionId());
+                continue;
+            }
             auto portionScheme = portion->GetSchema(VersionedIndex);
             TPortionEvictionFeatures features(portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
             features.SetTargetTierName(portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
@@ -111,25 +114,6 @@ void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {
         PortionsToActualizeScheme.clear();
         for (auto&& i : externalContext.GetPortions()) {
             AddPortion(i.second, externalContext);
-        }
-    }
-}
-
-void TSchemeActualizer::ChangeSchemeToCompatible(const THashMap<ui64, ui64>& versionMap, THashMap<ui64, std::shared_ptr<TPortionInfo>>& portions, NOlap::TDbWrapper& db, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization")("portion_count", portions.size());
-    for (auto& [portionId, portion]: portions) {
-        if (dataLocksManager->IsLocked(*portion)) {
-            continue;
-        }
-        THashMap<ui64, ui64>::const_iterator it = versionMap.find(portion->GetSchemaVersionVerified());
-        if (it != versionMap.end()) {
-            if (TargetSchema && (it->second >= TargetSchema->GetVersion())) {
-                RemovePortion(portionId);
-            }
-            //TO DO call VersionAddRef and VersionRemoveRef
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "schema_actualization")("portion_id", portionId)("from", portion->GetSchemaVersionOptional())("to", it->second);
-            portion->SetSchemaVersion(it->second);
-            db.WritePortion(*portion);
         }
     }
 }

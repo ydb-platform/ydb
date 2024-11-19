@@ -26,12 +26,16 @@ To import data to the table, use the [YQL `REPLACE` command](../../../../yql/ref
 
 `--restore-indexes VAL`: Enables/disables import of indexes, 1 (yes) or 0 (no), defaults to 1. If set to 0, the import won't either register secondary indexes in the data schema or populate them with data.
 
+`--restore-acl VAL`: Enables/disables import of ACL and owner, 1 (yes) or 0 (no), defaults to 1.
+
 `--dry-run`: Matching the data schemas in the database and file system without updating the database, 1 (yes) or 0 (no), defaults to 0. When enabled, the system checks that:
 
 - All tables in the file system are present in the database
 - These items are based on the same schema, both in the file system and in the database
 
 `--save-partial-result`: Save the partial import result. If disabled, an import error results in reverting to the database state before the import.
+
+`--import-data`: Use ImportData - a more efficient way to upload data. ImportData will throw an error if you try to upload data into an existing table that has secondary indexes or is in the process of building them. If you need to restore a table with secondary indexes, make sure it's not already present in the scheme. By default ImportData is not enabled.
 
 ### Workload restriction parameters {#limiters}
 
@@ -86,4 +90,10 @@ Matching schemas between the database and file system:
 
 ```bash
 {{ ydb-cli }} -p quickstart tools restore -p dir1/dir2 -i ~/backup_quickstart --dry-run
+```
+
+### Recommended options for better performance
+
+```bash
+{{ ydb-cli }} -p quickstart tools restore -p . -i . --import-data --bandwidth=1GiB
 ```

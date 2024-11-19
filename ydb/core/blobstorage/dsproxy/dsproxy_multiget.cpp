@@ -202,7 +202,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupMultiGetRequest(TBlobStorageGroupMultiGetParameters params) {
+IActor* CreateBlobStorageGroupMultiGetRequest(TBlobStorageGroupMultiGetParameters params, NWilson::TTraceId traceId) {
+    params.Common.Span = NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.MultiGet");
     return new TBlobStorageGroupMultiGetRequest(params);
 }
 

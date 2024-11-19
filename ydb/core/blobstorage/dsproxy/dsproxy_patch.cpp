@@ -1038,7 +1038,12 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupPatchRequest(TBlobStorageGroupPatchParameters params) {
+IActor* CreateBlobStorageGroupPatchRequest(TBlobStorageGroupPatchParameters params, NWilson::TTraceId traceId) {
+    NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.Patch");
+    if (span) {
+        span.Attribute("event", ev->ToString());
+    }
+    params.Common.Span = std::move(span);
     return new TBlobStorageGroupPatchRequest(params);
 }
 

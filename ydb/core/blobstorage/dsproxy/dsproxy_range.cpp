@@ -396,7 +396,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupRangeRequest(TBlobStorageGroupRangeParameters params) {
+IActor* CreateBlobStorageGroupRangeRequest(TBlobStorageGroupRangeParameters params, NWilson::TTraceId traceId) {
+    params.Common.Span = NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.Range");
     return new TBlobStorageGroupRangeRequest(params);
 }
 

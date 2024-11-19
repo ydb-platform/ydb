@@ -252,10 +252,6 @@ namespace NWilson {
             return TSpan(verbosity, GetTraceId(), std::move(name), flags, GetActorSystem());
         }
 
-        TString GetName() const {
-            return *this ? Data->Span.name() : TString();
-        }
-
         static const TSpan Empty;
 
     private:

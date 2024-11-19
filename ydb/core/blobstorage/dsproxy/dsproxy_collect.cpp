@@ -200,7 +200,8 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupCollectGarbageRequest(TBlobStorageGroupCollectGarbageParameters params) {
+IActor* CreateBlobStorageGroupCollectGarbageRequest(TBlobStorageGroupCollectGarbageParameters params, NWilson::TTraceId traceId) {
+    params.Common.Span = NWilson::TSpan(TWilson::BlobStorage, std::move(traceId), "DSProxy.CollectGarbage");
     return new TBlobStorageGroupCollectGarbageRequest(params);
 }
 

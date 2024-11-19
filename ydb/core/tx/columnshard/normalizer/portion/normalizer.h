@@ -81,9 +81,12 @@ public:
 };
 
 class TPortionsNormalizerBase: public TNormalizationController::INormalizerComponent {
+private:
+    using TBase = TNormalizationController::INormalizerComponent;
 public:
     TPortionsNormalizerBase(const TNormalizationController::TInitContext& info)
-        : DsGroupSelector(info.GetStorageInfo()) {
+        : TBase(info)
+        , DsGroupSelector(info.GetStorageInfo()) {
     }
 
     TConclusionStatus InitPortions(

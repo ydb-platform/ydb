@@ -210,6 +210,8 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
         new_muted_ya_tests_with_flaky = []
         new_muted_ya_tests_with_flaky_debug = []
         unmuted_tests_debug = []
+        muted_ya_tests_sorted = []
+        muted_ya_tests_sorted_debug = []
         muted_before_count = 0
         unmuted_stable = 0
         unmuted_deleted = 0
@@ -232,9 +234,12 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
                     new_muted_ya_tests_with_flaky_debug.append(test_string_debug)
 
             if testsuite and testcase and mute_check(testsuite, testcase):
-
-                if test_string not in new_muted_ya_tests:
+               
+                if test_string not in muted_ya_tests_sorted:
+                    muted_ya_tests_sorted.append(test_string)
+                    muted_ya_tests_sorted_debug.append(test_string_debug)
                     muted_before_count += 1
+                if test_string not in new_muted_ya_tests:
                     if test_string not in muted_stable_tests and test_string not in deleted_tests:
                         new_muted_ya_tests.append(test_string)
                         new_muted_ya_tests_debug.append(test_string_debug)
@@ -244,6 +249,10 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
                         unmuted_deleted += 1
                     unmuted_tests_debug.append(test_string_debug)
 
+        muted_ya_tests_sorted = sorted(muted_ya_tests_sorted)
+        add_lines_to_file(os.path.join(output_path, 'muted_ya_sorted.txt'), muted_ya_tests_sorted)
+        muted_ya_tests_sorted_debug = sorted(muted_ya_tests_sorted_debug)
+        add_lines_to_file(os.path.join(output_path, 'muted_ya_sorted_debug.txt'), muted_ya_tests_sorted_debug)
         new_muted_ya_tests = sorted(new_muted_ya_tests)
         add_lines_to_file(os.path.join(output_path, 'new_muted_ya.txt'), new_muted_ya_tests)
         new_muted_ya_tests_debug = sorted(new_muted_ya_tests_debug)

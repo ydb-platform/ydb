@@ -28,6 +28,8 @@ SRCS(
     shared_data_rope_backend.h
     should_continue.cpp
     should_continue.h
+    spinparkpad.cpp
+    spinparkpad.h
     thread.h
     threadparkpad.cpp
     threadparkpad.h

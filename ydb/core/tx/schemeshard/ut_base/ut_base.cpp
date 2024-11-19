@@ -1,7 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 
-
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 

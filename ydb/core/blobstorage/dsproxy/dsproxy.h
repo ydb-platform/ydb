@@ -718,7 +718,7 @@ struct TBlobStorageGroupMultiPutParameters {
         return maxRestarts;
     }
 };
-IActor* CreateBlobStorageGroupPutRequest(TBlobStorageGroupMultiPutParameters params, NWilson::TTraceId traceId);
+IActor* CreateBlobStorageGroupPutRequest(TBlobStorageGroupMultiPutParameters params);
 
 struct TBlobStorageGroupGetParameters {
     TBlobStorageGroupRequestActor<TEvBlobStorage::TEvGet>::TCommonParameters Common;

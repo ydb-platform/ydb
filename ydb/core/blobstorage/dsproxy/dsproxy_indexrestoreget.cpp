@@ -391,7 +391,7 @@ public:
 IActor* CreateBlobStorageGroupIndexRestoreGetRequest(TBlobStorageGroupRestoreGetParameters params, NWilson::TTraceId traceId) {
     NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.IndexRestoreGet");
     if (span) {
-        span.Attribute("event", ev->ToString());
+        span.Attribute("event", params.Common.Event->ToString());
     }
     params.Common.Span = std::move(span);
     return new TBlobStorageGroupIndexRestoreGetRequest(params);

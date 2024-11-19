@@ -468,7 +468,7 @@ public:
 IActor* CreateBlobStorageGroupGetRequest(TBlobStorageGroupGetParameters params, NWilson::TTraceId traceId) {
     NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.Get");
     if (span) {
-        span.Attribute("event", ev->ToString());
+        span.Attribute("event", params.Common.Event->ToString());
     }
     params.Common.Span = std::move(span);
     return new TBlobStorageGroupGetRequest(params);

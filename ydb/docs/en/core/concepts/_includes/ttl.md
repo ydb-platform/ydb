@@ -4,7 +4,7 @@ This section describes how the TTL mechanism works and what its limits are. It a
 
 ## How it works {#how-it-works}
 
-The table's TTL is defined by a sequence of storage tiers. For each tier in the sequence, an expression is specified; when the expression triggers, the row is assigned that tier. TTL automatically performs the specified action when a tier is assigned to a row: it moves the row to external storage or deletes it. External storage is represented by the external data source object. Deletion can only be specified for the last tier.
+The table's TTL is a sequence of storage tiers. For each tier, an expression is specified; when the expression triggers, that tier is assigned to the row. When a tier is assigned to a row, TTL automatically performs the specified action: move the row to an external storage or delete it. External storage is represented by the [external data source](https://ydb.tech/docs/en/concepts/datamodel/external_data_source) object. Deletion can only be specified for the last tier.
 
 {% note info %}
 

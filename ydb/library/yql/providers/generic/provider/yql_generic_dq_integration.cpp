@@ -244,7 +244,6 @@ namespace NYql {
                             properties["Protocol"] = "Http";
                             break;
                         case NConnector::NApi::PROTOCOL_UNSPECIFIED:
-                            break;
                         default:
                             properties["Protocol"] = NConnector::NApi::EProtocol_Name(dataSourceInstance.protocol());
                             break;

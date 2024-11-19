@@ -43,8 +43,9 @@ namespace NWriter {
             TIntrusivePtr<TCache> pageCollection;
 
             if (auto meta = Writer.Finish(false /* omit empty page collection */)) {
-                for (auto &glob : Writer.Grab())
+                for (auto &glob : Writer.Grab()) {
                     Cone->Put(std::move(glob));
+                }
 
                 pageCollection = MakePageCollection(std::move(meta));
             }
@@ -59,14 +60,15 @@ namespace NWriter {
         {
             auto pageId = Writer.AddPage(raw, (ui32)type);
 
-            for (auto &glob : Writer.Grab())
+            for (auto &glob : Writer.Grab()) {
                 Cone->Put(std::move(glob));
+            }
 
-            if (NTable::TLoader::NeedIn(type) || StickyFlatIndex && type == EPage::FlatIndex) {
+            if (NTable::TLoader::NeedIn(type) || Cache == ECache::Ever || StickyFlatIndex && type == EPage::FlatIndex) {
                 // Note: we mark flat index pages sticky after we load them
                 Sticky.emplace_back(pageId, std::move(raw));
             } else if (bool(Cache) && type == EPage::DataPage || type == EPage::BTreeIndex) {
-                // Note: we save b-tree index pages to shared cache regardless of a cache mode  
+                // Note: we save b-tree index pages to shared cache regardless of a cache mode
                 Regular.emplace_back(pageId, std::move(raw));
             }
 
@@ -87,10 +89,8 @@ namespace NWriter {
 
             TIntrusivePtr<TCache> cache = new TCache(pack);
 
-            const bool sticky = (Cache == ECache::Ever);
-
             for (auto &paged : Sticky) cache->Fill(paged, true);
-            for (auto &paged : Regular) cache->Fill(paged, sticky);
+            for (auto &paged : Regular) cache->Fill(paged, false);
 
             Sticky.clear();
             Regular.clear();

@@ -1,0 +1,1 @@
+{"ps_availqty"=3903;"ps_comment"="olites. blithely ironic accounts sublate furiously slow instructions. blithely ironic deposits pr";"ps_partkey"=1400001;"ps_suppkey"=2;"ps_supplycost"="\0\2\0\0\0\0\0\2\3Y\x0E\xD8";};

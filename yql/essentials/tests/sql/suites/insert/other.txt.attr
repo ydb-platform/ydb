@@ -1,0 +1,13 @@
+{
+    "_read_schema" = <"strict" = %false>[
+        {"type"="string";"name"="key"}
+    ];
+    "schema" = <"strict" = %false; "unique_keys" = %false>
+    [
+        {
+            "name" = "key";
+            "sort_order" = "ascending";
+            "type" = "string"
+        }
+    ]
+}

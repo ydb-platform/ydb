@@ -1,0 +1,1 @@
+select pgbit('0001') in (pgbit('0001'),pgbit('0010'))

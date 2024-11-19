@@ -1,0 +1,21 @@
+$p = @@
+def Parse(s):
+    return {'subkey': s, 'value': s}
+@@;
+
+$pv = Python::Parse(Callable<(String)->Struct<subkey: String, value: String>>, $p);
+
+$i = (
+    select
+        AsStruct(key as key),
+        $pv(info) as info
+    from ViewSource
+    where info != ""
+);
+
+$j = (
+    select *
+    from $i flatten columns
+);
+
+select * from $j

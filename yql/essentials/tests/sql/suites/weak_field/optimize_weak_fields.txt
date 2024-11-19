@@ -1,0 +1,3 @@
+{"key"="023"};
+{"key"="037";"subkey"=5;"value"="ddd"};
+{"key"="075";"subkey"=1;"value"="abc"};

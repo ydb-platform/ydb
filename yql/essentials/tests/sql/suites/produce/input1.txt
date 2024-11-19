@@ -1,0 +1,9 @@
+{"key"="foo";"subkey"="a";"value"="7"};
+{"key"="foo";"subkey"="b";"value"="1"};
+{"key"="foo";"subkey"="b";"value"="0"};
+{"key"="foo";"subkey"="a";"value"="2"};
+{"key"="bar";"subkey"="b";"value"="1"};
+{"key"="bar";"subkey"="u";"value"="2"};
+{"key"="bar";"subkey"="n";"value"="3"};
+{"key"="bar";"subkey"="n";"value"="4"};
+{"key"="bar";"subkey"="y";"value"="5"};

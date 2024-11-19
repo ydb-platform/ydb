@@ -1,0 +1,14 @@
+/* postgres can not */
+USE plato;
+pragma warning("error", "4501");
+
+$subq = (SELECT subkey FROM Input WHERE value = "ddd");
+
+--INSERT INTO Output
+SELECT
+    key as key,
+    "" as subkey,
+    "value:" || value as value
+FROM Input
+WHERE subkey in ($subq)
+ORDER BY key

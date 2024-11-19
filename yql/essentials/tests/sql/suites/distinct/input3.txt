@@ -1,0 +1,7 @@
+{"key"="1";"subkey"="10";"value"="FOO"};
+{"key"="1";"subkey"="20";"value"="BAR"};
+{"key"="1";"subkey"="30";"value"="BAR"};
+{"key"="0";"subkey"="40";"value"="FOO"};
+{"key"="0";"subkey"="40";"value"="FOO"};
+{"key"="A";"subkey"="50";"value"="WAT"};
+{"key"="A";"subkey"="50";"value"="WAT"};

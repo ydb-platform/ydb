@@ -1,0 +1,9 @@
+/* postgres can not */
+use plato;
+
+--insert into Output
+select
+  TablePath() as table_path
+from Input as a join Input as b using(key)
+where a.key = '200'
+;

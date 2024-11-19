@@ -1,0 +1,13 @@
+/* postgres can not */
+USE plato;
+
+$shiftSteps=1;
+$linear = ($x, $z, $x)->{ -- $x is duplicated
+  $v = 10 * $z + $x;
+  $shift = ($item) -> {return $item << $shiftSteps};
+  $res = Math::Floor(Math::Pi() * $shift($v));
+  return $res
+};
+
+--INSERT INTO Output
+SELECT t.*, $linear(cast(key as uint64), cast(subkey as uint64)) FROM Input as t;

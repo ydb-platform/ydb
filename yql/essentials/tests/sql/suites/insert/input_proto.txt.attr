@@ -1,0 +1,32 @@
+{
+    "_yql_proto_field_value"="#TA+H4sIAAAAAAAAA42Puw6CQBBFszw0DEp0Y4E2GmyolriJHyAPS6rVflFMTBCUR8Hn+KcuD0ui3WRy59wzcIJ1co9yntfOM8/KLKpuTv1KnKp0rqTdWBQk5uM5SEFhKhvZNqhKmE8CPAHF5yU30QbZmqUDCvAIpONuhmA/jL30WCywXsMI+SPuGJAOn0XdGVZDFhfl6qf1VuBdPAX1zJOq46vYAOSbkhh1Kosf4I2GC/mfhb3YcOD78EoYHfACkNva6FQjLZow11rCmJ3SqoivjaPXB4Sj9wEBmoL3ogEAAA==";
+    "_yql_proto_field_subkey"="#TA+H4sIAAAAAAAAA42Puw6CQBBFszw0DEp0Y4E2GmyolriJHyAPS6rVflFMTBCUR8Hn+KcuD0ui3WRy59wzcIJ1co9yntfOM8/KLKpuTv1KnKp0rqTdWBQk5uM5SEFhKhvZNqhKmE8CPAHF5yU30QbZmqUDCvAIpONuhmA/jL30WCywXsMI+SPuGJAOn0XdGVZDFhfl6qf1VuBdPAX1zJOq46vYAOSbkhh1Kosf4I2GC/mfhb3YcOD78EoYHfACkNva6FQjLZow11rCmJ3SqoivjaPXB4Sj9wEBmoL3ogEAAA==";
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

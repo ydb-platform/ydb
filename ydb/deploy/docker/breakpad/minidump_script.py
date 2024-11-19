@@ -26,6 +26,7 @@ if __name__ == "__main__":
             "/opt/ydb/bin/ydbd",
             core_file,
             "-iex=set auto-load safe-path /",
+            "-iex=set print thread-events off",
             "-ex=thread apply all bt",
             "--batch",
             "-q"

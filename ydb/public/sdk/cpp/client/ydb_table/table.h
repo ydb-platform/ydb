@@ -34,6 +34,8 @@ class TtlTier;
 class TableIndex;
 class TableIndexDescription;
 class ValueSinceUnixEpochModeSettings;
+class DeprecatedDateTypeColumnModeSettings;
+class DeprecatedValueSinceUnixEpochModeSettings;
 
 } // namespace Table
 } // namespace Ydb
@@ -441,11 +443,11 @@ public:
     explicit TTtlTierSettings(const Ydb::Table::TtlTier& tier);
     void SerializeTo(Ydb::Table::TtlTier& proto) const;
 
-    TDuration GetEvictionDelay() const;
+    TDuration GetEvictAfter() const;
     const TAction& GetAction() const;
 
 private:
-    TDuration EvictionDelay_;
+    TDuration EvictAfter_;
     TAction Action_;
 };
 
@@ -455,6 +457,7 @@ public:
     void SerializeTo(Ydb::Table::DateTypeColumnModeSettings& proto) const;
 
     const TString& GetColumnName() const;
+    // Deprecated. Use TTtlSettings::GetExpireAfter()
     const TDuration& GetExpireAfter() const;
 
 private:
@@ -479,6 +482,7 @@ public:
 
     const TString& GetColumnName() const;
     EUnit GetColumnUnit() const;
+    // Deprecated. Use TTtlSettings::GetExpireAfter()
     const TDuration& GetExpireAfter() const;
 
     static void Out(IOutputStream& o, EUnit unit);
@@ -510,14 +514,14 @@ public:
     explicit TTtlSettings(const TString& columnName, const TVector<TTtlTierSettings>& tiers);
     explicit TTtlSettings(const TString& columnName, const TDuration& expireAfter);
     const TDateTypeColumnModeSettings& GetDateTypeColumn() const;
-    // Deprecated. Use DeserializeFromProto
-    explicit TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds);
+    // Deprecated. Use DeserializeFromProto()
+    explicit TTtlSettings(const Ydb::Table::DeprecatedDateTypeColumnModeSettings& mode, ui32 runIntervalSeconds);
 
     explicit TTtlSettings(const TString& columnName, EUnit columnUnit, const TVector<TTtlTierSettings>& tiers);
     explicit TTtlSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter);
     const TValueSinceUnixEpochModeSettings& GetValueSinceUnixEpoch() const;
-    // Deprecated. Use DeserializeFromProto
-    explicit TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds);
+    // Deprecated. Use DeserializeFromProto()
+    explicit TTtlSettings(const Ydb::Table::DeprecatedValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds);
 
     static std::optional<TTtlSettings> DeserializeFromProto(const Ydb::Table::TtlSettings& proto);
     void SerializeTo(Ydb::Table::TtlSettings& proto) const;
@@ -527,11 +531,11 @@ public:
     const TDuration& GetRunInterval() const;
 
     const TVector<TTtlTierSettings>& GetTiers() const;
+    std::optional<TDuration> GetExpireAfter() const;
 
 private:
     explicit TTtlSettings(TMode mode, ui32 runIntervalSeconds);
-
-    static std::optional<TDuration> GetExpirationDelay(const TVector<TTtlTierSettings>& tiers);
+    static std::optional<TDuration> GetExpireAfterFrom(const TVector<TTtlTierSettings>& tiers);
 
 private:
     TMode Mode_;

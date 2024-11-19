@@ -28,47 +28,23 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
         return false;
     };
 
-    static const auto& fillCommonFields = []<class TModeSettings>(TTtlSettingsEnabled& out, const TModeSettings& in, std::optional<ui32> expireAfterSeconds) {
+    static const auto& fillModeSettings = []<class TModeSettings>(TTtlSettingsEnabled& out, const TModeSettings& in) {
         out.SetColumnName(in.column_name());
-        out.SetExpireAfterSeconds(expireAfterSeconds.value_or(in.expire_after_seconds()));
     };
 
-    std::optional<ui32> expireAfterSeconds;
-    if (in.tiers_size()) {
-        for (const auto& inTier : in.tiers()) {
-            auto* outTier = out.AddTiers();
-            outTier->SetEvictAfterSeconds(inTier.evict_after_seconds());
-            switch (inTier.action_case()) {
-                case Ydb::Table::TtlTier::kDelete:
-                    outTier->MutableDelete();
-                    expireAfterSeconds = inTier.evict_after_seconds();
-                    break;
-                case Ydb::Table::TtlTier::kEvictToExternalStorage:
-                    outTier->MutableEvictToExternalStorage()->SetStorageName(inTier.evict_to_external_storage().storage_name());
-                    break;
-                case Ydb::Table::TtlTier::ACTION_NOT_SET:
-                    break;
-            }
-        }
-        if (!expireAfterSeconds) {
-            expireAfterSeconds = std::numeric_limits<uint32_t>::max();
-        }
-    }
+    static const auto& fillDeleteTier = []<class TModeSettings>(TTtlSettingsEnabled& out, const TModeSettings& in) {
+        auto* deleteTier = out.AddTiers();
+        deleteTier->SetEvictAfterSeconds(in.expire_after_seconds());
+        deleteTier->MutableDelete();
+    };
 
-    switch (in.mode_case()) {
-    case Ydb::Table::TtlSettings::kDateTypeColumn:
-        fillCommonFields(out, in.date_type_column(), expireAfterSeconds);
-        break;
-
-    case Ydb::Table::TtlSettings::kValueSinceUnixEpoch:
-        fillCommonFields(out, in.value_since_unix_epoch(), expireAfterSeconds);
-
+    static const auto& fillColumnUnit = []<class TModeSettings> (TTtlSettingsEnabled& out, const TModeSettings& in) -> bool {
         #define CASE_UNIT(type) \
             case Ydb::Table::ValueSinceUnixEpochModeSettings::type: \
                 out.SetColumnUnit(NKikimrSchemeOp::TTTLSettings::type); \
                 break
 
-        switch (in.value_since_unix_epoch().column_unit()) {
+        switch (in.column_unit()) {
         CASE_UNIT(UNIT_SECONDS);
         CASE_UNIT(UNIT_MILLISECONDS);
         CASE_UNIT(UNIT_MICROSECONDS);
@@ -79,11 +55,61 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
         }
 
         #undef CASE_UNIT
+    };
+
+    if (in.tiers_size()) {
+        for (const auto& inTier : in.tiers()) {
+            auto* outTier = out.AddTiers();
+            outTier->SetEvictAfterSeconds(inTier.evict_after_seconds());
+            switch (inTier.action_case()) {
+                case Ydb::Table::TtlTier::kDelete:
+                    outTier->MutableDelete();
+                    break;
+                case Ydb::Table::TtlTier::kEvictToExternalStorage:
+                    outTier->MutableEvictToExternalStorage()->SetStorageName(inTier.evict_to_external_storage().storage_name());
+                    break;
+                case Ydb::Table::TtlTier::ACTION_NOT_SET:
+                    break;
+            }
+        }
+    }
+
+    switch (in.mode_case()) {
+    case Ydb::Table::TtlSettings::kDeprecatedDateTypeColumn:
+        fillModeSettings(out, in.deprecated_date_type_column());
+        fillDeleteTier(out, in.deprecated_date_type_column());
         break;
 
-    default:
+    case Ydb::Table::TtlSettings::kDeprecatedValueSinceUnixEpoch:
+        fillModeSettings(out, in.deprecated_value_since_unix_epoch());
+        fillDeleteTier(out, in.deprecated_date_type_column());
+        if (!fillColumnUnit(out, in.value_since_unix_epoch())) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TtlSettings::kDateTypeColumn:
+        fillModeSettings(out, in.date_type_column());
+        break;
+
+    case Ydb::Table::TtlSettings::kValueSinceUnixEpoch:
+        fillModeSettings(out, in.value_since_unix_epoch());
+        if (!fillColumnUnit(out, in.value_since_unix_epoch())) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TtlSettings::MODE_NOT_SET:
         return unsupported("Unsupported ttl settings");
     }
+
+    std::optional<ui32> expireInSeconds = 0;
+    for (const auto& tier : out.GetTiers()) {
+        if (tier.HasDelete()) {
+            expireInSeconds = tier.GetEvictInSeconds();
+        }
+    }
+    out.SetExpireInSeconds(expireInSeconds.value_or(std::numeric_limits<uint32_t>::max()));
 
     if constexpr (std::is_same_v<TTtlSettingsEnabled, NKikimrSchemeOp::TTTLSettings::TEnabled>) {
         if (in.run_interval_seconds()) {

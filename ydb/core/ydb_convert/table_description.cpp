@@ -507,23 +507,6 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
 
 template <typename TYdbProto, typename TTtl>
 static void AddTtl(TYdbProto& out, const TTtl& inTTL) {
-    static const auto& fillCommonFields = []<class TModeSettings>(TModeSettings& out, const TTtl& in) {
-        out.set_column_name(in.GetColumnName());
-        if (in.TiersSize()) {
-            std::optional<ui32> expireInSeconds;
-            for (const auto& inTier : in.GetTiers()) {
-                if (inTier.HasDelete()) {
-                    expireInSeconds = inTier.GetEvictAfterSeconds();
-                    break;
-                }
-            }
-            out.set_expire_after_seconds(expireInSeconds.value_or(std::numeric_limits<uint32_t>::max()));
-        } else {
-            // legacy schema
-            out.set_expire_after_seconds(in.GetExpireAfterSeconds());
-        }
-    };
-
     for (const auto& inTier : inTTL.GetTiers()) {
         auto* outTier = out.mutable_ttl_settings()->add_tiers();
         outTier->set_evict_after_seconds(inTier.GetEvictAfterSeconds());
@@ -542,7 +525,7 @@ static void AddTtl(TYdbProto& out, const TTtl& inTTL) {
     switch (inTTL.GetColumnUnit()) {
     case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {
         auto& outTTL = *out.mutable_ttl_settings()->mutable_date_type_column();
-        fillCommonFields(outTTL, inTTL);
+        outTTL.set_column_name(inTTL.GetColumnName());
         break;
     }
 
@@ -551,7 +534,7 @@ static void AddTtl(TYdbProto& out, const TTtl& inTTL) {
     case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
     case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: {
         auto& outTTL = *out.mutable_ttl_settings()->mutable_value_since_unix_epoch();
-        fillCommonFields(outTTL, inTTL);
+        outTTL.set_column_name(inTTL.GetColumnName());
         outTTL.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(inTTL.GetColumnUnit()));
         break;
     }

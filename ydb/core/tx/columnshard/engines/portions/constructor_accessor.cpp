@@ -130,12 +130,39 @@ TPortionDataAccessor TPortionAccessorConstructor::BuildForLoading(
     const TPortionInfo::TConstPtr& portion, std::vector<TColumnChunkLoadContextV1>&& records, std::vector<TIndexChunkLoadContext>&& indexes) {
     AFL_VERIFY(portion);
     std::vector<TColumnRecord> recordChunks;
-    for (auto&& i : records) {
-        recordChunks.emplace_back(TColumnRecord(i));
+    {
+        const auto pred = [](const TColumnRecord& l, const TColumnRecord& r) -> bool {
+            return l.GetAddress() < r.GetAddress();
+        };
+        bool needSort = false;
+        for (auto&& i : records) {
+            TColumnRecord chunk(i);
+            if (recordChunks.size() && !pred(recordChunks.back(), chunk)) {
+                needSort = true;
+            }
+            recordChunks.emplace_back(std::move(chunk));
+        }
+        if (needSort) {
+            std::sort(recordChunks.begin(), recordChunks.end(), pred);
+        }
     }
     std::vector<TIndexChunk> indexChunks;
-    for (auto&& i : indexes) {
-        indexChunks.emplace_back(i.BuildIndexChunk());
+    {
+
+        const auto pred = [](const TIndexChunk& l, const TIndexChunk& r) ->bool {
+            return l.GetAddress() < r.GetAddress();
+        };
+        bool needSort = false;
+        for (auto&& i : indexes) {
+            auto chunk = i.BuildIndexChunk();
+            if (indexChunks.size() && !pred(indexChunks.back(), chunk)) {
+                needSort = true;
+            }
+            indexChunks.emplace_back(std::move(chunk));
+        }
+        if (needSort) {
+            std::sort(indexChunks.begin(), indexChunks.end(), pred);
+        }
     }
     return TPortionDataAccessor(portion, std::move(recordChunks), std::move(indexChunks), true);
 }

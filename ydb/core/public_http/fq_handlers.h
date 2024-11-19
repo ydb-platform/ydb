@@ -407,9 +407,9 @@ class TRestartQueryRequest : public TActorBootstrapped<TRestartQueryRequest> {
     NProtobufJson::TJson2ProtoConfig Json2ProtoConfig;
 
 public:
-    TRestartQueryRequest(const THttpRequestContext& ctx, TGrpcProxyEventFactory eventFactory)
+    TRestartQueryRequest(const THttpRequestContext& ctx)
     : RequestContext(ctx)
-    , EventFactory(eventFactory)
+    // , EventFactory(eventFactory) // &NGRpcService::CreateFederatedQuery##internalAction##RequestOperationCall
     {
         Json2ProtoConfig = NProtobufJson::TJson2ProtoConfig()
             .SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameCamelCase)
@@ -462,7 +462,7 @@ public:
             TIntrusivePtr<TGrpcRequestContextWrapper> requestContextModify = new TGrpcRequestContextWrapper(
                 this->RequestContext,
                 std::move(modifyRequest),
-                TGrpcCallWrapper<FederatedQuery::ModifyQueryRequest, void, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse>::SendReply
+                TGrpcCallWrapper<FederatedQuery::ModifyQueryRequest, int, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse>::SendReply
             );
 
             ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(requestContextModify).get());

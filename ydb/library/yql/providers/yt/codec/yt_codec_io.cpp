@@ -1493,7 +1493,7 @@ public:
         if (!StreamReader_) {
             // Deal with empty input
             auto streamReaderResult = arrow::ipc::RecordBatchStreamReader::Open(InputStream_.get());
-            if (!streamReaderResult.ok() && InputStream_->EOSReached()) {
+            if (!streamReaderResult.ok() && InputStream_->EOSReached() && InputStream_->Tell().ValueOrDie() == 0) {
                 return false;
             }
             StreamReader_ = ARROW_RESULT(streamReaderResult);

@@ -48,7 +48,7 @@ TString SecurityPrint(const NKikimrClient::TSqsResponse& resp) {
         case NKikimrClient::TSqsResponse::kReceiveMessage: {
             NKikimrClient::TSqsResponse respCopy = resp;
             for (auto& msg : *respCopy.MutableReceiveMessage()->MutableMessages()) {
-                msg.SetData(TStringBuilder() << "[...user_data_" << msg.GetData().size() << "bytes" << "...]"); 
+                msg.SetData(TStringBuilder() << "[...user_data_" << msg.GetData().size() << "bytes" << "...]");
             }
             return TStringBuilder() << respCopy;
         }
@@ -75,6 +75,7 @@ void TProxyActor::Bootstrap() {
     RLOG_SQS_DEBUG("Request proxy started");
 
     if (!UserName_ || !QueueName_) {
+        TimeoutCookie_.Get()->Detach();
         RLOG_SQS_WARN("Validation error: No " << (!UserName_ ? "user name" : "queue name") << " in proxy actor");
         SendErrorAndDie(NErrors::INVALID_PARAMETER_VALUE, "Both account and queue name should be specified.");
         return;

@@ -151,6 +151,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTableIndex:
         return "ALTER TABLE INDEX RENAME";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence:
+        return "ALTER SEQUENCE RENAME";
     // filestore
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
         return "CREATE FILE STORE";
@@ -466,6 +468,10 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTableIndex:
         result.emplace_back(tx.GetMoveTableIndex().GetSrcPath());
         result.emplace_back(tx.GetMoveTableIndex().GetDstPath());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence:
+        result.emplace_back(tx.GetMoveSequence().GetSrcPath());
+        result.emplace_back(tx.GetMoveSequence().GetDstPath());
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSequence().GetName()}));

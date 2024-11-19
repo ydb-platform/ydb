@@ -1917,6 +1917,13 @@ public:
                 }
             }
 
+            if (settings.SequenceSettings.Restart) {
+                seqDesc->SetRestart(true);
+                if (settings.SequenceSettings.RestartValue) {
+                    seqDesc->MutableSetVal()->SetNextValue(*settings.SequenceSettings.RestartValue);
+                }
+            }
+
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
                 auto& phyTx = *phyQuery.AddTransactions();

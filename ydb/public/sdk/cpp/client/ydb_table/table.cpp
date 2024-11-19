@@ -331,6 +331,11 @@ class TTableDescription::TImpl {
             TtlSettings_ = std::move(*ttlSettings);
         }
 
+        // tiering
+        if (proto.tiering().size()) {
+            Tiering_ = proto.tiering();
+        }
+
         if (proto.store_type()) {
             StoreType_ = (proto.store_type() == Ydb::Table::STORE_TYPE_COLUMN) ? EStoreType::Column : EStoreType::Row;
         }

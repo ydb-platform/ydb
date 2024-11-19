@@ -44,12 +44,18 @@ static void FillStoragePool(TStoragePoolHolder* out, TAddStoragePoolFunc<TStorag
 THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTableRequest* req) {
     THashSet<EAlterOperationKind> ops;
 
-    if (req->add_columns_size() || req->drop_columns_size() || req->alter_columns_size() ||
-        req->ttl_action_case() != Ydb::Table::AlterTableRequest::TTL_ACTION_NOT_SET ||
-        req->tiering_action_case() != Ydb::Table::AlterTableRequest::TIERING_ACTION_NOT_SET || req->has_alter_storage_settings() ||
-        req->add_column_families_size() || req->alter_column_families_size() || req->set_compaction_policy() ||
-        req->has_alter_partitioning_settings() || req->set_key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED ||
-        req->has_set_read_replicas_settings()) {
+    if (req->add_columns_size() || req->drop_columns_size() ||
+        req->alter_columns_size() ||
+        req->ttl_action_case() !=
+            Ydb::Table::AlterTableRequest::TTL_ACTION_NOT_SET ||
+        req->tiering_action_case() !=
+            Ydb::Table::AlterTableRequest::TIERING_ACTION_NOT_SET ||
+        req->has_alter_storage_settings() || req->add_column_families_size() ||
+        req->alter_column_families_size() || req->set_compaction_policy() ||
+        req->has_alter_partitioning_settings() ||
+        req->set_key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED ||
+        req->has_set_read_replicas_settings())
+    {
         ops.emplace(EAlterOperationKind::Common);
     }
 
@@ -534,10 +540,10 @@ void FillColumnDescriptionImpl(TYdbProto& out,
         if (in.GetTTLSettings().HasEnabled()) {
             FillTtlSettings(*out.mutable_ttl_settings(), in.GetTTLSettings().GetEnabled());
         }
-    }
 
-    if (in.GetTTLSettings().HasUseTiering()) {
-        out.set_tiering(in.GetTTLSettings().GetUseTiering());
+        if (in.GetTTLSettings().HasUseTiering()) {
+            out.set_tiering(in.GetTTLSettings().GetUseTiering());
+        }
     }
 }
 
@@ -574,10 +580,10 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
         if (in.GetTtlSettings().HasEnabled()) {
             FillTtlSettings(*out.mutable_ttl_settings(), in.GetTtlSettings().GetEnabled());
         }
-    }
 
-    if (in.GetTtlSettings().HasUseTiering()) {
-        out.set_tiering(in.GetTtlSettings().GetUseTiering());
+        if (in.GetTtlSettings().HasUseTiering()) {
+            out.set_tiering(in.GetTtlSettings().GetUseTiering());
+        }
     }
 
     out.set_store_type(Ydb::Table::StoreType::STORE_TYPE_COLUMN);

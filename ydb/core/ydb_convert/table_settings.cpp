@@ -228,6 +228,10 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         }
     }
 
+    if (proto.tiering().size()) {
+        tableDesc.MutableTTLSettings()->SetUseTiering(proto.tiering());
+    }
+
     if (proto.has_storage_settings()) {
         TColumnFamilyManager families(tableDesc.MutablePartitionConfig());
         if (!families.ApplyStorageSettings(proto.storage_settings(), &code, &error)) {
@@ -385,6 +389,12 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         }
     } else if (proto.has_drop_ttl_settings()) {
         tableDesc.MutableTTLSettings()->MutableDisabled();
+    }
+
+    if (proto.has_set_tiering()) {
+        tableDesc.MutableTTLSettings()->SetUseTiering(proto.set_tiering());
+    } else if (proto.has_drop_tiering()) {
+        tableDesc.MutableTTLSettings()->SetUseTiering("");
     }
 
     if (!changed && !hadPartitionConfig) {

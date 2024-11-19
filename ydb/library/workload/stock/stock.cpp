@@ -384,6 +384,8 @@ void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComman
             .DefaultValue("row").StoreResult(&TableType).Hidden();
         break;
     case TWorkloadParams::ECommandType::Run:
+        opts.AddLongOption("store", "Tables type ('row' or 'column'). Default: 'row'.")
+            .DefaultValue("row").StoreResult(&TableType).Hidden();
         switch (static_cast<TStockWorkloadGenerator::EType>(workloadType)) {
         case TStockWorkloadGenerator::EType::InsertRandomOrder:
         case TStockWorkloadGenerator::EType::SubmitRandomOrder:

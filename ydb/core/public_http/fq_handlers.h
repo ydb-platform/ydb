@@ -419,30 +419,56 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         auto describeRequest = std::make_unique<FederatedQuery::DescribeQueryRequest>();
         if (!Parse<FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest>(*describeRequest)) {
-            throw; // temp sol
+            this->Die(ctx);
+            return;
         }
 
         TIntrusivePtr<TGrpcRequestContextWrapper> requestContext = new TGrpcRequestContextWrapper(
             RequestContext,
             std::move(describeRequest),
-            [&](const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
+            [&, this, query_id = describeRequest->Getquery_id()](const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
             Y_ABORT_UNLESS(resp);
             Y_ABORT_UNLESS(resp->GetArena());
 
             auto* typedResponse = static_cast<FederatedQuery::DescribeQueryResponse*>(resp);
+            if (!typedResponse->operation().result().template Is<FederatedQuery::DescribeQueryResult>()) {
+                TStringStream json;
+                auto* httpResult = google::protobuf::Arena::CreateMessage<FQHttp::Error>(resp->GetArena());
+                FqConvert(typedResponse->operation(), *httpResult);
+                FqPackToJson(json, *httpResult, jsonSettings);
+
+                requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());
+                this->Die(ctx);
+                return;
+            }
+
+            FederatedQuery::DescribeQueryResult* describeResult = google::protobuf::Arena::CreateMessage<FederatedQuery::DescribeQueryResult>(resp->GetArena());
+            typedResponse->operation().result().UnpackTo(describeResult);
 
 
+            // modify
+            auto modifyRequest = std::unique_ptr<FederatedQuery::ModifyQueryRequest>(google::protobuf::Arena::CreateMessage<FederatedQuery::ModifyQueryRequest>(resp->GetArena()));
 
-            
+            // bad
+            modifyRequest->set_query_id(query_id);
+            auto content = describeResult->Getquery().content();
+            modifyRequest->set_allocated_content(&content);
+            modifyRequest->set_execute_mode(::FederatedQuery::ExecuteMode::RUN);
+            modifyRequest->set_allocated_disposition(nullptr);
+            modifyRequest->set_state_load_mode(::FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT);
+            modifyRequest->set_previous_revision(describeResult->Getquery().meta().Getlast_job_query_revision()); // ??
+            modifyRequest->set_idempotency_key(requestContext.GetIdempotencyKey());
 
+            TIntrusivePtr<TGrpcRequestContextWrapper> requestContextModify = new TGrpcRequestContextWrapper(
+                this->RequestContext,
+                std::move(modifyRequest),
+                TGrpcCallWrapper<FederatedQuery::ModifyQueryRequest, void, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse>::SendReply
+            );
 
-
-            this->Die(ctx);
+            ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(requestContextModify).get());
         });
 
-
-
-
+        ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(requestContext).get());
     }
 
     template<typename TGrpcProtoRequestType, typename THttpProtoRequestType>
@@ -472,6 +498,31 @@ public:
         } catch (const std::exception& e) {
             ReplyError(TStringBuilder() << "Error in parsing: " << e.what());
             return false;
+        }
+    }
+
+    template <typename THttpProtoRequestType>
+    static void SetProtoMessageField(THttpProtoRequestType& request, TStringBuf name, TStringBuf value) {
+        const Reflection* reflection = request.GetReflection();
+        const Descriptor* descriptor = request.GetDescriptor();
+        auto field = descriptor->FindFieldByLowercaseName(TString(name));
+        if (!field) {
+            return;
+        }
+
+        switch (field->cpp_type()) {
+        case FieldDescriptor::CPPTYPE_INT32:
+            return reflection->SetInt32(&request, field, FromString<i32>(value));
+        case FieldDescriptor::CPPTYPE_INT64:
+            return reflection->SetInt64(&request, field, FromString<i64>(value));
+        case FieldDescriptor::CPPTYPE_UINT32:
+            return reflection->SetUInt32(&request, field, FromString<ui32>(value));
+        case FieldDescriptor::CPPTYPE_UINT64:
+            return reflection->SetUInt64(&request, field, FromString<ui64>(value));
+        case FieldDescriptor::CPPTYPE_STRING:
+            return reflection->SetString(&request, field, TString(value));
+        default:
+            break;
         }
     }
 

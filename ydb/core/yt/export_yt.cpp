@@ -7,6 +7,7 @@
 #include <contrib/ydb/library/services/services.pb.h>
 #include <contrib/ydb/core/tablet_flat/flat_row_state.h>
 #include <contrib/ydb/core/tx/datashard/export_common.h>
+#include <contrib/ydb/core/tx/datashard/export_logging.h>
 #include <contrib/ydb/library/binary_json/read.h>
 #include <contrib/ydb/library/actors/core/actor_bootstrapped.h>
 #include <contrib/ydb/library/actors/core/hfunc.h>

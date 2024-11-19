@@ -1,4 +1,4 @@
-#include "export_common.h"
+#include "export_logging.h"
 #include "export_scan.h"
 
 #include <ydb/core/base/appdata.h>

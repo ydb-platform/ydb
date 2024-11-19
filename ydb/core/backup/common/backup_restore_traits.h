@@ -7,9 +7,7 @@ namespace NKikimrSchemeOp {
     class TBackupTask;
 }
 
-namespace NKikimr {
-namespace NDataShard {
-namespace NBackupRestoreTraits {
+namespace NKikimr::NBackup::NCommon {
 
 enum class EDataFormat: int {
     Invalid /* "invalid" */,
@@ -47,6 +45,4 @@ inline TString DataKey(const TString& objKeyPattern, ui32 n, EDataFormat format,
     return Sprintf("%s/data_%02d%s", objKeyPattern.c_str(), n, ext.c_str());
 }
 
-} // NBackupRestoreTraits
-} // NDataShard
-} // NKikimr
+} // namespace NKikimr::NBackup::NCommon

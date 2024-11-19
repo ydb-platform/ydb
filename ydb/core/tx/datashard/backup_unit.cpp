@@ -1,10 +1,10 @@
 #include "backup_restore_common.h"
-#include "backup_restore_traits.h"
 #include "execution_unit_ctors.h"
 #include "export_iface.h"
 #include "export_scan.h"
 #include "export_s3.h"
 
+#include <ydb/core/backup/common/backup_restore_traits.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 
 namespace NKikimr {
@@ -61,7 +61,7 @@ protected:
                 return false;
             }
         } else if (backup.HasS3Settings()) {
-            NBackupRestoreTraits::ECompressionCodec codec;
+            NBackup::NCommon::ECompressionCodec codec;
             if (!TryCodecFromTask(backup, codec)) {
                 Abort(op, ctx, TStringBuilder() << "Unsupported compression codec"
                     << ": " << backup.GetCompression().GetCodec());

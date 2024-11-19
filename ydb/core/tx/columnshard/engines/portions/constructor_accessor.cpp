@@ -131,7 +131,6 @@ TPortionDataAccessor TPortionAccessorConstructor::BuildForLoading(
     AFL_VERIFY(portion);
     std::vector<TColumnRecord> recordChunks;
     {
-        TPortionAccessorConstructor
         const auto pred = [](const TColumnRecord& l, const TColumnRecord& r) {
             return l.GetAddress() < r.GetAddress();
         };

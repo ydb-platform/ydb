@@ -1491,9 +1491,9 @@ public:
 
     bool ReadNext() {
         if (!StreamReader_) {
-            // Deal with empty input
             auto streamReaderResult = arrow::ipc::RecordBatchStreamReader::Open(InputStream_.get());
             if (!streamReaderResult.ok() && InputStream_->EOSReached() && InputStream_->Tell().ValueOrDie() == 0) {
+                // Workaround for YT-23495
                 return false;
             }
             StreamReader_ = ARROW_RESULT(streamReaderResult);

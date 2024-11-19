@@ -39,7 +39,7 @@ private:
 
     TMaybeNode<TExprBase> HandleMap(TExprBase node, TExprContext& ctx) const {
         auto map = node.Cast<TYtMap>();
-        if (!State_->Configuration->JobBlockInput.Get().GetOrElse(Types->UseBlocks || Types->BlockEngineMode != EBlockEngineMode::Disable)) {
+        if (!State_->Configuration->JobBlockInput.Get().GetOrElse(Types->UseBlocks)) {
             return map;
         }
 

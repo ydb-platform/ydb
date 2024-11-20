@@ -75,12 +75,12 @@ void TProxyActor::Bootstrap() {
     RLOG_SQS_DEBUG("Request proxy started");
 
     if (!UserName_ || !QueueName_) {
-        TimeoutCookie_.Get()->Detach();
         RLOG_SQS_WARN("Validation error: No " << (!UserName_ ? "user name" : "queue name") << " in proxy actor");
         SendErrorAndDie(NErrors::INVALID_PARAMETER_VALUE, "Both account and queue name should be specified.");
         return;
     }
 
+    TimeoutCookie_.Reset(ISchedulerCookie::Make2Way());
     const auto& cfg = Cfg();
     if (cfg.GetRequestTimeoutMs()) {
         this->Schedule(TDuration::MilliSeconds(cfg.GetRequestTimeoutMs()), new TEvWakeup(), TimeoutCookie_.Get());

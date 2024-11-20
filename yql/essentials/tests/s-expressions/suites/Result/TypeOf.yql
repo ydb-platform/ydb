@@ -1,0 +1,23 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let vt1 (VariantType (TupleType (DataType 'Int32) (DataType 'String))))
+(let vt2 (VariantType (StructType '('x (DataType 'Int32)) '('y (DataType 'String)))))
+(let res_sink (DataSink 'result))
+(let data '(
+(Uint32 '1) 
+(AsStruct '('k (String 'key)) '('v (Uint64 '456)))
+(AsList (Uint32 '2))
+(Just (Uint32 '3))
+(Nothing (OptionalType (DataType 'String)))
+(AsDict '((String 'dkey1) (String 'dvalue1)) '((String 'dkey2) (String 'dvalue2)))
+(Variant (Int32 '7) '0 vt1)
+(Variant (String 'qwe) 'y vt2)
+))
+(let world (Write! world res_sink (Key) (FormatType (TypeOf data)) '()))
+(let world (Write! world res_sink (Key) (FormatType (TypeOf (TypeOf data))) '()))
+(let world (Commit! world res_sink))
+(return world)
+)

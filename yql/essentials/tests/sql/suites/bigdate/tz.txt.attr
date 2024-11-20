@@ -1,0 +1,8 @@
+{"_yql_row_spec"={
+	"Type"=["StructType";[
+		["waz";["DataType";"TzDate32"]];
+		["wdz";["DataType";"TzDatetime64"]];
+		["wtz";["DataType";"TzTimestamp64"]];
+	]];
+}}
+

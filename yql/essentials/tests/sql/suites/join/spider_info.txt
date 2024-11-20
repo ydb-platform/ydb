@@ -1,0 +1,8 @@
+{"key"="1.1.1.1";"subkey"="RESULT";"value"="http://www.foo.bar/wtf"};
+{"key"="1.1.1.1";"subkey"="RESULT";"value"="http://www.foo.bar/spam"};
+{"key"="1.1.1.1";"subkey"="BAN_DETECTED";"value"="http://www.foo.bar/spam"};
+{"key"="2.2.2.2";"subkey"="RESULT";"value"="http://www.spam.ru/foo"};
+{"key"="2.2.2.2";"subkey"="BAN_DETECTED";"value"="http://www.spam.ru/foo"};
+{"key"="2.2.2.2";"subkey"="RESULT";"value"="http://www.spam.ru/bar"};
+{"key"="2.2.2.2";"subkey"="BAN_DETECTED";"value"="http://www.spam.ru/bar"};
+{"key"="2.2.2.2";"subkey"="RESULT";"value"="http://www.yandex.ru/wat"};

@@ -1,0 +1,8 @@
+{"key"="1";"subkey"=".";"value"="abc"};
+{"key"="1";"subkey"=".";"value"="kkk"};
+{"key"="2";"subkey"=".";"value"="aaa"};
+{"key"="2";"subkey"=".";"value"="bbb"};
+{"key"="2";"subkey"=".";"value"="ddd"};
+{"key"="bad";"subkey"=".";"value"="ccc"};
+{"key"="1";"subkey"=".";"value"="qqq"};
+{"key"="1";"subkey"=".";"value"="zzz"};

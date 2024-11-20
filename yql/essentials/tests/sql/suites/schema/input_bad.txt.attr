@@ -1,0 +1,6 @@
+{
+    "schema" = [
+        {"required"=%false; "type"="any"; "name"="dates"};
+        {"required"=%false; "type"="string"; "name"="id1"};
+    ];
+}

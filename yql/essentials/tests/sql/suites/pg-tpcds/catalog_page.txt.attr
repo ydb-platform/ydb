@@ -1,0 +1,15 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["cp_catalog_page_sk";["PgType";"int4";];];
+              ["cp_catalog_page_id";["PgType";"text";];];
+              ["cp_start_date_sk";["PgType";"int4";];];
+              ["cp_end_date_sk";["PgType";"int4";];];
+              ["cp_department";["PgType";"text";];];
+              ["cp_catalog_number";["PgType";"int4";];];
+              ["cp_catalog_page_number";["PgType";"int4";];];
+              ["cp_description";["PgType";"text";];];
+              ["cp_type";["PgType";"text";];];
+        ];];
+    }
+}

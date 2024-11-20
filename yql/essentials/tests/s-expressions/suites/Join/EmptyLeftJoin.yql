@@ -1,0 +1,23 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let list1 (AsList 
+  (AsStruct '('key1 (Just (String '1))) '('value1 (Just (String 'A)))) 
+))
+
+(let list2 (AsList 
+  (AsStruct '('key2 (String '1)) '('value2 (Nothing (OptionalType (DataType 'String))))) 
+))
+
+(let keyExtractor (lambda '(x) (Member x 'key2)))
+(let payloadExtractor (lambda '(x) x))
+
+(let dictOne (ToDict list2 keyExtractor payloadExtractor '('Hashed 'One 'Compact)))
+(let dictMany (ToDict list2 keyExtractor payloadExtractor '('Hashed 'Many 'Compact)))
+(let joinLeft (MapJoinCore (Iterator list1 (DependsOn (String 'Left))) dictMany 'Left '('key1) '('key2) '('key1 'a.key1) '('key2 'b.key2 'value2 'b.value2) '() '()))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) (Collect joinLeft) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

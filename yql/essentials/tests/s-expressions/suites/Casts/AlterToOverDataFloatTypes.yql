@@ -1,0 +1,39 @@
+(
+
+(library "alterto.yql")
+(import alterto_module '"alterto.yql")
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# Float -> Double (always success)
+(let world (Apply (bind alterto_module 'doAlterTo) world (Float '"1.0") (DataType 'Double) (Double '"0.0")))
+
+# Double -> Float (success)
+(let world (Apply (bind alterto_module 'doAlterTo) world (Double '"2.0") (DataType 'Float) (Float '"123456.0")))
+
+# Double -> Float (fail)
+(let world (Apply (bind alterto_module 'doAlterTo) world (Double '"3.0000001") (DataType 'Float) (Float '"123456.0")))
+
+# Float -> Integer (success)
+(let world (Apply (bind alterto_module 'doAlterTo) world (Float '"3.0") (DataType 'Uint32) (Uint32 '123456)))
+
+# Float -> Integer (success)
+(let world (Apply (bind alterto_module 'doAlterTo) world (Float '"-3.0") (DataType 'Int32) (Int32 '123456)))
+
+# Float -> Integer (fail)
+(let world (Apply (bind alterto_module 'doAlterTo) world (Float '"3.3") (DataType 'Uint32) (Uint32 '123456)))
+
+# Float -> Integer (fail)
+(let world (Apply (bind alterto_module 'doAlterTo) world (Float '"1e10") (DataType 'Uint32) (Uint32 '123456)))
+
+# Float -> Integer (fail)
+(let world (Apply (bind alterto_module 'doAlterTo) world (Float '"-3.0") (DataType 'Uint32) (Uint32 '123456)))
+
+# Float -> Integer (fail)
+(let inf (/ (Float '"1.0") (Int8 '0)))
+(let world (Apply (bind alterto_module 'doAlterTo) world inf (DataType 'Int64) (Int64 '123456789)))
+
+(return world)
+
+)

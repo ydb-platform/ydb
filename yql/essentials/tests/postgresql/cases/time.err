@@ -1,0 +1,244 @@
+<sql-statement>
+--
+-- TIME
+--
+CREATE TABLE TIME_TBL (f1 time(2));
+</sql-statement>
+<sql-statement>
+INSERT INTO TIME_TBL VALUES ('00:00');
+</sql-statement>
+<sql-statement>
+INSERT INTO TIME_TBL VALUES ('01:00');
+</sql-statement>
+<sql-statement>
+-- as of 7.4, timezone spec should be accepted and ignored
+INSERT INTO TIME_TBL VALUES ('02:03 PST');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- as of 7.4, timezone spec should be accepted and ignored
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time: "02:03 PST"
+
+        	-- as of 7.4, timezone spec should be accepted and ignored
+	^
+<sql-statement>
+INSERT INTO TIME_TBL VALUES ('11:59 EDT');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIME_TBL VALUES ('11:59 EDT');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type time: "11:59 EDT"
+
+        	INSERT INTO TIME_TBL VALUES ('11:59 EDT');
+	^
+<sql-statement>
+INSERT INTO TIME_TBL VALUES ('12:00');
+</sql-statement>
+<sql-statement>
+INSERT INTO TIME_TBL VALUES ('12:01');
+</sql-statement>
+<sql-statement>
+INSERT INTO TIME_TBL VALUES ('23:59');
+</sql-statement>
+<sql-statement>
+INSERT INTO TIME_TBL VALUES ('11:59:59.99 PM');
+</sql-statement>
+<sql-statement>
+INSERT INTO TIME_TBL VALUES ('2003-03-07 15:36:39 America/New_York');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIME_TBL VALUES ('2003-03-07 15:36:39 America/New_York');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "america/new_york" not recognized
+
+        	INSERT INTO TIME_TBL VALUES ('2003-03-07 15:36:39 America/New_York');
+	^
+<sql-statement>
+INSERT INTO TIME_TBL VALUES ('2003-07-07 15:36:39 America/New_York');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	INSERT INTO TIME_TBL VALUES ('2003-07-07 15:36:39 America/New_York');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "america/new_york" not recognized
+
+        	INSERT INTO TIME_TBL VALUES ('2003-07-07 15:36:39 America/New_York');
+	^
+<sql-statement>
+-- this should fail (the timezone offset is not known)
+INSERT INTO TIME_TBL VALUES ('15:36:39 America/New_York');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtFill!
+    	-- this should fail (the timezone offset is not known)
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  time zone "america/new_york" not recognized
+
+        	-- this should fail (the timezone offset is not known)
+	^
+<sql-statement>
+SELECT f1 AS "Time" FROM TIME_TBL;
+</sql-statement>
+<sql-statement>
+SELECT f1 AS "Three" FROM TIME_TBL WHERE f1 < '05:06:07';
+</sql-statement>
+<sql-statement>
+SELECT f1 AS "Five" FROM TIME_TBL WHERE f1 > '05:06:07';
+</sql-statement>
+<sql-statement>
+SELECT f1 AS "None" FROM TIME_TBL WHERE f1 < '00:00';
+</sql-statement>
+<sql-statement>
+SELECT f1 AS "Eight" FROM TIME_TBL WHERE f1 >= '00:00';
+</sql-statement>
+<sql-statement>
+-- Check edge cases
+SELECT '23:59:59.999999'::time;
+</sql-statement>
+<sql-statement>
+SELECT '23:59:59.9999999'::time;  -- rounds up
+</sql-statement>
+<sql-statement>
+SELECT '23:59:60'::time;  -- rounds up
+</sql-statement>
+<sql-statement>
+SELECT '24:00:00'::time;  -- allowed
+</sql-statement>
+<sql-statement>
+SELECT '24:00:00.01'::time;  -- not allowed
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '24:00:00.01'::time;  -- not allowed
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "24:00:00.01"
+
+        	SELECT '24:00:00.01'::time;  -- not allowed
+	^
+<sql-statement>
+SELECT '23:59:60.01'::time;  -- not allowed
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '23:59:60.01'::time;  -- not allowed
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "23:59:60.01"
+
+        	SELECT '23:59:60.01'::time;  -- not allowed
+	^
+<sql-statement>
+SELECT '24:01:00'::time;  -- not allowed
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '24:01:00'::time;  -- not allowed
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "24:01:00"
+
+        	SELECT '24:01:00'::time;  -- not allowed
+	^
+<sql-statement>
+SELECT '25:00:00'::time;  -- not allowed
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT '25:00:00'::time;  -- not allowed
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  date/time field value out of range: "25:00:00"
+
+        	SELECT '25:00:00'::time;  -- not allowed
+	^
+<sql-statement>
+--
+-- TIME simple math
+--
+-- We now make a distinction between time and intervals,
+-- and adding two times together makes no sense at all.
+-- Leave in one query to show that it is rejected,
+-- and do the rest of the testing in horology.sql
+-- where we do mixed-type arithmetic. - thomas 2000-12-02
+SELECT f1 + time '00:01' AS "Illegal" FROM TIME_TBL;
+</sql-statement>
+<sql-statement>
+--
+-- test EXTRACT
+--
+SELECT EXTRACT(MICROSECOND FROM TIME '2020-05-26 13:30:25.575401');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(MILLISECOND FROM TIME '2020-05-26 13:30:25.575401');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(SECOND      FROM TIME '2020-05-26 13:30:25.575401');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(MINUTE      FROM TIME '2020-05-26 13:30:25.575401');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(HOUR        FROM TIME '2020-05-26 13:30:25.575401');
+</sql-statement>
+<sql-statement>
+SELECT EXTRACT(DAY         FROM TIME '2020-05-26 13:30:25.575401');  -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT EXTRACT(DAY         FROM TIME '2020-05-26 13:30:25.575401');  -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  "time" units "day" not recognized
+
+        	SELECT EXTRACT(DAY         FROM TIME '2020-05-26 13:30:25.575401');  -- error
+	^
+<sql-statement>
+SELECT EXTRACT(FORTNIGHT   FROM TIME '2020-05-26 13:30:25.575401');  -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT EXTRACT(FORTNIGHT   FROM TIME '2020-05-26 13:30:25.575401');  -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  "time" units "fortnight" not recognized
+
+        	SELECT EXTRACT(FORTNIGHT   FROM TIME '2020-05-26 13:30:25.575401');  -- error
+	^
+<sql-statement>
+SELECT EXTRACT(TIMEZONE    FROM TIME '2020-05-26 13:30:25.575401');  -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT EXTRACT(TIMEZONE    FROM TIME '2020-05-26 13:30:25.575401');  -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  "time" units "timezone" not recognized
+
+        	SELECT EXTRACT(TIMEZONE    FROM TIME '2020-05-26 13:30:25.575401');  -- error
+	^
+<sql-statement>
+SELECT EXTRACT(EPOCH       FROM TIME '2020-05-26 13:30:25.575401');
+</sql-statement>
+<sql-statement>
+-- date_part implementation is mostly the same as extract, so only
+-- test a few cases for additional coverage.
+SELECT date_part('microsecond', TIME '2020-05-26 13:30:25.575401');
+</sql-statement>
+<sql-statement>
+SELECT date_part('millisecond', TIME '2020-05-26 13:30:25.575401');
+</sql-statement>
+<sql-statement>
+SELECT date_part('second',      TIME '2020-05-26 13:30:25.575401');
+</sql-statement>
+<sql-statement>
+SELECT date_part('epoch',       TIME '2020-05-26 13:30:25.575401');
+</sql-statement>

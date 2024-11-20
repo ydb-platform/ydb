@@ -1,0 +1,28 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+(let world (Write! world res_sink (Key) (StartsWith (Utf8 '12345) (String '"")) '('('type))))
+(let world (Write! world res_sink (Key) (StartsWith (Just (String '12345)) (String '124)) '('('type))))
+(let world (Write! world res_sink (Key) (StartsWith (String '12345) (Just (String '123456))) '('('type))))
+(let world (Write! world res_sink (Key) (StartsWith (Just (String '567)) (Just (Utf8 '56))) '('('type))))
+(let world (Write! world res_sink (Key) (StartsWith (Utf8 'abcad) (String 'ab)) '('('type))))
+(let world (Write! world res_sink (Key) (StartsWith (Utf8 'xyz) (Utf8 'xyz)) '('('type))))
+(let world (Write! world res_sink (Key) (StartsWith (Utf8 'one) (Null)) '('('type))))
+(let world (Write! world res_sink (Key) (StartsWith (Null) (Utf8 'two)) '('('type))))
+
+(let world (Write! world res_sink (Key) (EndsWith (Utf8 '12345) (String '"")) '('('type))))
+(let world (Write! world res_sink (Key) (EndsWith (Just (String '12345)) (String '346)) '('('type))))
+(let world (Write! world res_sink (Key) (EndsWith (String '12345) (Just (String '012345))) '('('type))))
+(let world (Write! world res_sink (Key) (EndsWith (Just (String '567)) (Just (Utf8 '67))) '('('type))))
+(let world (Write! world res_sink (Key) (EndsWith (Utf8 'abcad) (String 'ad)) '('('type))))
+(let world (Write! world res_sink (Key) (EndsWith (Utf8 'xyz) (Utf8 'xyz)) '('('type))))
+(let world (Write! world res_sink (Key) (EndsWith (Utf8 'one) (Null)) '('('type))))
+(let world (Write! world res_sink (Key) (EndsWith (Null) (Utf8 'two)) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

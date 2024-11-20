@@ -1,0 +1,11 @@
+(
+
+(library "joins.yql")
+(import join_module '"joins.yql")
+
+(let world (Configure! world (DataSource '"yt" '"$all") '"Attr" '"joinmergetableslimit" '"10"))
+
+(let world (Apply (bind join_module 'doAllJoinsExceptCrossLink) world 'Input1 'Input2 '('('left 'any) '('right 'any))))
+
+(return world)
+)

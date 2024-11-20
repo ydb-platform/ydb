@@ -1,0 +1,10 @@
+/* postgres can not */
+use plato;
+
+insert into Output
+select
+  key,
+  max(TablePath()) over w as table_rec
+from Input
+window w as (order by key)
+;

@@ -1,0 +1,37 @@
+{
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "type_v3" = "string";
+            "required" = %true;
+            "name" = "key";
+            "sort_order" = "ascending";
+        };
+        {
+            "type_v3" = {
+                "type_name" = "struct";
+                "members" = [
+                    {
+                        "type" = {
+                            "type_name" = "optional";
+                            "item" = "int32";
+                        };
+                        "name" = "b";
+                    };
+                    {
+                        "type" = "string";
+                        "name" = "a";
+                    };
+                    {
+                        "type" = "string";
+                        "name" = "c";
+                    };
+                ];
+            };
+            "required" = %true;
+            "name" = "subkey";
+        };
+    ];
+}

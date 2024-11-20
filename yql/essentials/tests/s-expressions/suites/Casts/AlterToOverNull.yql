@@ -1,0 +1,36 @@
+(
+
+(library "alterto.yql")
+(import alterto_module '"alterto.yql")
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# Null -> Uint16?
+(let targetType (OptionalType (DataType 'Uint16)))
+(let world (Apply (bind alterto_module 'doAlterTo) world (Null) targetType (Just (Uint16 '12345))))
+
+# Just(Null) -> Null
+(let alterToResult (AlterTo (Just (Null)) (NullType) (lambda '(x) (String 'OK)) (String 'FAIL)))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) alterToResult '('('type))))
+
+# Nothing(Null?) -> Null
+(let alterToResult (AlterTo (Nothing (OptionalType (NullType))) (NullType) (lambda '(x) (String 'OK)) (String 'FAIL)))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) alterToResult '('('type))))
+
+# Nothing(Uint16?) -> Null
+(let alterToResult (AlterTo (Nothing (OptionalType (DataType 'Uint16))) (NullType) (lambda '(x) (String 'OK)) (String 'FAIL)))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) alterToResult '('('type))))
+
+# Null -> Null?
+(let alterToResult (AlterTo (Null) (OptionalType (NullType)) (lambda '(x) (String 'OK)) (String 'FAIL)))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) alterToResult '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+
+)

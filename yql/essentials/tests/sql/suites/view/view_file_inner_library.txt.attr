@@ -1,0 +1,31 @@
+{
+    "_yql_view_file_inner_library"="PRAGMA library('mylib.sql','http_test://mylib.sql');IMPORT mylib SYMBOLS $x;select $x as k, 2 as s, 3 as v";
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

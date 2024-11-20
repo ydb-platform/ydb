@@ -1,0 +1,37 @@
+{
+    "_yql_view_trivial"="SELECT key, subkey, value FROM self";
+    "_yql_view_key1"="SELECT key || \"key\" FROM self";
+    "_yql_view_key2"="SELECT key || \"key\" FROM self_raw";
+    "_yql_view_noread"="SELECT 1 as key, 2 as value";
+    "_yql_read_udf"="DummyLog.ReadRecord2";
+    "_yql_read_udf_type_config"="AAA";
+    "_yql_read_udf_run_config"="BBB";
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "subkey";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ];
+                [
+                    "value";
+                    [
+                        "DataType";
+                        "String"
+                    ]
+                ]
+            ]
+        ]
+    }
+}

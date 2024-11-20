@@ -1,0 +1,22 @@
+{
+    "_yql_row_spec"={
+       "Type"=["StructType";[
+           ["l_orderkey";["PgType";"int4";];];
+           ["l_partkey";["PgType";"int4";];];
+           ["l_suppkey";["PgType";"int4";];];
+           ["l_linenumber";["PgType";"int4";];];
+           ["l_quantity";["PgType";"numeric";];];
+           ["l_extendedprice";["PgType";"numeric";];];
+           ["l_discount";["PgType";"numeric";];];
+           ["l_tax";["PgType";"numeric";];];
+           ["l_returnflag";["PgType";"text";];];
+           ["l_linestatus";["PgType";"text";];];
+           ["l_shipdate";["PgType";"date";];];
+           ["l_commitdate";["PgType";"date";];];
+           ["l_receiptdate";["PgType";"date";];];
+           ["l_shipinstruct";["PgType";"text";];];
+           ["l_shipmode";["PgType";"text";];];
+           ["l_comment";["PgType";"text";];];
+       ];];
+    }
+}

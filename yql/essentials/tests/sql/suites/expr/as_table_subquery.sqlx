@@ -1,0 +1,3 @@
+$data = (select * from plato.Input);
+
+SELECT * FROM AS_TABLE($data);

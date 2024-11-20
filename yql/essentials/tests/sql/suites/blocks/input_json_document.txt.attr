@@ -1,0 +1,9 @@
+{"_yql_row_spec" = {
+    "Type" = [
+        "StructType";
+        [
+            ["key";["DataType";"Int32"]];
+            ["val";["DataType";"JsonDocument"]]
+        ]
+    ]
+}}

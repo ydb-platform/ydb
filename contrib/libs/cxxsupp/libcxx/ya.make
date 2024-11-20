@@ -14,9 +14,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2023-10-05)
+VERSION(2023-10-19)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/dc129d6f715cf83a2072fc8de8b4e4c70bca6935.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/d173ce4a670e88b65c52f6fc1bf10d133ee35704.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include

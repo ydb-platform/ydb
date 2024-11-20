@@ -1,0 +1,25 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let list1 (AsList
+  (AsStruct '('a.key1 (Int32 '-1)) '('k.value1 (Int32 '1)) '('k.s (String '"k1")))
+))
+
+(let list2 (AsList
+  (AsStruct '('b.key2 (Uint32 '4294967295)) '('l.value2 (Uint32 '1)) '('l.s (String '"l1")))
+))
+
+(let list3 (AsList
+  (AsStruct '('c.key3 (Int32 '1)) '('m.value3 (Uint16 '1)) '('m.s (String '"m1")))
+))
+
+(let joinInnerInner (EquiJoin '(list1 '('a 'k)) '(list2 '('b 'l)) '(list3 '('c 'm)) '('Inner '('Inner 'a 'b '('a 'key1) '('b 'key2) '()) 'c '('l 'value2) '('c 'key3) '()) '()))
+
+(let res_sink (DataSink 'result))
+
+(let world (Write! world res_sink (Key) joinInnerInner '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

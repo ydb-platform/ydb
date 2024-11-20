@@ -1,0 +1,21 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let x (Int32 '34))
+(let y (Int32 '56))
+(let jx (Just x))
+(let jy (Just y))
+(let n (Nothing (TypeOf jx)))
+
+(let world (Write! world res_sink (Key) (AggrAdd x y) '('('type))))
+(let world (Write! world res_sink (Key) (AggrAdd jx jy) '('('type))))
+(let world (Write! world res_sink (Key) (AggrAdd jx n) '('('type))))
+(let world (Write! world res_sink (Key) (AggrAdd n jy) '('('type))))
+(let world (Write! world res_sink (Key) (AggrAdd n n) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

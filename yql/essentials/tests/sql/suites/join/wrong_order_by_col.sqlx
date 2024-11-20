@@ -1,0 +1,16 @@
+USE plato;
+
+$input = (
+  SELECT key, subkey, value FROM Input
+);
+
+--INSERT INTO Output
+SELECT
+    i1.key as kk,
+    i2.value as val
+FROM $input as i1
+FULL JOIN $input as i2
+ON cast(i1.key as uint32) % 10 = cast(i2.subkey as uint32)
+ORDER BY
+    i1.kk, -- invalid column, should be either kk or i1.key
+    i2.val -- invalid column, should be either val or i2.value

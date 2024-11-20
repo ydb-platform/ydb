@@ -1,0 +1,141 @@
+Registering pre-existing tables
+	int4_tbl
+	INT4_TBL
+	float8_tbl
+	INT2_TBL
+	int2_tbl
+	FLOAT8_TBL
+<sql-statement>
+--
+-- NUMEROLOGY
+-- Test various combinations of numeric types and functions.
+--
+--
+-- Test implicit type conversions
+-- This fails for Postgres v6.1 (and earlier?)
+--  so let's try explicit conversions for now - tgl 97/05/07
+--
+CREATE TABLE TEMP_FLOAT (f1 FLOAT8);
+</sql-statement>
+<sql-statement>
+INSERT INTO TEMP_FLOAT (f1)
+  SELECT float8(f1) FROM INT4_TBL;
+</sql-statement>
+<sql-statement>
+INSERT INTO TEMP_FLOAT (f1)
+  SELECT float8(f1) FROM INT2_TBL;
+</sql-statement>
+<sql-statement>
+SELECT f1 FROM TEMP_FLOAT
+  ORDER BY f1;
+</sql-statement>
+<sql-statement>
+-- int4
+CREATE TABLE TEMP_INT4 (f1 INT4);
+</sql-statement>
+<sql-statement>
+INSERT INTO TEMP_INT4 (f1)
+  SELECT int4(f1) FROM FLOAT8_TBL
+  WHERE (f1 > -2147483647) AND (f1 < 2147483647);
+</sql-statement>
+<sql-statement>
+INSERT INTO TEMP_INT4 (f1)
+  SELECT int4(f1) FROM INT2_TBL;
+</sql-statement>
+<sql-statement>
+SELECT f1 FROM TEMP_INT4
+  ORDER BY f1;
+</sql-statement>
+<sql-statement>
+-- int2
+CREATE TABLE TEMP_INT2 (f1 INT2);
+</sql-statement>
+<sql-statement>
+INSERT INTO TEMP_INT2 (f1)
+  SELECT int2(f1) FROM FLOAT8_TBL
+  WHERE (f1 >= -32767) AND (f1 <= 32767);
+</sql-statement>
+<sql-statement>
+INSERT INTO TEMP_INT2 (f1)
+  SELECT int2(f1) FROM INT4_TBL
+  WHERE (f1 >= -32767) AND (f1 <= 32767);
+</sql-statement>
+<sql-statement>
+SELECT f1 FROM TEMP_INT2
+  ORDER BY f1;
+</sql-statement>
+<sql-statement>
+--
+-- Group-by combinations
+--
+CREATE TABLE TEMP_GROUP (f1 INT4, f2 INT4, f3 FLOAT8);
+</sql-statement>
+<sql-statement>
+INSERT INTO TEMP_GROUP
+  SELECT 1, (- i.f1), (- f.f1)
+  FROM INT4_TBL i, FLOAT8_TBL f;
+</sql-statement>
+<sql-statement>
+INSERT INTO TEMP_GROUP
+  SELECT 2, i.f1, f.f1
+  FROM INT4_TBL i, FLOAT8_TBL f;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	INSERT INTO TEMP_GROUP
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: f1
+        	INSERT INTO TEMP_GROUP
+	^
+<sql-statement>
+SELECT DISTINCT f1 AS two FROM TEMP_GROUP ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT f1 AS two, max(f3) AS max_float, min(f3) as min_float
+  FROM TEMP_GROUP
+  GROUP BY f1
+  ORDER BY two, max_float, min_float;
+</sql-statement>
+<sql-statement>
+-- GROUP BY a result column name is not legal per SQL92, but we accept it
+-- anyway (if the name is not the name of any column exposed by FROM).
+SELECT f1 AS two, max(f3) AS max_float, min(f3) AS min_float
+  FROM TEMP_GROUP
+  GROUP BY two
+  ORDER BY two, max_float, min_float;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	-- GROUP BY a result column name is not legal per SQL92, but we accept it
+	^
+        -stdin-:<main>:5:12: Error: No such column: two
+        	  GROUP BY two
+	           ^
+<sql-statement>
+SELECT f1 AS two, (max(f3) + 1) AS max_plus_1, (min(f3) - 1) AS min_minus_1
+  FROM TEMP_GROUP
+  GROUP BY f1
+  ORDER BY two, min_minus_1;
+</sql-statement>
+<sql-statement>
+SELECT f1 AS two,
+       max(f2) + min(f2) AS max_plus_min,
+       min(f3) - 1 AS min_minus_1
+  FROM TEMP_GROUP
+  GROUP BY f1
+  ORDER BY two, min_minus_1;
+</sql-statement>
+<sql-statement>
+DROP TABLE TEMP_INT2;
+</sql-statement>
+<sql-statement>
+DROP TABLE TEMP_INT4;
+</sql-statement>
+<sql-statement>
+DROP TABLE TEMP_FLOAT;
+</sql-statement>
+<sql-statement>
+DROP TABLE TEMP_GROUP;
+</sql-statement>

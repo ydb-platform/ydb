@@ -1,0 +1,14 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let str1 (AsStruct '('a (Uint32 '1)) '('b (String 'a)) '('c (Bool 'true))))
+(let str2 (AsStruct '('a (Uint32 '2)) '('b (String 'b)) '('c (Bool 'false))))
+(let list1 (AsList str1 str2))
+(let list1 (Skip list1 (Uint64 '1)))
+(let list1 (ExtractMembers list1 '('a)))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) list1 '()))
+(let world (Commit! world res_sink))
+(return world)
+)

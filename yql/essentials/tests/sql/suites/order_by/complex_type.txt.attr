@@ -1,0 +1,13 @@
+{
+    "_yql_row_spec" = {
+        "StrictSchema"=%true;
+        "Type"=["StructType";[
+            ["value";["ListType";["DataType";"String"]]];
+            ["key";["OptionalType";["DataType";"String"]]];
+        ]];
+    };
+    "schema" = [
+        {"required"=%false; "type"="any"; "name"="value"};
+        {"required"=%false; "type"="string"; "name"="key"};
+    ];
+}

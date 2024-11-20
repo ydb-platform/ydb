@@ -1,0 +1,29 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let test (lambda '(world data) (block '(
+  (let world (Write! world res_sink (Key) (ToOptional data) '('('type))))
+  (return world)
+))))
+
+(let listType (ListType (DataType 'String)))
+(let callableType (CallableType '() '(listType)))
+
+(let callable1 (Callable callableType (lambda '() (List listType))))
+(let callable2 (Callable callableType (lambda '() (List listType (String 'A)))))
+(let callable3 (Callable callableType (lambda '() (List listType (String 'A) (String 'B)))))
+
+(let world (Apply test world (List listType)))
+(let world (Apply test world (List listType (String 'a))))
+(let world (Apply test world (List listType (String 'a) (String 'b))))
+
+(let world (Apply test world (Apply callable1)))
+(let world (Apply test world (Apply callable2)))
+(let world (Apply test world (Apply callable3)))
+
+(let world (Commit! world res_sink))
+(return world)
+)

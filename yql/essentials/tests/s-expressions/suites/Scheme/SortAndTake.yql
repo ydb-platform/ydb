@@ -1,0 +1,17 @@
+# do not check tmp here (YQL-130, YQL-131)
+(
+(let x (Read! world (DataSource 'yt 'plato) (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let yt.plato.Input (Right! x))
+(let input yt.plato.Input)
+(let output (Sort input (Bool 'true) (lambda '(row) (block '(
+    (let res (Member row 'value))
+    (return res)
+)
+))))
+(let output (Take output (Uint64 '5)))
+(let sink (DataSink 'result))
+(let world (Write! world sink (Key) output '()))
+(let world (Commit! world sink))
+(return world)
+)

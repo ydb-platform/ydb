@@ -1,0 +1,17 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let data (AsList (String 'c) (String 'e) (String 'a)))
+(let data (Sort data (Bool 'true) (lambda '(x) x)))
+(let data (Reverse data))
+(let world (Write! world res_sink (Key) data '()))
+(let data (AsList '((Uint32 '1) (String 'c)) '((Uint32 '1) (String 's)) '((Uint32 '2) (String 'a))))
+(let data (Sort data '((Bool 'true) (Bool 'false)) (lambda '(x) x)))
+(let data (Reverse data))
+(let world (Write! world res_sink (Key) data '()))
+(let world (Commit! world res_sink))
+(return world)
+)

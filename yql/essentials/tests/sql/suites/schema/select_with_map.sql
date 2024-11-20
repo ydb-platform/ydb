@@ -1,0 +1,1 @@
+select * from plato.Input where key > "100";

@@ -1,0 +1,30 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let str1 (AsStruct '('a (Uint32 '1)) '('b (String 'a)) '('c (Bool 'true))))
+(let str2 (AsStruct '('a (Uint32 '2)) '('b (String 'b)) '('c (Bool 'false))))
+(let list1 (AsList str1 str2))
+
+(let res1 (FlatMap list1 (lambda '(item) (block '(
+   (let ret (Just (AsStruct '('a (Member item 'a)) '('c (Member item 'c)))))
+   (return ret)
+)))))
+
+(let res2 (FlatMap list1 (lambda '(item) (block '(
+   (let ret (Just (AsStruct '('b (Member item 'b)) '('k (Member item 'c)))))
+   (return ret)
+)))))
+
+(let res3 (FlatMap list1 (lambda '(item) (block '(
+   (let ret (Just (AsStruct)))
+   (return ret)
+)))))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) res1 '('('type))))
+(let world (Write! world res_sink (Key) res2 '('('type))))
+(let world (Write! world res_sink (Key) res3 '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

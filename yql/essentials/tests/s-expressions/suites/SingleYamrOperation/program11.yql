@@ -1,0 +1,13 @@
+(
+#comment
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'Input))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table1 (Right! x))
+(let tresh (ToString (+ (Int32 '100) (Int32 '200))))
+(let table1low (Filter table1 (lambda '(item) (< (Member item 'key) tresh))))
+(let mr_sink (DataSink 'yt (quote plato)))
+(let world (Write! world mr_sink (Key '('table (String 'Output))) table1low '('('mode 'append))))
+(let world (Commit! world mr_sink))
+(return world)
+)

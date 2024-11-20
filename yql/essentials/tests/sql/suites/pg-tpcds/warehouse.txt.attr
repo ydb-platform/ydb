@@ -1,0 +1,20 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["w_warehouse_sk";["PgType";"int4";];];
+              ["w_warehouse_id";["PgType";"text";];];
+              ["w_warehouse_name";["PgType";"text";];];
+              ["w_warehouse_sq_ft";["PgType";"int4";];];
+              ["w_street_number";["PgType";"text";];];
+              ["w_street_name";["PgType";"text";];];
+              ["w_street_type";["PgType";"text";];];
+              ["w_suite_number";["PgType";"text";];];
+              ["w_city";["PgType";"text";];];
+              ["w_county";["PgType";"text";];];
+              ["w_state";["PgType";"text";];];
+              ["w_zip";["PgType";"text";];];
+              ["w_country";["PgType";"text";];];
+              ["w_gmt_offset";["PgType";"numeric";];];
+        ];];
+    }
+}

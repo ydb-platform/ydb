@@ -1,0 +1,1436 @@
+Registering pre-existing tables
+	int4_tbl
+	INT4_TBL
+	tenk1
+	text_tbl
+	VARCHAR_TBL
+	float8_tbl
+	CHAR_TBL
+	TEXT_TBL
+	FLOAT8_TBL
+	varchar_tbl
+	int8_tbl
+<sql-statement>
+--
+-- UNION (also INTERSECT, EXCEPT)
+--
+-- Simple UNION constructs
+SELECT 1 AS two UNION SELECT 2 ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT 1 AS one UNION SELECT 1 ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT 1 AS two UNION ALL SELECT 2;
+</sql-statement>
+<sql-statement>
+SELECT 1 AS two UNION ALL SELECT 1;
+</sql-statement>
+<sql-statement>
+SELECT 1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT 1 AS two UNION SELECT 2 UNION SELECT 2 ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT 1 AS three UNION SELECT 2 UNION ALL SELECT 2 ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT 1.1 AS two UNION SELECT 2.2 ORDER BY 1;
+</sql-statement>
+<sql-statement>
+-- Mixed types
+SELECT 1.1 AS two UNION SELECT 2 ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT 1 AS two UNION SELECT 2.2 ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT 1 AS one UNION SELECT 1.0::float8 ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT 1.1 AS two UNION ALL SELECT 2 ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT 1.0::float8 AS two UNION ALL SELECT 1 ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT 1.1 AS three UNION SELECT 2 UNION SELECT 3 ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT 1.1::float8 AS two UNION SELECT 2 UNION SELECT 2.0::float8 ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT 1.1 AS three UNION SELECT 2 UNION ALL SELECT 2 ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT 1.1 AS two UNION (SELECT 2 UNION ALL SELECT 2) ORDER BY 1;
+</sql-statement>
+<sql-statement>
+--
+-- Try testing from tables...
+--
+SELECT f1 AS five FROM FLOAT8_TBL
+UNION
+SELECT f1 FROM FLOAT8_TBL
+ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT f1 AS ten FROM FLOAT8_TBL
+UNION ALL
+SELECT f1 FROM FLOAT8_TBL;
+</sql-statement>
+<sql-statement>
+SELECT f1 AS nine FROM FLOAT8_TBL
+UNION
+SELECT f1 FROM INT4_TBL
+ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT f1 AS ten FROM FLOAT8_TBL
+UNION ALL
+SELECT f1 FROM INT4_TBL;
+</sql-statement>
+<sql-statement>
+SELECT f1 AS five FROM FLOAT8_TBL
+  WHERE f1 BETWEEN -1e6 AND 1e6
+UNION
+SELECT f1 FROM INT4_TBL
+  WHERE f1 BETWEEN 0 AND 1000000
+ORDER BY 1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT f1 AS five FROM FLOAT8_TBL
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	SELECT f1 AS five FROM FLOAT8_TBL
+	^
+                -stdin-:<main>:2:12: Error: At function: PgBetween
+                	  WHERE f1 BETWEEN -1e6 AND 1e6
+	           ^
+                    -stdin-:<main>:2:12: Error: Mismatch of type of between elements: float8 and numeric
+                    	  WHERE f1 BETWEEN -1e6 AND 1e6
+	           ^
+<sql-statement>
+SELECT CAST(f1 AS char(4)) AS three FROM VARCHAR_TBL
+UNION
+SELECT f1 FROM CHAR_TBL
+ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT f1 AS three FROM VARCHAR_TBL
+UNION
+SELECT CAST(f1 AS varchar) FROM CHAR_TBL
+ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT f1 AS eight FROM VARCHAR_TBL
+UNION ALL
+SELECT f1 FROM CHAR_TBL;
+</sql-statement>
+<sql-statement>
+SELECT f1 AS five FROM TEXT_TBL
+UNION
+SELECT f1 FROM VARCHAR_TBL
+UNION
+SELECT TRIM(TRAILING FROM f1) FROM CHAR_TBL
+ORDER BY 1;
+</sql-statement>
+<sql-statement>
+--
+-- INTERSECT and EXCEPT
+--
+SELECT q2 FROM int8_tbl INTERSECT SELECT q1 FROM int8_tbl ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT q2 FROM int8_tbl INTERSECT ALL SELECT q1 FROM int8_tbl ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT q2 FROM int8_tbl EXCEPT SELECT q1 FROM int8_tbl ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT q2 FROM int8_tbl EXCEPT ALL SELECT q1 FROM int8_tbl ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT q2 FROM int8_tbl EXCEPT ALL SELECT DISTINCT q1 FROM int8_tbl ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT q1 FROM int8_tbl EXCEPT SELECT q2 FROM int8_tbl ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT q1 FROM int8_tbl EXCEPT ALL SELECT q2 FROM int8_tbl ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT q1 FROM int8_tbl EXCEPT ALL SELECT DISTINCT q2 FROM int8_tbl ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT q1 FROM int8_tbl EXCEPT ALL SELECT q1 FROM int8_tbl FOR NO KEY UPDATE;
+</sql-statement>
+<sql-statement>
+-- nested cases
+(SELECT 1,2,3 UNION SELECT 4,5,6) INTERSECT SELECT 4,5,6;
+</sql-statement>
+<sql-statement>
+(SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) INTERSECT SELECT 4,5,6;
+</sql-statement>
+<sql-statement>
+(SELECT 1,2,3 UNION SELECT 4,5,6) EXCEPT SELECT 4,5,6;
+</sql-statement>
+<sql-statement>
+(SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) EXCEPT SELECT 4,5,6;
+</sql-statement>
+<sql-statement>
+-- exercise both hashed and sorted implementations of UNION/INTERSECT/EXCEPT
+set enable_hashagg to on;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashagg
+    	-- exercise both hashed and sorted implementations of UNION/INTERSECT/EXCEPT
+	^
+<sql-statement>
+explain (costs off)
+select count(*) from
+  ( select unique1 from tenk1 union select fivethous from tenk1 ) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select count(*) from
+  ( select unique1 from tenk1 union select fivethous from tenk1 ) ss;
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select count(*) from
+  ( select unique1 from tenk1 intersect select fivethous from tenk1 ) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select count(*) from
+  ( select unique1 from tenk1 intersect select fivethous from tenk1 ) ss;
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
+</sql-statement>
+<sql-statement>
+set enable_hashagg to off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashagg
+    	set enable_hashagg to off;
+	^
+<sql-statement>
+explain (costs off)
+select count(*) from
+  ( select unique1 from tenk1 union select fivethous from tenk1 ) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select count(*) from
+  ( select unique1 from tenk1 union select fivethous from tenk1 ) ss;
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select count(*) from
+  ( select unique1 from tenk1 intersect select fivethous from tenk1 ) ss;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select count(*) from
+  ( select unique1 from tenk1 intersect select fivethous from tenk1 ) ss;
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select unique1 from tenk1 except select unique2 from tenk1 where unique2 != 10;
+</sql-statement>
+<sql-statement>
+reset enable_hashagg;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_hashagg;
+	^
+<sql-statement>
+-- non-hashable type
+set enable_hashagg to on;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashagg
+    	-- non-hashable type
+	^
+<sql-statement>
+explain (costs off)
+select x from (values (100::money), (200::money)) _(x) union select x from (values (100::money), (300::money)) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+set enable_hashagg to off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashagg
+    	set enable_hashagg to off;
+	^
+<sql-statement>
+explain (costs off)
+select x from (values (100::money), (200::money)) _(x) union select x from (values (100::money), (300::money)) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+reset enable_hashagg;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_hashagg;
+	^
+<sql-statement>
+-- arrays
+set enable_hashagg to on;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashagg
+    	-- arrays
+	^
+<sql-statement>
+explain (costs off)
+select x from (values (array[1, 2]), (array[1, 3])) _(x) union select x from (values (array[1, 2]), (array[1, 4])) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select x from (values (array[1, 2]), (array[1, 3])) _(x) union select x from (values (array[1, 2]), (array[1, 4])) _(x);
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select x from (values (array[1, 2]), (array[1, 3])) _(x) intersect select x from (values (array[1, 2]), (array[1, 4])) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select x from (values (array[1, 2]), (array[1, 3])) _(x) intersect select x from (values (array[1, 2]), (array[1, 4])) _(x);
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select x from (values (array[1, 2]), (array[1, 3])) _(x) except select x from (values (array[1, 2]), (array[1, 4])) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select x from (values (array[1, 2]), (array[1, 3])) _(x) except select x from (values (array[1, 2]), (array[1, 4])) _(x);
+</sql-statement>
+<sql-statement>
+-- non-hashable type
+explain (costs off)
+select x from (values (array[100::money]), (array[200::money])) _(x) union select x from (values (array[100::money]), (array[300::money])) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- non-hashable type
+	^
+<sql-statement>
+select x from (values (array[100::money]), (array[200::money])) _(x) union select x from (values (array[100::money]), (array[300::money])) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: AssumeColumnOrder, At function: AssumeColumnOrder, At function: OrderedMap, At function: OrderedFilter, At function: CountedAggregateAll
+    	select x from (values (array[100::money]), (array[200::money])) _(x) union select x from (values (array[100::money]), (array[300::money])) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Expected hashable and equatable type for key column: x, but got: _pgmoney
+        	select x from (values (array[100::money]), (array[200::money])) _(x) union select x from (values (array[100::money]), (array[300::money])) _(x);
+	^
+<sql-statement>
+set enable_hashagg to off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashagg
+    	set enable_hashagg to off;
+	^
+<sql-statement>
+explain (costs off)
+select x from (values (array[1, 2]), (array[1, 3])) _(x) union select x from (values (array[1, 2]), (array[1, 4])) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select x from (values (array[1, 2]), (array[1, 3])) _(x) union select x from (values (array[1, 2]), (array[1, 4])) _(x);
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select x from (values (array[1, 2]), (array[1, 3])) _(x) intersect select x from (values (array[1, 2]), (array[1, 4])) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select x from (values (array[1, 2]), (array[1, 3])) _(x) intersect select x from (values (array[1, 2]), (array[1, 4])) _(x);
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select x from (values (array[1, 2]), (array[1, 3])) _(x) except select x from (values (array[1, 2]), (array[1, 4])) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select x from (values (array[1, 2]), (array[1, 3])) _(x) except select x from (values (array[1, 2]), (array[1, 4])) _(x);
+</sql-statement>
+<sql-statement>
+reset enable_hashagg;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_hashagg;
+	^
+<sql-statement>
+-- records
+set enable_hashagg to on;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashagg
+    	-- records
+	^
+<sql-statement>
+explain (costs off)
+select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+<sql-statement>
+explain (costs off)
+select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+<sql-statement>
+explain (costs off)
+select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+<sql-statement>
+-- non-hashable type
+-- With an anonymous row type, the typcache does not report that the
+-- type is hashable.  (Otherwise, this would fail at execution time.)
+explain (costs off)
+select x from (values (row(100::money)), (row(200::money))) _(x) union select x from (values (row(100::money)), (row(300::money))) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- non-hashable type
+	^
+<sql-statement>
+select x from (values (row(100::money)), (row(200::money))) _(x) union select x from (values (row(100::money)), (row(300::money))) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
+    	select x from (values (row(100::money)), (row(200::money))) _(x) union select x from (values (row(100::money)), (row(300::money))) _(x);
+	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(100::money)), (row(200::money))) _(x) union select x from (values (row(100::money)), (row(300::money))) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(100::money)), (row(200::money))) _(x) union select x from (values (row(100::money)), (row(300::money))) _(x);
+	^
+<sql-statement>
+-- With a defined row type, the typcache can inspect the type's fields
+-- for hashability.
+create type ct1 as (f1 money);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 314
+    	-- With a defined row type, the typcache can inspect the type's fields
+	^
+<sql-statement>
+explain (costs off)
+select x from (values (row(100::money)::ct1), (row(200::money)::ct1)) _(x) union select x from (values (row(100::money)::ct1), (row(300::money)::ct1)) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select x from (values (row(100::money)::ct1), (row(200::money)::ct1)) _(x) union select x from (values (row(100::money)::ct1), (row(300::money)::ct1)) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:41: Error: alternative is not implemented yet : 138
+    	select x from (values (row(100::money)::ct1), (row(200::money)::ct1)) _(x) union select x from (values (row(100::money)::ct1), (row(300::money)::ct1)) _(x);
+	                                        ^
+    -stdin-:<main>:1:122: Error: alternative is not implemented yet : 138
+    	select x from (values (row(100::money)::ct1), (row(200::money)::ct1)) _(x) union select x from (values (row(100::money)::ct1), (row(300::money)::ct1)) _(x);
+	                                                                                                                         ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(100::money)::ct1), (row(200::money)::ct1)) _(x) union select x from (values (row(100::money)::ct1), (row(300::money)::ct1)) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(100::money)::ct1), (row(200::money)::ct1)) _(x) union select x from (values (row(100::money)::ct1), (row(300::money)::ct1)) _(x);
+	^
+<sql-statement>
+drop type ct1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 373
+    	drop type ct1;
+	^
+<sql-statement>
+set enable_hashagg to off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashagg
+    	set enable_hashagg to off;
+	^
+<sql-statement>
+explain (costs off)
+select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(1, 2)), (row(1, 3))) _(x) union select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+<sql-statement>
+explain (costs off)
+select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(1, 2)), (row(1, 3))) _(x) intersect select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+<sql-statement>
+explain (costs off)
+select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 138
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	select x from (values (row(1, 2)), (row(1, 3))) _(x) except select x from (values (row(1, 2)), (row(1, 4))) _(x);
+	^
+<sql-statement>
+reset enable_hashagg;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_hashagg;
+	^
+<sql-statement>
+--
+-- Mixed types
+--
+SELECT f1 FROM float8_tbl INTERSECT SELECT f1 FROM int4_tbl ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT f1 FROM float8_tbl EXCEPT SELECT f1 FROM int4_tbl ORDER BY 1;
+</sql-statement>
+<sql-statement>
+--
+-- Operator precedence and (((((extra))))) parentheses
+--
+SELECT q1 FROM int8_tbl INTERSECT SELECT q2 FROM int8_tbl UNION ALL SELECT q2 FROM int8_tbl  ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT q1 FROM int8_tbl INTERSECT (((SELECT q2 FROM int8_tbl UNION ALL SELECT q2 FROM int8_tbl))) ORDER BY 1;
+</sql-statement>
+<sql-statement>
+(((SELECT q1 FROM int8_tbl INTERSECT SELECT q2 FROM int8_tbl ORDER BY 1))) UNION ALL SELECT q2 FROM int8_tbl;
+</sql-statement>
+<sql-statement>
+SELECT q1 FROM int8_tbl UNION ALL SELECT q2 FROM int8_tbl EXCEPT SELECT q1 FROM int8_tbl ORDER BY 1;
+</sql-statement>
+<sql-statement>
+SELECT q1 FROM int8_tbl UNION ALL (((SELECT q2 FROM int8_tbl EXCEPT SELECT q1 FROM int8_tbl ORDER BY 1)));
+</sql-statement>
+<sql-statement>
+(((SELECT q1 FROM int8_tbl UNION ALL SELECT q2 FROM int8_tbl))) EXCEPT SELECT q1 FROM int8_tbl ORDER BY 1;
+</sql-statement>
+<sql-statement>
+--
+-- Subqueries with ORDER BY & LIMIT clauses
+--
+-- In this syntax, ORDER BY/LIMIT apply to the result of the EXCEPT
+SELECT q1,q2 FROM int8_tbl EXCEPT SELECT q2,q1 FROM int8_tbl
+ORDER BY q2,q1;
+</sql-statement>
+<sql-statement>
+-- This should fail, because q2 isn't a name of an EXCEPT output column
+SELECT q1 FROM int8_tbl EXCEPT SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	-- This should fail, because q2 isn't a name of an EXCEPT output column
+	^
+        -stdin-:<main>:2:65: Error: No such column: q2
+        	SELECT q1 FROM int8_tbl EXCEPT SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1;
+	                                                                ^
+<sql-statement>
+-- But this should work:
+SELECT q1 FROM int8_tbl EXCEPT (((SELECT q2 FROM int8_tbl ORDER BY q2 LIMIT 1))) ORDER BY 1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: sortClause should be used only on top
+    	-- But this should work:
+	^
+<sql-statement>
+--
+-- New syntaxes (7.1) permit new tests
+--
+(((((select * from int8_tbl)))));
+</sql-statement>
+<sql-statement>
+--
+-- Check behavior with empty select list (allowed since 9.4)
+--
+select union select;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: both values_list and target_list are not allowed to be empty
+    	--
+	^
+<sql-statement>
+select intersect select;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: both values_list and target_list are not allowed to be empty
+    	select intersect select;
+	^
+<sql-statement>
+select except select;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: both values_list and target_list are not allowed to be empty
+    	select except select;
+	^
+<sql-statement>
+-- check hashed implementation
+set enable_hashagg = true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashagg
+    	-- check hashed implementation
+	^
+<sql-statement>
+set enable_sort = false;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_sort
+    	set enable_sort = false;
+	^
+<sql-statement>
+explain (costs off)
+select from generate_series(1,5) union select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+select from generate_series(1,5) intersect select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select from generate_series(1,5) union select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: both values_list and target_list are not allowed to be empty
+    	select from generate_series(1,5) union select from generate_series(1,3);
+	^
+<sql-statement>
+select from generate_series(1,5) union all select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: both values_list and target_list are not allowed to be empty
+    	select from generate_series(1,5) union all select from generate_series(1,3);
+	^
+<sql-statement>
+select from generate_series(1,5) intersect select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: both values_list and target_list are not allowed to be empty
+    	select from generate_series(1,5) intersect select from generate_series(1,3);
+	^
+<sql-statement>
+select from generate_series(1,5) intersect all select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: both values_list and target_list are not allowed to be empty
+    	select from generate_series(1,5) intersect all select from generate_series(1,3);
+	^
+<sql-statement>
+select from generate_series(1,5) except select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: both values_list and target_list are not allowed to be empty
+    	select from generate_series(1,5) except select from generate_series(1,3);
+	^
+<sql-statement>
+select from generate_series(1,5) except all select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: both values_list and target_list are not allowed to be empty
+    	select from generate_series(1,5) except all select from generate_series(1,3);
+	^
+<sql-statement>
+-- check sorted implementation
+set enable_hashagg = false;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_hashagg
+    	-- check sorted implementation
+	^
+<sql-statement>
+set enable_sort = true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_sort
+    	set enable_sort = true;
+	^
+<sql-statement>
+explain (costs off)
+select from generate_series(1,5) union select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+select from generate_series(1,5) intersect select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select from generate_series(1,5) union select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: both values_list and target_list are not allowed to be empty
+    	select from generate_series(1,5) union select from generate_series(1,3);
+	^
+<sql-statement>
+select from generate_series(1,5) union all select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: both values_list and target_list are not allowed to be empty
+    	select from generate_series(1,5) union all select from generate_series(1,3);
+	^
+<sql-statement>
+select from generate_series(1,5) intersect select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: both values_list and target_list are not allowed to be empty
+    	select from generate_series(1,5) intersect select from generate_series(1,3);
+	^
+<sql-statement>
+select from generate_series(1,5) intersect all select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: both values_list and target_list are not allowed to be empty
+    	select from generate_series(1,5) intersect all select from generate_series(1,3);
+	^
+<sql-statement>
+select from generate_series(1,5) except select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: both values_list and target_list are not allowed to be empty
+    	select from generate_series(1,5) except select from generate_series(1,3);
+	^
+<sql-statement>
+select from generate_series(1,5) except all select from generate_series(1,3);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: SelectStmt: both values_list and target_list are not allowed to be empty
+    	select from generate_series(1,5) except all select from generate_series(1,3);
+	^
+<sql-statement>
+reset enable_hashagg;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_hashagg;
+	^
+<sql-statement>
+reset enable_sort;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_sort;
+	^
+<sql-statement>
+--
+-- Check handling of a case with unknown constants.  We don't guarantee
+-- an undecorated constant will work in all cases, but historically this
+-- usage has worked, so test we don't break it.
+--
+SELECT a.f1 FROM (SELECT 'test' AS f1 FROM varchar_tbl) a
+UNION
+SELECT b.f1 FROM (SELECT f1 FROM varchar_tbl) b
+ORDER BY 1;
+</sql-statement>
+<sql-statement>
+-- This should fail, but it should produce an error cursor
+SELECT '3.4'::numeric UNION SELECT 'foo';
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- This should fail, but it should produce an error cursor
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type numeric: "foo"
+
+        	-- This should fail, but it should produce an error cursor
+	^
+<sql-statement>
+--
+-- Test that expression-index constraints can be pushed down through
+-- UNION or UNION ALL
+--
+CREATE TEMP TABLE t1 (a text, b text);
+</sql-statement>
+<sql-statement>
+CREATE INDEX t1_ab_idx on t1 ((a || b));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: index expression is not supported yet
+    	CREATE INDEX t1_ab_idx on t1 ((a || b));
+	^
+<sql-statement>
+CREATE TEMP TABLE t2 (ab text primary key);
+</sql-statement>
+<sql-statement>
+INSERT INTO t1 VALUES ('a', 'b'), ('x', 'y');
+</sql-statement>
+<sql-statement>
+INSERT INTO t2 VALUES ('ab'), ('xy');
+</sql-statement>
+<sql-statement>
+set enable_seqscan = off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_seqscan
+    	set enable_seqscan = off;
+	^
+<sql-statement>
+set enable_indexscan = on;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_indexscan
+    	set enable_indexscan = on;
+	^
+<sql-statement>
+set enable_bitmapscan = off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_bitmapscan
+    	set enable_bitmapscan = off;
+	^
+<sql-statement>
+explain (costs off)
+ SELECT * FROM
+ (SELECT a || b AS ab FROM t1
+  UNION ALL
+  SELECT * FROM t2) t
+ WHERE ab = 'ab';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+explain (costs off)
+ SELECT * FROM
+ (SELECT a || b AS ab FROM t1
+  UNION
+  SELECT * FROM t2) t
+ WHERE ab = 'ab';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+--
+-- Test that ORDER BY for UNION ALL can be pushed down to inheritance
+-- children.
+--
+CREATE TEMP TABLE t1c (b text, a text);
+</sql-statement>
+<sql-statement>
+ALTER TABLE t1c INHERIT t1;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE t1c INHERIT t1;
+	^
+<sql-statement>
+CREATE TEMP TABLE t2c (primary key (ab)) INHERITS (t2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	CREATE TEMP TABLE t2c (primary key (ab)) INHERITS (t2);
+	^
+<sql-statement>
+INSERT INTO t1c VALUES ('v', 'w'), ('c', 'd'), ('m', 'n'), ('e', 'f');
+</sql-statement>
+<sql-statement>
+INSERT INTO t2c VALUES ('vw'), ('cd'), ('mn'), ('ef');
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.t2c
+    
+<sql-statement>
+CREATE INDEX t1c_ab_idx on t1c ((a || b));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: index expression is not supported yet
+    	CREATE INDEX t1c_ab_idx on t1c ((a || b));
+	^
+<sql-statement>
+set enable_seqscan = on;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_seqscan
+    	set enable_seqscan = on;
+	^
+<sql-statement>
+set enable_indexonlyscan = off;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported name: enable_indexonlyscan
+    	set enable_indexonlyscan = off;
+	^
+<sql-statement>
+explain (costs off)
+  SELECT * FROM
+  (SELECT a || b AS ab FROM t1
+   UNION ALL
+   SELECT ab FROM t2) t
+  ORDER BY 1 LIMIT 8;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+  SELECT * FROM
+  (SELECT a || b AS ab FROM t1
+   UNION ALL
+   SELECT ab FROM t2) t
+  ORDER BY 1 LIMIT 8;
+</sql-statement>
+<sql-statement>
+reset enable_seqscan;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_seqscan;
+	^
+<sql-statement>
+reset enable_indexscan;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_indexscan;
+	^
+<sql-statement>
+reset enable_bitmapscan;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_bitmapscan;
+	^
+<sql-statement>
+-- This simpler variant of the above test has been observed to fail differently
+create table events (event_id int primary key);
+</sql-statement>
+<sql-statement>
+create table other_events (event_id int primary key);
+</sql-statement>
+<sql-statement>
+create table events_child () inherits (events);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: table inheritance not supported
+    	create table events_child () inherits (events);
+	^
+<sql-statement>
+explain (costs off)
+select event_id
+ from (select event_id from events
+       union all
+       select event_id from other_events) ss
+ order by event_id;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+drop table events_child, events, other_events;
+</sql-statement>
+<sql-statement>
+reset enable_indexonlyscan;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: VariableSetStmt, not supported kind: 4
+    	reset enable_indexonlyscan;
+	^
+<sql-statement>
+-- Test constraint exclusion of UNION ALL subqueries
+explain (costs off)
+ SELECT * FROM
+  (SELECT 1 AS t, * FROM tenk1 a
+   UNION ALL
+   SELECT 2 AS t, * FROM tenk1 b) c
+ WHERE t = 2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Test constraint exclusion of UNION ALL subqueries
+	^
+<sql-statement>
+-- Test that we push quals into UNION sub-selects only when it's safe
+explain (costs off)
+SELECT * FROM
+  (SELECT 1 AS t, 2 AS x
+   UNION
+   SELECT 2 AS t, 4 AS x) ss
+WHERE x < 4
+ORDER BY x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Test that we push quals into UNION sub-selects only when it's safe
+	^
+<sql-statement>
+SELECT * FROM
+  (SELECT 1 AS t, 2 AS x
+   UNION
+   SELECT 2 AS t, 4 AS x) ss
+WHERE x < 4
+ORDER BY x;
+</sql-statement>
+<sql-statement>
+explain (costs off)
+SELECT * FROM
+  (SELECT 1 AS t, generate_series(1,10) AS x
+   UNION
+   SELECT 2 AS t, 4 AS x) ss
+WHERE x < 4
+ORDER BY x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+SELECT * FROM
+  (SELECT 1 AS t, generate_series(1,10) AS x
+   UNION
+   SELECT 2 AS t, 4 AS x) ss
+WHERE x < 4
+ORDER BY x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:19: Error: Generator functions are not allowed in: SELECT
+    	  (SELECT 1 AS t, generate_series(1,10) AS x
+	                  ^
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT * FROM
+	^
+        -stdin-:<main>:1:1: Error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term
+        	SELECT * FROM
+	^
+<sql-statement>
+explain (costs off)
+SELECT * FROM
+  (SELECT 1 AS t, (random()*3)::int AS x
+   UNION
+   SELECT 2 AS t, 4 AS x) ss
+WHERE x > 3
+ORDER BY x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+SELECT * FROM
+  (SELECT 1 AS t, (random()*3)::int AS x
+   UNION
+   SELECT 2 AS t, 4 AS x) ss
+WHERE x > 3
+ORDER BY x;
+</sql-statement>
+<sql-statement>
+-- Test cases where the native ordering of a sub-select has more pathkeys
+-- than the outer query cares about
+explain (costs off)
+select distinct q1 from
+  (select distinct * from int8_tbl i81
+   union all
+   select distinct * from int8_tbl i82) ss
+where q2 = q2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Test cases where the native ordering of a sub-select has more pathkeys
+	^
+<sql-statement>
+select distinct q1 from
+  (select distinct * from int8_tbl i81
+   union all
+   select distinct * from int8_tbl i82) ss
+where q2 = q2;
+</sql-statement>
+<sql-statement>
+explain (costs off)
+select distinct q1 from
+  (select distinct * from int8_tbl i81
+   union all
+   select distinct * from int8_tbl i82) ss
+where -q1 = q2;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select distinct q1 from
+  (select distinct * from int8_tbl i81
+   union all
+   select distinct * from int8_tbl i82) ss
+where -q1 = q2;
+</sql-statement>
+<sql-statement>
+-- Test proper handling of parameterized appendrel paths when the
+-- potential join qual is expensive
+create function expensivefunc(int) returns int
+language plpgsql immutable strict cost 10000
+as $$begin return $1; end$$;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 261
+    	-- Test proper handling of parameterized appendrel paths when the
+	^
+<sql-statement>
+create temp table t3 as select generate_series(-1000,1000) as x;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 277
+    	create temp table t3 as select generate_series(-1000,1000) as x;
+	^
+<sql-statement>
+create index t3i on t3 (expensivefunc(x));
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: index expression is not supported yet
+    	create index t3i on t3 (expensivefunc(x));
+	^
+<sql-statement>
+analyze t3;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 275
+    	analyze t3;
+	^
+<sql-statement>
+explain (costs off)
+select * from
+  (select * from t3 a union all select * from t3 b) ss
+  join int4_tbl on f1 = expensivefunc(x);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	explain (costs off)
+	^
+<sql-statement>
+select * from
+  (select * from t3 a union all select * from t3 b) ss
+  join int4_tbl on f1 = expensivefunc(x);
+</sql-statement>
+-stdin-:<main>: Fatal: Table metadata loading
+
+    -stdin-:<main>: Fatal: ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.cpp:44: Table not found: plato.t3
+    
+<sql-statement>
+drop table t3;
+</sql-statement>
+<sql-statement>
+drop function expensivefunc(int);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: DropStmt: alternative is not implemented yet : 386
+    	drop function expensivefunc(int);
+	^
+<sql-statement>
+-- Test handling of appendrel quals that const-simplify into an AND
+explain (costs off)
+select * from
+  (select *, 0 as x from int8_tbl a
+   union all
+   select *, 1 as x from int8_tbl b) ss
+where (x = 0) or (q1 >= q2 and q1 <= q2);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 276
+    	-- Test handling of appendrel quals that const-simplify into an AND
+	^
+<sql-statement>
+select * from
+  (select *, 0 as x from int8_tbl a
+   union all
+   select *, 1 as x from int8_tbl b) ss
+where (x = 0) or (q1 >= q2 and q1 <= q2);
+</sql-statement>

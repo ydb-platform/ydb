@@ -1,0 +1,21 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let data (Yson '@@
+{
+"a"=1;
+"$b"=#;
+"c"=2u;
+"d"=4.1;
+"e"=%true;
+"f"=[1;<x=1>"english text"];
+"g"=<u=2>{x=<v="\xff\xff binary">[];y="русский текст"};
+}
+@@))
+(let world (Write! world res_sink (Key) data '()))
+(let world (Commit! world res_sink))
+(return world)
+)

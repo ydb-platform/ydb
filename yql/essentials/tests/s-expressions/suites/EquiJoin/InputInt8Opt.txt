@@ -1,0 +1,5 @@
+{"key"=-1;"value"="Int8Opt_a"};
+{"key"=127;"value"="Int8Opt_b"};
+{"key"=0;"value"="Int8Opt_c"};
+{"key"=1;"value"="Int8Opt_d"};
+{"key"=2;"value"="Int8Opt_e"};

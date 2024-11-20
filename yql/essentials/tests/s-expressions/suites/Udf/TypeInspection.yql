@@ -1,0 +1,32 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list1 (AsList (String 'A) (String 'B) (String 'C) (String 'D) (String 'E)))
+(let list2 (AsList (Uint32 '1) (Uint32 '2) (Uint32 '3)))
+(let zip (Udf 'TypeInspection.Zip (Void)
+	(TupleType
+		(TypeOf '(list1 list2))
+		(StructType)
+		(TupleType)
+	)
+))
+(let data (Apply zip list1 list2))
+(let world (Write! world res_sink (Key) data '('('type))))
+
+(let stream1 (Iterator list1))
+(let stream2 (Iterator list2))
+(let interleave (Udf 'TypeInspection.Interleave (Void)
+	(TupleType
+		(TypeOf '(stream1 stream2))
+		(StructType)
+		(TupleType)
+	)
+))
+(let data (Apply interleave stream1 stream2))
+(let world (Write! world res_sink (Key) (Collect data) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

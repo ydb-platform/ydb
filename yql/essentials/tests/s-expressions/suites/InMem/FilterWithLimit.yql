@@ -1,0 +1,16 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let list (AsList (Int32 '1) (Int32 '2) (Int32 '3) (Int32 '4) (Int32 '5) (Int32 '6) (Int32 '7) (Int32 '8) (Int32 '9)))
+(let world (Write! world res_sink (Key) (OrderedFilter list
+   (lambda '(x) (AggrLess x (Int32 '6))) (Int32 '2)) '('('type))))
+(let world (Write! world res_sink (Key) (Filter (LazyList list)
+   (lambda '(x) (AggrGreater x (Int32 '4))) (Uint64 '3)) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (Filter (ToFlow list)
+   (lambda '(x) (AggrGreaterOrEqual x (Int32 '3))) (Int16 '4))) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

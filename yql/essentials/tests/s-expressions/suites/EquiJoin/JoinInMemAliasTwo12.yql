@@ -1,0 +1,43 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let list1 (AsList 
+  (AsStruct '('a.key1 (Just (Int32 '1))) '('c.value1 (Just (String 'A)))) 
+  (AsStruct '('a.key1 (Just (Int32 '7))) '('c.value1 (Just (String 'B))))
+  (AsStruct '('a.key1 (Just (Int32 '4))) '('c.value1 (Just (String 'C))))
+  (AsStruct '('a.key1 (Just (Int32 '4))) '('c.value1 (Just (String 'D))))
+))
+
+(let list2 (AsList 
+  (AsStruct '('b.key2 (Just (Int32 '9))) '('d.value2 (Just (String 'Z)))) 
+  (AsStruct '('b.key2 (Just (Int32 '4))) '('d.value2 (Just (String 'Y)))) 
+  (AsStruct '('b.key2 (Just (Int32 '3))) '('d.value2 (Just (String 'X)))) 
+  (AsStruct '('b.key2 (Just (Int32 '4))) '('d.value2 (Just (String 'W))))
+  (AsStruct '('b.key2 (Just (Int32 '8))) '('d.value2 (Just (String 'V))))
+))
+
+(let joinInner (EquiJoin '(list1 '('a 'c)) '(list2 '('b 'd)) '('Inner 'a 'b '('a 'key1) '('b 'key2) '()) '()))
+(let joinLeft (EquiJoin '(list1 '('a 'c)) '(list2 '('b 'd)) '('Left 'a 'b '('a 'key1) '('b 'key2) '()) '()))
+(let joinRight (EquiJoin '(list1 '('a 'c)) '(list2 '('b 'd)) '('Right 'a 'b '('a 'key1) '('b 'key2) '()) '()))
+(let joinFull (EquiJoin '(list1 '('a 'c)) '(list2 '('b 'd)) '('Full 'a 'b '('a 'key1) '('b 'key2) '()) '()))
+(let joinLeftOnly (EquiJoin '(list1 '('a 'c)) '(list2 '('b 'd)) '('LeftOnly 'a 'b '('a 'key1) '('b 'key2) '()) '()))
+(let joinRightOnly (EquiJoin '(list1 '('a 'c)) '(list2 '('b 'd)) '('RightOnly 'a 'b '('a 'key1) '('b 'key2) '()) '()))
+(let joinExclusion (EquiJoin '(list1 '('a 'c)) '(list2 '('b 'd)) '('Exclusion 'a 'b '('a 'key1) '('b 'key2) '()) '()))
+(let joinLeftSemi (EquiJoin '(list1 '('a 'c)) '(list2 '('b 'd)) '('LeftSemi 'a 'b '('a 'key1) '('b 'key2) '()) '()))
+(let joinRightSemi (EquiJoin '(list1 '('a 'c)) '(list2 '('b 'd)) '('RightSemi 'a 'b '('a 'key1) '('b 'key2) '()) '()))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) joinInner '('('type))))
+(let world (Write! world res_sink (Key) joinLeft '('('type))))
+(let world (Write! world res_sink (Key) joinRight '('('type))))
+(let world (Write! world res_sink (Key) joinFull '('('type))))
+(let world (Write! world res_sink (Key) joinLeftOnly '('('type))))
+(let world (Write! world res_sink (Key) joinRightOnly '('('type))))
+(let world (Write! world res_sink (Key) joinExclusion '('('type))))
+(let world (Write! world res_sink (Key) joinLeftSemi '('('type))))
+(let world (Write! world res_sink (Key) joinRightSemi '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

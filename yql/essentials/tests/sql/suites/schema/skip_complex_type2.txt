@@ -1,0 +1,4 @@
+{"boobee"=5};
+{"boobee"=6;"xx"=[];};
+{"boobee"=7;"xx"=[{bee=1;foo=2}];};
+{"boobee"=8;"xx"=[{bee=1;foo=2};{bee=4;foo=3}];};

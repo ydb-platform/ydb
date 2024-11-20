@@ -1,0 +1,48 @@
+#USE plato;
+#select table, count(*) from
+#    (select TablePath() as table from CONCAT([Input],[Input])) group by table;
+    
+(
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (MrTableConcat (Key '('table (String '"Input1"))) (Key '('table (String '"Input2")))) '() '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core (block '(
+        (let select (block '(
+          (let core table0)
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (AsStruct '('"table" (TablePath (DependsOn row)))))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )))
+      (let core (Aggregate core '('"table") '('('Count1 (Apply (bind aggregate_module '"count_traits_factory") (TypeOf core) (lambda '(row) (Void)))))))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"table" (Member row '"table")) '('"column1" (Member row 'Count1))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"table" '"column1")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

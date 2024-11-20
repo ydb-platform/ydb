@@ -1,0 +1,18 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let list1 (AsList (String 'a) (String 'b) (String 'c)))
+(let list2 (AsList (String 'd) (String 'e) (String 'f)))
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink
+    (Key)
+    (Skip (Extend list1 list2) (Uint64 '1)) '()))
+
+(let world (Write! world res_sink
+    (Key)
+    (Skip (Extend list1 list2) (Uint64 '5)) '()))
+
+(let world (Commit! world res_sink))
+(return world)
+)

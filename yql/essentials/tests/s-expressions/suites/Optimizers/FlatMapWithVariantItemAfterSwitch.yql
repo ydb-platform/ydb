@@ -1,0 +1,25 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+(let res_sink (DataSink 'result))
+
+(let structType (StructType '('key (DataType 'String)) '('value (DataType 'String))))
+(let tupleType (TupleType structType structType structType))
+(let vt (VariantType tupleType))
+(let vlist (AsList
+    (Variant (AsStruct '('key (String 'aaa)) '('value (String '0))) '0 vt)
+    (Variant (AsStruct '('key (String 'bbb)) '('value (String '1))) '1 vt)
+    (Variant (AsStruct '('key (String 'ccc)) '('value (String '2))) '2 vt)
+))
+
+(let takeHandler (lambda '(x) (Take x  (Uint64 '42))))
+
+(let world (Write! world res_sink (Key) (Collect (Map (Switch (ToFlow vlist) '1 '('0) takeHandler '('1 '2) takeHandler) (lambda '(s) (VariantItem s)))) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (Map (Switch (ToFlow vlist) '1 '('1) takeHandler '('2) takeHandler) (lambda '(s) (VariantItem s)))) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (Map (Switch (ToFlow vlist) '1 '('0 '1) takeHandler '('1 '2) takeHandler) (lambda '(s) (VariantItem s)))) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (OrderedMap (Switch (ToFlow vlist) '1 '('0 '1 '2) takeHandler) (lambda '(s) (VariantItem s)))) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

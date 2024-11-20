@@ -1,0 +1,33 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+(let qrs1 (QueueCreate (DataType 'String) (Uint64 '6) (Uint64 '0) (DependsOn (Uint64 '0))))
+(let qrs2 (QueueCreate (DataType 'String) (Uint64 '6) (Uint64 '0) (DependsOn (Uint64 '1))))
+(let qrs2 (QueuePush qrs2 (String '"It")))
+(let qrs1 (QueuePush qrs1 (String '"Look!")))
+(let qrs2 (QueuePush qrs2 (String '"is")))
+(let qrs1 (QueuePush qrs1 (String '"It")))
+(let qrs2 (QueuePush qrs2 (String '"a")))
+(let qrs1 (QueuePush qrs1 (String '"funny")))
+(let qrs2 (QueuePop qrs2))
+(let qrs2 (QueuePush qrs2 (String '"good")))
+(let qrs1 (QueuePop qrs1))
+(let qrs2 (QueuePush qrs2 (String '"day")))
+(let qrs2 (QueuePop qrs2))
+(let qrs2 (QueuePush qrs2 (String '"to")))
+(let qrs1 (QueuePush qrs1 (String '"bunny")))
+(let qrs2 (QueuePush qrs2 (String '"die")))
+(let qrs1 (QueuePop qrs1))
+
+(let resultString1 '((QueuePeek qrs1 (Minus (Uint64 '1))) (QueuePeek qrs1 (Uint64 '0)) (QueuePeek qrs1 (Uint64 '1)) (QueuePeek qrs1 (Uint64 '2))))
+(let resultString2 '((QueuePeek qrs2 (Minus (Uint64 '1))) (QueuePeek qrs2 (Uint64 '0)) (QueuePeek qrs2 (Uint64 '1)) (QueuePeek qrs2 (Uint64 '2))))
+
+(let result '(resultString1 resultString2))
+
+(let world (Write! world res_sink (Key) result '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

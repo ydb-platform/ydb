@@ -1,0 +1,34 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["d_date_sk";["PgType";"int4";];];
+              ["d_date_id";["PgType";"text";];];
+              ["d_date";["PgType";"date";];];
+              ["d_month_seq";["PgType";"int4";];];
+              ["d_week_seq";["PgType";"int4";];];
+              ["d_quarter_seq";["PgType";"int4";];];
+              ["d_year";["PgType";"int4";];];
+              ["d_dow";["PgType";"int4";];];
+              ["d_moy";["PgType";"int4";];];
+              ["d_dom";["PgType";"int4";];];
+              ["d_qoy";["PgType";"int4";];];
+              ["d_fy_year";["PgType";"int4";];];
+              ["d_fy_quarter_seq";["PgType";"int4";];];
+              ["d_fy_week_seq";["PgType";"int4";];];
+              ["d_day_name";["PgType";"text";];];
+              ["d_quarter_name";["PgType";"text";];];
+              ["d_holiday";["PgType";"text";];];
+              ["d_weekend";["PgType";"text";];];
+              ["d_following_holiday";["PgType";"text";];];
+              ["d_first_dom";["PgType";"int4";];];
+              ["d_last_dom";["PgType";"int4";];];
+              ["d_same_day_ly";["PgType";"int4";];];
+              ["d_same_day_lq";["PgType";"int4";];];
+              ["d_current_day";["PgType";"text";];];
+              ["d_current_week";["PgType";"text";];];
+              ["d_current_month";["PgType";"text";];];
+              ["d_current_quarter";["PgType";"text";];];
+              ["d_current_year";["PgType";"text";];];
+        ];];
+    }
+}

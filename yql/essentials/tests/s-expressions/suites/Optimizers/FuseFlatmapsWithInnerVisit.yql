@@ -1,0 +1,59 @@
+(
+#comment
+(let config (DataSource 'config))
+(let res_sink (DataSink 'result))
+
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let vt (VariantType (TupleType (DataType 'String) (DataType 'String) (DataType 'String))))
+(let v0 (Variant (String 'aaa) '0 vt))
+(let v1 (Variant (String 'bbb) '1 vt))
+(let v2 (Variant (String 'ccc) '2 vt))
+(let list (AsList v0 v1 v2))
+
+
+(let inner (lambda '(list)
+    (FlatMap list (lambda '(item)
+        (Visit item
+            '0 (lambda '(x) (OptionalIf (== x (String 'aaa)) (Variant (Concat (String '0-) x) '0 vt)))
+            '1 (lambda '(x) (Just (Variant (Concat (String '1-) x) '1 vt)))
+            (Just (Variant (String '2-) '2 vt))
+        )
+    ))
+))
+
+(let res (FlatMap (Apply inner (Iterator list (DependsOn (String 'a)))) (lambda '(item)
+    (Just (VariantItem item))
+)))
+(let world (Write! world res_sink (Key) (Collect res) '('('type))))
+
+(let res (FlatMap (Apply inner (Iterator list (DependsOn (String 'b)))) (lambda '(item)
+    (Just (Visit item
+            '0 (lambda '(x) (Variant x '0 vt))
+            '1 (lambda '(x) (Variant x '1 vt))
+            '2 (lambda '(x) (Variant x '1 vt))
+    ))
+)))
+(let world (Write! world res_sink (Key) (Collect res) '('('type))))
+
+(let res (FlatMap
+    (FlatMap list (lambda '(item)
+        (Visit item
+            '0 (lambda '(x) (ListIf (== x (String 'aaa)) (Variant (Concat (String '0-) x) '0 vt)))
+            '1 (lambda '(x) (AsList (Variant (Concat (String '1-) x) '1 vt) (Variant (Concat (String '2-) x) '2 vt)))
+            (AsList (Variant (String '2-) '2 vt))
+        )
+    ))
+    (lambda '(item)
+        (Just (Visit item
+                '0 (lambda '(x) (Variant x '0 vt))
+                '1 (lambda '(x) (Variant x '1 vt))
+                '2 (lambda '(x) (Variant x '1 vt))
+        ))
+    )
+))
+(let world (Write! world res_sink (Key) (Collect res) '('('type))))
+
+(let world (Commit! world res_sink))
+(return world)
+)

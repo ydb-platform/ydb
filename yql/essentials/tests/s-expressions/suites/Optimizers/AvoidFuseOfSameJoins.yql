@@ -1,0 +1,87 @@
+#USE plato;
+#
+#$sample = (SELECT a.key as key, a.value as value FROM Input as a Join Input as b ON a.key = b.key);
+#
+#select * from $sample as x left join Input as y using (key);
+#select * from $sample as x right join Input as y using (value);
+
+(
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) (Void) '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core (EquiJoin '((block '(
+        (let select (block '(
+          (let core (EquiJoin '(table0 '"a") '(table0 '"b") '('Inner '"a" '"b" '('"a" '"key") '('"b" '"key") '()) '()))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (Struct))
+            (let res (AddMember res '"key" (Member row '"a.key")))
+            (let res (AddMember res '"value" (Member row '"a.value")))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )) '"x") '(table0 '"y") '('Left '"x" '"y" '('"x" '"key") '('"y" '"key") '()) '()))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsList row))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (let select (Sort select '((Bool 'true) (Bool 'true) (Bool 'true)) (lambda '(row) '((Member row '"x.key") (Member row '"x.value") (Member row '"y.key")))))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) (Void) '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core (EquiJoin '((block '(
+        (let select (block '(
+          (let core (EquiJoin '(table0 '"a") '(table0 '"b") '('Inner '"a" '"b" '('"a" '"key") '('"b" '"key") '()) '()))
+          (let core (FlatMap core (lambda '(row) (block '(
+            (let res (Struct))
+            (let res (AddMember res '"key" (Member row '"a.key")))
+            (let res (AddMember res '"value" (Member row '"a.value")))
+            (let res (AsList res))
+            (return res)
+          )))))
+          (return core)
+        )))
+        (return select)
+      )) '"x") '(table0 '"y") '('Right '"x" '"y" '('"x" '"value") '('"y" '"value") '()) '()))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsList row))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (let select (Sort select '((Bool 'true) (Bool 'true) (Bool 'true)) (lambda '(row) '((Member row '"x.key") (Member row '"x.value") (Member row '"y.key")))))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

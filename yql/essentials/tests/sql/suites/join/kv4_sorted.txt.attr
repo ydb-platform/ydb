@@ -1,0 +1,25 @@
+{
+   "schema" = <
+        "strict" = %true;
+        "unique_keys" = %true
+    >
+    [
+        {
+            "name" = "k4";
+            "required" = %true;
+            "sort_order" = "ascending";
+            "type" = "string"
+        };
+        {
+            "name" = "v4";
+            "required" = %false;
+            "sort_order" = "ascending";
+            "type" = "string"
+        };
+        {
+            "name" = "u4";
+            "required" = %true;
+            "type" = "string"
+        }
+    ];
+}

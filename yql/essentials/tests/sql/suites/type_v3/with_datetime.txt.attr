@@ -1,0 +1,29 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+            ["key"; ["DataType"; "String"]];
+            ["subkey"; ["DataType"; "Datetime"]];
+        ]];
+        "UseNativeYtTypes" = %true;
+        "SortMembers" = ["key"];
+        "SortedBy" = ["key"];
+        "SortDirections" = [1];
+        "SortedByTypes" = [["DataType";"String"]];
+    };
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "type_v3" = "string";
+            "required" = %true;
+            "name" = "key";
+            "sort_order" = "ascending";
+        };
+        {
+            "type_v3" = "datetime";
+            "required" = %true;
+            "name" = "subkey";
+        };
+    ];
+}

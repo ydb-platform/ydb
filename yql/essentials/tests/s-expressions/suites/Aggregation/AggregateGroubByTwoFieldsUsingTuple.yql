@@ -1,0 +1,52 @@
+(
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) '('"key" '"subkey" '"value") '()))
+  (let world (Left! x))
+  (let table1 (Right! x))
+  (let table1 (FlatMap table1 (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AddMember res '"key" '((Member row '"key") (Member row '"key"))))
+        (let res (AddMember res '"subkey" (Member row '"subkey")))
+        (let res (AddMember res '"value" (Member row 'value)))
+        (let res (AsList res))
+        (return res)
+  )))))
+  (let output (block '(
+    (let select (block '(
+      (let core table1)
+      (let core (block '(
+        (let Count0_create (lambda '(row) (Convert (Exists row) 'Uint64)))
+        (let Count0_update (lambda '(row state) (OptionalReduce state (Convert (Exists row) 'Uint64) (lambda '(a b) (+ a b)))))
+        (let Count0_save (lambda '(state) state))
+        (let Count0_load (lambda '(item) item))
+        (let Count0_merge (lambda '(a b) (OptionalReduce a b (lambda '(a b) (+ a b)))))
+        (let Count0_finish (lambda '(state) state))
+        (return (Aggregate core '('"key" '"subkey") '('('Count0 (AggregationTraits (StructMemberType (ListItemType (TypeOf core)) '"value") Count0_create Count0_update Count0_save Count0_load Count0_merge Count0_finish (Uint64 '0)) '"value"))))
+      )))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AddMember res '"key" (Member row '"key")))
+        (let res (AddMember res '"subkey" (Member row '"subkey")))
+        (let res (AddMember res '"column2" (Member row 'Count0)))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (let select (Sort select '((Bool 'true) (Bool 'true) (Bool 'true)) (lambda '(row) '((Nth (Member row '"key") '0) (Nth (Member row '"key") '1) (Member row '"subkey")))))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"key" '"subkey" '"column2")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

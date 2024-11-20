@@ -1,0 +1,9 @@
+USE plato;
+
+$f = ()->{
+   return sum(1);
+};
+
+SELECT
+    $f()
+FROM Input

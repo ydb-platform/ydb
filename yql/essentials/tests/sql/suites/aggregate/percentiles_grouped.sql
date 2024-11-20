@@ -1,0 +1,2 @@
+/* postgres can not */
+select median(val) as med, median(distinct val) as distinct_med, percentile(val, 0.8) as p80 from (select key, cast(value as int) as val from plato.Input) group by key order by med;

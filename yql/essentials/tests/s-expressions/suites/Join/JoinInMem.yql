@@ -1,0 +1,34 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let list1 (AsList 
+  '((Int32 '1) (String 'A)) 
+  '((Int32 '7) (String 'B)) 
+  '((Int32 '4) (String 'C))
+  '((Int32 '4) (String 'D))
+))
+
+(let list2 (AsList 
+  '((Int32 '9) (String 'Z))
+  '((Int32 '4) (String 'Y))
+  '((Int32 '3) (String 'X))
+  '((Int32 '4) (String 'W))
+  '((Int32 '8) (String 'V))
+))
+
+(let keyExtractor (lambda '(item) (Nth item '0)))
+(let joinInner (Join list1 list2 keyExtractor keyExtractor 'Inner))
+(let joinLeft (Join list1 list2 keyExtractor keyExtractor 'Left))
+(let joinRight (Join list1 list2 keyExtractor keyExtractor 'Right))
+(let joinFull (Join list1 list2 keyExtractor keyExtractor 'Full))
+
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) joinInner '()))
+(let world (Write! world res_sink (Key) joinLeft '()))
+(let world (Write! world res_sink (Key) joinRight '()))
+(let world (Write! world res_sink (Key) joinFull '()))
+
+(let world (Commit! world res_sink))
+(return world)
+)

@@ -1,0 +1,37 @@
+(
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) '('"value" '"key") '()))
+  (let world (Left! x))
+  (let table0 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core table0)
+      (let core (Filter core (lambda '(row) (Coalesce ("<" (Member row '"value") (String '"f")) (Bool 'false)))))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AddMember res '"key" (Member row '"key")))
+        (let res (AsList res))
+        (return res)
+)
+))))
+      (return core)
+)
+))
+    (let select (Sort select (Bool 'true) (lambda '(row) (Member row '"key"))))
+    (let select (Take select (Uint64 '"2")))
+    (return select)
+)
+))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"key")))))
+    (let plato_sink (DataSink '"yt" '"plato"))
+    (let world (Commit! world plato_sink))
+    (return (Commit! world result_sink))
+)
+))
+  (return world)
+)
+))
+(return world)
+)

@@ -1,0 +1,23 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# prepare python udf
+(let ui32 (DataType 'Uint32))
+(let udfType (CallableType '() '(ui32) '(ui32) '(ui32)))
+(let udfScript (String '"def Sum(x, y): return x + y"))
+(let udf (ScriptUdf 'Python 'Sum udfType udfScript))
+
+# call udf
+(let x (Uint32 '10))
+(let y (Uint32 '32))
+(let result (Apply udf x y))
+
+# output result with type
+(let res_sink (DataSink 'result))
+(let world (Write! world res_sink (Key) result '( '('type) )))
+
+# finish
+(let world (Commit! world res_sink))
+(return world)
+)

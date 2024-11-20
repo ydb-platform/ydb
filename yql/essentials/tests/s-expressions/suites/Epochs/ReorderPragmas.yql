@@ -1,0 +1,63 @@
+#USE plato;
+#PRAGMA yt.InferSchema = "1";
+#PRAGMA yt.MaxRowWeight = "128m";
+#INSERT INTO Output
+#select * from Input
+#WHERE key != "0";
+#commit;
+#PRAGMA yt.InferSchema = "3";
+#select * from Input;
+#PRAGMA yt.MaxRowWeight = "128m";
+#PRAGMA yt.InferSchema = "1";
+#select * from Input
+#WHERE key != "0";
+
+(
+(let source (DataSource 'yt 'plato))
+(let source_any (DataSource 'yt '"$all"))
+(let sink (DataSink 'yt 'plato))
+(let result (DataSink 'result))
+
+(let world (Configure! world source_any '"Attr" '"inferschema" '"1"))
+(let world (Configure! world source_any '"Attr" '"maxrowweight" '"128m"))
+
+(let r (Read! world source (Key '('table (String '"Input"))) (Void) '()))
+(let input (Right! r))
+(let world (Left! r))
+
+(let filter (lambda '(item) (block '(
+  (let key (Member item '"key"))
+  (let res (Coalesce (!= key (String '"0")) (Bool 'false)))
+  (return res)
+))))
+
+(let out (Filter input filter))
+
+(let world (Write! world sink (Key '('table (String '"Output"))) out '('('mode 'append))))
+(let world (Commit! world sink))
+
+(let world (Configure! world source_any '"Attr" '"inferschema" '"3"))
+
+(let r (Read! world source (Key '('table (String '"Input"))) (Void) '()))
+(let input (Right! r))
+(let world (Left! r))
+
+(let world (Write! world result (Key) input '('('type) '('autoref))))
+(let world (Commit! world result))
+
+(let world (Configure! world source_any '"Attr" '"maxrowweight" '"128m"))
+(let world (Configure! world source_any '"Attr" '"inferschema" '"1"))
+
+(let r (Read! world source (Key '('table (String '"Input"))) (Void) '()))
+(let input (Right! r))
+(let world (Left! r))
+
+(let out (Filter input filter))
+
+(let world (Write! world result (Key) out '('('type) '('autoref))))
+
+(let world (Commit! world result))
+(let world (Commit! world sink))
+
+(return world)
+)

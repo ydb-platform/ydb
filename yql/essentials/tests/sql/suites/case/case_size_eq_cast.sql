@@ -1,0 +1,1 @@
+select key, subkey, case length(value) when cast(3 as smallint) then "JAR" else value end as value from plato.Input;

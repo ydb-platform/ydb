@@ -1,0 +1,53 @@
+(
+(let world (block '(
+  (let x (Read! world (DataSource '"yt" '"plato") (Key '('table (String '"Input"))) '('"key") '()))
+  (let world (Left! x))
+  (let table1 (Right! x))
+  (let output (block '(
+    (let select (block '(
+      (let core table1)
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (Struct))
+        (let res (AddMember res '"column0" ("Concat" (Member row '"key") ("Coalesce" (Member (MatchType (block '(
+          (let select (block '(
+            (let core table1)
+            (let core (block '(
+              (let Min0_create (lambda '(row) (Member row '"key")))
+              (let Min0_update (lambda '(row state) (OptionalReduce state (Member row '"key") (lambda '(a b) (Min a b)))))
+              (let Min0_save (lambda '(state) state))
+              (let Min0_load (lambda '(item) item))
+              (let Min0_merge (lambda '(a b) (OptionalReduce a b (lambda '(a b) (Min a b)))))
+              (let Min0_finish (lambda '(state) state))
+              (return (Aggregate core '() '('('Min0 (AggregationTraits (ListItemType (TypeOf core)) Min0_create Min0_update Min0_save Min0_load Min0_merge Min0_finish (Null))))))
+            )))
+            (let core (FlatMap core (lambda '(row) (block '(
+              (let res (Struct))
+              (let res (AddMember res '"key" (Member row 'Min0)))
+              (let res (AsList res))
+              (return res)
+            )))))
+            (return core)
+          )))
+          (return select)
+        )) 'Dict (lambda '(dict) (Lookup dict (Int64 '"0"))) (lambda '(list) (Lookup (ToIndexDict list) (Int64 '"0")))) '"key") (String '"")))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let plato_sink (DataSink '"yt" '"plato"))
+  (let world (Commit! world plato_sink))
+  (return world)
+)))
+(return world)
+)

@@ -1,0 +1,31 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+
+(let v1 (String 'test1))
+(let q1 (QueueCreate (TypeOf v1) (Uint64 '1) (Uint64 '1) (DependsOn v1)))
+(let new_q1 (QueuePush (QueuePop q1) v1))
+(let q1_item (QueuePeek q1 (Uint64 '0) (DependsOn v1)))
+(let new_q1_item (QueuePeek new_q1 (Uint64 '0) (DependsOn v1)))
+
+# will be (test1, test1)
+(let result '(new_q1_item q1_item))
+(let world (Write! world res_sink (Key) result '('('type))))
+
+
+(let v2 (String 'test2))
+(let q2 (QueueCreate (TypeOf v2) (Uint64 '1) (Uint64 '1) (DependsOn v2)))
+(let new_q2 (QueuePush (QueuePop q2) v2))
+(let q2_item (QueuePeek q2 (Uint64 '0) (DependsOn v2)))
+(let new_q2_item (QueuePeek new_q2 (Uint64 '0) (DependsOn v2)))
+
+# enforce q2_item to be calculated first
+(let result '((Seq q2_item new_q2_item) q2_item))
+(let world (Write! world res_sink (Key) result '('('type))))
+
+
+(let world (Commit! world res_sink))
+(return world)
+)

@@ -1,0 +1,13 @@
+(
+(let mr_source (DataSource 'yt 'plato))
+(let x (Read! world mr_source (Key '('table (String 'InputSelf))) '('key 'subkey 'value) '()))
+(let world (Left! x))
+(let table (Right! x))
+(let join (EquiJoin '(table 'a) '(table 'b) '('Right '"a" '"b" '('"a" '"key" '"a" '"subkey") '('"b" '"value" '"b" '"subkey") '()) '()))
+(let res_sink (DataSink 'result))
+(let sortDir '((Bool 'true) (Bool 'true) (Bool 'true) (Bool 'true)))
+(let keySelector (lambda '(row) '((Member row '"a.key") (Member row '"a.subkey") (Member row '"b.key") (Member row '"b.subkey"))))
+(let world (Write! world res_sink (Key) (Sort join sortDir keySelector) '('('type))))
+(let world (Commit! world res_sink))
+(return world)
+)

@@ -1,0 +1,2139 @@
+Registering pre-existing tables
+	text_tbl
+	VARCHAR_TBL
+	CHAR_TBL
+	TEXT_TBL
+	varchar_tbl
+<sql-statement>
+--
+-- STRINGS
+-- Test various data entry syntaxes.
+--
+-- SQL string continuation syntax
+-- E021-03 character string literals
+SELECT 'first line'
+' - next line'
+	' - third line'
+	AS "Three lines to one";
+</sql-statement>
+<sql-statement>
+-- illegal string continuation syntax
+SELECT 'first line'
+' - next line' /* this comment is not allowed here */
+' - third line'
+	AS "Illegal comment within continuation";
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:4:1: Error: ERROR:  syntax error at or near "' - third line'"
+
+    	' - third line'
+	^
+<sql-statement>
+-- Unicode escapes
+SET standard_conforming_strings TO on;
+</sql-statement>
+<sql-statement>
+SELECT U&'d\0061t\+000061' AS U&"d\0061t\+000061";
+</sql-statement>
+<sql-statement>
+SELECT U&'d!0061t\+000061' UESCAPE '!' AS U&"d*0061t\+000061" UESCAPE '*';
+</sql-statement>
+<sql-statement>
+SELECT U&'a\\b' AS "a\b";
+</sql-statement>
+<sql-statement>
+SELECT U&' \' UESCAPE '!' AS "tricky";
+</sql-statement>
+<sql-statement>
+SELECT 'tricky' AS U&"\" UESCAPE '!';
+</sql-statement>
+<sql-statement>
+SELECT U&'wrong: \061';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:19: Error: ERROR:  invalid Unicode escape
+
+    	SELECT U&'wrong: \061';
+	                  ^
+<sql-statement>
+SELECT U&'wrong: \+0061';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:19: Error: ERROR:  invalid Unicode escape
+
+    	SELECT U&'wrong: \+0061';
+	                  ^
+<sql-statement>
+SELECT U&'wrong: +0061' UESCAPE +;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:34: Error: ERROR:  UESCAPE must be followed by a simple string literal at or near "+"
+
+    	SELECT U&'wrong: +0061' UESCAPE +;
+	                                 ^
+<sql-statement>
+SELECT U&'wrong: +0061' UESCAPE '+';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:34: Error: ERROR:  invalid Unicode escape character at or near "'+'"
+
+    	SELECT U&'wrong: +0061' UESCAPE '+';
+	                                 ^
+<sql-statement>
+SELECT U&'wrong: \db99';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:24: Error: ERROR:  invalid Unicode surrogate pair
+
+    	SELECT U&'wrong: \db99';
+	                       ^
+<sql-statement>
+SELECT U&'wrong: \db99xy';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:24: Error: ERROR:  invalid Unicode surrogate pair
+
+    	SELECT U&'wrong: \db99xy';
+	                       ^
+<sql-statement>
+SELECT U&'wrong: \db99\\';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:24: Error: ERROR:  invalid Unicode surrogate pair
+
+    	SELECT U&'wrong: \db99\\';
+	                       ^
+<sql-statement>
+SELECT U&'wrong: \db99\0061';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:24: Error: ERROR:  invalid Unicode surrogate pair
+
+    	SELECT U&'wrong: \db99\0061';
+	                       ^
+<sql-statement>
+SELECT U&'wrong: \+00db99\+000061';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:27: Error: ERROR:  invalid Unicode surrogate pair
+
+    	SELECT U&'wrong: \+00db99\+000061';
+	                          ^
+<sql-statement>
+SELECT U&'wrong: \+2FFFFF';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:19: Error: ERROR:  invalid Unicode escape value
+
+    	SELECT U&'wrong: \+2FFFFF';
+	                  ^
+<sql-statement>
+-- while we're here, check the same cases in E-style literals
+SELECT E'd\u0061t\U00000061' AS "data";
+</sql-statement>
+<sql-statement>
+SELECT E'a\\b' AS "a\b";
+</sql-statement>
+<sql-statement>
+SELECT E'wrong: \u061';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:18: Error: ERROR:  invalid Unicode escape
+
+    	SELECT E'wrong: \u061';
+	                 ^
+<sql-statement>
+SELECT E'wrong: \U0061';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:18: Error: ERROR:  invalid Unicode escape
+
+    	SELECT E'wrong: \U0061';
+	                 ^
+<sql-statement>
+SELECT E'wrong: \udb99';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:24: Error: ERROR:  invalid Unicode surrogate pair at or near "'"
+
+    	SELECT E'wrong: \udb99';
+	                       ^
+<sql-statement>
+SELECT E'wrong: \udb99xy';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:24: Error: ERROR:  invalid Unicode surrogate pair at or near "x"
+
+    	SELECT E'wrong: \udb99xy';
+	                       ^
+<sql-statement>
+SELECT E'wrong: \udb99\\';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:24: Error: ERROR:  invalid Unicode surrogate pair at or near "\"
+
+    	SELECT E'wrong: \udb99\\';
+	                       ^
+<sql-statement>
+SELECT E'wrong: \udb99\u0061';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:24: Error: ERROR:  invalid Unicode surrogate pair at or near "\u0061"
+
+    	SELECT E'wrong: \udb99\u0061';
+	                       ^
+<sql-statement>
+SELECT E'wrong: \U0000db99\U00000061';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:28: Error: ERROR:  invalid Unicode surrogate pair at or near "\U00000061"
+
+    	SELECT E'wrong: \U0000db99\U00000061';
+	                           ^
+<sql-statement>
+SELECT E'wrong: \U002FFFFF';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:18: Error: ERROR:  invalid Unicode escape value at or near "\U002FFFFF"
+
+    	SELECT E'wrong: \U002FFFFF';
+	                 ^
+<sql-statement>
+SET standard_conforming_strings TO off;
+</sql-statement>
+<sql-statement>
+SELECT U&'d\0061t\+000061' AS U&"d\0061t\+000061";
+</sql-statement>
+<sql-statement>
+SELECT U&'d!0061t\+000061' UESCAPE '!' AS U&"d*0061t\+000061" UESCAPE '*';
+</sql-statement>
+<sql-statement>
+SELECT U&' \' UESCAPE '!' AS "tricky";
+</sql-statement>
+<sql-statement>
+SELECT 'tricky' AS U&"\" UESCAPE '!';
+</sql-statement>
+<sql-statement>
+SELECT U&'wrong: \061';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:19: Error: ERROR:  invalid Unicode escape
+
+    	SELECT U&'wrong: \061';
+	                  ^
+<sql-statement>
+SELECT U&'wrong: \+0061';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:19: Error: ERROR:  invalid Unicode escape
+
+    	SELECT U&'wrong: \+0061';
+	                  ^
+<sql-statement>
+SELECT U&'wrong: +0061' UESCAPE '+';
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:34: Error: ERROR:  invalid Unicode escape character at or near "'+'"
+
+    	SELECT U&'wrong: +0061' UESCAPE '+';
+	                                 ^
+<sql-statement>
+RESET standard_conforming_strings;
+</sql-statement>
+<sql-statement>
+-- bytea
+SET bytea_output TO hex;
+</sql-statement>
+<sql-statement>
+SELECT E'\\xDeAdBeEf'::bytea;
+</sql-statement>
+<sql-statement>
+SELECT E'\\x De Ad Be Ef '::bytea;
+</sql-statement>
+<sql-statement>
+SELECT E'\\xDeAdBeE'::bytea;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT E'\\xDeAdBeE'::bytea;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid hexadecimal data: odd number of digits
+
+        	SELECT E'\\xDeAdBeE'::bytea;
+	^
+<sql-statement>
+SELECT E'\\xDeAdBeEx'::bytea;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT E'\\xDeAdBeEx'::bytea;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid hexadecimal digit: "x"
+
+        	SELECT E'\\xDeAdBeEx'::bytea;
+	^
+<sql-statement>
+SELECT E'\\xDe00BeEf'::bytea;
+</sql-statement>
+<sql-statement>
+SELECT E'DeAdBeEf'::bytea;
+</sql-statement>
+<sql-statement>
+SELECT E'De\\000dBeEf'::bytea;
+</sql-statement>
+<sql-statement>
+SELECT E'De\123dBeEf'::bytea;
+</sql-statement>
+<sql-statement>
+SELECT E'De\\123dBeEf'::bytea;
+</sql-statement>
+<sql-statement>
+SELECT E'De\\678dBeEf'::bytea;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT E'De\\678dBeEf'::bytea;
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type bytea
+
+        	SELECT E'De\\678dBeEf'::bytea;
+	^
+<sql-statement>
+SET bytea_output TO escape;
+</sql-statement>
+<sql-statement>
+SELECT E'\\xDeAdBeEf'::bytea;
+</sql-statement>
+<sql-statement>
+SELECT E'\\x De Ad Be Ef '::bytea;
+</sql-statement>
+<sql-statement>
+SELECT E'\\xDe00BeEf'::bytea;
+</sql-statement>
+<sql-statement>
+SELECT E'DeAdBeEf'::bytea;
+</sql-statement>
+<sql-statement>
+SELECT E'De\\000dBeEf'::bytea;
+</sql-statement>
+<sql-statement>
+SELECT E'De\\123dBeEf'::bytea;
+</sql-statement>
+<sql-statement>
+--
+-- test conversions between various string types
+-- E021-10 implicit casting among the character data types
+--
+SELECT CAST(f1 AS text) AS "text(char)" FROM CHAR_TBL;
+</sql-statement>
+<sql-statement>
+SELECT CAST(f1 AS text) AS "text(varchar)" FROM VARCHAR_TBL;
+</sql-statement>
+<sql-statement>
+SELECT CAST(name 'namefield' AS text) AS "text(name)";
+</sql-statement>
+<sql-statement>
+-- since this is an explicit cast, it should truncate w/o error:
+SELECT CAST(f1 AS char(10)) AS "char(text)" FROM TEXT_TBL;
+</sql-statement>
+<sql-statement>
+-- note: implicit-cast case is tested in char.sql
+SELECT CAST(f1 AS char(20)) AS "char(text)" FROM TEXT_TBL;
+</sql-statement>
+<sql-statement>
+SELECT CAST(f1 AS char(10)) AS "char(varchar)" FROM VARCHAR_TBL;
+</sql-statement>
+<sql-statement>
+SELECT CAST(name 'namefield' AS char(10)) AS "char(name)";
+</sql-statement>
+<sql-statement>
+SELECT CAST(f1 AS varchar) AS "varchar(text)" FROM TEXT_TBL;
+</sql-statement>
+<sql-statement>
+SELECT CAST(f1 AS varchar) AS "varchar(char)" FROM CHAR_TBL;
+</sql-statement>
+<sql-statement>
+SELECT CAST(name 'namefield' AS varchar) AS "varchar(name)";
+</sql-statement>
+<sql-statement>
+--
+-- test SQL string functions
+-- E### and T### are feature reference numbers from SQL99
+--
+-- E021-09 trim function
+SELECT TRIM(BOTH FROM '  bunch o blanks  ') = 'bunch o blanks' AS "bunch o blanks";
+</sql-statement>
+<sql-statement>
+SELECT TRIM(LEADING FROM '  bunch o blanks  ') = 'bunch o blanks  ' AS "bunch o blanks  ";
+</sql-statement>
+<sql-statement>
+SELECT TRIM(TRAILING FROM '  bunch o blanks  ') = '  bunch o blanks' AS "  bunch o blanks";
+</sql-statement>
+<sql-statement>
+SELECT TRIM(BOTH 'x' FROM 'xxxxxsome Xsxxxxx') = 'some Xs' AS "some Xs";
+</sql-statement>
+<sql-statement>
+-- E021-06 substring expression
+SELECT SUBSTRING('1234567890' FROM 3) = '34567890' AS "34567890";
+</sql-statement>
+<sql-statement>
+SELECT SUBSTRING('1234567890' FROM 4 FOR 3) = '456' AS "456";
+</sql-statement>
+<sql-statement>
+-- test overflow cases
+SELECT SUBSTRING('string' FROM 2 FOR 2147483646) AS "tring";
+</sql-statement>
+<sql-statement>
+SELECT SUBSTRING('string' FROM -10 FOR 2147483646) AS "string";
+</sql-statement>
+<sql-statement>
+SELECT SUBSTRING('string' FROM -10 FOR -2147483646) AS "error";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT SUBSTRING('string' FROM -10 FOR -2147483646) AS "error";
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  negative substring length not allowed
+
+        	SELECT SUBSTRING('string' FROM -10 FOR -2147483646) AS "error";
+	^
+<sql-statement>
+-- T581 regular expression substring (with SQL's bizarre regexp syntax)
+SELECT SUBSTRING('abcdefg' SIMILAR 'a#"(b_d)#"%' ESCAPE '#') AS "bcd";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- T581 regular expression substring (with SQL's bizarre regexp syntax)
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "a#"(b_d)#"%"
+
+        	-- T581 regular expression substring (with SQL's bizarre regexp syntax)
+	^
+<sql-statement>
+-- obsolete SQL99 syntax
+SELECT SUBSTRING('abcdefg' FROM 'a#"(b_d)#"%' FOR '#') AS "bcd";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- obsolete SQL99 syntax
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "a#"(b_d)#"%"
+
+        	-- obsolete SQL99 syntax
+	^
+<sql-statement>
+-- No match should return NULL
+SELECT SUBSTRING('abcdefg' SIMILAR '#"(b_d)#"%' ESCAPE '#') IS NULL AS "True";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- No match should return NULL
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "#"(b_d)#"%"
+
+        	-- No match should return NULL
+	^
+<sql-statement>
+-- Null inputs should return NULL
+SELECT SUBSTRING('abcdefg' SIMILAR '%' ESCAPE NULL) IS NULL AS "True";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Null inputs should return NULL
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "%"
+
+        	-- Null inputs should return NULL
+	^
+<sql-statement>
+SELECT SUBSTRING(NULL SIMILAR '%' ESCAPE '#') IS NULL AS "True";
+</sql-statement>
+<sql-statement>
+SELECT SUBSTRING('abcdefg' SIMILAR NULL ESCAPE '#') IS NULL AS "True";
+</sql-statement>
+<sql-statement>
+-- The first and last parts should act non-greedy
+SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%#"g' ESCAPE '#') AS "bcdef";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- The first and last parts should act non-greedy
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "a#"%#"g"
+
+        	-- The first and last parts should act non-greedy
+	^
+<sql-statement>
+SELECT SUBSTRING('abcdefg' SIMILAR 'a*#"%#"g*' ESCAPE '#') AS "abcdefg";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT SUBSTRING('abcdefg' SIMILAR 'a*#"%#"g*' ESCAPE '#') AS "abcdefg";
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "a*#"%#"g*"
+
+        	SELECT SUBSTRING('abcdefg' SIMILAR 'a*#"%#"g*' ESCAPE '#') AS "abcdefg";
+	^
+<sql-statement>
+-- Vertical bar in any part affects only that part
+SELECT SUBSTRING('abcdefg' SIMILAR 'a|b#"%#"g' ESCAPE '#') AS "bcdef";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Vertical bar in any part affects only that part
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "a|b#"%#"g"
+
+        	-- Vertical bar in any part affects only that part
+	^
+<sql-statement>
+SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%#"x|g' ESCAPE '#') AS "bcdef";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%#"x|g' ESCAPE '#') AS "bcdef";
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "a#"%#"x|g"
+
+        	SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%#"x|g' ESCAPE '#') AS "bcdef";
+	^
+<sql-statement>
+SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%|ab#"g' ESCAPE '#') AS "bcdef";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%|ab#"g' ESCAPE '#') AS "bcdef";
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "a#"%|ab#"g"
+
+        	SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%|ab#"g' ESCAPE '#') AS "bcdef";
+	^
+<sql-statement>
+-- Can't have more than two part separators
+SELECT SUBSTRING('abcdefg' SIMILAR 'a*#"%#"g*#"x' ESCAPE '#') AS "error";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Can't have more than two part separators
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "a*#"%#"g*#"x"
+
+        	-- Can't have more than two part separators
+	^
+<sql-statement>
+-- Postgres extension: with 0 or 1 separator, assume parts 1 and 3 are empty
+SELECT SUBSTRING('abcdefg' SIMILAR 'a#"%g' ESCAPE '#') AS "bcdefg";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- Postgres extension: with 0 or 1 separator, assume parts 1 and 3 are empty
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "a#"%g"
+
+        	-- Postgres extension: with 0 or 1 separator, assume parts 1 and 3 are empty
+	^
+<sql-statement>
+SELECT SUBSTRING('abcdefg' SIMILAR 'a%g' ESCAPE '#') AS "abcdefg";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT SUBSTRING('abcdefg' SIMILAR 'a%g' ESCAPE '#') AS "abcdefg";
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid input syntax for type integer: "a%g"
+
+        	SELECT SUBSTRING('abcdefg' SIMILAR 'a%g' ESCAPE '#') AS "abcdefg";
+	^
+<sql-statement>
+-- substring() with just two arguments is not allowed by SQL spec;
+-- we accept it, but we interpret the pattern as a POSIX regexp not SQL
+SELECT SUBSTRING('abcdefg' FROM 'c.e') AS "cde";
+</sql-statement>
+<sql-statement>
+-- With a parenthesized subexpression, return only what matches the subexpr
+SELECT SUBSTRING('abcdefg' FROM 'b(.*)f') AS "cde";
+</sql-statement>
+<sql-statement>
+-- Check behavior of SIMILAR TO, which uses largely the same regexp variant
+SELECT 'abcdefg' SIMILAR TO '_bcd%' AS true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:18: Error: A_Expr_Kind unsupported value: 9
+    	SELECT 'abcdefg' SIMILAR TO '_bcd%' AS true;
+	                 ^
+<sql-statement>
+SELECT 'abcdefg' SIMILAR TO 'bcd%' AS false;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:18: Error: A_Expr_Kind unsupported value: 9
+    	SELECT 'abcdefg' SIMILAR TO 'bcd%' AS false;
+	                 ^
+<sql-statement>
+SELECT 'abcdefg' SIMILAR TO '_bcd#%' ESCAPE '#' AS false;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:18: Error: A_Expr_Kind unsupported value: 9
+    	SELECT 'abcdefg' SIMILAR TO '_bcd#%' ESCAPE '#' AS false;
+	                 ^
+<sql-statement>
+SELECT 'abcd%' SIMILAR TO '_bcd#%' ESCAPE '#' AS true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:16: Error: A_Expr_Kind unsupported value: 9
+    	SELECT 'abcd%' SIMILAR TO '_bcd#%' ESCAPE '#' AS true;
+	               ^
+<sql-statement>
+-- Postgres uses '\' as the default escape character, which is not per spec
+SELECT 'abcdefg' SIMILAR TO '_bcd\%' AS false;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:18: Error: A_Expr_Kind unsupported value: 9
+    	SELECT 'abcdefg' SIMILAR TO '_bcd\%' AS false;
+	                 ^
+<sql-statement>
+-- and an empty string to mean "no escape", which is also not per spec
+SELECT 'abcd\efg' SIMILAR TO '_bcd\%' ESCAPE '' AS true;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:19: Error: A_Expr_Kind unsupported value: 9
+    	SELECT 'abcd\efg' SIMILAR TO '_bcd\%' ESCAPE '' AS true;
+	                  ^
+<sql-statement>
+-- these behaviors are per spec, though:
+SELECT 'abcdefg' SIMILAR TO '_bcd%' ESCAPE NULL AS null;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:18: Error: A_Expr_Kind unsupported value: 9
+    	SELECT 'abcdefg' SIMILAR TO '_bcd%' ESCAPE NULL AS null;
+	                 ^
+<sql-statement>
+SELECT 'abcdefg' SIMILAR TO '_bcd#%' ESCAPE '##' AS error;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:18: Error: A_Expr_Kind unsupported value: 9
+    	SELECT 'abcdefg' SIMILAR TO '_bcd#%' ESCAPE '##' AS error;
+	                 ^
+<sql-statement>
+-- Test back reference in regexp_replace
+SELECT regexp_replace('1112223333', E'(\\d{3})(\\d{3})(\\d{4})', E'(\\1) \\2-\\3');
+</sql-statement>
+<sql-statement>
+SELECT regexp_replace('AAA   BBB   CCC   ', E'\\s+', ' ', 'g');
+</sql-statement>
+<sql-statement>
+SELECT regexp_replace('AAA', '^|$', 'Z', 'g');
+</sql-statement>
+<sql-statement>
+SELECT regexp_replace('AAA aaa', 'A+', 'Z', 'gi');
+</sql-statement>
+<sql-statement>
+-- invalid regexp option
+SELECT regexp_replace('AAA aaa', 'A+', 'Z', 'z');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- invalid regexp option
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid regular expression option: "z"
+
+        	-- invalid regexp option
+	^
+<sql-statement>
+-- set so we can tell NULL from empty string
+\pset null '\\N'
+</sql-statement>
+<sql-statement>
+-- return all matches from regexp
+SELECT regexp_matches('foobarbequebaz', $re$(bar)(beque)$re$);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT regexp_matches('foobarbequebaz', $re$(bar)(beque)$re$);
+	       ^
+<sql-statement>
+-- test case insensitive
+SELECT regexp_matches('foObARbEqUEbAz', $re$(bar)(beque)$re$, 'i');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT regexp_matches('foObARbEqUEbAz', $re$(bar)(beque)$re$, 'i');
+	       ^
+<sql-statement>
+-- global option - more than one match
+SELECT regexp_matches('foobarbequebazilbarfbonk', $re$(b[^b]+)(b[^b]+)$re$, 'g');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT regexp_matches('foobarbequebazilbarfbonk', $re$(b[^b]+)(b[^b]+)$re$, 'g');
+	       ^
+<sql-statement>
+-- empty capture group (matched empty string)
+SELECT regexp_matches('foobarbequebaz', $re$(bar)(.*)(beque)$re$);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT regexp_matches('foobarbequebaz', $re$(bar)(.*)(beque)$re$);
+	       ^
+<sql-statement>
+-- no match
+SELECT regexp_matches('foobarbequebaz', $re$(bar)(.+)(beque)$re$);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT regexp_matches('foobarbequebaz', $re$(bar)(.+)(beque)$re$);
+	       ^
+<sql-statement>
+-- optional capture group did not match, null entry in array
+SELECT regexp_matches('foobarbequebaz', $re$(bar)(.+)?(beque)$re$);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT regexp_matches('foobarbequebaz', $re$(bar)(.+)?(beque)$re$);
+	       ^
+<sql-statement>
+-- no capture groups
+SELECT regexp_matches('foobarbequebaz', $re$barbeque$re$);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT regexp_matches('foobarbequebaz', $re$barbeque$re$);
+	       ^
+<sql-statement>
+-- start/end-of-line matches are of zero length
+SELECT regexp_matches('foo' || chr(10) || 'bar' || chr(10) || 'bequq' || chr(10) || 'baz', '^', 'mg');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT regexp_matches('foo' || chr(10) || 'bar' || chr(10) || 'bequq' || chr(10) || 'baz', '^', 'mg');
+	       ^
+<sql-statement>
+SELECT regexp_matches('foo' || chr(10) || 'bar' || chr(10) || 'bequq' || chr(10) || 'baz', '$', 'mg');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT regexp_matches('foo' || chr(10) || 'bar' || chr(10) || 'bequq' || chr(10) || 'baz', '$', 'mg');
+	       ^
+<sql-statement>
+SELECT regexp_matches('1' || chr(10) || '2' || chr(10) || '3' || chr(10) || '4' || chr(10), '^.?', 'mg');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT regexp_matches('1' || chr(10) || '2' || chr(10) || '3' || chr(10) || '4' || chr(10), '^.?', 'mg');
+	       ^
+<sql-statement>
+SELECT regexp_matches(chr(10) || '1' || chr(10) || '2' || chr(10) || '3' || chr(10) || '4' || chr(10), '.?$', 'mg');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT regexp_matches(chr(10) || '1' || chr(10) || '2' || chr(10) || '3' || chr(10) || '4' || chr(10), '.?$', 'mg');
+	       ^
+<sql-statement>
+SELECT regexp_matches(chr(10) || '1' || chr(10) || '2' || chr(10) || '3' || chr(10) || '4', '.?$', 'mg');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT regexp_matches(chr(10) || '1' || chr(10) || '2' || chr(10) || '3' || chr(10) || '4', '.?$', 'mg');
+	       ^
+<sql-statement>
+-- give me errors
+SELECT regexp_matches('foobarbequebaz', $re$(bar)(beque)$re$, 'gz');
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:2:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT regexp_matches('foobarbequebaz', $re$(bar)(beque)$re$, 'gz');
+	       ^
+<sql-statement>
+SELECT regexp_matches('foobarbequebaz', $re$(barbeque$re$);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT regexp_matches('foobarbequebaz', $re$(barbeque$re$);
+	       ^
+<sql-statement>
+SELECT regexp_matches('foobarbequebaz', $re$(bar)(beque){2,1}$re$);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:8: Error: Generator functions are not allowed in: SELECT
+    	SELECT regexp_matches('foobarbequebaz', $re$(bar)(beque){2,1}$re$);
+	       ^
+<sql-statement>
+-- split string on regexp
+SELECT foo, length(foo) FROM regexp_split_to_table('the quick brown fox jumps over the lazy dog', $re$\s+$re$) AS foo;
+</sql-statement>
+<sql-statement>
+SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', $re$\s+$re$);
+</sql-statement>
+<sql-statement>
+SELECT foo, length(foo) FROM regexp_split_to_table('the quick brown fox jumps over the lazy dog', $re$\s*$re$) AS foo;
+</sql-statement>
+<sql-statement>
+SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', $re$\s*$re$);
+</sql-statement>
+<sql-statement>
+SELECT foo, length(foo) FROM regexp_split_to_table('the quick brown fox jumps over the lazy dog', '') AS foo;
+</sql-statement>
+<sql-statement>
+SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', '');
+</sql-statement>
+<sql-statement>
+-- case insensitive
+SELECT foo, length(foo) FROM regexp_split_to_table('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'i') AS foo;
+</sql-statement>
+<sql-statement>
+SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'i');
+</sql-statement>
+<sql-statement>
+-- no match of pattern
+SELECT foo, length(foo) FROM regexp_split_to_table('the quick brown fox jumps over the lazy dog', 'nomatch') AS foo;
+</sql-statement>
+<sql-statement>
+SELECT regexp_split_to_array('the quick brown fox jumps over the lazy dog', 'nomatch');
+</sql-statement>
+<sql-statement>
+-- some corner cases
+SELECT regexp_split_to_array('123456','1');
+</sql-statement>
+<sql-statement>
+SELECT regexp_split_to_array('123456','6');
+</sql-statement>
+<sql-statement>
+SELECT regexp_split_to_array('123456','.');
+</sql-statement>
+<sql-statement>
+SELECT regexp_split_to_array('123456','');
+</sql-statement>
+<sql-statement>
+SELECT regexp_split_to_array('123456','(?:)');
+</sql-statement>
+<sql-statement>
+SELECT regexp_split_to_array('1','');
+</sql-statement>
+<sql-statement>
+-- errors
+SELECT foo, length(foo) FROM regexp_split_to_table('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'zippy') AS foo;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- errors
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid regular expression option: "z"
+
+        	-- errors
+	^
+<sql-statement>
+SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'iz');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'iz');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid regular expression option: "z"
+
+        	SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'iz');
+	^
+<sql-statement>
+-- global option meaningless for regexp_split
+SELECT foo, length(foo) FROM regexp_split_to_table('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'g') AS foo;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- global option meaningless for regexp_split
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  regexp_split_to_table() does not support the "global" option
+
+        	-- global option meaningless for regexp_split
+	^
+<sql-statement>
+SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'g');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'g');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  regexp_split_to_array() does not support the "global" option
+
+        	SELECT regexp_split_to_array('thE QUick bROWn FOx jUMPs ovEr The lazy dOG', 'e', 'g');
+	^
+<sql-statement>
+-- change NULL-display back
+\pset null ''
+</sql-statement>
+<sql-statement>
+-- E021-11 position expression
+SELECT POSITION('4' IN '1234567890') = '4' AS "4";
+</sql-statement>
+<sql-statement>
+SELECT POSITION('5' IN '1234567890') = '5' AS "5";
+</sql-statement>
+<sql-statement>
+-- T312 character overlay function
+SELECT OVERLAY('abcdef' PLACING '45' FROM 4) AS "abc45f";
+</sql-statement>
+<sql-statement>
+SELECT OVERLAY('yabadoo' PLACING 'daba' FROM 5) AS "yabadaba";
+</sql-statement>
+<sql-statement>
+SELECT OVERLAY('yabadoo' PLACING 'daba' FROM 5 FOR 0) AS "yabadabadoo";
+</sql-statement>
+<sql-statement>
+SELECT OVERLAY('babosa' PLACING 'ubb' FROM 2 FOR 4) AS "bubba";
+</sql-statement>
+<sql-statement>
+--
+-- test LIKE
+-- Be sure to form every test as a LIKE/NOT LIKE pair.
+--
+-- simplest examples
+-- E061-04 like predicate
+SELECT 'hawkeye' LIKE 'h%' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' NOT LIKE 'h%' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' LIKE 'H%' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' NOT LIKE 'H%' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' LIKE 'indio%' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' NOT LIKE 'indio%' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' LIKE 'h%eye' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' NOT LIKE 'h%eye' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'indio' LIKE '_ndio' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'indio' NOT LIKE '_ndio' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'indio' LIKE 'in__o' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'indio' NOT LIKE 'in__o' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'indio' LIKE 'in_o' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'indio' NOT LIKE 'in_o' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'abc'::name LIKE '_b_' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'abc'::name NOT LIKE '_b_' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'abc'::bytea LIKE '_b_'::bytea AS "true";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT 'abc'::bytea LIKE '_b_'::bytea AS "true";
+	^
+        -stdin-:<main>:1:21: Error: At function: PgLike
+        	SELECT 'abc'::bytea LIKE '_b_'::bytea AS "true";
+	                    ^
+            -stdin-:<main>:1:21: Error: Expected pg text, but got bytea
+            	SELECT 'abc'::bytea LIKE '_b_'::bytea AS "true";
+	                    ^
+<sql-statement>
+SELECT 'abc'::bytea NOT LIKE '_b_'::bytea AS "false";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT 'abc'::bytea NOT LIKE '_b_'::bytea AS "false";
+	^
+        -stdin-:<main>:1:21: Error: At function: PgNot, At function: PgLike
+        	SELECT 'abc'::bytea NOT LIKE '_b_'::bytea AS "false";
+	                    ^
+            -stdin-:<main>:1:21: Error: Expected pg text, but got bytea
+            	SELECT 'abc'::bytea NOT LIKE '_b_'::bytea AS "false";
+	                    ^
+<sql-statement>
+-- unused escape character
+SELECT 'hawkeye' LIKE 'h%' ESCAPE '#' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' NOT LIKE 'h%' ESCAPE '#' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'indio' LIKE 'ind_o' ESCAPE '$' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'indio' NOT LIKE 'ind_o' ESCAPE '$' AS "false";
+</sql-statement>
+<sql-statement>
+-- escape character
+-- E061-05 like predicate with escape clause
+SELECT 'h%' LIKE 'h#%' ESCAPE '#' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'h%' NOT LIKE 'h#%' ESCAPE '#' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'h%wkeye' LIKE 'h#%' ESCAPE '#' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'h%wkeye' NOT LIKE 'h#%' ESCAPE '#' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'h%wkeye' LIKE 'h#%%' ESCAPE '#' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'h%wkeye' NOT LIKE 'h#%%' ESCAPE '#' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'h%awkeye' LIKE 'h#%a%k%e' ESCAPE '#' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'h%awkeye' NOT LIKE 'h#%a%k%e' ESCAPE '#' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'indio' LIKE '_ndio' ESCAPE '$' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'indio' NOT LIKE '_ndio' ESCAPE '$' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'i_dio' LIKE 'i$_d_o' ESCAPE '$' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'i_dio' NOT LIKE 'i$_d_o' ESCAPE '$' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'i_dio' LIKE 'i$_nd_o' ESCAPE '$' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'i_dio' NOT LIKE 'i$_nd_o' ESCAPE '$' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'i_dio' LIKE 'i$_d%o' ESCAPE '$' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'i_dio' NOT LIKE 'i$_d%o' ESCAPE '$' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'a_c'::bytea LIKE 'a$__'::bytea ESCAPE '$'::bytea AS "true";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT 'a_c'::bytea LIKE 'a$__'::bytea ESCAPE '$'::bytea AS "true";
+	^
+        -stdin-:<main>:1:21: Error: At function: PgLike
+        	SELECT 'a_c'::bytea LIKE 'a$__'::bytea ESCAPE '$'::bytea AS "true";
+	                    ^
+            -stdin-:<main>:1:21: Error: Expected pg text, but got bytea
+            	SELECT 'a_c'::bytea LIKE 'a$__'::bytea ESCAPE '$'::bytea AS "true";
+	                    ^
+<sql-statement>
+SELECT 'a_c'::bytea NOT LIKE 'a$__'::bytea ESCAPE '$'::bytea AS "false";
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT 'a_c'::bytea NOT LIKE 'a$__'::bytea ESCAPE '$'::bytea AS "false";
+	^
+        -stdin-:<main>:1:21: Error: At function: PgNot, At function: PgLike
+        	SELECT 'a_c'::bytea NOT LIKE 'a$__'::bytea ESCAPE '$'::bytea AS "false";
+	                    ^
+            -stdin-:<main>:1:21: Error: Expected pg text, but got bytea
+            	SELECT 'a_c'::bytea NOT LIKE 'a$__'::bytea ESCAPE '$'::bytea AS "false";
+	                    ^
+<sql-statement>
+-- escape character same as pattern character
+SELECT 'maca' LIKE 'm%aca' ESCAPE '%' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'maca' NOT LIKE 'm%aca' ESCAPE '%' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'ma%a' LIKE 'm%a%%a' ESCAPE '%' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'ma%a' NOT LIKE 'm%a%%a' ESCAPE '%' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'bear' LIKE 'b_ear' ESCAPE '_' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'bear' NOT LIKE 'b_ear' ESCAPE '_' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'be_r' LIKE 'b_e__r' ESCAPE '_' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'be_r' NOT LIKE 'b_e__r' ESCAPE '_' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'be_r' LIKE '__e__r' ESCAPE '_' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'be_r' NOT LIKE '__e__r' ESCAPE '_' AS "true";
+</sql-statement>
+<sql-statement>
+--
+-- test ILIKE (case-insensitive LIKE)
+-- Be sure to form every test as an ILIKE/NOT ILIKE pair.
+--
+SELECT 'hawkeye' ILIKE 'h%' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' NOT ILIKE 'h%' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' ILIKE 'H%' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' NOT ILIKE 'H%' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' ILIKE 'H%Eye' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'hawkeye' NOT ILIKE 'H%Eye' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'Hawkeye' ILIKE 'h%' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'Hawkeye' NOT ILIKE 'h%' AS "false";
+</sql-statement>
+<sql-statement>
+SELECT 'ABC'::name ILIKE '_b_' AS "true";
+</sql-statement>
+<sql-statement>
+SELECT 'ABC'::name NOT ILIKE '_b_' AS "false";
+</sql-statement>
+<sql-statement>
+--
+-- test %/_ combination cases, cf bugs #4821 and #5478
+--
+SELECT 'foo' LIKE '_%' as t, 'f' LIKE '_%' as t, '' LIKE '_%' as f;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	--
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: t
+        	--
+	^
+<sql-statement>
+SELECT 'foo' LIKE '%_' as t, 'f' LIKE '%_' as t, '' LIKE '%_' as f;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT 'foo' LIKE '%_' as t, 'f' LIKE '%_' as t, '' LIKE '%_' as f;
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: t
+        	SELECT 'foo' LIKE '%_' as t, 'f' LIKE '%_' as t, '' LIKE '%_' as f;
+	^
+<sql-statement>
+SELECT 'foo' LIKE '__%' as t, 'foo' LIKE '___%' as t, 'foo' LIKE '____%' as f;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT 'foo' LIKE '__%' as t, 'foo' LIKE '___%' as t, 'foo' LIKE '____%' as f;
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: t
+        	SELECT 'foo' LIKE '__%' as t, 'foo' LIKE '___%' as t, 'foo' LIKE '____%' as f;
+	^
+<sql-statement>
+SELECT 'foo' LIKE '%__' as t, 'foo' LIKE '%___' as t, 'foo' LIKE '%____' as f;
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem
+    	SELECT 'foo' LIKE '%__' as t, 'foo' LIKE '%___' as t, 'foo' LIKE '%____' as f;
+	^
+        -stdin-:<main>:1:1: Error: Duplicated member: t
+        	SELECT 'foo' LIKE '%__' as t, 'foo' LIKE '%___' as t, 'foo' LIKE '%____' as f;
+	^
+<sql-statement>
+SELECT 'jack' LIKE '%____%' AS t;
+</sql-statement>
+<sql-statement>
+--
+-- basic tests of LIKE with indexes
+--
+CREATE TABLE texttest (a text PRIMARY KEY, b int);
+</sql-statement>
+<sql-statement>
+SELECT * FROM texttest WHERE a LIKE '%1%';
+</sql-statement>
+<sql-statement>
+CREATE TABLE byteatest (a bytea PRIMARY KEY, b int);
+</sql-statement>
+<sql-statement>
+SELECT * FROM byteatest WHERE a LIKE '%1%';
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect
+    	SELECT * FROM byteatest WHERE a LIKE '%1%';
+	^
+        -stdin-:<main>: Error: At function: PgSetItem
+        
+            -stdin-:<main>:1:1: Error: At function: PgWhere
+            	SELECT * FROM byteatest WHERE a LIKE '%1%';
+	^
+                -stdin-:<main>:1:33: Error: At function: PgLike
+                	SELECT * FROM byteatest WHERE a LIKE '%1%';
+	                                ^
+                    -stdin-:<main>:1:33: Error: Expected pg text, but got bytea
+                    	SELECT * FROM byteatest WHERE a LIKE '%1%';
+	                                ^
+<sql-statement>
+DROP TABLE texttest, byteatest;
+</sql-statement>
+<sql-statement>
+--
+-- test implicit type conversion
+--
+-- E021-07 character concatenation
+SELECT 'unknown' || ' and unknown' AS "Concat unknown types";
+</sql-statement>
+<sql-statement>
+SELECT text 'text' || ' and unknown' AS "Concat text to unknown type";
+</sql-statement>
+<sql-statement>
+SELECT char(20) 'characters' || ' and text' AS "Concat char to unknown type";
+</sql-statement>
+<sql-statement>
+SELECT text 'text' || char(20) ' and characters' AS "Concat text to char";
+</sql-statement>
+<sql-statement>
+SELECT text 'text' || varchar ' and varchar' AS "Concat text to varchar";
+</sql-statement>
+<sql-statement>
+--
+-- test substr with toasted text values
+--
+CREATE TABLE toasttest(f1 text);
+</sql-statement>
+<sql-statement>
+insert into toasttest values(repeat('1234567890',10000));
+</sql-statement>
+<sql-statement>
+insert into toasttest values(repeat('1234567890',10000));
+</sql-statement>
+<sql-statement>
+--
+-- Ensure that some values are uncompressed, to test the faster substring
+-- operation used in that case
+--
+alter table toasttest alter column f1 set storage external;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	--
+	^
+<sql-statement>
+insert into toasttest values(repeat('1234567890',10000));
+</sql-statement>
+<sql-statement>
+insert into toasttest values(repeat('1234567890',10000));
+</sql-statement>
+<sql-statement>
+-- If the starting position is zero or less, then return from the start of the string
+-- adjusting the length to be consistent with the "negative start" per SQL.
+SELECT substr(f1, -1, 5) from toasttest;
+</sql-statement>
+<sql-statement>
+-- If the length is less than zero, an ERROR is thrown.
+SELECT substr(f1, 5, -1) from toasttest;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMap!
+    	-- If the length is less than zero, an ERROR is thrown.
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  negative substring length not allowed
+
+        	-- If the length is less than zero, an ERROR is thrown.
+	^
+<sql-statement>
+-- If no third argument (length) is provided, the length to the end of the
+-- string is assumed.
+SELECT substr(f1, 99995) from toasttest;
+</sql-statement>
+<sql-statement>
+-- If start plus length is > string length, the result is truncated to
+-- string length
+SELECT substr(f1, 99995, 10) from toasttest;
+</sql-statement>
+<sql-statement>
+TRUNCATE TABLE toasttest;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 257
+    	TRUNCATE TABLE toasttest;
+	^
+<sql-statement>
+INSERT INTO toasttest values (repeat('1234567890',300));
+</sql-statement>
+<sql-statement>
+INSERT INTO toasttest values (repeat('1234567890',300));
+</sql-statement>
+<sql-statement>
+INSERT INTO toasttest values (repeat('1234567890',300));
+</sql-statement>
+<sql-statement>
+INSERT INTO toasttest values (repeat('1234567890',300));
+</sql-statement>
+<sql-statement>
+-- expect >0 blocks
+SELECT pg_relation_size(reltoastrelid) = 0 AS is_empty
+  FROM pg_class where relname = 'toasttest';
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- expect >0 blocks
+	^
+        -stdin-:<main>:2:40: Error: At function: PgOp
+        	SELECT pg_relation_size(reltoastrelid) = 0 AS is_empty
+	                                       ^
+            -stdin-:<main>:2:8: Error: At function: PgCall
+            	SELECT pg_relation_size(reltoastrelid) = 0 AS is_empty
+	       ^
+                -stdin-:<main>:2:8: Error: Unable to find an overload for proc pg_relation_size with given argument types: (oid)
+                	SELECT pg_relation_size(reltoastrelid) = 0 AS is_empty
+	       ^
+<sql-statement>
+TRUNCATE TABLE toasttest;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: RawStmt: alternative is not implemented yet : 257
+    	TRUNCATE TABLE toasttest;
+	^
+<sql-statement>
+ALTER TABLE toasttest set (toast_tuple_target = 4080);
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	ALTER TABLE toasttest set (toast_tuple_target = 4080);
+	^
+<sql-statement>
+INSERT INTO toasttest values (repeat('1234567890',300));
+</sql-statement>
+<sql-statement>
+INSERT INTO toasttest values (repeat('1234567890',300));
+</sql-statement>
+<sql-statement>
+INSERT INTO toasttest values (repeat('1234567890',300));
+</sql-statement>
+<sql-statement>
+INSERT INTO toasttest values (repeat('1234567890',300));
+</sql-statement>
+<sql-statement>
+-- expect 0 blocks
+SELECT pg_relation_size(reltoastrelid) = 0 AS is_empty
+  FROM pg_class where relname = 'toasttest';
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	-- expect 0 blocks
+	^
+        -stdin-:<main>:2:40: Error: At function: PgOp
+        	SELECT pg_relation_size(reltoastrelid) = 0 AS is_empty
+	                                       ^
+            -stdin-:<main>:2:8: Error: At function: PgCall
+            	SELECT pg_relation_size(reltoastrelid) = 0 AS is_empty
+	       ^
+                -stdin-:<main>:2:8: Error: Unable to find an overload for proc pg_relation_size with given argument types: (oid)
+                	SELECT pg_relation_size(reltoastrelid) = 0 AS is_empty
+	       ^
+<sql-statement>
+DROP TABLE toasttest;
+</sql-statement>
+<sql-statement>
+--
+-- test substr with toasted bytea values
+--
+CREATE TABLE toasttest(f1 bytea);
+</sql-statement>
+<sql-statement>
+insert into toasttest values(decode(repeat('1234567890',10000),'escape'));
+</sql-statement>
+<sql-statement>
+insert into toasttest values(decode(repeat('1234567890',10000),'escape'));
+</sql-statement>
+<sql-statement>
+--
+-- Ensure that some values are uncompressed, to test the faster substring
+-- operation used in that case
+--
+alter table toasttest alter column f1 set storage external;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: alternative is not implemented yet : 245
+    	--
+	^
+<sql-statement>
+insert into toasttest values(decode(repeat('1234567890',10000),'escape'));
+</sql-statement>
+<sql-statement>
+insert into toasttest values(decode(repeat('1234567890',10000),'escape'));
+</sql-statement>
+<sql-statement>
+-- If the starting position is zero or less, then return from the start of the string
+-- adjusting the length to be consistent with the "negative start" per SQL.
+SELECT substr(f1, -1, 5) from toasttest;
+</sql-statement>
+<sql-statement>
+-- If the length is less than zero, an ERROR is thrown.
+SELECT substr(f1, 5, -1) from toasttest;
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: YtMap!
+    	-- If the length is less than zero, an ERROR is thrown.
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  negative substring length not allowed
+
+        	-- If the length is less than zero, an ERROR is thrown.
+	^
+<sql-statement>
+-- If no third argument (length) is provided, the length to the end of the
+-- string is assumed.
+SELECT substr(f1, 99995) from toasttest;
+</sql-statement>
+<sql-statement>
+-- If start plus length is > string length, the result is truncated to
+-- string length
+SELECT substr(f1, 99995, 10) from toasttest;
+</sql-statement>
+<sql-statement>
+DROP TABLE toasttest;
+</sql-statement>
+<sql-statement>
+-- test internally compressing datums
+-- this tests compressing a datum to a very small size which exercises a
+-- corner case in packed-varlena handling: even though small, the compressed
+-- datum must be given a 4-byte header because there are no bits to indicate
+-- compression in a 1-byte header
+CREATE TABLE toasttest (c char(4096));
+</sql-statement>
+<sql-statement>
+INSERT INTO toasttest VALUES('x');
+</sql-statement>
+<sql-statement>
+SELECT length(c), c::text FROM toasttest;
+</sql-statement>
+<sql-statement>
+SELECT c FROM toasttest;
+</sql-statement>
+<sql-statement>
+DROP TABLE toasttest;
+</sql-statement>
+<sql-statement>
+--
+-- test length
+--
+SELECT length('abcdef') AS "length_6";
+</sql-statement>
+<sql-statement>
+--
+-- test strpos
+--
+SELECT strpos('abcdef', 'cd') AS "pos_3";
+</sql-statement>
+<sql-statement>
+SELECT strpos('abcdef', 'xy') AS "pos_0";
+</sql-statement>
+<sql-statement>
+SELECT strpos('abcdef', '') AS "pos_1";
+</sql-statement>
+<sql-statement>
+SELECT strpos('', 'xy') AS "pos_0";
+</sql-statement>
+<sql-statement>
+SELECT strpos('', '') AS "pos_1";
+</sql-statement>
+<sql-statement>
+--
+-- test replace
+--
+SELECT replace('abcdef', 'de', '45') AS "abc45f";
+</sql-statement>
+<sql-statement>
+SELECT replace('yabadabadoo', 'ba', '123') AS "ya123da123doo";
+</sql-statement>
+<sql-statement>
+SELECT replace('yabadoo', 'bad', '') AS "yaoo";
+</sql-statement>
+<sql-statement>
+--
+-- test split_part
+--
+select split_part('','@',1) AS "empty string";
+</sql-statement>
+<sql-statement>
+select split_part('','@',-1) AS "empty string";
+</sql-statement>
+<sql-statement>
+select split_part('joeuser@mydatabase','',1) AS "joeuser@mydatabase";
+</sql-statement>
+<sql-statement>
+select split_part('joeuser@mydatabase','',2) AS "empty string";
+</sql-statement>
+<sql-statement>
+select split_part('joeuser@mydatabase','',-1) AS "joeuser@mydatabase";
+</sql-statement>
+<sql-statement>
+select split_part('joeuser@mydatabase','',-2) AS "empty string";
+</sql-statement>
+<sql-statement>
+select split_part('joeuser@mydatabase','@',0) AS "an error";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	select split_part('joeuser@mydatabase','@',0) AS "an error";
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  field position must not be zero
+
+        	select split_part('joeuser@mydatabase','@',0) AS "an error";
+	^
+<sql-statement>
+select split_part('joeuser@mydatabase','@@',1) AS "joeuser@mydatabase";
+</sql-statement>
+<sql-statement>
+select split_part('joeuser@mydatabase','@@',2) AS "empty string";
+</sql-statement>
+<sql-statement>
+select split_part('joeuser@mydatabase','@',1) AS "joeuser";
+</sql-statement>
+<sql-statement>
+select split_part('joeuser@mydatabase','@',2) AS "mydatabase";
+</sql-statement>
+<sql-statement>
+select split_part('joeuser@mydatabase','@',3) AS "empty string";
+</sql-statement>
+<sql-statement>
+select split_part('@joeuser@mydatabase@','@',2) AS "joeuser";
+</sql-statement>
+<sql-statement>
+select split_part('joeuser@mydatabase','@',-1) AS "mydatabase";
+</sql-statement>
+<sql-statement>
+select split_part('joeuser@mydatabase','@',-2) AS "joeuser";
+</sql-statement>
+<sql-statement>
+select split_part('joeuser@mydatabase','@',-3) AS "empty string";
+</sql-statement>
+<sql-statement>
+select split_part('@joeuser@mydatabase@','@',-2) AS "mydatabase";
+</sql-statement>
+<sql-statement>
+--
+-- test to_hex
+--
+select to_hex(256*256*256 - 1) AS "ffffff";
+</sql-statement>
+<sql-statement>
+select to_hex(256::bigint*256::bigint*256::bigint*256::bigint - 1) AS "ffffffff";
+</sql-statement>
+<sql-statement>
+--
+-- MD5 test suite - from IETF RFC 1321
+-- (see: ftp://ftp.rfc-editor.org/in-notes/rfc1321.txt)
+--
+select md5('') = 'd41d8cd98f00b204e9800998ecf8427e' AS "TRUE";
+</sql-statement>
+<sql-statement>
+select md5('a') = '0cc175b9c0f1b6a831c399e269772661' AS "TRUE";
+</sql-statement>
+<sql-statement>
+select md5('abc') = '900150983cd24fb0d6963f7d28e17f72' AS "TRUE";
+</sql-statement>
+<sql-statement>
+select md5('message digest') = 'f96b697d7cb7938d525a2f31aaf161d0' AS "TRUE";
+</sql-statement>
+<sql-statement>
+select md5('abcdefghijklmnopqrstuvwxyz') = 'c3fcd3d76192e4007dfb496cca67e13b' AS "TRUE";
+</sql-statement>
+<sql-statement>
+select md5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789') = 'd174ab98d277d9f5a5611c2c9f419d9f' AS "TRUE";
+</sql-statement>
+<sql-statement>
+select md5('12345678901234567890123456789012345678901234567890123456789012345678901234567890') = '57edf4a22be3c955ac49da2e2107b67a' AS "TRUE";
+</sql-statement>
+<sql-statement>
+select md5(''::bytea) = 'd41d8cd98f00b204e9800998ecf8427e' AS "TRUE";
+</sql-statement>
+<sql-statement>
+select md5('a'::bytea) = '0cc175b9c0f1b6a831c399e269772661' AS "TRUE";
+</sql-statement>
+<sql-statement>
+select md5('abc'::bytea) = '900150983cd24fb0d6963f7d28e17f72' AS "TRUE";
+</sql-statement>
+<sql-statement>
+select md5('message digest'::bytea) = 'f96b697d7cb7938d525a2f31aaf161d0' AS "TRUE";
+</sql-statement>
+<sql-statement>
+select md5('abcdefghijklmnopqrstuvwxyz'::bytea) = 'c3fcd3d76192e4007dfb496cca67e13b' AS "TRUE";
+</sql-statement>
+<sql-statement>
+select md5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'::bytea) = 'd174ab98d277d9f5a5611c2c9f419d9f' AS "TRUE";
+</sql-statement>
+<sql-statement>
+select md5('12345678901234567890123456789012345678901234567890123456789012345678901234567890'::bytea) = '57edf4a22be3c955ac49da2e2107b67a' AS "TRUE";
+</sql-statement>
+<sql-statement>
+--
+-- SHA-2
+--
+SET bytea_output TO hex;
+</sql-statement>
+<sql-statement>
+SELECT sha224('');
+</sql-statement>
+<sql-statement>
+SELECT sha224('The quick brown fox jumps over the lazy dog.');
+</sql-statement>
+<sql-statement>
+SELECT sha256('');
+</sql-statement>
+<sql-statement>
+SELECT sha256('The quick brown fox jumps over the lazy dog.');
+</sql-statement>
+<sql-statement>
+SELECT sha384('');
+</sql-statement>
+<sql-statement>
+SELECT sha384('The quick brown fox jumps over the lazy dog.');
+</sql-statement>
+<sql-statement>
+SELECT sha512('');
+</sql-statement>
+<sql-statement>
+SELECT sha512('The quick brown fox jumps over the lazy dog.');
+</sql-statement>
+<sql-statement>
+--
+-- encode/decode
+--
+SELECT encode('\x1234567890abcdef00', 'hex');
+</sql-statement>
+<sql-statement>
+SELECT decode('1234567890abcdef00', 'hex');
+</sql-statement>
+<sql-statement>
+SELECT encode(('\x' || repeat('1234567890abcdef0001', 7))::bytea, 'base64');
+</sql-statement>
+<sql-statement>
+SELECT decode(encode(('\x' || repeat('1234567890abcdef0001', 7))::bytea,
+                     'base64'), 'base64');
+</sql-statement>
+<sql-statement>
+SELECT encode('\x1234567890abcdef00', 'escape');
+</sql-statement>
+<sql-statement>
+SELECT decode(encode('\x1234567890abcdef00', 'escape'), 'escape');
+</sql-statement>
+<sql-statement>
+--
+-- get_bit/set_bit etc
+--
+SELECT get_bit('\x1234567890abcdef00'::bytea, 43);
+</sql-statement>
+<sql-statement>
+SELECT get_bit('\x1234567890abcdef00'::bytea, 99);  -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT get_bit('\x1234567890abcdef00'::bytea, 99);  -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  index 99 out of valid range, 0..71
+
+        	SELECT get_bit('\x1234567890abcdef00'::bytea, 99);  -- error
+	^
+<sql-statement>
+SELECT set_bit('\x1234567890abcdef00'::bytea, 43, 0);
+</sql-statement>
+<sql-statement>
+SELECT set_bit('\x1234567890abcdef00'::bytea, 99, 0);  -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT set_bit('\x1234567890abcdef00'::bytea, 99, 0);  -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  index 99 out of valid range, 0..71
+
+        	SELECT set_bit('\x1234567890abcdef00'::bytea, 99, 0);  -- error
+	^
+<sql-statement>
+SELECT get_byte('\x1234567890abcdef00'::bytea, 3);
+</sql-statement>
+<sql-statement>
+SELECT get_byte('\x1234567890abcdef00'::bytea, 99);  -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT get_byte('\x1234567890abcdef00'::bytea, 99);  -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  index 99 out of valid range, 0..8
+
+        	SELECT get_byte('\x1234567890abcdef00'::bytea, 99);  -- error
+	^
+<sql-statement>
+SELECT set_byte('\x1234567890abcdef00'::bytea, 7, 11);
+</sql-statement>
+<sql-statement>
+SELECT set_byte('\x1234567890abcdef00'::bytea, 99, 11);  -- error
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT set_byte('\x1234567890abcdef00'::bytea, 99, 11);  -- error
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  index 99 out of valid range, 0..8
+
+        	SELECT set_byte('\x1234567890abcdef00'::bytea, 99, 11);  -- error
+	^
+<sql-statement>
+--
+-- test behavior of escape_string_warning and standard_conforming_strings options
+--
+set escape_string_warning = off;
+</sql-statement>
+<sql-statement>
+set standard_conforming_strings = off;
+</sql-statement>
+<sql-statement>
+show escape_string_warning;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unrecognized configuration parameter "escape_string_warning"
+    	show escape_string_warning;
+	^
+<sql-statement>
+show standard_conforming_strings;
+</sql-statement>
+<sql-statement>
+set escape_string_warning = on;
+</sql-statement>
+<sql-statement>
+set standard_conforming_strings = on;
+</sql-statement>
+<sql-statement>
+show escape_string_warning;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:1: Error: unrecognized configuration parameter "escape_string_warning"
+    	show escape_string_warning;
+	^
+<sql-statement>
+show standard_conforming_strings;
+</sql-statement>
+<sql-statement>
+select 'a\bcd' as f1, 'a\b''cd' as f2, 'a\b''''cd' as f3, 'abcd\'   as f4, 'ab\''cd' as f5, '\\' as f6;
+</sql-statement>
+<sql-statement>
+set standard_conforming_strings = off;
+</sql-statement>
+<sql-statement>
+select 'a\\bcd' as f1, 'a\\b\'cd' as f2, 'a\\b\'''cd' as f3, 'abcd\\'   as f4, 'ab\\\'cd' as f5, '\\\\' as f6;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:34: Error: ERROR:  syntax error at or near "' as f2, '"
+
+    	select 'a\\bcd' as f1, 'a\\b\'cd' as f2, 'a\\b\'''cd' as f3, 'abcd\\'   as f4, 'ab\\\'cd' as f5, '\\\\' as f6;
+	                                 ^
+<sql-statement>
+set escape_string_warning = off;
+</sql-statement>
+<sql-statement>
+set standard_conforming_strings = on;
+</sql-statement>
+<sql-statement>
+select 'a\bcd' as f1, 'a\b''cd' as f2, 'a\b''''cd' as f3, 'abcd\'   as f4, 'ab\''cd' as f5, '\\' as f6;
+</sql-statement>
+<sql-statement>
+set standard_conforming_strings = off;
+</sql-statement>
+<sql-statement>
+select 'a\\bcd' as f1, 'a\\b\'cd' as f2, 'a\\b\'''cd' as f3, 'abcd\\'   as f4, 'ab\\\'cd' as f5, '\\\\' as f6;
+</sql-statement>
+-stdin-:<main>: Error: Parse Sql
+
+    -stdin-:<main>:1:34: Error: ERROR:  syntax error at or near "' as f2, '"
+
+    	select 'a\\bcd' as f1, 'a\\b\'cd' as f2, 'a\\b\'''cd' as f3, 'abcd\\'   as f4, 'ab\\\'cd' as f5, '\\\\' as f6;
+	                                 ^
+<sql-statement>
+reset standard_conforming_strings;
+</sql-statement>
+<sql-statement>
+--
+-- Additional string functions
+--
+SET bytea_output TO escape;
+</sql-statement>
+<sql-statement>
+SELECT initcap('hi THOMAS');
+</sql-statement>
+<sql-statement>
+SELECT lpad('hi', 5, 'xy');
+</sql-statement>
+<sql-statement>
+SELECT lpad('hi', 5);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT lpad('hi', 5);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT lpad('hi', 5);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc lpad with given argument types: (unknown,int4)
+            	SELECT lpad('hi', 5);
+	       ^
+<sql-statement>
+SELECT lpad('hi', -5, 'xy');
+</sql-statement>
+<sql-statement>
+SELECT lpad('hello', 2);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT lpad('hello', 2);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT lpad('hello', 2);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc lpad with given argument types: (unknown,int4)
+            	SELECT lpad('hello', 2);
+	       ^
+<sql-statement>
+SELECT lpad('hi', 5, '');
+</sql-statement>
+<sql-statement>
+SELECT rpad('hi', 5, 'xy');
+</sql-statement>
+<sql-statement>
+SELECT rpad('hi', 5);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT rpad('hi', 5);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT rpad('hi', 5);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc rpad with given argument types: (unknown,int4)
+            	SELECT rpad('hi', 5);
+	       ^
+<sql-statement>
+SELECT rpad('hi', -5, 'xy');
+</sql-statement>
+<sql-statement>
+SELECT rpad('hello', 2);
+</sql-statement>
+-stdin-:<main>: Error: Type annotation
+
+    -stdin-:<main>:1:1: Error: At function: RemovePrefixMembers, At function: PgSelect, At function: PgSetItem, At function: PgResultItem
+    	SELECT rpad('hello', 2);
+	^
+        -stdin-:<main>:1:8: Error: At function: PgCall
+        	SELECT rpad('hello', 2);
+	       ^
+            -stdin-:<main>:1:8: Error: Unable to find an overload for proc rpad with given argument types: (unknown,int4)
+            	SELECT rpad('hello', 2);
+	       ^
+<sql-statement>
+SELECT rpad('hi', 5, '');
+</sql-statement>
+<sql-statement>
+SELECT ltrim('zzzytrim', 'xyz');
+</sql-statement>
+<sql-statement>
+SELECT translate('', '14', 'ax');
+</sql-statement>
+<sql-statement>
+SELECT translate('12345', '14', 'ax');
+</sql-statement>
+<sql-statement>
+SELECT ascii('x');
+</sql-statement>
+<sql-statement>
+SELECT ascii('');
+</sql-statement>
+<sql-statement>
+SELECT chr(65);
+</sql-statement>
+<sql-statement>
+SELECT chr(0);
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT chr(0);
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  null character not permitted
+
+        	SELECT chr(0);
+	^
+<sql-statement>
+SELECT repeat('Pg', 4);
+</sql-statement>
+<sql-statement>
+SELECT repeat('Pg', -4);
+</sql-statement>
+<sql-statement>
+SELECT SUBSTRING('1234567890'::bytea FROM 3) "34567890";
+</sql-statement>
+<sql-statement>
+SELECT SUBSTRING('1234567890'::bytea FROM 4 FOR 3) AS "456";
+</sql-statement>
+<sql-statement>
+SELECT SUBSTRING('string'::bytea FROM 2 FOR 2147483646) AS "tring";
+</sql-statement>
+<sql-statement>
+SELECT SUBSTRING('string'::bytea FROM -10 FOR 2147483646) AS "string";
+</sql-statement>
+<sql-statement>
+SELECT SUBSTRING('string'::bytea FROM -10 FOR -2147483646) AS "error";
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT SUBSTRING('string'::bytea FROM -10 FOR -2147483646) AS "error";
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  negative substring length not allowed
+
+        	SELECT SUBSTRING('string'::bytea FROM -10 FOR -2147483646) AS "error";
+	^
+<sql-statement>
+SELECT trim(E'\\000'::bytea from E'\\000Tom\\000'::bytea);
+</sql-statement>
+<sql-statement>
+SELECT trim(leading E'\\000'::bytea from E'\\000Tom\\000'::bytea);
+</sql-statement>
+<sql-statement>
+SELECT trim(trailing E'\\000'::bytea from E'\\000Tom\\000'::bytea);
+</sql-statement>
+<sql-statement>
+SELECT btrim(E'\\000trim\\000'::bytea, E'\\000'::bytea);
+</sql-statement>
+<sql-statement>
+SELECT btrim(''::bytea, E'\\000'::bytea);
+</sql-statement>
+<sql-statement>
+SELECT btrim(E'\\000trim\\000'::bytea, ''::bytea);
+</sql-statement>
+<sql-statement>
+SELECT encode(overlay(E'Th\\000omas'::bytea placing E'Th\\001omas'::bytea from 2),'escape');
+</sql-statement>
+<sql-statement>
+SELECT encode(overlay(E'Th\\000omas'::bytea placing E'\\002\\003'::bytea from 8),'escape');
+</sql-statement>
+<sql-statement>
+SELECT encode(overlay(E'Th\\000omas'::bytea placing E'\\002\\003'::bytea from 5 for 3),'escape');
+</sql-statement>
+<sql-statement>
+SELECT bit_count('\x1234567890'::bytea);
+</sql-statement>
+<sql-statement>
+SELECT unistr('\0064at\+0000610');
+</sql-statement>
+<sql-statement>
+SELECT unistr('d\u0061t\U000000610');
+</sql-statement>
+<sql-statement>
+SELECT unistr('a\\b');
+</sql-statement>
+<sql-statement>
+-- errors:
+SELECT unistr('wrong: \db99');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	-- errors:
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid Unicode surrogate pair
+
+        	-- errors:
+	^
+<sql-statement>
+SELECT unistr('wrong: \db99\0061');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT unistr('wrong: \db99\0061');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid Unicode surrogate pair
+
+        	SELECT unistr('wrong: \db99\0061');
+	^
+<sql-statement>
+SELECT unistr('wrong: \+00db99\+000061');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT unistr('wrong: \+00db99\+000061');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid Unicode surrogate pair
+
+        	SELECT unistr('wrong: \+00db99\+000061');
+	^
+<sql-statement>
+SELECT unistr('wrong: \+2FFFFF');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT unistr('wrong: \+2FFFFF');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid Unicode code point: 2FFFFF
+
+        	SELECT unistr('wrong: \+2FFFFF');
+	^
+<sql-statement>
+SELECT unistr('wrong: \udb99\u0061');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT unistr('wrong: \udb99\u0061');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid Unicode surrogate pair
+
+        	SELECT unistr('wrong: \udb99\u0061');
+	^
+<sql-statement>
+SELECT unistr('wrong: \U0000db99\U00000061');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT unistr('wrong: \U0000db99\U00000061');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid Unicode surrogate pair
+
+        	SELECT unistr('wrong: \U0000db99\U00000061');
+	^
+<sql-statement>
+SELECT unistr('wrong: \U002FFFFF');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT unistr('wrong: \U002FFFFF');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid Unicode code point: 2FFFFF
+
+        	SELECT unistr('wrong: \U002FFFFF');
+	^
+<sql-statement>
+SELECT unistr('wrong: \xyz');
+</sql-statement>
+-stdin-:<main>: Fatal: Execution
+
+    -stdin-:<main>:1:1: Fatal: Execution of node: Result
+    	SELECT unistr('wrong: \xyz');
+	^
+        -stdin-:<main>:1:1: Fatal: ERROR:  invalid Unicode escape
+HINT:  Unicode escapes must be \XXXX, \+XXXXXX, \uXXXX, or \UXXXXXXXX.
+
+        	SELECT unistr('wrong: \xyz');
+	^

@@ -1,0 +1,31 @@
+(
+(library "joins.yql")
+(import join_module '"joins.yql")
+
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+# Same as InputKV1
+(let list1 (AsList 
+  (AsStruct '('key (String '1)) '('v1 (String 'v11)))
+  (AsStruct '('key (String '2)) '('v1 (String 'v12)))
+  (AsStruct '('key (String '2)) '('v1 (String 'v12)))
+  (AsStruct '('key (String '2)) '('v1 (String 'v12)))
+  (AsStruct '('key (String '3)) '('v1 (String 'v13)))
+  (AsStruct '('key (String '3)) '('v1 (String 'v13)))
+))
+
+# Same as InputKV2
+(let list2 (AsList
+  (AsStruct '('key (String '2)) '('v2 (String 'v22_extra_bytes)))
+  (AsStruct '('key (String '2)) '('v2 (String 'v22_extra_bytes)))
+  (AsStruct '('key (String '3)) '('v2 (String 'v23_extra_bytes)))
+  (AsStruct '('key (String '3)) '('v2 (String 'v23_extra_bytes)))
+  (AsStruct '('key (String '3)) '('v2 (String 'v23_extra_bytes)))
+  (AsStruct '('key (String '4)) '('v2 (String 'v24_extra_bytes)))
+))
+
+(let world (Apply (bind join_module 'doAllJoinsExceptCrossEx) world list1 list2 '('('left 'any))))
+
+(return world)
+)

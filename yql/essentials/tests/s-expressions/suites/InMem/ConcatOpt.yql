@@ -1,0 +1,572 @@
+(
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(import aggregate_module '"/lib/yql/aggregate.yql")
+(import window_module '"/lib/yql/window.yql")
+(import core_module '"/lib/yql/core.yql")
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" (String '"a") (String '"b")))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Just" (String '"a")) (String '"b")))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" (String '"a") ("Just" (String '"b"))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Just" (String '"a")) (String '"b")))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Nothing" ("OptionalType" ("DataType" '"String"))) (String '"b")))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" (String '"a") ("Nothing" ("OptionalType" ("DataType" '"String")))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Nothing" ("OptionalType" ("DataType" '"String"))) ("Nothing" ("OptionalType" ("DataType" '"String")))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" (String '"a") ("Unwrap" (Cast (String '"b") 'Utf8))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Just" (String '"a")) ("Unwrap" (Cast (String '"b") 'Utf8))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" (String '"a") ("Just" ("Unwrap" (Cast (String '"b") 'Utf8)))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Just" (String '"a")) ("Unwrap" (Cast (String '"b") 'Utf8))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Nothing" ("OptionalType" ("DataType" '"String"))) ("Unwrap" (Cast (String '"b") 'Utf8))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" (String '"a") ("Nothing" ("OptionalType" ("DataType" '"Utf8")))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Nothing" ("OptionalType" ("DataType" '"String"))) ("Nothing" ("OptionalType" ("DataType" '"Utf8")))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Unwrap" (Cast (String '"a") 'Utf8)) (String '"b")))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Just" ("Unwrap" (Cast (String '"a") 'Utf8))) (String '"b")))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Unwrap" (Cast (String '"a") 'Utf8)) ("Just" (String '"b"))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Just" ("Unwrap" (Cast (String '"a") 'Utf8))) (String '"b")))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Nothing" ("OptionalType" ("DataType" '"Utf8"))) (String '"b")))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Unwrap" (Cast (String '"a") 'Utf8)) ("Nothing" ("OptionalType" ("DataType" '"String")))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Nothing" ("OptionalType" ("DataType" '"Utf8"))) ("Nothing" ("OptionalType" ("DataType" '"String")))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Unwrap" (Cast (String '"a") 'Utf8)) ("Unwrap" (Cast (String '"b") 'Utf8))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Just" ("Unwrap" (Cast (String '"a") 'Utf8))) ("Unwrap" (Cast (String '"b") 'Utf8))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Unwrap" (Cast (String '"a") 'Utf8)) ("Just" ("Unwrap" (Cast (String '"b") 'Utf8)))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Just" ("Unwrap" (Cast (String '"a") 'Utf8))) ("Unwrap" (Cast (String '"b") 'Utf8))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Nothing" ("OptionalType" ("DataType" '"Utf8"))) ("Unwrap" (Cast (String '"b") 'Utf8))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Unwrap" (Cast (String '"a") 'Utf8)) ("Nothing" ("OptionalType" ("DataType" '"Utf8")))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (let output (block '(
+    (let select (block '(
+      (let core (AsList (Uint32 '0)))
+      (let core (FlatMap core (lambda '(row) (block '(
+        (let res (AsStruct '('"column0" ("Concat" ("Nothing" ("OptionalType" ("DataType" '"Utf8"))) ("Nothing" ("OptionalType" ("DataType" '"Utf8")))))))
+        (let res (AsList res))
+        (return res)
+      )))))
+      (return core)
+    )))
+    (return select)
+  )))
+  (let world (block '(
+    (let result_sink (DataSink 'result))
+    (let world (Write! world result_sink (Key) output '('('type) '('autoref) '('columns '('"column0")))))
+    (return (Commit! world result_sink))
+  )))
+  (return world)
+)))
+(let world (block '(
+  (return world)
+)))
+(return world)
+)

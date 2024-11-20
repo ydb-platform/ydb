@@ -1,0 +1,14 @@
+(
+#comment
+(let config (DataSource 'config))
+(let world (Configure! world config 'PureDataSource 'yt))
+
+(let res_sink (DataSink 'result))
+(let fromString (Udf 'Callables.FromString))
+(let mul (Udf 'Callables.Mul))
+(let list (AsList (String '1) (String '2) (String '3) (String '4) (String '5)))
+(let data (Apply mul list fromString))
+(let world (Write! world res_sink (Key) data '()))
+(let world (Commit! world res_sink))
+(return world)
+)

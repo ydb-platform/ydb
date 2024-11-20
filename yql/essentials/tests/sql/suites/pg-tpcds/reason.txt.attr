@@ -1,0 +1,9 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+              ["r_reason_sk";["PgType";"int4";];];
+              ["r_reason_id";["PgType";"text";];];
+              ["r_reason_desc";["PgType";"text";];];
+        ];];
+    }
+}

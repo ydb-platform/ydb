@@ -1,0 +1,6 @@
+{"K"=101;"J"="{ \"who\": \"Fred\", \"where\": \"General Products\", \"friends\": [ { \"name\": \"Lili\", \"rank\": 5 }, {\"name\": \"Hank\", \"rank\": 7} ] }"};
+{"K"=102;"J"="{ \"who\": \"Tom\", \"where\": \"MultiCorp\", \"friends\": [ { \"name\": \"Sharon\", \"rank\": 2}, {\"name\": \"Monty\", \"rank\": 3} ] }"};
+{"K"=103;"J"="{ \"who\": \"Jack\",\"friends\": [ { \"name\": \"Connie\" } ] }"};
+{"K"=104;"J"="{ \"who\": \"Joe\",\"friends\": [ { \"name\": \"Doris\" }, {\"rank\": 1} ] }"};
+{"K"=105;"J"="{ \"who\": \"Mabel\", \"where\": \"Black Label\",\"friends\": [ { \"name\": \"Buck\", \"rank\": 6} ] }"};
+{"K"=106;"J"="{ \"who\": \"Louise\", \"where\": \"Iana\" }"};

@@ -62,7 +62,7 @@ TString TObject::GetIndexTablePath() const {
 
 bool TObject::TryProvideTtl(const NKikimrSchemeOp::TColumnTableDescription& csDescription, Ydb::Table::CreateTableRequest* cRequest) {
     if (csDescription.HasTtlSettings() && csDescription.GetTtlSettings().HasEnabled()) {
-        auto ttl = csDescription.GetTtlSettings().GetEnabled();
+        auto& ttl = csDescription.GetTtlSettings().GetEnabled();
         if (!ttl.HasExpireAfterSeconds()) {
             return false;
         }
@@ -76,8 +76,9 @@ bool TObject::TryProvideTtl(const NKikimrSchemeOp::TColumnTableDescription& csDe
             return false;
         }
         if (cRequest) {
-            ttl.SetColumnName("pk_" + ttl.GetColumnName());
-            FillTtlSettings(*cRequest->mutable_ttl_settings(), ttl);
+            auto newTtl = ttl;
+            newTtl.SetColumnName("pk_" + ttl.GetColumnName());
+            FillTtlSettings(*cRequest->mutable_ttl_settings(), newTtl);
         }
     }
     return true;

@@ -99,17 +99,22 @@ The `ydbops` utility will automatically create a maintenance task to restart the
 To take out a host for maintenance you can use the following algorithm:
 
 1) Create a maintenance task using the command:
+
     ```bash
     $ ydbops maintenance create --hosts=<fqdn> --duration=<seconds>
     ```
+
     This command will create a maintenance task that will acquire an exclusive lock for `<seconds>` seconds on the host with the fully qualified domain name `<fqdn>`.
 2) After creating a task, you should refresh its state until the lock is taken, using the command:
+
     ```bash
     $ ydbops maintenance refresh --task-id=<id>
     ```
+
     This command will refresh the task with identifier `<id>` and attempt to acquire the required lock. When a `PERFORMED` response is received, you can move on to the next item.
 3) Perform host maintenance while the lock is acquired.
 4) After the maintenance is complete, you need to release the lock, using the command:
+
     ```bash
     $ ydbops maintenance complete --task-id=<id> --hosts=<fqdn>
     ```

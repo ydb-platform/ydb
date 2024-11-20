@@ -51,7 +51,7 @@ namespace NKikimr {
             const TIntrusivePtr<::NMonitoring::TDynamicCounters> &groupCounters,
             const NBackpressure::TQueueClientId &queueClientId, NKikimrBlobStorage::EVDiskQueueId vDiskQueueId,
             const TString &queueName, TInterconnectChannels::EInterconnectChannels interconnectChannel,
-            TWrapper wrapper = {})
+            const bool useActorSystemTimeInBSQueue, TWrapper wrapper = {})
     {
         for (auto &vdiskInfo : disks) {
             auto vdisk = GetVDiskID(vdiskInfo);
@@ -62,7 +62,8 @@ namespace NKikimr {
                 queue.reset(CreateVDiskBackpressureClient(gInfo, vdisk,
                         vDiskQueueId, groupCounters, vCtx, queueClientId, queueName,
                         interconnectChannel, vdiskActorId.NodeId() == parent.NodeId(),
-                        TDuration::Minutes(1), flowRecord, NMonitoring::TCountableBase::EVisibility::Private));
+                        TDuration::Minutes(1), flowRecord, NMonitoring::TCountableBase::EVisibility::Private,
+                        useActorSystemTimeInBSQueue));
                 TActorId serviceId = TActivationContext::Register(queue.release(), parent);
                 EmplaceToContainer(cont, vdisk, wrapper.Wrap(std::move(serviceId)));
             }

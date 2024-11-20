@@ -139,25 +139,18 @@ public:
         return ERequestType::Patch;
     }
 
-    TBlobStorageGroupPatchRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-            const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-            const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvPatch *ev,
-            ui64 cookie, NWilson::TSpan&& span, TInstant now,
-            TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
-            bool useVPatch = false)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie,
-                NKikimrServices::BS_PROXY_PATCH, false, {}, now, storagePoolCounters,
-                ev->RestartCounter, std::move(span), std::move(ev->ExecutionRelay))
-        , OriginalGroupId(TGroupId::FromValue(ev->OriginalGroupId))
-        , OriginalId(ev->OriginalId)
-        , PatchedId(ev->PatchedId)
-        , MaskForCookieBruteForcing(ev->MaskForCookieBruteForcing)
-        , DiffCount(ev->DiffCount)
-        , Diffs(ev->Diffs.Release())
-        , StartTime(now)
-        , Deadline(ev->Deadline)
-        , Orbit(std::move(ev->Orbit))
-        , UseVPatch(useVPatch)
+    TBlobStorageGroupPatchRequest(TBlobStorageGroupPatchParameters& params)
+        : TBlobStorageGroupRequestActor(params)
+        , OriginalGroupId(TGroupId::FromValue(params.Common.Event->OriginalGroupId))
+        , OriginalId(params.Common.Event->OriginalId)
+        , PatchedId(params.Common.Event->PatchedId)
+        , MaskForCookieBruteForcing(params.Common.Event->MaskForCookieBruteForcing)
+        , DiffCount(params.Common.Event->DiffCount)
+        , Diffs(params.Common.Event->Diffs.Release())
+        , StartTime(params.Common.Now)
+        , Deadline(params.Common.Event->Deadline)
+        , Orbit(std::move(params.Common.Event->Orbit))
+        , UseVPatch(params.UseVPatch)
     {}
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
@@ -1045,19 +1038,13 @@ public:
     }
 };
 
-IActor* CreateBlobStorageGroupPatchRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-        const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
-        const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvPatch *ev,
-        ui64 cookie, NWilson::TTraceId traceId, TInstant now,
-        TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
-        bool useVPatch) {
+IActor* CreateBlobStorageGroupPatchRequest(TBlobStorageGroupPatchParameters params, NWilson::TTraceId traceId) {
     NWilson::TSpan span(TWilson::BlobStorage, std::move(traceId), "DSProxy.Patch");
     if (span) {
-        span.Attribute("event", ev->ToString());
+        span.Attribute("event", params.Common.Event->ToString());
     }
-
-    return new TBlobStorageGroupPatchRequest(info, state, source, mon, ev, cookie, std::move(span), now,
-        storagePoolCounters, useVPatch);
+    params.Common.Span = std::move(span);
+    return new TBlobStorageGroupPatchRequest(params);
 }
 
 }//NKikimr

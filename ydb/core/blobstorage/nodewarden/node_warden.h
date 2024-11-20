@@ -37,6 +37,7 @@ namespace NKikimr {
 
         // debugging options
         bool VDiskReplPausedAtStart = false;
+        bool UseActorSystemTimeInBSQueue = false;
 
         TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
             : PDiskServiceFactory(pDiskServiceFactory)

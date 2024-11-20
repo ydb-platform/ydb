@@ -14,7 +14,8 @@ namespace NKikimr {
 
     public:
         EStrategyOutcome Process(TLogContext& logCtx, TBlobState& state, const TBlobStorageGroupInfo& info,
-                TBlackboard& blackboard, TGroupDiskRequests& groupDiskRequests) override {
+                TBlackboard& blackboard, TGroupDiskRequests& groupDiskRequests,
+                const TAccelerationParams& accelerationParams) override {
             if (state.WholeSituation == TBlobState::ESituation::Present) {
                 return EStrategyOutcome::DONE;
             }
@@ -55,7 +56,7 @@ namespace NKikimr {
                     state.Id.ToString().c_str(), ui32(state.WholeSituation));
             state.WholeSituation = TBlobState::ESituation::Present;
             const EStrategyOutcome outcome = TPut3dcStrategy(TEvBlobStorage::TEvPut::TacticMaxThroughput, false).Process(logCtx,
-                state, info, blackboard, groupDiskRequests);
+                state, info, blackboard, groupDiskRequests, accelerationParams);
             switch (outcome) {
                 case EStrategyOutcome::IN_PROGRESS:
                     state.WholeSituation = TBlobState::ESituation::Unknown;

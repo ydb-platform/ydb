@@ -9,8 +9,8 @@ from yql_utils import replace_vals, yql_binary_path, is_xfail, get_param, \
     get_gateway_cfg_suffix, normalize_result, stable_result_file, stable_table_file, \
     dump_table_yson, normalize_source_code_path
 
-from utils import get_config, DATA_PATH
-from file_common import run_file, run_file_no_cache
+from test_utils import get_config, DATA_PATH
+from test_file_common import run_file, run_file_no_cache
 
 ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 DQRUN_PATH = yql_binary_path('ydb/library/yql/tools/dqrun/dqrun')
@@ -71,7 +71,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             to_canonize.append(normalize_source_code_path(res.std_err))
 
         return
-    
+
     if what == 'Plan':
         to_canonize = [yatest.common.canonical_file(res.plan_file)]
 

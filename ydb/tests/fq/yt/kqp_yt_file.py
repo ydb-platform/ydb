@@ -2,9 +2,9 @@ import codecs
 
 import pytest
 
-from file_common import check_provider, get_sql_query
+from test_file_common import check_provider, get_sql_query
 from kqprun import KqpRun
-from utils import DATA_PATH, get_config, get_parameters_files, replace_vars
+from test_utils import DATA_PATH, get_config, get_parameters_files, replace_vars
 from yql_utils import KSV_ATTR, get_files, get_http_files, get_tables, is_xfail, yql_binary_path, yql_source_path
 
 EXCLUDED_SUITES = [

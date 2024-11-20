@@ -515,9 +515,6 @@ message TtlSettings {
     // BRO will not be started more often, but may be started less often.
     uint32 run_interval_seconds = 3;
 
-    // List of storage tiers. This value is ignored for deprecated ttl modes:
-    // * date_type_column
-    // * value_since_unix_epoch
     repeated TtlTier tiers = 6;
 }
 

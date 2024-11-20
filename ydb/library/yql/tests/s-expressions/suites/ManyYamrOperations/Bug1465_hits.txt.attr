@@ -1,3 +1,0 @@
-{
-    "_yql_row_spec"={"Type"=["StructType";[["url";["OptionalType";["DataType";"String"]]];["history.date";["OptionalType";["DataType";"String"]]]]]}
-}

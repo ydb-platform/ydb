@@ -32,6 +32,7 @@ DEPENDS(
 
 DATA(
     arcadia/ydb/library/yql/tests/s-expressions # python files
+    arcadia/yql/essentials/tests/s-expressions/suites
     arcadia/yql/essentials/mount
     arcadia/yql/essentials/cfg/tests
 )

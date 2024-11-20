@@ -11,7 +11,7 @@ import pytest
 import yql_utils
 from yql_utils import get_supported_providers, yql_binary_path, yql_source_path, get_param, new_table, volatile_attrs
 
-DATA_PATH = yql_source_path('ydb/library/yql/tests/s-expressions/suites')
+DATA_PATH = yql_source_path('yql/essentials/tests/s-expressions/suites')
 try:
     ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 except Exception as e:

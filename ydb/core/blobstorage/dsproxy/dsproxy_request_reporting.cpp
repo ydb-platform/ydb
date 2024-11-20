@@ -2,49 +2,102 @@
 
 namespace NKikimr {
 
-static std::array<std::atomic<bool>, NKikimrBlobStorage::EPutHandleClass_MAX + 1> ReportPutPermissions;
-static std::array<std::atomic<bool>, NKikimrBlobStorage::EGetHandleClass_MAX + 1> ReportGetPermissions;
+struct TReportLeakBucket {
+    ui64 Level;
+    TInstant LastUpdate;
+    TMutex Lock;
+};
+
+static std::array<TReportLeakBucket, NKikimrBlobStorage::EPutHandleClass_MAX + 1> ReportPutPermissions;
+static std::array<TReportLeakBucket, NKikimrBlobStorage::EGetHandleClass_MAX + 1> ReportGetPermissions;
 
 bool AllowToReport(NKikimrBlobStorage::EPutHandleClass handleClass) {
-    return ReportPutPermissions[(ui32)handleClass].exchange(false);
+    auto& permission = ReportPutPermissions[(ui32)handleClass];
+    TGuard<TMutex> guard(permission.Lock);
+    auto level = permission.Level;
+    permission.Level = std::max((i64)0, (i64)level - 1);
+    return level > 0;
 }
 
 bool AllowToReport(NKikimrBlobStorage::EGetHandleClass handleClass) {
-    return ReportGetPermissions[(ui32)handleClass].exchange(false);
+    auto& permission = ReportGetPermissions[(ui32)handleClass];
+    TGuard<TMutex> guard(permission.Lock);
+    auto level = permission.Level;
+    permission.Level = std::max((i64)0, (i64)level - 1);
+    return level > 0;
 }
 
 class TRequestReportingThrottler : public TActorBootstrapped<TRequestReportingThrottler> {
 public:
-    TRequestReportingThrottler(const TControlWrapper& reportingDelayMs)
-        : ReportingDelayMs(reportingDelayMs)
-    {}
+    TRequestReportingThrottler(const TControlWrapper& bucketSize, const TControlWrapper& leakDurationMs,
+            const TControlWrapper& leakRate, const TControlWrapper& updatingDurationMs)
+        : BucketSize(bucketSize)
+        , LeakDurationMs(leakDurationMs)
+        , LeakRate(leakRate)
+        , UpdatingDurationMs(updatingDurationMs)
+    {
+        for (auto& permission : ReportPutPermissions) {
+            permission.Level = BucketSize;
+        }
+        for (auto& permission : ReportGetPermissions) {
+            permission.Level = BucketSize;
+        }
+    }
 
-    void Bootstrap() {
+    void Bootstrap(const TActorContext &ctx) {
+        for (auto& permission : ReportPutPermissions) {
+            permission.LastUpdate = ctx.Now();
+        }
+        for (auto& permission : ReportGetPermissions) {
+            permission.LastUpdate = ctx.Now();
+        }
         Become(&TThis::StateFunc);
-        HandleWakeup();
+        HandleWakeup(ctx);
     }
 
     STRICT_STFUNC(StateFunc,
-        cFunc(TEvents::TEvWakeup::EventType, HandleWakeup);
+        CFunc(TEvents::TEvWakeup::EventType, HandleWakeup);
     )
 
 private:
-    void HandleWakeup() {
-        for (std::atomic<bool>& permission : ReportPutPermissions) {
-            permission.store(true);
+    void Update(const TInstant& now, TInstant& lastUpdate, ui64& bucketLevel) {
+        ui64 bucketSize = BucketSize.Update(now);
+        ui64 leakRate = LeakRate.Update(now);
+        ui64 leakDurationMs = LeakDurationMs.Update(now);
+
+        ui64 msSinceLastUpdate = (now - lastUpdate).MilliSeconds();
+        ui64 intervalsCount = msSinceLastUpdate / leakDurationMs;
+        if (bucketLevel == bucketSize) {
+            lastUpdate = now;
+            return;
         }
-        for (std::atomic<bool>& permission : ReportGetPermissions) {
-            permission.store(true);
+        lastUpdate += TDuration::MilliSeconds(intervalsCount * leakDurationMs);
+        bucketLevel = std::min(bucketLevel + leakRate * intervalsCount, bucketSize);
+    }
+
+    void HandleWakeup(const TActorContext& ctx) {
+        TInstant now = ctx.Now();
+        for (auto& permission : ReportPutPermissions) {
+            TGuard<TMutex> guard(permission.Lock);
+            Update(now, permission.LastUpdate, permission.Level);
         }
-        Schedule(TDuration::MilliSeconds(ReportingDelayMs.Update(TActivationContext::Now())), new TEvents::TEvWakeup);
+        for (auto& permission : ReportGetPermissions) {
+            TGuard<TMutex> guard(permission.Lock);
+            Update(now, permission.LastUpdate, permission.Level);
+        }
+        Schedule(TDuration::MilliSeconds(UpdatingDurationMs.Update(now)), new TEvents::TEvWakeup);
     }   
 
 private:
-    TMemorizableControlWrapper ReportingDelayMs;
+    TMemorizableControlWrapper BucketSize;
+    TMemorizableControlWrapper LeakDurationMs;
+    TMemorizableControlWrapper LeakRate;
+    TMemorizableControlWrapper UpdatingDurationMs;
 };
 
-IActor* CreateRequestReportingThrottler(const TControlWrapper& reportingDelayMs) {
-    return new TRequestReportingThrottler(reportingDelayMs);
+IActor* CreateRequestReportingThrottler(const TControlWrapper& bucketSize, const TControlWrapper& leakDurationMs,
+        const TControlWrapper& leakRate, const TControlWrapper& updatingDurationMs) {
+    return new TRequestReportingThrottler(bucketSize, leakDurationMs, leakRate, updatingDurationMs);
 }
 
 } // namespace NKikimr

@@ -4,7 +4,9 @@
 
 | Metric name<br/>Type, units of measurement | Description<br/>Labels |
 | ----- | ----- |
-| `resources.storage.used_bytes`<br/>`IGAUGE`, bytes | The size of user and service data stored in distributed network storage. Housekeeping data include the data of the primary and [secondary indexes](../../../concepts/secondary_indexes.md). |
+| `resources.storage.used_bytes`<br/>`IGAUGE`, bytes | The size of user and service data stored in distributed network storage. Is equal to `resources.storage.table.used_bytes` + `resources.storage.topic.used_bytes`. |
+| `resources.storage.table.used_bytes`<br/>`IGAUGE`, bytes | The size of user and service data stored by tables in distributed network storage. Housekeeping data include the data of the primary and [secondary indexes](../../../concepts/secondary_indexes.md). |
+| `resources.storage.topic.used_bytes`<br/>`IGAUGE`, bytes | The size of storage used by topics. |
 | `resources.storage.limit_bytes`<br/>`IGAUGE`, bytes | A limit on the size of user and service data that a database can store in distributed network storage. |
 
 ## API metrics {#api}

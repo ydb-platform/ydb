@@ -27,7 +27,10 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
     if (source->NeedAccessorsFetching()) {
         if (!AskAccumulatorsScript) {
             AskAccumulatorsScript = std::make_shared<TFetchingScript>(*this);
-            AskAccumulatorsScript->AddStep(std::make_shared<TPortionAccessorFetchingStep>());
+            if (ui64 size = source->PredictAccessorsMemory()) {
+                AskAccumulatorsScript->AddStep<TAllocateMemoryStep>(size, EStageFeaturesIndexes::Accessors);
+            }
+            AskAccumulatorsScript->AddStep<TPortionAccessorFetchingStep>();
         }
         AskAccumulatorsScript->AddStep<TDetectInMem>(*FFColumns);
         return AskAccumulatorsScript;
@@ -54,8 +57,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
         }
     }
     {
-        auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][isWholeExclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0]
-                                                               [useIndexes ? 1 : 0][needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0];
+        auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][isWholeExclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]
+                                          [needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0];
         if (!result) {
             TGuard<TMutex> wg(Mutex);
             result = CacheFetchingScripts[needSnapshots ? 1 : 0][isWholeExclusiveSource ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]
@@ -274,11 +277,11 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
     : CommonContext(commonContext) {
-
     ReadMetadata = dynamic_pointer_cast<const TReadMetadata>(CommonContext->GetReadMetadata());
     Y_ABORT_UNLESS(ReadMetadata);
     Y_ABORT_UNLESS(ReadMetadata->SelectInfo);
 
+    double kffAccessors = 0.01;
     double kffFilter = 0.45;
     double kffFetching = 0.45;
     double kffMerge = 0.10;
@@ -287,15 +290,19 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
         stagePrefix = "EF";
         kffFilter = 0.7;
         kffFetching = 0.15;
-        kffMerge = 0.15;
+        kffMerge = 0.14;
+        kffAccessors = 0.01;
     } else {
         stagePrefix = "FO";
         kffFilter = 0.1;
         kffFetching = 0.75;
-        kffMerge = 0.15;
+        kffMerge = 0.14;
+        kffAccessors = 0.01;
     }
 
-    std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> stages = { 
+    std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> stages = {
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(
+            stagePrefix + "::ACCESSORS", kffAccessors * TGlobalLimits::ScanMemoryLimit),
         NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(
             stagePrefix + "::FILTER", kffFilter * TGlobalLimits::ScanMemoryLimit),
         NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(
@@ -304,8 +311,8 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     };
     ProcessMemoryGuard =
         NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(CommonContext->GetReadMetadata()->GetTxId(), stages);
-    ProcessScopeGuard =
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildScopeGuard(CommonContext->GetReadMetadata()->GetTxId(), GetCommonContext()->GetScanId());
+    ProcessScopeGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildScopeGuard(
+        CommonContext->GetReadMetadata()->GetTxId(), GetCommonContext()->GetScanId());
 
     auto readSchema = ReadMetadata->GetResultSchema();
     SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSnapshotColumnIdsSet(), readSchema);

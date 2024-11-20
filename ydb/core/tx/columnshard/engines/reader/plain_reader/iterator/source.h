@@ -319,7 +319,7 @@ private:
 
 public:
     virtual ui64 PredictAccessorsMemory() const override {
-        return Portion->GetApproxChunksCount(Context->GetCommonContext()->GetReadMetadata()->GetResultSchema()->GetColumnsCount()) * sizeof(TColumnRecord);
+        return Portion->GetApproxChunksCount(GetContext()->GetCommonContext()->GetReadMetadata()->GetResultSchema()->GetColumnsCount()) * sizeof(TColumnRecord);
     }
 
     virtual bool NeedAccessorsForRead() const override {

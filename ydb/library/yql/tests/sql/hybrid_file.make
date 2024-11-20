@@ -22,6 +22,8 @@ FORK_TESTS()
 FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
+ENV(YQL_YQLRUN_PATH="ydb/library/yql/tools/yqlrun/yqlrun")
+
 DEPENDS(
     yql/essentials/tools/astdiff
     ydb/library/yql/tools/dqrun

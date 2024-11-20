@@ -156,6 +156,14 @@ namespace NYql {
                 const auto it = Results_.find(TGenericState::TTableAddress(clusterName, tableName));
                 if (Results_.cend() != it) {
                     const auto& response = it->second->Response;
+
+                    if (!response.has_schema()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(read.Pos()),
+                                     "Got empty response from connector, server is probably misbehaving"));
+                        hasErrors = true;
+                        break;
+                    }
+
                     if (NConnector::IsSuccess(response)) {
                         TGenericState::TTableMeta tableMeta;
                         tableMeta.Schema = response.schema();
@@ -327,7 +335,7 @@ namespace NYql {
             request.set_schema(schema);
         }
 
-        void GetServiceName(NYql::NConnector::NApi::TOracleDataSourceOptions& request, const TGenericClusterConfig& clusterConfig) {
+        void GetOracleServiceName(NYql::NConnector::NApi::TOracleDataSourceOptions& request, const TGenericClusterConfig& clusterConfig) {
             const auto it = clusterConfig.GetDataSourceOptions().find("service_name");
             if (it != clusterConfig.GetDataSourceOptions().end()) {
                 request.set_service_name(it->second);
@@ -355,7 +363,7 @@ namespace NYql {
                 } break;
                 case NYql::NConnector::NApi::ORACLE: {
                     auto* options = request.mutable_data_source_instance()->mutable_oracle_options();
-                    GetServiceName(*options, clusterConfig);
+                    GetOracleServiceName(*options, clusterConfig);
                 } break;
                 case NYql::NConnector::NApi::LOGGING:
                     break;

@@ -1295,7 +1295,7 @@ private:
                 .SetQueryParameters(query.ParameterTypes)
                 .SetApplicationName(ApplicationName)
                 .SetIsEnablePgSyntax(SessionCtx->Config().FeatureFlags.GetEnablePgSyntax())
-                .SetIsEnableAntlr4Parser(SessionCtx->Config().EnableAntlr4Parser);
+                .SetIsEnableAntlr4Parser(SessionCtx->Config().FeatureFlags.GetEnableAntlr4Parser() || SessionCtx->Config().EnableAntlr4Parser);
             NSQLTranslation::TTranslationSettings effectiveSettings;
             auto astRes = ParseQuery(
                 query.Text,

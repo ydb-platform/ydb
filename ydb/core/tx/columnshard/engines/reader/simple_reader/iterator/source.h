@@ -316,7 +316,7 @@ private:
 
 public:
     virtual ui64 PredictAccessorsSize() const override {
-        return Portion->GetApproxChunksCount(Context->GetCommonContext()->GetReadMetadata()->GetResultSchema()->GetColumnsCount()) * sizeof(TColumnRecord);
+        return Portion->GetApproxChunksCount(GetContext()->GetCommonContext()->GetReadMetadata()->GetResultSchema()->GetColumnsCount()) * sizeof(TColumnRecord);
     }
 
     virtual bool DoAddTxConflict() override {

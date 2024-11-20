@@ -293,7 +293,7 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSour
     } else {
         source->SetSourceInMemory(true);
     }
-    AFL_VERIFY(!source->NeedAccessorsFetching());
+    AFL_VERIFY(source->GetStageData().HasPortionAccessor());
     auto plan = source->GetContext()->GetColumnsFetchingPlan(source);
     source->InitFetchingPlan(plan);
     TFetchingScriptCursor cursor(plan, 0);

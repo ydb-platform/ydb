@@ -38,6 +38,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     if (snapshot.IsZero()) {
         snapshot = Self->GetLastTxSnapshot();
     }
+    TScannerConstructorContext context(snapshot, request.HasItemsLimit() ? request.GetItemsLimit() : 0, request.GetReverse());
     const auto scanId = request.GetScanId();
     const ui64 txId = request.GetTxId();
     const ui32 scanGen = request.GetGeneration();
@@ -62,24 +63,24 @@ void TTxScan::Complete(const TActorContext& ctx) {
         read.PathId = request.GetLocalPathId();
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         read.TableName = table;
-        bool isIndex = false;
         std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
-            const ui64 itemsLimit = request.HasItemsLimit() ? request.GetItemsLimit() : 0;
             auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
-            isIndex = !sysViewPolicy;
             if (!sysViewPolicy) {
                 auto constructor = NReader::IScannerConstructor::TFactory::MakeHolder(
                     AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName()
                                                                              : "PLAIN",
-                    request);
+                    context);
                 if (!constructor) {
-                    return SendError("cannot build scanner", AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
+                    return std::unique_ptr<IScannerConstructor>();
                 }
                 return std::unique_ptr<IScannerConstructor>(constructor.Release());
             } else {
-                return sysViewPolicy->CreateConstructor(snapshot, itemsLimit, request.GetReverse());
+                return sysViewPolicy->CreateConstructor(context);
             }
         }();
+        if (!scannerConstructor) {
+            return SendError("cannot build scanner", AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
+        }
         read.ColumnIds.assign(request.GetColumnTags().begin(), request.GetColumnTags().end());
         read.StatsMode = request.GetStatsMode();
 

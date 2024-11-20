@@ -9,10 +9,8 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     ui32 sourceIdx = 0;
     std::deque<std::shared_ptr<IDataSource>> sources;
     const auto& portions = GetReadMetadata()->SelectInfo->PortionsOrderedPK;
-    const auto& committed = GetReadMetadata()->CommittedBlobs;
     ui64 compactedPortionsBytes = 0;
     ui64 insertedPortionsBytes = 0;
-    ui64 committedPortionsBytes = 0;
     for (auto&& i : portions) {
         if (i->GetMeta().GetProduced() == NPortion::EProduced::COMPACTED || i->GetMeta().GetProduced() == NPortion::EProduced::SPLIT_COMPACTED) {
             compactedPortionsBytes += i->GetTotalBlobBytes();
@@ -21,39 +19,12 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
         }
         sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, i, SpecialReadContext));
     }
-    for (auto&& i : committed) {
-        if (i.IsCommitted()) {
-            continue;
-        }
-        if (GetReadMetadata()->IsMyUncommitted(i.GetInsertWriteId())) {
-            continue;
-        }
-        if (GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetFirst()) ||
-            GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetLast())) {
-            GetReadMetadata()->SetConflictedWriteId(i.GetInsertWriteId());
-        }
-    }
-
-    for (auto&& i : committed) {
-        if (!i.IsCommitted()) {
-            if (GetReadMetadata()->IsWriteConflictable(i.GetInsertWriteId())) {
-                continue;
-            }
-        } else if (GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(i.GetFirst(), i.GetLast()) ==
-                   TPKRangeFilter::EUsageClass::DontUsage) {
-            continue;
-        }
-        sources.emplace_back(std::make_shared<TCommittedDataSource>(sourceIdx++, i, SpecialReadContext));
-        committedPortionsBytes += i.GetSize();
-    }
     Scanner = std::make_shared<TScanHead>(std::move(sources), SpecialReadContext);
 
     auto& stats = GetReadMetadata()->ReadStats;
     stats->IndexPortions = GetReadMetadata()->SelectInfo->PortionsOrderedPK.size();
     stats->IndexBatches = GetReadMetadata()->NumIndexedBlobs();
-    stats->CommittedBatches = GetReadMetadata()->CommittedBlobs.size();
     stats->SchemaColumns = (*SpecialReadContext->GetProgramInputColumns() - *SpecialReadContext->GetSpecColumns()).GetColumnsCount();
-    stats->CommittedPortionsBytes = committedPortionsBytes;
     stats->InsertedPortionsBytes = insertedPortionsBytes;
     stats->CompactedPortionsBytes = compactedPortionsBytes;
 

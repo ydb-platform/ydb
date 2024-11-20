@@ -84,9 +84,6 @@ TConclusionStatus TScanHead::Start() {
         }
 
         for (auto&& i : point.GetFinishSources()) {
-            if (!i->NeedAccessorsFetching()) {
-                i->SetSourceInMemory(true);
-            }
             i->InitFetchingPlan(Context->GetColumnsFetchingPlan(i));
         }
         context.OnFinishPoint(point);

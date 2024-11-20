@@ -8,6 +8,22 @@
 
 namespace NKikimr::NOlap::NReader {
 
+class TScannerConstructorContext {
+private:
+    YDB_READONLY(TSnapshot, Snapshot, TSnapshot::Zero());
+    YDB_READONLY(ui32, ItemsLimit, 0);
+    YDB_READONLY(bool, Reverse, false);
+
+public:
+    TScannerConstructorContext(const TSnapshot& snapshot, const ui32 itemsLimit, const bool reverse)
+        : Snapshot(snapshot)
+        , ItemsLimit(itemsLimit)
+        , Reverse(reverse)
+    {
+
+    }
+};
+
 class IScannerConstructor {
 protected:
     const TSnapshot Snapshot;
@@ -18,13 +34,13 @@ protected:
 private:
     virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const = 0;
 public:
-    using TFactory = NObjectFactory::TParametrizedObjectFactory<IScannerConstructor, TString, NKikimrTxDataShard::TEvKqpScan>;
+    using TFactory = NObjectFactory::TParametrizedObjectFactory<IScannerConstructor, TString, TScannerConstructorContext>;
     virtual ~IScannerConstructor() = default;
 
-    IScannerConstructor(const NKikimrTxDataShard::TEvKqpScan& request)
-        : Snapshot(snapshot)
-        , ItemsLimit(request.HasItemsLimit() ? request.GetItemsLimit() : 0)
-        , IsReverse(request.GetReverse())
+    IScannerConstructor(const TScannerConstructorContext& context)
+        : Snapshot(context.GetSnapshot())
+        , ItemsLimit(context.GetItemsLimit())
+        , IsReverse(context.GetReverse())
     {
 
     }

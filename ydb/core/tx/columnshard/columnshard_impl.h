@@ -59,6 +59,9 @@ class TTxInternalScan;
 namespace NPlain {
 class TIndexScannerConstructor;
 }
+namespace NSimple {
+class TIndexScannerConstructor;
+}
 }   // namespace NReader
 
 namespace NDataSharing {
@@ -198,6 +201,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NOlap::NReader::TTxScan;
     friend class NOlap::NReader::TTxInternalScan;
     friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
+    friend class NOlap::NReader::NSimple::TIndexScannerConstructor;
 
     class TStoragesManager;
     friend class TTxController;

@@ -24,10 +24,10 @@ ui64 TSpecialReadContext::GetMemoryForSources(const THashMap<ui32, std::shared_p
 }
 
 std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) {
-    if (source->NeedAccessorsFetching()) {
+    if (!source->GetStageData().HasPortionAccessor()) {
         if (!AskAccumulatorsScript) {
             AskAccumulatorsScript = std::make_shared<TFetchingScript>(*this);
-            AskAccumulatorsScript->AddStep<TAllocateMemoryStep>(source->PredictAccessorsSize());
+            AskAccumulatorsScript->AddStep<TAllocateMemoryStep>(source->PredictAccessorsSize(), EStageFeaturesIndexes::Accessors);
             AskAccumulatorsScript->AddStep<TPortionAccessorFetchingStep>();
         }
         AskAccumulatorsScript->AddStep<TDetectInMem>(*FFColumns);
@@ -44,8 +44,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
         }
     }();
     const bool useIndexes = (IndexChecker ? source->HasIndexes(IndexChecker->GetIndexIds()) : false);
-    const bool isWholeExclusiveSource = source->GetExclusiveIntervalOnly() && source->IsSourceInMemory();
-    const bool needSnapshots = ReadMetadata->GetRequestSnapshot() < source->GetRecordSnapshotMax() || !isWholeExclusiveSource;
+    const bool needSnapshots = ReadMetadata->GetRequestSnapshot() < source->GetRecordSnapshotMax();
     const bool hasDeletions = source->GetHasDeletions();
     bool needShardingFilter = false;
     if (!!ReadMetadata->GetRequestShardingInfo()) {
@@ -55,15 +54,14 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
         }
     }
     {
-        auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0]
-                                                               [useIndexes ? 1 : 0][needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0];
+        auto result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
+                                          [hasDeletions ? 1 : 0];
         if (!result) {
             TGuard<TMutex> wg(Mutex);
             result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]
                                          [needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0];
             if (!result) {
-                result = BuildColumnsFetchingPlan(
-                    needSnapshots, isWholeExclusiveSource, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions);
+                result = BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions);
                 CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0]
                                     [needShardingFilter ? 1 : 0][hasDeletions ? 1 : 0] = result;
             }
@@ -145,9 +143,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         result->AddStep(std::make_shared<TIndexBlobsFetchingStep>(std::make_shared<TIndexesSet>(IndexChecker->GetIndexIds())));
         result->AddStep(std::make_shared<TApplyIndexStep>(IndexChecker));
     }
-    bool hasFilterSharding = false;
     if (needFilterSharding && !ShardingColumns->IsEmpty()) {
-        hasFilterSharding = true;
         const TColumnsSetIds columnsFetch = *ShardingColumns;
         acc.AddFetchingStep(*result, columnsFetch, EStageFeaturesIndexes::Filter);
         acc.AddAssembleStep(*result, columnsFetch, "SPEC_SHARDING", EStageFeaturesIndexes::Filter, false);

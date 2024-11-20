@@ -1,325 +1,324 @@
-tables:
-  SINGLE:
-    columns:
-      WatchID:
-        type: Int64
-        not_null: true
-      JavaEnable:
-        type: Int16
-        not_null: true
-      Title:
-        type: string_type
-        not_null: true
-      GoodEvent:
-        type: Int16
-        not_null: true
-      EventTime:
-        type: timestamp_type
-        not_null: true
-      EventDate:
-        type: date_type
-        not_null: true
-      CounterID:
-        type: Int32
-        not_null: true
-      ClientIP:
-        type: Int32
-        not_null: true
-      RegionID:
-        type: Int32
-        not_null: true
-      UserID:
-        type: Int64
-        not_null: true
-      CounterClass:
-        type: Int16
-        not_null: true
-      OS:
-        type: Int16
-        not_null: true
-      UserAgent:
-        type: Int16
-        not_null: true
-      URL:
-        type: string_type
-        not_null: true
-      Referer:
-        type: string_type
-        not_null: true
-      IsRefresh:
-        type: Int16
-        not_null: true
-      RefererCategoryID:
-        type: Int16
-        not_null: true
-      RefererRegionID:
-        type: Int32
-        not_null: true
-      URLCategoryID:
-        type: Int16
-        not_null: true
-      URLRegionID:
-        type: Int32
-        not_null: true
-      ResolutionWidth:
-        type: Int16
-        not_null: true
-      ResolutionHeight:
-        type: Int16
-        not_null: true
-      ResolutionDepth:
-        type: Int16
-        not_null: true
-      FlashMajor:
-        type: Int16
-        not_null: true
-      FlashMinor:
-        type: Int16
-        not_null: true
-      FlashMinor2:
-        type: string_type
-        not_null: true
-      NetMajor:
-        type: Int16
-        not_null: true
-      NetMinor:
-        type: Int16
-        not_null: true
-      UserAgentMajor:
-        type: Int16
-        not_null: true
-      UserAgentMinor:
-        type: Bytes
-        not_null: true
-      CookieEnable:
-        type: Int16
-        not_null: true
-      JavascriptEnable:
-        type: Int16
-        not_null: true
-      IsMobile:
-        type: Int16
-        not_null: true
-      MobilePhone:
-        type: Int16
-        not_null: true
-      MobilePhoneModel:
-        type: string_type
-        not_null: true
-      Params:
-        type: string_type
-        not_null: true
-      IPNetworkID:
-        type: Int32
-        not_null: true
-      TraficSourceID:
-        type: Int16
-        not_null: true
-      SearchEngineID:
-        type: Int16
-        not_null: true
-      SearchPhrase:
-        type: string_type
-        not_null: true
-      AdvEngineID:
-        type: Int16
-        not_null: true
-      IsArtifical:
-        type: Int16
-        not_null: true
-      WindowClientWidth:
-        type: Int16
-        not_null: true
-      WindowClientHeight:
-        type: Int16
-        not_null: true
-      ClientTimeZone:
-        type: Int16
-        not_null: true
-      ClientEventTime:
-        type: timestamp_type
-        not_null: true
-      SilverlightVersion1:
-        type: Int16
-        not_null: true
-      SilverlightVersion2:
-        type: Int16
-        not_null: true
-      SilverlightVersion3:
-        type: Int32
-        not_null: true
-      SilverlightVersion4:
-        type: Int16
-        not_null: true
-      PageCharset:
-        type: string_type
-        not_null: true
-      CodeVersion:
-        type: Int32
-        not_null: true
-      IsLink:
-        type: Int16
-        not_null: true
-      IsDownload:
-        type: Int16
-        not_null: true
-      IsNotBounce:
-        type: Int16
-        not_null: true
-      FUniqID:
-        type: Int64
-        not_null: true
-      OriginalURL:
-        type: string_type
-        not_null: true
-      HID:
-        type: Int32
-        not_null: true
-      IsOldCounter:
-        type: Int16
-        not_null: true
-      IsEvent:
-        type: Int16
-        not_null: true
-      IsParameter:
-        type: Int16
-        not_null: true
-      DontCountHits:
-        type: Int16
-        not_null: true
-      WithHash:
-        type: Int16
-        not_null: true
-      HitColor:
-        type: string_type
-        not_null: true
-      LocalEventTime:
-        type: timestamp_type
-        not_null: true
-      Age:
-        type: Int16
-        not_null: true
-      Sex:
-        type: Int16
-        not_null: true
-      Income:
-        type: Int16
-        not_null: true
-      Interests:
-        type: Int16
-        not_null: true
-      Robotness:
-        type: Int16
-        not_null: true
-      RemoteIP:
-        type: Int32
-        not_null: true
-      WindowName:
-        type: Int32
-        not_null: true
-      OpenerName:
-        type: Int32
-        not_null: true
-      HistoryLength:
-        type: Int16
-        not_null: true
-      BrowserLanguage:
-        type: string_type
-        not_null: true
-      BrowserCountry:
-        type: string_type
-        not_null: true
-      SocialNetwork:
-        type: string_type
-        not_null: true
-      SocialAction:
-        type: string_type
-        not_null: true
-      HTTPError:
-        type: Int16
-        not_null: true
-      SendTiming:
-        type: Int32
-        not_null: true
-      DNSTiming:
-        type: Int32
-        not_null: true
-      ConnectTiming:
-        type: Int32
-        not_null: true
-      ResponseStartTiming:
-        type: Int32
-        not_null: true
-      ResponseEndTiming:
-        type: Int32
-        not_null: true
-      FetchTiming:
-        type: Int32
-        not_null: true
-      SocialSourceNetworkID:
-        type: Int16
-        not_null: true
-      SocialSourcePage:
-        type: string_type
-        not_null: true
-      ParamPrice:
-        type: Int64
-        not_null: true
-      ParamOrderID:
-        type: string_type
-        not_null: true
-      ParamCurrency:
-        type: string_type
-        not_null: true
-      ParamCurrencyID:
-        type: Int16
-        not_null: true
-      OpenstatServiceName:
-        type: string_type
-        not_null: true
-      OpenstatCampaignID:
-        type: string_type
-        not_null: true
-      OpenstatAdID:
-        type: string_type
-        not_null: true
-      OpenstatSourceID:
-        type: string_type
-        not_null: true
-      UTMSource:
-        type: string_type
-        not_null: true
-      UTMMedium:
-        type: string_type
-        not_null: true
-      UTMCampaign:
-        type: string_type
-        not_null: true
-      UTMContent:
-        type: string_type
-        not_null: true
-      UTMTerm:
-        type: string_type
-        not_null: true
-      FromTag:
-        type: string_type
-        not_null: true
-      HasGCLID:
-        type: Int16
-        not_null: true
-      RefererHash:
-        type: Int64
-        not_null: true
-      URLHash:
-        type: Int64
-        not_null: true
-      CLID:
-        type: Int32
-        not_null: true
-    primary_key:
-      - CounterID
-      - EventDate
-      - UserID
-      - EventTime
-      - WatchID
-    partitioning: 128
+table:
+  columns:
+    - name: WatchID
+      type: Int64
+      not_null: true
+    - name: JavaEnable
+      type: Int16
+      not_null: true
+    - name: Title
+      type: string_type
+      not_null: true
+    - name: GoodEvent
+      type: Int16
+      not_null: true
+    - name: EventTime
+      type: timestamp_type
+      not_null: true
+    - name: EventDate
+      type: date_type
+      not_null: true
+    - name: CounterID
+      type: Int32
+      not_null: true
+    - name: ClientIP
+      type: Int32
+      not_null: true
+    - name: RegionID
+      type: Int32
+      not_null: true
+    - name: UserID
+      type: Int64
+      not_null: true
+    - name: CounterClass
+      type: Int16
+      not_null: true
+    - name: OS
+      type: Int16
+      not_null: true
+    - name: UserAgent
+      type: Int16
+      not_null: true
+    - name: URL
+      type: string_type
+      not_null: true
+    - name: Referer
+      type: string_type
+      not_null: true
+    - name: IsRefresh
+      type: Int16
+      not_null: true
+    - name: RefererCategoryID
+      type: Int16
+      not_null: true
+    - name: RefererRegionID
+      type: Int32
+      not_null: true
+    - name: URLCategoryID
+      type: Int16
+      not_null: true
+    - name: URLRegionID
+      type: Int32
+      not_null: true
+    - name: ResolutionWidth
+      type: Int16
+      not_null: true
+    - name: ResolutionHeight
+      type: Int16
+      not_null: true
+    - name: ResolutionDepth
+      type: Int16
+      not_null: true
+    - name: FlashMajor
+      type: Int16
+      not_null: true
+    - name: FlashMinor
+      type: Int16
+      not_null: true
+    - name: FlashMinor2
+      type: string_type
+      not_null: true
+    - name: NetMajor
+      type: Int16
+      not_null: true
+    - name: NetMinor
+      type: Int16
+      not_null: true
+    - name: UserAgentMajor
+      type: Int16
+      not_null: true
+    - name: UserAgentMinor
+      type: Bytes
+      not_null: true
+    - name: CookieEnable
+      type: Int16
+      not_null: true
+    - name: JavascriptEnable
+      type: Int16
+      not_null: true
+    - name: IsMobile
+      type: Int16
+      not_null: true
+    - name: MobilePhone
+      type: Int16
+      not_null: true
+    - name: MobilePhoneModel
+      type: string_type
+      not_null: true
+    - name: Params
+      type: string_type
+      not_null: true
+    - name: IPNetworkID
+      type: Int32
+      not_null: true
+    - name: TraficSourceID
+      type: Int16
+      not_null: true
+    - name: SearchEngineID
+      type: Int16
+      not_null: true
+    - name: SearchPhrase
+      type: string_type
+      not_null: true
+    - name: AdvEngineID
+      type: Int16
+      not_null: true
+    - name: IsArtifical
+      type: Int16
+      not_null: true
+    - name: WindowClientWidth
+      type: Int16
+      not_null: true
+    - name: WindowClientHeight
+      type: Int16
+      not_null: true
+    - name: ClientTimeZone
+      type: Int16
+      not_null: true
+    - name: ClientEventTime
+      type: timestamp_type
+      not_null: true
+    - name: SilverlightVersion1
+      type: Int16
+      not_null: true
+    - name: SilverlightVersion2
+      type: Int16
+      not_null: true
+    - name: SilverlightVersion3
+      type: Int32
+      not_null: true
+    - name: SilverlightVersion4
+      type: Int16
+      not_null: true
+    - name: PageCharset
+      type: string_type
+      not_null: true
+    - name: CodeVersion
+      type: Int32
+      not_null: true
+    - name: IsLink
+      type: Int16
+      not_null: true
+    - name: IsDownload
+      type: Int16
+      not_null: true
+    - name: IsNotBounce
+      type: Int16
+      not_null: true
+    - name: FUniqID
+      type: Int64
+      not_null: true
+    - name: OriginalURL
+      type: string_type
+      not_null: true
+    - name: HID
+      type: Int32
+      not_null: true
+    - name: IsOldCounter
+      type: Int16
+      not_null: true
+    - name: IsEvent
+      type: Int16
+      not_null: true
+    - name: IsParameter
+      type: Int16
+      not_null: true
+    - name: DontCountHits
+      type: Int16
+      not_null: true
+    - name: WithHash
+      type: Int16
+      not_null: true
+    - name: HitColor
+      type: string_type
+      not_null: true
+    - name: LocalEventTime
+      type: timestamp_type
+      not_null: true
+    - name: Age
+      type: Int16
+      not_null: true
+    - name: Sex
+      type: Int16
+      not_null: true
+    - name: Income
+      type: Int16
+      not_null: true
+    - name: Interests
+      type: Int16
+      not_null: true
+    - name: Robotness
+      type: Int16
+      not_null: true
+    - name: RemoteIP
+      type: Int32
+      not_null: true
+    - name: WindowName
+      type: Int32
+      not_null: true
+    - name: OpenerName
+      type: Int32
+      not_null: true
+    - name: HistoryLength
+      type: Int16
+      not_null: true
+    - name: BrowserLanguage
+      type: string_type
+      not_null: true
+    - name: BrowserCountry
+      type: string_type
+      not_null: true
+    - name: SocialNetwork
+      type: string_type
+      not_null: true
+    - name: SocialAction
+      type: string_type
+      not_null: true
+    - name: HTTPError
+      type: Int16
+      not_null: true
+    - name: SendTiming
+      type: Int32
+      not_null: true
+    - name: DNSTiming
+      type: Int32
+      not_null: true
+    - name: ConnectTiming
+      type: Int32
+      not_null: true
+    - name: ResponseStartTiming
+      type: Int32
+      not_null: true
+    - name: ResponseEndTiming
+      type: Int32
+      not_null: true
+    - name: FetchTiming
+      type: Int32
+      not_null: true
+    - name: SocialSourceNetworkID
+      type: Int16
+      not_null: true
+    - name: SocialSourcePage
+      type: string_type
+      not_null: true
+    - name: ParamPrice
+      type: Int64
+      not_null: true
+    - name: ParamOrderID
+      type: string_type
+      not_null: true
+    - name: ParamCurrency
+      type: string_type
+      not_null: true
+    - name: ParamCurrencyID
+      type: Int16
+      not_null: true
+    - name: OpenstatServiceName
+      type: string_type
+      not_null: true
+    - name: OpenstatCampaignID
+      type: string_type
+      not_null: true
+    - name: OpenstatAdID
+      type: string_type
+      not_null: true
+    - name: OpenstatSourceID
+      type: string_type
+      not_null: true
+    - name: UTMSource
+      type: string_type
+      not_null: true
+    - name: UTMMedium
+      type: string_type
+      not_null: true
+    - name: UTMCampaign
+      type: string_type
+      not_null: true
+    - name: UTMContent
+      type: string_type
+      not_null: true
+    - name: UTMTerm
+      type: string_type
+      not_null: true
+    - name: FromTag
+      type: string_type
+      not_null: true
+    - name: HasGCLID
+      type: Int16
+      not_null: true
+    - name: RefererHash
+      type: Int64
+      not_null: true
+    - name: URLHash
+      type: Int64
+      not_null: true
+    - name: CLID
+      type: Int32
+      not_null: true
+  primary_key:
+    - CounterID
+    - EventDate
+    - UserID
+    - EventTime
+    - WatchID
+  partitioning: 128

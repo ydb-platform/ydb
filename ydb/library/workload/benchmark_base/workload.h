@@ -55,6 +55,7 @@ protected:
 
     THolder<TGeneratorStateProcessor> StateProcessor;
 private:
+    void GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, bool single) const;
     const TWorkloadBaseParams& Params;
 };
 

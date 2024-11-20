@@ -672,9 +672,13 @@ void TTopicSession::DoFiltering(ui64 rowsOffset, ui64 numberRows, const TVector<
     Y_ENSURE(rowsOffset < offsets.size(), "Invalid first row ofset");
     Y_ENSURE(numberRows, "Expected non empty parsed batch");
     Y_ENSURE(parsedValues, "Expected non empty schema");
-    LOG_ROW_DISPATCHER_TRACE("SendToFiltering, first offset: " << offsets[rowsOffset] << ", last offset: " << offsets[rowsOffset + numberRows - 1]);
+    auto lastOffset = offsets[rowsOffset + numberRows - 1];
+    LOG_ROW_DISPATCHER_TRACE("SendToFiltering, first offset: " << offsets[rowsOffset] << ", last offset: " << lastOffset);
 
     for (auto& [actorId, info] : Clients) {
+        if (info.NextMessageOffset && lastOffset < info.NextMessageOffset) {        // the batch has already been processed
+            continue;
+        }
         try {
             if (info.Filter) {
                 info.Filter->Push(offsets, RebuildJson(info, parsedValues), rowsOffset, numberRows);

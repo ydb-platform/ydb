@@ -549,7 +549,6 @@ void TTopicSession::HandleNewEvents() {
         }
 
         std::visit(TTopicEventProcessor{*this, LogPrefix, handledEventsSize}, *event);
-            LOG_ROW_DISPATCHER_TRACE("handledEventsSize " << handledEventsSize );
         if (handledEventsSize >= MaxHandledEventsSize) {
             break;
         }

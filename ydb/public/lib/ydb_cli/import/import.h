@@ -59,18 +59,20 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
 
 class TImportFileClient {
 public:
-    explicit TImportFileClient(const TDriver& driver, const TClientCommand::TConfig& rootConfig);
+    explicit TImportFileClient(const TDriver& driver, const TClientCommand::TConfig& rootConfig,
+                               const TImportFileSettings& settings = {});
     TImportFileClient(const TImportFileClient&) = delete;
 
     // Ingest data from the input files to the database table.
     //   fsPaths: vector of paths to input files
     //   dbPath: full path to the database table, including the database path
     //   settings: input data format and operational settings
-    TStatus Import(const TVector<TString>& fsPaths, const TString& dbPath, const TImportFileSettings& settings = {});
+    TStatus Import(const TVector<TString>& fsPaths, const TString& dbPath);
 
 private:
     std::shared_ptr<NTable::TTableClient> TableClient;
     std::shared_ptr<NScheme::TSchemeClient> SchemeClient;
+    const TImportFileSettings& Settings;
 
     NTable::TBulkUpsertSettings UpsertSettings;
     NTable::TRetryOperationSettings RetrySettings;
@@ -86,23 +88,20 @@ private:
 
     TStatus UpsertCsv(IInputStream& input,
                       const TString& dbPath,
-                      const TImportFileSettings& settings,
                       const TString& filePath,
                       std::optional<ui64> inputSizeHint,
                       ProgressCallbackFunc & progressCallback);
 
     TStatus UpsertCsvByBlocks(const TString& filePath,
-                              const TString& dbPath,
-                              const TImportFileSettings& settings);
+                              const TString& dbPath);
 
     TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValueBuilder& builder);
     TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValue&& rows);
 
-    TStatus UpsertJson(IInputStream &input, const TString &dbPath, const TImportFileSettings &settings,
-                    std::optional<ui64> inputSizeHint, ProgressCallbackFunc & progressCallback);
+    TStatus UpsertJson(IInputStream &input, const TString &dbPath, std::optional<ui64> inputSizeHint,
+                       ProgressCallbackFunc & progressCallback);
 
-    TStatus UpsertParquet(const TString& filename, const TString& dbPath, const TImportFileSettings& settings,
-                    ProgressCallbackFunc & progressCallback);
+    TStatus UpsertParquet(const TString& filename, const TString& dbPath, ProgressCallbackFunc & progressCallback);
     TAsyncStatus UpsertParquetBuffer(const TString& dbPath, const TString& buffer, const TString& strSchema);
 
     TType GetTableType();

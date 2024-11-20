@@ -401,9 +401,12 @@ public:
                         .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of copying base table
                 } else {
                     checks
-                        .NotUnderOperation()
                         .IsCommonSensePath()
                         .IsLikeDirectory();
+
+                    if (!Transaction.GetCreateTable().GetAllowUnderSameOperation()) {
+                        checks.NotUnderOperation();
+                    }
                 }
             }
 
@@ -775,8 +778,11 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             .NotDeleted()
             .NotUnderDeleting()
             .IsTable()
-            .NotUnderOperation()
             .IsCommonSensePath(); //forbid copy impl index tables directly
+
+        if (!copying.GetAllowUnderSameOperation()) {
+            checks.NotUnderOperation();
+        }
 
         if (!checks) {
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};

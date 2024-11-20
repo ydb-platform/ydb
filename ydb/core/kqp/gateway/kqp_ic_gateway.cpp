@@ -1282,6 +1282,10 @@ public:
         return NotImplemented<TGenericResult>();
     }
 
+    TFuture<TGenericResult> Backup(const TString&, const NYql::TBackupSettings&) override {
+        return NotImplemented<TGenericResult>();
+    }
+
     TFuture<TGenericResult> CreateUser(const TString& cluster, const NYql::TCreateUserSettings& settings) override {
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 

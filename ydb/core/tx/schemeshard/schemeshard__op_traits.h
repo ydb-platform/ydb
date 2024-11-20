@@ -1,5 +1,9 @@
 #pragma once
 
+#include "schemeshard_path.h"
+#include "schemeshard_impl.h"
+#include "schemeshard__operation.h"
+
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <util/generic/string.h>
@@ -22,14 +26,19 @@ struct TSchemeTxTraitsFallback {
         return false;
     }
 
-    static THashMap<TString, THashSet<TString>> GetRequiredPaths(const TTxTransaction& tx) {
-        Y_UNUSED(tx);
+    static std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths(const TTxTransaction& tx, const TOperationContext& context) {
+        Y_UNUSED(tx, context);
         return {};
     }
 
-    constexpr inline static bool CreateDirsFromName = false;
+    static bool Rewrite(TTxTransaction& tx) {
+        Y_UNUSED(tx);
+        return false;
+    }
 
+    constexpr inline static bool CreateDirsFromName = false;
     constexpr inline static bool CreateAdditionalDirs = false;
+    constexpr inline static bool NeedRewrite = false;
 };
 
 template <NKikimrSchemeOp::EOperationType opType>
@@ -288,6 +297,69 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCol
     }
 
     constexpr inline static bool CreateDirsFromName = true;
+};
+
+template <>
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection> : public TSchemeTxTraitsFallback {
+    static std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths(const TTxTransaction& tx, const TOperationContext& context) {
+        THashMap<TString, THashSet<TString>> paths;
+
+        const auto& backupOp = tx.GetBackupBackupCollection();
+
+        const auto& targetDir = backupOp.GetTargetDir();
+        const TString& targetPath = JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName()});
+
+        const TPath& bcPath = TPath::Resolve(targetPath, context.SS);
+        {
+            auto checks = bcPath.Check();
+            checks
+                .NotEmpty()
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotUnderDeleting()
+                .NotUnderOperation()
+                .IsBackupCollection();
+
+            if (!checks) {
+                return {};
+            }
+        }
+
+        Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
+        const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+
+        auto& collectionPaths = paths[targetPath];
+
+        for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+            std::pair<TString, TString> paths;
+            TString err;
+            if (!TrySplitPathByDb(item.GetPath(), tx.GetWorkingDir(), paths, err)) {
+                return {};
+            }
+
+            auto pathPieces = SplitPath(paths.second);
+            if (pathPieces.size() > 1) {
+                auto parent = ExtractParent(paths.second);
+                collectionPaths.emplace(JoinPath({targetDir, TString(parent)}));
+            }
+        }
+
+        return paths;
+    }
+
+    static bool Rewrite(TTxTransaction& tx) {
+        auto now = ToX509String(TlsActivationContext->AsActorContext().Now());
+        tx.MutableBackupBackupCollection()->SetTargetDir(now + "_full");
+        return true;
+    }
+
+    constexpr inline static bool CreateAdditionalDirs = true;
+    constexpr inline static bool NeedRewrite = true;
+private:
+    static inline TString ToX509String(const TInstant& datetime) {
+        return datetime.FormatLocalTime("%Y%m%d%H%M%SZ");
+    }
 };
 
 } // namespace NKikimr::NSchemeShard

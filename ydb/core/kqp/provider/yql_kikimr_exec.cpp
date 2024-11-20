@@ -2592,6 +2592,28 @@ public:
             }, "Executing DROP BACKUP COLLECTION");
         }
 
+        if (auto maybeBackup = TMaybeNode<TKiBackup>(input)) {
+            auto requireStatus = RequireChild(*input, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            auto backup = maybeBackup.Cast();
+
+            TBackupSettings settings;
+            settings.Name = TString(backup.BackupCollection());
+
+            auto cluster = TString(backup.DataSink().Cluster());
+            auto future = Gateway->Backup(cluster, settings);
+
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
+                Y_UNUSED(res);
+                auto resultNode = ctx.NewWorld(input->Pos());
+                return resultNode;
+            }, "Executing BACKUP");
+        }
+
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
             << "(Kikimr DataSink) Failed to execute node: " << input->Content()));
         return SyncError();

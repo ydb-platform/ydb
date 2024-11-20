@@ -62,7 +62,7 @@ private:
     THolder<IReplyCallback> Cb_;
     bool ErrorResponse_ = false;
     TInstant StartTs_;
-    TSchedulerCookieHolder TimeoutCookie_ = ISchedulerCookie::Make2Way();
+    TSchedulerCookieHolder TimeoutCookie_;
 
     TIntrusivePtr<TUserCounters> UserCounters_;
     TIntrusivePtr<TQueueCounters> QueueCounters_;

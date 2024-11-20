@@ -876,6 +876,10 @@ struct TDropBackupCollectionSettings {
     bool Cascade = false;
 };
 
+struct TBackupSettings {
+    TString Name;
+};
+
 struct TKikimrListPathItem {
     TKikimrListPathItem(TString name, bool isDirectory) {
         Name = name;
@@ -1065,6 +1069,8 @@ public:
     virtual NThreading::TFuture<TGenericResult> AlterBackupCollection(const TString& cluster, const TAlterBackupCollectionSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> DropBackupCollection(const TString& cluster, const TDropBackupCollectionSettings& settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> Backup(const TString& cluster, const TBackupSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) = 0;
 

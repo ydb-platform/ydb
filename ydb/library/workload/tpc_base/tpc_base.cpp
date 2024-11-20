@@ -87,7 +87,8 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
 void TTpcBaseWorkloadGenerator::PatchQuery(TString& query) const {
     SubstGlobal(query, "{% include 'header.sql.jinja' %}", GetHeader(query));
     SubstGlobal(query, "{path}", Params.GetFullTableName(nullptr) + "/");
-    for (const auto& table: GetTablesList()) {
+    const auto tableJson = GetTablesJson();
+    for (const auto& [table, _]: tableJson["tables"].GetMap()) {
         SubstGlobal(query, 
             TStringBuilder() << "{{" << table << "}}", 
             TStringBuilder() << Params.GetTablePathQuote(Params.GetSyntax()) << Params.GetPath() << "/" << table << Params.GetTablePathQuote(Params.GetSyntax())

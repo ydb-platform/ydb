@@ -157,14 +157,14 @@ namespace NYql {
                 if (Results_.cend() != it) {
                     const auto& response = it->second->Response;
 
-                    if (!response.has_schema()) {
-                        ctx.AddError(TIssue(ctx.GetPosition(read.Pos()),
-                                     "Got empty response from connector, server is probably misbehaving"));
-                        hasErrors = true;
-                        break;
-                    }
-
                     if (NConnector::IsSuccess(response)) {
+                        if (!response.has_schema()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(read.Pos()),
+                                        "Got empty response from connector, server is probably misbehaving"));
+                            hasErrors = true;
+                            break;
+                        }
+
                         TGenericState::TTableMeta tableMeta;
                         tableMeta.Schema = response.schema();
                         tableMeta.DataSourceInstance = it->second->DataSourceInstance;

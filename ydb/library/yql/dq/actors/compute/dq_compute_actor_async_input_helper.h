@@ -15,7 +15,7 @@ constexpr ui32 IssuesBufferSize = 16;
 
 struct TComputeActorAsyncInputHelper {
     TString Type;
-    const TString LogPrefix;
+    const TString& LogPrefix;
     ui64 Index;
     IDqComputeActorAsyncInput* AsyncInput = nullptr;
     NActors::IActor* Actor = nullptr;

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "schemeshard.h"
 #include "schemeshard_types.h"
 #include "schemeshard_info_types.h"
 
@@ -229,7 +228,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
 
         if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
             status = NKikimrScheme::EStatus::StatusInvalidParameter;
-            error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo); 
+            error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
             return false;
         }
     } else if (!IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {

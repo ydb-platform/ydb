@@ -2985,6 +2985,11 @@ TDateTypeColumnModeSettings::TDateTypeColumnModeSettings(const TString& columnNa
 
 void TDateTypeColumnModeSettings::SerializeTo(Ydb::Table::DateTypeColumnModeSettings& proto) const {
     proto.set_column_name(ColumnName_);
+    proto.set_expire_after_seconds(DeprecatedExpireAfter_.Seconds());
+}
+
+void TDateTypeColumnModeSettings::SerializeTo(Ydb::Table::DateTypeColumnModeSettingsV1& proto) const {
+    proto.set_column_name(ColumnName_);
 }
 
 const TString& TDateTypeColumnModeSettings::GetColumnName() const {
@@ -3002,6 +3007,12 @@ TValueSinceUnixEpochModeSettings::TValueSinceUnixEpochModeSettings(const TString
 {}
 
 void TValueSinceUnixEpochModeSettings::SerializeTo(Ydb::Table::ValueSinceUnixEpochModeSettings& proto) const {
+    proto.set_column_name(ColumnName_);
+    proto.set_column_unit(TProtoAccessor::GetProto(ColumnUnit_));
+    proto.set_expire_after_seconds(DeprecatedExpireAfter_.Seconds());
+}
+
+void TValueSinceUnixEpochModeSettings::SerializeTo(Ydb::Table::ValueSinceUnixEpochModeSettingsV1& proto) const {
     proto.set_column_name(ColumnName_);
     proto.set_column_unit(TProtoAccessor::GetProto(ColumnUnit_));
 }

@@ -466,14 +466,6 @@ message ValueSinceUnixEpochModeSettingsV1 {
     // Same as DateTypeColumnModeSettings (above), but useful when type of the
     // value stored in <column_name> is not a date type.
 
-    enum Unit {
-        UNIT_UNSPECIFIED = 0;
-        UNIT_SECONDS = 1;
-        UNIT_MILLISECONDS = 2;
-        UNIT_MICROSECONDS = 3;
-        UNIT_NANOSECONDS = 4;
-    }
-
     // The column type must be one of:
     // - Uint32
     // - Uint64
@@ -481,7 +473,7 @@ message ValueSinceUnixEpochModeSettingsV1 {
     string column_name = 1;
 
     // Interpretation of the value stored in <column_name>
-    Unit column_unit = 2;
+    ValueSinceUnixEpochModeSettings.Unit column_unit = 2;
 }
 
 message DateTypeColumnModeSettings {
@@ -492,8 +484,17 @@ message DateTypeColumnModeSettings {
 
 message ValueSinceUnixEpochModeSettings {
     // Deprecated TTL mode
+
+    enum Unit {
+        UNIT_UNSPECIFIED = 0;
+        UNIT_SECONDS = 1;
+        UNIT_MILLISECONDS = 2;
+        UNIT_MICROSECONDS = 3;
+        UNIT_NANOSECONDS = 4;
+    }
+
     string column_name = 1;
-    ValueSinceUnixEpochModeSettingsV1.Unit column_unit = 2;
+    Unit column_unit = 2;
     uint32 expire_after_seconds = 3;
 }
 

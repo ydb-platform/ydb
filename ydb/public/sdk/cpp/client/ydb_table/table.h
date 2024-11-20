@@ -34,8 +34,8 @@ class TtlTier;
 class TableIndex;
 class TableIndexDescription;
 class ValueSinceUnixEpochModeSettings;
-class DeprecatedDateTypeColumnModeSettings;
-class DeprecatedValueSinceUnixEpochModeSettings;
+class DateTypeColumnModeSettingsV1;
+class ValueSinceUnixEpochModeSettingsV1;
 
 } // namespace Table
 } // namespace Ydb
@@ -455,6 +455,7 @@ class TDateTypeColumnModeSettings {
 public:
     explicit TDateTypeColumnModeSettings(const TString& columnName, const TDuration& deprecatedExpireAfter = TDuration::Max());
     void SerializeTo(Ydb::Table::DateTypeColumnModeSettings& proto) const;
+    void SerializeTo(Ydb::Table::DateTypeColumnModeSettingsV1& proto) const;
 
     const TString& GetColumnName() const;
     // Deprecated. Use TTtlSettings::GetExpireAfter()
@@ -479,6 +480,7 @@ public:
 public:
     explicit TValueSinceUnixEpochModeSettings(const TString& columnName, EUnit columnUnit, const TDuration& deprecatedExpireAfter = TDuration::Max());
     void SerializeTo(Ydb::Table::ValueSinceUnixEpochModeSettings& proto) const;
+    void SerializeTo(Ydb::Table::ValueSinceUnixEpochModeSettingsV1& proto) const;
 
     const TString& GetColumnName() const;
     EUnit GetColumnUnit() const;

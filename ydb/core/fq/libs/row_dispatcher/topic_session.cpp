@@ -775,11 +775,12 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             // Parse remains data before adding new client
             DoParsing(true);
         }
-        auto counters = Counters->GetSubgroup("queryId", ev->Get()->Record.GetQueryId());
+        auto queryGroup = Counters->GetSubgroup("queryId", ev->Get()->Record.GetQueryId());
+        auto topicGroup = queryGroup->GetSubgroup("topic", TopicPath);
         auto& clientInfo = Clients.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(ev->Sender), 
-            std::forward_as_tuple(ev, counters)).first->second;
+            std::forward_as_tuple(ev, topicGroup)).first->second;
         UpdateFieldsIds(clientInfo);
 
         const auto& source = clientInfo.Settings.GetSource();

@@ -134,7 +134,7 @@ NYql::TIssues ValidateConnectionSetting(
     case FederatedQuery::ConnectionSetting::kLogging: {
         const FederatedQuery::Logging logging = setting.logging();
         if (!logging.has_auth() || logging.auth().identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.cloud_logging.auth field is not specified"));
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.logging.auth field is not specified"));
         }
 
         if (logging.auth().identity_case() == FederatedQuery::IamAuth::kCurrentIam && disableCurrentIam) {
@@ -142,7 +142,7 @@ NYql::TIssues ValidateConnectionSetting(
         }
 
         if (!logging.folder_id()) {
-            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.cloud_logging.folder_id field is not specified"));
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "content.setting.logging.folder_id field is not specified"));
         }
 
         break;

@@ -31,7 +31,7 @@ struct TRobinHoodBatchRequestItem {
     void ConstructKey(const TKey& key) {
         new (KeyStorage) TKey(key);
     }
-    
+
     // intermediate data
     ui64 Hash;
     char* InitialIterator;
@@ -215,7 +215,7 @@ private:
     };
 
     Y_FORCE_INLINE char* MakeIterator(const ui64 hash, char* data, ui64 capacityShift) {
-        // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/        
+        // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
         ui64 bucket = ((SelfHash ^ hash) * 11400714819323198485llu) >> capacityShift;
         char* ptr = data + AsDeriv().GetCellSize() * bucket;
         return ptr;

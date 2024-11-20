@@ -1854,7 +1854,7 @@ public:
         NKikimr::NKqp::TQueryData::TPtr params = std::make_shared<NKikimr::NKqp::TQueryData>(txAlloc);
         literalRequest.Transactions.emplace_back(queryHolder.GetPhyTx(0), params);
 
-        auto result = ExecuteLiteralInstant1(std::move(literalRequest), params, 0);
+        auto result = ExecuteLiteralInstant(std::move(literalRequest), params, 0);
 
         TExecuteLiteralResult literalResult;
         FillLiteralResult(result, literalResult);
@@ -1872,7 +1872,7 @@ public:
         return promise.GetFuture();
     }
 
-    TExecPhysicalResult ExecuteLiteralInstant1(TExecPhysicalRequest&& request, TQueryData::TPtr params, ui32 txIndex) override {
+    TExecPhysicalResult ExecuteLiteralInstant(TExecPhysicalRequest&& request, TQueryData::TPtr params, ui32 txIndex) override {
         YQL_ENSURE(!request.Transactions.empty());
         YQL_ENSURE(request.DataShardLocks.empty());
         YQL_ENSURE(!request.NeedTxId);

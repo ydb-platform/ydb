@@ -49,6 +49,10 @@ ui64 TSnapshotSchema::GetVersion() const {
     return IndexInfo.GetVersion();
 }
 
+bool IsSnapshotField(const std::string& name) {
+    return memcmp(name.c_str(), "_yql_", 5) == 0;
+}
+
 bool TSnapshotSchema::IsReplaceableByNextVersion(const TSnapshotSchema& nextSchema) const {
     const auto& nextFields = nextSchema.GetSchema()->fields();
     const auto& curFields = Schema->fields();
@@ -58,6 +62,9 @@ bool TSnapshotSchema::IsReplaceableByNextVersion(const TSnapshotSchema& nextSche
     }
     const TIndexInfo& nextIndexInfo = nextSchema.GetIndexInfo();
     for (ui32 fld = 0; fld < curFieldCount; fld++) {
+        if (IsSnapshotField(curFields[fld]->name())) {
+            break;
+        }
         if (!curFields[fld]->Equals(nextFields[fld], true)) {
             return false;
         }

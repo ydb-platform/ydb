@@ -302,6 +302,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     settings.NewlineDelimited(NewlineDelimited);
     settings.HeaderRow(HeaderRow);
     settings.NullValue(NullValue);
+    settings.Verbose(config.IsVerbose());
 
     if (Delimiter.size() != 1) {
         throw TMisuseException()

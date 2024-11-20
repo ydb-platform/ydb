@@ -116,7 +116,7 @@ namespace NKikimr {
         THullCtxPtr HullCtx;
         TPDiskCtxPtr PDiskCtx;
         THugeBlobCtxPtr HugeBlobCtx;
-        ui32 MinREALHugeBlobInBytes;
+        ui32 MinHugeBlobInBytes;
 
         // Group Type
         const TBlobStorageGroupType GType;
@@ -290,7 +290,7 @@ namespace NKikimr {
         THullCompactionWorker(THullCtxPtr hullCtx,
                               TPDiskCtxPtr pdiskCtx,
                               THugeBlobCtxPtr hugeBlobCtx,
-                              ui32 minREALHugeBlobInBytes,
+                              ui32 minHugeBlobInBytes,
                               TIntrusivePtr<TLevelIndex> levelIndex,
                               const TIterator& it,
                               bool isFresh,
@@ -301,7 +301,7 @@ namespace NKikimr {
             : HullCtx(std::move(hullCtx))
             , PDiskCtx(std::move(pdiskCtx))
             , HugeBlobCtx(std::move(hugeBlobCtx))
-            , MinREALHugeBlobInBytes(minREALHugeBlobInBytes)
+            , MinHugeBlobInBytes(minHugeBlobInBytes)
             , GType(HullCtx->VCtx->Top->GType)
             , LevelIndex(std::move(levelIndex))
             , FirstLsn(firstLsn)
@@ -570,7 +570,7 @@ namespace NKikimr {
         bool PreprocessItem() {
             // finish merging data for this item
             if constexpr (LogoBlobs) {
-                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, Key.LogoBlobID(), MinREALHugeBlobInBytes));
+                IndexMerger.Finish(HugeBlobCtx->IsHugeBlob(GType, Key.LogoBlobID(), MinHugeBlobInBytes));
             } else {
                 IndexMerger.Finish(false);
             }

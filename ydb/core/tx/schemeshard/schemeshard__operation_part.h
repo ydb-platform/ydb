@@ -459,6 +459,11 @@ ISubOperation::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState sta
 ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, TTxState::ETxState state);
 
+bool CreateConsistentCopyTables(
+    TOperationId nextId,
+    const TTxTransaction& tx,
+    TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result);
 TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx);
@@ -611,6 +616,8 @@ ISubOperation::TPtr CreateCopySequence(TOperationId id, const TTxTransaction& tx
 ISubOperation::TPtr CreateCopySequence(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateAlterSequence(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterSequence(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateMoveSequence(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateMoveSequence(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state);
@@ -653,6 +660,7 @@ ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, TTxState::ETxStat
 ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, TTxState::ETxState state);
 
+TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 
 }
 }

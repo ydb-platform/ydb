@@ -318,6 +318,7 @@ message TTableDescription {
     // on table creation to allow system column names (started with __ydb_)
     // It won't be present on describes and won't be preserved
     optional bool SystemColumnNamesAllowed = 42;
+    optional bool AllowUnderSameOperation = 44 [default = false];
 }
 
 message TDictionaryEncodingSettings {
@@ -1070,6 +1071,7 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
 
     // additionally creates cdc stream on src table consistently with taking snapshot
     optional TCreateCdcStream CreateSrcCdcStream = 6;
+    optional bool AllowUnderSameOperation = 7 [default = false];
 }
 
 message TConsistentTableCopyingConfig {
@@ -1617,6 +1619,10 @@ enum EOperationType {
     ESchemeOpCreateBackupCollection = 105;
     ESchemeOpAlterBackupCollection = 106;
     ESchemeOpDropBackupCollection = 107;
+    ESchemeOpBackupBackupCollection = 109;
+
+    // Move sequence
+    ESchemeOpMoveSequence = 108;
 }
 
 message TApplyIf {
@@ -1804,6 +1810,9 @@ message TModifyScheme {
     optional TBackupCollectionDescription CreateBackupCollection = 74;
     optional TBackupCollectionDescription AlterBackupCollection = 75;
     optional TBackupCollectionDescription DropBackupCollection = 76;
+    optional TBackupBackupCollection BackupBackupCollection = 78;
+
+    optional TMove MoveSequence = 77;
 }
 
 message TCopySequence {
@@ -2193,4 +2202,10 @@ message TBackupCollectionDescription {
     oneof Storage {
         google.protobuf.Empty Cluster = 7;
     }
+}
+
+message TBackupBackupCollection {
+    optional string Name = 1;
+    optional NKikimrProto.TPathID PathId = 2;
+    optional string TargetDir = 3; // must be set on Rewrite
 }

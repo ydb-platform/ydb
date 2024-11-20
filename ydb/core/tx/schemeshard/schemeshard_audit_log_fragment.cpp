@@ -151,6 +151,8 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTableIndex:
         return "ALTER TABLE INDEX RENAME";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence:
+        return "ALTER SEQUENCE RENAME";
     // filestore
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore:
         return "CREATE FILE STORE";
@@ -253,6 +255,9 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER BACKUP COLLECTION";
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
         return "DROP BACKUP COLLECTION";
+
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
+        return "BACKUP";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -479,6 +484,10 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         result.emplace_back(tx.GetMoveTableIndex().GetSrcPath());
         result.emplace_back(tx.GetMoveTableIndex().GetDstPath());
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence:
+        result.emplace_back(tx.GetMoveSequence().GetSrcPath());
+        result.emplace_back(tx.GetMoveSequence().GetDstPath());
+        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetSequence().GetName()}));
         break;
@@ -569,6 +578,10 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDropBackupCollection().GetName()}));
+        break;
+
+    case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName()}));
         break;
     }
 

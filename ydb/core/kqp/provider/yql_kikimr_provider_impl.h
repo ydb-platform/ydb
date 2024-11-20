@@ -79,6 +79,7 @@ private:
     virtual TStatus HandleCreateBackupCollection(NNodes::TKiCreateBackupCollection node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterBackupCollection(NNodes::TKiAlterBackupCollection node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropBackupCollection(NNodes::TKiDropBackupCollection node, TExprContext& ctx) = 0;
+    virtual TStatus HandleBackup(NNodes::TKiBackup node, TExprContext& ctx) = 0;
 };
 
 class TKikimrKey {

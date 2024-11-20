@@ -438,11 +438,6 @@ message EvictionToExternalStorageSettings {
     string storage_name = 1;
 }
 
-message EvictionToFamilySettings {
-    // Name of column family
-    string family_name = 1;
-}
-
 message TtlTier {
     uint32 evict_after_seconds = 1;
 

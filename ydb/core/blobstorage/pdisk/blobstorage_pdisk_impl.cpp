@@ -2360,8 +2360,8 @@ void TPDisk::ClearQuarantineChunks() {
         });
         for (auto delIt = it; delIt != QuarantineOwners.end(); ++delIt) {
             TOwner owner = *delIt;
-            ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[*delIt].OperationLog, "Remove owner from quarantine, OwnerId# " << *delIt);
-            TOwnerRound ownerRound = OwnerData[*delIt].OwnerRound;
+            ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(OwnerData[owner].OperationLog, "Remove owner from quarantine, OwnerId# " << owner);
+            TOwnerRound ownerRound = OwnerData[owner].OwnerRound;
             OwnerData[owner].Reset(false);
             OwnerData[owner].OwnerRound = ownerRound;
             Keeper.RemoveOwner(owner);

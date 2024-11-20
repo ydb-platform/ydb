@@ -274,7 +274,7 @@ public:
             SectorOperationThrottler->ThrottleRead(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
         }
 
-        if (Y_UNLIKELY(ReadCallback)) {
+        if (ReadCallback) {
             ReadCallback();
         }
     }

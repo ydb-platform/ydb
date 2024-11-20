@@ -2,6 +2,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/mind/hive/hive.h>
+
 namespace {
 
 using namespace NKikimr;

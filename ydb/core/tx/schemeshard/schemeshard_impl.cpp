@@ -4851,7 +4851,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
 
-        HFuncTraced(TEvPersQueue::TEvProposeTransactionAttachResult, Handle);
+        HFuncTraced(TEvDataShard::TEvProposeTransactionAttachResult, Handle);
 
         HFuncTraced(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         HFuncTraced(TEvPrivate::TEvSendBaseStatsToSA, Handle);
@@ -5445,12 +5445,12 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TAct
     Execute(CreateTxOperationProgress(TOperationId(txId, ev->Get()->TxPartId)), ctx);
 }
 
-void TSchemeShard::Handle(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx)
+void TSchemeShard::Handle(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx)
 {
     const auto txId = TTxId(ev->Get()->Record.GetTxId());
     if (!Operations.contains(txId)) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Got TEvPersQueue::TEvProposeTransactionAttachResult"
+                   "Got TEvDataShard::TEvProposeTransactionAttachResult"
                    << " for unknown txId: " << txId
                    << " message: " << ev->Get()->Record.ShortDebugString());
         return;
@@ -5460,7 +5460,7 @@ void TSchemeShard::Handle(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr&
     TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
     if (partId == InvalidSubTxId) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Got TEvPersQueue::TEvProposeTransactionAttachResult but partId is unknown"
+                   "Got TEvDataShard::TEvProposeTransactionAttachResult but partId is unknown"
                        << ", for txId: " << txId
                        << ", tabletId: " << tabletId
                        << ", at schemeshard: " << TabletID());

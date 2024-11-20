@@ -1,7 +1,0 @@
-{
-    "infer_schema" = %true;
-    "schema_mode" = "strong";
-    "schema" = <strict=%false>[
-        {"type"="string"; "name"="key"};
-    ]
-}

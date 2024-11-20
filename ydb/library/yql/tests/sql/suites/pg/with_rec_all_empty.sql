@@ -1,9 +1,0 @@
---!syntax_pg
-WITH RECURSIVE t(n) AS (
-    SELECT * FROM (SELECT 1 LIMIT 0) a
-    UNION ALL
-    SELECT n+1 FROM t WHERE n < 5
-)
-SELECT * FROM t
-
-

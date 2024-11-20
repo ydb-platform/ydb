@@ -1,3 +1,0 @@
-select key,1 as `num` from Input1
-union all
-select key,2 as `num` from Input2;

@@ -26,7 +26,7 @@ To import data to the table, use the [YQL `REPLACE` command](../../../../yql/ref
 
 `--restore-indexes VAL`: Enables/disables import of indexes, 1 (yes) or 0 (no), defaults to 1. If set to 0, the import won't either register secondary indexes in the data schema or populate them with data.
 
-`--restore-acl VAL`: Enables/disables import of ACL and owner, 1 (yes) or 0 (no), defaults to 1.
+`--restore-acl VAL`: Enables/disables import of access control lists (ACL) and owners for database objects, 1 (yes) or 0 (no), defaults to 1.
 
 `--dry-run`: Matching the data schemas in the database and file system without updating the database, 1 (yes) or 0 (no), defaults to 0. When enabled, the system checks that:
 

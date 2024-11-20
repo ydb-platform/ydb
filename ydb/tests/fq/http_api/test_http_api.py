@@ -98,9 +98,6 @@ class TestHttpApi(TestBase):
             response = client.stop_query(query_id)
             assert response.status_code == 204
 
-            response = client.restart_query(query_id)
-            assert response.status_code == 204
-
     def test_empty_query(self):
         with self.create_client() as client:
             with pytest.raises(
@@ -111,6 +108,14 @@ class TestHttpApi(TestBase):
                 ),
             ):  # noqa
                 client.create_query()
+
+    def test_invalid_id(self):
+        with self.create_client() as client:
+            resp = client.stop_quert(query_id="nevalidno")
+            assert resp.status_code == 404
+
+            resp = client.restart_query(query_id="snova nevalidno")
+            assert resp.status_code == 404s
 
     def test_warning(self):
         with self.create_client() as client:
@@ -215,9 +220,6 @@ class TestHttpApi(TestBase):
             response = client.stop_query(query_id1)
             assert response.status_code == 204
 
-            response = client.restart_query(query_id1)
-            assert response.status_code == 204
-
     def test_stop_idempotency(self):
         c = FederatedQueryClient("my_folder", streaming_over_kikimr=self.streaming_over_kikimr)
         self.streaming_over_kikimr.compute_plane.stop()
@@ -227,20 +229,36 @@ class TestHttpApi(TestBase):
         with self.create_client() as client:
             response1 = client.stop_query(query_id, idempotency_key="Z")
             assert response1.status_code == 204
-
-            response = client.restart_query(query_id)
-            assert response.status_code == 204
-
             response2 = client.stop_query(query_id, idempotency_key="Z")
             assert response2.status_code == 204
-            response2 = client.restart_query(query_id)
-            assert response2.status_code == 204
-
             client.stop_query(query_id, expected_code=400)
-            response = client.restart_query(query_id, expected_code=400)
 
         self.streaming_over_kikimr.compute_plane.start()
         c.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)
+
+    def test_restart_idempotency(self):
+        c = FederatedQueryClient("my_folder", streaming_over_kikimr=self.streaming_over_kikimr)
+        self.streaming_over_kikimr.compute_plane.stop()
+        query_id = c.create_query("select1", "select 1").result.query_id
+        c.wait_query_status(query_id, fq.QueryMeta.STARTING)
+    
+        with self.create_client() as client:
+            response1 = client.stop_query(query_id, idempotency_key="Z")
+            assert response1.status_code == 204
+
+            response2 = client.restart_query(query_id, idempotency_key="Z")
+            assert response2.status_code == 204
+
+            response2 = client.restart_query(query_id, idempotency_key="Z")
+            assert response2.status_code == 204
+
+            response2 = client.restart_query(query_id)
+            assert response2.status_code == 400
+            
+        
+        self.streaming_over_kikimr.compute_plane.start()
+        c.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)
+        pass
 
     def test_simple_streaming_query(self):
         self.init_topics("simple_streaming_query", create_output=False)

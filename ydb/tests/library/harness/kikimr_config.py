@@ -156,6 +156,7 @@ class KikimrConfigGenerator(object):
             default_user_sid=None,
             pg_compatible_expirement=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
+            metadata_section=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -430,6 +431,13 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
             self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
 
+        self.full_config = dict()
+        if metadata_section:
+            self.full_config["metadata"] = metadata_section
+            self.full_config["config"] = self.yaml_config
+        else:
+            self.full_config = self.yaml_config
+
     @property
     def pdisks_info(self):
         return self._pdisks_info
@@ -526,7 +534,7 @@ class KikimrConfigGenerator(object):
     def write_proto_configs(self, configs_path):
         self.write_tls_data()
         with open(os.path.join(configs_path, "config.yaml"), "w") as writer:
-            writer.write(yaml.safe_dump(self.yaml_config))
+            writer.write(yaml.safe_dump(self.full_config))
 
     def clone_grpc_as_ext_endpoint(self, port, endpoint_id=None):
         cur_grpc_config = copy.deepcopy(self.yaml_config['grpc_config'])

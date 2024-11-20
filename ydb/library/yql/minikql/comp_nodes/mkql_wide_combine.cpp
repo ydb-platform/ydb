@@ -603,9 +603,11 @@ private:
             bucket.LineCount++;
 
             if (bucket.BucketState != TSpilledBucket::EBucketState::InMemory) {
-                bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
-                SpillingBucketsCount++;
-                InMemoryBucketsCount--;
+                if (bucket.BucketState != TSpilledBucket::EBucketState::SpillingState) {
+                    bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
+                    SpillingBucketsCount++;
+                }
+
                 bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
                 for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
                     //releasing values stored in unsafe TUnboxedValue buffer

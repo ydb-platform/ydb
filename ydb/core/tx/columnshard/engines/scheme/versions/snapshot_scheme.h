@@ -38,18 +38,6 @@ public:
     const TSnapshot& GetSnapshot() const override;
     ui32 GetColumnsCount() const override;
     ui64 GetVersion() const override;
-
-    bool IsReplaceableByNext(const ISnapshotSchema& nextSchema) const override {
-        return nextSchema.IsReplaceableByPrev(*this);
-    };
-
-    bool IsReplaceableByPrev(const TSnapshotSchema& prevSchema) const override {
-        return prevSchema.IsReplaceableByNextVersion(*this);
-    };
-
-    // Checks that no columns changed and deleted in the next version,
-    // so that current schema version can be safely changed to the next
-    bool IsReplaceableByNextVersion(const TSnapshotSchema& nextSchema) const;
 };
 
 }

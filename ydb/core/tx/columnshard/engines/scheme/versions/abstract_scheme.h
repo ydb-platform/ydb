@@ -16,6 +16,10 @@ class TSaverContext;
 class TWritePortionInfoWithBlobsResult;
 class TSnapshotSchema;
 
+inline bool IsSnapshotField(const std::string& name) {
+    return memcmp(name.c_str(), "_yql_", 5) == 0;
+}
+
 class ISnapshotSchema {
 protected:
     virtual TString DoDebugString() const = 0;
@@ -88,13 +92,7 @@ public:
     std::set<ui32> GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const;
     std::vector<ui32> ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const;
 
-    virtual bool IsReplaceableByNext(const ISnapshotSchema&) const {
-        return false;
-    };
-
-    virtual bool IsReplaceableByPrev(const TSnapshotSchema&) const {
-        return false;
-    }
+    bool IsReplaceableByNext(const ISnapshotSchema& nextSchema) const;
 };
 
 }   // namespace NKikimr::NOlap

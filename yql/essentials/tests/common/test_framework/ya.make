@@ -8,6 +8,7 @@ PY_SRCS(
     yqlrun.py
     yql_http_file_server.py
     test_utils.py
+    test_file_common.py
 )
 
 PY_SRCS(

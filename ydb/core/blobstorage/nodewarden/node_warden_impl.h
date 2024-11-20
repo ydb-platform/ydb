@@ -188,7 +188,7 @@ namespace NKikimr::NStorage {
             , PredictedDelayMultiplierHDD(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000)
             , PredictedDelayMultiplierSSD(std::round(DefaultPredictedDelayMultiplier * 1000), 0, 1'000'000)
             , MaxNumOfSlowDisks(DefaultMaxNumOfSlowDisks, 1, 2)
-            , MaxNumOfSlowDisksHDD(DefaultMaxNumOfSlowDisks, 1, 2)
+            , MaxNumOfSlowDisksHDD(DefaultMaxNumOfSlowDisksHDD, 1, 2)
             , MaxNumOfSlowDisksSSD(DefaultMaxNumOfSlowDisks, 1, 2)
         {
             Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);

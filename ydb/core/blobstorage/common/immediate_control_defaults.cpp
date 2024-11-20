@@ -11,4 +11,7 @@ TControlWrapper PredictedDelayMultiplierDefaultControl =
 TControlWrapper MaxNumOfSlowDisksDefaultControl =
         TControlWrapper(DefaultMaxNumOfSlowDisks, 1, 2);
 
+TControlWrapper MaxNumOfSlowDisksHDDDefaultControl =
+        TControlWrapper(DefaultMaxNumOfSlowDisksHDD, 1, 2);
+
 } // namespace NKikimr

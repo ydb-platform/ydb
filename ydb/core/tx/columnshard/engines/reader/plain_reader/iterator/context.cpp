@@ -27,7 +27,9 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::GetColumnsFetchingPlan(con
     if (source->NeedAccessorsFetching()) {
         if (!AskAccumulatorsScript) {
             AskAccumulatorsScript = std::make_shared<TFetchingScript>(*this);
-            AskAccumulatorsScript->AddStep<TAllocateMemoryStep>();
+            if (ui64 size = source->PredictAccessorsMemory()) {
+                AskAccumulatorsScript->AddStep<TAllocateMemoryStep>(size, EStageFeaturesIndexes::Accessors);
+            }
             AskAccumulatorsScript->AddStep<TPortionAccessorFetchingStep>();
         }
         AskAccumulatorsScript->AddStep<TDetectInMem>(*FFColumns);

@@ -4206,6 +4206,9 @@ void TPersQueue::ChangeTxState(TDistributedTransaction& tx,
     auto now = TAppData::TimeProvider->Now();
 
     if (TxExecutionTime.contains(tx.State)) {
+        Y_ABORT_UNLESS(tx.ChangeStateTime.Defined(),
+                       "PQ %" PRIu64 ", TxId %" PRIu64,
+                       TabletID(), tx.TxId);
         Y_ABORT_UNLESS(now >= *tx.ChangeStateTime,
                        "PQ %" PRIu64 ", TxId %" PRIu64,
                        TabletID(), tx.TxId);

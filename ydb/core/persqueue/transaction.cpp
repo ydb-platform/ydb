@@ -427,6 +427,13 @@ NKikimrPQ::TTransaction TDistributedTransaction::Serialize(EState state) {
 
     *tx.MutablePartitions() = PartitionsData;
 
+    if (BeginTime.Defined()) {
+        tx.SetBeginTime(BeginTime->MicroSeconds());
+    }
+    if (ChangeStateTime.Defined()) {
+        tx.SetChangeStateTime(ChangeStateTime->MicroSeconds());
+    }
+
     return tx;
 }
 

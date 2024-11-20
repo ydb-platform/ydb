@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
         // We expect to see quarantined log chunks in the log at least once (however locally it was seen every time).
         // The original bug was crashing the server, so this test also tests this and that's why it doesn't break the cycle
         // upon encountering quarantined log chunks.
-        bool captureQuarantinedLogChunks = false;
+        bool capturedQuarantinedLogChunks = false;
         THPTimer timer;
         while (timer.Passed() < timeLimit) {
             TStringStream ss;
@@ -392,11 +392,13 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
                 }
             }
 
-            if (!captureQuarantinedLogChunks) {
+            if (!capturedQuarantinedLogChunks) {
                 TString log = ss.Str();
-                captureQuarantinedLogChunks = log.Contains("quarantined log chunks");
+                capturedQuarantinedLogChunks = log.Contains("quarantined log chunks");
             }
         }
+
+        UNIT_ASSERT(capturedQuarantinedLogChunks);
     }
 
     Y_UNIT_TEST(OwnerKilledWhileReadingLog) {

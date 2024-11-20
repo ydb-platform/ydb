@@ -231,7 +231,7 @@ public:
         }
     }
 
-    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery, 
+    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery,
         TMaybe<TOwnedCellVec> lastProcessedKey, ui64& newReadId) final {
 
         auto it = PendingKeysByReadId.find(prevReadId);
@@ -280,7 +280,7 @@ public:
             requests.emplace_back(std::move(request));
             PendingKeysByReadId.insert({newReadId, std::move(unprocessedRanges)});
         }
-        
+
         return requests;
     }
 
@@ -495,7 +495,7 @@ public:
         UnprocessedRows.emplace_back(std::make_pair(TOwnedCellVec(joinKeyCells), std::move(inputRow.GetElement(1))));
     }
 
-    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery, 
+    std::vector<THolder<TEvDataShard::TEvRead>> RebuildRequest(const ui64& prevReadId, ui32 firstUnprocessedQuery,
         TMaybe<TOwnedCellVec> lastProcessedKey, ui64& newReadId) final {
 
         auto readIt = PendingKeysByReadId.find(prevReadId);
@@ -934,6 +934,7 @@ private:
         if (rowStats.ResultBytesCount > (ui64)freeSpace) {
             resultRow.DeleteUnreferenced();
             rowStats.Clear();
+            return NUdf::TUnboxedValuePod();
         }
 
         return resultRow;

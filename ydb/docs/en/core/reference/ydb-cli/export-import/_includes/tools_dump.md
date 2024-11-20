@@ -27,7 +27,7 @@ The `tools dump` command dumps the database data and objects schema to the clien
 
 `--save-partial-result`: Don't delete the result of partial dumping. Without this option, the dumps that terminated with an error are deleted.
 
-`--preserve-pool-kinds`: Preserve storage pool kind settings. If this option is enabled, storage pool kind will be saved to dump. In this case, if there will be no such storage pool kind in database on restore, error will occur. By default this option is disabled and any existing storage pool kind will be used on restore.
+`--preserve-pool-kinds`: If this option is enabled, `tools dump` command saves storage pool kind settings to the dump. To import such a dump, same storage pools kinds must be present in the database. If at least one is missing, the import procedure will end with an error. By default this option is disabled, and the import procedure will use any existing storage pool kinds.
 
 `--ordered`: Rows in the exported tables will be sorted by the primary key.
 

@@ -10,6 +10,25 @@
 namespace NKikimr {
 namespace NKqp {
 
+class IDataBatch : public TThrRefBase {
+public:
+    virtual TString SerializeToString() const = 0;
+    virtual i64 GetMemory() const = 0;
+    bool IsEmpty() const;
+};
+
+using IDataBatchPtr = TIntrusivePtr<IDataBatch>;
+
+class IDataSerializer : public TThrRefBase {
+public:
+
+    virtual void AddData(const NMiniKQL::TUnboxedValueBatch& data) = 0;
+    virtual IDataBatchPtr Build() = 0;
+};
+
+using IDataSerializerPtr = TIntrusivePtr<IDataSerializer>;
+
+
 class IShardedWriteController : public TThrRefBase {
 public:
     virtual void OnPartitioningChanged(

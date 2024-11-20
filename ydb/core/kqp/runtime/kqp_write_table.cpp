@@ -20,19 +20,75 @@ namespace {
 constexpr ui64 DataShardMaxOperationBytes = 8_MB;
 constexpr ui64 ColumnShardMaxOperationBytes = 64_MB;
 
+class TColumnBatch : public IDataBatch {
+public:
+    using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
+
+    TString SerializeToString() const override {
+        return NArrow::SerializeBatchNoCompression(Data);
+    }
+
+    i64 GetMemory() const override {
+        return Memory;
+    }
+
+    TRecordBatchPtr Extract() {
+        Memory = 0;
+        TRecordBatchPtr result = std::move(Data);
+        return result;
+    }
+
+    TColumnBatch(const TRecordBatchPtr& data)
+        : Data(data)
+        , Memory(NArrow::GetBatchDataSize(Data)) {
+    }
+
+private:
+    TRecordBatchPtr Data;
+    i64 Memory;
+};
+
+
+class TRowBatch : public IDataBatch {
+public:
+    TString SerializeToString() const override {
+        return TSerializedCellMatrix::Serialize(Cells, Rows, Columns);
+    }
+
+    i64 GetMemory() const override {
+        return Size;
+    }
+
+    bool IsEmpty() const {
+        return Cells.empty();
+    }
+
+    std::pair<std::vector<TCell>, std::vector<NUdf::TStringValue>> Extract() {
+        Size = 0;
+        Rows = 0;
+        return {std::move(Cells), std::move(Data)};
+    }
+
+    TRowBatch(std::vector<TCell>&& cells, std::vector<NUdf::TStringValue>&& data, i64 size, ui32 rows, ui16 columns)
+        : Cells(std::move(cells))
+        , Data(std::move(data))
+        , Size(size)
+        , Rows(rows)
+        , Columns(columns) {
+    }
+
+private:
+    std::vector<TCell> Cells;
+    std::vector<NUdf::TStringValue> Data;
+    ui64 Size = 0;
+    ui32 Rows = 0;
+    ui16 Columns = 0;
+};
+
 class IPayloadSerializer : public TThrRefBase {
 public:
-    class IBatch : public TThrRefBase {
-    public:
-        virtual TString SerializeToString() const = 0;
-        virtual i64 GetMemory() const = 0;
-        bool IsEmpty() const;
-    };
-
-    using IBatchPtr = TIntrusivePtr<IBatch>;
-
     virtual void AddData(const NMiniKQL::TUnboxedValueBatch& data) = 0;
-    virtual void AddBatch(const IBatchPtr& batch) = 0;
+    virtual void AddBatch(const IDataBatchPtr& batch) = 0;
 
     virtual void Close() = 0;
 
@@ -43,11 +99,11 @@ public:
     virtual NKikimrDataEvents::EDataFormat GetDataFormat() = 0;
     virtual std::vector<ui32> GetWriteColumnIds() = 0;
 
-    using TBatches = THashMap<ui64, std::deque<IBatchPtr>>;
+    using TBatches = THashMap<ui64, std::deque<IDataBatchPtr>>;
 
     virtual TBatches FlushBatchesForce() = 0;
 
-    virtual IBatchPtr FlushBatch(ui64 shardId) = 0;
+    virtual IDataBatchPtr FlushBatch(ui64 shardId) = 0;
     virtual const THashSet<ui64>& GetShardIds() const = 0;
 
     virtual i64 GetMemory() = 0;
@@ -331,32 +387,7 @@ private:
 
 class TColumnShardPayloadSerializer : public IPayloadSerializer {
     using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
-
-    class TBatch : public IPayloadSerializer::IBatch {
-    public:
-        TString SerializeToString() const override {
-            return NArrow::SerializeBatchNoCompression(Data);
-        }
-
-        i64 GetMemory() const override {
-            return Memory;
-        }
-
-        TRecordBatchPtr Extract() {
-            Memory = 0;
-            TRecordBatchPtr result = std::move(Data);
-            return result;
-        }
-
-        TBatch(const TRecordBatchPtr& data)
-            : Data(data)
-            , Memory(NArrow::GetBatchDataSize(Data)) {
-        }
-
-    private:
-        TRecordBatchPtr Data;
-        i64 Memory;
-    };
+    using TBatch = TColumnBatch;
 
     struct TUnpreparedBatch {
         ui64 TotalDataSize = 0;
@@ -411,7 +442,7 @@ public:
         FlushUnsharded(false);
     }
 
-    void AddBatch(const IPayloadSerializer::IBatchPtr& batch) override {
+    void AddBatch(const IDataBatchPtr& batch) override {
         auto columnshardBatch = dynamic_cast<TBatch*>(batch.Get());
         YQL_ENSURE(columnshardBatch);
         auto data = columnshardBatch->Extract();
@@ -546,7 +577,7 @@ public:
         return std::move(newBatches);
     }
 
-    IBatchPtr FlushBatch(ui64 shardId) override {
+    IDataBatchPtr FlushBatch(ui64 shardId) override {
         if (!Batches.contains(shardId)) {
             return {};
         }
@@ -584,41 +615,7 @@ private:
 };
 
 class TDataShardPayloadSerializer : public IPayloadSerializer {
-    class TBatch : public IPayloadSerializer::IBatch {
-    public:
-        TString SerializeToString() const override {
-            return TSerializedCellMatrix::Serialize(Cells, Rows, Columns);
-        }
-
-        i64 GetMemory() const override {
-            return Size;
-        }
-
-        bool IsEmpty() const {
-            return Cells.empty();
-        }
-
-        std::pair<std::vector<TCell>, std::vector<NUdf::TStringValue>> Extract() {
-            Size = 0;
-            Rows = 0;
-            return {std::move(Cells), std::move(Data)};
-        }
-
-        TBatch(std::vector<TCell>&& cells, std::vector<NUdf::TStringValue>&& data, i64 size, ui32 rows, ui16 columns)
-            : Cells(std::move(cells))
-            , Data(std::move(data))
-            , Size(size)
-            , Rows(rows)
-            , Columns(columns) {
-        }
-
-    private:
-        std::vector<TCell> Cells;
-        std::vector<NUdf::TStringValue> Data;
-        ui64 Size = 0;
-        ui32 Rows = 0;
-        ui16 Columns = 0;
-    };
+    using TBatch = TRowBatch;
 
     class TRowsBatcher {
     public:
@@ -727,7 +724,7 @@ public:
         });
     }
 
-    void AddBatch(const IPayloadSerializer::IBatchPtr& batch) override {
+    void AddBatch(const IDataBatchPtr& batch) override {
         auto datashardBatch = dynamic_cast<TBatch*>(batch.Get());
         YQL_ENSURE(datashardBatch);
         auto [cells, data] = datashardBatch->Extract();
@@ -773,12 +770,12 @@ public:
         return IsClosed() && IsEmpty();
     }
 
-    IBatchPtr ExtractNextBatch(TRowsBatcher& batcher, bool force) {
+    IDataBatchPtr ExtractNextBatch(TRowsBatcher& batcher, bool force) {
         auto batchResult = batcher.Flush(force);
         Memory -= batchResult.Memory;
         const ui32 rows = batchResult.Cells.size() / Columns.size();
         YQL_ENSURE(Columns.size() <= std::numeric_limits<ui16>::max());
-        return MakeIntrusive<TBatch>(
+        return MakeIntrusive<TRowBatch>(
             std::move(batchResult.Cells),
             std::move(batchResult.Data),
             static_cast<i64>(batchResult.MemorySerialized),
@@ -801,7 +798,7 @@ public:
         return result;
     }
 
-    IBatchPtr FlushBatch(ui64 shardId) override {
+    IDataBatchPtr FlushBatch(ui64 shardId) override {
         if (!Batchers.contains(shardId)) {
             return {};
         }
@@ -834,10 +831,6 @@ private:
     bool Closed = false;
 };
 
-bool IPayloadSerializer::IBatch::IsEmpty() const {
-    return GetMemory() == 0;
-}
-
 IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
@@ -855,6 +848,10 @@ IPayloadSerializerPtr CreateDataShardPayloadSerializer(
 
 }
 
+bool IDataBatch::IsEmpty() const {
+    return GetMemory() == 0;
+}
+
 namespace {
 
 struct TMetadata {
@@ -866,7 +863,7 @@ struct TMetadata {
 
 struct TBatchWithMetadata {
     IShardedWriteController::TWriteToken Token = std::numeric_limits<IShardedWriteController::TWriteToken>::max();
-    IPayloadSerializer::IBatchPtr Data = nullptr;
+    IDataBatchPtr Data = nullptr;
     bool HasRead = false;
 
     bool IsCoveringBatch() const {

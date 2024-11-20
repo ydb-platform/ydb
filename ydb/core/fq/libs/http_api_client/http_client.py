@@ -149,6 +149,21 @@ class YQHttpClient(object):
 
         self._validate_http_error(response, expected_code=expected_code)
         return response.json()["id"]
+    
+    def restart_query(
+        self,
+        query_id: str,
+        idempotency_key: str | None = None,
+        expected_code: int = 204,
+    ):
+        response = self.session.get(
+            self._compose_api_url(f"/api/fq/v1/queries/{query_id}/start"),
+            headers=self._build_headers(idempotency_key=idempotency_key),
+            params=self._build_params(),
+        )
+
+        self._validate_http_error(response, expected_code)
+        return response.json()["status"]
 
     def get_query_status(self, query_id, request_id=None, expected_code=200) -> Any:
         response = self.session.get(

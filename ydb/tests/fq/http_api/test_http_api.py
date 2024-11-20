@@ -98,6 +98,9 @@ class TestHttpApi(TestBase):
             response = client.stop_query(query_id)
             assert response.status_code == 204
 
+            response = client.restart_query(query_id)
+            assert response.status_code == 204
+
     def test_empty_query(self):
         with self.create_client() as client:
             with pytest.raises(
@@ -212,6 +215,9 @@ class TestHttpApi(TestBase):
             response = client.stop_query(query_id1)
             assert response.status_code == 204
 
+            response = client.restart_query(query_id1)
+            assert response.status_code == 204
+
     def test_stop_idempotency(self):
         c = FederatedQueryClient("my_folder", streaming_over_kikimr=self.streaming_over_kikimr)
         self.streaming_over_kikimr.compute_plane.stop()
@@ -221,9 +227,17 @@ class TestHttpApi(TestBase):
         with self.create_client() as client:
             response1 = client.stop_query(query_id, idempotency_key="Z")
             assert response1.status_code == 204
+
+            response = client.restart_query(query_id)
+            assert response.status_code == 204
+
             response2 = client.stop_query(query_id, idempotency_key="Z")
             assert response2.status_code == 204
+            response2 = client.restart_query(query_id)
+            assert response2.status_code == 204
+
             client.stop_query(query_id, expected_code=400)
+            response = client.restart_query(query_id, expected_code=400)
 
         self.streaming_over_kikimr.compute_plane.start()
         c.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)
@@ -257,6 +271,9 @@ class TestHttpApi(TestBase):
             assert query_json["id"] == query_id
 
             response = client.stop_query(query_id)
+            assert response.status_code == 204
+
+            response = client.restart_query(query_id)
             assert response.status_code == 204
 
             wait_for_query_status(client, query_id, ["FAILED"])

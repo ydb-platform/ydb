@@ -208,7 +208,7 @@ namespace NKikimr {
         Y_ABORT_UNLESS(Topology);
         Sessions->QueueConnectUpdate(Topology->GetOrderNumber(msg->VDiskId), msg->QueueId, msg->IsConnected,
             msg->ExtraBlockChecksSupport, msg->CostModel, *Topology);
-        MinREALHugeBlobInBytes = Sessions->GetMinREALHugeBlobInBytes();
+        MinHugeBlobInBytes = Sessions->GetMinHugeBlobInBytes();
         if (msg->IsConnected && (CurrentStateFunc() == &TThis::StateEstablishingSessions ||
                 CurrentStateFunc() == &TThis::StateEstablishingSessionsTimeout)) {
             SwitchToWorkWhenGoodToGo();
@@ -216,7 +216,7 @@ namespace NKikimr {
             SetStateEstablishingSessions();
         }
 
-        Y_DEBUG_ABORT_UNLESS(CurrentStateFunc() != &TThis::StateWork || MinREALHugeBlobInBytes);
+        Y_DEBUG_ABORT_UNLESS(CurrentStateFunc() != &TThis::StateWork || MinHugeBlobInBytes);
 
         if (const ui32 prev = std::exchange(NumUnconnectedDisks, Sessions->GetNumUnconnectedDisks()); prev != NumUnconnectedDisks) {
             NodeMon->IncNumUnconnected(NumUnconnectedDisks);

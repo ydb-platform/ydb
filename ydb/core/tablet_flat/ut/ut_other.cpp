@@ -38,22 +38,24 @@ Y_UNIT_TEST_SUITE(NOther) {
 
         auto results = bundle->Results();
         UNIT_ASSERT(results);
-        UNIT_ASSERT(results[0].PageCollections.at(0)->Total() == 7);
+        UNIT_ASSERT_VALUES_EQUAL(results[0].PageCollections.at(0).RegularPages.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(results[0].PageCollections.at(0).StickyPages.size(), 7);
 
-        UNIT_ASSERT(globs.size() == 18 /* 11 page collections + 4 meta + 3 external */);
+        UNIT_ASSERT_VALUES_EQUAL(globs.size(), 18 /* 11 page collections + 4 meta + 3 external */);
 
         /*_ Ensure that writer places blobs to the correct channel and grp */
 
         for (auto &one: globs) {
             UNIT_ASSERT(NPageCollection::TGroupBlobsByCookie::IsInPlane(one.GId.Logo, mask));
-            UNIT_ASSERT(
-                (one.GId.Group == 13 && one.GId.Logo.Channel() == 3)
-                ||(one.GId.Group == 17 && one.GId.Logo.Channel() == 5));
+            UNIT_ASSERT_VALUES_EQUAL(one.GId.Group, 13);
+            UNIT_ASSERT_VALUES_EQUAL(one.GId.Logo.Channel(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(one.GId.Group, 17);
+            UNIT_ASSERT_VALUES_EQUAL(one.GId.Logo.Channel(), 5);
         }
 
         /*_ Ensure external blob references are accounted correctly */
-        UNIT_ASSERT(results[0].Growth.size() == 1);
-        UNIT_ASSERT(results[0].Growth[0] == NTable::TScreen::THole(0, 3));
+        UNIT_ASSERT_VALUES_EQUAL(results[0].Growth.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(results[0].Growth[0], NTable::TScreen::THole(0, 3));
     }
 }
 

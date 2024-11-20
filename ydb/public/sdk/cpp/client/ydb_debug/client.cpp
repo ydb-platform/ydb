@@ -12,6 +12,8 @@
 
 namespace NYdb::NDebug {
 
+using namespace Ydb;
+
 using namespace NThreading;
 
 class TDebugClient::TImpl: public TClientImplCommon<TDebugClient::TImpl> {
@@ -20,51 +22,18 @@ public:
         : TClientImplCommon(std::move(connections), settings)
     {}
 
-    TAsyncPlainGrpcPingResult PlainGrpcPing(const TPlainGrpcPingSettings& settings) {
-        auto pingPromise = NewPromise<TPlainGrpcPingResult>();
-        auto responseCb = [pingPromise] (Ydb::Debug::PlainGrpcResponse*, TPlainStatus status) mutable {
-            TPlainGrpcPingResult val(TStatus(std::move(status)));
+    template<typename TRequest, typename TResponse, typename TResult, typename TSettings>
+    auto Ping(const TSettings& settings, auto serviceMethod) {
+        auto pingPromise = NewPromise<TResult>();
+        auto responseCb = [pingPromise] (TResponse*, TPlainStatus status) mutable {
+            TResult val(TStatus(std::move(status)));
             pingPromise.SetValue(std::move(val));
         };
 
-        Connections_->Run<Ydb::Debug::V1::DebugService, Ydb::Debug::PlainGrpcRequest, Ydb::Debug::PlainGrpcResponse>(
-            Ydb::Debug::PlainGrpcRequest(),
+        Connections_->Run<Debug::V1::DebugService, TRequest, TResponse>(
+            TRequest(),
             responseCb,
-            &Ydb::Debug::V1::DebugService::Stub::AsyncPingPlainGrpc,
-            DbDriverState_,
-            TRpcRequestSettings::Make(settings));
-
-        return pingPromise;
-    }
-
-    TAsyncGrpcProxyPingResult GrpcProxyPing(const TGrpcProxyPingSettings& settings) {
-        auto pingPromise = NewPromise<TGrpcProxyPingResult>();
-        auto responseCb = [pingPromise] (Ydb::Debug::GrpcProxyResponse*, TPlainStatus status) mutable {
-            TGrpcProxyPingResult val(TStatus(std::move(status)));
-            pingPromise.SetValue(std::move(val));
-        };
-
-        Connections_->Run<Ydb::Debug::V1::DebugService, Ydb::Debug::GrpcProxyRequest, Ydb::Debug::GrpcProxyResponse>(
-            Ydb::Debug::GrpcProxyRequest(),
-            responseCb,
-            &Ydb::Debug::V1::DebugService::Stub::AsyncPingGrpcProxy,
-            DbDriverState_,
-            TRpcRequestSettings::Make(settings));
-
-        return pingPromise;
-    }
-
-    TAsyncKqpProxyPingResult KqpProxyPing(const TKqpProxyPingSettings& settings) {
-        auto pingPromise = NewPromise<TKqpProxyPingResult>();
-        auto responseCb = [pingPromise] (Ydb::Debug::KqpProxyResponse*, TPlainStatus status) mutable {
-            TKqpProxyPingResult val(TStatus(std::move(status)));
-            pingPromise.SetValue(std::move(val));
-        };
-
-        Connections_->Run<Ydb::Debug::V1::DebugService, Ydb::Debug::KqpProxyRequest, Ydb::Debug::KqpProxyResponse>(
-            Ydb::Debug::KqpProxyRequest(),
-            responseCb,
-            &Ydb::Debug::V1::DebugService::Stub::AsyncPingKqpProxy,
+            serviceMethod,
             DbDriverState_,
             TRpcRequestSettings::Make(settings));
 
@@ -79,16 +48,30 @@ TDebugClient::TDebugClient(const TDriver& driver, const TClientSettings& setting
 {
 }
 
-TAsyncPlainGrpcPingResult TDebugClient::PlainGrpcPing(const TPlainGrpcPingSettings& settings) {
-    return Impl_->PlainGrpcPing(settings);
+TAsyncPlainGrpcPingResult TDebugClient::PingPlainGrpc(const TPlainGrpcPingSettings& settings) {
+    return Impl_->Ping<Debug::PlainGrpcRequest, Debug::PlainGrpcResponse, TPlainGrpcPingResult>(
+        settings, &Debug::V1::DebugService::Stub::AsyncPingPlainGrpc);
 }
 
-TAsyncGrpcProxyPingResult TDebugClient::GrpcProxyPing(const TGrpcProxyPingSettings& settings) {
-    return Impl_->GrpcProxyPing(settings);
+TAsyncGrpcProxyPingResult TDebugClient::PingGrpcProxy(const TGrpcProxyPingSettings& settings) {
+    return Impl_->Ping<Debug::GrpcProxyRequest, Debug::GrpcProxyResponse, TGrpcProxyPingResult>(
+        settings, &Debug::V1::DebugService::Stub::AsyncPingGrpcProxy);
 }
 
-TAsyncKqpProxyPingResult TDebugClient::KqpProxyPing(const TKqpProxyPingSettings& settings) {
-    return Impl_->KqpProxyPing(settings);
+TAsyncKqpProxyPingResult TDebugClient::PingKqpProxy(const TKqpProxyPingSettings& settings) {
+    return Impl_->Ping<Debug::KqpProxyRequest, Debug::KqpProxyResponse, TKqpProxyPingResult>(
+        settings, &Debug::V1::DebugService::Stub::AsyncPingKqpProxy);
+}
+
+TAsyncSchemeCachePingResult TDebugClient::PingSchemeCache(const TSchemeCachePingSettings& settings) {
+    return Impl_->Ping<Debug::SchemeCacheRequest, Debug::SchemeCacheResponse, TSchemeCachePingResult>(
+        settings, &Debug::V1::DebugService::Stub::AsyncPingSchemeCache);
+
+}
+
+TAsyncTxProxyPingResult TDebugClient::PingTxProxy(const TTxProxyPingSettings& settings) {
+    return Impl_->Ping<Debug::TxProxyRequest, Debug::TxProxyResponse, TTxProxyPingResult>(
+        settings, &Debug::V1::DebugService::Stub::AsyncPingTxProxy);
 }
 
 } // namespace NYdb::NDebug

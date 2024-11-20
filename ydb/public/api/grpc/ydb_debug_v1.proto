@@ -9,4 +9,6 @@ service DebugService {
     rpc PingPlainGrpc(Debug.PlainGrpcRequest) returns (Debug.PlainGrpcResponse);
     rpc PingGrpcProxy(Debug.GrpcProxyRequest) returns (Debug.GrpcProxyResponse);
     rpc PingKqpProxy(Debug.KqpProxyRequest) returns (Debug.KqpProxyResponse);
+    rpc PingSchemeCache(Debug.SchemeCacheRequest) returns (Debug.SchemeCacheResponse);
+    rpc PingTxProxy(Debug.TxProxyRequest) returns (Debug.TxProxyResponse);
 }

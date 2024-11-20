@@ -18,6 +18,8 @@ const TVector<TString> PingTypeDescriptions = {
     "ping goes through GRPC layer right to the GRPC proxy and returns",
     "ping goes until query processing layer and returns without any query execution",
     "ping executes a very simple 'SELECT 1;' query",
+    "ping goes through GRPC layer to SchemeCache and returns",
+    "ping goes through GRPC layer to TxProxy and allocates TxId",
 };
 
 } // anonymous
@@ -40,7 +42,8 @@ void TCommandPing::Config(TConfig& config) {
     for (size_t i = 0; i < PingTypeDescriptions.size(); ++i) {
         EPingType type = static_cast<EPingType>(i);
 
-        pingTypesDescription << "\n" << colors.ItalicOn() << type << "\n    " << colors.ItalicOff() << PingTypeDescriptions[i];
+        pingTypesDescription << "\n" << colors.ItalicOn() << type << colors.ItalicOff()
+            << "\n    " << PingTypeDescriptions[i];
     }
     pingTypesDescription << "\nDefault: " << PingType << Endl;
 
@@ -94,6 +97,12 @@ int TCommandPing::RunCommand(TConfig& config) {
         case EPingType::Select1:
             isOk = PingKqpSelect1(queryClient, query);
             break;
+        case EPingType::SchemeCache:
+            isOk = PingSchemeCache(pingClient);
+            break;
+        case EPingType::TxProxy:
+            isOk = PingTxProxy(pingClient);
+            break;
         default:
             std::cerr << "Unknown ping type" << std::endl;
             return EXIT_FAILURE;
@@ -129,14 +138,14 @@ int TCommandPing::RunCommand(TConfig& config) {
 }
 
 bool TCommandPing::PingPlainGrpc(NDebug::TDebugClient& client) {
-    auto asyncResult = client.PlainGrpcPing(NDebug::TPlainGrpcPingSettings());
+    auto asyncResult = client.PingPlainGrpc(NDebug::TPlainGrpcPingSettings());
     asyncResult.GetValueSync();
 
     return true;
 }
 
 bool TCommandPing::PingPlainKqp(NDebug::TDebugClient& client) {
-    auto asyncResult = client.KqpProxyPing(NDebug::TKqpProxyPingSettings());
+    auto asyncResult = client.PingKqpProxy(NDebug::TKqpProxyPingSettings());
     auto result = asyncResult.GetValueSync();
 
     if (result.IsSuccess()) {
@@ -147,7 +156,29 @@ bool TCommandPing::PingPlainKqp(NDebug::TDebugClient& client) {
 }
 
 bool TCommandPing::PingGrpcProxy(NDebug::TDebugClient& client) {
-    auto asyncResult = client.GrpcProxyPing(NDebug::TGrpcProxyPingSettings());
+    auto asyncResult = client.PingGrpcProxy(NDebug::TGrpcProxyPingSettings());
+    auto result = asyncResult.GetValueSync();
+
+    if (result.IsSuccess()) {
+        return true;
+    }
+
+    return false;
+}
+
+bool TCommandPing::PingSchemeCache(NDebug::TDebugClient& client) {
+    auto asyncResult = client.PingSchemeCache(NDebug::TSchemeCachePingSettings());
+    auto result = asyncResult.GetValueSync();
+
+    if (result.IsSuccess()) {
+        return true;
+    }
+
+    return false;
+}
+
+bool TCommandPing::PingTxProxy(NDebug::TDebugClient& client) {
+    auto asyncResult = client.PingTxProxy(NDebug::TTxProxyPingSettings());
     auto result = asyncResult.GetValueSync();
 
     if (result.IsSuccess()) {

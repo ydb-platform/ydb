@@ -27,18 +27,37 @@ public:
     {}
 };
 
+class TSchemeCachePingResult: public TStatus {
+public:
+    TSchemeCachePingResult(TStatus&& status)
+        : TStatus(std::move(status))
+    {}
+};
+
+class TTxProxyPingResult: public TStatus {
+public:
+    TTxProxyPingResult(TStatus&& status)
+        : TStatus(std::move(status))
+    {}
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
 using TAsyncPlainGrpcPingResult = NThreading::TFuture<TPlainGrpcPingResult>;
 using TAsyncGrpcProxyPingResult = NThreading::TFuture<TGrpcProxyPingResult>;
 using TAsyncKqpProxyPingResult = NThreading::TFuture<TKqpProxyPingResult>;
+using TAsyncSchemeCachePingResult = NThreading::TFuture<TSchemeCachePingResult>;
+using TAsyncTxProxyPingResult = NThreading::TFuture<TTxProxyPingResult>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TPlainGrpcPingSettings : public TOperationRequestSettings<TPlainGrpcPingSettings> {};
 struct TGrpcProxyPingSettings : public TOperationRequestSettings<TGrpcProxyPingSettings> {};
 struct TKqpProxyPingSettings : public TOperationRequestSettings<TKqpProxyPingSettings> {};
+struct TSchemeCachePingSettings : public TOperationRequestSettings<TSchemeCachePingSettings> {};
+struct TTxProxyPingSettings : public TOperationRequestSettings<TTxProxyPingSettings> {};
+
+////////////////////////////////////////////////////////////////////////////////
 
 struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
 };
@@ -49,9 +68,12 @@ public:
 public:
     TDebugClient(const TDriver& driver, const TClientSettings& settings = TClientSettings());
 
-    TAsyncPlainGrpcPingResult PlainGrpcPing(const TPlainGrpcPingSettings& settings);
-    TAsyncGrpcProxyPingResult GrpcProxyPing(const TGrpcProxyPingSettings& settings);
-    TAsyncKqpProxyPingResult KqpProxyPing(const TKqpProxyPingSettings& settings);
+    TAsyncPlainGrpcPingResult PingPlainGrpc(const TPlainGrpcPingSettings& settings);
+    TAsyncGrpcProxyPingResult PingGrpcProxy(const TGrpcProxyPingSettings& settings);
+    TAsyncKqpProxyPingResult PingKqpProxy(const TKqpProxyPingSettings& settings);
+
+    TAsyncSchemeCachePingResult PingSchemeCache(const TSchemeCachePingSettings& settings);
+    TAsyncTxProxyPingResult PingTxProxy(const TTxProxyPingSettings& settings);
 
 private:
     class TImpl;

@@ -29,6 +29,8 @@ public:
         GrpcProxy,
         PlainKqp,
         Select1,
+        SchemeCache,
+        TxProxy,
     };
 
 public:
@@ -44,6 +46,8 @@ private:
     bool PingPlainGrpc(NDebug::TDebugClient& client);
     bool PingPlainKqp(NDebug::TDebugClient& client);
     bool PingGrpcProxy(NDebug::TDebugClient& client);
+    bool PingSchemeCache(NDebug::TDebugClient& client);
+    bool PingTxProxy(NDebug::TDebugClient& client);
 
     bool PingKqpSelect1(NQuery::TQueryClient& client, const TString& query);
 

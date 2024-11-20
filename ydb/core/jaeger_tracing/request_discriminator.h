@@ -73,6 +73,8 @@ enum class ERequestType: size_t {
     PING_GRPC,
     PING_PROXY,
     PING_KQP,
+    PING_SCHEME_CACHE,
+    PING_TX_PROXY,
 
     REQUEST_TYPES_CNT, // Add new types above this line
 };

@@ -37,3 +37,23 @@ message KqpProxyResponse {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
 }
+
+// Ping SchemeCache
+
+message SchemeCacheRequest {
+}
+
+message SchemeCacheResponse {
+    StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+}
+
+// Ping TxProxy
+
+message TxProxyRequest {
+}
+
+message TxProxyResponse {
+    StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+}

@@ -211,10 +211,11 @@ public:
     ui64 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {
         ui64 result = 0;
         for (auto&& i : PathIdStatus) {
-            for (auto&& [_, p] : i.GetPortions()) {
+            for (auto&& [_, p] : i.second.GetPortions()) {
                 result += p->PredictAccessorsMemory(schema);
             }
         }
+        return result;
     }
 
     bool HasSubscriber() const {

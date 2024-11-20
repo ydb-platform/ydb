@@ -345,6 +345,11 @@ public:
         RequestContext.ResponseBadRequest(Ydb::StatusIds::BAD_REQUEST, error);
     }
 
+    // template<typename ResponseType = GrpcProtoResponseType, typename ResultType = GrpcProtoResultType>
+    // static std::optional<ResponseType*> GetTypedResponse(NProtoBuf::Message* msg) {
+        
+    // }
+
     static void SendReply(const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
         Y_ABORT_UNLESS(resp);
         Y_ABORT_UNLESS(resp->GetArena());
@@ -403,11 +408,11 @@ class TRestartQueryRequest : public TGrpcCallWrapperBase {
     // THttpRequestContext RequestContext;
 
     typedef std::function<std::unique_ptr<NGRpcService::TEvProxyRuntimeEvent>(TIntrusivePtr<NYdbGrpc::IRequestContextBase> ctx)> TGrpcProxyEventFactory;
-    TGrpcProxyEventFactory EventFactory;
+    // TGrpcProxyEventFactory EventFactory;
 
 public:
     TRestartQueryRequest(const THttpRequestContext& ctx)
-    : TGrpcCallWrapperBase(ctx, TGrpcProxyEventFactory())
+    : TGrpcCallWrapperBase(ctx, &NGRpcService::CreateFederatedQueryDescribeQueryRequestOperationCall)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -449,7 +454,7 @@ public:
             modifyRequest->set_execute_mode(::FederatedQuery::ExecuteMode::RUN);
             modifyRequest->set_allocated_disposition(nullptr);
             modifyRequest->set_state_load_mode(::FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT);
-            modifyRequest->set_previous_revision(describeResult->Getquery().meta().Getlast_job_query_revision()); // ??
+            modifyRequest->set_previous_revision(describeResult->Getquery().meta().Getlast_job_query_revision());
             modifyRequest->set_idempotency_key(requestContext.GetIdempotencyKey());
 
             TIntrusivePtr<TGrpcRequestContextWrapper> requestContextModify = new TGrpcRequestContextWrapper(
@@ -458,10 +463,13 @@ public:
                 TGrpcCallWrapper<FederatedQuery::ModifyQueryRequest, int, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse>::SendReply
             );
 
-            ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(requestContextModify).get());
+            // новый тип события, по идее нужна новая фабрика
+            EventFactory = &NGRpcService::CreateFederatedQueryModifyQueryRequestOperationCall;
+            ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(requestContextModify).release());
+            this->Die(ctx);
         });
 
-        ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(requestContext).get());
+        ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(requestContext).release());
     }
 };
 

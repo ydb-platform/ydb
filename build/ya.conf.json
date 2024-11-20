@@ -84,7 +84,7 @@
                     "clang-format"
                 ]
             },
-            "formula": "build/platform/clang/clang-format16.json"
+            "formula": "build/platform/clang/clang-format/clang-format16.json"
         },
         "clang16": {
             "executable": {

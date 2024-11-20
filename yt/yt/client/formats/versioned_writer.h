@@ -26,11 +26,11 @@ public:
         NTableClient::TTableSchemaPtr schema,
         const std::function<std::unique_ptr<NYson::IFlushableYsonConsumer>(IZeroCopyOutput*)>& consumerBuilder);
 
-    virtual TFuture<void> Close() override;
+    TFuture<void> Close() override;
 
-    virtual bool Write(TRange<NTableClient::TVersionedRow> rows) override;
+    bool Write(TRange<NTableClient::TVersionedRow> rows) override;
 
-    virtual TFuture<void> GetReadyEvent() override;
+    TFuture<void> GetReadyEvent() override;
 
 private:
     const NConcurrency::IAsyncOutputStreamPtr Stream_;

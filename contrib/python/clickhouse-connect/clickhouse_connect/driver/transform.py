@@ -54,13 +54,14 @@ class NativeTransform:
                 if isinstance(ex, StreamCompleteException):
                     # We ran out of data before it was expected, this could be ClickHouse reporting an error
                     # in the response
-                    message = source.last_message
-                    if len(message) > 1024:
-                        message = message[-1024:]
-                    error_start = message.find('Code: ')
-                    if error_start != -1:
-                        message = message[error_start:]
-                    raise StreamFailureError(message) from None
+                    if source.last_message:
+                        message = source.last_message
+                        if len(message) > 1024:
+                            message = message[-1024:]
+                        error_start = message.find('Code: ')
+                        if error_start != -1:
+                            message = message[error_start:]
+                        raise StreamFailureError(message) from None
                 raise
             block_num += 1
             return result_block

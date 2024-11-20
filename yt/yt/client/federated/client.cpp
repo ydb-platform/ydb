@@ -161,17 +161,17 @@ public:
         return Underlying_->GetStartTimestamp();
     }
 
-    virtual NTransactionClient::EAtomicity GetAtomicity() const override
+    NTransactionClient::EAtomicity GetAtomicity() const override
     {
         return Underlying_->GetAtomicity();
     }
 
-    virtual NTransactionClient::EDurability GetDurability() const override
+    NTransactionClient::EDurability GetDurability() const override
     {
         return Underlying_->GetDurability();
     }
 
-    virtual TDuration GetTimeout() const override
+    TDuration GetTimeout() const override
     {
         return Underlying_->GetTimeout();
     }

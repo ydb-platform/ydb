@@ -8,8 +8,8 @@ from yql_utils import get_supported_providers, yql_binary_path, is_xfail, is_ski
     normalize_source_code_path, dump_table_yson, get_gateway_cfg_suffix, do_custom_query_check, normalize_result, \
     stable_result_file, stable_table_file, is_with_final_result_issues
 
-from utils import get_config, DATA_PATH
-from file_common import run_file, run_file_no_cache
+from test_utils import get_config, DATA_PATH
+from test_file_common import run_file, run_file_no_cache
 
 ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 DQRUN_PATH = yql_binary_path('ydb/library/yql/tools/dqrun/dqrun')
@@ -81,7 +81,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
 
                 if do_custom_query_check(yqlrun_res, sql_query):
                     return None
-                
+
                 if os.path.exists(yqlrun_res.results_file):
                     assert os.path.exists(res.results_file)
                     dq_res_yson = normalize_result(stable_result_file(res), False)

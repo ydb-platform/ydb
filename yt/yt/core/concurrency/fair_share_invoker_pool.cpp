@@ -549,6 +549,15 @@ private:
             }
         }
 
+        void Invoke(TMutableRange<TClosure> callbacks) override
+        {
+            if (auto strongParent = Parent_.Lock()) {
+                for (auto& callback : callbacks) {
+                    strongParent->Enqueue(std::move(callback), Index_);
+                }
+            }
+        }
+
     private:
         const int Index_;
         const TWeakPtr<TFairShareInvokerPool> Parent_;

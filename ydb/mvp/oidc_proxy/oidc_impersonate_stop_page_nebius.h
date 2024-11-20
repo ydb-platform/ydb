@@ -3,8 +3,9 @@
 #include "oidc_settings.h"
 #include "context.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
+
+using namespace NActors;
 
 class THandlerImpersonateStop : public NActors::TActorBootstrapped<THandlerImpersonateStop> {
 private:
@@ -23,6 +24,7 @@ public:
                             const TOpenIdConnectSettings& settings);
 
     void Bootstrap(const NActors::TActorContext& ctx);
+    void ReplyAndDie(NHttp::THttpOutgoingResponsePtr httpResponse, const NActors::TActorContext& ctx);
 };
 
 class TImpersonateStopPageHandler : public NActors::TActor<TImpersonateStopPageHandler> {
@@ -38,9 +40,9 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 };
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

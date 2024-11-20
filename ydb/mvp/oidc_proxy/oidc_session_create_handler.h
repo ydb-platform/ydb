@@ -5,8 +5,9 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include "oidc_settings.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
+
+using namespace NActors;
 
 class TSessionCreateHandler : public NActors::TActor<TSessionCreateHandler> {
     using TBase = NActors::TActor<TSessionCreateHandler>;
@@ -21,9 +22,9 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 };
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

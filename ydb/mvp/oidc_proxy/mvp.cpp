@@ -28,8 +28,7 @@
 
 NActors::IActor* CreateMemProfiler();
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 namespace {
 
@@ -418,5 +417,4 @@ THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char**
 
 TAtomic TMVP::Quit = false;
 
-} // NOIDC
-} // NMVP
+} // NMVP::NOIDC

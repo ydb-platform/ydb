@@ -3,9 +3,9 @@
 #include "openid_connect.h"
 #include "oidc_session_create_nebius.h"
 #include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/string_utils/quote/quote.h>
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 THandlerSessionCreateNebius::THandlerSessionCreateNebius(const NActors::TActorId& sender,
                                                          const NHttp::THttpIncomingRequestPtr& request,
@@ -28,7 +28,10 @@ void THandlerSessionCreateNebius::RequestSessionToken(const TString& code, const
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetTokenEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
     httpRequest->Set("Authorization", Settings.GetAuthorizationString());
-    httpRequest->Set<&NHttp::THttpRequest::Body>(body);
+
+    TString bodyStr = body;
+    CGIEscape(bodyStr);
+    httpRequest->Set<&NHttp::THttpRequest::Body>(bodyStr);
 
     ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     Become(&THandlerSessionCreateNebius::StateWork);
@@ -37,16 +40,14 @@ void THandlerSessionCreateNebius::RequestSessionToken(const TString& code, const
 void THandlerSessionCreateNebius::ProcessSessionToken(const TString& sessionToken, const NActors::TActorContext& ctx) {
     TString sessionCookieName = CreateNameSessionCookie(Settings.ClientId);
     TString sessionCookieValue = Base64Encode(sessionToken);
-    LOG_DEBUG_S(ctx, EService::MVP, "Set session cookie: (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
+    BLOG_D("Set session cookie: (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
 
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Set-Cookie", CreateSecureCookie(sessionCookieName, sessionCookieValue));
     responseHeaders.Set("Location", Context.GetRequestedAddress());
     NHttp::THttpOutgoingResponsePtr httpResponse;
     httpResponse = Request->CreateResponse("302", "Cookie set", responseHeaders);
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-    Die(ctx);
+    ReplyAndDie(httpResponse, ctx);
 }
 
-} // NOIDC
-} // NMVP
+} // NMVP::NOIDC

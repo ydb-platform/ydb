@@ -2,8 +2,7 @@
 #include "oidc_session_create_nebius.h"
 #include "oidc_session_create_yandex.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 TSessionCreateHandler::TSessionCreateHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings)
     : TBase(&TSessionCreateHandler::StateWork)
@@ -27,5 +26,4 @@ void TSessionCreateHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::
     ctx.Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
 }
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

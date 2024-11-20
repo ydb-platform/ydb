@@ -641,8 +641,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
         const TStringBuf& body = outgoingRequestEv->Request->Body;
-        UNIT_ASSERT_STRING_CONTAINS(body, "code=code_template");
-        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type=authorization_code");
+        UNIT_ASSERT_STRING_CONTAINS(body, "code%3Dcode_template");
+        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type%3Dauthorization_code");
 
         const TString authorizationServerResponse = R"___({"access_token":"access_token_value","token_type":"bearer","expires_in":43199,"scope":"openid","id_token":"id_token_value"})___";
         NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
@@ -793,8 +793,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TAutoPtr<IEventHandle> handle;
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
         const TStringBuf& body = outgoingRequestEv->Request->Body;
-        UNIT_ASSERT_STRING_CONTAINS(body, "code=code_template");
-        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type=authorization_code");
+        UNIT_ASSERT_STRING_CONTAINS(body, "code%3Dcode_template");
+        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type%3Dauthorization_code");
 
         const TString authorizationServerResponse = R"___({"access_token":"access_token_value","token_type":"bearer","expires_in":43199,"scope":"openid","id_token":"id_token_value"})___";
         NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
@@ -848,8 +848,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TAutoPtr<IEventHandle> handle;
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
         const TStringBuf& body = outgoingRequestEv->Request->Body;
-        UNIT_ASSERT_STRING_CONTAINS(body, "code=code_template");
-        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type=authorization_code");
+        UNIT_ASSERT_STRING_CONTAINS(body, "code%3Dcode_template");
+        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type%3Dauthorization_code");
 
         const TString authorizationServerResponse = R"___({"access_token":"invalid_access_token","token_type":"bearer","expires_in":43199,"scope":"openid","id_token":"id_token_value"})___";
         NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
@@ -914,8 +914,9 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TAutoPtr<IEventHandle> handle;
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
         const TStringBuf& body = outgoingRequestEv->Request->Body;
-        UNIT_ASSERT_STRING_CONTAINS(body, "code=code_template");
-        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type=authorization_code");
+
+        UNIT_ASSERT_STRING_CONTAINS(body, "code%3Dcode_template");
+        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type%3Dauthorization_code");
 
         const TString authorizationServerResponse = R"___({"access_token":"access_token_value","token_type":"bearer","expires_in":43199,"scope":"openid","id_token":"id_token_value"})___";
         NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);

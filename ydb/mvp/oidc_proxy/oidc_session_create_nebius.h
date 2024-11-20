@@ -2,8 +2,9 @@
 
 #include "oidc_session_create.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
+
+using namespace NActors;
 
 class THandlerSessionCreateNebius : public THandlerSessionCreate {
 private:
@@ -22,9 +23,9 @@ private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 };
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

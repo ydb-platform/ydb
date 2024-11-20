@@ -4,6 +4,7 @@
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/appdata.h>
 #include <ydb/mvp/core/mvp_log.h>
+#include <library/cpp/string_utils/quote/quote.h>
 #include "oidc_session_create_yandex.h"
 
 namespace NMVP {
@@ -20,8 +21,8 @@ void THandlerSessionCreateYandex::RequestSessionToken(const TString& code, const
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetTokenEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
     httpRequest->Set("Authorization", Settings.GetAuthorizationString());
-    TStringBuilder body;
-    body << "grant_type=authorization_code&code=" << code;
+    TString body = "grant_type=authorization_code&code=" + code;
+    CGIEscape(body);
     httpRequest->Set<&NHttp::THttpRequest::Body>(body);
     ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     Become(&THandlerSessionCreateYandex::StateWork);
@@ -56,7 +57,7 @@ void THandlerSessionCreateYandex::ProcessSessionToken(const TString& sessionToke
 }
 
 void THandlerSessionCreateYandex::HandleCreateSession(TEvPrivate::TEvCreateSessionResponse::TPtr event, const NActors::TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Create(): OK");
+    BLOG_D("SessionService.Create(): OK");
     auto response = event->Get()->Response;
     NHttp::THeadersBuilder responseHeaders;
     for (const auto& cookie : response.Getset_cookie_header()) {
@@ -66,7 +67,7 @@ void THandlerSessionCreateYandex::HandleCreateSession(TEvPrivate::TEvCreateSessi
 }
 
 void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, EService::MVP, "SessionService.Create(): " << event->Get()->Status);
+    BLOG_D("SessionService.Create(): " << event->Get()->Status);
     if (event->Get()->Status == "400") {
         RetryRequestToProtectedResourceAndDie(ctx);
     } else {
@@ -74,12 +75,11 @@ void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr
         responseHeaders.Set("Content-Type", "text/plain");
         SetCORS(Request, &responseHeaders);
         NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details);
-        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-        Die(ctx);
+        ReplyAndDie(httpResponse, ctx);
     }
 }
 
-} // NOIDC
+} // NMVP
 
 template<>
 TString SecureShortDebugString(const yandex::cloud::priv::oauth::v1::CreateSessionRequest& request) {

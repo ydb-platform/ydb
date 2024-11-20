@@ -3,8 +3,9 @@
 #include "oidc_settings.h"
 #include "context.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
+
+using namespace NActors;
 
 class THandlerImpersonateStart : public NActors::TActorBootstrapped<THandlerImpersonateStart> {
 private:
@@ -13,7 +14,7 @@ private:
 protected:
     const NActors::TActorId Sender;
     const NHttp::THttpIncomingRequestPtr Request;
-    NActors::TActorId HttpProxyId;
+    const NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
 
 public:
@@ -21,15 +22,17 @@ public:
                              const NHttp::THttpIncomingRequestPtr& request,
                              const NActors::TActorId& httpProxyId,
                              const TOpenIdConnectSettings& settings);
+    void Bootstrap(const NActors::TActorContext& ctx);
     void RequestImpersonatedToken(const TString&, const TString&, const NActors::TActorContext&);
     void ProcessImpersonatedToken(const TString& impersonatedToken, const NActors::TActorContext& ctx);
-
-    void Bootstrap(const NActors::TActorContext& ctx);
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
+    void ReplyAndDie(NHttp::THttpOutgoingResponsePtr httpResponse, const NActors::TActorContext& ctx);
+    void ReplyBadRequestAndDie(const TString& errorMessage, const NActors::TActorContext& ctx);
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 };
@@ -47,9 +50,9 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 };
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

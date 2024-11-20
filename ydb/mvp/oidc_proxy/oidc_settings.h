@@ -3,8 +3,7 @@
 #include <util/generic/string.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 struct TOpenIdConnectSettings {
     static const inline TString YDB_OIDC_COOKIE = "ydb_oidc_cookie";
@@ -37,5 +36,4 @@ struct TOpenIdConnectSettings {
     TString GetImpersonateEndpointURL() const;
 };
 
-} // NOIDC
-} // NMVP
+} // NMVP::NOIDC

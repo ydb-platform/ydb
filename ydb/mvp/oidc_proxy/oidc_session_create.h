@@ -9,8 +9,7 @@
 #include "oidc_settings.h"
 #include "context.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 class THandlerSessionCreate : public NActors::TActorBootstrapped<THandlerSessionCreate> {
 private:
@@ -19,7 +18,7 @@ private:
 protected:
     const NActors::TActorId Sender;
     const NHttp::THttpIncomingRequestPtr Request;
-    NActors::TActorId HttpProxyId;
+    const NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
     TContext Context;
 
@@ -39,10 +38,10 @@ protected:
     TString ChangeSameSiteFieldInSessionCookie(const TString& cookie);
     void RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx);
     void RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx);
+    void ReplyAndDie(NHttp::THttpOutgoingResponsePtr httpResponse, const NActors::TActorContext& ctx);
 
 private:
     void SendUnknownErrorResponseAndDie(const NActors::TActorContext& ctx);
 };
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

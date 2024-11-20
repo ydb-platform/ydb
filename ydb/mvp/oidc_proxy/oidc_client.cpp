@@ -4,8 +4,9 @@
 #include "oidc_impersonate_start_page_nebius.h"
 #include "oidc_impersonate_stop_page_nebius.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
+
+using namespace NActors;
 
 void InitOIDC(NActors::TActorSystem& actorSystem,
               const NActors::TActorId& httpProxyId,
@@ -37,5 +38,4 @@ void InitOIDC(NActors::TActorSystem& actorSystem,
                     );
 }
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

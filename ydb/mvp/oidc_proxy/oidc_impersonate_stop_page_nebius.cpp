@@ -1,14 +1,14 @@
 #include "openid_connect.h"
 #include "oidc_session_create.h"
 #include "oidc_impersonate_stop_page_nebius.h"
+#include <ydb/library/actors/core/events.h>
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 THandlerImpersonateStop::THandlerImpersonateStop(const NActors::TActorId& sender,
-                                                const NHttp::THttpIncomingRequestPtr& request,
-                                                const NActors::TActorId& httpProxyId,
-                                                const TOpenIdConnectSettings& settings)
+                                                 const NHttp::THttpIncomingRequestPtr& request,
+                                                 const NActors::TActorId& httpProxyId,
+                                                 const TOpenIdConnectSettings& settings)
     : Sender(sender)
     , Request(request)
     , HttpProxyId(httpProxyId)
@@ -17,7 +17,7 @@ THandlerImpersonateStop::THandlerImpersonateStop(const NActors::TActorId& sender
 
 void THandlerImpersonateStop::Bootstrap(const NActors::TActorContext& ctx) {
     TString impersonatedCookieName = CreateNameImpersonatedCookie(Settings.ClientId);
-    LOG_DEBUG_S(ctx, EService::MVP, "Clear impersonated cookie: (" << impersonatedCookieName << ")");
+    BLOG_D("Clear impersonated cookie: (" << impersonatedCookieName << ")");
 
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Set-Cookie", ClearSecureCookie(impersonatedCookieName));
@@ -25,6 +25,10 @@ void THandlerImpersonateStop::Bootstrap(const NActors::TActorContext& ctx) {
 
     NHttp::THttpOutgoingResponsePtr httpResponse;
     httpResponse = Request->CreateResponse("200", "OK", responseHeaders);
+    ReplyAndDie(httpResponse, ctx);
+}
+
+void THandlerImpersonateStop::ReplyAndDie(NHttp::THttpOutgoingResponsePtr httpResponse, const NActors::TActorContext& ctx) {
     ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
     Die(ctx);
 }
@@ -39,5 +43,4 @@ void TImpersonateStopPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingReq
     ctx.Register(new THandlerImpersonateStop(event->Sender, event->Get()->Request, HttpProxyId, Settings));
 }
 
-} // NOIDC
-} // NMVP
+} // NMVP::NOIDC

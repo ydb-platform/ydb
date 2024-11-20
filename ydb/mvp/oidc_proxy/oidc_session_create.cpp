@@ -6,8 +6,7 @@
 #include "oidc_session_create.h"
 #include "oidc_settings.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 THandlerSessionCreate::THandlerSessionCreate(const NActors::TActorId& sender,
                                              const NHttp::THttpIncomingRequestPtr& request,
@@ -64,9 +63,9 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
     NHttp::THttpOutgoingResponsePtr httpResponse;
     if (event->Get()->Error.empty() && event->Get()->Response) {
         NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
-        LOG_DEBUG_S(ctx, EService::MVP, "Incoming response from authorization server: " << response->Status);
+        BLOG_D("Incoming response from authorization server: " << response->Status);
         if (response->Status == "200") {
-            TStringBuf jsonError;
+            TStringBuf errorMessage;
             NJson::TJsonValue jsonValue;
             NJson::TJsonReaderConfig jsonConfig;
             if (NJson::ReadJsonTree(response->Body, &jsonConfig, &jsonValue)) {
@@ -76,14 +75,14 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
                     ProcessSessionToken(sessionToken, ctx);
                     return;
                 } else {
-                    jsonError = "Wrong OIDC provider response: access_token not found";
+                    errorMessage = "Wrong OIDC provider response: access_token not found";
                 }
             } else {
-                jsonError =  "Wrong OIDC response";
+                errorMessage =  "Wrong OIDC response";
             }
             NHttp::THeadersBuilder responseHeaders;
             responseHeaders.Set("Content-Type", "text/plain");
-            httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, jsonError);
+            httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, errorMessage);
         } else {
             NHttp::THeadersBuilder responseHeaders;
             responseHeaders.Parse(response->Headers);
@@ -94,8 +93,7 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
         responseHeaders.Set("Content-Type", "text/plain");
         httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error);
     }
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-    Die(ctx);
+    ReplyAndDie(httpResponse, ctx);
 }
 
 TString THandlerSessionCreate::ChangeSameSiteFieldInSessionCookie(const TString& cookie) {
@@ -119,8 +117,7 @@ void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(const NActors:
 void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx) {
     SetCORS(Request, responseHeaders);
     responseHeaders->Set("Location", Context.GetRequestedAddress());
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("302", "Found", *responseHeaders)));
-    Die(ctx);
+    ReplyAndDie(Request->CreateResponse("302", "Found", *responseHeaders), ctx);
 }
 
 void THandlerSessionCreate::SendUnknownErrorResponseAndDie(const NActors::TActorContext& ctx) {
@@ -141,9 +138,12 @@ void THandlerSessionCreate::SendUnknownErrorResponseAndDie(const NActors::TActor
                                                             "</center>"
                                                         "</body>"
                                                     "</html>";
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(Request->CreateResponse("400", "Bad Request", responseHeaders, BAD_REQUEST_HTML_PAGE)));
+    ReplyAndDie(Request->CreateResponse("400", "Bad Request", responseHeaders, BAD_REQUEST_HTML_PAGE), ctx);
+}
+
+void THandlerSessionCreate::ReplyAndDie(NHttp::THttpOutgoingResponsePtr httpResponse, const NActors::TActorContext& ctx) {
+    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
     Die(ctx);
 }
 
-} // NOIDC
-} // NMVP
+} // NMVP::NOIDC

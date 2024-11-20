@@ -3,8 +3,9 @@
 #include "oidc_session_create.h"
 #include "openid_connect.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
+
+using namespace NActors;
 
 class THandlerSessionCreateYandex : public THandlerSessionCreate {
 private:
@@ -28,9 +29,9 @@ private:
             HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
             HFunc(TEvPrivate::TEvCreateSessionResponse, HandleCreateSession);
             HFunc(TEvPrivate::TEvErrorResponse, HandleError);
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 };
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

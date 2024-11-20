@@ -2,8 +2,9 @@
 
 #include "oidc_protected_page.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
+
+using namespace NActors;
 
 class THandlerSessionServiceCheckNebius : public THandlerSessionServiceCheck {
 private:
@@ -22,31 +23,31 @@ public:
                                       const NHttp::THttpIncomingRequestPtr& request,
                                       const NActors::TActorId& httpProxyId,
                                       const TOpenIdConnectSettings& settings);
-    TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName, const NActors::TActorContext& ctx);
     void StartOidcProcess(const NActors::TActorContext& ctx) override;
     void HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleProxy);
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 
     STFUNC(StateExchange) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleExchange);
+            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 
 private:
     void SendTokenExchangeRequest(const TStringBuilder& body, const ETokenExchangeType exchangeType, const NActors::TActorContext& ctx);
-    void ExchangeSessionToken(const TString sessionToken, const NActors::TActorContext& ctx);
-    void ExchangeImpersonatedToken(const TString sessionToken, const TString impersonatedToken, const NActors::TActorContext& ctx);
+    void ExchangeSessionToken(const TString& sessionToken, const NActors::TActorContext& ctx);
+    void ExchangeImpersonatedToken(const TString& sessionToken, const TString& impersonatedToken, const NActors::TActorContext& ctx);
     void ClearImpersonatedCookie(const NActors::TActorContext& ctx);
     void RequestAuthorizationCode(const NActors::TActorContext& ctx);
     void ForwardUserRequest(TStringBuf authHeader, const NActors::TActorContext& ctx, bool secure = false) override;
     bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const override;
 };
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

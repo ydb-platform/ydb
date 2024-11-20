@@ -8,8 +8,7 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include "oidc_settings.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 class THandlerSessionServiceCheck : public NActors::TActorBootstrapped<THandlerSessionServiceCheck> {
 protected:
@@ -17,9 +16,9 @@ protected:
 
     const NActors::TActorId Sender;
     const NHttp::THttpIncomingRequestPtr Request;
-    NActors::TActorId HttpProxyId;
+    const NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
-    TString ProtectedPageUrl;
+    const TString ProtectedPageUrl;
     TString RequestedPageScheme;
 
     const static inline TStringBuf IAM_TOKEN_SCHEME = "Bearer ";
@@ -42,6 +41,7 @@ protected:
 
     bool CheckRequestedHost();
     void ForwardRequestHeaders(NHttp::THttpOutgoingRequestPtr& request) const;
+    void ReplyAndDie(NHttp::THttpOutgoingResponsePtr httpResponse, const NActors::TActorContext& ctx);
 
     static bool IsAuthorizedRequest(TStringBuf authHeader);
     static TString FixReferenceInHtml(TStringBuf html, TStringBuf host, TStringBuf findStr);
@@ -55,5 +55,4 @@ private:
     NHttp::THttpOutgoingResponsePtr CreateResponseForNotExistingResponseFromProtectedResource(const TString& errorMessage);
 };
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

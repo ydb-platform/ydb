@@ -3,6 +3,7 @@
 #include <util/string/hex.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <ydb/library/security/util.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
@@ -10,8 +11,7 @@
 #include "openid_connect.h"
 #include "oidc_settings.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 namespace {
 
@@ -237,16 +237,23 @@ TCheckStateResult CheckState(const TString& state, const TString& key) {
     return TCheckStateResult();
 }
 
-TString DecodeToken(const TStringBuf& cookie, const NActors::TActorContext& ctx) {
+TString DecodeToken(const TStringBuf& cookie) {
     TString token;
     try {
         Base64StrictDecode(cookie, token);
     } catch (std::exception& e) {
-        LOG_DEBUG_S(ctx, EService::MVP, "Base64Decode " << cookie << " cookie: " << e.what());
+        BLOG_D("Base64Decode " << cookie << " cookie: " << e.what());
         token.clear();
     }
     return token;
 }
 
-}  // NOIDC
-}  // NMVP
+TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName) {
+    TStringBuf cookieValue = cookies.Get(cookieName);
+    if (!cookieValue.Empty()) {
+        BLOG_D("Using cookie (" << cookieName << ": " << NKikimr::MaskTicket(cookieValue) << ")");
+    }
+    return cookieValue;
+}
+
+} // NMVP::NOIDC

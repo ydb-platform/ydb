@@ -2,8 +2,7 @@
 #include "oidc_protected_page_nebius.h"
 #include "oidc_protected_page_yandex.h"
 
-namespace NMVP {
-namespace NOIDC {
+namespace NMVP::NOIDC {
 
 TProtectedPageHandler::TProtectedPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings)
     : TBase(&TProtectedPageHandler::StateWork)
@@ -22,5 +21,4 @@ void TProtectedPageHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::
     }
 }
 
-}  // NOIDC
-}  // NMVP
+} // NMVP::NOIDC

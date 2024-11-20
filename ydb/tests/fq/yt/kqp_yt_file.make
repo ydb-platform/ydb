@@ -16,7 +16,7 @@ ELSE()
 ENDIF()
 
 DEPENDS(
-    ydb/library/yql/tests/common/test_framework/udfs_deps
+    yql/essentials/tests/common/test_framework/udfs_deps
     yql/essentials/udfs/test/test_import
     ydb/tests/tools/kqprun
 )
@@ -28,7 +28,7 @@ DATA(
 )
 
 PEERDIR(
-    ydb/library/yql/tests/common/test_framework
+    yql/essentials/tests/common/test_framework
 )
 
 NO_CHECK_IMPORTS()

@@ -25,7 +25,7 @@ SPLIT_FACTOR(10)
 DEPENDS(
     ydb/library/yql/tools/yqlrun
     yql/essentials/tools/astdiff
-    ydb/library/yql/tests/common/test_framework/udfs_deps
+    yql/essentials/tests/common/test_framework/udfs_deps
     yql/essentials/udfs/test/test_import
     yql/essentials/udfs/test/simple
 )
@@ -40,7 +40,7 @@ DATA(
 PEERDIR(
     library/python/testing/swag/lib
     yql/essentials/protos
-    ydb/library/yql/tests/common/test_framework
+    yql/essentials/tests/common/test_framework
 )
 
 TAG(ya:dump_test_env)

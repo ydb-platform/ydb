@@ -26,7 +26,7 @@ DEPENDS(
     yql/essentials/tools/astdiff
     ydb/library/yql/tools/dqrun
     ydb/library/yql/tools/yqlrun
-    ydb/library/yql/tests/common/test_framework/udfs_deps
+    yql/essentials/tests/common/test_framework/udfs_deps
     yql/essentials/udfs/test/test_import
 )
 DATA(
@@ -35,7 +35,7 @@ DATA(
     arcadia/yql/essentials/cfg/tests
 )
 PEERDIR(
-    ydb/library/yql/tests/common/test_framework
+    yql/essentials/tests/common/test_framework
     library/python/testing/swag/lib
 )
 

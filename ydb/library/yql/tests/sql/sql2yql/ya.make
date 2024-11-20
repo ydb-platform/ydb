@@ -34,7 +34,7 @@ ENDIF()
         arcadia/yql/essentials/cfg/tests
     )
     PEERDIR(
-        ydb/library/yql/tests/common/test_framework
+        yql/essentials/tests/common/test_framework
         library/python/testing/swag/lib
     )
 

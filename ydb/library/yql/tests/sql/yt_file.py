@@ -98,7 +98,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             prov='yt',
             keep_temp=False,
             gateway_config=get_gateways_config(http_files, yql_http_file_server),
-            udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps')
+            udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps')
         )
 
         opt_res, opt_tables_res = execute(

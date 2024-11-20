@@ -45,7 +45,7 @@ def yqlrun_yt_results(provider, prepare, suite, case, config):
             if 'Python' in content or 'Javascript' in content:
                 pytest.skip('ScriptUdf')
 
-        yqlrun = YQLRun(prov=provider, keep_temp=True, udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps'))
+        yqlrun = YQLRun(prov=provider, keep_temp=True, udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'))
         res, tables_res = execute(
             yqlrun,
             program=program,
@@ -109,7 +109,7 @@ def run_test(provider, prepare, suite, case, tmpdir, what):
         files = get_files(suite, config, DATA_PATH)
 
         opt_res, opt_tables_res = execute(
-            YQLRun(prov=provider, keep_temp=False, udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps')),
+            YQLRun(prov=provider, keep_temp=False, udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps')),
             program=res.opt,
             input_tables=in_tables,
             output_tables=out_tables,
@@ -161,7 +161,7 @@ def run_test(provider, prepare, suite, case, tmpdir, what):
         gateway_config = get_block_gateways_config()
 
         blocks_res, blocks_tables_res = execute(
-            YQLRun(prov=provider, keep_temp=False, udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps'), gateway_config=gateway_config),
+            YQLRun(prov=provider, keep_temp=False, udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'), gateway_config=gateway_config),
             program=program,
             input_tables=in_tables,
             output_tables=out_tables,

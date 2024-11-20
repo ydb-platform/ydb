@@ -108,7 +108,7 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, 
         binary=yqlrun_binary,
         gateway_config=get_gateways_config(http_files, yql_http_file_server, force_blocks=force_blocks, is_hybrid=is_hybrid(provider)),
         extra_args=extra_args,
-        udfs_dir=yql_binary_path('ydb/library/yql/tests/common/test_framework/udfs_deps')
+        udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps')
     )
 
     res, tables_res = execute_sql(

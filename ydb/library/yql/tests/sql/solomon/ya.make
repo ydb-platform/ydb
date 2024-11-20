@@ -26,7 +26,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc
 
 PEERDIR(
     library/python/testing/swag/lib
-    ydb/library/yql/tests/common/test_framework
+    yql/essentials/tests/common/test_framework
 )
 
 END()

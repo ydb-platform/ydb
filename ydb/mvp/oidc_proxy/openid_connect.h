@@ -9,7 +9,6 @@
 #include <ydb/mvp/core/core_ydb.h>
 #include "context.h"
 
-
 namespace NMVP {
 namespace NOIDC {
 
@@ -52,6 +51,7 @@ TString ClearSecureCookie(const TString& name);
 void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers);
 TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TString& key);
 TCheckStateResult CheckState(const TString& state, const TString& key);
+TString DecodeToken(const TStringBuf& cookie, const NActors::TActorContext& ctx);
 
 template <typename TSessionService>
 std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> CreateGRpcServiceConnection(const TString& endpoint) {

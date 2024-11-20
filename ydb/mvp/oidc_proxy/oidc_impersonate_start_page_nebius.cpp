@@ -20,17 +20,6 @@ THandlerImpersonateStart::THandlerImpersonateStart(const NActors::TActorId& send
     , Settings(settings)
 {}
 
-TString THandlerImpersonateStart::DecodeToken(const TStringBuf& cookie, const NActors::TActorContext& ctx) {
-    TString token;
-    try {
-        Base64StrictDecode(cookie, token);
-    } catch (std::exception& e) {
-        LOG_DEBUG_S(ctx, EService::MVP, "Base64Decode " << cookie << " cookie: " << e.what());
-        token.clear();
-    }
-    return token;
-}
-
 void THandlerImpersonateStart::Bootstrap(const NActors::TActorContext& ctx) {
     LOG_DEBUG_S(ctx, EService::MVP, "Start impersonation process");
     NHttp::TUrlParameters urlParameters(Request->URL);

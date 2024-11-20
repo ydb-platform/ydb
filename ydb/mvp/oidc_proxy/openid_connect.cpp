@@ -237,5 +237,16 @@ TCheckStateResult CheckState(const TString& state, const TString& key) {
     return TCheckStateResult();
 }
 
+TString DecodeToken(const TStringBuf& cookie, const NActors::TActorContext& ctx) {
+    TString token;
+    try {
+        Base64StrictDecode(cookie, token);
+    } catch (std::exception& e) {
+        LOG_DEBUG_S(ctx, EService::MVP, "Base64Decode " << cookie << " cookie: " << e.what());
+        token.clear();
+    }
+    return token;
+}
+
 }  // NOIDC
 }  // NMVP

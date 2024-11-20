@@ -23,7 +23,6 @@ public:
                                       const NActors::TActorId& httpProxyId,
                                       const TOpenIdConnectSettings& settings);
     TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName, const NActors::TActorContext& ctx);
-    TString DecodeToken(const TStringBuf& cookie, const NActors::TActorContext& ctx);
     void StartOidcProcess(const NActors::TActorContext& ctx) override;
     void HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
 
@@ -40,7 +39,7 @@ public:
     }
 
 private:
-
+    void SendTokenExchangeRequest(const TStringBuilder& body, const ETokenExchangeType exchangeType, const NActors::TActorContext& ctx);
     void ExchangeSessionToken(const TString sessionToken, const NActors::TActorContext& ctx);
     void ExchangeImpersonatedToken(const TString sessionToken, const TString impersonatedToken, const NActors::TActorContext& ctx);
     void ClearImpersonatedCookie(const NActors::TActorContext& ctx);

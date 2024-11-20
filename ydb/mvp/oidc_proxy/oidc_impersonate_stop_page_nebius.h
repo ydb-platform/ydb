@@ -15,7 +15,6 @@ protected:
     const NHttp::THttpIncomingRequestPtr Request;
     NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
-    TContext Context;
 
 public:
     THandlerImpersonateStop(const NActors::TActorId& sender,

@@ -15,10 +15,8 @@ protected:
     const NHttp::THttpIncomingRequestPtr Request;
     NActors::TActorId HttpProxyId;
     const TOpenIdConnectSettings Settings;
-    TContext Context;
 
 public:
-    TString DecodeToken(const TStringBuf& cookie, const NActors::TActorContext& ctx);
     THandlerImpersonateStart(const NActors::TActorId& sender,
                              const NHttp::THttpIncomingRequestPtr& request,
                              const NActors::TActorId& httpProxyId,

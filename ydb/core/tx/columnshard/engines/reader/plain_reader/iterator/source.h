@@ -111,10 +111,11 @@ public:
     void SetSourceInMemory(const bool value) {
         AFL_VERIFY(!IsSourceInMemoryFlag);
         IsSourceInMemoryFlag = value;
-        AFL_VERIFY(NeedAccessorsForRead());
-        AFL_VERIFY(StageData);
-        if (!value) {
-            StageData->SetUseFilter(value);
+        if (NeedAccessorsForRead()) {
+            AFL_VERIFY(StageData);
+            if (!value) {
+                StageData->SetUseFilter(value);
+            }
         }
     }
     void SetFirstIntervalId(const ui64 value) {

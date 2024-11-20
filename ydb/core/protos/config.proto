@@ -1384,6 +1384,29 @@ message TImmediateControlsConfig {
     }
 
     message TDSProxyControls {
+        message TRequestReportingSettings {
+            optional uint64 BucketSize = 1 [(ControlOptions) = {
+                Description: "Capacity for Leaky Bucket algorithm",
+                MinValue: 1,
+                MaxValue: 100000,
+                DefaultValue: 1 }];
+            optional uint64 LeakDurationMs = 2 [(ControlOptions) = {
+                Description: "Leak interval (ms) for Leaky Bucket algorithm",
+                MinValue: 1,
+                MaxValue: 3600000,
+                DefaultValue: 60000 }];
+            optional uint64 LeakRate = 3 [(ControlOptions) = {
+                Description: "Leak size for Leaky Bucket algorithm",
+                MinValue: 1,
+                MaxValue: 100000,
+                DefaultValue: 1 }];
+            optional uint64 UpdatingDurationMs = 4 [(ControlOptions) = {
+                Description: "Interval (ms) for updating Leaky Bucket",
+                MinValue: 1,
+                MaxValue: 3600000,
+                DefaultValue: 60000 }];
+        }
+
         optional uint64 SlowDiskThreshold = 1 [(ControlOptions) = {
             Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille",
             MinValue: 1,
@@ -1399,11 +1422,7 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000000,
             DefaultValue: 50000 }];
-        optional uint64 LongRequestReportingDelayMs = 4 [(ControlOptions) = {
-            Description: "Delay (ms) between reports of long requests for one handle class",
-            MinValue: 1,
-            MaxValue: 1000000,
-            DefaultValue: 60000 }];
+        reserved 4;
         optional uint64 MaxNumOfSlowDisks = 5 [(ControlOptions) = {
             Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations",
             MinValue: 1,
@@ -1441,6 +1460,8 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 2,
             DefaultValue: 2 }];
+
+        optional TRequestReportingSettings RequestReportingSettings = 12;
     }
 
     message TPDiskControls {

@@ -47,7 +47,10 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , MaxNumOfSlowDisksHDD(DefaultMaxNumOfSlowDisks, 1, 2)
     , MaxNumOfSlowDisksSSD(DefaultMaxNumOfSlowDisks, 1, 2)
     , LongRequestThresholdMs(50'000, 1, 1'000'000)
-    , LongRequestReportingDelayMs(60'000, 1, 1'000'000)
+    , ReportingControllerBucketSize(1, 1, 100'000)
+    , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
+    , ReportingControllerLeakRate(1, 1, 100'000)
+    , ReportingControllerUpdatingDurationMs(60'000, 1, 3'600'000)
 {
     Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
     AvailDomainId = 1;
@@ -281,7 +284,7 @@ void TNodeWarden::StopInvalidGroupProxy() {
 
 void TNodeWarden::StartRequestReportingThrottler() {
     STLOG(PRI_DEBUG, BS_NODE, NW62, "StartRequestReportingThrottler");
-    Register(CreateRequestReportingThrottler(LongRequestReportingDelayMs));
+    Register(CreateRequestReportingThrottler(ReportingControllerBucketSize, ReportingControllerLeakDurationMs, ReportingControllerLeakRate, ReportingControllerUpdatingDurationMs));
 }
 
 void TNodeWarden::PassAway() {
@@ -364,7 +367,10 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(MaxNumOfSlowDisksSSD, "DSProxyControls.MaxNumOfSlowDisksSSD");
 
         icb->RegisterSharedControl(LongRequestThresholdMs, "DSProxyControls.LongRequestThresholdMs");
-        icb->RegisterSharedControl(LongRequestReportingDelayMs, "DSProxyControls.LongRequestReportingDelayMs");
+        icb->RegisterSharedControl(ReportingControllerBucketSize, "DSProxyControls.RequestReportingSettings.BucketSize");
+        icb->RegisterSharedControl(ReportingControllerLeakDurationMs, "DSProxyControls.RequestReportingSettings.LeakDurationMs");
+        icb->RegisterSharedControl(ReportingControllerLeakRate, "DSProxyControls.RequestReportingSettings.LeakRate");
+        icb->RegisterSharedControl(ReportingControllerUpdatingDurationMs, "DSProxyControls.RequestReportingSettings.UpdatingDurationMs");
     }
 
     // start replication broker

@@ -80,9 +80,9 @@ void TProxyActor::Bootstrap() {
         return;
     }
 
-    TimeoutCookie_.Reset(ISchedulerCookie::Make2Way());
     const auto& cfg = Cfg();
     if (cfg.GetRequestTimeoutMs()) {
+        TimeoutCookie_.Reset(ISchedulerCookie::Make2Way());
         this->Schedule(TDuration::MilliSeconds(cfg.GetRequestTimeoutMs()), new TEvWakeup(), TimeoutCookie_.Get());
     }
 

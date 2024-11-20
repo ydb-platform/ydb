@@ -2661,7 +2661,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     Y_UNIT_TEST(ShouldRestoreTtlSettingsInDateTypeColumnMode) {
         ShouldRestoreSettings(R"(
             ttl_settings {
-              date_type_column {
+              date_type_column_v1 {
                 column_name: "created_at"
               }
               tiers {
@@ -2677,7 +2677,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     Y_UNIT_TEST(ShouldRestoreTtlSettingsInValueSinceUnixEpochMode) {
         ShouldRestoreSettings(R"(
             ttl_settings {
-              value_since_unix_epoch {
+              value_since_unix_epoch_v1 {
                 column_name: "modified_at"
                 column_unit: UNIT_SECONDS
               }

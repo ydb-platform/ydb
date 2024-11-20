@@ -462,6 +462,12 @@ bool FillIndexTablePartitioning(
 
 template <typename TTtl>
 void FillTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in) {
+    if (!in.TiersSize()) {
+        auto* deleteTier = out.add_tiers();
+        deleteTier->mutable_delete_();
+        deleteTier->set_evict_after_seconds(in.GetExpireAfterSeconds());
+    }
+
     for (const auto& inTier : in.GetTiers()) {
         auto* outTier = out.add_tiers();
         outTier->set_evict_after_seconds(inTier.GetEvictAfterSeconds());
@@ -479,7 +485,7 @@ void FillTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in) {
 
     switch (in.GetColumnUnit()) {
     case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {
-        auto& outTTL = *out.mutable_date_type_column();
+        auto& outTTL = *out.mutable_date_type_column_v1();
         outTTL.set_column_name(in.GetColumnName());
         break;
     }
@@ -488,7 +494,7 @@ void FillTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in) {
     case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
     case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
     case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: {
-        auto& outTTL = *out.mutable_value_since_unix_epoch();
+        auto& outTTL = *out.mutable_value_since_unix_epoch_v1();
         outTTL.set_column_name(in.GetColumnName());
         outTTL.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(in.GetColumnUnit()));
         break;

@@ -452,7 +452,7 @@ message TtlTier {
     }
 }
 
-message DateTypeColumnModeSettings {
+message DateTypeColumnModeSettingsV1 {
     // The row will be assigned a tier at the moment of time, when the value
     // stored in <column_name> is less than or equal to the current time (in epoch
     // time format), and <tier.evict_after_seconds> has passed since that moment;
@@ -462,7 +462,7 @@ message DateTypeColumnModeSettings {
     string column_name = 1;
 }
 
-message ValueSinceUnixEpochModeSettings {
+message ValueSinceUnixEpochModeSettingsV1 {
     // Same as DateTypeColumnModeSettings (above), but useful when type of the
     // value stored in <column_name> is not a date type.
 
@@ -484,25 +484,25 @@ message ValueSinceUnixEpochModeSettings {
     Unit column_unit = 2;
 }
 
-message DeprecatedDateTypeColumnModeSettings {
+message DateTypeColumnModeSettings {
     // Deprecated TTL mode
     string column_name = 1;
     uint32 expire_after_seconds = 2;
 }
 
-message DeprecatedValueSinceUnixEpochModeSettings {
+message ValueSinceUnixEpochModeSettings {
     // Deprecated TTL mode
     string column_name = 1;
-    ValueSinceUnixEpochModeSettings.Unit column_unit = 2;
+    ValueSinceUnixEpochModeSettingsV1.Unit column_unit = 2;
     uint32 expire_after_seconds = 3;
 }
 
 message TtlSettings {
     oneof mode {
-        DeprecatedDateTypeColumnModeSettings deprecated_date_type_column = 1 [deprecated = true];
-        DeprecatedValueSinceUnixEpochModeSettings deprecated_value_since_unix_epoch = 2 [deprecated = true];
-        DateTypeColumnModeSettings date_type_column = 4;
-        ValueSinceUnixEpochModeSettings value_since_unix_epoch = 5;
+        DateTypeColumnModeSettings date_type_column = 1 [deprecated = true];
+        ValueSinceUnixEpochModeSettings value_since_unix_epoch = 2 [deprecated = true];
+        DateTypeColumnModeSettingsV1 date_type_column_v1 = 4;
+        ValueSinceUnixEpochModeSettingsV1 value_since_unix_epoch_v1 = 5;
     }
 
     // There is no guarantee that expired row will be deleted immediately upon
@@ -519,6 +519,9 @@ message TtlSettings {
     // BRO will not be started more often, but may be started less often.
     uint32 run_interval_seconds = 3;
 
+    // List of storage tiers. This value is ignored for deprecated ttl modes:
+    // * date_type_column
+    // * value_since_unix_epoch
     repeated TtlTier tiers = 6;
 }
 

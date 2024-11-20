@@ -33,7 +33,7 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
         return false;
     };
 
-    static const auto& fillModeSettings = []<class TModeSettings>(TTtlSettingsEnabled& out, const TModeSettings& in) {
+    static const auto& fillColumnName = []<class TModeSettings>(TTtlSettingsEnabled& out, const TModeSettings& in) {
         out.SetColumnName(in.column_name());
     };
 
@@ -63,44 +63,42 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
         #undef CASE_UNIT
     };
 
-    if (in.tiers_size()) {
-        for (const auto& inTier : in.tiers()) {
-            auto* outTier = out.AddTiers();
-            outTier->SetEvictAfterSeconds(inTier.evict_after_seconds());
-            switch (inTier.action_case()) {
-                case Ydb::Table::TtlTier::kDelete:
-                    outTier->MutableDelete();
-                    break;
-                case Ydb::Table::TtlTier::kEvictToExternalStorage:
-                    outTier->MutableEvictToExternalStorage()->SetStorageName(inTier.evict_to_external_storage().storage_name());
-                    break;
-                case Ydb::Table::TtlTier::ACTION_NOT_SET:
-                    break;
-            }
+    for (const auto& inTier : in.tiers()) {
+        auto* outTier = out.AddTiers();
+        outTier->SetEvictAfterSeconds(inTier.evict_after_seconds());
+        switch (inTier.action_case()) {
+            case Ydb::Table::TtlTier::kDelete:
+                outTier->MutableDelete();
+                break;
+            case Ydb::Table::TtlTier::kEvictToExternalStorage:
+                outTier->MutableEvictToExternalStorage()->SetStorageName(inTier.evict_to_external_storage().storage_name());
+                break;
+            case Ydb::Table::TtlTier::ACTION_NOT_SET:
+                break;
         }
     }
 
     switch (in.mode_case()) {
-    case Ydb::Table::TtlSettings::kDeprecatedDateTypeColumn:
-        fillModeSettings(out, in.deprecated_date_type_column());
-        fillDeleteTier(out, in.deprecated_date_type_column());
+    case Ydb::Table::TtlSettings::kDateTypeColumn:
+        fillColumnName(out, in.date_type_column());
+        fillDeleteTier(out, in.date_type_column());
         break;
 
-    case Ydb::Table::TtlSettings::kDeprecatedValueSinceUnixEpoch:
-        fillModeSettings(out, in.deprecated_value_since_unix_epoch());
-        fillDeleteTier(out, in.deprecated_date_type_column());
+    case Ydb::Table::TtlSettings::kValueSinceUnixEpoch:
+        fillColumnName(out, in.value_since_unix_epoch());
+        fillDeleteTier(out, in.value_since_unix_epoch());
         if (!fillColumnUnit(out, in.value_since_unix_epoch())) {
             return false;
         }
         break;
 
-    case Ydb::Table::TtlSettings::kDateTypeColumn:
-        fillModeSettings(out, in.date_type_column());
+    case Ydb::Table::TtlSettings::kDateTypeColumnV1:
+        fillColumnName(out, in.date_type_column_v1());
         break;
 
-    case Ydb::Table::TtlSettings::kValueSinceUnixEpoch:
-        fillModeSettings(out, in.value_since_unix_epoch());
-        if (!fillColumnUnit(out, in.value_since_unix_epoch())) {
+    case Ydb::Table::TtlSettings::kValueSinceUnixEpochV1:
+        fillColumnName(out, in.value_since_unix_epoch_v1());
+        if (!fillColumnUnit(out, in.value_since_unix_epoch_v1())) {
             return false;
         }
         break;
@@ -109,13 +107,13 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
         return unsupported("Unsupported ttl settings");
     }
 
-    std::optional<ui32> expireInSeconds = 0;
+    std::optional<ui32> expireAfterSeconds;
     for (const auto& tier : out.GetTiers()) {
         if (tier.HasDelete()) {
-            expireInSeconds = tier.GetEvictAfterSeconds();
+            expireAfterSeconds = tier.GetEvictAfterSeconds();
         }
     }
-    out.SetExpireAfterSeconds(expireInSeconds.value_or(std::numeric_limits<uint32_t>::max()));
+    out.SetExpireAfterSeconds(expireAfterSeconds.value_or(std::numeric_limits<uint32_t>::max()));
 
     if constexpr (std::is_same_v<TTtlSettingsEnabled, NKikimrSchemeOp::TTTLSettings::TEnabled>) {
         if (in.run_interval_seconds()) {

@@ -3066,7 +3066,7 @@ TTtlSettings::TTtlSettings(const TString& columnName, const TDuration& expireAft
     : TTtlSettings(columnName, {TTtlTierSettings(expireAfter, TTtlDeleteAction())})
 {}
 
-TTtlSettings::TTtlSettings(const Ydb::Table::DeprecatedDateTypeColumnModeSettings& mode, ui32 runIntervalSeconds)
+TTtlSettings::TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds)
     : TTtlSettings(mode.column_name(), TDuration::Seconds(mode.expire_after_seconds())) {
     RunInterval_ = TDuration::Seconds(runIntervalSeconds);
 }
@@ -3083,7 +3083,7 @@ TTtlSettings::TTtlSettings(const TString& columnName, EUnit columnUnit, const TD
     : TTtlSettings(columnName, columnUnit, {TTtlTierSettings(expireAfter, TTtlDeleteAction())})
 {}
 
-TTtlSettings::TTtlSettings(const Ydb::Table::DeprecatedValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds)
+TTtlSettings::TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds)
     : TTtlSettings(mode.column_name(), TProtoAccessor::FromProto(mode.column_unit()), TDuration::Seconds(mode.expire_after_seconds())) {
     RunInterval_ = TDuration::Seconds(runIntervalSeconds);
 }
@@ -3097,14 +3097,14 @@ std::optional<TTtlSettings> TTtlSettings::DeserializeFromProto(const Ydb::Table:
     const TDuration legacyExpireAfter = GetExpireAfterFrom(tiers).value_or(TDuration::Max());
 
     switch(proto.mode_case()) {
-    case Ydb::Table::TtlSettings::kDeprecatedDateTypeColumn:
-        return TTtlSettings(proto.deprecated_date_type_column(), proto.run_interval_seconds());
-    case Ydb::Table::TtlSettings::kDeprecatedValueSinceUnixEpoch:
-        return TTtlSettings(proto.deprecated_value_since_unix_epoch(), proto.run_interval_seconds());
     case Ydb::Table::TtlSettings::kDateTypeColumn:
-        return TTtlSettings(TDateTypeColumnModeSettings(proto.date_type_column().column_name(), legacyExpireAfter), proto.run_interval_seconds());
+        return TTtlSettings(proto.date_type_column(), proto.run_interval_seconds());
     case Ydb::Table::TtlSettings::kValueSinceUnixEpoch:
-        return TTtlSettings(TValueSinceUnixEpochModeSettings(proto.date_type_column().column_name(), TProtoAccessor::FromProto(proto.value_since_unix_epoch().column_unit()), legacyExpireAfter), proto.run_interval_seconds());
+        return TTtlSettings(proto.value_since_unix_epoch(), proto.run_interval_seconds());
+    case Ydb::Table::TtlSettings::kDateTypeColumnV1:
+        return TTtlSettings(TDateTypeColumnModeSettings(proto.date_type_column_v1().column_name(), legacyExpireAfter), proto.run_interval_seconds());
+    case Ydb::Table::TtlSettings::kValueSinceUnixEpochV1:
+        return TTtlSettings(TValueSinceUnixEpochModeSettings(proto.value_since_unix_epoch_v1().column_name(), TProtoAccessor::FromProto(proto.value_since_unix_epoch_v1().column_unit()), legacyExpireAfter), proto.run_interval_seconds());
     case Ydb::Table::TtlSettings::MODE_NOT_SET:
         return std::nullopt;
         break;
@@ -3114,10 +3114,10 @@ std::optional<TTtlSettings> TTtlSettings::DeserializeFromProto(const Ydb::Table:
 void TTtlSettings::SerializeTo(Ydb::Table::TtlSettings& proto) const {
     switch (GetMode()) {
     case EMode::DateTypeColumn:
-        GetDateTypeColumn().SerializeTo(*proto.mutable_date_type_column());
+        GetDateTypeColumn().SerializeTo(*proto.mutable_date_type_column_v1());
         break;
     case EMode::ValueSinceUnixEpoch:
-        GetValueSinceUnixEpoch().SerializeTo(*proto.mutable_value_since_unix_epoch());
+        GetValueSinceUnixEpoch().SerializeTo(*proto.mutable_value_since_unix_epoch_v1());
         break;
     }
 

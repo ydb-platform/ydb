@@ -515,13 +515,13 @@ public:
     explicit TTtlSettings(const TString& columnName, const TDuration& expireAfter);
     const TDateTypeColumnModeSettings& GetDateTypeColumn() const;
     // Deprecated. Use DeserializeFromProto()
-    explicit TTtlSettings(const Ydb::Table::DeprecatedDateTypeColumnModeSettings& mode, ui32 runIntervalSeconds);
+    explicit TTtlSettings(const Ydb::Table::DateTypeColumnModeSettings& mode, ui32 runIntervalSeconds);
 
     explicit TTtlSettings(const TString& columnName, EUnit columnUnit, const TVector<TTtlTierSettings>& tiers);
     explicit TTtlSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter);
     const TValueSinceUnixEpochModeSettings& GetValueSinceUnixEpoch() const;
     // Deprecated. Use DeserializeFromProto()
-    explicit TTtlSettings(const Ydb::Table::DeprecatedValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds);
+    explicit TTtlSettings(const Ydb::Table::ValueSinceUnixEpochModeSettings& mode, ui32 runIntervalSeconds);
 
     static std::optional<TTtlSettings> DeserializeFromProto(const Ydb::Table::TtlSettings& proto);
     void SerializeTo(Ydb::Table::TtlSettings& proto) const;

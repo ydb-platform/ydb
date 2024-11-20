@@ -842,7 +842,10 @@ struct TBlobStorageProxyControlWrappers {
     // Acceleration parameters
     DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(SlowDiskThreshold);
     DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(PredictedDelayMultiplier);
-    DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(MaxNumOfSlowDisks);
+
+    TMemorizableControlWrapper MaxNumOfSlowDisks = MaxNumOfSlowDisksDefaultControl;
+    TMemorizableControlWrapper MaxNumOfSlowDisksHDD = MaxNumOfSlowDisksHDDDefaultControl;
+    TMemorizableControlWrapper MaxNumOfSlowDisksSSD = MaxNumOfSlowDisksDefaultControl;
 
 #undef DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS
 

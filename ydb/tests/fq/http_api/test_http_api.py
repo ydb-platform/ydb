@@ -98,6 +98,12 @@ class TestHttpApi(TestBase):
             response = client.stop_query(query_id)
             assert response.status_code == 204
 
+            response = client.restart_query(query_id)
+            assert response.status_code == 204
+
+            response = client.stop_query(query_id)
+            assert response.status_code == 204
+
     def test_empty_query(self):
         with self.create_client() as client:
             with pytest.raises(

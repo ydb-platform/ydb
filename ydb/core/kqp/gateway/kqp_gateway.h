@@ -201,6 +201,8 @@ public:
     using NYql::IKikimrGateway::ExecuteLiteral;
     virtual NThreading::TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request,
         TQueryData::TPtr params, ui32 txIndex) = 0;
+    virtual TExecPhysicalResult ExecuteLiteralInstant1(TExecPhysicalRequest&& request,
+        TQueryData::TPtr params, ui32 txIndex) = 0;
 
     /* Scripting */
     virtual NThreading::TFuture<TQueryResult> ExplainDataQueryAst(const TString& cluster, const TString& query) = 0;

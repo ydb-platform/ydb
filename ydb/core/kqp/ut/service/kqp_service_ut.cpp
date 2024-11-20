@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
     }
 
     Y_UNIT_TEST(CloseSessionsWithLoad) {
-        UNIT_FAIL("Fast fail to avoid 10 min time waste, https://github.com/ydb-platform/ydb/issues/5349");
+        // UNIT_FAIL("Fast fail to avoid 10 min time waste, https://github.com/ydb-platform/ydb/issues/5349");
 
         auto kikimr = std::make_shared<TKikimrRunner>();
         kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);

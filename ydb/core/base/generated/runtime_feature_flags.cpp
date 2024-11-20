@@ -664,6 +664,10 @@ std::tuple<ui64, ui64> TRuntimeFeatureFlags::BitsFromProto_slot4(const NKikimrCo
         bits |= flags.GetEnableSeparateDiskSpaceQuotas() ? 201326592ULL : 67108864ULL;
         mask |= 201326592ULL;
     }
+    if (flags.HasEnableAntlr4Parser()) {
+        bits |= flags.GetEnableAntlr4Parser() ? 805306368ULL : 268435456ULL;
+        mask |= 805306368ULL;
+    }
     return { bits, mask };
 }
 
@@ -768,7 +772,7 @@ void TRuntimeFeatureFlags::CopyRuntimeFrom(const NKikimrConfig::TFeatureFlags& f
     Update_slot1(slot1 & 18446744073709536255ULL, 18446744073709536255ULL);
     Update_slot2(slot2 & 18216849385675816959ULL, 18216849385675816959ULL);
     Update_slot3(slot3 & 18446744073457893375ULL, 18446744073457893375ULL);
-    Update_slot4(slot4 & 268435455ULL, 268435455ULL);
+    Update_slot4(slot4 & 1073741823ULL, 1073741823ULL);
 }
 
 TRuntimeFeatureFlags::operator NKikimrConfig::TFeatureFlags() const {
@@ -1203,6 +1207,9 @@ TRuntimeFeatureFlags::operator NKikimrConfig::TFeatureFlags() const {
     }
     if (slot4 & 67108864ULL) {
         flags.SetEnableSeparateDiskSpaceQuotas(bool(slot4 & 134217728ULL));
+    }
+    if (slot4 & 268435456ULL) {
+        flags.SetEnableAntlr4Parser(bool(slot4 & 536870912ULL));
     }
     return flags;
 }
@@ -3478,6 +3485,22 @@ void TRuntimeFeatureFlags::SetEnableSeparateDiskSpaceQuotas(bool value) {
 
 void TRuntimeFeatureFlags::ClearEnableSeparateDiskSpaceQuotas() {
     Update_slot4(0ULL, 201326592ULL);
+}
+
+bool TRuntimeFeatureFlags::HasEnableAntlr4Parser() const {
+    return slot4_.load(std::memory_order_relaxed) & 268435456ULL;
+}
+
+bool TRuntimeFeatureFlags::GetEnableAntlr4Parser() const {
+    return slot4_.load(std::memory_order_relaxed) & 536870912ULL;
+}
+
+void TRuntimeFeatureFlags::SetEnableAntlr4Parser(bool value) {
+    Update_slot4(value ? 805306368ULL : 268435456ULL, 805306368ULL);
+}
+
+void TRuntimeFeatureFlags::ClearEnableAntlr4Parser() {
+    Update_slot4(0ULL, 805306368ULL);
 }
 
 

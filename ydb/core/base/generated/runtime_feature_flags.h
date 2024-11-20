@@ -888,6 +888,12 @@ public:
     void SetEnableSeparateDiskSpaceQuotas(bool value);
     void ClearEnableSeparateDiskSpaceQuotas();
 
+    // Feature flag EnableAntlr4Parser
+    bool HasEnableAntlr4Parser() const;
+    bool GetEnableAntlr4Parser() const;
+    void SetEnableAntlr4Parser(bool value);
+    void ClearEnableAntlr4Parser();
+
 
 private:
     static std::tuple<ui64, ui64> BitsFromProto_slot0(const NKikimrConfig::TFeatureFlags& flags);

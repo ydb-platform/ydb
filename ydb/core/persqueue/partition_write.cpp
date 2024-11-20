@@ -4,6 +4,7 @@
 #include "partition_util.h"
 #include "partition.h"
 #include "read.h"
+#include "y_abort_unless_ex.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -414,7 +415,9 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         BodySize += ck.second;
         Y_ABORT_UNLESS(!ck.first.IsHead());
         ui64 lastOffset = DataKeysBody.empty() ? 0 : (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());
-        Y_ABORT_UNLESS(lastOffset <= ck.first.GetOffset());
+        Y_ABORT_UNLESS_EX(lastOffset <= ck.first.GetOffset(),
+                          "Partition: %s, lastOffset: %" PRIu64 ", ck.first.Offset: %" PRIu64,
+                          Partition.ToString().data(), lastOffset, ck.first.GetOffset());
         if (DataKeysBody.empty()) {
             StartOffset = ck.first.GetOffset() + (ck.first.GetPartNo() > 0 ? 1 : 0);
         } else {
@@ -1321,6 +1324,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                           curWrites,
                           request,
                           ctx);
+
         ui32 countOfLastParts = 0;
         for (auto& x : PartitionedBlob.GetClientBlobs()) {
             if (NewHead.GetBatches().empty() || NewHead.GetLastBatch().Packed) {

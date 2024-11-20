@@ -2,6 +2,7 @@
 #include "partition.h"
 #include "partition_log.h"
 #include "partition_util.h"
+#include "y_abort_unless_ex.h"
 
 #include <memory>
 

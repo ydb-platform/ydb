@@ -4,6 +4,7 @@
 #include "partition_util.h"
 #include "partition.h"
 #include "partition_log.h"
+#include "y_abort_unless_ex.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -251,7 +252,7 @@ ui64 TPartition::UserDataSize() const {
         return 0;
     }
 
-    // We assume that DataKyesBody contains an up-to-date set of blobs, their relevance is
+    // We assume that DataKeysBody contains an up-to-date set of blobs, their relevance is
     // maintained by the background process. However, the last block may contain several irrelevant
     // messages. Because of them, we throw out the size of the entire blob.
     auto size = Size();
@@ -1318,8 +1319,10 @@ void TPartition::CheckHeadConsistency() const {
         }
         Y_ABORT_UNLESS(s < DataKeysHead[j].Border());
     }
-    Y_ABORT_UNLESS(DataKeysBody.empty() ||
-             Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());
+    Y_ABORT_UNLESS_EX(DataKeysBody.empty() ||
+                      Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount(),
+                      "Head.Offset: %" PRIu64 ", Key: %s",
+                      Head.Offset, DataKeysBody.back().Key.ToString().data());
     Y_ABORT_UNLESS(p == HeadKeys.size());
     if (!HeadKeys.empty()) {
         Y_ABORT_UNLESS(HeadKeys.size() <= TotalMaxCount);
@@ -2173,14 +2176,12 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
     PQ_LOG_D("t.WriteInfo->BodyKeys.size=" << t.WriteInfo->BodyKeys.size() <<
              ", t.WriteInfo->BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
-    PQ_LOG_D("Head=" << Head << ", NewHead=" << NewHead);
+    PQ_LOG_D("NewHead=" << NewHead << ", Head=" << Head);
 
     if (!t.WriteInfo->BodyKeys.empty()) {
         PQ_LOG_D("huge blobs");
 
-        PQ_LOG_D("new TPartitionedBlob: " <<
-                 "NewHead=" << NewHead <<
-                 ", Head=" << Head);
+        PQ_LOG_D("new TPartitionedBlob: " << "NewHead=" << NewHead << ", Head=" << Head);
         PartitionedBlob = TPartitionedBlob(Partition,
                                            NewHead.Offset,
                                            "", // SourceId
@@ -2203,6 +2204,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             }
         }
 
+        PQ_LOG_D("huge blobs appended (1): NewHead=" << NewHead);
 
         PQ_LOG_D("PartitionedBlob.GetFormedBlobs().size=" << PartitionedBlob.GetFormedBlobs().size());
         if (const auto& formedBlobs = PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
@@ -2215,8 +2217,10 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         }
 
         const auto& last = t.WriteInfo->BodyKeys.back();
-
         NewHead.Offset += (last.Key.GetOffset() + last.Key.GetCount());
+        Parameters->CurOffset = NewHead.Offset;
+
+        PQ_LOG_D("huge blobs appended (2): NewHead=" << NewHead);
     }
 
     if (!t.WriteInfo->BlobsFromHead.empty()) {
@@ -2227,9 +2231,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
         Parameters->HeadCleared = Parameters->HeadCleared || !t.WriteInfo->BodyKeys.empty();
 
-        PQ_LOG_D("new TPartitionedBlob: " <<
-                 "NewHead=" << NewHead <<
-                 ", Head=" << Head);
+        PQ_LOG_D("new TPartitionedBlob: " << "NewHead=" << NewHead << ", Head=" << Head);
         PartitionedBlob = TPartitionedBlob(Partition,
                                            NewHead.Offset,
                                            first.SourceId,
@@ -2271,6 +2273,8 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             info.SeqNo = blob.SeqNo;
             info.Offset = NewHead.Offset;
         }
+
+        PQ_LOG_D("small blobs appended: NewHead=" << NewHead);
     }
 
     WriteInfosApplied.emplace_back(std::move(t.WriteInfo));

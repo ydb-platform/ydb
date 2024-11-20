@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(Deadlines) {
         }
     }
 
-    void TestGet(const TBlobStorageGroupType& erasure, TDuration delay, TDuration timeout) {
+    void TestGet(const TBlobStorageGroupType& erasure, bool restoreGet, bool indexOnly, TDuration delay, TDuration timeout) {
         Y_ABORT_UNLESS(timeout < delay);
 
         TestCtx ctx(erasure, delay);
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(Deadlines) {
 
             ctx.Env->Runtime->WrapInActorContext(ctx.Edge, [&] {
                 SendToBSProxy(ctx.Edge, ctx.GroupId, new TEvBlobStorage::TEvGet(blobId, 0, data.size(), now + timeout,
-                    NKikimrBlobStorage::FastRead));
+                    NKikimrBlobStorage::FastRead, restoreGet, indexOnly));
             });
         }
 
@@ -178,10 +178,45 @@ Y_UNIT_TEST_SUITE(Deadlines) {
         }
     }
 
-    #define TEST_DEADLINE(method, erasure)                      \
-    Y_UNIT_TEST(Test##method##erasure) {                        \
-        Test##method(TBlobStorageGroupType::Erasure##erasure,   \
-            TDuration::Seconds(50), TDuration::Seconds(40));    \
+    template<class Tag>
+    void Test(const TBlobStorageGroupType&, TDuration, TDuration) {}
+
+    struct TagPut {};
+    struct TagGet {};
+    struct TagRestoreGet {};
+    struct TagIndexGet {};
+    struct TagIndexRestoreGet {};
+
+    template<>
+    void Test<TagPut>(const TBlobStorageGroupType& erasure, TDuration delay, TDuration timeout) {
+        TestPut(erasure, delay, timeout);
+    }
+
+    template<>
+    void Test<TagGet>(const TBlobStorageGroupType& erasure, TDuration delay, TDuration timeout) {
+        TestGet(erasure, false, false, delay, timeout);
+    }
+
+    template<>
+    void Test<TagRestoreGet>(const TBlobStorageGroupType& erasure, TDuration delay, TDuration timeout) {
+        TestGet(erasure, true, false, delay, timeout);
+    }
+
+    template<>
+    void Test<TagIndexGet>(const TBlobStorageGroupType& erasure, TDuration delay, TDuration timeout) {
+        TestGet(erasure, false, true, delay, timeout);
+    }
+
+    template<>
+    void Test<TagIndexRestoreGet>(const TBlobStorageGroupType& erasure, TDuration delay, TDuration timeout) {
+        TestGet(erasure, true, true, delay, timeout);
+    }
+
+
+    #define TEST_DEADLINE(method, erasure)                          \
+    Y_UNIT_TEST(Test##method##erasure) {                            \
+        Test<Tag##method>(TBlobStorageGroupType::Erasure##erasure,  \
+            TDuration::Seconds(50), TDuration::Seconds(40));        \
     }
 
     TEST_DEADLINE(Put, Mirror3dc);
@@ -191,6 +226,18 @@ Y_UNIT_TEST_SUITE(Deadlines) {
     TEST_DEADLINE(Get, Mirror3dc);
     TEST_DEADLINE(Get, 4Plus2Block);
     TEST_DEADLINE(Get, Mirror3of4);
+
+    TEST_DEADLINE(RestoreGet, Mirror3dc);
+    TEST_DEADLINE(RestoreGet, 4Plus2Block);
+    TEST_DEADLINE(RestoreGet, Mirror3of4);
+
+    TEST_DEADLINE(IndexGet, Mirror3dc);
+    TEST_DEADLINE(IndexGet, 4Plus2Block);
+    TEST_DEADLINE(IndexGet, Mirror3of4);
+
+    TEST_DEADLINE(IndexRestoreGet, Mirror3dc);
+    TEST_DEADLINE(IndexRestoreGet, 4Plus2Block);
+    TEST_DEADLINE(IndexRestoreGet, Mirror3of4);
 
     #undef TEST_DEADLINE
 }

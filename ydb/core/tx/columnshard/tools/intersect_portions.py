@@ -5,7 +5,9 @@ import re
 import time
 import matplotlib.dates as mdates
 import getopt, sys
-from datetime import datetime
+import math
+from time import strftime, localtime
+from datetime import datetime, timezone
 from matplotlib.patches import Rectangle
 from matplotlib.collections import PatchCollection
 from operator import attrgetter
@@ -14,7 +16,7 @@ LIMIT_ROWS = -1
 
 
 # Return number of days since the epoch
-def data_to_num(val):
+def data_to_num(val: str):
     try:
         return mdates.date2num(datetime.strptime(val, "%Y-%m-%d %H:%M:%S.%f"))
     except ValueError:
@@ -23,6 +25,14 @@ def data_to_num(val):
 
 def num_to_date(val) -> datetime:
     return datetime.fromtimestamp(mdates.num2date(val).timestamp())
+
+
+def date_from_ms(ms: str):
+    return mdates.date2num(datetime.fromtimestamp(int(ms) / 1000.0, tz=timezone.utc))
+
+
+def days_to_ms(days: float):
+    return math.ceil(days * 86400000)
 
 
 def parse_primary_key(string: str):
@@ -111,8 +121,8 @@ def parse_txt(
             parts = line.split(',')
             primary_key_min = parse_primary_key_by_index(parts[5], 22, 48)
             primary_key_max = parse_primary_key_by_index(parts[4], 34, 60)
-            snapshot_plan_step_min = int(parts[6][32:])
-            snapshot_plan_step_max = int(parts[8][32:])
+            snapshot_plan_step_min = date_from_ms(parts[6][32:])
+            snapshot_plan_step_max = date_from_ms(parts[8][32:])
             if primary_key_min == None:
                 raise Exception("Can't read primary_key_min")
             if primary_key_max == None:
@@ -141,7 +151,7 @@ def parse_txt(
         with open(f"{path.split('.')[0]}_save_parsing.txt", 'w') as file:
             for rect in result:
                 file.write(
-                    f"{num_to_date(rect.get_x())};{rect.get_y()};{num_to_date(rect.get_x() + rect.get_width())};{rect.get_y() + rect.get_height()}\n"
+                    f"{num_to_date(rect.get_x())};{days_to_ms(rect.get_y())};{num_to_date(rect.get_x() + rect.get_width())};{days_to_ms(rect.get_y() + rect.get_height())}\n"
                 )
     return result, limit_x, limit_y
 
@@ -168,9 +178,9 @@ def read_result(
                 break
             parts = line.split(';')
             primary_key_min = data_to_num(parts[0])
-            snapshot_plan_step_min = int(parts[1])
+            snapshot_plan_step_min = date_from_ms(parts[1])
             primary_key_max = data_to_num(parts[2])
-            snapshot_plan_step_max = int(parts[3])
+            snapshot_plan_step_max = date_from_ms(parts[3])
             rect = create_rectangle(primary_key_min, primary_key_max, snapshot_plan_step_min, snapshot_plan_step_max)
             if check_border(
                 rect, border_pk_min, border_snapshot_plan_step_min, border_pk_max, border_snapshot_plan_step_max
@@ -318,10 +328,10 @@ long_options = [
 # args:
 # parsing_file - path to file with portion's logs (after run, file is saved with name *_save_parsing.txt for next read with --read_from_save)
 # read_from_save - path to file for read portion's logs after first run with --parsing_file
-# pk_min - left border PK for drawing
-# pk_max - right border PK for drawing
-# snapshot_plan_step_min - down border PK for drawing
-# snapshot_plan_step_max - up border PK for drawing
+# pk_min - left border PK for drawing (DataTime format Y-m-d H:M:S)
+# pk_max - right border PK for drawing (DataTime format Y-m-d H:M:S)
+# snapshot_plan_step_min - down border PK for drawing (ms)
+# snapshot_plan_step_max - up border PK for drawing (ms)
 # max_intersect - finds area with maximum intersection and moves to it.
 # drawing_step - step to select rectangles
 # limit_rows - read first limit_rows rows from file
@@ -347,9 +357,9 @@ if __name__ == '__main__':
         elif current_argument in ("--pk_max"):
             border_pk_max = data_to_num(current_value)
         elif current_argument in ("--snapshot_plan_step_min"):
-            border_snapshot_plan_step_min = int(current_value)
+            border_snapshot_plan_step_min = date_from_ms(current_value)
         elif current_argument in ("--snapshot_plan_step_max"):
-            border_snapshot_plan_step_max = int(current_value)
+            border_snapshot_plan_step_max = date_from_ms(current_value)
         elif current_argument in ("--max_intersect"):
             max_intersect = True
         elif current_argument in ("--drawing_step"):
@@ -421,11 +431,11 @@ if __name__ == '__main__':
     plt.ylabel("snapshot plan step")
     plt.title(f"intersect portions")
 
-    locator = mdates.AutoDateLocator()
-    ax.xaxis.set_major_locator(locator)
+    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M:%S.%f\n'))
-    ax.yaxis.get_major_formatter().set_useOffset(False)
-    ax.yaxis.get_major_formatter().set_scientific(False)
+
+    ax.yaxis.set_major_locator(mdates.AutoDateLocator())
+    ax.yaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M:%S.%f\n'))
 
     plt.xlim(limit_x[0], limit_x[1])
     plt.ylim(limit_y[0], limit_y[1])

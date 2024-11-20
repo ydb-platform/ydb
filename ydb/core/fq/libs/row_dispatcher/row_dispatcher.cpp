@@ -72,16 +72,22 @@ struct TEvPrivate {
     };
 };
 
+using TQueryStatKey = std::pair<TString, TString>;  // QueryId / Topic
+
 struct TAggQueryStat {
     NYql::TCounters::TEntry ReadBytes;
     NYql::TCounters::TEntry UnreadBytes;
-};
-
-struct TQueryState {
     NYql::TCounters::TEntry UnreadRows;
-    NYql::TCounters::TEntry UnreadBytes;
     NYql::TCounters::TEntry ReadLagMessages;
     bool IsWaiting = false;
+
+    void Add(const TopicSessionClientStatistic& stat) {
+        ReadBytes.Add(NYql::TCounters::TEntry(stat.ReadBytes));
+        UnreadBytes.Add(NYql::TCounters::TEntry(stat.UnreadBytes));
+        UnreadRows.Add(NYql::TCounters::TEntry(stat.UnreadRows));
+        ReadLagMessages.Add(NYql::TCounters::TEntry(stat.ReadLagMessages));
+        IsWaiting = IsWaiting || stat.IsWaiting;
+    }        
 };
 
 ui64 UpdateMetricsPeriodSec = 60;
@@ -227,7 +233,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
     struct TAggregatedStats{
         NYql::TCounters::TEntry AllSessionsReadBytes;
-        TMap<TString, TAggQueryStat> LastQueryStats;
+        TMap<TQueryStatKey, TAggQueryStat> LastQueryStats;
         TDuration LastUpdateMetricsPeriod;
     };
 
@@ -497,6 +503,7 @@ void TRowDispatcher::UpdateMetrics() {
     AggrStats.LastQueryStats.clear();
 
     for (auto& [key, sessionsInfo] : TopicSessions) {
+        const auto& topic = key.TopicPath;
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
             auto read = NYql::TCounters::TEntry(sessionInfo.Stat.ReadBytes);
             AggrStats.AllSessionsReadBytes.Add(read);
@@ -504,17 +511,17 @@ void TRowDispatcher::UpdateMetrics() {
             sessionInfo.Stat.Clear();
 
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
-                auto& stat = AggrStats.LastQueryStats[consumer->QueryId];
-                stat.UnreadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadBytes));
-                stat.ReadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.ReadBytes));
+                AggrStats.LastQueryStats[TQueryStatKey{consumer->QueryId, topic}].Add(consumer->Stat);
                 consumer->Stat.Clear();
             }
         }
     }
-    for (const auto& [queryId, stat] : AggrStats.LastQueryStats) {
-        auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryId);
-        queryGroup->GetCounter("MaxUnreadBytes")->Set(stat.UnreadBytes.Max);
-        queryGroup->GetCounter("AvgUnreadBytes")->Set(stat.UnreadBytes.Avg);
+    for (const auto& [queryStatKey, stat] : AggrStats.LastQueryStats) {
+        auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryStatKey.first);
+        auto topicGroup = queryGroup->GetSubgroup("topic", queryStatKey.second);
+        topicGroup->GetCounter("MaxUnreadBytes")->Set(stat.UnreadBytes.Max);
+        topicGroup->GetCounter("AvgUnreadBytes")->Set(stat.UnreadBytes.Avg);
+        topicGroup->GetCounter("MaxReadLag")->Set(stat.ReadLagMessages.Max);
     }
 }
 
@@ -547,20 +554,18 @@ TString TRowDispatcher::GetInternalState() {
     printDataRate(AggrStats.AllSessionsReadBytes);
     str << "\n";
 
-    TMap<TString, TQueryState> queryState;
-    TMap<TString, ui64> sessionCountByQuery;
+    TMap<TQueryStatKey, TAggQueryStat> queryState;
+    TMap<TQueryStatKey, ui64> sessionCountByQuery;
     ui64 unreadBytesSum = 0;
 
     for (auto& [key, sessionsInfo] : TopicSessions) {
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
+            const auto& topic = key.TopicPath;
             unreadBytesSum += sessionInfo.Stat.UnreadBytes;
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
-                ++sessionCountByQuery[consumer->QueryId];
-                auto& stat = queryState[consumer->QueryId];
-                stat.UnreadRows.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadRows));
-                stat.UnreadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadBytes));
-                stat.ReadLagMessages.Add(NYql::TCounters::TEntry(consumer->Stat.ReadLagMessages));
-                stat.IsWaiting = stat.IsWaiting || consumer->Stat.IsWaiting;
+                auto key = TQueryStatKey{consumer->QueryId, topic};
+                ++sessionCountByQuery[key];
+                queryState[key].Add(consumer->Stat);
             }
         }
     }
@@ -570,11 +575,12 @@ TString TRowDispatcher::GetInternalState() {
     }
 
     str << "Queries:\n";
-    for (const auto& [queryId, stat]: queryState) {
-        const auto& aggStat = AggrStats.LastQueryStats[queryId];
-        auto sessionsBufferSumSize = sessionCountByQuery[queryId] * MaxSessionBufferSizeBytes;
+    for (const auto& [queryStatKey, stat]: queryState) {
+        auto [queryId, topic] = queryStatKey;
+        const auto& aggStat = AggrStats.LastQueryStats[queryStatKey];
+        auto sessionsBufferSumSize = sessionCountByQuery[queryStatKey] * MaxSessionBufferSizeBytes;
         auto used = sessionsBufferSumSize ? (stat.UnreadBytes.Sum * 100.0 / sessionsBufferSumSize) : 0.0;
-        str << "  " << queryId << " buffer used (all partitions) " << LeftPad(Prec(used, 4), 10) << "% (" << toHuman(stat.UnreadBytes.Sum) <<  ") unread max (one partition) " << toHuman(stat.UnreadBytes.Max) << " data rate";
+        str << "  " << queryId << " / " << topic << ": buffer used (all partitions) " << LeftPad(Prec(used, 4), 10) << "% (" << toHuman(stat.UnreadBytes.Sum) <<  ") unread max (one partition) " << toHuman(stat.UnreadBytes.Max) << " data rate";
         printDataRate(aggStat.ReadBytes);
         str << " waiting " << stat.IsWaiting << " max read lag " << stat.ReadLagMessages.Max;
         str << "\n";
@@ -717,7 +723,6 @@ bool TRowDispatcher::CheckSession(TAtomicSharedPtr<ConsumerInfo>& consumer, cons
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
-    LOG_ROW_DISPATCHER_DEBUG(GetInternalState());
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
         LOG_ROW_DISPATCHER_WARN("Ignore TEvStopSession from " << ev->Sender << " part id " << ev->Get()->Record.GetPartitionId());

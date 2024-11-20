@@ -801,6 +801,26 @@ void TColumnShard::SetupCompaction(const std::set<ui64>& pathIds) {
     }
 }
 
+class TAccessorsMemorySubscriber: public NOlap::NResourceBroker::NSubscribe::ITask {
+private:
+    std::shared_ptr<TDataAccessorsRequest> Request;
+    std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
+
+    virtual void DoOnAllocationSuccess(const std::shared_ptr<TResourcesGuard>& guard) override {
+        Request->InitResourcesGuard(guard);
+        DataAccessorsManager->AskData(Request);
+    }
+
+public:
+    TAccessorsMemorySubscriber(const ui64 memory, const TString& externalTaskId, const TTaskContext& context,
+        std::shared_ptr<TDataAccessorsRequest>&& request,
+        const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager)
+        : TBase(0, memory, externalTaskId, context)
+        , Request(std::move(request))
+        , DataAccessorsManager(dataAccessorsManager) {
+    }
+};
+
 class TCompactionDataAccessorsSubscriber: public TDataAccessorsSubscriberWithRead {
 private:
     using TBase = TDataAccessorsSubscriberWithRead;
@@ -840,7 +860,11 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
     request->RegisterSubscriber(std::make_shared<TCompactionDataAccessorsSubscriber>(ResourceSubscribeActor, indexChanges, actualIndexInfo,
         Settings.CacheDataAfterCompaction, SelfId(), TabletID(), Counters.GetCompactionCounters(), GetLastCompletedTx(),
         CompactTaskSubscription));
-    TablesManager.GetPrimaryIndex()->FetchDataAccessors(request);
+    const ui64 accessorsMemory = request->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetLastSchema());
+    NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
+        ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, indexChanges->GetExternalTaskId(),
+                                    CompactTaskSubscription,
+                                    std::move(request), DataAccessorsManager));
 }
 
 class TWriteEvictPortionsDataAccessorsSubscriber: public TDataAccessorsSubscriberWithRead {
@@ -934,13 +958,16 @@ bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
         i->Start(*this);
         auto request = i->ExtractDataAccessorsRequest();
         if (i->NeedConstruction()) {
-            request->RegisterSubscriber(std::make_shared<TWriteEvictPortionsDataAccessorsSubscriber>(ResourceSubscribeActor, i,
-                actualIndexInfo, Settings.CacheDataAfterCompaction, SelfId(), TabletID(), Counters.GetEvictionCounters(), GetLastCompletedTx(),
+            request->RegisterSubscriber(std::make_shared<TWriteEvictPortionsDataAccessorsSubscriber>(ResourceSubscribeActor, i, actualIndexInfo,
+                Settings.CacheDataAfterCompaction, SelfId(), TabletID(), Counters.GetEvictionCounters(), GetLastCompletedTx(),
                 TTLTaskSubscription));
         } else {
             request->RegisterSubscriber(std::make_shared<TNoWriteEvictPortionsDataAccessorsSubscriber>(SelfId(), i, actualIndexInfo));
         }
-        TablesManager.GetPrimaryIndex()->FetchDataAccessors(request);
+        const ui64 accessorsMemory = request->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetLastSchema());
+        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
+            ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(
+                                        accessorsMemory, i->GetExternalTaskId(), TTLTaskSubscription, std::move(request), DataAccessorsManager));
     }
     return true;
 }
@@ -983,7 +1010,11 @@ void TColumnShard::SetupCleanupPortions() {
     auto request = changes->ExtractDataAccessorsRequest();
     auto actualIndexInfo = std::make_shared<NOlap::TVersionedIndex>(TablesManager.GetPrimaryIndex()->GetVersionedIndex());
     request->RegisterSubscriber(std::make_shared<TCleanupPortionsDataAccessorsSubscriber>(SelfId(), changes, actualIndexInfo));
-    TablesManager.GetPrimaryIndex()->FetchDataAccessors(request);
+    const ui64 accessorsMemory = request->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetLastSchema());
+
+    NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(
+        ResourceSubscribeActor, std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, changes->GetExternalTaskId(), TTLTaskSubscription,
+                                    std::move(request), DataAccessorsManager));
 }
 
 void TColumnShard::SetupCleanupTables() {

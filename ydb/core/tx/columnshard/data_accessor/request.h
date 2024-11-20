@@ -208,6 +208,15 @@ public:
 
     TDataAccessorsRequest() = default;
 
+    ui64 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {
+        ui64 result = 0;
+        for (auto&& i : PathIdStatus) {
+            for (auto&& [_, p] : i.GetPortions()) {
+                result += p->PredictAccessorsMemory(schema);
+            }
+        }
+    }
+
     bool HasSubscriber() const {
         return !!Subscriber;
     }

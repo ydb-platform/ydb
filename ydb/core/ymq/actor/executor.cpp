@@ -4,6 +4,7 @@
 
 #include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/public/lib/value/value.h>

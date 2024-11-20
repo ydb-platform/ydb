@@ -3,18 +3,19 @@
 #include "table_settings.h"
 #include "ydb_convert.h"
 
-#include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
+#include <ydb/core/scheme/protos/type_info.pb.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
-#include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/core/scheme/protos/type_info.pb.h>
-#include <ydb/core/protos/kqp_physical.pb.h>
-#include <ydb/core/protos/table_stats.pb.h>
-#include <ydb/core/protos/follower_group.pb.h>
 
 #include <util/generic/hash.h>
 

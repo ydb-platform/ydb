@@ -1273,11 +1273,14 @@ public:
 
             block = test;
 
-            const auto storedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetStored() }, "stored", block);
-            const auto lastStored = new LoadInst(storedType, storedPtr, "lastStored", block);
-            const auto decr = BinaryOperator::CreateSub(used, lastStored, "decr", block);
+            auto totalUsed = used;
+            if (MemLimit) {
+                const auto storedPtr = GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetStored() }, "stored", block);
+                const auto lastStored = new LoadInst(storedType, storedPtr, "lastStored", block);
+                totalUsed = BinaryOperator::CreateSub(used, lastStored, "decr", block);
+            }
 
-            const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, decr, ctx, block);
+            const auto check = CheckAdjustedMemLimit<TrackRss>(MemLimit, totalUsed, ctx, block);
             BranchInst::Create(done, loop, check, block);
 
             block = done;

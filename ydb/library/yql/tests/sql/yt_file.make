@@ -31,7 +31,7 @@ DEPENDS(
 DATA(
     arcadia/ydb/library/yql/tests/sql # python files
     arcadia/yql/essentials/mount
-    arcadia/ydb/library/yql/cfg/tests
+    arcadia/yql/essentials/cfg/tests
 )
 
 PEERDIR(

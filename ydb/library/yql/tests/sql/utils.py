@@ -22,7 +22,7 @@ except BaseException:
 def get_sql_flags():
     gateway_config = gateways_config_pb2.TGatewaysConfig()
 
-    with open(yatest.common.source_path('ydb/library/yql/cfg/tests/gateways.conf')) as f:
+    with open(yatest.common.source_path('yql/essentials/cfg/tests/gateways.conf')) as f:
         text_format.Merge(f.read(), gateway_config)
 
     if yql_get_param('SQL_FLAGS'):

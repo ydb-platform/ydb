@@ -85,7 +85,7 @@ def test(case):
     if "YA_TEST_RUNNER" in extra_env:
         del extra_env["YA_TEST_RUNNER"]
 
-    yqlrun_res = YQLRun(udfs_dir=udfs_dir, prov='yt', use_sql2yql=False, cfg_dir=os.getenv('YQL_CONFIG_DIR') or 'ydb/library/yql/cfg/udf_test').yql_exec(
+    yqlrun_res = YQLRun(udfs_dir=udfs_dir, prov='yt', use_sql2yql=False, cfg_dir=os.getenv('YQL_CONFIG_DIR') or 'yql/essentials/cfg/udf_test').yql_exec(
         program=program,
         run_sql=True,
         tables=in_tables,

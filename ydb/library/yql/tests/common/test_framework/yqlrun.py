@@ -61,11 +61,11 @@ class YQLRun(object):
         if gateway_config is not None:
             text_format.Merge(gateway_config, self.gateway_config)
 
-        yql_utils.merge_default_gateway_cfg(cfg_dir or 'ydb/library/yql/cfg/tests', self.gateway_config)
+        yql_utils.merge_default_gateway_cfg(cfg_dir or 'yql/essentials/cfg/tests', self.gateway_config)
 
         self.fs_config = file_storage_pb2.TFileStorageConfig()
 
-        with open(yql_utils.yql_source_path(os.path.join(cfg_dir or 'ydb/library/yql/cfg/tests', 'fs.conf'))) as f:
+        with open(yql_utils.yql_source_path(os.path.join(cfg_dir or 'yql/essentials/cfg/tests', 'fs.conf'))) as f:
             text_format.Merge(f.read(), self.fs_config)
 
         if fs_config is not None:

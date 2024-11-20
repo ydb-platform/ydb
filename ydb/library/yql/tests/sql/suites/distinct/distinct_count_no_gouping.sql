@@ -1,1 +1,0 @@
-select count(distinct key) as dist, count(key) as full from plato.Input2;

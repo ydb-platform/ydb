@@ -1,2 +1,0 @@
-{"key"="1";"subkey"="1";"value"="abc"};
-{"key"="1";"subkey"="2";"value"="ddd"};

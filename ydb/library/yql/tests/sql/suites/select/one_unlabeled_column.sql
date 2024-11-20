@@ -1,1 +1,0 @@
-select key from plato.Input;

@@ -1,8 +1,0 @@
-$concat = ($row) -> {
-    return AddMember(
-        $row, "foo",
-        $row.key || "|" || $row.subkey || "|" || $row.value
-    );
-};
-
-process `Input` using $concat(TableRow());

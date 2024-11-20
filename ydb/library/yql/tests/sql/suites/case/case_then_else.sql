@@ -1,1 +1,0 @@
-select case when key != subkey then subkey else value end from plato.Input;

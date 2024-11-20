@@ -1,5 +1,0 @@
-USE plato;
-
-SELECT *
-FROM Input
-HAVING key < '100' -- using having mean aggregation GROUP BY (), should use aggregation functions

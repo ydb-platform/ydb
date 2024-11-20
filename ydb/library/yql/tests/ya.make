@@ -1,4 +1,3 @@
 RECURSE(
-    s-expressions
     sql
 )

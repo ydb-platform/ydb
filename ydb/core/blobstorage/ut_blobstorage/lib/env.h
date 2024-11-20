@@ -51,6 +51,7 @@ struct TEnvironmentSetup {
         const float SlowDiskThreshold = 2;
         const float VDiskPredictedDelayMultiplier = 1;
         const ui32 MaxNumOfSlowDisks = 2;
+        const bool UseActorSystemTimeInBSQueue = true;
     };
 
     const TSettings Settings;
@@ -366,7 +367,7 @@ struct TEnvironmentSetup {
                 auto config = MakeIntrusive<TNodeWardenConfig>(new TMockPDiskServiceFactory(*this));
                 config->BlobStorageConfig.MutableServiceSet()->AddAvailabilityDomains(DomainId);
                 config->VDiskReplPausedAtStart = Settings.VDiskReplPausedAtStart;
-                config->UseActorSystemTimeInBSQueue = true;
+                config->UseActorSystemTimeInBSQueue = Settings.UseActorSystemTimeInBSQueue;
                 if (Settings.ConfigPreprocessor) {
                     Settings.ConfigPreprocessor(nodeId, *config);
                 }

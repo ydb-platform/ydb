@@ -86,7 +86,11 @@ Y_UNIT_TEST_SUITE(CountingEvents) {
 
     void CountingEventsTest(TString typeOperation, ui32 eventsCount, TBlobStorageGroupType groupType)
     {
-        TEnvironmentSetup env(true, groupType);
+        TEnvironmentSetup env({
+            .VDiskReplPausedAtStart = true,
+            .Erasure = groupType,
+            .UseActorSystemTimeInBSQueue = false,
+        });
         auto& runtime = env.Runtime;
 
         env.CreateBoxAndPool();

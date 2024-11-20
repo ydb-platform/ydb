@@ -2,7 +2,7 @@
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
-#include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/constructor/read_metadata.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 

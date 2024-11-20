@@ -3,7 +3,7 @@
 #include "fetching.h"
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
-#include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/formats/arrow/reader/merger.h>
 

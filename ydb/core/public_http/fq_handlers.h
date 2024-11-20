@@ -249,6 +249,7 @@ void SetIdempotencyKey(T& dst, const TString& key) {
 
 template <typename GrpcProtoRequestType, typename HttpProtoRequestType, typename GrpcProtoResultType, typename HttpProtoResultType, typename GrpcProtoResponseType>
 class TGrpcCallWrapper : public TActorBootstrapped<TGrpcCallWrapper<GrpcProtoRequestType, HttpProtoRequestType, GrpcProtoResultType, HttpProtoResultType, GrpcProtoResponseType>> {
+protected:
     THttpRequestContext RequestContext;
 
     typedef std::function<std::unique_ptr<NGRpcService::TEvProxyRuntimeEvent>(TIntrusivePtr<NYdbGrpc::IRequestContextBase> ctx)> TGrpcProxyEventFactory;
@@ -397,28 +398,21 @@ DECLARE_YQ_GRPC_ACTOR_WIHT_EMPTY_RESULT(StopQuery, ControlQuery);
 DECLARE_YQ_GRPC_ACTOR(GetResultData, GetResultData);
 
 // #define RestartArgs FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest, FederatedQuery::ModifyQueryResponse, FQHttp::GetQueryResult, FederatedQuery::ModifyQueryResult
-
-class TRestartQueryRequest : public TActorBootstrapped<TRestartQueryRequest> {
-    THttpRequestContext RequestContext;
+#define TGrpcCallWrapperBase TGrpcCallWrapper<FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse>
+class TRestartQueryRequest : public TGrpcCallWrapperBase {
+    // THttpRequestContext RequestContext;
 
     typedef std::function<std::unique_ptr<NGRpcService::TEvProxyRuntimeEvent>(TIntrusivePtr<NYdbGrpc::IRequestContextBase> ctx)> TGrpcProxyEventFactory;
     TGrpcProxyEventFactory EventFactory;
 
-    NProtobufJson::TJson2ProtoConfig Json2ProtoConfig;
-
 public:
     TRestartQueryRequest(const THttpRequestContext& ctx)
-    : RequestContext(ctx)
-    // , EventFactory(eventFactory) // &NGRpcService::CreateFederatedQuery##internalAction##RequestOperationCall
-    {
-        Json2ProtoConfig = NProtobufJson::TJson2ProtoConfig()
-            .SetFieldNameMode(NProtobufJson::TJson2ProtoConfig::FieldNameCamelCase)
-            .SetMapAsObject(true);
-    }
+    : TGrpcCallWrapperBase(ctx, TGrpcProxyEventFactory())
+    {}
 
     void Bootstrap(const TActorContext& ctx) {
         auto describeRequest = std::make_unique<FederatedQuery::DescribeQueryRequest>();
-        if (!Parse<FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest>(*describeRequest)) {
+        if (!Parse(*describeRequest)) {
             this->Die(ctx);
             return;
         }
@@ -449,7 +443,6 @@ public:
             // modify
             auto modifyRequest = std::unique_ptr<FederatedQuery::ModifyQueryRequest>(google::protobuf::Arena::CreateMessage<FederatedQuery::ModifyQueryRequest>(resp->GetArena()));
 
-            // bad
             modifyRequest->set_query_id(query_id);
             auto content = describeResult->Getquery().content();
             modifyRequest->set_allocated_content(&content);
@@ -470,71 +463,6 @@ public:
 
         ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(requestContext).get());
     }
-
-    template<typename TGrpcProtoRequestType, typename THttpProtoRequestType>
-    bool Parse(TGrpcProtoRequestType& grpcRequest) {
-        const auto& httpRequest = *RequestContext.GetHttpRequest();
-        try {
-            THttpProtoRequestType request;
-            if (httpRequest.Method == "POST"sv && RequestContext.GetContentType() == APPLICATION_JSON) {
-                NProtobufJson::Json2Proto(httpRequest.Body, request, Json2ProtoConfig);
-            }
-
-            NHttp::TUrlParameters params(httpRequest.URL);
-            for (const auto& [name, value] : params.Parameters) {
-                SetProtoMessageField(request, name, value);
-            }
-            RequestContext.SetDb(TString(params.Get("db")));
-            RequestContext.SetProject(TString(params.Get("project")));
-
-            // path params should overwrite query params in case of conflict
-            for (const auto& [name, value] : RequestContext.GetPathParams()) {
-                SetProtoMessageField(request, name, value);
-            }
-            FqConvert(request, grpcRequest);
-            SetIdempotencyKey(grpcRequest, RequestContext.GetIdempotencyKey());
-
-            return true;
-        } catch (const std::exception& e) {
-            ReplyError(TStringBuilder() << "Error in parsing: " << e.what());
-            return false;
-        }
-    }
-
-    template <typename THttpProtoRequestType>
-    static void SetProtoMessageField(THttpProtoRequestType& request, TStringBuf name, TStringBuf value) {
-        const Reflection* reflection = request.GetReflection();
-        const Descriptor* descriptor = request.GetDescriptor();
-        auto field = descriptor->FindFieldByLowercaseName(TString(name));
-        if (!field) {
-            return;
-        }
-
-        switch (field->cpp_type()) {
-        case FieldDescriptor::CPPTYPE_INT32:
-            return reflection->SetInt32(&request, field, FromString<i32>(value));
-        case FieldDescriptor::CPPTYPE_INT64:
-            return reflection->SetInt64(&request, field, FromString<i64>(value));
-        case FieldDescriptor::CPPTYPE_UINT32:
-            return reflection->SetUInt32(&request, field, FromString<ui32>(value));
-        case FieldDescriptor::CPPTYPE_UINT64:
-            return reflection->SetUInt64(&request, field, FromString<ui64>(value));
-        case FieldDescriptor::CPPTYPE_STRING:
-            return reflection->SetString(&request, field, TString(value));
-        default:
-            break;
-        }
-    }
-
-    void ReplyError(const TString& error) {
-        RequestContext.ResponseBadRequest(Ydb::StatusIds::BAD_REQUEST, error);
-    }
-
-
-
-
-
-    
 };
 
 } // namespace NKikimr::NPublicHttp

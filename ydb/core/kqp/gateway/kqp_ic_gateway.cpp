@@ -30,7 +30,7 @@
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/persqueue_v1/rpc_calls.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -202,16 +202,10 @@ public:
             ResultSet.set_truncated(true);
         }
 
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         resp->Record.SetEnough(truncated);
-        resp->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
         resp->Record.SetFreeSpace(ResultSetBytesLimit);
         ctx.Send(ev->Sender, resp.Release());
-    }
-
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ctx);
-        Executions.push_back(std::move(*ev->Get()->Record.MutableProfile()));
     }
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
@@ -228,11 +222,6 @@ public:
         auto& response = *ev->Get()->Record.MutableResponse();
 
         response.AddYdbResults()->CopyFrom(ResultSet);
-        for (auto& execStats : Executions) {
-            response.MutableQueryStats()->AddExecutions()->Swap(&execStats);
-        }
-        Executions.clear();
-
         TBase::HandleResponse(ev, ctx);
     }
 
@@ -240,7 +229,6 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
-            HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, Handle);
             HFunc(TResponse, HandleResponse);
 
         default:
@@ -253,7 +241,6 @@ private:
     TActorId ExecuterActorId;
     bool HasMeta = false;
     Ydb::ResultSet ResultSet;
-    TVector<NYql::NDqProto::TDqExecutionStats> Executions;
 };
 
 // Handles data query request for StreamExecuteYqlScript
@@ -384,11 +371,6 @@ public:
         TlsActivationContext->Send(ev->Forward(ExecuterActorId));
     }
 
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ctx);
-        Executions.push_back(std::move(*ev->Get()->Record.MutableProfile()));
-    }
-
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
@@ -404,11 +386,6 @@ public:
 
         Ydb::ResultSet resultSet;
         response.AddYdbResults()->CopyFrom(resultSet);
-        for (auto& execStats : Executions) {
-            response.MutableQueryStats()->AddExecutions()->Swap(&execStats);
-        }
-        Executions.clear();
-
         TBase::HandleResponse(ev, ctx);
     }
 
@@ -416,7 +393,6 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
             HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
-            HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, Handle);
             HFunc(TResponse, HandleResponse);
 
         default:
@@ -427,7 +403,6 @@ public:
 private:
     TActorId ExecuterActorId;
     TActorId TargetActorId;
-    TVector<NYql::NDqProto::TDqExecutionStats> Executions;
 };
 
 class TKqpGenericQueryRequestHandler: public TRequestHandlerBase<
@@ -497,8 +472,7 @@ public:
             }
         }
 
-        auto response = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        response->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        auto response = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         response->Record.SetFreeSpace(SizeLimit && SizeLimit < std::numeric_limits<i64>::max() ? SizeLimit : std::numeric_limits<i64>::max());
         Send(ev->Sender, response.Release());
     }

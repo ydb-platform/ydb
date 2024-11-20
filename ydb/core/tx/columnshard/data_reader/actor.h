@@ -59,8 +59,10 @@ private:
 
     EStage Stage = EStage::Initialization;
     static inline const ui64 FreeSpace = ((ui64)8) << 20;
-    void SwitchStage(const EStage from, const EStage to) {
-        AFL_VERIFY(Stage == from)("from", (ui32)from)("real", (ui32)Stage)("to", (ui32)to);
+    void SwitchStage(const std::optional<EStage> from, const EStage to) {
+        if (from) {
+            AFL_VERIFY(Stage == *from)("from", (ui32)*from)("real", (ui32)Stage)("to", (ui32)to);
+        }
         Stage = to;
     }
 

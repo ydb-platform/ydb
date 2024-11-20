@@ -10,12 +10,12 @@
 #include <yt/yt/library/tvm/service/public.h>
 
 #include <yt/yt/core/misc/mpsc_stack.h>
-#include <library/cpp/yt/threading/atomic_object.h>
 
 #include <yt/yt/core/rpc/grpc/config.h>
 
 #include <yt/yt/core/ytree/yson_struct.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
@@ -188,7 +188,7 @@ private:
     i64 TotalMemory_ = 0;
     i64 TotalSize_ = 0;
 
-    TAtomicObject<TPromise<void>> QueueEmptyPromise_ = NewPromise<void>();
+    NThreading::TAtomicObject<TPromise<void>> QueueEmptyPromise_ = NewPromise<void>();
 
     THashMap<TString, TJaegerChannelManagerPtr> CollectorChannels_;
     NRpc::NGrpc::TChannelConfigPtr OpenChannelConfig_;

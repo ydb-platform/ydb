@@ -21,14 +21,14 @@ PEERDIR(
     yt/cpp/mapreduce/client
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface
-    ydb/library/yql/core/file_storage
-    ydb/library/yql/public/issue
-    ydb/library/yql/utils
-    ydb/library/yql/utils/log
-    ydb/library/yql/utils/threading
-    ydb/library/yql/core/type_ann
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/gateway
+    yql/essentials/core/file_storage
+    yql/essentials/public/issue
+    yql/essentials/utils
+    yql/essentials/utils/log
+    yql/essentials/utils/threading
+    yql/essentials/core/type_ann
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/gateway
     ydb/library/yql/providers/yt/provider
     ydb/library/yql/providers/yt/common
     ydb/library/yql/providers/yt/lib/hash

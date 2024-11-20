@@ -29,21 +29,21 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/ast
-    ydb/library/yql/core/services
-    ydb/library/yql/core/services/mounts
-    ydb/library/yql/core/user_data
-    ydb/library/yql/utils/backtrace
-    ydb/library/yql/utils/log
-    ydb/library/yql/core
-    ydb/library/yql/core/type_ann
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/comp_nodes
-    ydb/library/yql/providers/common/mkql
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/providers/common/schema/expr
-    ydb/library/yql/providers/common/udf_resolve
-    ydb/library/yql/providers/common/arrow_resolve
+    yql/essentials/ast
+    yql/essentials/core/services
+    yql/essentials/core/services/mounts
+    yql/essentials/core/user_data
+    yql/essentials/utils/backtrace
+    yql/essentials/utils/log
+    yql/essentials/core
+    yql/essentials/core/type_ann
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/comp_nodes
+    yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/schema/expr
+    yql/essentials/providers/common/udf_resolve
+    yql/essentials/providers/common/arrow_resolve
 )
 
 YQL_LAST_ABI_VERSION()

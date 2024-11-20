@@ -3,13 +3,13 @@
 #include "fwd.h"
 #include "wrappers.h"
 
-#include <ydb/library/yql/core/user_data/yql_user_data.h>
+#include <yql/essentials/core/user_data/yql_user_data.h>
 
-#include <ydb/library/yql/public/udf/udf_value.h>
-#include <ydb/library/yql/public/udf/udf_counter.h>
-#include <ydb/library/yql/public/udf/udf_registrator.h>
+#include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/public/udf/udf_counter.h>
+#include <yql/essentials/public/udf/udf_registrator.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <library/cpp/yson/node/node.h>
 
 #include <library/cpp/logger/priority.h>

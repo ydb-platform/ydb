@@ -170,6 +170,7 @@ SRCS(
     schemeshard__operation_mkdir.cpp
     schemeshard__operation_modify_acl.cpp
     schemeshard__operation_move_index.cpp
+    schemeshard__operation_move_sequence.cpp
     schemeshard__operation_move_table.cpp
     schemeshard__operation_move_table_index.cpp
     schemeshard__operation_move_tables.cpp
@@ -283,6 +284,7 @@ PEERDIR(
     ydb/core/tx/datashard
     ydb/core/tx/schemeshard/backup
     ydb/core/tx/schemeshard/common
+    ydb/core/tx/schemeshard/generated
     ydb/core/tx/schemeshard/olap
     ydb/core/tx/scheme_board
     ydb/core/tx/tx_allocator_client
@@ -294,8 +296,8 @@ PEERDIR(
     ydb/library/login
     ydb/library/login/protos
     ydb/library/protobuf_printer
-    ydb/library/yql/minikql
-    ydb/library/yql/providers/common/proto
+    yql/essentials/minikql
+    yql/essentials/providers/common/proto
     ydb/services/bg_tasks
     ydb/core/tx/columnshard/bg_tasks/manager
 )

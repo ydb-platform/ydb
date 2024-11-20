@@ -107,6 +107,7 @@ public:
     }
 
     ISnapshotSchema::TPtr GetResultSchema() const {
+        AFL_VERIFY(ResultIndexSchema);
         return ResultIndexSchema;
     }
 
@@ -117,12 +118,13 @@ public:
     ISnapshotSchema::TPtr GetLoadSchemaVerified(const TPortionInfo& porition) const;
 
     const std::shared_ptr<NArrow::TSchemaLite>& GetBlobSchema(const ui64 version) const {
-        return GetIndexVersions().GetSchema(version)->GetIndexInfo().ArrowSchema();
+        return GetIndexVersions().GetSchemaVerified(version)->GetIndexInfo().ArrowSchema();
     }
 
     const TIndexInfo& GetIndexInfo(const std::optional<TSnapshot>& version = {}) const {
+        AFL_VERIFY(ResultIndexSchema);
         if (version && version < RequestSnapshot) {
-            return GetIndexVersions().GetSchema(*version)->GetIndexInfo();
+            return GetIndexVersions().GetSchemaVerified(*version)->GetIndexInfo();
         }
         return ResultIndexSchema->GetIndexInfo();
     }
@@ -150,6 +152,7 @@ public:
     }
 
     std::set<ui32> GetProcessingColumnIds() const {
+        AFL_VERIFY(ResultIndexSchema);
         std::set<ui32> result;
         for (auto&& i : GetProgram().GetProcessingColumns()) {
             result.emplace(ResultIndexSchema->GetIndexInfo().GetColumnIdVerified(i));
@@ -184,6 +187,7 @@ public:
     }
 
     std::shared_ptr<arrow::Schema> GetReplaceKey() const {
+        AFL_VERIFY(ResultIndexSchema);
         return ResultIndexSchema->GetIndexInfo().GetReplaceKey();
     }
 

@@ -3,11 +3,11 @@
 
 #include <ydb/library/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
 #include <ydb/library/yql/providers/yt/lib/lambda_builder/lambda_builder.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
 
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
 
 #include <library/cpp/yson/node/node_builder.h>
 #include <yt/cpp/mapreduce/io/node_table_reader.h>

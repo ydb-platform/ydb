@@ -130,6 +130,7 @@ constexpr const char* EntireDatabaseTag = "entire_database";
 
 NLs::TCheckFunc LsCheckDiskQuotaExceeded(
     const TMap<TString, EDiskUsageStatus>& expectedExceeders,
+    bool enableSeparateQuotasFeatureFlag,
     const TString& debugHint = ""
 ) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
@@ -166,8 +167,19 @@ NLs::TCheckFunc LsCheckDiskQuotaExceeded(
                                              receivedQuotas.data_size_soft_quota()
                                  }
             );
-            
+
             TMap<TString, EDiskUsageStatus> exceeders = CheckStoragePoolsQuotas(parsedUsage, parsedQuotas);
+            if (enableSeparateQuotasFeatureFlag) {
+                // ignore the status of the overall quota
+                exceeders.erase(EntireDatabaseTag);
+            } else {
+                // ignore the statuses of the separate storage pool quotas
+                TMap<TString, EDiskUsageStatus> onlyOverallStatus;
+                if (auto* overallStatus = exceeders.FindPtr(EntireDatabaseTag)) {
+                    onlyOverallStatus.emplace(EntireDatabaseTag, *overallStatus);
+                }
+                std::swap(exceeders, onlyOverallStatus);
+            }
             UNIT_ASSERT_VALUES_EQUAL_C(exceeders, expectedExceeders,
                 debugHint << ", subdomain's disk space usage:\n" << desc.GetDiskSpaceUsage().DebugString()
             );
@@ -181,9 +193,9 @@ void CheckQuotaExceedance(TTestActorRuntime& runtime,
                           bool expectExceeded,
                           const TString& debugHint = ""
 ) {
-    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain),
-                       { LsCheckDiskQuotaExceeded(expectExceeded, debugHint) }
-    );
+    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain), {
+        LsCheckDiskQuotaExceeded(expectExceeded, debugHint)
+    });
 }
 
 void CheckQuotaExceedance(TTestActorRuntime& runtime,
@@ -192,9 +204,13 @@ void CheckQuotaExceedance(TTestActorRuntime& runtime,
                           const TMap<TString, EDiskUsageStatus>& expectedExceeders,
                           const TString& debugHint = ""
 ) {
-    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain),
-                       { LsCheckDiskQuotaExceeded(expectedExceeders, debugHint) }
-    );
+    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain), {
+        LsCheckDiskQuotaExceeded(
+            expectedExceeders,
+            runtime.GetAppData().FeatureFlags.GetEnableSeparateDiskSpaceQuotas(),
+            debugHint
+        )
+    });
 }
 
 TVector<ui64> GetTableShards(TTestActorRuntime& runtime,
@@ -3207,6 +3223,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         opts.EnableTopicDiskSubDomainQuota(false);
 
         TTestEnv env(runtime, opts);
+        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(false);
+
         ui64 txId = 100;
 
         auto waitForTableStats = [&](ui32 shards) {
@@ -3435,6 +3453,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NLog::PRI_TRACE);
 
         runtime.GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
+        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(false);
 
         ui64 txId = 100;
 
@@ -3482,7 +3501,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         auto stats = NPQ::GetReadBalancerPeriodicTopicStats(runtime, balancerId);
         UNIT_ASSERT_EQUAL_C(false, stats->Record.GetSubDomainOutOfSpace(), "SubDomainOutOfSpace from ReadBalancer");
-        
+
         auto msg = TString(24_MB, '_');
 
         ui32 seqNo = 100;
@@ -3517,7 +3536,9 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
         opts.EnablePersistentPartitionStats(true);
         opts.EnableBackgroundCompaction(false);
         TTestEnv env(runtime, opts);
-        
+
+        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(true);
+
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
         NDataShard::gDbStatsDataSizeResolution = 1;
         NDataShard::gDbStatsRowCountResolution = 1;
@@ -3610,7 +3631,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
         UpdateRow(runtime, "SomeTable", 1, "some_value_for_the_key", shards[0]);
         {
             const auto tableStats = WaitTableStats(runtime, shards[0]).GetTableStats();
-            // channels' usage statistics appears only after a table compaction 
+            // channels' usage statistics appears only after a table compaction
             UNIT_ASSERT_VALUES_EQUAL_C(tableStats.ChannelsSize(), 0, tableStats.DebugString());
         }
         CheckQuotaExceedance(runtime, tenantSchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
@@ -3636,7 +3657,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
 
         TTestEnvOptions opts;
         TTestEnv env(runtime, opts);
-        
+
         ui64 txId = 100;
 
         constexpr const char* databaseDescription = R"(
@@ -3678,8 +3699,8 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
 
     // This test might start failing, because disk space usage of the created table might change
     // due to changes in the storage implementation.
-    // To fix the test you need to update canonical quotas and / or batch sizes.
-    Y_UNIT_TEST_FLAG(DifferentQuotasInteraction, IsExternalSubdomain) {
+    // To fix the test you need to update canonical quotas and the content of the table.
+    Y_UNIT_TEST_FLAGS(DifferentQuotasInteraction, IsExternalSubdomain, EnableSeparateQuotas) {
         TTestBasicRuntime runtime;
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
 
@@ -3688,8 +3709,7 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
         opts.EnablePersistentPartitionStats(true);
         opts.EnableBackgroundCompaction(false);
         TTestEnv env(runtime, opts);
-        bool bTreeIndex = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex();
-        
+
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
         NDataShard::gDbStatsDataSizeResolution = 1;
         NDataShard::gDbStatsRowCountResolution = 1;
@@ -3798,43 +3818,46 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
 
         const auto updateAndCheck = [&](ui32 rowsToUpdate,
                                         const TString& value,
-                                        bool compact,
                                         const TMap<TString, EDiskUsageStatus>& expectedExceeders,
                                         const TString& debugHint = ""
         ) {
             for (ui32 i = 0; i < rowsToUpdate; ++i) {
                 UpdateRow(runtime, "SomeTable", i, value, shards[0]);
             }
-            if (compact) {
-                CompactTableAndCheckResult(runtime, shards[0], tableId);
-            }
+            CompactTableAndCheckResult(runtime, shards[0], tableId);
             WaitTableStats(runtime, shards[0]);
             CheckQuotaExceedance(runtime, tenantSchemeShard, "/MyRoot/SomeDatabase", expectedExceeders, debugHint);
         };
 
-        // Warning: calculated empirically, might need an update if the test fails.
-        // The logic of the test expects:
-        // batchSizes[0] <= batchSizes[1] <= batchSizes[2],
-        // because rows are never deleted, only updated.
-        const std::array<ui32, 3> batchSizes = {25, 35, bTreeIndex ? 60u : 50u};
+        // Warning: calculated empirically, might need an update if the test fails!
+        constexpr ui32 lessRows = 37u;
+        const ui32 moreRows = runtime.GetAppData().FeatureFlags.GetEnableLocalDBBtreeIndex() ? 60u : 50u;
 
-        constexpr const char* longText = "this_text_is_very_long_and_takes_a_lot_of_disk_space";
-        constexpr const char* middleLengthText = "this_text_is_significantly_shorter";
+        const TString longText = TString(64, 'a');;
+        const TString mediumText = TString(32, 'a');
+        const TString shortText = TString(16, 'a');
+        const TString tinyText = TString(8, 'a');
 
-        // Test scenario:
-        // 1) break only the entire database hard quota, don't break others,
-        updateAndCheck(batchSizes[0], longText, false, {{EntireDatabaseTag, EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
-        updateAndCheck(0, "", true, {}, DEBUG_HINT);
+        runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(EnableSeparateQuotas);
+        if (!EnableSeparateQuotas) {
+            // write a lot of data to break the overall hard quota
+            updateAndCheck(lessRows, longText, {{EntireDatabaseTag, EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+        } else {
+            // There are two columns in the table: key and value. Key is stored at the fast storage, value at the large storage.
+            // We can:
+            // - simultaneously increase the consumption of the both storage pools by increasing the number of rows in the table
+            // - increase or decrease the consumption of the large storage by making the value longer / shorter
+            // Test scenario:
+            // 1) write a small number of rows (little fast storage consumption), but a long text that breaks the large kind hard quota
+            // 2) the same small number of rows, but a medium text that gets the large kind storage consumption in between the soft and the large quotas
+            // 3) the same small number of rows, but a short text that gets the large kind storage consumption below the soft quota
+            // 4) a bigger number of rows, but a tiny text to break only the fast kind hard quota
+            updateAndCheck(lessRows, longText, {{"large_kind", EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+            updateAndCheck(lessRows, mediumText, {{"large_kind", EDiskUsageStatus::InBetween}}, DEBUG_HINT);
+            updateAndCheck(lessRows, shortText, {}, DEBUG_HINT);
 
-        // 2) break only the large_kind hard quota, don't break other hard quotas,
-        updateAndCheck(batchSizes[1], longText, true,
-            {{"large_kind", EDiskUsageStatus::AboveHardQuota}, {EntireDatabaseTag, EDiskUsageStatus::InBetween}}, DEBUG_HINT
-        );
-        updateAndCheck(batchSizes[1], middleLengthText, true, {{"large_kind", EDiskUsageStatus::InBetween}}, DEBUG_HINT);
-        updateAndCheck(batchSizes[1], "extra_short_text", true, {}, DEBUG_HINT);
-
-        // 3) break only the fast_kind hard quota, don't break others.
-        updateAndCheck(batchSizes[2], "shortest", true, {{"fast_kind", EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+            updateAndCheck(moreRows, tinyText, {{"fast_kind", EDiskUsageStatus::AboveHardQuota}}, DEBUG_HINT);
+        }
 
         // step 4: drop the table
         TestDropTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/SomeDatabase", "SomeTable");

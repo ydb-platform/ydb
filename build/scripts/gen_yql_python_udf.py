@@ -3,7 +3,7 @@ import sys
 TEMPLATE = """
 #include <@YQL_BASE_DIR@/udfs/common/python/python_udf/python_udf.h>
 
-#include <@YQL_BASE_DIR@/public/udf/udf_registrator.h>
+#include <yql/essentials/public/udf/udf_registrator.h>
 
 #if @WITH_LIBRA@
 #include <yql/udfs/quality/libra/module/module.h>

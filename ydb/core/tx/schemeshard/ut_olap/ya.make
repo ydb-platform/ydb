@@ -24,7 +24,7 @@ PEERDIR(
     ydb/core/tx/columnshard/test_helper
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/public/udf/service/exception_policy
 )
 
 YQL_LAST_ABI_VERSION()

@@ -14,7 +14,7 @@
 
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
@@ -41,6 +41,11 @@ using namespace NKMeans;
 // Which UPLOAD* will be used depends on that will client of this scan request (see UploadState)
 //
 // NTable::IScan::Seek used to switch from current state to the next one.
+
+// If less than 1% of vectors are reassigned to new clusters we want to stop
+// TODO(mbkkt) 1% is choosed by common sense and should be adjusted in future
+static constexpr double MinVectorsNeedsReassigned = 0.01;
+
 class TLocalKMeansScanBase: public TActor<TLocalKMeansScanBase>, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::TEvLocalKMeansRequest;
@@ -60,10 +65,10 @@ protected:
 
     TLead Lead;
 
-    // Sample
-    TStats ReadStats;
-    // TODO(mbkkt) Sent or Upload stats?
+    ui64 ReadRows = 0;
+    ui64 ReadBytes = 0;
 
+    // Sample
     ui64 MaxProbability = std::numeric_limits<ui64>::max();
     TReallyFastRng32 Rng;
 
@@ -77,6 +82,7 @@ protected:
 
     std::vector<TProbability> MaxRows;
     std::vector<TString> Clusters;
+    std::vector<ui64> ClusterSizes;
 
     // Upload
     std::shared_ptr<NTxProxy::TUploadTypes> TargetTypes;
@@ -100,6 +106,9 @@ protected:
     TTags UploadScan;
 
     TUploadStatus UploadStatus;
+
+    ui64 UploadRows = 0;
+    ui64 UploadBytes = 0;
 
     // Response
     TActorId ResponseActorId;
@@ -163,6 +172,10 @@ public:
         }
 
         auto& record = Response->Record;
+        record.SetReadRows(ReadRows);
+        record.SetReadBytes(ReadBytes);
+        record.SetUploadRows(UploadRows);
+        record.SetUploadBytes(UploadBytes);
         if (abort != EAbort::None) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         } else if (UploadStatus.IsSuccess()) {
@@ -243,6 +256,8 @@ protected:
         UploadStatus.StatusCode = ev->Get()->Status;
         UploadStatus.Issues = ev->Get()->Issues;
         if (UploadStatus.IsSuccess()) {
+            UploadRows += WriteBuf.GetRows();
+            UploadBytes += WriteBuf.GetBytes();
             WriteBuf.Clear();
             if (!ReadBuf.IsEmpty() && ReadBuf.IsReachLimits(Limits)) {
                 ReadBuf.FlushTo(WriteBuf);
@@ -326,7 +341,7 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
 
     struct TAggregatedCluster {
         TEmbedding Cluster;
-        ui64 Count = 0;
+        ui64 Size = 0;
     };
     std::vector<TAggregatedCluster> AggregatedClusters;
 
@@ -366,6 +381,9 @@ public:
             if (!InitAggregatedClusters()) {
                 // We don't need to do anything,
                 // because this datashard doesn't have valid embeddings for this parent
+                if (UploadStatus.IsNone()) {
+                    UploadStatus.StatusCode = Ydb::StatusIds::SUCCESS;
+                }
                 return EScan::Final;
             }
             ++Round;
@@ -373,8 +391,7 @@ public:
         }
 
         Y_ASSERT(State == EState::KMEANS);
-        RecomputeClusters(Round >= MaxRounds);
-        if (Round >= MaxRounds) {
+        if (RecomputeClusters()) {
             lead = std::move(Lead);
             lead.SetTags(UploadScan);
 
@@ -391,6 +408,8 @@ public:
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
     {
         LOG_T("Feed " << Debug());
+        ++ReadRows;
+        ReadBytes += CountBytes(key, row);
         switch (State) {
             case EState::SAMPLE:
                 return FeedSample(row);
@@ -422,6 +441,7 @@ private:
             Clusters.resize(K);
         }
         Y_ASSERT(Clusters.size() == K);
+        ClusterSizes.resize(K, 0);
         AggregatedClusters.resize(K);
         for (auto& aggregate : AggregatedClusters) {
             aggregate.Cluster.resize(this->Dimensions, 0);
@@ -439,36 +459,59 @@ private:
         for (auto coord : this->GetCoords(embedding)) {
             *coords++ += coord;
         }
-        ++aggregate.Count;
+        ++aggregate.Size;
     }
 
-    void RecomputeClusters(bool last)
+    bool RecomputeClusters()
     {
-        auto r = Clusters.begin();
-        auto w = r;
-        for (auto& aggregate : AggregatedClusters) {
-            if (aggregate.Count != 0) {
-                auto& cluster = *r;
-                this->Fill(cluster, aggregate.Cluster.data(), aggregate.Count);
-                if (w != r) {
-                    Y_ASSERT(w < r);
-                    *w = std::move(*r);
-                }
-                ++w;
-            } else if (!last) {
+        Y_ASSERT(K >= 1);
+        ui64 vectorCount = 0;
+        ui64 reassignedCount = 0;
+        for (size_t i = 0; auto& aggregate : AggregatedClusters) {
+            vectorCount += aggregate.Size;
+
+            auto& clusterSize = ClusterSizes[i];
+            reassignedCount += clusterSize < aggregate.Size ? aggregate.Size - clusterSize : 0;
+            clusterSize = aggregate.Size;
+
+            if (aggregate.Size != 0) {
+                this->Fill(Clusters[i], aggregate.Cluster.data(), aggregate.Size);
+                Y_ASSERT(aggregate.Size == 0);
+            }
+            ++i;
+        }
+        Y_ASSERT(vectorCount >= K);
+        Y_ASSERT(reassignedCount <= vectorCount);
+        if (K == 1) {
+            return true;
+        }
+
+        bool last = Round >= MaxRounds;
+        if (!last && Round > 1) {
+            const auto changes = static_cast<double>(reassignedCount) / static_cast<double>(vectorCount);
+            last = changes < MinVectorsNeedsReassigned;
+        }
+        if (!last) {
+            return false;
+        }
+
+        size_t w = 0;
+        for (size_t r = 0; r < ClusterSizes.size(); ++r) {
+            if (ClusterSizes[r] != 0) {
+                ClusterSizes[w] = ClusterSizes[r];
+                Clusters[w] = std::move(Clusters[r]);
                 ++w;
             }
-            ++r;
         }
-        Clusters.erase(w, Clusters.end());
+        ClusterSizes.erase(ClusterSizes.begin() + w, ClusterSizes.end());
+        Clusters.erase(Clusters.begin() + w, Clusters.end());
+        return true;
     }
 
     EScan FeedSample(const TRow& row) noexcept
     {
         Y_ASSERT(row.Size() == 1);
         const auto embedding = row.Get(0).AsRef();
-        ReadStats.Rows += 1;
-        ReadStats.Bytes += embedding.size(); // TODO(mbkkt) add some constant overhead?
         if (!this->IsExpectedSize(embedding)) {
             return EScan::Feed;
         }
@@ -495,14 +538,14 @@ private:
     EScan FeedKMeans(const TRow& row) noexcept
     {
         Y_ASSERT(row.Size() == 1);
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, 0, ReadStats);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, 0);
         AggregateToCluster(pos, row.Get(0).Data());
         return EScan::Feed;
     }
 
     EScan FeedUploadMain2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
             return EScan::Feed;
         }
@@ -512,7 +555,7 @@ private:
 
     EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
             return EScan::Feed;
         }
@@ -522,7 +565,7 @@ private:
 
     EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
             return EScan::Feed;
         }
@@ -532,7 +575,7 @@ private:
 
     EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
     {
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos, ReadStats);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
             return EScan::Feed;
         }
@@ -663,7 +706,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     TScanOptions scanOpts;
     scanOpts.SetSnapshotRowVersion(rowVersion);
     scanOpts.SetResourceBroker("build_index", 10); // TODO(mbkkt) Should be different group?
-    const auto scanId = QueueScan(userTable.LocalTid, std::move(scan), ev->Cookie, scanOpts);
+    const auto scanId = QueueScan(userTable.LocalTid, std::move(scan), 0, scanOpts);
     TScanRecord recCard = {scanId, seqNo};
     ScanManager.Set(id, recCard);
 }

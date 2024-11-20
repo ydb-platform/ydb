@@ -8,9 +8,9 @@
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
-#include <ydb/library/yql/ast/yql_gc_nodes.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <yql/essentials/ast/yql_gc_nodes.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <library/cpp/cache/cache.h>

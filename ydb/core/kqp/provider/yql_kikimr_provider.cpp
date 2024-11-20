@@ -1,12 +1,12 @@
 #include "yql_kikimr_provider_impl.h"
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/providers/result/provider/yql_result_provider.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -566,8 +566,7 @@ template<typename TProto>
 void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
     auto type = literal.Ref().GetTypeAnn();
 
-    // TODO: support pg types
-    YQL_ENSURE(type->GetKind() != ETypeAnnotationKind::Pg, "pg types are not supported");
+    YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::Data, "unexpected type: " << type->GetKind());
 
     auto slot = type->Cast<TDataExprType>()->GetSlot();
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
@@ -655,6 +654,23 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKqpProto::TKqpPhyLite
     FillLiteralProtoImpl(literal, proto);
 }
 
+void FillLiteralProto(const NNodes::TCoPgConst& pgLiteral, NKqpProto::TKqpPhyLiteralValue& proto) {
+    auto type = pgLiteral.Ref().GetTypeAnn();
+    auto actualPgType = type->Cast<TPgExprType>();
+    auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
+
+    auto& protoType = *proto.MutableType();
+    auto& protoValue = *proto.MutableValue();
+
+    protoType.SetKind(NKikimrMiniKQL::ETypeKind::Pg);
+    protoType.MutablePg()->Setoid(actualPgType->GetId());
+
+    TString content = TString(pgLiteral.Value().Value());
+    auto parseResult = NKikimr::NPg::PgNativeBinaryFromNativeText(content, typeDesc);
+
+    protoValue.SetBytes(parseResult.Str.data(), parseResult.Str.size());
+}
+
 bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral) {
     return maybeLiteral.Ptr()->IsCallable() &&
         maybeLiteral.Ptr()->Content() == "PgCast" && maybeLiteral.Ptr()->ChildrenSize() >= 1 &&
@@ -711,8 +727,7 @@ void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto
 {
     auto type = literal.Ref().GetTypeAnn();
 
-    // TODO: support pg types
-    YQL_ENSURE(type->GetKind() != ETypeAnnotationKind::Pg, "pg types are not supported");
+    YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::Data, "unexpected type: " << type->GetKind());
 
     auto slot = type->Cast<TDataExprType>()->GetSlot();
     auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;

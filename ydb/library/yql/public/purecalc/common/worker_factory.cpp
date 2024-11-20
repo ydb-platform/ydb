@@ -4,23 +4,23 @@
 #include "worker.h"
 #include "compile_mkql.h"
 
-#include <ydb/library/yql/sql/sql.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <ydb/library/yql/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/config/yql_config_provider.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
-#include <ydb/library/yql/core/services/yql_transform_pipeline.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
+#include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/config/yql_config_provider.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/aligned_page_pool.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/public/purecalc/common/names.h>
 #include <ydb/library/yql/public/purecalc/common/transformations/type_annotation.h>
 #include <ydb/library/yql/public/purecalc/common/transformations/align_output_schema.h>
@@ -29,7 +29,7 @@
 #include <ydb/library/yql/public/purecalc/common/transformations/replace_table_reads.h>
 #include <ydb/library/yql/public/purecalc/common/transformations/root_to_blocks.h>
 #include <ydb/library/yql/public/purecalc/common/transformations/utils.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 #include <util/stream/trace.h>
 
 using namespace NYql;

@@ -9,7 +9,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/sdk/cpp/client/impl/ydb_endpoints
     ydb/public/sdk/cpp/client/ydb_types/operation
-    ydb/library/yql/public/issue/protos
+    yql/essentials/public/issue/protos
 )
 
 END()

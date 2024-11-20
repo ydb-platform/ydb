@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/config/yql_dispatch.h>
-#include <ydb/library/yql/providers/common/config/yql_setting.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/providers/common/config/yql_dispatch.h>
+#include <yql/essentials/providers/common/config/yql_setting.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <library/cpp/string_utils/parse_size/parse_size.h>
 
@@ -206,6 +206,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> BlockReaderSupportedDataTypes;
     NCommon::TConfSetting<TSet<TString>, true> JobBlockInputSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> JobBlockInputSupportedDataTypes;
+    NCommon::TConfSetting<TString, true> _BinaryCacheFolder;
 
     // Optimizers
     NCommon::TConfSetting<bool, true> _EnableDq;

@@ -132,7 +132,7 @@ void DumpTimeInfo()
     formatter.AppendNumber(timeSinceEpoch);
     formatter.AppendString(" (Unix time); Try \"date -d @");
     formatter.AppendNumber(timeSinceEpoch, 10);
-    formatter.AppendString("\" if you are using GNU date ***\n");
+    formatter.AppendString("\" if you are using GNU date\n");
     WriteToStderr(formatter);
 }
 
@@ -150,14 +150,14 @@ void DumpCodicils()
     // NB: Avoid constructing FLS slot to avoid allocations; these may lead to deadlocks if the
     // program crashes during an allocation itself.
     if (CodicilStackSlot().IsInitialized() && !CodicilStackSlot()->empty()) {
-        WriteToStderr("*** Begin codicils ***\n");
+        WriteToStderr("*** Begin codicils\n");
         for (const auto& data : *CodicilStackSlot()) {
             TFormatter formatter;
             formatter.AppendString(data.c_str());
             formatter.AppendString("\n");
             WriteToStderr(formatter);
         }
-        WriteToStderr("*** End codicils ***\n");
+        WriteToStderr("*** End codicils\n");
     }
 }
 
@@ -464,8 +464,9 @@ void DumpSigcontext(void* uc)
 
 void CrashTimeoutHandler(int /*signal*/)
 {
-    WriteToStderr("*** Process hung during crash ***\n");
-    AbortProcess(ToUnderlying(EProcessExitCode::GenericError));
+    AbortProcessDramatically(
+        EProcessExitCode::GenericError,
+        "Process hung during crash");
 }
 
 void DumpUndumpableBlocksInfo()
@@ -476,7 +477,7 @@ void DumpUndumpableBlocksInfo()
         TFormatter formatter;
         formatter.AppendString("*** Marked memory regions of total size ");
         formatter.AppendNumber(cutInfo.MarkedSize / 1_MB);
-        formatter.AppendString(" MB as undumpable ***\n");
+        formatter.AppendString(" MB as undumpable\n");
         WriteToStderr(formatter);
     }
 
@@ -490,7 +491,7 @@ void DumpUndumpableBlocksInfo()
         formatter.AppendNumber(record.Size / 1_MB);
         formatter.AppendString(" MB with error code ");
         formatter.AppendNumber(record.ErrorCode);
-        formatter.AppendString(" ***\n");
+        formatter.AppendString("\n");
         WriteToStderr(formatter);
     }
 }
@@ -534,7 +535,7 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
 
     NDetail::DumpUndumpableBlocksInfo();
 
-    WriteToStderr("*** Waiting for logger to shut down ***\n");
+    WriteToStderr("*** Waiting for logger to shut down\n");
 
     // Actually, it is not okay to hang.
     ::signal(SIGALRM, NDetail::CrashTimeoutHandler);
@@ -542,7 +543,7 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
 
     NLogging::TLogManager::Get()->Shutdown();
 
-    WriteToStderr("*** Terminating ***\n");
+    WriteToStderr("*** Terminating\n");
 }
 
 #else

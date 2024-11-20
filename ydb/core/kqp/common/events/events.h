@@ -8,7 +8,7 @@
 #include <ydb/core/kqp/common/shutdown/events.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/library/yql/dq/actors/dq.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/event_local.h>

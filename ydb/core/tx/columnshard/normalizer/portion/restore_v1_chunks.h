@@ -11,13 +11,16 @@ class TTablesManager;
 namespace NKikimr::NOlap::NRestoreV1Chunks {
 
 class TNormalizer: public TNormalizationController::INormalizerComponent {
+private:
+    using TBase = TNormalizationController::INormalizerComponent;
+
 public:
     static TString GetClassNameStatic() {
-        return ::ToString(ENormalizerSequentialId::RestoreV1Chunks);
+        return ::ToString(ENormalizerSequentialId::RestoreV1Chunks_V2);
     }
 
     virtual std::optional<ENormalizerSequentialId> DoGetEnumSequentialId() const override {
-        return ENormalizerSequentialId::RestoreV1Chunks;
+        return ENormalizerSequentialId::RestoreV1Chunks_V2;
     }
 
     virtual TString GetClassName() const override {
@@ -31,7 +34,8 @@ public:
 
 public:
     TNormalizer(const TNormalizationController::TInitContext& info)
-        : DsGroupSelector(info.GetStorageInfo()) {
+        : TBase(info)
+        , DsGroupSelector(info.GetStorageInfo()) {
     }
 
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
@@ -40,4 +44,4 @@ public:
 private:
     NColumnShard::TBlobGroupSelector DsGroupSelector;
 };
-}   // namespace NKikimr::NOlap::NChunksActualization
+}   // namespace NKikimr::NOlap::NRestoreV1Chunks

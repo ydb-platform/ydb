@@ -182,7 +182,7 @@ YT_DEFINE_ERROR_ENUM(
     ((DuplicateColumnInSchema)           (322))
     ((MissingRequiredColumnInSchema)     (323))
     ((IncomparableComplexValues)         (324))
-    ((KeyCannotBeNan)                    (325))
+    ((KeyCannotBeNaN)                    (325))
     ((StringLikeValueLengthLimitExceeded)(326))
     ((NameTableUpdateFailed)             (327))
     ((InvalidTableChunkFormat)           (328))

@@ -1,4 +1,4 @@
-d_year,brand_id,brand,ext_price
+dt.d_year,brand_id,brand,sum_agg
 1998,2001001,amalgimporto #1,45162.45
 1998,5003001,exportischolar #1,40600.56
 1998,5001001,amalgscholar #1,32515.11

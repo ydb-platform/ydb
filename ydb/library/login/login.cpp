@@ -389,12 +389,15 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
         auto keyId = FromStringWithDefault<ui64>(decoded_token.get_key_id());
         const TKeyRecord* key = FindKey(keyId);
         if (key != nullptr) {
+            static const size_t ISSUED_AT_LEEWAY_SEC = 2;
             auto verifier = jwt::verify()
-                .allow_algorithm(jwt::algorithm::ps256(key->PublicKey));
+                .allow_algorithm(jwt::algorithm::ps256(key->PublicKey))
+                .issued_at_leeway(ISSUED_AT_LEEWAY_SEC);
             if (Audience) {
                 // jwt.h require audience claim to be a set
                 verifier.with_audience(std::set<std::string>{Audience});
             }
+
             verifier.verify(decoded_token);
             response.User = decoded_token.get_subject();
             response.ExpiresAt = decoded_token.get_expires_at();

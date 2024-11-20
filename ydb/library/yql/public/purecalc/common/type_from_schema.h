@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/public/purecalc/common/interface.h>
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <library/cpp/yson/node/node.h>
 

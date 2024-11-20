@@ -921,4 +921,15 @@ const char* TErrorException::what() const noexcept
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// TODO(arkady-e1ppa): Move this out eventually.
+[[noreturn]] void TErrorAttributes::ThrowCannotParseAttributeException(TStringBuf key, const std::exception& ex)
+{
+    THROW_ERROR_EXCEPTION(
+        "Error parsing attribute %Qv",
+        key)
+        << ex;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT

@@ -3,9 +3,9 @@
 #include <ydb/library/yql/public/purecalc/common/interface.h>
 #include <ydb/library/yql/public/purecalc/io_specs/arrow/spec.h>
 #include <ydb/library/yql/public/purecalc/ut/lib/helpers.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
-#include <ydb/library/yql/public/udf/arrow/udf_arrow_helpers.h>
+#include <yql/essentials/public/udf/arrow/udf_arrow_helpers.h>
 #include <arrow/array/builder_primitive.h>
 
 namespace {

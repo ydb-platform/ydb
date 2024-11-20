@@ -1,9 +1,9 @@
 #include "yql_skiff_schema.h"
 
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/schema/skiff/yql_skiff_schema.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/schema/skiff/yql_skiff_schema.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/yson/node/node.h>
 

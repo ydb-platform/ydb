@@ -156,7 +156,7 @@ int TProgram::Run(int argc, const char** argv)
 void TProgram::Abort(int code) noexcept
 {
     NLogging::TLogManager::Get()->Shutdown();
-    AbortProcess(code);
+    AbortProcessSilently(code);
 }
 
 void TProgram::Exit(int code) noexcept
@@ -169,7 +169,7 @@ void TProgram::Exit(int code) noexcept
     // cf. the comment section for NYT::Shutdown.
     Shutdown({
         .AbortOnHang = ShouldAbortOnHungShutdown(),
-        .HungExitCode = code
+        .HungExitCode = code,
     });
 
     ::exit(code);
@@ -320,7 +320,7 @@ void ExitZero(int /*unused*/)
     // TODO(babenko): replace with pure "exit" some day.
     // Currently this causes some RPC requests to master to be replied with "Promise abandoned" error,
     // which is not retriable.
-    AbortProcess(ToUnderlying(EProcessExitCode::OK));
+    AbortProcessSilently(EProcessExitCode::OK);
 }
 
 } // namespace

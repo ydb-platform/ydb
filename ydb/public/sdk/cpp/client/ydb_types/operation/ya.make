@@ -10,6 +10,7 @@ PEERDIR(
     library/cpp/threading/future
     ydb/public/lib/operation_id
     ydb/public/sdk/cpp/client/ydb_types
+    ydb/public/api/protos
 )
 
 END()

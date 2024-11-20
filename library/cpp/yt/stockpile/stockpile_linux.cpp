@@ -25,7 +25,7 @@ namespace {
 void RunWithFixedBreaks(i64 bufferSize, TDuration period)
 {
     auto returnCode = -::madvise(nullptr, bufferSize, MADV_STOCKPILE);
-    YT_LOG_DEBUG_IF(returnCode, "System call \"madvise\" returned %v", strerror(returnCode));
+    YT_LOG_DEBUG_IF(returnCode, "System call \"madvise\" failed: %v", strerror(returnCode));
     Sleep(period);
 }
 
@@ -33,7 +33,7 @@ void RunWithCappedLoad(i64 bufferSize, TDuration period)
 {
     auto started = GetApproximateCpuInstant();
     auto returnCode = -::madvise(nullptr, bufferSize, MADV_STOCKPILE);
-    YT_LOG_DEBUG_IF(returnCode, "System call \"madvise\" returned %v", strerror(returnCode));
+    YT_LOG_DEBUG_IF(returnCode, "System call \"madvise\" failed: %v", strerror(returnCode));
     auto duration = CpuDurationToDuration(GetApproximateCpuInstant() - started);
 
     if (duration < period) {
@@ -48,7 +48,7 @@ std::pair<i64, TDuration> RunWithBackoffs(
     i64 pageSize)
 {
     int returnCode = -::madvise(nullptr, adjustedBufferSize, MADV_STOCKPILE);
-    YT_LOG_DEBUG_IF(returnCode, "System call \"madvise\" returned %v", strerror(returnCode));
+    YT_LOG_DEBUG_IF(returnCode, "System call \"madvise\" failed: %v", strerror(returnCode));
 
     switch(returnCode) {
         case 0:

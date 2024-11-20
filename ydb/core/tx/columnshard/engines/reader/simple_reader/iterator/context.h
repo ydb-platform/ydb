@@ -35,10 +35,10 @@ private:
     NIndexes::TIndexCheckerContainer IndexChecker;
     TReadMetadata::TConstPtr ReadMetadata;
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
-    std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(
-        const bool needSnapshotsFilter, const bool partialUsageByPredicate, const bool needFilterSharding, const bool needFilterDeletion) const;
+    std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
+        const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion) const;
     TMutex Mutex;
-    std::array<std::array<std::array<std::array<std::array<std::array<std::optional<std::shared_ptr<TFetchingScript>>, 2>, 2>, 2>, 2>, 2>, 2>
+    std::array<std::array<std::array<std::array<std::array<std::optional<std::shared_ptr<TFetchingScript>>, 2>, 2>, 2>, 2>, 2>
         CacheFetchingScripts;
     std::shared_ptr<TFetchingScript> AskAccumulatorsScript;
 

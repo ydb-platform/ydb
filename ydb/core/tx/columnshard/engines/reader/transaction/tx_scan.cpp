@@ -68,7 +68,14 @@ void TTxScan::Complete(const TActorContext& ctx) {
             auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
             isIndex = !sysViewPolicy;
             if (!sysViewPolicy) {
-                return std::unique_ptr<IScannerConstructor>(new NPlain::TIndexScannerConstructor(snapshot, itemsLimit, request.GetReverse()));
+                auto constructor = NReader::IScannerConstructor::TFactory::MakeHolder(
+                    AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName()
+                                                                             : "PLAIN",
+                    request);
+                if (!constructor) {
+                    return SendError("cannot build scanner", AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
+                }
+                return std::unique_ptr<IScannerConstructor>(constructor.Release());
             } else {
                 return sysViewPolicy->CreateConstructor(snapshot, itemsLimit, request.GetReverse());
             }

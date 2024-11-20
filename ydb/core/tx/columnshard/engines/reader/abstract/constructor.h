@@ -18,12 +18,13 @@ protected:
 private:
     virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const = 0;
 public:
+    using TFactory = NObjectFactory::TParametrizedObjectFactory<IScannerConstructor, TString, NKikimrTxDataShard::TEvKqpScan>;
     virtual ~IScannerConstructor() = default;
 
-    IScannerConstructor(const TSnapshot& snapshot, const ui64 itemsLimit, const bool reverse)
+    IScannerConstructor(const NKikimrTxDataShard::TEvKqpScan& request)
         : Snapshot(snapshot)
-        , ItemsLimit(itemsLimit)
-        , IsReverse(reverse)
+        , ItemsLimit(request.HasItemsLimit() ? request.GetItemsLimit() : 0)
+        , IsReverse(request.GetReverse())
     {
 
     }

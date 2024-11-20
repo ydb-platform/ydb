@@ -4,8 +4,16 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 class TIndexScannerConstructor: public IScannerConstructor {
+public:
+    static TString GetClassNameStatic() {
+        return "SIMPLE";
+    }
+
 private:
     using TBase = IScannerConstructor;
+    static const inline TFactory::TRegistrator<TIndexScannerConstructor> Registrator =
+        TFactory::TRegistrator<TIndexScannerConstructor>(GetClassNameStatic());
+
 protected:
     virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const override;
 public:

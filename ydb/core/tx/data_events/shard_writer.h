@@ -55,7 +55,7 @@ public:
         , FailedFullReplyDuration(TBase::GetHistogram("Replies/Failed/Full/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10)))
         , BytesDistribution(TBase::GetHistogram("Requests/Bytes", NMonitoring::ExponentialHistogram(15, 2, 1024)))
         , RowsDistribution(TBase::GetHistogram("Requests/Rows", NMonitoring::ExponentialHistogram(15, 2, 16)))
-        , ShardsCountDistribution(TBase::GetHistogram("Requests/ShardSplits", NMonitoring::LinearHistogram(128, 1, 1)))
+        , ShardsCountDistribution(TBase::GetHistogram("Requests/ShardSplits", NMonitoring::LinearHistogram(50, 1, 1)))
         , RowsCount(TBase::GetDeriviative("Rows"))
         , BytesCount(TBase::GetDeriviative("Bytes"))
         , FailsCount(TBase::GetDeriviative("Fails"))

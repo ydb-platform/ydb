@@ -56,26 +56,13 @@ bool TSnapshotSchema::IsReplaceableByNextVersion(const TSnapshotSchema& nextSche
     if (nextFields.size() < curFieldCount) {
         return false;
     }
-    THashMap<std::string, std::pair<const arrow::Field*, ui32>> nextFieldMap;
-    ui32 ind = 0;
-    for (const auto& field: nextFields) {
-        auto& pair = nextFieldMap[field->name()];
-        pair.first = field.get();
-        pair.second = ind++;
-    }
-
     const TIndexInfo& nextIndexInfo = nextSchema.GetIndexInfo();
     for (ui32 fld = 0; fld < curFieldCount; fld++) {
-        const auto* field = curFields[fld].get();
-        auto iter = nextFieldMap.find(field->name());
-        if (iter == nextFieldMap.end()) {
-            return false;
-        }
-        if (!curFields[fld]->Equals(*iter->second.first, true)) {
+        if (!curFields[fld]->Equals(nextFields[fld], true)) {
             return false;
         }
         const std::shared_ptr<TColumnFeatures>& features = IndexInfo.GetColumnFeaturesByIndex(fld);
-        const std::shared_ptr<TColumnFeatures>& nextFeatures = nextIndexInfo.GetColumnFeaturesByIndex(iter->second.second);
+        const std::shared_ptr<TColumnFeatures>& nextFeatures = nextIndexInfo.GetColumnFeaturesByIndex(fld);
         if (!features != !nextFeatures) {
             return false;
         }

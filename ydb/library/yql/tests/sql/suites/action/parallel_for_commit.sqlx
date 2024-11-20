@@ -1,4 +1,0 @@
-evaluate parallel for $i in [1,2,3] do begin
-commit;
-end do;
-

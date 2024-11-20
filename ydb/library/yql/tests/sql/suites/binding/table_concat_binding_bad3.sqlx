@@ -1,4 +1,0 @@
-/* postgres can not */
-use plato;
-$a = a.0;
-SELECT count(*) FROM concat($a,$a);

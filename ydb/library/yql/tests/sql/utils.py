@@ -8,7 +8,7 @@ from yql_utils import get_param as yql_get_param
 from google.protobuf import text_format
 import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_config_pb2
 
-DATA_PATH = yatest.common.source_path('ydb/library/yql/tests/sql/suites')
+DATA_PATH = yatest.common.source_path('yql/essentials/tests/sql/suites')
 try:
     SQLRUN_PATH = yatest.common.binary_path('yql/essentials/tools/sql2yql/sql2yql')
 except BaseException:

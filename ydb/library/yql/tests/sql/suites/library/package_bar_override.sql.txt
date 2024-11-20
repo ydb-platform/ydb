@@ -1,7 +1,0 @@
-$do_bar = ($value) -> {
-    return AsStruct(
-        $value as bar_override
-    );
-};
-
-export $do_bar;

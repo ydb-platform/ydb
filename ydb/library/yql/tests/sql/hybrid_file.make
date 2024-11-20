@@ -31,6 +31,7 @@ DEPENDS(
 )
 DATA(
     arcadia/ydb/library/yql/tests/sql # python files
+    arcadia/yql/essentials/tests/sql/suites
     arcadia/yql/essentials/mount
     arcadia/yql/essentials/cfg/tests
 )

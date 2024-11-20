@@ -345,25 +345,22 @@ public:
         RequestContext.ResponseBadRequest(Ydb::StatusIds::BAD_REQUEST, error);
     }
 
-    // template<typename ResponseType = GrpcProtoResponseType, typename ResultType = GrpcProtoResultType>
-    // static std::optional<ResponseType*> GetTypedResponse(NProtoBuf::Message* msg) {
-        
-    // }
+    #define CheckTypedResponse(typedResponse, ResultType)                                                   \
+    if (!typedResponse->operation().result().template Is<ResultType>()) {                                   \
+            TStringStream json;                                                                             \
+            auto* httpResult = google::protobuf::Arena::CreateMessage<FQHttp::Error>(resp->GetArena());     \
+            FqConvert(typedResponse->operation(), *httpResult);                                             \
+            FqPackToJson(json, *httpResult, jsonSettings);                                                  \
+            requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());         \
+            return;                                                                                         \
+    }
 
     static void SendReply(const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
         Y_ABORT_UNLESS(resp);
         Y_ABORT_UNLESS(resp->GetArena());
         Y_UNUSED(status);
         auto* typedResponse = static_cast<TGrpcProtoResponseType*>(resp);
-        if (!typedResponse->operation().result().template Is<TGrpcProtoResultType>()) {
-            TStringStream json;
-            auto* httpResult = google::protobuf::Arena::CreateMessage<FQHttp::Error>(resp->GetArena());
-            FqConvert(typedResponse->operation(), *httpResult);
-            FqPackToJson(json, *httpResult, jsonSettings);
-
-            requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());
-            return;
-        }
+        CheckTypedResponse(typedResponse, TGrpcProtoResultType);
 
         auto* grpcResult = google::protobuf::Arena::CreateMessage<TGrpcProtoResultType>(resp->GetArena());
         typedResponse->operation().result().UnpackTo(grpcResult);
@@ -402,14 +399,9 @@ DECLARE_YQ_GRPC_ACTOR(GetQueryStatus, GetQueryStatus);
 DECLARE_YQ_GRPC_ACTOR_WIHT_EMPTY_RESULT(StopQuery, ControlQuery);
 DECLARE_YQ_GRPC_ACTOR(GetResultData, GetResultData);
 
-// #define RestartArgs FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest, FederatedQuery::ModifyQueryResponse, FQHttp::GetQueryResult, FederatedQuery::ModifyQueryResult
 #define TGrpcCallWrapperBase TGrpcCallWrapper<FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse>
+
 class TRestartQueryRequest : public TGrpcCallWrapperBase {
-    // THttpRequestContext RequestContext;
-
-    typedef std::function<std::unique_ptr<NGRpcService::TEvProxyRuntimeEvent>(TIntrusivePtr<NYdbGrpc::IRequestContextBase> ctx)> TGrpcProxyEventFactory;
-    // TGrpcProxyEventFactory EventFactory;
-
 public:
     TRestartQueryRequest(const THttpRequestContext& ctx)
     : TGrpcCallWrapperBase(ctx, &NGRpcService::CreateFederatedQueryDescribeQueryRequestOperationCall)
@@ -430,16 +422,7 @@ public:
             Y_ABORT_UNLESS(resp->GetArena());
 
             auto* typedResponse = static_cast<FederatedQuery::DescribeQueryResponse*>(resp);
-            if (!typedResponse->operation().result().template Is<FederatedQuery::DescribeQueryResult>()) {
-                TStringStream json;
-                auto* httpResult = google::protobuf::Arena::CreateMessage<FQHttp::Error>(resp->GetArena());
-                FqConvert(typedResponse->operation(), *httpResult);
-                FqPackToJson(json, *httpResult, jsonSettings);
-
-                requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());
-                this->Die(ctx);
-                return;
-            }
+            CheckTypedResponse(typedResponse, FederatedQuery::DescribeQueryResult);
 
             FederatedQuery::DescribeQueryResult* describeResult = google::protobuf::Arena::CreateMessage<FederatedQuery::DescribeQueryResult>(resp->GetArena());
             typedResponse->operation().result().UnpackTo(describeResult);
@@ -472,5 +455,7 @@ public:
         ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(requestContext).release());
     }
 };
+
+#undef TGrpcCallWrapperBase
 
 } // namespace NKikimr::NPublicHttp

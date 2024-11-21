@@ -260,11 +260,11 @@ private:
 
 class TJobInFlightManager {
 public:
-    TJobInFlightManager(size_t fileCount, size_t maxJobInFlight)
+    TJobInFlightManager(size_t orderNum, size_t fileCount, size_t maxJobInFlight)
         : MaxJobInFlight(maxJobInFlight)
         , CurrentFileCount(fileCount)
-        , CurrentSemaphoreMax(Max(1ul, MaxJobInFlight / CurrentFileCount))
-        , JobsSemaphore(Max(1ul, MaxJobInFlight / CurrentFileCount)) {
+        , CurrentSemaphoreMax(GetSemaphoreMaxValue(orderNum))
+        , JobsSemaphore(GetSemaphoreMaxValue(orderNum)) {
     }
 
     // Return value: true if this call was useful (Inflight manager is still working)
@@ -275,9 +275,7 @@ public:
             return false;
         }
         --CurrentFileCount;
-        size_t newSemaphoreMax = Max(1ul, MaxJobInFlight / CurrentFileCount
-            // One more thread for the first <MaxJobInFlight % CurrentFileCount> managers to utilize max jobs inflight
-            + (informedSoFar < MaxJobInFlight % CurrentFileCount ? 1 : 0));
+        size_t newSemaphoreMax = GetSemaphoreMaxValue(informedSoFar);
         size_t semaphoreSizeDiff = newSemaphoreMax - CurrentSemaphoreMax;
         CurrentSemaphoreMax = newSemaphoreMax;
         for (size_t i = 0; i < semaphoreSizeDiff; ++i) {
@@ -307,6 +305,11 @@ public:
     }
 
 private:
+    size_t GetSemaphoreMaxValue(size_t orderNum) const {
+        return Max(1ul, MaxJobInFlight / CurrentFileCount
+            // One more thread for the first <MaxJobInFlight % CurrentFileCount> managers to utilize max jobs inflight
+            + (orderNum < MaxJobInFlight % CurrentFileCount ? 1 : 0));
+    }
     size_t MaxJobInFlight;
     size_t CurrentFileCount;
     size_t CurrentSemaphoreMax;
@@ -453,7 +456,7 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
         // <maxInFlight> requests in flight on server and <maxThreads> threads building TValue
         size_t maxJobInflight = Settings.Threads_ + Settings.MaxInFlightRequests_;
         for (size_t i = 0; i < filePathsSize; ++i) {
-            inflightManagers.push_back(std::make_shared<TJobInFlightManager>(filePathsSize, maxJobInflight));
+            inflightManagers.push_back(std::make_shared<TJobInFlightManager>(i, filePathsSize, maxJobInflight));
         }
     }
 

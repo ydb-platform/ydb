@@ -151,7 +151,7 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
                     << ", at schemeshard: " << Self->TabletID());
                 return false;
             }
-            expireAfter = TDuration::Seconds(settings.GetTiers(0).GetEvictAfterSeconds());
+            expireAfter = TDuration::Seconds(settings.GetTiers(0).GetApplyAfterSeconds());
          } else {
             // legacy format
             expireAfter = TDuration::Seconds(settings.GetExpireAfterSeconds());

@@ -19,7 +19,7 @@ void CheckTtlSettings(const TTtlSettings& ttl, const char* ttlColumnName, bool l
     } else {
         UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().TiersSize(), 1);
         UNIT_ASSERT(ttl.GetEnabled().GetTiers(0).HasDelete());
-        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetTiers(0).GetEvictAfterSeconds(), 3600);
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetTiers(0).GetApplyAfterSeconds(), 3600);
     }
 }
 
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ExpireAfterSeconds: 3600
                 ColumnUnit: %s
                 Tiers: {
-                  EvictAfterSeconds: 3600
+                  ApplyAfterSeconds: 3600
                   Delete: {}
                 }
               }
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "modified_at"
                 ExpireAfterSeconds: 3153600000
                 Tiers: {
-                  EvictAfterSeconds: 3153600000
+                  ApplyAfterSeconds: 3153600000
                   Delete: {}
                 }
               }
@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                   ColumnName: "modified_at"
                   ExpireAfterSeconds: 3600
                   Tiers: {
-                    EvictAfterSeconds: 3600
+                    ApplyAfterSeconds: 3600
                     Delete: {}
                   }
                 }
@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "modified_at"
                 ExpireAfterSeconds: 3600
                 Tiers: {
-                  EvictAfterSeconds: 3600
+                  ApplyAfterSeconds: 3600
                   Delete: {}
                 }
               }
@@ -324,7 +324,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "modified_at"
                 ExpireAfterSeconds: 3600
                 Tiers: {
-                  EvictAfterSeconds: 3600
+                  ApplyAfterSeconds: 3600
                   Delete: {}
                 }
               }
@@ -385,7 +385,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "modified_at"
                 ExpireAfterSeconds: 3600
                 Tiers: {
-                  EvictAfterSeconds: 3600
+                  ApplyAfterSeconds: 3600
                   Delete: {}
                 }
               }
@@ -420,7 +420,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "modified_at"
                 ExpireAfterSeconds: 3600
                 Tiers: {
-                  EvictAfterSeconds: 3600
+                  ApplyAfterSeconds: 3600
                   Delete: {}
                 }
               }
@@ -564,7 +564,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                     ColumnName: "ts"
                     ExpireAfterSeconds: 3600
                     Tiers: {
-                      EvictAfterSeconds: 3600
+                      ApplyAfterSeconds: 3600
                       Delete: {}
                     }
                   }
@@ -829,7 +829,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "modified_at"
                 ExpireAfterSeconds: 3600
                 Tiers: {
-                  EvictAfterSeconds: 3600
+                  ApplyAfterSeconds: 3600
                   Delete: {}
                 }
               }
@@ -851,7 +851,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                   RunInterval: 1800000000
                 }
                 Tiers: {
-                  EvictAfterSeconds: 3600
+                  ApplyAfterSeconds: 3600
                   Delete: {}
                 }
               }
@@ -873,7 +873,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                   RunInterval: 1799999999
                 }
                 Tiers: {
-                  EvictAfterSeconds: 3600
+                  ApplyAfterSeconds: 3600
                   Delete: {}
                 }
               }
@@ -1192,7 +1192,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
                     ExpireAfterSeconds: 3600
                     ColumnUnit: %s
                     Tiers: {
-                      EvictAfterSeconds: 3600
+                      ApplyAfterSeconds: 3600
                       Delete: {}
                     }
                 }
@@ -1232,7 +1232,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
                         ColumnName: "modified_at"
                         ExpireAfterSeconds: 3600
                         Tiers: {
-                            EvictAfterSeconds: 3600
+                            ApplyAfterSeconds: 3600
                             Delete: {}
                         }
                     }
@@ -1294,7 +1294,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
                 ColumnName: "modified_at"
                 ExpireAfterSeconds: 3600
                 Tiers: {
-                  EvictAfterSeconds: 3600
+                  ApplyAfterSeconds: 3600
                   Delete: {}
                 }
               }
@@ -1362,7 +1362,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardColumnTableTTL) {
                 ColumnName: "str"
                 ExpireAfterSeconds: 3600
                 Tiers: {
-                  EvictAfterSeconds: 3600
+                  ApplyAfterSeconds: 3600
                   Delete: {}
                 }
               }
@@ -1385,7 +1385,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTestsWithReboots) {
                     ColumnName: "modified_at"
                     ExpireAfterSeconds: 3600
                     Tiers: {
-                      EvictAfterSeconds: 3600
+                      ApplyAfterSeconds: 3600
                       Delete: {}
                     }
                   }
@@ -1421,7 +1421,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTestsWithReboots) {
                     ColumnName: "modified_at"
                     ExpireAfterSeconds: 3600
                     Tiers: {
-                      EvictAfterSeconds: 3600
+                      ApplyAfterSeconds: 3600
                       Delete: {}
                     }
                   }
@@ -1451,7 +1451,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTestsWithReboots) {
                         ColumnName: "modified_at"
                         ExpireAfterSeconds: 3600
                         Tiers: {
-                          EvictAfterSeconds: 3600
+                          ApplyAfterSeconds: 3600
                           Delete: {}
                         }
                       }
@@ -1485,7 +1485,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTestsWithReboots) {
                         ColumnName: "modified_at"
                         ExpireAfterSeconds: 3600
                         Tiers: {
-                          EvictAfterSeconds: 3600
+                          ApplyAfterSeconds: 3600
                           Delete: {}
                         }
                       }

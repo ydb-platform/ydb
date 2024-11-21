@@ -41,7 +41,7 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
 
     static const auto& fillDeleteTier = []<class TModeSettings>(TTtlSettingsEnabled& out, const TModeSettings& in) {
         auto* deleteTier = out.AddTiers();
-        deleteTier->SetEvictAfterSeconds(in.expire_after_seconds());
+        deleteTier->SetApplyAfterSeconds(in.expire_after_seconds());
         deleteTier->MutableDelete();
     };
 
@@ -67,7 +67,7 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
 
     for (const auto& inTier : in.tiers()) {
         auto* outTier = out.AddTiers();
-        outTier->SetEvictAfterSeconds(inTier.evict_after_seconds());
+        outTier->SetApplyAfterSeconds(inTier.apply_after_seconds());
         switch (inTier.action_case()) {
             case Ydb::Table::TtlTier::kDelete:
                 outTier->MutableDelete();
@@ -112,7 +112,7 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
     std::optional<ui32> expireAfterSeconds;
     for (const auto& tier : out.GetTiers()) {
         if (tier.HasDelete()) {
-            expireAfterSeconds = tier.GetEvictAfterSeconds();
+            expireAfterSeconds = tier.GetApplyAfterSeconds();
         }
     }
     out.SetExpireAfterSeconds(expireAfterSeconds.value_or(std::numeric_limits<uint32_t>::max()));

@@ -2933,7 +2933,7 @@ TTtlTierSettings::TTtlTierSettings(TDuration evictionDelay, const TAction& actio
 }
 
 TTtlTierSettings::TTtlTierSettings(const Ydb::Table::TtlTier& tier)
-    : EvictAfter_(TDuration::Seconds(tier.evict_after_seconds())) {
+    : EvictAfter_(TDuration::Seconds(tier.apply_after_seconds())) {
     switch (tier.action_case()) {
         case Ydb::Table::TtlTier::kDelete:
             Action_ = TTtlDeleteAction();
@@ -2947,7 +2947,7 @@ TTtlTierSettings::TTtlTierSettings(const Ydb::Table::TtlTier& tier)
 }
 
 void TTtlTierSettings::SerializeTo(Ydb::Table::TtlTier& proto) const {
-    proto.set_evict_after_seconds(EvictAfter_.Seconds());
+    proto.set_apply_after_seconds(EvictAfter_.Seconds());
 
     std::visit(TOverloaded{
             [&proto](const TTtlDeleteAction&) { proto.mutable_delete_(); },
@@ -3098,7 +3098,7 @@ std::optional<TTtlSettings> TTtlSettings::DeserializeFromProto(const Ydb::Table:
     TDuration legacyExpireAfter = TDuration::Max();
     for (const auto& tier : proto.tiers()) {
         if (tier.has_delete_()) {
-            legacyExpireAfter = TDuration::Seconds(tier.evict_after_seconds());
+            legacyExpireAfter = TDuration::Seconds(tier.apply_after_seconds());
             break;
         }
     }

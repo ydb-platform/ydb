@@ -466,11 +466,11 @@ bool FillTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in, Ydb::Stat
         // handle legacy format for backwards-compatibility
         auto* deleteTier = out.add_tiers();
         deleteTier->mutable_delete_();
-        deleteTier->set_evict_after_seconds(in.GetExpireAfterSeconds());
+        deleteTier->set_apply_after_seconds(in.GetExpireAfterSeconds());
     } else {
         for (const auto& inTier : in.GetTiers()) {
             auto* outTier = out.add_tiers();
-            outTier->set_evict_after_seconds(inTier.GetEvictAfterSeconds());
+            outTier->set_apply_after_seconds(inTier.GetApplyAfterSeconds());
             switch (inTier.GetActionCase()) {
                 case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kDelete:
                     outTier->mutable_delete_();

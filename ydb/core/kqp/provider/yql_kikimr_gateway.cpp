@@ -319,7 +319,7 @@ void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::T
         opts.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(*settings.ColumnUnit));
     }
     auto* deleteTier = proto.add_tiers();
-    deleteTier->set_evict_after_seconds(settings.ExpireAfter.Seconds());
+    deleteTier->set_apply_after_seconds(settings.ExpireAfter.Seconds());
     deleteTier->mutable_delete_();
 }
 

@@ -2665,7 +2665,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 column_name: "created_at"
               }
               tiers {
-                evict_after_seconds: 3600
+                apply_after_seconds: 3600
                 delete {}
               }
             }
@@ -2682,7 +2682,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 column_unit: UNIT_SECONDS
               }
               tiers {
-                evict_after_seconds: 7200
+                apply_after_seconds: 7200
                 delete {}
               }
             }

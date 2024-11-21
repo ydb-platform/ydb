@@ -64,7 +64,7 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
                 errStr = Sprintf("Only DELETE via TTL is allowed for row-oriented tables");
                 return false;            
             }
-            expireInSeconds = enabled.GetTiers(0).GetEvictAfterSeconds();
+            expireInSeconds = enabled.GetTiers(0).GetApplyAfterSeconds();
         } else {
             // legacy format
             expireInSeconds = enabled.GetExpireAfterSeconds();

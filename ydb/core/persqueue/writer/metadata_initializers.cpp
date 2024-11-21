@@ -58,7 +58,7 @@ void TSrcIdMetaInitializer::DoPrepare(NInitializer::IInitializerInput::TPtr cont
             columnTtl->set_column_unit(Ydb::Table::ValueSinceUnixEpochModeSettings::UNIT_MILLISECONDS);
             auto* deleteTier = ttlSettings->add_tiers();
             deleteTier->mutable_delete_();
-            deleteTier->set_evict_after_seconds(1382400);
+            deleteTier->set_apply_after_seconds(1382400);
         }
 
         result.emplace_back(new NInitializer::TGenericTableModifier<NRequest::TDialogCreateTable>(request, "create"));

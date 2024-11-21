@@ -170,8 +170,10 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     NChanges::TGeneralCompactionCounters::OnRepackPortions(portionsCount, portionsSize);
 
     {
-    NActors::TLogContextGuard gLogging =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("blobs", Blobs.DebugString());
+        std::vector<TReadPortionInfoWithBlobs> portions =
+            TReadPortionInfoWithBlobs::RestorePortions(SwitchedPortions, Blobs, context.SchemaVersions);
+        NActors::TLogContextGuard gLogging =
+            NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("blobs", Blobs.DebugString());
         BuildAppendedPortionsByChunks(context, std::move(portions));
     }
 

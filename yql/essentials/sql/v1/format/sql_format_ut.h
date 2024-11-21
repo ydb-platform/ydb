@@ -226,6 +226,16 @@ Y_UNIT_TEST(CreateTable) {
             "CREATE TABLE user (\n\tuser int32\n)\nWITH (ttl = interval('P1D') ON user AS MICROSECONDS);\n"},
         {"create table user(user int32) with (ttl=interval('P1D') on user as nAnOsEcOnDs)",
             "CREATE TABLE user (\n\tuser int32\n)\nWITH (ttl = interval('P1D') ON user AS NANOSECONDS);\n"},
+        {"create table user(user int32) with (ttl=interval('P1D') delete on user as nAnOsEcOnDs)",
+            "CREATE TABLE user (\n\tuser int32\n)\nWITH (ttl = interval('P1D') DELETE ON user AS NANOSECONDS);\n"},
+        {"create table user(user int32) with (ttl=interval('P1D')to external data source tier1 ,interval('P10D')delete on user as seconds)",
+            "CREATE TABLE user (\n"
+            "\tuser int32\n"
+            ")\n"
+            "WITH (ttl =\n"
+            "\tinterval('P1D') TO EXTERNAL DATA SOURCE tier1,\n"
+            "\tinterval('P10D') DELETE\n"
+            "ON user AS SECONDS);\n"},
         {"create table user(index user global unique sync on (user,user) with (user=user,user=user))",
             "CREATE TABLE user (\n\tINDEX user GLOBAL UNIQUE SYNC ON (user, user) WITH (user = user, user = user)\n);\n"},
         {"create table user(index user global async on (user) with (user=user,))",

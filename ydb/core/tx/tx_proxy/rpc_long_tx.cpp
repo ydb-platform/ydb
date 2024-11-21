@@ -98,6 +98,8 @@ protected:
         const auto& splittedData = shardsSplitter->GetSplitData();
         InternalController =
             std::make_shared<NEvWrite::TWritersController>(splittedData.GetShardRequestsCount(), this->SelfId(), LongTxId, NoTxWrite);
+
+        InternalController->GetCounters()->OnSplitByShards(splittedData.GetShardsCount());
         ui32 sumBytes = 0;
         ui32 rowsCount = 0;
         ui32 writeIdx = 0;

@@ -570,7 +570,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseMapToMapReduce(TExp
     }
 
     for (size_t index = 0; index < outerMapReduce.Input().Size(); index++) {
-        // validate input
+        // Validate input
         if (outerMapReduce.Input().Item(index).Paths().Size() != 1) {
             continue;
         }
@@ -595,8 +595,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseMapToMapReduce(TExp
             continue;
         }
         if (NYql::HasAnySetting(outerMapReduce.Input().Item(index).Settings().Ref(),
-            EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::DirectRead | EYtSettingType::Sample | EYtSettingType::SysColumns | EYtSettingType::BlockInputApplied))
-        {
+            EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::DirectRead | EYtSettingType::Sample | EYtSettingType::SysColumns | EYtSettingType::BlockInputApplied)) {
             continue;
         }
 
@@ -645,7 +644,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseMapToMapReduce(TExp
                 .Done();
         }
 
-        switchArgs[index* 2 + 1] = innerLambda;
+        switchArgs[index * 2 + 1] = innerLambda;
         innerLambda = Build<TCoLambda>(ctx, innerLambda.Pos())
             .Args({"stream"})
             .Body<TCoSwitch>()
@@ -658,9 +657,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseMapToMapReduce(TExp
                 .Build()
             .Build()
             .Done();
-        switchArgs[index* 2 + 1] = identityLambda;            
+        switchArgs[index * 2 + 1] = identityLambda;
 
-        TMaybeNode<TCoLambda> resultLambda;
+        TMaybeNode<TCoLambda> resultLambda = innerLambda;
         if (auto maybeOuterLambda = outerMapReduce.Mapper().Maybe<TCoLambda>()) {
             auto outerLambda = maybeOuterLambda.Cast();
             if (HasYtRowNumber(outerLambda.Body().Ref())) {
@@ -673,7 +672,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseMapToMapReduce(TExp
                 return {};
             }
             if (!*fuseRes) {
-                // Cannot fuse
+                // Cannot fuse, return switch argument to default
                 continue;
             }
 
@@ -715,26 +714,30 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseMapToMapReduce(TExp
                     .With(TExprBase(placeHolder), "stream")
                 .Build()
                 .Done();
-        } else {
-            resultLambda = Build<TCoLambda>(ctx, node.Pos())
-                .Args({"stream"})
-                .Body<TExprApplier>()            
-                    .Apply(innerLambda)
-                    .With(0, "stream")
-                .Build()
-                .Done();
+        }
+
+        TVector<TExprBase> updatedInputs;
+        for (size_t inputIndex = 0; inputIndex < outerMapReduce.Input().Size(); inputIndex++) {
+            if (inputIndex != index) {
+                updatedInputs.push_back(outerMapReduce.Input().Item(inputIndex));
+            }
+        }
+        for (size_t inputIndex = 0; inputIndex < innerMap.Input().Size(); inputIndex++) {
+            updatedInputs.push_back(innerMap.Input().Item(inputIndex));
         }
 
         auto resultSettings = MergeSettings(
             *NYql::RemoveSettings(outerMapReduce.Settings().Ref(), EYtSettingType::Flow | EYtSettingType::BlockInputReady, ctx),
-            *NYql::RemoveSettings(innerMap.Settings().Ref(), EYtSettingType::Ordered | EYtSettingType::KeepSorted, ctx), ctx);
+            *NYql::RemoveSettings(innerMap.Settings().Ref(), EYtSettingType::Ordered | EYtSettingType::KeepSorted | EYtSettingType::BlockInputReady, ctx), ctx);
         return Build<TYtMapReduce>(ctx, node.Pos())
             .InitFrom(outerMapReduce)
             .World<TCoSync>()
                 .Add(innerMap.World())
                 .Add(outerMapReduce.World())
             .Build()
-            .Input(innerMap.Input())
+            .Input()
+                .Add(updatedInputs)
+            .Build()
             .Mapper(resultLambda.Cast())
             .Settings(resultSettings)
             .Done();

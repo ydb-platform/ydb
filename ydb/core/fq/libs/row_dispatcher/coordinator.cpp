@@ -280,8 +280,11 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
         return std::nullopt;
     }
 
+    auto rowDispatcherIt = RowDispatchers.find(bestLocation);
+    Y_ENSURE(rowDispatcherIt != RowDispatchers.end(), "Invalid best location");
+
     PartitionLocations[key] = bestLocation;
-    RowDispatchers[bestLocation].Locations.insert(key);
+    rowDispatcherIt->second.Locations.insert(key);
     topicPartitionsCount[bestLocation.NodeId()]++;
     return bestLocation;
 }

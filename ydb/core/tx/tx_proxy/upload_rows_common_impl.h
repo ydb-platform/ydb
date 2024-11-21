@@ -15,6 +15,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/tx/tx_proxy/upload_rows_counters.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -37,143 +38,6 @@
 #include <util/string/vector.h>
 
 namespace NKikimr {
-
-enum class EUploadFailureReason {
-    DISK_QUOTA_EXCEEDED,
-    DELIVERY_PROBLEM,
-};
-
-class TUploadStatus {
-private:
-    YDB_ACCESSOR_DEF(Ydb::StatusIds::StatusCode, Code);
-    YDB_READONLY_DEF(std::optional<TString>, Subcode);
-
-public:
-    TUploadStatus(const Ydb::StatusIds::StatusCode code)
-        : Code(code) {
-    }
-    TUploadStatus(const Ydb::StatusIds::StatusCode code, const NSchemeCache::TSchemeCacheNavigate::EStatus subcode)
-        : Code(code) {
-        SetSubcode(subcode);
-    }
-    TUploadStatus(const Ydb::StatusIds::StatusCode code, const NKikimrTxDataShard::TError::EKind subcode)
-        : Code(code) {
-        SetSubcode(subcode);
-    }
-    TUploadStatus(const Ydb::StatusIds::StatusCode code, const EUploadFailureReason subcode)
-        : Code(code) {
-        SetSubcode(subcode);
-    }
-
-    struct Hasher {
-        ui64 Hash(const TUploadStatus& object) const {
-            ui64 hash = object.GetCode();
-            boost::hash_combine(hash, object.GetSubcode().has_value());
-            if (object.GetSubcode()) {
-                boost::hash_combine(hash, *object.GetSubcode());
-            }
-            return hash;
-        }
-    };
-
-    bool operator==(const TUploadStatus& other) const {
-        return Code == other.Code && Subcode == other.Subcode;
-    }
-
-    TString GetCodeString() const {
-        return Ydb::StatusIds::StatusCode_Name(Code);
-    }
-
-    void SetSubcode(const NSchemeCache::TSchemeCacheNavigate::EStatus subcode) {
-        Subcode = ToString(subcode);
-    }
-
-    void SetSubcode(const NKikimrTxDataShard::TError::EKind subcode) {
-        Subcode = NKikimrTxDataShard::TError::EKind_Name(subcode);
-    }
-
-    void SetSubcode(const EUploadFailureReason subcode) {
-        Subcode = ToString(subcode);
-    }
-};
-
-class TUploadCounters: public NColumnShard::TCommonCountersOwner {
-private:
-    using TBase = NColumnShard::TCommonCountersOwner;
-    NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
-    NMonitoring::THistogramPtr ReplyDuration;
-
-    NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
-    NMonitoring::THistogramPtr PackageSizeRecordsByRecords;
-    NMonitoring::THistogramPtr PackageSizeCountByRecords;
-
-    NMonitoring::THistogramPtr PreparingDuration;
-    NMonitoring::THistogramPtr WritingDuration;
-    NMonitoring::THistogramPtr CommitDuration;
-    NMonitoring::THistogramPtr PrepareReplyDuration;
-
-    THashMap<TUploadStatus, NMonitoring::TDynamicCounters::TCounterPtr, TUploadStatus::Hasher> CodesCount;
-
-    NMonitoring::TDynamicCounters::TCounterPtr GetCodeCounter(const TUploadStatus& status);
-
-public:
-    TUploadCounters();
-
-    class TGuard: TMoveOnly {
-    private:
-        TMonotonic Start = TMonotonic::Now();
-        std::optional<TMonotonic> WritingStarted;
-        std::optional<TMonotonic> CommitStarted;
-        std::optional<TMonotonic> CommitFinished;
-        std::optional<TMonotonic> ReplyFinished;
-        TUploadCounters& Owner;
-    public:
-        TGuard(const TMonotonic start, TUploadCounters& owner)
-            : Start(start)
-            , Owner(owner)
-        {
-
-        }
-
-        void OnWritingStarted() {
-            WritingStarted = TMonotonic::Now();
-            Owner.PreparingDuration->Collect((*WritingStarted - Start).MilliSeconds());
-        }
-
-        void OnCommitStarted() {
-            CommitStarted = TMonotonic::Now();
-            AFL_VERIFY(WritingStarted);
-            Owner.WritingDuration->Collect((*CommitStarted - *WritingStarted).MilliSeconds());
-        }
-
-        void OnCommitFinished() {
-            CommitFinished = TMonotonic::Now();
-            AFL_VERIFY(CommitStarted);
-            Owner.CommitDuration->Collect((*CommitFinished - *CommitStarted).MilliSeconds());
-        }
-
-        void OnReply(const TUploadStatus& status) {
-            ReplyFinished = TMonotonic::Now();
-            if (CommitFinished) {
-                Owner.PrepareReplyDuration->Collect((*ReplyFinished - *CommitFinished).MilliSeconds());
-            }
-            Owner.ReplyDuration->Collect((*ReplyFinished - Start).MilliSeconds());
-            Owner.GetCodeCounter(status)->Add(1);
-        }
-    };
-
-    TGuard BuildGuard(const TMonotonic start) {
-        return TGuard(start, *this);
-    }
-
-    void OnRequest(const ui64 rowsCount) const {
-        RequestsCount->Add(1);
-        RowsCount->Add(rowsCount);
-        PackageSizeRecordsByRecords->Collect((i64)rowsCount, rowsCount);
-        PackageSizeCountByRecords->Collect(rowsCount);
-    }
-};
-
 
 using namespace NActors;
 
@@ -777,7 +641,7 @@ private:
 
         // TODO: fast fail for all tables?
         if (isColumnTable && DiskQuotaExceeded) {
-            return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, EUploadFailureReason::DISK_QUOTA_EXCEEDED),
+            return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DISK_QUOTA_EXCEEDED),
                 LogPrefix() << "cannot perform writes: database is out of disk space", ctx);
         }
 
@@ -1276,7 +1140,7 @@ private:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
 
-        SetError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, EUploadFailureReason::DELIVERY_PROBLEM),
+        SetError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM),
             Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId));
         ShardRepliesLeft.erase(ev->Get()->TabletId);
 
@@ -1400,7 +1264,7 @@ private:
         UploadCountersGuard.OnReply(status);
         SendResult(ctx, status.GetCode());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "completed with status " << status);
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "completed with status " << status.GetCode());
 
         if (LongTxId != NLongTxService::TLongTxId()) {
             // LongTxId is reset after successful commit

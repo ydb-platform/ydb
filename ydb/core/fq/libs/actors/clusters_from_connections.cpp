@@ -295,6 +295,16 @@ void AddClustersFromConnections(
             clusters.emplace(connectionName, GenericProviderName);
             break;
         }
+        case FederatedQuery::ConnectionSetting::kLogging: {
+            const auto& connection = conn.content().setting().logging();
+            auto* clusterCfg = gatewaysConfig.MutableGeneric()->AddClusterMapping();
+            clusterCfg->SetKind(NYql::NConnector::NApi::EDataSourceKind::LOGGING);
+            clusterCfg->SetName(connectionName);
+            clusterCfg->mutable_datasourceoptions()->insert({"folder_id", connection.folder_id()});
+            FillClusterAuth(*clusterCfg, connection.auth(), authToken, accountIdSignatures);
+            clusters.emplace(connectionName, GenericProviderName);
+            break;
+        }
 
         // Do not replace with default. Adding a new connection should cause a compilation error
         case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:

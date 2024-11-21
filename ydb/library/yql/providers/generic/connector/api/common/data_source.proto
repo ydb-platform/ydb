@@ -35,6 +35,8 @@ enum EDataSourceKind {
     MYSQL = 5;
     MS_SQL_SERVER = 6;
     GREENPLUM = 7;
+    ORACLE = 8;
+    LOGGING = 9;
 }
 
 // EProtocol generalizes various kinds of network protocols supported by different databases.

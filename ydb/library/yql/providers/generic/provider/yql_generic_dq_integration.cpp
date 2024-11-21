@@ -35,6 +35,10 @@ namespace NYql {
                     return "GreenplumGeneric";
                 case NYql::NConnector::NApi::MS_SQL_SERVER:
                     return "MsSQLServerGeneric";
+                case NYql::NConnector::NApi::ORACLE:
+                    return "OracleGeneric";
+                case NYql::NConnector::NApi::LOGGING:
+                    return "LoggingGeneric";
                 default:
                     ythrow yexception() << "Data source kind is unknown or not specified";
             }
@@ -214,6 +218,12 @@ namespace NYql {
                         case NConnector::NApi::MS_SQL_SERVER:
                             properties["SourceType"] = "MsSQLServer";
                             break;
+                        case NConnector::NApi::ORACLE:
+                            properties["SourceType"] = "Oracle";
+                            break;
+                        case NConnector::NApi::LOGGING:
+                            properties["SourceType"] = "Logging";
+                            break;
                         case NConnector::NApi::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;
                         default:
@@ -233,7 +243,6 @@ namespace NYql {
                             properties["Protocol"] = "Http";
                             break;
                         case NConnector::NApi::PROTOCOL_UNSPECIFIED:
-                            break;
                         default:
                             properties["Protocol"] = NConnector::NApi::EProtocol_Name(dataSourceInstance.protocol());
                             break;

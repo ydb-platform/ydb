@@ -28,13 +28,13 @@ struct TCoordinatorMetrics {
         : Counters(counters) {
         IncomingRequests = Counters->GetCounter("IncomingRequests", true);
         LeaderChangedCount = Counters->GetCounter("LeaderChangedCount");
-        PendingPartitions = Counters->GetCounter("PendingPartitions");
+        PartitionsLimitPerNode = Counters->GetCounter("PartitionsLimitPerNode");
     }
 
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr IncomingRequests;
     ::NMonitoring::TDynamicCounters::TCounterPtr LeaderChangedCount;
-    ::NMonitoring::TDynamicCounters::TCounterPtr PendingPartitions;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PartitionsLimitPerNode;
 };
 
 class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
@@ -78,6 +78,64 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
         NRowDispatcherProto::TEvGetAddressRequest Record;
     };
 
+    struct TTopicInfo {
+        struct TTopicMetrics {
+            TTopicMetrics(const TCoordinatorMetrics& metrics, const TString& topicNmae)
+                : Counters(metrics.Counters->GetSubgroup("topic", topicNmae))
+            {
+                PendingPartitions = Counters->GetCounter("PendingPartitions");
+            }
+
+            ::NMonitoring::TDynamicCounterPtr Counters;
+            ::NMonitoring::TDynamicCounters::TCounterPtr PendingPartitions;
+        };
+
+        struct TNodeMetrics {
+            TNodeMetrics(const TTopicMetrics& metrics, ui32 nodeId)
+                : Counters(metrics.Counters->GetSubgroup("node", ToString(nodeId)))
+            {
+                PartitionsCount = Counters->GetCounter("PartitionsCount");
+            }
+
+            ::NMonitoring::TDynamicCounterPtr Counters;
+            ::NMonitoring::TDynamicCounters::TCounterPtr PartitionsCount;
+        };
+
+        struct TNodeInfo {
+            ui64 NumberPartitions = 0;
+            TNodeMetrics Metrics;
+        };
+
+        TTopicInfo(const TCoordinatorMetrics& metrics, const TString& topicName)
+            : Metrics(metrics, topicName)
+        {}
+
+        void AddPendingPartition(const TPartitionKey& key) {
+            if (PendingPartitions.insert(key).second) {
+                Metrics.PendingPartitions->Inc();
+            }
+        }
+
+        void RemovePendingPartition(const TPartitionKey& key) {
+            if (PendingPartitions.erase(key)) {
+                Metrics.PendingPartitions->Dec();
+            }
+        }
+
+        void IncNodeUsage(ui32 nodeId) {
+            auto nodeIt = NodesInfo.find(nodeId);
+            if (nodeIt == NodesInfo.end()) {
+                nodeIt = NodesInfo.insert({nodeId, TNodeInfo{.NumberPartitions = 0, .Metrics = TNodeMetrics(Metrics, nodeId)}}).first;
+            }
+            nodeIt->second.NumberPartitions++;
+            nodeIt->second.Metrics.PartitionsCount->Inc();
+        }
+
+        THashSet<TPartitionKey, TPartitionKeyHash> PendingPartitions;
+        THashMap<ui32, TNodeInfo> NodesInfo;
+        TTopicMetrics Metrics;
+    };
+
     NConfig::TRowDispatcherCoordinatorConfig Config;
     TYqSharedResources::TPtr YqSharedResources;
     TActorId LocalRowDispatcherId;
@@ -85,9 +143,8 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     const TString Tenant;
     TMap<NActors::TActorId, RowDispatcherInfo> RowDispatchers;
     THashMap<TPartitionKey, TActorId, TPartitionKeyHash> PartitionLocations;
-    THashSet<TPartitionKey, TPartitionKeyHash> PendingPartitions;
-    std::unordered_map<TString, std::unordered_map<ui32, ui64>> PartitionsCount;  // {TopicName -> {NodeId -> NumberPartitions}}
-    std::unordered_map<TString, std::unordered_map<TActorId, TCoordinatorRequest>> PendingReadActors;  // {TopicName -> {ReadActorId -> CoordinatorRequest}}
+    THashMap<TString, TTopicInfo> TopicsInfo;
+    std::unordered_map<TActorId, TCoordinatorRequest> PendingReadActors;
     TCoordinatorMetrics Metrics;
     THashSet<TActorId> InterconnectSessions;
 
@@ -124,6 +181,7 @@ private:
 
     void AddRowDispatcher(NActors::TActorId actorId, bool isLocal);
     void PrintInternalState();
+    TTopicInfo& GetOrCreateTopicInfo(const TString& topicName);
     std::optional<TActorId> GetAndUpdateLocation(const TPartitionKey& key);  // std::nullopt if TopicPartitionsLimitPerNode reached
     bool ComputeCoordinatorRequest(TActorId readActorId, const TCoordinatorRequest& request);
     void UpdatePendingReadActors();
@@ -141,7 +199,9 @@ TActorCoordinator::TActorCoordinator(
     , LocalRowDispatcherId(localRowDispatcherId)
     , LogPrefix("Coordinator: ")
     , Tenant(tenant)
-    , Metrics(counters) {
+    , Metrics(counters)
+{
+    Metrics.PartitionsLimitPerNode->Set(Config.GetTopicPartitionsLimitPerNode());
     AddRowDispatcher(localRowDispatcherId, true);
 }
 
@@ -155,6 +215,7 @@ void TActorCoordinator::AddRowDispatcher(NActors::TActorId actorId, bool isLocal
     auto it = RowDispatchers.find(actorId);
     if (it != RowDispatchers.end()) {
         it->second.Connected = true;
+        UpdatePendingReadActors();
         return;
     }
 
@@ -171,10 +232,12 @@ void TActorCoordinator::AddRowDispatcher(NActors::TActorId actorId, bool isLocal
         auto node = RowDispatchers.extract(oldActorId);
         node.key() = actorId;
         RowDispatchers.insert(std::move(node));
+        UpdatePendingReadActors();
         return;
     }
 
     RowDispatchers.emplace(actorId, RowDispatcherInfo{true, isLocal});
+    UpdatePendingReadActors();
 }
 
 void TActorCoordinator::UpdateInterconnectSessions(const NActors::TActorId& interconnectSession) {
@@ -207,12 +270,12 @@ void TActorCoordinator::PrintInternalState() {
 
     str << "\nLocations:\n";
     for (auto& [key, actorId] : PartitionLocations) {
-        str << "    " << key.Endpoint << " / " << key.Database << " / " << key.TopicName << ", partId " << key.PartitionId  <<  ",  row dispatcher actor id: " << actorId << "\n";
+        str << "    " << key.Endpoint << " / " << key.Database << " / " << key.TopicName << ", partId " << key.PartitionId  <<  ", row dispatcher actor id: " << actorId << "\n";
     }
 
     str << "\nPending partitions:\n";
-    for (const auto& [topicName, requests] : PendingReadActors) {
-        str << "    " << topicName  <<  ",  pending read actors: " << requests.size() << "\n";
+    for (const auto& [topicName, topicInfo] : TopicsInfo) {
+        str << "    " << topicName <<  ", pending partitions: " << topicInfo.PendingPartitions.size() << "\n";
     }
 
     LOG_ROW_DISPATCHER_DEBUG(str.Str());
@@ -253,10 +316,18 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPt
     Metrics.LeaderChangedCount->Inc();
 }
 
+TActorCoordinator::TTopicInfo& TActorCoordinator::GetOrCreateTopicInfo(const TString& topicName) {
+    const auto it = TopicsInfo.find(topicName);
+    if (it != TopicsInfo.end()) {
+        return it->second;
+    }
+    return TopicsInfo.insert({topicName, TTopicInfo(Metrics, topicName)}).first->second;
+}
+
 std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& key) {
     Y_ENSURE(!PartitionLocations.contains(key));
 
-    auto& topicPartitionsCount = PartitionsCount[key.TopicName];
+    auto& topicInfo = GetOrCreateTopicInfo(key.TopicName);
 
     TActorId bestLocation;
     ui64 bestNumberPartitions = std::numeric_limits<ui64>::max();
@@ -266,8 +337,8 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
         }
 
         ui64 numberPartitions = 0;
-        if (const auto it = topicPartitionsCount.find(location.NodeId()); it != topicPartitionsCount.end()) {
-            numberPartitions = it->second;
+        if (const auto it = topicInfo.NodesInfo.find(location.NodeId()); it != topicInfo.NodesInfo.end()) {
+            numberPartitions = it->second.NumberPartitions;
         }
 
         if (!bestLocation || numberPartitions < bestNumberPartitions) {
@@ -278,6 +349,7 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
     Y_ENSURE(bestLocation, "Local row dispatcher should always be connected");
 
     if (Config.GetTopicPartitionsLimitPerNode() > 0 && bestNumberPartitions >= Config.GetTopicPartitionsLimitPerNode()) {
+        topicInfo.AddPendingPartition(key);
         return std::nullopt;
     }
 
@@ -286,11 +358,8 @@ std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartition
 
     PartitionLocations[key] = bestLocation;
     rowDispatcherIt->second.Locations.insert(key);
-    topicPartitionsCount[bestLocation.NodeId()]++;
-
-    if (PendingPartitions.erase(key)) {
-        Metrics.PendingPartitions->Dec();
-    }
+    topicInfo.IncNodeUsage(bestLocation.NodeId());
+    topicInfo.RemovePendingPartition(key);
 
     return bestLocation;
 }
@@ -310,11 +379,11 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
 
     TCoordinatorRequest request = {.Cookie = ev->Cookie, .Record = ev->Get()->Record};
     if (ComputeCoordinatorRequest(ev->Sender, request)) {
-        PendingReadActors[source.GetTopicPath()].erase(ev->Sender);
+        PendingReadActors.erase(ev->Sender);
     } else {
         // All nodes are overloaded, add request into pending queue
         // We save only last request from each read actor
-        PendingReadActors[source.GetTopicPath()][ev->Sender] = request;
+        PendingReadActors[ev->Sender] = request;
     }
 }
 
@@ -336,9 +405,6 @@ bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TC
                 rowDispatcherId = *maybeLocation;
             } else {
                 hasPendingPartitions = true;
-                if (PendingPartitions.insert(key).second) {
-                    Metrics.PendingPartitions->Inc();
-                }
                 continue;
             }
         }
@@ -366,20 +432,11 @@ bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TC
 }
 
 void TActorCoordinator::UpdatePendingReadActors() {
-    for (auto topicIt = PendingReadActors.begin(); topicIt != PendingReadActors.end();) {
-        auto& requests = topicIt->second;
-        for (auto requestIt = requests.begin(); requestIt != requests.end();) {
-            if (ComputeCoordinatorRequest(requestIt->first, requestIt->second)) {
-                requestIt = requests.erase(requestIt);
-            } else {
-                break;
-            }
-        }
-
-        if (requests.empty()) {
-            topicIt = PendingReadActors.erase(topicIt);
+    for (auto readActorIt = PendingReadActors.begin(); readActorIt != PendingReadActors.end();) {
+        if (ComputeCoordinatorRequest(readActorIt->first, readActorIt->second)) {
+            readActorIt = PendingReadActors.erase(readActorIt);
         } else {
-            ++topicIt;
+            ++readActorIt;
         }
     }
 }

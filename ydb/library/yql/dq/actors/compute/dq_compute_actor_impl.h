@@ -110,14 +110,7 @@ public:
     void Bootstrap() {
         try {
             StartTime = TInstant::Now();
-            {
-                TStringBuilder prefixBuilder;
-                prefixBuilder << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ";
-                if (RequestContext) {
-                    prefixBuilder << "Ctx: " << *RequestContext << ". ";
-                }
-                LogPrefix = prefixBuilder;
-            }
+            InitializeLogPrefix(); // re-initialize with SelfId
             CA_LOG_D("Start compute actor " << this->SelfId() << ", task: " << Task.GetId());
 
             Channels = new TDqComputeActorChannels(this->SelfId(), TxId, Task, !RuntimeSettings.FailOnUndelivery,
@@ -231,6 +224,15 @@ protected:
             SourceCpuTimeMs = taskCounters->GetCounter("SourceCpuTimeMs", true);
             InputTransformCpuTimeMs = taskCounters->GetCounter("InputTransformCpuTimeMs", true);
         }
+    }
+
+    void InitializeLogPrefix() {
+        TStringBuilder prefixBuilder;
+        prefixBuilder << "SelfId: " << this->SelfId() << ", TxId: " << TxId << ", task: " << Task.GetId() << ". ";
+        if (RequestContext) {
+            prefixBuilder << "Ctx: " << *RequestContext << ". ";
+        }
+        LogPrefix = std::move(prefixBuilder);
     }
 
     void ReportEventElapsedTime() {
@@ -1609,6 +1611,7 @@ protected:
         RequestContext = MakeIntrusive<NYql::NDq::TRequestContext>(Task.GetRequestContext());
 
         InitializeWatermarks();
+        InitializeLogPrefix(); // note: SelfId is not initialized here
     }
 
 private:

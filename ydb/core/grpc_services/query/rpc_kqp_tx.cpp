@@ -68,6 +68,7 @@ private:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request);
         SetDatabase(ev, *Request);
+        ev->Record.MutableRequest()->SetClientAddress(Request->GetPeerName());
 
         if (CheckSession(req->session_id(), Request.get())) {
             ev->Record.MutableRequest()->SetSessionId(req->session_id());
@@ -189,6 +190,7 @@ private:
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         SetAuthToken(ev, *Request);
         SetDatabase(ev, *Request);
+        ev->Record.MutableRequest()->SetClientAddress(Request->GetPeerName());
 
         const auto& [sessionId, txId] = GetReqData();
 

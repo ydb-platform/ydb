@@ -938,6 +938,7 @@ public:
     virtual TMaybe<TString> GetSetting(const TString& cluster, const TString& name) = 0;
 
     virtual void SetToken(const TString& cluster, const TIntrusiveConstPtr<NACLib::TUserToken>& token) = 0;
+    virtual void SetClientAddress(const TString& clientAddress) = 0;
 
     virtual NThreading::TFuture<TListPathResult> ListPath(const TString& cluster, const TString& path) = 0;
 

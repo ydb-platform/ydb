@@ -536,12 +536,13 @@ public:
     using TResult = IKqpGateway::TGenericResult;
 
     TKqpSchemeExecuterRequestHandler(TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TMaybe<TString>& requestType, const TString& database,
-        const TString& databaseId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, TPromise<TResult> promise)
+        const TString& databaseId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, TString clientAddress, TPromise<TResult> promise)
         : PhyTx(std::move(phyTx))
         , QueryType(queryType)
         , Database(database)
         , DatabaseId(databaseId)
         , UserToken(std::move(userToken))
+        , ClientAddress(std::move(clientAddress))
         , Promise(promise)
         , RequestType(requestType)
     {}
@@ -549,7 +550,7 @@ public:
     void Bootstrap() {
         auto ctx = MakeIntrusive<TUserRequestContext>();
         ctx->DatabaseId = DatabaseId;
-        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, SelfId(), RequestType, Database, UserToken, false /* temporary */, TString() /* sessionId */, ctx);
+        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, SelfId(), RequestType, Database, UserToken, ClientAddress, false /* temporary */, TString() /* sessionId */, ctx);
         Register(actor);
         Become(&TThis::WaitState);
     }
@@ -582,6 +583,7 @@ private:
     const TString Database;
     const TString DatabaseId;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    const TString ClientAddress;
     TPromise<TResult> Promise;
     const TMaybe<TString> RequestType;
 };
@@ -744,6 +746,10 @@ public:
     void SetToken(const TString& cluster, const TIntrusiveConstPtr<NACLib::TUserToken>& token) override {
         YQL_ENSURE(cluster == Cluster);
         UserToken = token;
+    }
+
+    void SetClientAddress(const TString& clientAddress) override {
+        ClientAddress = clientAddress;
     }
 
     bool GetDomainLoginOnly() override {
@@ -2231,7 +2237,7 @@ private:
 
     TFuture<TGenericResult> SendSchemeExecuterRequest(const TString&, const TMaybe<TString>& requestType, const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder>& phyTx) override {
         auto promise = NewPromise<TGenericResult>();
-        IActor* requestHandler = new TKqpSchemeExecuterRequestHandler(phyTx, QueryType, requestType, Database, DatabaseId, UserToken, promise);
+        IActor* requestHandler = new TKqpSchemeExecuterRequestHandler(phyTx, QueryType, requestType, Database, DatabaseId, UserToken, ClientAddress, promise);
         RegisterActor(requestHandler);
         return promise.GetFuture();
     }
@@ -2317,6 +2323,7 @@ private:
     TKqpRequestCounters::TPtr Counters;
     TAlignedPagePoolCounters AllocCounters;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TString ClientAddress;
     std::shared_ptr<IKqpTableMetadataLoader> MetadataLoader;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
 };

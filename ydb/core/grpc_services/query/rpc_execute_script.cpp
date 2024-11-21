@@ -132,6 +132,7 @@ private:
         SetAuthToken(ev, *Request);
         SetDatabase(ev, *Request);
         SetRlPath(ev, *Request);
+        ev->Record.MutableRequest()->SetClientAddress(Request->GetPeerName());
 
         if (traceId) {
             ev->Record.SetTraceId(traceId.GetRef());

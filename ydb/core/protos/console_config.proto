@@ -279,6 +279,7 @@ message TReplaceYamlConfigResponse {
 message TDropConfigRequest {
     optional Ydb.DynamicConfig.DropConfigRequest Request = 1;
     optional bytes UserToken = 2;
+    optional string PeerName = 3;
 }
 
 message TDropConfigResponse {
@@ -287,6 +288,7 @@ message TDropConfigResponse {
 message TAddVolatileConfigRequest {
     optional Ydb.DynamicConfig.AddVolatileConfigRequest Request = 1;
     optional bytes UserToken = 2;
+    optional string PeerName = 3;
 }
 
 message TAddVolatileConfigResponse {
@@ -295,6 +297,7 @@ message TAddVolatileConfigResponse {
 message TGetAllConfigsRequest {
     optional Ydb.DynamicConfig.GetConfigRequest Request = 1;
     optional bytes UserToken = 2;
+    optional string PeerName = 3;
 }
 
 message TGetAllConfigsResponse {
@@ -304,6 +307,7 @@ message TGetAllConfigsResponse {
 
 message TIsYamlReadOnlyRequest {
     optional bytes UserToken = 1;
+    optional string PeerName = 3;
 }
 
 message TIsYamlReadOnlyResponse {
@@ -313,6 +317,7 @@ message TIsYamlReadOnlyResponse {
 message TGetNodeLabelsRequest {
     optional Ydb.DynamicConfig.GetNodeLabelsRequest Request = 1;
     optional bytes UserToken = 2;
+    optional string PeerName = 3;
 }
 
 message TGetNodeLabelsResponse {
@@ -322,6 +327,7 @@ message TGetNodeLabelsResponse {
 message TGetAllMetadataRequest {
     optional Ydb.DynamicConfig.GetMetadataRequest Request = 1;
     optional bytes UserToken = 2;
+    optional string PeerName = 3;
 }
 
 message TGetAllMetadataResponse {
@@ -331,6 +337,7 @@ message TGetAllMetadataResponse {
 message TRemoveVolatileConfigRequest {
     optional Ydb.DynamicConfig.RemoveVolatileConfigRequest Request = 1;
     optional bytes UserToken = 2;
+    optional string PeerName = 3;
 }
 
 message TRemoveVolatileConfigResponse {
@@ -339,6 +346,7 @@ message TRemoveVolatileConfigResponse {
 message TResolveConfigRequest {
     optional Ydb.DynamicConfig.ResolveConfigRequest Request = 1;
     optional bytes UserToken = 2;
+    optional string PeerName = 3;
 }
 
 message TResolveConfigResponse {
@@ -348,6 +356,7 @@ message TResolveConfigResponse {
 message TResolveAllConfigRequest {
     optional Ydb.DynamicConfig.ResolveAllConfigRequest Request = 1;
     optional bytes UserToken = 2;
+    optional string PeerName = 3;
 }
 
 message TResolveAllConfigResponse {

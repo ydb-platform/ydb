@@ -278,8 +278,8 @@ public:
         size_t newSemaphoreMax = GetSemaphoreMaxValue(informedSoFar);
         size_t semaphoreSizeDiff = newSemaphoreMax - CurrentSemaphoreMax;
         CurrentSemaphoreMax = newSemaphoreMax;
-        for (size_t i = 0; i < semaphoreSizeDiff; ++i) {
-            JobsSemaphore.release();
+        if (semaphoreSizeDiff > 0) {
+            JobsSemaphore.release(semaphoreSizeDiff);
         }
         return true;
     }
@@ -590,12 +590,11 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath,
     };
     if (!RequestsInflight->try_acquire()) {
         if (Settings.Verbose_ && Settings.NewlineDelimited_) {
-            static bool expected = false;
-            if (InformedAboutLimit.compare_exchange_strong(expected, true)) {
+            if (!InformedAboutLimit.exchange(true)) {
                 Cerr << '@';
             } else {
-                Cerr << "@ (each '@' means max request inflight is reached and a worker thread is waiting for "
-                "any response fromdatabase)" << Endl;
+                Cerr << (TStringBuilder() << "@ (each '@' means max request inflight is reached and a worker thread is waiting for "
+                "any response from database)" << Endl);
             }
         }
         RequestsInflight->acquire();
@@ -679,7 +678,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
 
         if (readBytes >= nextBorder && Settings.Verbose_) {
             nextBorder += VerboseModeStepSize;
-            Cerr << "Processed " << PrettifyBytes(readBytes) << " and " << row + batchRows << " records" << Endl;
+            Cerr << (TStringBuilder() << "Processed " << PrettifyBytes(readBytes) << " and " << row + batchRows << " records" << Endl);
         }
 
         if (batchBytes < Settings.BytesPerRequest_) {
@@ -808,9 +807,8 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
                 ++idx;
                 if (readBytes >= nextBorder && Settings.Verbose_) {
                     nextBorder += VerboseModeStepSize;
-                    TStringBuilder builder;
-                    builder << "Processed " << PrettifyBytes(readBytes) << " and " << idx << " records" << Endl;
-                    Cerr << builder;
+                    Cerr << (TStringBuilder() << "Processed " << PrettifyBytes(readBytes) << " and "
+                        << idx << " records" << Endl);
                 }
                 if (batchBytes >= Settings.BytesPerRequest_) {
                     batchBytes = 0;

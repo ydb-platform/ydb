@@ -10,8 +10,8 @@ RESOURCE(
 )
 
 PEERDIR(
-    ydb/library/accessor
     library/cpp/resource
+    ydb/library/accessor
     ydb/library/workload/benchmark_base
     ydb/public/lib/scheme_types
 )

@@ -547,10 +547,10 @@ public:
         return sum;
     }
 
-    ui64 GetColumnRawBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetColumnRawBytes(const std::set<ui32>& columnIds, const bool validation = false) const;
     ui64 GetColumnRawBytes(const bool validation = true) const;
 
-    ui64 GetColumnBlobBytes(const std::set<ui32>& columnIds, const bool validation = true) const;
+    ui64 GetColumnBlobBytes(const std::set<ui32>& columnIds, const bool validation = false) const;
     ui64 GetColumnBlobBytes(const bool validation = true) const;
 
     ui64 GetTotalBlobBytes() const noexcept {

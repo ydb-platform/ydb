@@ -2,6 +2,7 @@
 #include "type_codecs.h"
 
 #include "y_abort_unless_ex.h"
+#include "partition_log.h"
 
 #include <util/string/builder.h>
 #include <util/string/escape.h>
@@ -18,7 +19,9 @@ TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
     , Count(0)
     , InternalPartsCount(0)
 {
-    Y_ABORT_UNLESS(Data != End);
+    Y_ABORT_UNLESS_EX(Data != End,
+                      "Key: %s, Blob.size: %" PRISZT,
+                      Key.ToString().data(), blob.size());
     ParseBatch();
     Y_ABORT_UNLESS(Header.GetPartNo() == Key.GetPartNo());
 }
@@ -672,7 +675,10 @@ ui32 THead::GetCount() const
         return 0;
 
     //how much offsets before last batch and how much offsets in last batch
-    Y_ABORT_UNLESS(Batches.front().GetOffset() == Offset);
+    Y_ABORT_UNLESS_EX(Batches.front().GetOffset() == Offset,
+                      "Batches.front.Offset: %" PRIu64 ", Offset: %" PRIu64,
+                      Batches.front().GetOffset(), Offset);
+
     return Batches.back().GetOffset() - Offset + Batches.back().GetCount();
 }
 
@@ -862,6 +868,12 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 off
 
 TString TPartitionedBlob::CompactHead(bool glueHead, THead& head, bool glueNewHead, THead& newHead, ui32 estimatedSize)
 {
+    PQ_LOG_D("TPartitionedBlob::CompactHead: " <<
+             "glueHead=" << static_cast<int>(glueHead) <<
+             ", glueNewHead=" << static_cast<int>(glueNewHead) <<
+             ", estimatedSize=" << estimatedSize <<
+             ", newHead=" << newHead <<
+             ", head=" << head);
     TString valueD;
     valueD.reserve(estimatedSize);
     if (glueHead) {
@@ -889,6 +901,7 @@ TString TPartitionedBlob::CompactHead(bool glueHead, THead& head, bool glueNewHe
 
 auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optional<TFormedBlobInfo>
 {
+    PQ_LOG_D("TPartitionedBlob::CreateFormedBlob: size: " << size << ", useRename: " << static_cast<int>(useRename));
     HeadPartNo = NextPartNo;
     ui32 count = (GlueHead ? Head.GetCount() : 0) + (GlueNewHead ? NewHead.GetCount() : 0);
 
@@ -898,12 +911,15 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
 
     TKey tmpKey(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, false);
     TKey dataKey(TKeyPrefix::TypeData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, false);
+    PQ_LOG_D("tmpKey: " << tmpKey.ToString() << ", dataKey: " << dataKey.ToString());
 
     StartOffset = Offset;
     StartPartNo = NextPartNo;
     InternalPartsCount = 0;
 
+    PQ_LOG_D("GlueHead=" << static_cast<int>(GlueHead) << ", GlueNewHead=" << static_cast<int>(GlueNewHead));
     TString valueD = CompactHead(GlueHead, Head, GlueNewHead, NewHead, HeadSize + BlobsSize + (BlobsSize > 0 ? GetMaxHeaderSize() : 0));
+    PQ_LOG_D("(1) valueD.size=" << valueD.size());
 
     GlueHead = GlueNewHead = false;
     if (!Blobs.empty()) {
@@ -912,6 +928,7 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
         batch.Pack();
         Y_ABORT_UNLESS(batch.Packed);
         batch.SerializeTo(valueD);
+        PQ_LOG_D("(2) valueD.size=" << valueD.size());
     }
 
     Y_ABORT_UNLESS(valueD.size() <= MaxBlobSize && (valueD.size() + size + 1_MB > MaxBlobSize || HeadSize + BlobsSize + size + GetMaxHeaderSize() <= MaxBlobSize));
@@ -954,10 +971,17 @@ auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
 
 auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size) -> std::optional<TFormedBlobInfo>
 {
+    PQ_LOG_D("TPartitionedBlob::Add oldKey: " << oldKey.ToString() << ", size: " << size << ", NeedCompactHead: " << static_cast<int>(NeedCompactHead));
+    PQ_LOG_D("HeadSize=" << HeadSize << ", BlobsSize=" << BlobsSize);
+
+    if (HeadSize + BlobsSize == 0) { //if nothing to compact at all
+        NeedCompactHead = false;
+    }
+
     std::optional<TFormedBlobInfo> res;
     if (NeedCompactHead) {
         NeedCompactHead = false;
-        GlueNewHead = false;
+        //GlueNewHead = false;
         res = CreateFormedBlob(0, false);
     }
 

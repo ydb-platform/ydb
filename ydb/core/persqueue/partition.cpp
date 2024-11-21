@@ -1744,6 +1744,48 @@ size_t TPartition::GetUserActCount(const TString& consumer) const
     }
 }
 
+void TPartition::DbgTracePersistRequest(const NKikimrClient::TKeyValueRequest::TCmdDeleteRange& cmd)
+{
+    const auto& range = cmd.GetRange();
+    PQ_LOG_D("DELETE RANGE " <<
+             (range.GetIncludeFrom() ? "[" : "(") <<
+             range.GetFrom() <<
+             ", " <<
+             range.GetTo() <<
+             (range.GetIncludeTo() ? "]" : ")"));
+}
+
+void TPartition::DbgTracePersistRequest(const NKikimrClient::TKeyValueRequest::TCmdWrite& cmd)
+{
+    PQ_LOG_D("WRITE " <<
+             cmd.GetKey());
+}
+
+void TPartition::DbgTracePersistRequest(const NKikimrClient::TKeyValueRequest::TCmdRename& cmd)
+{
+    PQ_LOG_D("RENAME " <<
+             cmd.GetOldKey() <<
+             " " <<
+             cmd.GetNewKey());
+}
+
+void TPartition::DbgTracePersistRequest()
+{
+    const auto& request = PersistRequest->Record;
+    PQ_LOG_D("== CmdDeleteRange ==");
+    for (size_t i = 0; i < request.CmdDeleteRangeSize(); ++i) {
+        DbgTracePersistRequest(request.GetCmdDeleteRange(i));
+    }
+    PQ_LOG_D("== CmdWrite ==");
+    for (size_t i = 0; i < request.CmdWriteSize(); ++i) {
+        DbgTracePersistRequest(request.GetCmdWrite(i));
+    }
+    PQ_LOG_D("== CmdRename ==");
+    for (size_t i = 0; i < request.CmdRenameSize(); ++i) {
+        DbgTracePersistRequest(request.GetCmdRename(i));
+    }
+}
+
 void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 {
     if (KVWriteInProgress) {
@@ -1757,6 +1799,8 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
         ScheduleDeletePartitionDone();
 
         AddCmdDeleteRangeForAllKeys(*PersistRequest);
+
+        DbgTracePersistRequest();
 
         ctx.Send(Tablet, PersistRequest.Release());
         PersistRequest = nullptr;
@@ -1963,6 +2007,8 @@ void TPartition::RunPersist() {
         }
         WriteInfosApplied.clear();
         //Done with counters.
+
+        DbgTracePersistRequest();
 
         ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release());
         KVWriteInProgress = true;
@@ -2191,11 +2237,12 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            Head,
                                            NewHead,
                                            Parameters->HeadCleared,  // headCleared
-                                           Head.PackedSize != 0,     // needCompactHead
+                                           Head.PackedSize != 0,     // needCompactHead   <=== ???
                                            MaxBlobSize);
+        PartitionedBlob.LogPrefix_ = LogPrefix();
 
         for (auto& k : t.WriteInfo->BodyKeys) {
-            PQ_LOG_D("add key " << k.Key.ToString());
+            PQ_LOG_D("add key " << k.Key.ToString() << ", size " << k.Size);
             auto write = PartitionedBlob.Add(k.Key, k.Size);
             if (write && !write->Value.empty()) {
                 AddCmdWrite(write, PersistRequest.Get(), ctx);
@@ -2244,6 +2291,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            false,                   // needCompactHead
                                            MaxBlobSize,
                                            first.GetPartNo());
+        PartitionedBlob.LogPrefix_ = LogPrefix();
 
         for (auto& blob : t.WriteInfo->BlobsFromHead) {
             TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{

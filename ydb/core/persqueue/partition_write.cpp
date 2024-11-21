@@ -1246,6 +1246,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         PartitionedBlob = TPartitionedBlob(Partition, curOffset, p.Msg.SourceId, p.Msg.SeqNo,
                                             p.Msg.TotalParts, p.Msg.TotalSize, Head, NewHead,
                                             parameters.HeadCleared, needCompactHead, MaxBlobSize);
+        PartitionedBlob.LogPrefix_ = LogPrefix();
     }
 
     PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition
@@ -1358,6 +1359,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
         ++curOffset;
         PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
+        PartitionedBlob.LogPrefix_ = LogPrefix();
     }
 
     return true;

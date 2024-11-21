@@ -966,6 +966,11 @@ private:
     void UpdateAvgWriteBytes(ui64 size, const TInstant& now);
 
     size_t WriteNewSizeFromSupportivePartitions = 0;
+
+    void DbgTracePersistRequest();
+    void DbgTracePersistRequest(const NKikimrClient::TKeyValueRequest::TCmdDeleteRange& cmd);
+    void DbgTracePersistRequest(const NKikimrClient::TKeyValueRequest::TCmdWrite& cmd);
+    void DbgTracePersistRequest(const NKikimrClient::TKeyValueRequest::TCmdRename& cmd);
 };
 
 } // namespace NKikimr::NPQ

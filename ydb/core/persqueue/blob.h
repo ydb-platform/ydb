@@ -356,10 +356,6 @@ public:
     const std::deque<TClientBlob>& GetClientBlobs() const { return Blobs; }
     const std::deque<TRenameFormedBlobInfo>& GetFormedBlobs() const { return FormedBlobs; }
 
-    inline TString LogPrefix() { return LogPrefix_; }
-
-    TString LogPrefix_;
-
 private:
     TString CompactHead(bool glueHead, THead& head, bool glueNewHead, THead& newHead, ui32 estimatedSize);
     std::optional<TFormedBlobInfo> CreateFormedBlob(ui32 size, bool useRename);

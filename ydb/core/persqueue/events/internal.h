@@ -246,6 +246,7 @@ struct TEvPQ {
         TVector<TMsg> Msgs;
         bool IsDirectWrite;
         std::optional<ui64> InitialSeqNo;
+
     };
 
     struct TEvReadTimeout : public TEventLocal<TEvReadTimeout, EvReadTimeout> {

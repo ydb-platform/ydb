@@ -4,7 +4,6 @@
 #include "partition_util.h"
 #include "partition.h"
 #include "partition_log.h"
-#include "y_abort_unless_ex.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -1319,10 +1318,8 @@ void TPartition::CheckHeadConsistency() const {
         }
         Y_ABORT_UNLESS(s < DataKeysHead[j].Border());
     }
-    Y_ABORT_UNLESS_EX(DataKeysBody.empty() ||
-                      Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount(),
-                      "Head.Offset: %" PRIu64 ", Key: %s",
-                      Head.Offset, DataKeysBody.back().Key.ToString().data());
+    Y_ABORT_UNLESS(DataKeysBody.empty() ||
+                   Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());
     Y_ABORT_UNLESS(p == HeadKeys.size());
     if (!HeadKeys.empty()) {
         Y_ABORT_UNLESS(HeadKeys.size() <= TotalMaxCount);
@@ -1744,48 +1741,6 @@ size_t TPartition::GetUserActCount(const TString& consumer) const
     }
 }
 
-void TPartition::DbgTracePersistRequest(const NKikimrClient::TKeyValueRequest::TCmdDeleteRange& cmd)
-{
-    const auto& range = cmd.GetRange();
-    PQ_LOG_D("DELETE RANGE " <<
-             (range.GetIncludeFrom() ? "[" : "(") <<
-             range.GetFrom() <<
-             ", " <<
-             range.GetTo() <<
-             (range.GetIncludeTo() ? "]" : ")"));
-}
-
-void TPartition::DbgTracePersistRequest(const NKikimrClient::TKeyValueRequest::TCmdWrite& cmd)
-{
-    PQ_LOG_D("WRITE " <<
-             cmd.GetKey());
-}
-
-void TPartition::DbgTracePersistRequest(const NKikimrClient::TKeyValueRequest::TCmdRename& cmd)
-{
-    PQ_LOG_D("RENAME " <<
-             cmd.GetOldKey() <<
-             " " <<
-             cmd.GetNewKey());
-}
-
-void TPartition::DbgTracePersistRequest()
-{
-    const auto& request = PersistRequest->Record;
-    PQ_LOG_D("== CmdDeleteRange ==");
-    for (size_t i = 0; i < request.CmdDeleteRangeSize(); ++i) {
-        DbgTracePersistRequest(request.GetCmdDeleteRange(i));
-    }
-    PQ_LOG_D("== CmdWrite ==");
-    for (size_t i = 0; i < request.CmdWriteSize(); ++i) {
-        DbgTracePersistRequest(request.GetCmdWrite(i));
-    }
-    PQ_LOG_D("== CmdRename ==");
-    for (size_t i = 0; i < request.CmdRenameSize(); ++i) {
-        DbgTracePersistRequest(request.GetCmdRename(i));
-    }
-}
-
 void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
 {
     if (KVWriteInProgress) {
@@ -1799,8 +1754,6 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext& ctx)
         ScheduleDeletePartitionDone();
 
         AddCmdDeleteRangeForAllKeys(*PersistRequest);
-
-        DbgTracePersistRequest();
 
         ctx.Send(Tablet, PersistRequest.Release());
         PersistRequest = nullptr;
@@ -2007,8 +1960,6 @@ void TPartition::RunPersist() {
         }
         WriteInfosApplied.clear();
         //Done with counters.
-
-        DbgTracePersistRequest();
 
         ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release());
         KVWriteInProgress = true;
@@ -2222,17 +2173,12 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
     PQ_LOG_D("t.WriteInfo->BodyKeys.size=" << t.WriteInfo->BodyKeys.size() <<
              ", t.WriteInfo->BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
-    PQ_LOG_D("NewHead=" << NewHead << ", Head=" << Head << ", CurOffset=" << Parameters->CurOffset);
+    PQ_LOG_D("Head=" << Head << ", NewHead=" << NewHead);
 
     if (!t.WriteInfo->BodyKeys.empty()) {
-        PQ_LOG_D("huge blobs");
-
         bool needCompactHead =
             (Parameters->FirstCommitWriteOperations ? Head : NewHead).PackedSize != 0;
 
-        PQ_LOG_D("new TPartitionedBlob: " <<
-                 "NewHead=" << NewHead << ", Head=" << Head <<
-                 ", NeedCompactHead=" << static_cast<int>(needCompactHead));
         PartitionedBlob = TPartitionedBlob(Partition,
                                            NewHead.Offset,
                                            "", // SourceId
@@ -2244,10 +2190,9 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            Parameters->HeadCleared,  // headCleared
                                            needCompactHead, // needCompactHead
                                            MaxBlobSize);
-        PartitionedBlob.LogPrefix_ = LogPrefix();
 
         for (auto& k : t.WriteInfo->BodyKeys) {
-            PQ_LOG_D("add key " << k.Key.ToString() << ", size " << k.Size);
+            PQ_LOG_D("add key " << k.Key.ToString());
             auto write = PartitionedBlob.Add(k.Key, k.Size);
             if (write && !write->Value.empty()) {
                 AddCmdWrite(write, PersistRequest.Get(), ctx);
@@ -2256,8 +2201,6 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             }
             Parameters->CurOffset += k.Key.GetCount();
         }
-
-        PQ_LOG_D("huge blobs appended (0): CurOffset=" << Parameters->CurOffset << ", NewHead=" << NewHead);
 
         PQ_LOG_D("PartitionedBlob.GetFormedBlobs().size=" << PartitionedBlob.GetFormedBlobs().size());
         if (const auto& formedBlobs = PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
@@ -2269,23 +2212,16 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                               ctx);
         }
 
-        PQ_LOG_D("huge blobs appended (1): CurOffset=" << Parameters->CurOffset << ", NewHead=" << NewHead);
-
         NewHead.Clear();
         NewHead.Offset = Parameters->CurOffset;
-
-        PQ_LOG_D("huge blobs appended (2): CurOffset=" << Parameters->CurOffset << ", NewHead=" << NewHead);
     }
 
     if (!t.WriteInfo->BlobsFromHead.empty()) {
-        PQ_LOG_D("small blobs");
-
         auto& first = t.WriteInfo->BlobsFromHead.front();
         NewHead.PartNo = first.GetPartNo();
 
         Parameters->HeadCleared = Parameters->HeadCleared || !t.WriteInfo->BodyKeys.empty();
 
-        PQ_LOG_D("new TPartitionedBlob: " << "NewHead=" << NewHead << ", Head=" << Head);
         PartitionedBlob = TPartitionedBlob(Partition,
                                            NewHead.Offset,
                                            first.SourceId,
@@ -2298,7 +2234,6 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            false,                   // needCompactHead
                                            MaxBlobSize,
                                            first.GetPartNo());
-        PartitionedBlob.LogPrefix_ = LogPrefix();
 
         for (auto& blob : t.WriteInfo->BlobsFromHead) {
             TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
@@ -2328,8 +2263,6 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             info.SeqNo = blob.SeqNo;
             info.Offset = NewHead.Offset;
         }
-
-        PQ_LOG_D("smapp blobs appended: CurOffset=" << Parameters->CurOffset << ", NewHead=" << NewHead);
     }
 
     Parameters->FirstCommitWriteOperations = false;

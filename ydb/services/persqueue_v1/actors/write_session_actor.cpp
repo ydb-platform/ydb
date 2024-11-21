@@ -1053,9 +1053,6 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
                     return;
                 }
 
-                LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie <<
-                            " Write statistics ");
-
                 addAck(partitionCmdWriteResult, batchWriteResponse, batchWriteResponse->mutable_write_statistics());
                 ++partitionCmdWriteResultIndex;
             }

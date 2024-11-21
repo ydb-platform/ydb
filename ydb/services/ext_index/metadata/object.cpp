@@ -78,7 +78,12 @@ bool TObject::TryProvideTtl(const NKikimrSchemeOp::TColumnTableDescription& csDe
         if (cRequest) {
             auto newTtl = ttl;
             newTtl.SetColumnName("pk_" + ttl.GetColumnName());
-            FillTtlSettings(*cRequest->mutable_ttl_settings(), newTtl);
+
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            if (!FillTtlSettings(*cRequest->mutable_ttl_settings(), newTtl, status, error)) {
+                return false;
+            }
         }
     }
     return true;

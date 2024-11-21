@@ -538,7 +538,11 @@ void FillColumnDescriptionImpl(TYdbProto& out,
 
     if (in.HasTTLSettings()) {
         if (in.GetTTLSettings().HasEnabled()) {
-            FillTtlSettings(*out.mutable_ttl_settings(), in.GetTTLSettings().GetEnabled());
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!FillTtlSettings(*out.mutable_ttl_settings(), in.GetTTLSettings().GetEnabled(), code, error)) {
+                ythrow yexception() << "invalid TTL settings: " << error;
+            }
         }
 
         if (in.GetTTLSettings().HasUseTiering()) {
@@ -578,7 +582,11 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
 
     if (in.HasTtlSettings()) {
         if (in.GetTtlSettings().HasEnabled()) {
-            FillTtlSettings(*out.mutable_ttl_settings(), in.GetTtlSettings().GetEnabled());
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            if (!FillTtlSettings(*out.mutable_ttl_settings(), in.GetTtlSettings().GetEnabled(), status, error)) {
+                ythrow yexception() << "invalid TTL settings: " << error;
+            }
         }
 
         if (in.GetTtlSettings().HasUseTiering()) {

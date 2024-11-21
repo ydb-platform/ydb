@@ -584,7 +584,7 @@ message TColumnDataLifeCycle {
     message TTtl {
         optional string ColumnName = 1;
         oneof Expire {
-            uint32 ExpireAfterSeconds = 2 [deprecated = true];
+            uint32 ExpireAfterSeconds = 2 [deprecated = true]; // ignored if Tiers are not empty
             uint64 ExpireAfterBytes = 4;
         }
         optional TTTLSettings.EUnit ColumnUnit = 3;

@@ -153,6 +153,7 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
             }
             expireAfter = TDuration::Seconds(settings.GetTiers(0).GetEvictAfterSeconds());
          } else {
+            // legacy format
             expireAfter = TDuration::Seconds(settings.GetExpireAfterSeconds());
          }
         const TInstant wallClock = ctx.Now() - expireAfter;

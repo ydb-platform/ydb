@@ -61,11 +61,12 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
         ui32 expireInSeconds;
         if (enabled.TiersSize()) {
             if (enabled.TiersSize() > 1 || !enabled.GetTiers(0).HasDelete()) {
-                errStr = Sprintf("Eviction to external storage via TTL is not allowed for row-oriented tables");
+                errStr = Sprintf("Only DELETE via TTL is allowed for row-oriented tables");
                 return false;            
             }
             expireInSeconds = enabled.GetTiers(0).GetEvictAfterSeconds();
         } else {
+            // legacy format
             expireInSeconds = enabled.GetExpireAfterSeconds();
         }
 

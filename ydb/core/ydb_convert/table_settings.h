@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+
+#include <ydb/library/conclusion/status.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <util/datetime/base.h>
@@ -20,8 +22,8 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
 
 
 // out
-void FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TTTLSettings::TEnabled& in);
-void FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& in);
+bool FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TTTLSettings::TEnabled& in, Ydb::StatusIds::StatusCode& code, TString& error);
+bool FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& in, Ydb::StatusIds::StatusCode& code, TString& error);
 // in
 template <class TTtlSettingsEnabled>
 bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in,

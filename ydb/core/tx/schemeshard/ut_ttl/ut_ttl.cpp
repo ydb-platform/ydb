@@ -10,13 +10,21 @@ using namespace NSchemeShardUT_Private;
 namespace {
 
 template <typename TTtlSettings>
-void CheckTtlSettings(const TTtlSettings& ttl, const char* ttlColumnName) {
+void CheckTtlSettings(const TTtlSettings& ttl, const char* ttlColumnName, bool legacyTiering = false) {
     UNIT_ASSERT(ttl.HasEnabled());
     UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), ttlColumnName);
     UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), 3600);
-    UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().TiersSize(), 1);
-    UNIT_ASSERT(ttl.GetEnabled().GetTiers(0).HasDelete());
-    UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetTiers(0).GetEvictAfterSeconds(), 3600);
+    if (legacyTiering) {
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().TiersSize(), 0);
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().TiersSize(), 1);
+        UNIT_ASSERT(ttl.GetEnabled().GetTiers(0).HasDelete());
+        UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetTiers(0).GetEvictAfterSeconds(), 3600);
+    }
+}
+
+void LegacyOltpTtlChecker(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckTtlSettings(record.GetPathDescription().GetTable().GetTTLSettings(), "modified_at", true);
 }
 
 void OltpTtlChecker(const NKikimrScheme::TEvDescribeSchemeResult& record) {
@@ -912,6 +920,53 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         env.TestWaitNotification(runtime, txId);
 
         WaitForCondErase(runtime);
+    }
+
+    Y_UNIT_TEST(LegacyTtlSettingsNoTiers) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "TTLEnabledTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "modified_at" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings {
+              Enabled {
+                ColumnName: "modified_at"
+                ExpireAfterSeconds: 3600
+              }
+            }
+        )"));
+        env.TestWaitNotification(runtime, txId);
+        CheckTtlSettings(runtime, LegacyOltpTtlChecker);
+    }
+
+    Y_UNIT_TEST(LegacyTtlSettingsNoTiersAlterTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "TTLEnabledTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "modified_at" Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+        )"));
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLEnabledTable"
+            TTLSettings {
+              Enabled {
+                ColumnName: "modified_at"
+                ExpireAfterSeconds: 3600
+              }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        CheckTtlSettings(runtime, LegacyOltpTtlChecker);
     }
 
     NKikimrTabletBase::TEvGetCountersResponse GetCounters(TTestBasicRuntime& runtime) {

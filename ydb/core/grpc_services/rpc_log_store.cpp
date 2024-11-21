@@ -508,7 +508,9 @@ private:
                 }
 
                 if (tableDescription.HasTtlSettings() && tableDescription.GetTtlSettings().HasEnabled()) {
-                    FillTtlSettings(*describeLogTableResult.mutable_ttl_settings(), tableDescription.GetTtlSettings().GetEnabled());
+                    if (!FillTtlSettings(*describeLogTableResult.mutable_ttl_settings(), tableDescription.GetTtlSettings().GetEnabled(), status, error)) {
+                        return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+                    }
                 }
 
                 return ReplyWithResult(Ydb::StatusIds::SUCCESS, describeLogTableResult, ctx);

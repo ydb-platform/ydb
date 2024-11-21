@@ -461,25 +461,28 @@ bool FillIndexTablePartitioning(
 }
 
 template <typename TTtl>
-void FillTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in) {
+bool FillTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in, Ydb::StatusIds::StatusCode& code, TString& error) {
     if (!in.TiersSize()) {
+        // handle legacy format for backwards-compatibility
         auto* deleteTier = out.add_tiers();
         deleteTier->mutable_delete_();
         deleteTier->set_evict_after_seconds(in.GetExpireAfterSeconds());
-    }
-
-    for (const auto& inTier : in.GetTiers()) {
-        auto* outTier = out.add_tiers();
-        outTier->set_evict_after_seconds(inTier.GetEvictAfterSeconds());
-        switch (inTier.GetActionCase()) {
-            case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kDelete:
-                outTier->mutable_delete_();
-                break;
-            case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage:
-                outTier->mutable_evict_to_external_storage()->set_storage_name(inTier.GetEvictToExternalStorage().GetStorageName());
-                break;
-            case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::ACTION_NOT_SET:
-                break;
+    } else {
+        for (const auto& inTier : in.GetTiers()) {
+            auto* outTier = out.add_tiers();
+            outTier->set_evict_after_seconds(inTier.GetEvictAfterSeconds());
+            switch (inTier.GetActionCase()) {
+                case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kDelete:
+                    outTier->mutable_delete_();
+                    break;
+                case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage:
+                    outTier->mutable_evict_to_external_storage()->set_storage_name(inTier.GetEvictToExternalStorage().GetStorageName());
+                    break;
+                case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::ACTION_NOT_SET:
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = "Undefined tier action";
+                    return false;
+            }
         }
     }
 
@@ -501,7 +504,9 @@ void FillTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in) {
     }
 
     default:
-        break;
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Undefined column unit";
+        return false;
     }
 
     if constexpr (std::is_same_v<TTtl, NKikimrSchemeOp::TTTLSettings::TEnabled>) {
@@ -509,14 +514,16 @@ void FillTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in) {
             out.set_run_interval_seconds(TDuration::FromValue(in.GetSysSettings().GetRunInterval()).Seconds());
         }
     }
+
+    return true;
 }
 
-void FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TTTLSettings::TEnabled& in) {
-    FillTtlSettingsImpl(out, in);
+bool FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TTTLSettings::TEnabled& in, Ydb::StatusIds::StatusCode& code, TString& error) {
+    return FillTtlSettingsImpl(out, in, code, error);
 }
 
-void FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& in) {
-    FillTtlSettingsImpl(out, in);
+bool FillTtlSettings(Ydb::Table::TtlSettings& out, const NKikimrSchemeOp::TColumnDataLifeCycle::TTtl& in, Ydb::StatusIds::StatusCode& code, TString& error) {
+    return FillTtlSettingsImpl(out, in, code, error);
 }
 
 } // namespace NKikimr

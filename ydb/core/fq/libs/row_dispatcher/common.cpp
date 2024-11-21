@@ -21,6 +21,10 @@ public:
         return it->second;
     }
 
+    TGuard<TMutex> LockFactory() const override {
+        return Guard(FactoryMutex);
+    }
+
 private:
     void CreateFactory(const TSettings& settings) {
         ProgramFactories.insert({settings, NYql::NPureCalc::MakeProgramFactory(
@@ -31,6 +35,7 @@ private:
 
 private:
     std::map<TSettings, NYql::NPureCalc::IProgramFactoryPtr> ProgramFactories;
+    TMutex FactoryMutex;
 };
 
 } // anonymous namespace

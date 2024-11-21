@@ -622,6 +622,7 @@ private:
         ui64 CurOffset;
         bool OldPartsCleared;
         bool HeadCleared;
+        bool FirstCommitWriteOperations = true;
     };
 
     static void RemoveMessages(TMessageQueue& src, TMessageQueue& dst);

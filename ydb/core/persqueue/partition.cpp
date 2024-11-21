@@ -2222,12 +2222,17 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
     PQ_LOG_D("t.WriteInfo->BodyKeys.size=" << t.WriteInfo->BodyKeys.size() <<
              ", t.WriteInfo->BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
-    PQ_LOG_D("NewHead=" << NewHead << ", Head=" << Head);
+    PQ_LOG_D("NewHead=" << NewHead << ", Head=" << Head << ", CurOffset=" << Parameters->CurOffset);
 
     if (!t.WriteInfo->BodyKeys.empty()) {
         PQ_LOG_D("huge blobs");
 
-        PQ_LOG_D("new TPartitionedBlob: " << "NewHead=" << NewHead << ", Head=" << Head);
+        bool needCompactHead =
+            (Parameters->FirstCommitWriteOperations ? Head : NewHead).PackedSize != 0;
+
+        PQ_LOG_D("new TPartitionedBlob: " <<
+                 "NewHead=" << NewHead << ", Head=" << Head <<
+                 ", NeedCompactHead=" << static_cast<int>(needCompactHead));
         PartitionedBlob = TPartitionedBlob(Partition,
                                            NewHead.Offset,
                                            "", // SourceId
@@ -2237,7 +2242,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            Head,
                                            NewHead,
                                            Parameters->HeadCleared,  // headCleared
-                                           Head.PackedSize != 0,     // needCompactHead   <=== ???
+                                           needCompactHead, // needCompactHead
                                            MaxBlobSize);
         PartitionedBlob.LogPrefix_ = LogPrefix();
 
@@ -2249,9 +2254,10 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                 CompactedKeys.emplace_back(write->Key, write->Value.size());
                 ClearOldHead(write->Key.GetOffset(), write->Key.GetPartNo(), PersistRequest.Get());
             }
+            Parameters->CurOffset += k.Key.GetCount();
         }
 
-        PQ_LOG_D("huge blobs appended (1): NewHead=" << NewHead);
+        PQ_LOG_D("huge blobs appended (0): CurOffset=" << Parameters->CurOffset << ", NewHead=" << NewHead);
 
         PQ_LOG_D("PartitionedBlob.GetFormedBlobs().size=" << PartitionedBlob.GetFormedBlobs().size());
         if (const auto& formedBlobs = PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
@@ -2263,11 +2269,12 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                               ctx);
         }
 
-        const auto& last = t.WriteInfo->BodyKeys.back();
-        NewHead.Offset += (last.Key.GetOffset() + last.Key.GetCount());
-        Parameters->CurOffset = NewHead.Offset;
+        PQ_LOG_D("huge blobs appended (1): CurOffset=" << Parameters->CurOffset << ", NewHead=" << NewHead);
 
-        PQ_LOG_D("huge blobs appended (2): NewHead=" << NewHead);
+        NewHead.Clear();
+        NewHead.Offset = Parameters->CurOffset;
+
+        PQ_LOG_D("huge blobs appended (2): CurOffset=" << Parameters->CurOffset << ", NewHead=" << NewHead);
     }
 
     if (!t.WriteInfo->BlobsFromHead.empty()) {
@@ -2322,8 +2329,10 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             info.Offset = NewHead.Offset;
         }
 
-        PQ_LOG_D("small blobs appended: NewHead=" << NewHead);
+        PQ_LOG_D("smapp blobs appended: CurOffset=" << Parameters->CurOffset << ", NewHead=" << NewHead);
     }
+
+    Parameters->FirstCommitWriteOperations = false;
 
     WriteInfosApplied.emplace_back(std::move(t.WriteInfo));
 }

@@ -983,11 +983,20 @@ auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size) -> std::optional<TForm
         NeedCompactHead = false;
         //GlueNewHead = false;
         res = CreateFormedBlob(0, false);
+
+        PQ_LOG_D("head compacted (0): StartOffset=" << StartOffset << ", Count=" << res->Key.GetCount());
+
+        StartOffset = NewHead.Offset + NewHead.GetCount();
+        NewHead.Clear();
+        NewHead.Offset = StartOffset;
+
+        PQ_LOG_D("head compacted (1): StartOffset=" << StartOffset << ", NewHead=" << NewHead);
     }
 
     TKey newKey(TKeyPrefix::TypeData,
                 Partition,
-                NewHead.Offset + oldKey.GetOffset(),
+                //NewHead.Offset + oldKey.GetOffset(),
+                StartOffset,
                 oldKey.GetPartNo(),
                 oldKey.GetCount(),
                 oldKey.GetInternalPartsCount(),

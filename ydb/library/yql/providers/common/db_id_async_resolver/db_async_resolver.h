@@ -18,7 +18,8 @@ enum class EDatabaseType {
     MySQL,
     Greenplum,
     MsSQLServer,
-    Oracle
+    Oracle,
+    Logging
 };
 
 inline EDatabaseType DatabaseTypeFromDataSourceKind(NConnector::NApi::EDataSourceKind dataSourceKind) {
@@ -37,6 +38,8 @@ inline EDatabaseType DatabaseTypeFromDataSourceKind(NConnector::NApi::EDataSourc
           return EDatabaseType::MsSQLServer;
         case NConnector::NApi::EDataSourceKind::ORACLE:
           return EDatabaseType::Oracle;
+        case NConnector::NApi::EDataSourceKind::LOGGING:
+          return EDatabaseType::Logging;
         default:
             ythrow yexception() << "Unknown data source kind: " << NConnector::NApi::EDataSourceKind_Name(dataSourceKind);
     }
@@ -58,6 +61,8 @@ inline NConnector::NApi::EDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseT
             return NConnector::NApi::EDataSourceKind::MS_SQL_SERVER;
         case EDatabaseType::Oracle:
             return NConnector::NApi::EDataSourceKind::ORACLE;
+        case EDatabaseType::Logging:
+            return NConnector::NApi::EDataSourceKind::LOGGING;
         default:
             ythrow yexception() << "Unknown database type: " << ToString(databaseType);
     }

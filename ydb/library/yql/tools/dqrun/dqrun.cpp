@@ -1023,7 +1023,7 @@ int RunMain(int argc, const char* argv[])
 
         genericClient = NConnector::MakeClientGRPC(gatewaysConfig.GetGeneric().GetConnector());
 
-        dataProvidersInit.push_back(GetGenericDataProviderInitializer(genericClient, dbResolver, credentialsFactory));
+        dataProvidersInit.push_back(GetGenericDataProviderInitializer(genericClient, dbResolver, nullptr, credentialsFactory));
     }
 
     if (gatewaysConfig.HasYdb()) {

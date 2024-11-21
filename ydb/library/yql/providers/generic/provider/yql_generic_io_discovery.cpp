@@ -19,11 +19,11 @@ namespace NYql {
         public:
             using TPtr = std::unique_ptr<IClusterConfigModifier>;
 
-            virtual void CollectUnresolvedClusters(const TExprNode::TListType& reads);
-            virtual IGraphTransformer::TStatus ResolveClusters(TExprContext& ctx);
-            virtual IGraphTransformer::TStatus ModifyClusterConfigs(TExprContext& ctx);
-            virtual std::size_t Count() const;
-            virtual void Cleanup();
+            virtual void CollectUnresolvedClusters(const TExprNode::TListType& reads) = 0;
+            virtual IGraphTransformer::TStatus ResolveClusters(TExprContext& ctx) = 0;
+            virtual IGraphTransformer::TStatus ModifyClusterConfigs(TExprContext& ctx) = 0;
+            virtual std::size_t Count() const = 0;
+            virtual void Cleanup() = 0;
             virtual ~IClusterConfigModifier() = default;
         };
 
@@ -217,7 +217,7 @@ namespace NYql {
                 AsyncFuture_.GetValue();
 
                 // Modify cluster configs with resolved ids
-                auto status = ManagedDatabasesConfigModifier_.ModifyClusterConfigs(ctx);
+                auto status = ManagedDatabasesConfigModifier_->ModifyClusterConfigs(ctx);
 
                 // Clear results map
                 ManagedDatabasesConfigModifier_->Cleanup();

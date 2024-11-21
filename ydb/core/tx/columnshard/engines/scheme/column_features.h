@@ -51,7 +51,15 @@ public:
         return TConclusionStatus::Success();
     }
 
-    auto operator<=>(const TColumnFeatures&) const = default;
+    bool operator==(const TColumnFeatures& other) const {
+        return GetColumnId() == other.GetColumnId()
+            && GetPKColumnIndex() == other.GetPKColumnIndex()
+            && GetColumnName() == other.GetColumnName()
+            && GetNeedMinMax() == other.GetNeedMinMax()
+            && GetIsSorted() == other.GetIsSorted()
+            && GetIsNullable() == other.GetIsNullable()
+            && GetDictionaryEncoding() == other.GetDictionaryEncoding();
+    }
 };
 
 } // namespace NKikimr::NOlap

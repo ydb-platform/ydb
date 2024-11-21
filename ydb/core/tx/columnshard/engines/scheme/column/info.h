@@ -30,7 +30,7 @@ private:
     YDB_READONLY(bool, IsSorted, false);
     YDB_READONLY(bool, IsNullable, false);
     YDB_READONLY_DEF(TColumnDefaultScalarValue, DefaultValue);
-    std::optional<NArrow::NDictionary::TEncodingSettings> DictionaryEncoding;
+    YDB_READONLY_DEF(std::optional<NArrow::NDictionary::TEncodingSettings>, DictionaryEncoding);
     std::shared_ptr<TColumnLoader> Loader;
     NArrow::NTransformation::ITransformer::TPtr GetLoadTransformer() const;
 

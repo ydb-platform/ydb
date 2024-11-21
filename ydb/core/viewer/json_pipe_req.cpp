@@ -748,6 +748,12 @@ void TViewerPipeClient::RequestDone(ui32 requests) {
     }
 }
 
+void TViewerPipeClient::ResetAndBootstrap() {
+    Requests = 0;
+    DelayedRequests.clear();
+    Bootstrap();
+}
+
 void TViewerPipeClient::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
     if (ev->Get()->Status != NKikimrProto::OK) {
         ui32 requests = FailPipeConnect(ev->Get()->TabletId);
@@ -763,7 +769,7 @@ void TViewerPipeClient::HandleResolveResource(TEvTxProxySchemeCache::TEvNavigate
             SharedDatabase = CanonizePath(entry.Path);
             if (SharedDatabase == AppData()->TenantName) {
                 Direct = true;
-                return Bootstrap(); // retry bootstrap without redirect this time
+                return ResetAndBootstrap(); // retry bootstrap without redirect this time
             }
             DatabaseBoardInfoResponse = MakeRequestStateStorageEndpointsLookup(SharedDatabase);
         } else {
@@ -795,7 +801,8 @@ void TViewerPipeClient::HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
         if (DatabaseBoardInfoResponse->IsOk()) {
             ReplyAndPassAway(MakeForward(GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef())));
         } else {
-            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Failed to resolve database - no nodes found"));
+            Direct = true;
+            ResetAndBootstrap(); // retry bootstrap without redirect this time
         }
     }
 }

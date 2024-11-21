@@ -1,4 +1,6 @@
 {%- set publish = target.publish -%}
+{%- set libraries = target.consumer|selectattr('type', 'eq', 'library') -%}
+
 import com.google.protobuf.gradle.*
 
 val baseBuildDir = "{{ export_root }}/gradle.build/"
@@ -6,6 +8,11 @@ buildDir = file(baseBuildDir + project.path.replaceFirst(":", "/").replace(":", 
 subprojects {
     buildDir = file(baseBuildDir + project.path.replaceFirst(":", "/").replace(":", "."))
 }
+
+val mainProtosDir = File(buildDir, "main_protos")
+{%- if libraries|length %}
+val mainExtractedIncludeProtosDir = File(buildDir, "extracted-include-protos/main")
+{%- endif %}
 
 plugins {
     id("java-library")
@@ -99,8 +106,13 @@ dependencies {
     }
 {%-         endif -%}
 {%-     endif -%}
-{%- endfor %}
-    protobuf(files("$projectDir"))
+{%- endfor -%}
+
+{%- if target.proto_namespace %}
+    protobuf(files(File(mainProtosDir, "{{ target.proto_namespace }}")))
+{%- else %}
+    protobuf(files(mainProtosDir))
+{%- endif %}
 }
 
 protobuf {
@@ -138,6 +150,36 @@ protobuf {
 {%-     endif %}
         }
     }
+{%- endif %}
+}
+
+val prepareMainProtos = tasks.register<Copy>("prepareMainProtos") {
+    from("$project_root") {
+{#- list of all current project proto files -#}
+{%-     for proto in target.proto_files %}
+        include("{{ proto }}")
+{%-     endfor %}
+    }
+    into(mainProtosDir)
+}
+
+{%  if libraries|length -%}
+val extractMainLibrariesProtos = tasks.register<Copy>("extractMainLibrariesProtos") {
+    from("$project_root") {
+{#- list of all library directories -#}
+{%-     for library in libraries -%}
+{%-         set path_and_jar = rsplit(library.jar, '/', 2) %}
+        include("{{ path_and_jar[0] }}/**/*.proto")
+{%-     endfor %}
+    }
+    into(mainExtractedIncludeProtosDir)
+}
+
+{% endif -%}
+afterEvaluate {
+    tasks.getByName("extractProto").dependsOn(prepareMainProtos)
+{%- if libraries|length %}
+    tasks.getByName("extractProto").dependsOn(extractMainLibrariesProtos)
 {%- endif %}
 }
 

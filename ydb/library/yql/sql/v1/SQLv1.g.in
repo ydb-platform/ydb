@@ -748,8 +748,14 @@ table_setting_value:
     | STRING_VALUE
     | integer
     | split_boundaries
-    | expr ON an_id (AS (SECONDS | MILLISECONDS | MICROSECONDS | NANOSECONDS))?
+    | ttl_tier_list ON an_id (AS (SECONDS | MILLISECONDS | MICROSECONDS | NANOSECONDS))?
     | bool_value
+;
+
+ttl_tier_list: expr (ttl_tier_action (COMMA expr ttl_tier_action)*)?;
+ttl_tier_action:
+      TO EXTERNAL DATA SOURCE an_id
+    | DELETE
 ;
 
 family_entry: FAMILY an_id family_settings;

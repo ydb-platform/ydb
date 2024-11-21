@@ -472,6 +472,7 @@ message ColumnFamily {
         COMPRESSION_UNSPECIFIED = 0;
         COMPRESSION_NONE = 1;
         COMPRESSION_LZ4 = 2;
+        COMPRESSION_ZSTD = 3;
     }
 
     // Name of the column family, the name "default" must be used for the

@@ -2927,17 +2927,6 @@ bool operator!=(const TChangefeedDescription& lhs, const TChangefeedDescription&
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-TVector<TTtlTierSettings> DeserializeTiers(const NProtoBuf::RepeatedPtrField<Ydb::Table::TtlTier>& serialized) {
-    TVector<TTtlTierSettings> tiers;
-    for (const auto& tier : serialized) {
-        tiers.push_back(TTtlTierSettings(tier));
-    }
-    return tiers;
-}
-}   // namespace
-
 TTtlTierSettings::TTtlTierSettings(TDuration evictionDelay, const TAction& action)
     : EvictAfter_(evictionDelay)
     , Action_(action) {
@@ -3071,6 +3060,7 @@ TValueSinceUnixEpochModeSettings::EUnit TValueSinceUnixEpochModeSettings::UnitFr
 
 TTtlSettings::TTtlSettings(const TString& columnName, const TVector<TTtlTierSettings>& tiers)
     : Mode_(TDateTypeColumnModeSettings(columnName, GetExpireAfterFrom(tiers).value_or(TDuration::Max())))
+    , Tiers_(tiers)
 {}
 
 TTtlSettings::TTtlSettings(const TString& columnName, const TDuration& expireAfter)
@@ -3088,6 +3078,7 @@ const TDateTypeColumnModeSettings& TTtlSettings::GetDateTypeColumn() const {
 
 TTtlSettings::TTtlSettings(const TString& columnName, EUnit columnUnit, const TVector<TTtlTierSettings>& tiers)
     : Mode_(TValueSinceUnixEpochModeSettings(columnName, columnUnit, GetExpireAfterFrom(tiers).value_or(TDuration::Max())))
+    , Tiers_(tiers)
 {}
 
 TTtlSettings::TTtlSettings(const TString& columnName, EUnit columnUnit, const TDuration& expireAfter)
@@ -3104,8 +3095,13 @@ const TValueSinceUnixEpochModeSettings& TTtlSettings::GetValueSinceUnixEpoch() c
 }
 
 std::optional<TTtlSettings> TTtlSettings::DeserializeFromProto(const Ydb::Table::TtlSettings& proto) {
-    auto tiers = DeserializeTiers(proto.tiers());
-    const TDuration legacyExpireAfter = GetExpireAfterFrom(tiers).value_or(TDuration::Max());
+    TDuration legacyExpireAfter = TDuration::Max();
+    for (const auto& tier : proto.tiers()) {
+        if (tier.has_delete_()) {
+            legacyExpireAfter = TDuration::Seconds(tier.evict_after_seconds());
+            break;
+        }
+    }
 
     switch(proto.mode_case()) {
     case Ydb::Table::TtlSettings::kDateTypeColumn:
@@ -3130,6 +3126,10 @@ void TTtlSettings::SerializeTo(Ydb::Table::TtlSettings& proto) const {
     case EMode::ValueSinceUnixEpoch:
         GetValueSinceUnixEpoch().SerializeTo(*proto.mutable_value_since_unix_epoch_v1());
         break;
+    }
+
+    for (const auto& tier : Tiers_) {
+        tier.SerializeTo(*proto.add_tiers());
     }
 
     if (RunInterval_) {

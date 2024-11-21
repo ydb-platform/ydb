@@ -56,6 +56,7 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(0, &TYtDqWrite::Match, HNDL(YtDqWrite));
     AddHandler(0, &TYtDqProcessWrite::Match, HNDL(YtDqProcessWrite));
     AddHandler(0, &TYtEquiJoin::Match, HNDL(EarlyMergeJoin));
+    AddHandler(0, &TYtOutputOpBase::Match, HNDL(TableContentWithSettings));
     AddHandler(0, &TYtOutputOpBase::Match, HNDL(NonOptimalTableContent));
 
     if (!State_->Configuration->DisableFuseOperations.Get().GetOrElse(DEFAULT_DISABLE_FUSE_OPERATIONS)) {
@@ -69,7 +70,6 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(1, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(WeakFields));
     AddHandler(1, &TYtTransientOpBase::Match, HNDL(BypassMerge));
     AddHandler(1, &TYtPublish::Match, HNDL(BypassMergeBeforePublish));
-    AddHandler(1, &TYtOutputOpBase::Match, HNDL(TableContentWithSettings));
     AddHandler(1, &TCoRight::Match, HNDL(ReadWithSettings));
     AddHandler(1, &TYtTransientOpBase::Match, HNDL(PushDownKeyExtract));
     AddHandler(1, &TYtTransientOpBase::Match, HNDL(TransientOpWithSettings));

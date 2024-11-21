@@ -29,6 +29,9 @@ using namespace NColumnShard;
 
 class TFastTTLCompactionController: public NKikimr::NYDBTest::ICSController {
 public:
+    virtual bool CheckPortionForEvict(const NOlap::TPortionInfo& /*portion*/) const override {
+        return true;
+    }
     virtual bool NeedForceCompactionBacketsConstruction() const override {
         return true;
     }

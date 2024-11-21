@@ -339,4 +339,8 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
     return TWritePortionInfoWithBlobsResult(std::move(constructor));
 }
 
+ui32 ISnapshotSchema::GetIndexesCount() const {
+    return GetIndexInfo().GetIndexes().size();
+}
+
 }   // namespace NKikimr::NOlap

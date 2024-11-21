@@ -289,7 +289,8 @@ TConclusion<bool> TPortionAccessorFetchingStep::DoExecuteInplace(
 
 TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     if (Columns.GetColumnsCount()) {
-        source->SetSourceInMemory(source->GetColumnRawBytes(Columns.GetColumnIds()) < 1e+8);
+        source->SetSourceInMemory(
+            source->GetColumnRawBytes(Columns.GetColumnIds()) < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     } else {
         source->SetSourceInMemory(true);
     }

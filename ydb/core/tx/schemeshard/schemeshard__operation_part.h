@@ -661,6 +661,7 @@ ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, const TTxTransac
 ISubOperation::TPtr CreateDropBackupCollection(TOperationId id, TTxState::ETxState state);
 
 TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 
 }
 }

@@ -753,7 +753,7 @@ private:
             response.SetSessionId(SessionId);
         }
 
-        ctx.Send(QueryState->Sender, responseEv.Release(), 0, QueryState->ProxyRequestId);
+        ctx.Send<ESendingType::Tail>(QueryState->Sender, responseEv.Release(), 0, QueryState->ProxyRequestId);
         LOG_D("Sent query response back to proxy, proxyRequestId: " << QueryState->ProxyRequestId
             << ", proxyId: " << QueryState->Sender.ToString());
 

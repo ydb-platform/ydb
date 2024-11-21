@@ -385,6 +385,29 @@ private:
     TVector<TCellInfo> CellsInfo;
 };
 
+class TColumnDataBatcher : public IDataBatch {
+public:
+    using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
+
+    void AddData(const NMiniKQL::TUnboxedValueBatch& data) override {
+        TRowBuilder rowBuilder(Columns.size());
+        data.ForEachRow([&](const auto& row) {
+            for (size_t index = 0; index < Columns.size(); ++index) {
+                rowBuilder.AddCell(WriteIndex[index], Columns[index].PType, row.GetElement(index));
+            }
+            auto rowWithData = rowBuilder.Build();
+            BatchBuilder.AddRow(TConstArrayRef<TCell>{rowWithData.Cells.begin(), rowWithData.Cells.end()});
+        });
+    }
+
+    IDataBatchPtr Build() override {
+        return BatchBuilder.FlushBatch(true);
+    }
+
+private:
+    NArrow::TArrowBatchBuilder BatchBuilder;
+};
+
 class TColumnShardPayloadSerializer : public IPayloadSerializer {
     using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
     using TBatch = TColumnBatch;

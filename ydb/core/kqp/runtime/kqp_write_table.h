@@ -19,15 +19,18 @@ public:
 
 using IDataBatchPtr = TIntrusivePtr<IDataBatch>;
 
-class IDataSerializer : public TThrRefBase {
+class IDataBatcher : public TThrRefBase {
 public:
 
     virtual void AddData(const NMiniKQL::TUnboxedValueBatch& data) = 0;
+    virtual i64 GetMemory() const = 0;
     virtual IDataBatchPtr Build() = 0;
 };
 
-using IDataSerializerPtr = TIntrusivePtr<IDataSerializer>;
+using IDataBatcherPtr = TIntrusivePtr<IDataBatcher>;
 
+IDataBatcherPtr CreateRowDataBatcher();
+IDataBatcherPtr CreateColumnDataBatcher();
 
 class IShardedWriteController : public TThrRefBase {
 public:

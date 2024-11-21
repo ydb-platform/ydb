@@ -35,25 +35,45 @@ TStockWorkloadGenerator::TStockWorkloadGenerator(const TStockWorkloadParams* par
 
 std::string TStockWorkloadGenerator::GetDDLQueries() const {
     std::string stockPartitionsDdl = "";
-    std::string ordersPartitionsDdl = "WITH (READ_REPLICAS_SETTINGS = \"per_az:1\")";
+    std::string ordersPartitionsDdl = "";
     std::string orderLinesPartitionsDdl = "";
-    if (Params.PartitionsByLoad) {
-        stockPartitionsDdl = std::format(R"(WITH (
-              AUTO_PARTITIONING_BY_LOAD = ENABLED
+
+    if (Params.GetStoreType() == TStockWorkloadParams::EStoreType::Row) {
+        ordersPartitionsDdl = "WITH (READ_REPLICAS_SETTINGS = \"per_az:1\")";
+        if (Params.PartitionsByLoad) {
+            stockPartitionsDdl = std::format(R"(WITH (
+                STORE = ROW
+                , AUTO_PARTITIONING_BY_LOAD = ENABLED
+                , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {0}
+            ))", Params.MinPartitions);
+            ordersPartitionsDdl = std::format(R"(WITH (
+                STORE = ROW
+                , READ_REPLICAS_SETTINGS = "per_az:1"
+                , AUTO_PARTITIONING_BY_LOAD = ENABLED
+                , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {0}
+                , AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+                , UNIFORM_PARTITIONS = {0}
+            ))", Params.MinPartitions);
+            orderLinesPartitionsDdl = std::format(R"(WITH (
+                STORE = ROW
+                , AUTO_PARTITIONING_BY_LOAD = ENABLED
+                , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {0}
+                , AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
+                , UNIFORM_PARTITIONS = {0}
+            ))", Params.MinPartitions);
+        }
+    } else {
+         stockPartitionsDdl = std::format(R"(WITH (
+            STORE = COLUMN
             , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {0}
         ))", Params.MinPartitions);
         ordersPartitionsDdl = std::format(R"(WITH (
-              READ_REPLICAS_SETTINGS = "per_az:1"
-            , AUTO_PARTITIONING_BY_LOAD = ENABLED
+            STORE = COLUMN
             , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {0}
-            , AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
-            , UNIFORM_PARTITIONS = {0}
         ))", Params.MinPartitions);
         orderLinesPartitionsDdl = std::format(R"(WITH (
-              AUTO_PARTITIONING_BY_LOAD = ENABLED
+            STORE = COLUMN
             , AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {0}
-            , AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 1000
-            , UNIFORM_PARTITIONS = {0}
         ))", Params.MinPartitions);
     }
 
@@ -66,11 +86,13 @@ std::string TStockWorkloadGenerator::GetDDLQueries() const {
     }
 
     return std::format(R"(--!syntax_v1
-        CREATE TABLE `{0}/stock`(product Utf8, quantity Int64, PRIMARY KEY(product)) {1};
-        CREATE TABLE `{0}/orders`(id Uint64, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id), INDEX ix_cust GLOBAL ON (customer, created) COVER (processed)) {2};
-        CREATE TABLE `{0}/orderLines`(id_order Uint64, product Utf8, quantity Int64, PRIMARY KEY(id_order, product)) {3};
+        CREATE TABLE `{0}/stock`(product Utf8 {5}, quantity Int64, PRIMARY KEY(product)) {1};
+        CREATE TABLE `{0}/orders`(id Uint64 {5}, customer Utf8, created Datetime, processed Datetime, PRIMARY KEY(id) {6}) {2};
+        CREATE TABLE `{0}/orderLines`(id_order Uint64 {5}, product Utf8 {5}, quantity Int64 {5}, PRIMARY KEY(id_order, product)) {3};
         {4}
-    )", DbPath, stockPartitionsDdl, ordersPartitionsDdl, orderLinesPartitionsDdl, changefeeds);
+    )", DbPath, stockPartitionsDdl, ordersPartitionsDdl, orderLinesPartitionsDdl, changefeeds,
+        Params.GetStoreType() == TStockWorkloadParams::EStoreType::Row ? "" : "NOT NULL",
+        Params.GetStoreType() == TStockWorkloadParams::EStoreType::Row ? ", INDEX ix_cust GLOBAL ON (customer, created) COVER (processed)" : "");
 }
 
 TQueryInfoList TStockWorkloadGenerator::GetInitialData() {
@@ -205,15 +227,17 @@ TQueryInfo TStockWorkloadGenerator::ExecuteOrder(const uint64_t orderID) {
 }
 
 TQueryInfo TStockWorkloadGenerator::SelectCustomerHistory(const std::string& customerId, const unsigned int limit) {
-    std::string query = R"(--!syntax_v1
-        DECLARE $cust as Utf8;
-        DECLARE $limit as UInt32;
-        select id, customer, created
-        from orders view ix_cust
-        where customer = $cust
-        order by customer desc, created desc
-        limit $limit;
-    )";
+    const std::string query = [this]() {
+        return std::format(R"(--!syntax_v1
+            DECLARE $cust as Utf8;
+            DECLARE $limit as UInt32;
+            select id, customer, created
+            from orders {}
+            where customer = $cust
+            order by customer desc, created desc
+            limit $limit;
+        )", Params.GetStoreType() == TStockWorkloadParams::EStoreType::Row ? "view ix_cust" : "");
+    }();
 
     NYdb::TParamsBuilder paramsBuilder;
     paramsBuilder
@@ -304,6 +328,20 @@ TQueryInfoList TStockWorkloadGenerator::GetCustomerHistory() {
 }
 
 void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
+    auto addStorageTypeParam = [&]() {
+        opts.AddLongOption("store", "Storage type."
+                " Options: row, column\n"
+                "row - use row-based storage engine;\n"
+                "column - use column-based storage engine.")
+            .DefaultValue(StoreType)
+            .Handler1T<TStringBuf>([this](TStringBuf arg) {
+                const auto l = to_lower(TString(arg));
+                if (!TryFromString(arg, StoreType)) {
+                    throw yexception() << "Ivalid store type: " << arg;
+                }
+            });
+    };
+
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
         opts.AddLongOption('p', "products", "Product count. Value in 1..500 000.")
@@ -318,8 +356,10 @@ void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComman
             .DefaultValue(true).StoreResult(&PartitionsByLoad);
         opts.AddLongOption("enable-cdc", "Create changefeeds on tables.")
             .DefaultValue(false).StoreTrue(&EnableCdc).Hidden();
+        addStorageTypeParam();
         break;
     case TWorkloadParams::ECommandType::Run:
+        addStorageTypeParam();
         switch (static_cast<TStockWorkloadGenerator::EType>(workloadType)) {
         case TStockWorkloadGenerator::EType::InsertRandomOrder:
         case TStockWorkloadGenerator::EType::SubmitRandomOrder:

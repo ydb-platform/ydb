@@ -5,6 +5,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <library/cpp/testing/unittest/gtest.h>
 
 #include <thread>
@@ -409,6 +410,23 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         source.AddMetadataFields("_yql_sys_create_time");
         StartSession(source);
         ProcessSomeJsons(0, {Json1}, RowDispatcher1, UVParserWithMetadatafields);  
+    }
+
+    Y_UNIT_TEST_F(IgnoreCoordinatorResultIfWrongState, TFixture) {
+        StartSession(Source1);
+        ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
+
+        MockCoordinatorChanged(Coordinator2Id);
+        auto req = ExpectCoordinatorRequest(Coordinator2Id);
+
+        CaSetup->Execute([&](TFakeActor& actor) {
+            auto event = new NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed(0);
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, LocalRowDispatcherId, event));
+        });
+        MockCoordinatorResult(RowDispatcher1, req->Cookie);
+        MockCoordinatorResult(RowDispatcher1, req->Cookie);
+        ExpectStartSession(2, RowDispatcher1, 2);
+        MockAck(RowDispatcher1);
     }
 }
 } // NYql::NDq

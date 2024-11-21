@@ -559,7 +559,7 @@ void TListNodeMixin::SetChild(
 void TSupportsSetSelfMixin::SetSelf(
     TReqSet* request,
     TRspSet* /*response*/,
-    const TCtxSetPtr &context)
+    const TCtxSetPtr& context)
 {
     bool force = request->force();
     context->SetRequestInfo("Force: %v", force);

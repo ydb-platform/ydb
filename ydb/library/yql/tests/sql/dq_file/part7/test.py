@@ -2,7 +2,7 @@ import pytest
 import yatest
 
 from dq_file import run_test
-from utils import pytest_generate_tests_for_part
+from test_utils import pytest_generate_tests_for_part
 from yql_utils import pytest_get_current_part
 
 

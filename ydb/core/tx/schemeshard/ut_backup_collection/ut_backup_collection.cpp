@@ -288,4 +288,58 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         )");
         env.TestWaitNotification(runtime, txId);
     }
+
+    Y_UNIT_TEST(BackupAbsentCollection) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        PrepareDirs(runtime, env, txId);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")",
+            {NKikimrScheme::EStatus::StatusPathDoesNotExist});
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(BackupDroppedCollection) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", DefaultCollectionSettings());
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", "Name: \"" DEFAULT_NAME_1 "\"");
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")",
+            {NKikimrScheme::EStatus::StatusPathDoesNotExist});
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(BackupAbsentDirs) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", DefaultCollectionSettings());
+        env.TestWaitNotification(runtime, txId);
+
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")",
+            {NKikimrScheme::EStatus::StatusPathDoesNotExist});
+        env.TestWaitNotification(runtime, txId);
+    }
 } // TBackupCollectionTests

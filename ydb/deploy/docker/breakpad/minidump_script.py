@@ -23,13 +23,14 @@ if __name__ == "__main__":
         mndmp_cmd = ["/usr/bin/minidump-2-core", "-v", dmp_file, "-o", core_file]
         gdb_cmd = [
             "/usr/bin/gdb",
-            "/opt/ydb/bin/ydbd",
-            core_file,
+            "-q",
+            "-batch",
             "-iex=set auto-load safe-path /",
             "-iex=set print thread-events off",
+            "-ex=backtrace",
             "-ex=thread apply all bt",
-            "--batch",
-            "-q"
+            "/opt/ydb/bin/ydbd",
+            core_file,
         ]
 
         elf_resp = subprocess.check_output(elf_cmd).decode("utf-8")

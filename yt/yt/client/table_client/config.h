@@ -429,6 +429,7 @@ public:
     bool EnableRowCountInColumnarStatistics;
     bool EnableSegmentMetaInBlocks;
     bool EnableColumnMetaInChunkMeta;
+    bool ConsiderMinRowRangeDataWeight;
 
     NYTree::INodePtr CastAnyToCompositeNode;
 

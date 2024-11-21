@@ -43,7 +43,7 @@ bool TTcpDispatcher::IsNetworkingDisabled()
     return Impl_->IsNetworkingDisabled();
 }
 
-const TString& TTcpDispatcher::GetNetworkNameForAddress(const NNet::TNetworkAddress& address)
+const std::string& TTcpDispatcher::GetNetworkNameForAddress(const NNet::TNetworkAddress& address)
 {
     return Impl_->GetNetworkNameForAddress(address);
 }

@@ -162,4 +162,8 @@ void TDqComputeActorWatermarks::PopPendingWatermark() {
     PendingWatermark = Nothing();
 }
 
+void TDqComputeActorWatermarks::SetLogPrefix(const TString& logPrefix) {
+    LogPrefix = logPrefix;
+}
+
 } // namespace NYql::NDq

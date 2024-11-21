@@ -10,7 +10,6 @@ class TDqComputeActorWatermarks
 {
 public:
     TDqComputeActorWatermarks(const TString& logPrefix);
-    // CAREFUL: logPrefix stored as reference, TDqComputeActorWatermarks must be destroyed before object that owns referenced LogPrefix
 
     void RegisterAsyncInput(ui64 inputId);
     void RegisterInputChannel(ui64 inputId);
@@ -33,12 +32,14 @@ public:
     TMaybe<TInstant> GetPendingWatermark() const;
     void PopPendingWatermark();
 
+    void SetLogPrefix(const TString& logPrefix);
+
 private:
     void RecalcPendingWatermark();
     bool MaybePopPendingWatermark();
 
 private:
-    const TString& LogPrefix;
+    TString LogPrefix;
 
     std::unordered_map<ui64, TMaybe<TInstant>> AsyncInputsWatermarks;
     std::unordered_map<ui64, TMaybe<TInstant>> InputChannelsWatermarks;

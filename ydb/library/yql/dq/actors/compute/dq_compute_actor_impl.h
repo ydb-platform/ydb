@@ -233,6 +233,17 @@ protected:
             prefixBuilder << "Ctx: " << *RequestContext << ". ";
         }
         LogPrefix = std::move(prefixBuilder);
+
+        WatermarksTracker.SetLogPrefix(LogPrefix);
+        for (auto& [_, info]: InputTransformsMap) {
+            info.SetLogPrefix(LogPrefix);
+        }
+        for (auto& [_, info]: SourcesMap) {
+            info.SetLogPrefix(LogPrefix);
+        }
+        for (auto& [_, info]: InputChannelsMap) {
+            info.SetLogPrefix(LogPrefix);
+        }
     }
 
     void ReportEventElapsedTime() {
@@ -790,7 +801,7 @@ protected:
 
 protected:
     struct TInputChannelInfo {
-        const TString& LogPrefix; // CAREFUL: TInputChannelInfo must be destroyed before object that owns referenced LogPrefix
+        TString LogPrefix;
         ui64 ChannelId;
         ui32 SrcStageId;
         IDqInputChannel::TPtr Channel;
@@ -849,6 +860,10 @@ protected:
             if (Channel) {  // async actor doesn't hold channels, so channel is resumed in task runner actor
                 Channel->Resume();
             }
+        }
+
+        void SetLogPrefix(const TString& logPrefix) {
+            LogPrefix = logPrefix;
         }
     };
 

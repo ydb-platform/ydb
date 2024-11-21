@@ -2026,7 +2026,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("expireAfter"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tiers"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("evictionDelay"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
             }
         };
@@ -2048,10 +2049,85 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("expireAfter"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tiers"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("evictionDelay"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("columnUnit"));
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("seconds"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(TtlTieringParseCorrect) {
+        NYql::TAstParseResult res = SqlToYql(
+            R"( USE plato;
+                CREATE TABLE tableName (Key Uint32, CreatedAt Uint32, PRIMARY KEY (Key))
+                WITH (TTL =
+                        Interval("P1D") TO EXTERNAL DATA SOURCE Tier1,
+                        Interval("P2D") TO EXTERNAL DATA SOURCE Tier2,
+                        Interval("P30D") DELETE
+                    ON CreatedAt AS SECONDS);)"
+        );
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tiers"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("evictionDelay"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("storageName"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Tier1"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Tier2"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("172800000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("2592000000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("columnUnit"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("seconds"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(TtlTieringWithOtherActionsParseCorrect) {
+        NYql::TAstParseResult res = SqlToYql(
+            R"( USE plato;
+                ALTER TABLE tableName
+                    ADD FAMILY cold (DATA = "rot"),
+                    SET TTL
+                        Interval("P1D") TO EXTERNAL DATA SOURCE Tier1,
+                        Interval("P2D") TO EXTERNAL DATA SOURCE Tier2,
+                        Interval("P30D") DELETE
+                    ON CreatedAt,
+                    ALTER COLUMN payload_v2 SET FAMILY cold,
+                    ALTER FAMILY default SET DATA "ssd"
+                ;)"
+        );
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("addColumnFamilies"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("cold"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("alterColumnFamilies"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("default"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("setTtlSettings"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("tiers"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("evictionDelay"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("storageName"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Tier1"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("Tier2"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("86400000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("172800000"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("2592000000"));
             }
         };
 

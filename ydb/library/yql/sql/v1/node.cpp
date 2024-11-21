@@ -1853,9 +1853,14 @@ TMaybe<TStringContent> StringContentOrIdContent(TContext& ctx, TPosition pos, co
         (ctx.AnsiQuotedIdentifiers && input.StartsWith('"'))? EStringContentMode::AnsiIdent : EStringContentMode::Default);
 }
 
-TTtlSettings::TTtlSettings(const TIdentifier& columnName, const TNodePtr& expr, const TMaybe<EUnit>& columnUnit)
+TTtlSettings::TTierSettings::TTierSettings(const TNodePtr& evictionDelay, const std::optional<TIdentifier>& storageName)
+    : EvictionDelay(evictionDelay)
+    , StorageName(storageName) {
+}
+
+TTtlSettings::TTtlSettings(const TIdentifier& columnName, const std::vector<TTierSettings>& tiers, const TMaybe<EUnit>& columnUnit)
     : ColumnName(columnName)
-    , Expr(expr)
+    , Tiers(tiers)
     , ColumnUnit(columnUnit)
 {
 }
@@ -3225,7 +3230,7 @@ TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TStri
         return nullptr;
     }
 
-    auto wrappedNode = new TAstListNodeImpl(pos, { 
+    auto wrappedNode = new TAstListNodeImpl(pos, {
         new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
         node
     });
@@ -3254,7 +3259,7 @@ void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDefer
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
-    auto wrappedNode = new TAstListNodeImpl(pos, { 
+    auto wrappedNode = new TAstListNodeImpl(pos, {
         new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
         node
     });
@@ -3271,7 +3276,7 @@ TDeferredAtom MakeAtomFromExpression(TPosition pos, TContext& ctx, TNodePtr node
         node = node->Y("Concat", node->Y("String", node->Q(prefix)), node);
     }
 
-    auto wrappedNode = new TAstListNodeImpl(pos, { 
+    auto wrappedNode = new TAstListNodeImpl(pos, {
         new TAstAtomNodeImpl(pos, "EvaluateAtom", TNodeFlags::Default),
         node
     });

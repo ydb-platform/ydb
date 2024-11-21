@@ -20,6 +20,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     msgbus_server_pq_metarequest_ut.cpp
+    mock_pq_metacache.h
 )
 
 END()

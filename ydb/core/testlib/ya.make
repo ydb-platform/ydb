@@ -9,7 +9,6 @@ SRCS(
     fake_coordinator.h
     fake_scheme_shard.h
     minikql_compile.h
-    mock_pq_metacache.h
     tablet_flat_dummy.cpp
     tablet_helpers.cpp
     tablet_helpers.h
@@ -29,8 +28,6 @@ PEERDIR(
     ydb/library/grpc/server
     ydb/library/grpc/server/actors
     library/cpp/regex/pcre
-    library/cpp/testing/gmock_in_unittest
-    library/cpp/testing/unittest
     ydb/core/driver_lib/run
     ydb/core/base
     ydb/core/blobstorage/base

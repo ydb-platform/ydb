@@ -23,7 +23,7 @@
 #include "blobs_action/transaction/tx_gc_indexed.h"
 #include "blobs_action/transaction/tx_set_compatible_versions.h"
 #include "blobs_reader/actor.h"
-include "bg_tasks/events/events.h"
+#include "bg_tasks/events/events.h"
 
 #include "data_accessor/manager.h"
 #include "data_sharing/destination/session/destination.h"

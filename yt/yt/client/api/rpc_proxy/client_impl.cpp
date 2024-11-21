@@ -2667,7 +2667,7 @@ TFuture<TGetFlowViewResult> TClient::GetFlowView(
 }
 
 TFuture<TShuffleHandlePtr> TClient::StartShuffle(
-    const TString& account,
+    const std::string& account,
     int partitionCount,
     TTransactionId parentTransactionId,
     const TStartShuffleOptions& options)

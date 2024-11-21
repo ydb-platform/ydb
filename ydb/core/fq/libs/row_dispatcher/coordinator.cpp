@@ -339,7 +339,7 @@ bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TC
                 if (PendingPartitions.insert(key).second) {
                     Metrics.PendingPartitions->Inc();
                 }
-                continue;;
+                continue;
             }
         }
         tmpResult[rowDispatcherId].insert(partitionId);

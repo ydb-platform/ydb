@@ -1,8 +1,10 @@
 #pragma once
 
+#include <semaphore>
 #include <thread>
 #include <functional>
 
+#include <util/thread/pool.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
 #include <ydb/public/lib/ydb_cli/common/formats.h>
@@ -46,7 +48,8 @@ struct TImportFileSettings : public TOperationRequestSettings<TImportFileSetting
     FLUENT_SETTING_DEFAULT(ui64, BytesPerRequest, 1_MB);
     FLUENT_SETTING_DEFAULT(ui64, FileBufferSize, 2_MB);
     FLUENT_SETTING_DEFAULT(ui64, MaxInFlightRequests, 100);
-    FLUENT_SETTING_DEFAULT(ui64, Threads, std::thread::hardware_concurrency());
+    // Main thread that reads input file is CPU intensive so make room for it too
+    FLUENT_SETTING_DEFAULT(ui64, Threads, std::thread::hardware_concurrency() > 1 ? std::thread::hardware_concurrency() - 1 : 1);
     // Settings below are for CSV format only
     FLUENT_SETTING_DEFAULT(ui32, SkipRows, 0);
     FLUENT_SETTING_DEFAULT(bool, Header, false);
@@ -81,6 +84,15 @@ private:
 
     std::atomic<ui64> CurrentFileCount;
     std::atomic<ui64> TotalBytesRead = 0;
+    // RequestInflight increases on sending a single request to server
+    // Decreases on receiving any response for its request
+    std::unique_ptr<std::counting_semaphore<>> RequestsInflight;
+    // Common pool between all files for building TValues
+    THolder<IThreadPool> ProcessingPool;
+    std::atomic<bool> Failed = false;
+    std::atomic<bool> InformedAboutLimit = false;
+    THolder<TStatus> ErrorStatus;
+    std::mutex StatusLock;
 
     static constexpr ui32 VerboseModeStepSize = 1 << 27; // 128 MB
 

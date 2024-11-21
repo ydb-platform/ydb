@@ -39,16 +39,13 @@ struct TRowDispatcherMetrics {
         ErrorsCount = Counters->GetCounter("ErrorsCount", true);
         ClientsCount = Counters->GetCounter("ClientsCount");
         RowsSent = Counters->GetCounter("RowsSent", true);
-        NewClients = Counters->GetCounter("NewClients", true);
     }
 
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr ErrorsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr ClientsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr RowsSent;
-    ::NMonitoring::TDynamicCounters::TCounterPtr NewClients;
 };
-
 
 struct TEvPrivate {
     // Event ids
@@ -612,7 +609,9 @@ TString TRowDispatcher::GetInternalState() {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("Received TEvStartSession from " << ev->Sender << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " part id " << ev->Get()->Record.GetPartitionId() << " query id " << ev->Get()->Record.GetQueryId() << " cookie " << ev->Cookie);
-    ++*Metrics.NewClients;
+    auto queryGroup = Metrics.Counters->GetSubgroup("queryId", ev->Get()->Record.GetQueryId());
+    auto topicGroup = queryGroup->GetSubgroup("topic", ev->Get()->Record.GetSource().GetTopicPath());
+    topicGroup->GetCounter("StartSession", true)->Inc();
 
     NodesTracker.AddNode(ev->Sender.NodeId());
     TMaybe<ui64> readOffset;

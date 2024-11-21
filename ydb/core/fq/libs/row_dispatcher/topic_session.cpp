@@ -126,6 +126,7 @@ private:
             : Settings(ev->Get()->Record)
             , ReadActorId(ev->Sender)
             , FilteredDataRate(counters->GetCounter("FilteredDataRate", true))
+            , RestartSessionByOffsetsByQuery(counters->GetCounter("RestartSessionByOffsetsByQuery", true))
         {
             if (Settings.HasOffset()) {
                 NextMessageOffset = Settings.GetOffset();
@@ -144,6 +145,7 @@ private:
         TDuration ReconnectPeriod;
         TStats Stat;        // Send (filtered) to read_actor
         NMonitoring::TDynamicCounters::TCounterPtr FilteredDataRate;    // filtered
+        NMonitoring::TDynamicCounters::TCounterPtr RestartSessionByOffsetsByQuery;
     };
 
     struct TTopicEventProcessor {
@@ -811,6 +813,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 LOG_ROW_DISPATCHER_INFO("New client has less offset (" << clientInfo.Settings.GetOffset() << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
                 Metrics.RestartSessionByOffsets->Inc();
                 ++RestartSessionByOffsets;
+                clientInfo.RestartSessionByOffsetsByQuery->Inc();
                 StopReadSession();
             }
         }

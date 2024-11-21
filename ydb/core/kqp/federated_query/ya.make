@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/fq/libs/grpc
     ydb/library/db_pool/protos
     ydb/library/yql/providers/common/http_gateway
+    ydb/library/yql/providers/common/logging_resolver
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/yt/comp_nodes/dq
     ydb/library/yql/providers/yt/gateway/native

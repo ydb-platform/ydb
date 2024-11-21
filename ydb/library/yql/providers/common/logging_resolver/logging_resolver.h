@@ -29,17 +29,9 @@ namespace NYql {
             TString Table; // table to read from
         };
 
-        virtual NThreading::TFuture<TResponse> Resolve(const TRequest& request) const;
+        virtual NThreading::TFuture<TResponse> Resolve(const TRequest& request) const = 0;
 
         virtual ~ILoggingResolver() = default;
-    };
-
-    // TLoggingResolverEnvMock is a mock implementation of ILoggingResolver that
-    // reads the configuration from the environment variables.
-    class TLoggingResolverEnvMock: public ILoggingResolver {
-        TLoggingResolverEnvMock() {};
-
-        virtual NThreading::TFuture<TResponse> Resolve(const TRequest& request) const override;
     };
 
     ILoggingResolver::TPtr MakeLoggingResolverEnvMock();

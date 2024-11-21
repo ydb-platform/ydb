@@ -7,9 +7,11 @@ namespace NYql {
 
     TDataProviderInitializer GetGenericDataProviderInitializer(NConnector::IClient::TPtr genericClient,
                                                                const IDatabaseAsyncResolver::TPtr& dbResolver,
+                                                               const ILoggingResolver::TPtr& loggingResolver,
                                                                const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory)
     {
-        return [genericClient, dbResolver, credentialsFactory](const TString& userName, const TString& sessionId, const TGatewaysConfig* gatewaysConfig,
+        return [genericClient, dbResolver, loggingResolver, credentialsFactory](
+                                                               const TString& userName, const TString& sessionId, const TGatewaysConfig* gatewaysConfig,
                                                                const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
                                                                TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
                                                                const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
@@ -28,6 +30,7 @@ namespace NYql {
                 typeCtx.Get(),
                 functionRegistry,
                 dbResolver,
+                loggingResolver,
                 credentialsFactory,
                 genericClient,
                 gatewaysConfig->GetGeneric());

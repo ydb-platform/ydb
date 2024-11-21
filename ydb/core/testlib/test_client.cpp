@@ -98,6 +98,7 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
+#include <ydb/library/yql/providers/common/logging_resolver/logging_resolver.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -966,6 +967,7 @@ namespace Tests {
                     connectorClient,
                     Settings->CredentialsFactory,
                     databaseAsyncResolver,
+                    NYql::MakeLoggingResolverEnvMock(), // TODO: create mock of resolver for unit tests if neccessary 
                     queryServiceConfig.GetS3(),
                     queryServiceConfig.GetGeneric(),
                     queryServiceConfig.GetYt(),

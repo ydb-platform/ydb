@@ -61,6 +61,7 @@ PEERDIR(
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/comp_nodes
     ydb/library/yql/providers/common/db_id_async_resolver
+    ydb/library/yql/providers/common/logging_resolver
     yql/essentials/providers/common/metrics
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/schema/mkql

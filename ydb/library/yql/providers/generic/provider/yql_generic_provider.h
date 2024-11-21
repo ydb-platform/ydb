@@ -9,6 +9,7 @@ namespace NYql {
     TDataProviderInitializer GetGenericDataProviderInitializer(
         NConnector::IClient::TPtr genericClient,                                           // required
         const IDatabaseAsyncResolver::TPtr& dbResolver = nullptr,                          // can be missing in on-prem installations
+        const ILoggingResolver::TPtr& loggingResolver = nullptr,                           // can be missing in on-prem installations
         const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory = nullptr // can be missing in on-prem installations
     );
 

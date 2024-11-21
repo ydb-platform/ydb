@@ -1801,6 +1801,7 @@ private:
             TypesCtx.Get(),
             FuncRegistry,
             FederatedQuerySetup->DatabaseAsyncResolver,
+            FederatedQuerySetup->LoggingResolver,
             FederatedQuerySetup->CredentialsFactory,
             FederatedQuerySetup->ConnectorClient,
             FederatedQuerySetup->GenericGatewayConfig

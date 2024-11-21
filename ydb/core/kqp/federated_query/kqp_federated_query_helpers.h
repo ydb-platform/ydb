@@ -6,6 +6,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/mdb_endpoint_generator.h>
+#include <ydb/library/yql/providers/common/logging_resolver/logging_resolver.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
@@ -26,6 +27,7 @@ namespace NKikimr::NKqp {
         NYql::NConnector::IClient::TPtr ConnectorClient;
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         NYql::IDatabaseAsyncResolver::TPtr DatabaseAsyncResolver;
+        NYql::ILoggingResolver::TPtr LoggingResolver;
         NYql::TS3GatewayConfig S3GatewayConfig;
         NYql::TGenericGatewayConfig GenericGatewayConfig;
         NYql::TYtGatewayConfig YtGatewayConfig;
@@ -78,6 +80,7 @@ namespace NKikimr::NKqp {
             NYql::NConnector::IClient::TPtr connectorClient,
             NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
             NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver,
+            NYql::ILoggingResolver::TPtr loggingResolver,
             const NYql::TS3GatewayConfig& s3GatewayConfig,
             const NYql::TGenericGatewayConfig& genericGatewayConfig,
             const NYql::TYtGatewayConfig& ytGatewayConfig,
@@ -87,6 +90,7 @@ namespace NKikimr::NKqp {
             , ConnectorClient(connectorClient)
             , CredentialsFactory(credentialsFactory)
             , DatabaseAsyncResolver(databaseAsyncResolver)
+            , LoggingResolver(loggingResolver)
             , S3GatewayConfig(s3GatewayConfig)
             , GenericGatewayConfig(genericGatewayConfig)
             , YtGatewayConfig(ytGatewayConfig)
@@ -97,7 +101,17 @@ namespace NKikimr::NKqp {
 
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
             return TKqpFederatedQuerySetup{
-                HttpGateway, ConnectorClient, CredentialsFactory, DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig, YtGatewayConfig, YtGateway, ComputationFactories, S3ReadActorFactoryConfig};
+                HttpGateway, 
+                ConnectorClient, 
+                CredentialsFactory, 
+                DatabaseAsyncResolver,  
+                LoggingResolver,
+                S3GatewayConfig,
+                GenericGatewayConfig, 
+                YtGatewayConfig,
+                YtGateway,
+                ComputationFactories, 
+                S3ReadActorFactoryConfig};
         }
 
     private:
@@ -105,6 +119,7 @@ namespace NKikimr::NKqp {
         NYql::NConnector::IClient::TPtr ConnectorClient;
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         NYql::IDatabaseAsyncResolver::TPtr DatabaseAsyncResolver;
+        NYql::ILoggingResolver::TPtr LoggingResolver;
         NYql::TS3GatewayConfig S3GatewayConfig;
         NYql::TGenericGatewayConfig GenericGatewayConfig;
         NYql::TYtGatewayConfig YtGatewayConfig;

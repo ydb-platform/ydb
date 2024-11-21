@@ -14,6 +14,7 @@
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <ydb/library/yql/providers/common/logging_resolver/logging_resolver.h>
 #include <ydb/library/yql/providers/dq/actors/executer_actor.h>
 #include <ydb/library/yql/providers/dq/actors/proto_builder.h>
 #include <ydb/library/yql/providers/dq/actors/task_controller.h>
@@ -1953,6 +1954,8 @@ private:
             Params.Config.GetCommon().GetMdbGateway(),
             Params.MdbEndpointGenerator,
             Params.QueryId);
+
+        auto loggingResolver = NYql::MakeLoggingResolverEnvMock();
         {
             // TBD: move init to better place
             QueryStateUpdateRequest.set_scope(Params.Scope.ToString());
@@ -1962,7 +1965,7 @@ private:
         }
 
         {
-           dataProvidersInit.push_back(GetGenericDataProviderInitializer(Params.ConnectorClient, dbResolver, Params.CredentialsFactory));
+           dataProvidersInit.push_back(GetGenericDataProviderInitializer(Params.ConnectorClient, dbResolver, loggingResolver, Params.CredentialsFactory));
         }
 
         {

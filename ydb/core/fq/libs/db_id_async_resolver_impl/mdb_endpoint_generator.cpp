@@ -65,7 +65,6 @@ namespace NFq {
                         default:
                             ythrow yexception() << "Unexpected protocol for ClickHouse: " << NYql::NConnector::NApi::EProtocol_Name(params.Protocol);
                     }
-
                     return TEndpoint(fixedHost, port);
                 }
                 case NYql::EDatabaseType::PostgreSQL:

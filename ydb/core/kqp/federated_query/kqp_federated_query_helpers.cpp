@@ -111,6 +111,7 @@ namespace NKikimr::NKqp {
                     TActorSetupCmd(httpProxyActor, TMailboxType::HTSwap, appData->UserPoolId)));
 
             DatabaseResolverActorId = NFq::MakeDatabaseResolverActorId();
+
             // NOTE: it's ok for CredentialsFactory to be null
             auto databaseResolverActor = NFq::CreateDatabaseResolver(httpProxyActorId, CredentialsFactory);
             setup->LocalServices.push_back(
@@ -125,6 +126,7 @@ namespace NKikimr::NKqp {
             ConnectorClient,
             CredentialsFactory,
             nullptr,
+            NYql::MakeLoggingResolverEnvMock(), // TODO: more advanced initialization of logging resolver
             S3GatewayConfig,
             GenericGatewaysConfig,
             YtGatewayConfig,
@@ -142,6 +144,7 @@ namespace NKikimr::NKqp {
                 GenericGatewaysConfig.GetMdbGateway(),
                 MdbEndpointGenerator);
         }
+
 
         return result;
     }

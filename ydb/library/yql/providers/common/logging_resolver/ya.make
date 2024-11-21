@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     logging_resolver.h
+    logging_resolver_env_mock.cpp
 )
 
 PEERDIR(

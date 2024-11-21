@@ -19,9 +19,32 @@ namespace NKqp {
 class TTestHelper {
 public:
     class TCompression {
-        YDB_ACCESSOR(TString, SerializerName, "ARROW_SERIALIZER");
-        YDB_ACCESSOR(arrow::Compression::type, Type, arrow::Compression::type::UNCOMPRESSED);
-        YDB_ACCESSOR(i32, CompressionLevel, Max<i32>());
+        YDB_ACCESSOR(TString, SerializerClassName, "ARROW_SERIALIZER");
+        YDB_ACCESSOR_DEF(NKikimrSchemeOp::EColumnCodec, CompressionType);
+        YDB_ACCESSOR_DEF(std::optional<i32>, CompressionLevel);
+
+    public:
+        bool DeserializeFromProto(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializer);
+        TString BuildQuery() const;
+
+        bool IsEqual(const TCompression& rhs, TString& errorMessage) const;
+
+        TString ToString() const;
+    };
+
+    class TColumnFamily {
+        YDB_ACCESSOR(ui32, Id, 0);
+        YDB_ACCESSOR_DEF(TString, FamilyName);
+        YDB_ACCESSOR_DEF(TString, Data);
+        YDB_ACCESSOR_DEF(TCompression, Compression);
+
+    public:
+        bool DeserializeFromProto(const NKikimrSchemeOp::TFamilyDescription& family);
+        TString BuildQuery() const;
+
+        bool IsEqual(const TColumnFamily& rhs, TString& errorMessage) const;
+
+        TString ToString() const;
     };
 
     class TColumnSchema {
@@ -30,6 +53,7 @@ public:
         YDB_ACCESSOR_DEF(NScheme::TTypeId, Type);
         YDB_ACCESSOR_DEF(TTypeDesc, TypeDesc);
         YDB_FLAG_ACCESSOR(Nullable, true);
+        YDB_ACCESSOR_DEF(TString, ColumnFamilyName);
 
     public:
         TString BuildQuery() const;
@@ -44,6 +68,7 @@ public:
         YDB_ACCESSOR_DEF(TVector<TString>, PrimaryKey);
         YDB_ACCESSOR_DEF(TVector<TString>, Sharding);
         YDB_ACCESSOR(ui32, MinPartitionsCount, 1);
+        YDB_ACCESSOR_DEF(TVector<TColumnFamily>, ColumnFamilies);
 
         std::optional<std::pair<TString, TString>> TTLConf;
 

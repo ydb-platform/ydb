@@ -725,6 +725,10 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
         }
         columnDesc->SetType(NScheme::TypeName(typeInfo, typeMod));
         columnDesc->SetNotNull(column.not_null());
+
+        if (!column.Getfamily().empty()) {
+            columnDesc->SetColumnFamilyName(column.Getfamily());
+        }
     }
 
     return true;
@@ -738,6 +742,38 @@ bool FillColumnDescription(NKikimrSchemeOp::TColumnTableDescription& out, const 
 bool FillColumnDescription(NKikimrSchemeOp::TAlterColumnTable& out, const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in,
     Ydb::StatusIds::StatusCode& status, TString& error) {
     return FillColumnDescriptionImpl(out, in, status, error);
+}
+
+bool FillColumnFamily(
+    const Ydb::Table::ColumnFamily& from, NKikimrSchemeOp::TFamilyDescription* to, Ydb::StatusIds::StatusCode& status, TString& error) {
+    to->SetName(from.name());
+    if (from.has_data()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = TStringBuilder() << "Field `DATA` is not supported for OLAP tables in column family '" << from.name() << "'";
+        return false;
+    }
+    switch (from.compression()) {
+        case Ydb::Table::ColumnFamily::COMPRESSION_UNSPECIFIED:
+            break;
+        case Ydb::Table::ColumnFamily::COMPRESSION_NONE:
+            to->SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain);
+            break;
+        case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
+            to->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+            break;
+        case Ydb::Table::ColumnFamily::COMPRESSION_ZSTD:
+            to->SetColumnCodec(NKikimrSchemeOp::ColumnCodecZSTD);
+            break;
+        default:
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Unsupported compression value " << (ui32)from.compression() << " in column family '" << from.name()
+                                     << "'";
+            return false;
+    }
+    if (from.has_compression_level()) {
+        to->SetColumnCodecLevel(from.compression_level());
+    }
+    return true;
 }
 
 bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
@@ -780,6 +816,31 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 
         if (!FillColumnDescription(*alterColumnTable, req->add_columns(), status, error)) {
             return false;
+        }
+
+        for (const auto& alter : req->alter_columns()) {
+            auto alterColumn = alterColumnTable->MutableAlterSchema()->AddAlterColumns();
+            alterColumn->SetName(alter.Getname());
+
+            if (!alter.family().empty()) {
+                alterColumn->SetColumnFamilyName(alter.family());
+            }
+        }
+
+        for (const auto& add : req->add_column_families()) {
+            if (add.compression() == Ydb::Table::ColumnFamily::COMPRESSION_UNSPECIFIED) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Compression value is not set for column family '" << add.name() << "'";
+            }
+            if (!FillColumnFamily(add, alterColumnTable->MutableAlterSchema()->AddAddColumnFamily(), status, error)) {
+                return false;
+            }
+        }
+
+        for (const auto& alter : req->alter_column_families()) {
+            if (!FillColumnFamily(alter, alterColumnTable->MutableAlterSchema()->AddAlterColumnFamily(), status, error)) {
+                return false;
+            }
         }
 
         if (req->has_set_ttl_settings()) {

@@ -111,9 +111,8 @@ NKikimr::TConclusion<std::shared_ptr<arrow::util::Codec>> TNativeSerializer::Bui
     const int levelMin = codec->minimum_compression_level();
     const int levelMax = codec->maximum_compression_level();
     if (levelDef < levelMin || levelMax < levelDef) {
-        return TConclusionStatus::Fail(
-            TStringBuilder() << "incorrect level for codec. have to be: [" << levelMin << ":" << levelMax << "]"
-        );
+        return TConclusionStatus::Fail(TStringBuilder() << "incorrect level for codec `" << arrow::util::Codec::GetCodecAsString(cType)
+                                                        << "`. have to be: [" << levelMin << ":" << levelMax << "]");
     }
     std::shared_ptr<arrow::util::Codec> codecPtr = std::move(NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(cType, levelDef)));
     return codecPtr;
@@ -180,7 +179,9 @@ NKikimr::TConclusionStatus TNativeSerializer::DoDeserializeFromProto(const NKiki
 void TNativeSerializer::DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerializer& proto) const {
     if (Options.codec) {
         proto.MutableArrowCompression()->SetCodec(NArrow::CompressionToProto(Options.codec->compression_type()));
-        proto.MutableArrowCompression()->SetLevel(Options.codec->compression_level());
+        if (arrow::util::Codec::SupportsCompressionLevel(Options.codec->compression_type())) {
+            proto.MutableArrowCompression()->SetLevel(Options.codec->compression_level());
+        }
     } else {
         proto.MutableArrowCompression()->SetCodec(NArrow::CompressionToProto(arrow::Compression::UNCOMPRESSED));
     }

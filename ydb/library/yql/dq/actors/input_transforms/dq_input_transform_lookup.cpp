@@ -222,6 +222,10 @@ private: //IDqComputeActorAsyncInput
         auto startCycleCount = GetCycleCountFast();
         auto guard = BindAllocator();
 
+        if (!KeysForLookup) { // Already passed away
+            return 0;
+        }
+
         DrainReadyQueue(batch);
 
         if (InputFlowFetchStatus != NUdf::EFetchStatus::Finish && KeysForLookup->empty()) {

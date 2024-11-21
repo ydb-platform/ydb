@@ -1300,6 +1300,14 @@ namespace NSQLTranslationV1 {
         TVector<TDeferredAtom> Roles;
     };
 
+    struct TSequenceParameters {
+        bool MissingOk = false;
+        TMaybe<TDeferredAtom> StartValue;
+        bool IsRestart = false;
+        TMaybe<TDeferredAtom> RestartValue;
+        TMaybe<TDeferredAtom> Increment;
+    };
+
     struct TTopicConsumerSettings {
         struct TLocalSinkSettings {
             // no special settings

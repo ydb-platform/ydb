@@ -74,6 +74,7 @@ sql_stmt_core:
   | drop_resource_pool_classifier_stmt
   | backup_stmt
   | restore_stmt
+  | alter_sequence_stmt
 ;
 
 expr:
@@ -1053,6 +1054,14 @@ analyze_table: simple_table_ref (LPAREN column_list RPAREN)?;
 analyze_table_list: analyze_table (COMMA analyze_table)* COMMA?;
 analyze_stmt: ANALYZE analyze_table_list;
 
+alter_sequence_stmt: ALTER SEQUENCE (IF EXISTS)? object_ref alter_sequence_action+;
+alter_sequence_action:
+  START WITH? integer
+  | RESTART WITH? integer
+  | RESTART
+  | INCREMENT BY? integer
+;
+
 // Special rules that allow to use certain keywords as identifiers.
 identifier: ID_PLAIN | ID_QUOTED;
 id: identifier | keyword;
@@ -1338,6 +1347,7 @@ keyword_as_compat:
   | IMMEDIATE
   | IMPORT
   | IN
+  | INCREMENT
   | INCREMENTAL
   | INDEX
   | INDEXED
@@ -1412,6 +1422,7 @@ keyword_as_compat:
   | REPLICATION
   | RESET
   | RESPECT
+  | RESTART
   | RESTORE
   | RESTRICT
   // | RESULT
@@ -1429,7 +1440,9 @@ keyword_as_compat:
   | SETS
   | SHOW
   | TSKIP
+  | SEQUENCE
   | SOURCE
+  | START
   | SUBQUERY
   | SUBSET
   | SYMBOLS
@@ -1556,6 +1569,7 @@ keyword_compat: (
   | IMMEDIATE
   | IMPORT
   | IN
+  | INCREMENT
   | INCREMENTAL
   | INDEX
   | INDEXED
@@ -1630,6 +1644,7 @@ keyword_compat: (
   | REPLICATION
   | RESET
   | RESPECT
+  | RESTART
   | RESTORE
   | RESTRICT
   | RESULT
@@ -1647,7 +1662,9 @@ keyword_compat: (
   | SETS
   | SHOW
   | TSKIP
+  | SEQUENCE
   | SOURCE
+  | START
   | SUBQUERY
   | SUBSET
   | SYMBOLS
@@ -1902,6 +1919,7 @@ ILIKE: I L I K E;
 IMMEDIATE: I M M E D I A T E;
 IMPORT: I M P O R T;
 IN: I N;
+INCREMENT: I N C R E M E N T;
 INCREMENTAL: I N C R E M E N T A L;
 INDEX: I N D E X;
 INDEXED: I N D E X E D;
@@ -1991,6 +2009,7 @@ REPLICATION: R E P L I C A T I O N;
 RESET: R E S E T;
 RESOURCE: R E S O U R C E;
 RESPECT: R E S P E C T;
+RESTART: R E S T A R T;
 RESTORE: R E S T O R E;
 RESTRICT: R E S T R I C T;
 RESULT: R E S U L T;
@@ -2015,7 +2034,9 @@ SET: S E T;
 SETS: S E T S;
 SHOW: S H O W;
 TSKIP: S K I P;
+SEQUENCE: S E Q U E N C E;
 SOURCE: S O U R C E;
+START: S T A R T;
 STREAM: S T R E A M;
 STRUCT: S T R U C T;
 SUBQUERY: S U B Q U E R Y;

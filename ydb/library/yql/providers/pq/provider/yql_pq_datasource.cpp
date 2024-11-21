@@ -180,6 +180,10 @@ public:
             settings.Add(ctx.NewList(read.Pos(), std::move(pair)));
         }
 
+        if (topicKeyParser.GetDateFormat()) {
+            settings.Add(topicKeyParser.GetDateFormat());
+        }
+
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())
             .World(read.World())
             .DataSource(read.DataSource())

@@ -876,6 +876,11 @@ NDB::FormatSettings GetFormatSettings(const std::string_view& view) {
             auto format = json["data.timestamp.format"].getString();
             settings.timestamp_format = format;
         }
+
+        if (json.has("data.date.format")) {
+            auto format = json["data.date.format"].getString();
+            settings.date_format = format;
+        }
     }
     return settings;
 }

@@ -3,6 +3,21 @@
 
 namespace NKikimr {
 
+    NMonitoring::TDynamicCounters::TCounterPtr TUploadCounters::GetCodeCounter(const TUploadStatus& status) {
+        auto it = CodesCount.FindPtr(status);
+        if (it) {
+            return *it;
+        }
+        const auto counters = [this, &status]() {
+            auto groupByCode = CreateSubGroup("reply_code", status.GetCodeString());
+            if (status.GetSubcode()) {
+                return groupByCode.CreateSubGroup("subcode", *status.GetSubcode());
+            }
+            return groupByCode;
+        }();
+        return CodesCount.emplace(status, counters.GetDeriviative("Replies/Count")).first->second;
+    }
+
     TUploadCounters::TUploadCounters()
         : TBase("BulkUpsert")
     {
@@ -17,12 +32,6 @@ namespace NKikimr {
         WritingDuration = TBase::GetHistogram("Writing/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10));
         CommitDuration = TBase::GetHistogram("Commit/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10));
         PrepareReplyDuration = TBase::GetHistogram("ToReply/DurationMs", NMonitoring::ExponentialHistogram(15, 2, 10));
-
-        const google::protobuf::EnumDescriptor* descriptor = ::Ydb::StatusIds::StatusCode_descriptor();
-        for (ui32 i = 0; i < (ui32)descriptor->value_count(); ++i) {
-            auto vDescription = descriptor->value(i);
-            CodesCount.emplace(vDescription->name(), CreateSubGroup("reply_code", vDescription->name()).GetDeriviative("Replies/Count"));
-        }
     }
 
 }

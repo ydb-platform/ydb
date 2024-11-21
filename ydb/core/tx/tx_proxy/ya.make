@@ -18,6 +18,7 @@ SRCS(
 )
 
 GENERATE_ENUM_SERIALIZATION(read_table_impl.h)
+GENERATE_ENUM_SERIALIZATION(upload_rows_common_impl.h)
 
 PEERDIR(
     ydb/library/actors/core

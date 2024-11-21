@@ -31,11 +31,71 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 
+#include <boost/container_hash/hash_fwd.hpp>
+#include <util/generic/size_literals.h>
 #include <util/string/join.h>
 #include <util/string/vector.h>
-#include <util/generic/size_literals.h>
 
 namespace NKikimr {
+
+enum class EUploadFailureReason {
+    DISK_QUOTA_EXCEEDED,
+    DELIVERY_PROBLEM,
+};
+
+class TUploadStatus {
+private:
+    YDB_ACCESSOR_DEF(Ydb::StatusIds::StatusCode, Code);
+    YDB_READONLY_DEF(std::optional<TString>, Subcode);
+
+public:
+    TUploadStatus(const Ydb::StatusIds::StatusCode code)
+        : Code(code) {
+    }
+    TUploadStatus(const Ydb::StatusIds::StatusCode code, const NSchemeCache::TSchemeCacheNavigate::EStatus subcode)
+        : Code(code) {
+        SetSubcode(subcode);
+    }
+    TUploadStatus(const Ydb::StatusIds::StatusCode code, const NKikimrTxDataShard::TError::EKind subcode)
+        : Code(code) {
+        SetSubcode(subcode);
+    }
+    TUploadStatus(const Ydb::StatusIds::StatusCode code, const EUploadFailureReason subcode)
+        : Code(code) {
+        SetSubcode(subcode);
+    }
+
+    struct Hasher {
+        ui64 Hash(const TUploadStatus& object) const {
+            ui64 hash = object.GetCode();
+            boost::hash_combine(hash, object.GetSubcode().has_value());
+            if (object.GetSubcode()) {
+                boost::hash_combine(hash, *object.GetSubcode());
+            }
+            return hash;
+        }
+    };
+
+    bool operator==(const TUploadStatus& other) const {
+        return Code == other.Code && Subcode == other.Subcode;
+    }
+
+    TString GetCodeString() const {
+        return Ydb::StatusIds::StatusCode_Name(Code);
+    }
+
+    void SetSubcode(const NSchemeCache::TSchemeCacheNavigate::EStatus subcode) {
+        Subcode = ToString(subcode);
+    }
+
+    void SetSubcode(const NKikimrTxDataShard::TError::EKind subcode) {
+        Subcode = NKikimrTxDataShard::TError::EKind_Name(subcode);
+    }
+
+    void SetSubcode(const EUploadFailureReason subcode) {
+        Subcode = ToString(subcode);
+    }
+};
 
 class TUploadCounters: public NColumnShard::TCommonCountersOwner {
 private:
@@ -52,7 +112,10 @@ private:
     NMonitoring::THistogramPtr CommitDuration;
     NMonitoring::THistogramPtr PrepareReplyDuration;
 
-    THashMap<TString, NMonitoring::TDynamicCounters::TCounterPtr> CodesCount;
+    THashMap<TUploadStatus, NMonitoring::TDynamicCounters::TCounterPtr, TUploadStatus::Hasher> CodesCount;
+
+    NMonitoring::TDynamicCounters::TCounterPtr GetCodeCounter(const TUploadStatus& status);
+
 public:
     TUploadCounters();
 
@@ -89,17 +152,13 @@ public:
             Owner.CommitDuration->Collect((*CommitFinished - *CommitStarted).MilliSeconds());
         }
 
-        void OnReply(const ::Ydb::StatusIds::StatusCode code) {
+        void OnReply(const TUploadStatus& status) {
             ReplyFinished = TMonotonic::Now();
             if (CommitFinished) {
                 Owner.PrepareReplyDuration->Collect((*ReplyFinished - *CommitFinished).MilliSeconds());
             }
             Owner.ReplyDuration->Collect((*ReplyFinished - Start).MilliSeconds());
-
-            const TString name = ::Ydb::StatusIds::StatusCode_Name(code);
-            auto it = Owner.CodesCount.find(name);
-            Y_ABORT_UNLESS(it != Owner.CodesCount.end());
-            it->second->Add(1);
+            Owner.GetCodeCounter(status)->Add(1);
         }
     };
 
@@ -113,8 +172,6 @@ public:
         PackageSizeRecordsByRecords->Collect((i64)rowsCount, rowsCount);
         PackageSizeCountByRecords->Collect(rowsCount);
     }
-
-    void OnReply(const TDuration dFull, const TDuration dDelta, const ::Ydb::StatusIds::StatusCode code) const;
 };
 
 
@@ -219,7 +276,7 @@ private:
     NSchemeCache::TSchemeCacheNavigate::EKind TableKind = NSchemeCache::TSchemeCacheNavigate::KindUnknown;
     THashSet<TTabletId> ShardRepliesLeft;
     THashMap<TTabletId, TShardUploadRetryState> ShardUploadRetryStates;
-    Ydb::StatusIds::StatusCode Status;
+    TUploadStatus Status;
     TString ErrorMessage;
     std::shared_ptr<NYql::TIssues> Issues = std::make_shared<NYql::TIssues>();
     NLongTxService::TLongTxId LongTxId;
@@ -676,23 +733,38 @@ private:
         Y_ABORT_UNLESS(request.ResultSet.size() == 1);
         const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = request.ResultSet.front();
 
-        switch (entry.Status) {
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
-                break;
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
-                return ReplyWithError(Ydb::StatusIds::UNAVAILABLE, LogPrefix() << "table unavaliable", ctx);
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "unknown table", ctx);
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
-                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "unknown database", ctx);
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
-                return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, LogPrefix() << "access denied", ctx);
-            case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
-                return ReplyWithError(Ydb::StatusIds::GENERIC_ERROR, LogPrefix() << "unknown error", ctx);
+        if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+            Ydb::StatusIds::StatusCode code = Ydb::StatusIds::GENERIC_ERROR;
+            TString message;
+            switch (entry.Status) {
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
+                    Y_ABORT("unreachable");
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
+                    code = Ydb::StatusIds::UNAVAILABLE;
+                    message = "table unavaliable";
+                    break;
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+                    code = Ydb::StatusIds::SCHEME_ERROR;
+                    message = "unknown table";
+                    break;
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
+                    code = Ydb::StatusIds::SCHEME_ERROR;
+                    message = "unknown database";
+                    break;
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+                    code = Ydb::StatusIds::UNAUTHORIZED;
+                    message = "access denied";
+                    break;
+                case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
+                    code = Ydb::StatusIds::GENERIC_ERROR;
+                    message = "unknown error";
+                    break;
+            }
+            return ReplyWithError(TUploadStatus(code, entry.Status), LogPrefix() << message, ctx);
         }
 
         TableKind = entry.Kind;
@@ -705,7 +777,7 @@ private:
 
         // TODO: fast fail for all tables?
         if (isColumnTable && DiskQuotaExceeded) {
-            return ReplyWithError(Ydb::StatusIds::UNAVAILABLE,
+            return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, EUploadFailureReason::DISK_QUOTA_EXCEEDED),
                 LogPrefix() << "cannot perform writes: database is out of disk space", ctx);
         }
 
@@ -1204,7 +1276,8 @@ private:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
 
-        SetError(Ydb::StatusIds::UNAVAILABLE, Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId));
+        SetError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, EUploadFailureReason::DELIVERY_PROBLEM),
+            Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId));
         ShardRepliesLeft.erase(ev->Get()->TabletId);
 
         return ReplyIfDone(ctx);
@@ -1234,26 +1307,26 @@ private:
                     << " from shard " << shardResponse.GetTabletID());
 
         if (shardResponse.GetStatus() != NKikimrTxDataShard::TError::OK) {
-            ::Ydb::StatusIds::StatusCode status = Ydb::StatusIds::GENERIC_ERROR;
+            TUploadStatus status(Ydb::StatusIds::GENERIC_ERROR, (NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus());
 
             switch (shardResponse.GetStatus()) {
             case NKikimrTxDataShard::TError::WRONG_SHARD_STATE:
             case NKikimrTxDataShard::TError::SHARD_IS_BLOCKED:
                 ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
-                status = Ydb::StatusIds::OVERLOADED;
+                status.SetCode(Ydb::StatusIds::OVERLOADED);
                 break;
             case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED:
             case NKikimrTxDataShard::TError::OUT_OF_SPACE:
-                status = Ydb::StatusIds::UNAVAILABLE;
+                status.SetCode(Ydb::StatusIds::UNAVAILABLE);
                 break;
             case NKikimrTxDataShard::TError::SCHEME_ERROR:
-                status = Ydb::StatusIds::SCHEME_ERROR;
+                status.SetCode(Ydb::StatusIds::SCHEME_ERROR);
                 break;
             case NKikimrTxDataShard::TError::BAD_ARGUMENT:
-                status = Ydb::StatusIds::BAD_REQUEST;
+                status.SetCode(Ydb::StatusIds::BAD_REQUEST);
                 break;
             case NKikimrTxDataShard::TError::EXECUTION_CANCELLED:
-                status = Ydb::StatusIds::TIMEOUT;
+                status.SetCode(Ydb::StatusIds::TIMEOUT);
                 break;
             };
 
@@ -1292,8 +1365,8 @@ private:
         }
     }
 
-    void SetError(::Ydb::StatusIds::StatusCode status, const TString& message) {
-        if (Status != ::Ydb::StatusIds::SUCCESS) {
+    void SetError(const TUploadStatus& status, const TString& message) {
+        if (Status.GetCode() != ::Ydb::StatusIds::SUCCESS) {
             return;
         }
 
@@ -1314,7 +1387,7 @@ private:
         return ReplyWithResult(Status, ctx);
     }
 
-    void ReplyWithError(::Ydb::StatusIds::StatusCode status, const TString& message, const TActorContext& ctx) {
+    void ReplyWithError(const TUploadStatus& status, const TString& message, const TActorContext& ctx) {
         LOG_NOTICE_S(ctx, NKikimrServices::RPC_REQUEST, message);
 
         SetError(status, message);
@@ -1323,9 +1396,9 @@ private:
         return ReplyIfDone(ctx);
     }
 
-    void ReplyWithResult(::Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
+    void ReplyWithResult(const TUploadStatus& status, const TActorContext& ctx) {
         UploadCountersGuard.OnReply(status);
-        SendResult(ctx, status);
+        SendResult(ctx, status.GetCode());
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "completed with status " << status);
 

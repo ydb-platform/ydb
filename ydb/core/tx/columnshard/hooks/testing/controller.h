@@ -22,6 +22,7 @@ private:
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideCompactionActualizationLag);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideTasksActualizationLag);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideReadTimeoutClean);
+    YDB_ACCESSOR(std::optional<ui64>, OverrideMemoryLimitForPortionReading, 100);
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
 
     YDB_ACCESSOR(std::optional<ui64>, OverrideReduceMemoryIntervalLimit, 1024);
@@ -130,6 +131,11 @@ private:
     THashSet<TString> SharingIds;
 protected:
     virtual ::NKikimr::NColumnShard::TBlobPutResult::TPtr OverrideBlobPutResultOnCompaction(const ::NKikimr::NColumnShard::TBlobPutResult::TPtr original, const NOlap::TWriteActionsCollection& actions) const override;
+
+    virtual ui64 DoGetMemoryLimitScanPortion(const ui64 defaultValue) const override {
+        return OverrideMemoryLimitForPortionReading.value_or(defaultValue);
+    }
+
     virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration def) const override {
         return OverrideLagForCompactionBeforeTierings.value_or(def);
     }

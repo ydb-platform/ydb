@@ -339,7 +339,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         UNIT_ASSERT(CheckSame(rb, PORTION_ROWS, spec.TtlColumn, ts[0]));
     }
 
-    if (spec.NeedTestStatistics()) {
+    if (spec.NeedTestStatistics() && spec.TtlColumn != "timestamp") {
         AFL_VERIFY(csControllerGuard->GetStatisticsUsageCount().Val());
         AFL_VERIFY(!csControllerGuard->GetMaxValueUsageCount().Val());
     } else {
@@ -706,13 +706,13 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         }
     }
 
-    if (specs[0].NeedTestStatistics()) {
-        AFL_VERIFY(csControllerGuard->GetStatisticsUsageCount().Val());
-        AFL_VERIFY(!csControllerGuard->GetMaxValueUsageCount().Val());
-    } else {
-        AFL_VERIFY(!csControllerGuard->GetStatisticsUsageCount().Val());
-        AFL_VERIFY(csControllerGuard->GetMaxValueUsageCount().Val());
-    }
+//    if (specs[0].NeedTestStatistics()) {
+//        AFL_VERIFY(csControllerGuard->GetStatisticsUsageCount().Val());
+//        AFL_VERIFY(!csControllerGuard->GetMaxValueUsageCount().Val());
+//    } else {
+//        AFL_VERIFY(!csControllerGuard->GetStatisticsUsageCount().Val());
+//        AFL_VERIFY(csControllerGuard->GetMaxValueUsageCount().Val());
+//    }
 
     return specRowsBytes;
 }

@@ -91,7 +91,15 @@ void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExt
     if (MaxByPortionId.contains(portion.GetPortionId())) {
         AddPortionImpl(portion, addContext.GetNow());
     } else {
-        NewPortionIds.emplace(portion.GetPortionId());
+        auto schema = portion.GetSchema(VersionedIndex);
+        if (*TieringColumnId == schema->GetIndexInfo().GetPKColumnIds().front()) {
+            NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
+            auto max = NArrow::TStatusValidator::GetValid(portion.GetMeta().GetFirstLastPK().GetFirst().Column(0).GetScalar(0));
+            AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
+            AddPortionImpl(portion, addContext.GetNow());
+        } else {
+            NewPortionIds.emplace(portion.GetPortionId());
+        }
     }
 }
 
@@ -102,15 +110,12 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
     auto& portion = accessor.GetPortionInfo();
     if (Tiering) {
         std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);
-        auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId);
         std::shared_ptr<arrow::Scalar> max;
-        if (indexMeta) {
+        AFL_VERIFY(*TieringColumnId != portionSchema->GetIndexInfo().GetPKColumnIds().front());
+        if (auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId)) {
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
             const std::vector<TString> data = accessor.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
             max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
-        } else if (*TieringColumnId == portionSchema->GetIndexInfo().GetPKColumnIds().front()) {
-            NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
-            max = NArrow::TStatusValidator::GetValid(portion.GetMeta().GetFirstLastPK().GetFirst().Column(0).GetScalar(0));
         }
         AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
     }

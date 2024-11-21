@@ -591,10 +591,10 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath,
     if (!RequestsInflight->try_acquire()) {
         if (Settings.Verbose_ && Settings.NewlineDelimited_) {
             if (!InformedAboutLimit.exchange(true)) {
-                Cerr << '@';
-            } else {
                 Cerr << (TStringBuilder() << "@ (each '@' means max request inflight is reached and a worker thread is waiting for "
                 "any response from database)" << Endl);
+            } else {
+                Cerr << '@';
             }
         }
         RequestsInflight->acquire();

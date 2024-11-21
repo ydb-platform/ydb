@@ -330,7 +330,7 @@ TQueryInfoList TStockWorkloadGenerator::GetCustomerHistory() {
 void TStockWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     auto addStorageTypeParam = [&]() {
         opts.AddLongOption("store", "Storage type."
-                " Options: row, column, external-s3\n"
+                " Options: row, column\n"
                 "row - use row-based storage engine;\n"
                 "column - use column-based storage engine.")
             .DefaultValue(StoreType)

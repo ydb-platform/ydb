@@ -100,6 +100,10 @@ public:
     TPortionInfo(TPortionInfo&&) = default;
     TPortionInfo& operator=(TPortionInfo&&) = default;
 
+    ui32 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {
+        return (GetRecordsCount() / 10000 + 1) * sizeof(TColumnRecord) * schema->GetColumnsCount() + schema->GetIndexesCount() * sizeof(TIndexChunk);
+    }
+
     ui32 PredictMetadataMemorySize(const ui32 columnsCount) const {
         return (GetRecordsCount() / 10000 + 1) * sizeof(TColumnRecord) * columnsCount;
     }

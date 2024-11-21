@@ -53,7 +53,7 @@ class LoadSuiteBase:
     @allure.step('check tables size')
     def check_tables_size(cls, folder: Optional[str], tables: dict[str, int]):
         wait_error = YdbCluster.wait_ydb_alive(
-            300, (
+            20 * 60, (
                 f'{YdbCluster.tables_path}/{folder}'
                 if folder is not None
                 else [f'{YdbCluster.tables_path}/{t}' for t in tables.keys()]

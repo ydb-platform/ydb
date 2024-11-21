@@ -1,7 +1,7 @@
 #include "kqp_statistics_transformer.h"
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
-#include <ydb/library/yql/core/yql_cost_function.h>
+#include <yql/essentials/core/yql_cost_function.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>

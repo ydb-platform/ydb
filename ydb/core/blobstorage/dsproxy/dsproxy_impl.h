@@ -71,7 +71,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     bool UseActorSystemTimeInBSQueue;
     bool IsLimitedKeyless = false;
     bool IsFullMonitoring = false; // current state of monitoring
-    ui32 MinREALHugeBlobInBytes = 0;
+    ui32 MinHugeBlobInBytes = 0;
 
     TActorId MonActor;
     TIntrusivePtr<TBlobStorageGroupProxyMon> Mon;
@@ -108,9 +108,6 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     TBatchedQueue<TEvBlobStorage::TEvGet::TPtr> BatchedGets[GetHandleClassCount];
     TStackVec<NKikimrBlobStorage::EGetHandleClass, GetHandleClassCount> GetBatchedBucketQueue;
 
-    TMemorizableControlWrapper EnablePutBatching;
-    TMemorizableControlWrapper EnableVPatch;
-
     TInstant EstablishingSessionStartTime;
 
     const TDuration MuteDuration = TDuration::Seconds(5);
@@ -121,12 +118,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     bool HasInvalidGroupId() const { return GroupId.GetRawId() == Max<ui32>(); }
     void ProcessInitQueue();
 
-    // Acceleration parameters
-    TMemorizableControlWrapper SlowDiskThreshold;
-    TMemorizableControlWrapper PredictedDelayMultiplier;
-    TMemorizableControlWrapper MaxNumOfSlowDisks;
-
-    TMemorizableControlWrapper LongRequestThresholdMs;
+    TBlobStorageProxyControlWrappers Controls;
 
     TAccelerationParams GetAccelerationParams();
 

@@ -82,7 +82,8 @@ struct IServiceContext
     //! Returns time between request execution start and the moment of reply or cancellation (if it already happened).
     virtual std::optional<TDuration> GetExecutionDuration() const = 0;
 
-    //! Substract given throttle duration time from request execution time.
+    //! This duration will be subtracted from the request execution time.
+    //! Can be called multiple times; these durations are added up.
     virtual void RecordThrottling(TDuration throttleDuration) = 0;
 
     //! Returns trace context associated with request.
@@ -99,12 +100,10 @@ struct IServiceContext
     virtual TMutationId GetMutationId() const = 0;
 
     //! Returns request service name.
-    // NB: Service name is supposed to be short, so SSO should work.
-    virtual std::string GetService() const = 0;
+    virtual const std::string& GetService() const = 0;
 
     //! Returns request method name.
-    // NB: Method name is supposed to be short, so SSO should work.
-    virtual std::string GetMethod() const = 0;
+    virtual const std::string& GetMethod() const = 0;
 
     //! Returns request realm id.
     virtual TRealmId GetRealmId() const = 0;

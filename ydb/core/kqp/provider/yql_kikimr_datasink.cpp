@@ -1,11 +1,11 @@
 #include "yql_kikimr_provider_impl.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
 namespace {
@@ -162,6 +162,12 @@ private:
     }
 
     TStatus HandleDropBackupCollection(TKiDropBackupCollection node, TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        Y_UNUSED(node);
+        return TStatus::Ok;
+    }
+
+    TStatus HandleBackup(TKiBackup node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         Y_UNUSED(node);
         return TStatus::Ok;
@@ -596,6 +602,10 @@ public:
             || node.IsCallable(TKiAlterBackupCollection::CallableName())
             || node.IsCallable(TKiDropBackupCollection::CallableName()))
         {
+            return true;
+        }
+
+        if (node.IsCallable(TKiBackup::CallableName())) {
             return true;
         }
 
@@ -1497,6 +1507,14 @@ public:
                             .Build()
                         .Done()
                         .Ptr();
+                } else if (mode == "backup") {
+                    return Build<TKiBackup>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .BackupCollection().Build(key.GetBackupCollectionPath().Name)
+                        .Prefix().Build(key.GetBackupCollectionPath().Prefix)
+                        .Done()
+                        .Ptr();
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Unknown operation type for backup collection: " << TString(mode)));
                     return nullptr;
@@ -1766,6 +1784,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = TMaybeNode<TKiDropBackupCollection>(input)) {
         return HandleDropBackupCollection(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiBackup>(input)) {
+        return HandleBackup(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

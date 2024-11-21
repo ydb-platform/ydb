@@ -13,7 +13,6 @@
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
-#include <ydb/library/yql/public/purecalc/common/interface.h>
 
 namespace {
 
@@ -27,7 +26,7 @@ const ui64 GrabTimeoutSec = 4 * TimeoutBeforeStartSessionSec;
 class TFixture : public NUnitTest::TBaseFixture {
 public:
     TFixture()
-        : PureCalcProgramFactory(NYql::NPureCalc::MakeProgramFactory(NYql::NPureCalc::TProgramFactoryOptions()))
+        : PureCalcProgramFactory(CreatePureCalcProgramFactory())
         , Runtime(true)
     {}
 
@@ -72,7 +71,8 @@ public:
             CredentialsProviderFactory,
             PureCalcProgramFactory,
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
-            CreatePqNativeGateway(pqServices)
+            CreatePqNativeGateway(pqServices),
+            16000000
             ).release());
         Runtime.EnableScheduleForActor(TopicSession);
 
@@ -133,11 +133,14 @@ public:
         }
     }
 
-    void ExpectSessionError(NActors::TActorId readActorId, TString message) {
+    TString ExpectSessionError(NActors::TActorId readActorId, TMaybe<TString> message = Nothing()) {
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionError>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
-        UNIT_ASSERT_STRING_CONTAINS(TString(eventHolder->Get()->Record.GetMessage()), message);
+        if (message) {
+            UNIT_ASSERT_STRING_CONTAINS(TString(eventHolder->Get()->Record.GetMessage()), *message);
+        }
+        return eventHolder->Get()->Record.GetMessage();
     }
 
     void ExpectNewDataArrived(TSet<NActors::TActorId> readActorIds) {
@@ -158,7 +161,7 @@ public:
         return eventHolder->Get()->Record.MessagesSize();
     }
 
-    NYql::NPureCalc::IProgramFactoryPtr PureCalcProgramFactory;
+    IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     NActors::TTestActorRuntime Runtime;
     TActorSystemStub ActorSystemStub;
     NActors::TActorId TopicSession;
@@ -307,6 +310,21 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId1, source);
     }
 
+    Y_UNIT_TEST_F(WrongFieldType, TFixture) {
+        const TString topicName = "wrong_field";
+        PQCreateStream(topicName);
+        Init(topicName);
+        auto source = BuildSource(topicName);
+        StartSession(ReadActorId1, source);
+
+        const std::vector<TString> data = {"{\"dt\":100}"};
+        PQWrite(data, topicName);
+        auto error = ExpectSessionError(ReadActorId1);
+        UNIT_ASSERT_STRING_CONTAINS(error, "Failed to parse json messages, found 1 missing values");
+        UNIT_ASSERT_STRING_CONTAINS(error, "the field (value) has been added by query");
+        StopSession(ReadActorId1, source);
+    }
+
     Y_UNIT_TEST_F(RestartSessionIfNewClientWithOffset, TFixture) {
         const TString topicName = "topic6";
         PQCreateStream(topicName);
@@ -314,7 +332,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         auto source = BuildSource(topicName);
         StartSession(ReadActorId1, source);
 
-        const std::vector<TString> data = { Json1, Json2 }; // offset 0, 1
+        const std::vector<TString> data = { Json1, Json2, Json3 }; // offset 0, 1, 2
         PQWrite(data, topicName);
         ExpectNewDataArrived({ReadActorId1});
         ExpectMessageBatch(ReadActorId1, data);
@@ -323,11 +341,11 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(ReadActorId2, source, 1);
         ExpectNewDataArrived({ReadActorId2});
 
-        PQWrite({ Json3 }, topicName);
+        PQWrite({ Json4 }, topicName);
         ExpectNewDataArrived({ReadActorId1});
 
-        ExpectMessageBatch(ReadActorId1, { Json3 });
-        ExpectMessageBatch(ReadActorId2, { Json2, Json3 });
+        ExpectMessageBatch(ReadActorId1, { Json4 });
+        ExpectMessageBatch(ReadActorId2, { Json2, Json3, Json4 });
 
         StopSession(ReadActorId1, source);
         StopSession(ReadActorId2, source);

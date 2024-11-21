@@ -826,8 +826,9 @@ void WrapIOErrors(std::function<void()> func)
         auto status = ex.Status();
         switch (status) {
             case ENOMEM:
-                fprintf(stderr, "Out-of-memory condition detected during I/O operation; terminating\n");
-                AbortProcess(ToUnderlying(EProcessExitCode::OutOfMemory));
+                AbortProcessDramatically(
+                    EProcessExitCode::OutOfMemory,
+                    "Out-of-memory on I/O operation");
                 break;
 
             case EIO:

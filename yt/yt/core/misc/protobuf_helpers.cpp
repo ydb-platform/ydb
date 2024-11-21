@@ -195,8 +195,8 @@ bool TryDeserializeProtoWithEnvelope(
         return false;
     }
 
-    NCompression::ECodec codecId;
-    if (!TryEnumCast(envelope.codec(), &codecId)) {
+    auto codecId = TryCheckedEnumCast<NCompression::ECodec>(envelope.codec());
+    if (!codecId) {
         return false;
     }
 
@@ -206,12 +206,12 @@ bool TryDeserializeProtoWithEnvelope(
 
     auto compressedMessage = TSharedRef(sourceMessage, fixedHeader->MessageSize, nullptr);
 
-    auto* codec = NCompression::GetCodec(codecId);
+    auto* codec = NCompression::GetCodec(*codecId);
     try {
         auto serializedMessage = codec->Decompress(compressedMessage);
 
         return TryDeserializeProto(message, serializedMessage);
-    } catch (const std::exception& ex) {
+    } catch (const std::exception&) {
         return false;
     }
 }
@@ -418,7 +418,7 @@ void ToProto(NYT::NProto::TExtensionSet* protoExtensionSet, const TExtensionSet&
     }
 }
 
-void Serialize(const TExtensionSet& extensionSet, NYson::IYsonConsumer* consumer)
+void Serialize(const TExtensionSet& extensionSet, NYson::IYsonConsumer* consumer, const TProtobufParserOptions& parserOptions = {})
 {
     BuildYsonFluently(consumer)
         .DoMapFor(extensionSet.Extensions, [&] (TFluentMap fluent, const TExtension& extension) {
@@ -433,7 +433,8 @@ void Serialize(const TExtensionSet& extensionSet, NYson::IYsonConsumer* consumer
                     ParseProtobuf(
                         fluent.GetConsumer(),
                         &inputStream,
-                        ReflectProtobufMessageType(extensionDescriptor->MessageDescriptor));
+                        ReflectProtobufMessageType(extensionDescriptor->MessageDescriptor),
+                        parserOptions);
                 });
         });
 }
@@ -463,7 +464,7 @@ void Deserialize(TExtensionSet& extensionSet, NYTree::INodePtr node)
     }
 }
 
-REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION(NYT::NProto::TExtensionSet, TExtensionSet)
+REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(NYT::NProto::TExtensionSet, TExtensionSet)
 
 ////////////////////////////////////////////////////////////////////////////////
 

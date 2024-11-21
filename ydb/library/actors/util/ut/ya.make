@@ -14,6 +14,7 @@ SRCS(
     shared_data_ut.cpp
     shared_data_rope_backend_ut.cpp
     shared_data_native_rope_backend_ut.cpp
+    spinparkpad_ut.cpp
     unordered_cache_ut.cpp
 )
 

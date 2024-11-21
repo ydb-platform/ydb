@@ -152,7 +152,7 @@ public:
     TKqpTempTablesState::TConstPtr TempTablesState;
     TMaybe<TActorId> PoolHandlerActor;
 
-    THolder<NYql::TExprContext> SplittedCtx;
+    std::shared_ptr<NYql::TExprContext> SplittedCtx;
     TVector<NYql::TExprNode::TPtr> SplittedExprs;
     NYql::TExprNode::TPtr SplittedWorld;
     int NextSplittedExpr = 0;

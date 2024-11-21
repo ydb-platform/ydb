@@ -1,7 +1,7 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>

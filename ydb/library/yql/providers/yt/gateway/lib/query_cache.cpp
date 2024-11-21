@@ -2,8 +2,8 @@
 #include "yt_helpers.h"
 
 #include <ydb/library/yql/providers/yt/lib/hash/yql_hash_builder.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <yt/cpp/mapreduce/interface/errors.h>
 #include <yt/cpp/mapreduce/interface/error_codes.h>

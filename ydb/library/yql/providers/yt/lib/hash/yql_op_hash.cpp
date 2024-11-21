@@ -1,10 +1,10 @@
 #include "yql_op_hash.h"
 #include "yql_hash_builder.h"
 
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql {
 

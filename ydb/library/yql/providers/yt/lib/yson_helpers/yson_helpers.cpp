@@ -1,8 +1,8 @@
 #include "yson_helpers.h"
 
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/utils/log/context.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/log/context.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/detail.h>

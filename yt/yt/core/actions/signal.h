@@ -213,12 +213,12 @@ public: \
 protected: \
     ::NYT::TCallbackList<TSignature> name##_; \
 public: \
-    virtual void Subscribe##name(const ::NYT::TCallback<TSignature>& callback) override \
+    void Subscribe##name(const ::NYT::TCallback<TSignature>& callback) override \
     { \
         name##_.Subscribe(callback); \
     } \
     \
-    virtual void Unsubscribe##name(const ::NYT::TCallback<TSignature>& callback) override \
+    void Unsubscribe##name(const ::NYT::TCallback<TSignature>& callback) override \
     { \
         name##_.Unsubscribe(callback); \
     } \
@@ -233,8 +233,8 @@ public: \
     ::NYT::TCallbackList<TSignature>* Get##name##Signal()
 
 #define DECLARE_SIGNAL_OVERRIDE(TSignature, name) \
-    virtual void Subscribe##name(const ::NYT::TCallback<TSignature>& callback) override; \
-    virtual void Unsubscribe##name(const ::NYT::TCallback<TSignature>& callback) override
+    void Subscribe##name(const ::NYT::TCallback<TSignature>& callback) override; \
+    void Unsubscribe##name(const ::NYT::TCallback<TSignature>& callback) override
 
 #define DECLARE_INTERFACE_SIGNAL(TSignature, name) \
     virtual void Subscribe##name(const ::NYT::TCallback<TSignature>& callback) = 0; \

@@ -18,6 +18,7 @@ SRCS(
     rpc_alter_table.cpp
     rpc_backup.cpp
     rpc_begin_transaction.cpp
+    rpc_bsconfig.cpp
     rpc_calls.cpp
     rpc_cancel_operation.cpp
     rpc_cms.cpp
@@ -131,13 +132,14 @@ PEERDIR(
     ydb/core/security
     ydb/core/security/ldap_auth_provider
     ydb/library/aclib
-    ydb/library/binary_json
-    ydb/library/dynumber
+    yql/essentials/types/binary_json
+    yql/essentials/types/dynumber
     ydb/library/mkql_proto
     ydb/library/persqueue/topic_parser
-    ydb/library/yql/parser/pg_wrapper/interface
-    ydb/library/yql/public/types
-    ydb/library/yql/public/issue
+    ydb/library/yaml_config
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/public/types
+    yql/essentials/public/issue
     ydb/library/services
     ydb/public/api/grpc/draft
     ydb/public/api/protos

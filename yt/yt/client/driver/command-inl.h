@@ -392,7 +392,7 @@ void TSelectRowsCommandBase<
         .GreaterThan(0)
         .Optional(/*init*/ false);
 
-    registrar.template ParameterWithUniversalAccessor<ui64>(
+    registrar.template ParameterWithUniversalAccessor<i64>(
         "min_row_count_per_subquery",
         [] (TThis* command) -> auto& {
             return command->Options.MinRowCountPerSubquery;

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "schemeshard.h"
 #include "schemeshard_types.h"
 #include "schemeshard_info_types.h"
 
@@ -11,7 +10,7 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 
 #include <ydb/library/actors/core/actorid.h>
 
@@ -229,7 +228,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
 
         if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
             status = NKikimrScheme::EStatus::StatusInvalidParameter;
-            error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo); 
+            error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
             return false;
         }
     } else if (!IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {

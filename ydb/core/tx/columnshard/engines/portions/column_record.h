@@ -121,6 +121,14 @@ public:
         return BlobRange;
     }
 
+    NKikimrTxColumnShard::TColumnChunkInfo SerializeToDBProto() const {
+        NKikimrTxColumnShard::TColumnChunkInfo result;
+        result.SetSSColumnId(GetEntityId());
+        result.SetChunkIdx(GetChunkIdx());
+        *result.MutableChunkMetadata() = Meta.SerializeToProto();
+        *result.MutableBlobRangeLink() = BlobRange.SerializeToProto();
+        return result;
+    }
     NKikimrColumnShardDataSharingProto::TColumnRecord SerializeToProto() const;
     static TConclusion<TColumnRecord> BuildFromProto(const NKikimrColumnShardDataSharingProto::TColumnRecord& proto) {
         TColumnRecord result;

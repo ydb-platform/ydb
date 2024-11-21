@@ -7,10 +7,10 @@ SRCS(
 
 PEERDIR(
     library/cpp/yson
-    ydb/library/yql/minikql
-    ydb/library/yql/public/udf
-    ydb/library/yql/utils
-    ydb/library/yql/providers/common/codec
+    yql/essentials/minikql
+    yql/essentials/public/udf
+    yql/essentials/utils
+    yql/essentials/providers/common/codec
     ydb/library/yql/providers/yt/codec
     ydb/library/yql/providers/yt/lib/mkql_helpers
 )

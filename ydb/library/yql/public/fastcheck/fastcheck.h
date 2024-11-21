@@ -1,7 +1,7 @@
 #pragma once
-#include <ydb/library/yql/ast/yql_errors.h>
+#include <yql/essentials/ast/yql_errors.h>
 #include <util/generic/hash.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NYql {
 namespace NFastCheck {

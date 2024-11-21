@@ -18,8 +18,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
 #include <ydb/core/cms/console/console.h>
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
 
 #include <util/stream/null.h>
 
@@ -299,6 +299,7 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(CreateBackupCollection);
     GENERIC_HELPERS(DropBackupCollection);
     DROP_BY_PATH_ID_HELPERS(DropBackupCollection);
+    GENERIC_HELPERS(BackupBackupCollection);
 
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS

@@ -43,12 +43,13 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
 
 ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& index) const {
     if (SchemaVersion) {
-        auto schema = index.GetSchema(SchemaVersion.value());
+        auto schema = index.GetSchemaVerified(SchemaVersion.value());
         AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value());
         return schema;
+    } else {
+        AFL_VERIFY(MinSnapshotDeprecated);
+        return index.GetSchemaVerified(*MinSnapshotDeprecated);
     }
-    AFL_VERIFY(MinSnapshotDeprecated);
-    return index.GetSchema(*MinSnapshotDeprecated);
 }
 
 void TPortionInfoConstructor::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch) {

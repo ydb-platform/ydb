@@ -1356,7 +1356,7 @@ inline bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescri
             return false;
         }
         cells.push_back({});
-        if (!CellFromProtoVal(fd.Type, fd.Typmod, &proto.Getitems(fd.PositionInStruct), cells.back(), err, valueDataPool)) {
+        if (!CellFromProtoVal(fd.Type, fd.Typmod, &proto.Getitems(fd.PositionInStruct), false, cells.back(), err, valueDataPool)) {
             return false;
         }
 

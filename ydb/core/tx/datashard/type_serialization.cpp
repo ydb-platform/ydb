@@ -1,8 +1,8 @@
 #include "type_serialization.h"
 
-#include <ydb/library/dynumber/dynumber.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/type_desc.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
 #include <library/cpp/string_utils/quote/quote.h>

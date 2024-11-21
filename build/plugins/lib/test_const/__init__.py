@@ -184,6 +184,7 @@ JSTYLE_RUNNER_LIB = 'JSTYLE_LIB_RESOURCE_GLOBAL'
 NODEJS_RESOURCE = 'NODEJS_RESOURCE_GLOBAL'
 NYC_RESOURCE = 'NYC_RESOURCE_GLOBAL'
 RUFF_RESOURCE = 'RUFF_RESOURCE_GLOBAL'
+CLANG_FORMAT_RESOURCE = 'CLANG_FORMAT_RESOURCE_GLOBAL'
 
 # test_tool resource for host platform.
 # source - build/platform/test_tool/host.ya.make.inc.
@@ -445,9 +446,6 @@ class PythonLinterName(Enum):
 
 class CppLinterName(Enum):
     ClangFormat = "clang_format"
-    # kept for compatibility
-    # TODO delete along with the record in default_configs.json
-    DoNotUse = "clang-format"
 
 
 class DefaultLinterConfig(Enum):

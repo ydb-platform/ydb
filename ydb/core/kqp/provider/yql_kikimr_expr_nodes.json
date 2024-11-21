@@ -562,6 +562,17 @@
                 {"Index": 3, "Name": "Prefix", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "Cascade", "Type":  "TCoAtom"}
             ]
+        },
+        {
+            "Name": "TKiBackup",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiBackup!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "BackupCollection", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Prefix", "Type": "TCoAtom"}
+            ]
         }
     ]
 }

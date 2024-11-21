@@ -18,12 +18,12 @@ SRCS(
 PEERDIR(
     library/cpp/random_provider
     library/cpp/time_provider
-    ydb/library/yql/minikql/comp_nodes/llvm14
-    ydb/library/yql/public/udf/service/exception_policy
+    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/public/udf/service/exception_policy
     ydb/library/yql/providers/yt/comp_nodes/llvm14
     ydb/library/yql/providers/yt/codec
     ydb/library/yql/providers/yt/codec/codegen
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/sql/pg_dummy
 )
 
 YQL_LAST_ABI_VERSION()

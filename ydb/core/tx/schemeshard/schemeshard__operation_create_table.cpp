@@ -6,6 +6,7 @@
 #include <ydb/core/protos/datashard_config.pb.h>
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
 
 namespace {
 

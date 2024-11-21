@@ -2,7 +2,10 @@ IF (NOT SANITIZER_TYPE)
 
 PY3TEST()
 
-TEST_SRCS(test_generator.py)
+TEST_SRCS(
+    test_generator.py
+    test_init.py
+)
 
 TIMEOUT(600)
 SIZE(MEDIUM)

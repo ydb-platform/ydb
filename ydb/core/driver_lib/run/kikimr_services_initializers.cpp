@@ -42,7 +42,6 @@
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
 #include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/cms/console/log_settings_configurator.h>
-#include <ydb/core/cms/console/shared_cache_configurator.h>
 #include <ydb/core/cms/console/validators/core_validators.h>
 #include <ydb/core/cms/http.h>
 
@@ -175,8 +174,8 @@
 
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <ydb/services/metadata/ds_table/service.h>
@@ -1092,38 +1091,17 @@ TSharedCacheInitializer::TSharedCacheInitializer(const TKikimrRunConfig& runConf
 void TSharedCacheInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData) {
-    auto config = MakeHolder<TSharedPageCacheConfig>();
-
-    NKikimrSharedCache::TSharedCacheConfig cfg;
+    NKikimrSharedCache::TSharedCacheConfig config;
     if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasSharedCacheConfig()) {
-        cfg.MergeFrom(Config.GetBootstrapConfig().GetSharedCacheConfig());
+        config.MergeFrom(Config.GetBootstrapConfig().GetSharedCacheConfig());
     }
     if (Config.HasSharedCacheConfig()) {
-        cfg.MergeFrom(Config.GetSharedCacheConfig());
+        config.MergeFrom(Config.GetSharedCacheConfig());
     }
 
-    if (cfg.HasMemoryLimit() && cfg.GetMemoryLimit() != 0) {
-        // config limit is optional
-        // if preserved apply both memory controller limit and config limit
-        config->LimitBytes = cfg.GetMemoryLimit();
-    } else {
-        config->LimitBytes = {};
-    }
-    config->TotalAsyncQueueInFlyLimit = cfg.GetAsyncQueueInFlyLimit();
-    config->TotalScanQueueInFlyLimit = cfg.GetScanQueueInFlyLimit();
-    config->ReplacementPolicy = cfg.GetReplacementPolicy();
-    config->ActivePagesReservationPercent = cfg.GetActivePagesReservationPercent();
-
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> sausageGroup = tabletGroup->GetSubgroup("type", "S_CACHE");
-    config->Counters = new TSharedPageCacheCounters(sausageGroup);
-
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeSharedPageCacheId(0),
-        TActorSetupCmd(CreateSharedPageCache(std::move(config)), TMailboxType::ReadAsFilled, appData->UserPoolId)));
-
-    auto *configurator = NConsole::CreateSharedCacheConfigurator();
-    setup->LocalServices.emplace_back(TActorId(),
-                                      TActorSetupCmd(configurator, TMailboxType::HTSwap, appData->UserPoolId));
+    auto* actor = NSharedCache::CreateSharedPageCache(config, appData->Counters);
+    setup->LocalServices.emplace_back(NSharedCache::MakeSharedPageCacheId(0),
+        TActorSetupCmd(actor, TMailboxType::ReadAsFilled, appData->UserPoolId));
 }
 
 // TBlobCacheInitializer

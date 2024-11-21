@@ -1,6 +1,5 @@
 #pragma once
 
-#include "schemeshard.h"
 #include "schemeshard_types.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_path_element.h"

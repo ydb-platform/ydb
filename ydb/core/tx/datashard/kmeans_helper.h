@@ -77,6 +77,7 @@ struct TMetric {
 
     void Fill(TString& d, TSum* embedding, ui64& c)
     {
+        Y_ASSERT(c > 0);
         const auto count = static_cast<TSum>(std::exchange(c, 0));
         auto data = GetData(d.MutRef().data());
         for (auto& coord : data) {

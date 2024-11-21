@@ -100,6 +100,10 @@ public:
     TPortionInfo(TPortionInfo&&) = default;
     TPortionInfo& operator=(TPortionInfo&&) = default;
 
+    ui32 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {
+        return (GetRecordsCount() / 10000 + 1) * sizeof(TColumnRecord) * schema->GetColumnsCount() + schema->GetIndexesCount() * sizeof(TIndexChunk);
+    }
+
     ui32 PredictMetadataMemorySize(const ui32 columnsCount) const {
         return (GetRecordsCount() / 10000 + 1) * sizeof(TColumnRecord) * columnsCount;
     }
@@ -221,7 +225,11 @@ public:
     const TString& GetIndexStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
     const TString& GetEntityStorageId(const ui32 entityId, const TIndexInfo& indexInfo) const;
 
-    ui64 GetTxVolume() const;   // fake-correct method for determ volume on rewrite this portion in transaction progress
+    ui64 GetTxVolume() const {
+        return 1024;
+    }
+
+    ui64 GetApproxChunksCount(const ui32 schemaColumnsCount) const;
     ui64 GetMetadataMemorySize() const;
 
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;

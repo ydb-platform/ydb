@@ -18,15 +18,11 @@ TInvokerWrapper<VirtualizeBase>::TInvokerWrapper(IInvokerPtr underlyingInvoker)
 }
 
 template <bool VirtualizeBase>
-void TInvokerWrapper<VirtualizeBase>::Invoke(TClosure callback)
-{
-    return UnderlyingInvoker_->Invoke(std::move(callback));
-}
-
-template <bool VirtualizeBase>
 void TInvokerWrapper<VirtualizeBase>::Invoke(TMutableRange<TClosure> callbacks)
 {
-    return UnderlyingInvoker_->Invoke(callbacks);
+    for (auto& callback : callbacks) {
+        static_cast<IInvoker*>(this)->Invoke(std::move(callback));
+    }
 }
 
 template <bool VirtualizeBase>

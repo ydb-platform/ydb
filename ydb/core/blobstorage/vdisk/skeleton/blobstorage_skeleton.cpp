@@ -202,25 +202,25 @@ namespace NKikimr {
                     if (!ApplyHugeBlobSize(type.GetMinHugeBlobSizeInBytes())) {
                         continue;
                     }
-                    Y_ABORT_UNLESS(MinREALHugeBlobInBytes);
+                    Y_ABORT_UNLESS(MinHugeBlobInBytes);
                     if (Config->RunRepl) {
-                        ctx.Send(Db->ReplID, new TEvMinHugeBlobSizeUpdate(MinREALHugeBlobInBytes));
+                        ctx.Send(Db->ReplID, new TEvMinHugeBlobSizeUpdate(MinHugeBlobInBytes));
                     }
                     if (Hull) {
-                        Hull->ApplyHugeBlobSize(MinREALHugeBlobInBytes, ctx);
+                        Hull->ApplyHugeBlobSize(MinHugeBlobInBytes, ctx);
                     }
-                    ctx.Send(*SkeletonFrontIDPtr, new TEvMinHugeBlobSizeUpdate(MinREALHugeBlobInBytes));
+                    ctx.Send(*SkeletonFrontIDPtr, new TEvMinHugeBlobSizeUpdate(MinHugeBlobInBytes));
                 }
             }
         }
 
         bool ApplyHugeBlobSize(ui32 minHugeBlobInBytes) {
-            ui32 alignedSize = HugeBlobCtx->HugeSlotsMap->AlignByBlockSize(minHugeBlobInBytes) + 1;
-            if (MinREALHugeBlobInBytes == alignedSize) {
+            const ui32 alignedSize = HugeBlobCtx->HugeSlotsMap->AlignByBlockSize(minHugeBlobInBytes);
+            if (MinHugeBlobInBytes == alignedSize) {
                 return false;
             }
-            MinREALHugeBlobInBytes = alignedSize;
-            IFaceMonGroup->MinHugeBlobInBytes(MinREALHugeBlobInBytes);
+            MinHugeBlobInBytes = alignedSize;
+            IFaceMonGroup->MinHugeBlobInBytes(MinHugeBlobInBytes);
             return true;
         }
 
@@ -583,7 +583,7 @@ namespace NKikimr {
                 TVPutInfo &info = putsInfo.back();
 
                 try {
-                    info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, blobId.FullID(), MinREALHugeBlobInBytes);
+                    info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, blobId.FullID(), MinHugeBlobInBytes);
                     if (info.IsHugeBlob) {
                         LOG_CRIT_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << "TEvVMultiPut: TEvVMultiPut has huge blob# "
                             << blobId << " Marker# BSVS08");
@@ -726,7 +726,7 @@ namespace NKikimr {
             const ui64 bufSize = info.Buffer.GetSize();
 
             try {
-                info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID(), MinREALHugeBlobInBytes);
+                info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID(), MinHugeBlobInBytes);
             } catch (yexception ex) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << ex.what()  << " Marker# BSVS41");
                 info.HullStatus = {NKikimrProto::ERROR, "", false};
@@ -1788,7 +1788,7 @@ namespace NKikimr {
             auto msg = std::make_unique<TEvFrontRecoveryStatus>(TEvFrontRecoveryStatus::SyncGuidRecoveryDone,
                                                           NKikimrProto::OK,
                                                           (PDiskCtx ? PDiskCtx->Dsk : nullptr),
-                                                          MinREALHugeBlobInBytes,
+                                                          MinHugeBlobInBytes,
                                                           Db->GetVDiskIncarnationGuid());
             ctx.Send(*SkeletonFrontIDPtr, msg.release());
             ctx.Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
@@ -1815,7 +1815,7 @@ namespace NKikimr {
             auto msg = std::make_unique<TEvFrontRecoveryStatus>(phase,
                                                           NKikimrProto::ERROR,
                                                           (PDiskCtx ? PDiskCtx->Dsk : nullptr),
-                                                          MinREALHugeBlobInBytes,
+                                                          MinHugeBlobInBytes,
                                                           Db->GetVDiskIncarnationGuid());
             ctx.Send(*SkeletonFrontIDPtr, msg.release());
             // push the status
@@ -1863,7 +1863,7 @@ namespace NKikimr {
             // check status
             if (ev->Get()->Status == NKikimrProto::OK) {
                 ApplyHugeBlobSize(Config->MinHugeBlobInBytes);
-                Y_ABORT_UNLESS(MinREALHugeBlobInBytes);
+                Y_ABORT_UNLESS(MinHugeBlobInBytes);
 
                 // handle special case when donor disk starts and finds out that it has been wiped out
                 if (ev->Get()->LsnMngr->GetOriginallyRecoveredLsn() == 0 && Config->BaseInfo.DonorMode) {
@@ -1881,7 +1881,7 @@ namespace NKikimr {
                 auto msg = std::make_unique<TEvFrontRecoveryStatus>(TEvFrontRecoveryStatus::LocalRecoveryDone,
                                                               NKikimrProto::OK,
                                                               PDiskCtx->Dsk,
-                                                              MinREALHugeBlobInBytes,
+                                                              MinHugeBlobInBytes,
                                                               Db->GetVDiskIncarnationGuid());
                 ctx.Send(*SkeletonFrontIDPtr, msg.release());
 
@@ -1943,7 +1943,7 @@ namespace NKikimr {
                     Db->HugeKeeperID);
 
                 // create Hull
-                Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, HugeBlobCtx, MinREALHugeBlobInBytes,
+                Hull = std::make_shared<THull>(Db->LsnMngr, PDiskCtx, HugeBlobCtx, MinHugeBlobInBytes,
                     Db->SkeletonID, Config->BalancingEnableDelete, std::move(*ev->Get()->Uncond),
                     ctx.ExecutorThread.ActorSystem, Config->BarrierValidation, Db->HugeKeeperID);
                 ActiveActors.Insert(Hull->RunHullServices(Config, HullLogCtx, Db->SyncLogFirstLsnToKeep,
@@ -2044,7 +2044,7 @@ namespace NKikimr {
                 DbBirthLsn = ev->Get()->DbBirthLsn;
                 SkeletonIsUpAndRunning(ctx, Config->RunRepl);
                 if (Config->RunRepl) {
-                    auto replCtx = std::make_shared<TReplCtx>(VCtx, HullCtx, PDiskCtx, HugeBlobCtx, MinREALHugeBlobInBytes, Hull->GetHullDs(),
+                    auto replCtx = std::make_shared<TReplCtx>(VCtx, HullCtx, PDiskCtx, HugeBlobCtx, MinHugeBlobInBytes, Hull->GetHullDs(),
                         GInfo, SelfId(), Config, PDiskWriteBytes, Config->ReplPausedAtStart);
                     Db->ReplID.Set(ctx.Register(CreateReplActor(replCtx)));
                     ActiveActors.Insert(Db->ReplID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
@@ -2594,7 +2594,7 @@ namespace NKikimr {
                 .TimeToSleepIfNothingToDo=Config->BalancingTimeToSleepIfNothingToDo,
             };
             auto balancingCtx = std::make_shared<TBalancingCtx>(
-                balancingCfg, VCtx, PDiskCtx, HugeBlobCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo, MinREALHugeBlobInBytes);
+                balancingCfg, VCtx, PDiskCtx, HugeBlobCtx, SelfId(), Hull->GetSnapshot(), Config, GInfo, MinHugeBlobInBytes);
             BalancingId = RunInBatchPool(ctx, CreateBalancingActor(balancingCtx));
             ActiveActors.Insert(BalancingId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
@@ -2857,7 +2857,7 @@ namespace NKikimr {
         THullCtxPtr HullCtx;
         THugeBlobCtxPtr HugeBlobCtx;
         std::shared_ptr<THullLogCtx> HullLogCtx;
-        ui32 MinREALHugeBlobInBytes = 0;
+        ui32 MinHugeBlobInBytes = 0;
         std::shared_ptr<THull> Hull; // run it after local recovery
         std::shared_ptr<TOutOfSpaceLogic> OutOfSpaceLogic;
         std::shared_ptr<TQueryCtx> QueryCtx;

@@ -6,7 +6,7 @@
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
-#include <ydb/library/yql/minikql/mkql_terminator.h>
+#include <yql/essentials/minikql/mkql_terminator.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -189,10 +189,18 @@ TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(
     , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard()) {
 }
 
+void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
+    auto sourcePtr = Source.lock();
+    if (sourcePtr) {
+        sourcePtr->GetContext()->GetCommonContext()->AbortWithError(
+            "cannot allocate memory for step " + Step.GetName() + ": '" + errorMessage + "'");
+    }
+}
+
 TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
 
-    ui64 size = 0;
+    ui64 size = PredefinedSize.value_or(0);
     for (auto&& i : Packs) {
         ui32 sizeLocal = source->GetColumnsVolume(i.GetColumns().GetColumnIds(), i.GetMemType());
         if (source->GetStageData().GetUseFilter() && source->GetContext()->GetReadMetadata()->Limit && i.GetMemType() != EMemType::Blob) {

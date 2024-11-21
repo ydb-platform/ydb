@@ -7,10 +7,10 @@
 
 #include <ydb/library/yql/providers/yt/common/yql_yt_settings.h>
 #include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
-#include <ydb/library/yql/dq/integration/yql_dq_integration.h>
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/core/yql_execution.h>
-#include <ydb/library/yql/ast/yql_constraint.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_execution.h>
+#include <yql/essentials/ast/yql_constraint.h>
 
 #include <library/cpp/time_provider/monotonic.h>
 #include <library/cpp/yson/writer.h>

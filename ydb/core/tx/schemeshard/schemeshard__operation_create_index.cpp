@@ -1,5 +1,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard_impl.h"
 
 namespace {
 

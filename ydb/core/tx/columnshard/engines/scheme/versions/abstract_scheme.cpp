@@ -380,6 +380,9 @@ bool ISnapshotSchema::IsReplaceableByNext(const ISnapshotSchema& nextSchema) con
         }
     }
     return true;
+
+ui32 ISnapshotSchema::GetIndexesCount() const {
+    return GetIndexInfo().GetIndexes().size();
 }
 
 }   // namespace NKikimr::NOlap

@@ -94,11 +94,11 @@ dependencies {
 {%-     endif -%}
 {%- endfor %}
 
-{% if target.proto_namespace -%}
+{%- if target.proto_namespace %}
     protobuf(files(File(buildProtoDir, "{{ target.proto_namespace }}")))
-{% else -%}
+{%- else %}
     protobuf(files(buildProtoDir))
-{% endif -%}
+{%- endif %}
 }
 
 protobuf {
@@ -106,17 +106,30 @@ protobuf {
         // Download from repositories
         artifact = "com.google.protobuf:protoc:{%- if target.proto_compiler_version -%}{{ target.proto_compiler_version }}{%- else -%}3.22.5{%- endif -%}"
     }
-{%  if target.proto_grpc is defined -%}
+{%  if target.proto_grpc -%}
     plugins {
         id("grpc") {
             artifact = "io.grpc:protoc-gen-grpc-java:{%- if target.proto_grpc_version -%}{{ target.proto_grpc_version }}{%- else -%}1.45.0{%- endif -%}"
         }
+{%-     if target.proto_kotlin_grpc %}
+        id("grpckt") {
+            artifact = "io.grpc:protoc-gen-grpc-kotlin:{%- if target.proto_kotlin_grpc_version -%}{{ target.proto_kotlin_grpc_version }}{%- else -%}1.3.1{%- endif -%}:jdk8@jar"
+        }
+{%      endif -%}
     }
     generateProtoTasks {
         all().forEach {
             it.plugins {
                 id("grpc")
+{%-     if target.proto_kotlin_grpc %}
+                id("grpckt")
+{%      endif -%}
             }
+{%-     if target.proto_kotlin_grpc %}
+            it.builtins {
+                create("kotlin")
+            }
+{%      endif -%}
         }
     }
 {%- endif %}
@@ -145,9 +158,8 @@ afterEvaluate {
     tasks.getByName("extractProto").dependsOn(prepareProto)
 }
 {# To avoid problems when build project with proto #}
-tasks.named("sourcesJar").configure {
-    dependsOn("generateProto")
-}
+tasks.getByName("sourcesJar").dependsOn("generateProto")
+
 {# To disable redundant javadoc (it may fail the build) #}
 tasks.withType<Javadoc>().configureEach {
     isEnabled = false

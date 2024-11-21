@@ -1,9 +1,9 @@
 #include "clusters_from_connections.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/generic/connector/api/common/data_source.pb.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_cluster_config.h>
-#include <ydb/library/yql/utils/url_builder.h>
+#include <yql/essentials/utils/url_builder.h>
 #include <ydb/library/actors/http/http.h>
 
 #include <util/generic/hash.h>

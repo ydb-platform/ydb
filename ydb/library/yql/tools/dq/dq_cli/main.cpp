@@ -1,8 +1,8 @@
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
 #include <ydb/library/yql/providers/dq/actors/yt/nodeid_assigner.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <ydb/library/grpc/client/grpc_client_low.h>

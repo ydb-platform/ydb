@@ -4,9 +4,9 @@
 
 #include <ydb/library/yql/providers/yt/comp_nodes/yql_mkql_file_input_state.h>
 #include <ydb/library/yql/providers/yt/codec/yt_codec.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/interface/errors.h>

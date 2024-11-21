@@ -9,8 +9,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/core/testlib/cs_helper.h>
 #include <ydb/core/testlib/common_helper.h>
-#include <ydb/library/uuid/uuid.h>
-#include <ydb/library/binary_json/write.h>
+#include <yql/essentials/types/uuid/uuid.h>
+#include <yql/essentials/types/binary_json/write.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 

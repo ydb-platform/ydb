@@ -3,7 +3,7 @@
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/function/gateway/dq_function_gateway.h>
 #include <ydb/library/yql/providers/function/common/dq_function_types.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 
 #include <util/generic/string.h>
 #include <util/generic/ptr.h>

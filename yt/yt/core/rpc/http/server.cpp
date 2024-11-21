@@ -116,7 +116,7 @@ public:
 
         YT_VERIFY(message.Size() >= 2);
         if (responseHeader.has_format()) {
-            auto format = CheckedEnumCast<EMessageFormat>(responseHeader.format());
+            auto format = FromProto<EMessageFormat>(responseHeader.format());
             Rsp_->GetHeaders()->Add("Content-Type", ToHttpContentType(format));
         }
 

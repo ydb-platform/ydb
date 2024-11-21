@@ -50,8 +50,8 @@ ui64 TPortionInfo::GetMetadataMemorySize() const {
     return sizeof(TPortionInfo) - sizeof(TPortionMeta) + Meta.GetMetadataMemorySize();
 }
 
-ui64 TPortionInfo::GetTxVolume() const {
-    return 1024;
+ui64 TPortionInfo::GetApproxChunksCount(const ui32 schemaColumnsCount) const {
+    return schemaColumnsCount * 256 * (GetRecordsCount() / 10000 + 1);
 }
 
 void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
@@ -109,11 +109,11 @@ const TString& TPortionInfo::GetIndexStorageId(const ui32 indexId, const TIndexI
 ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) const {
     AFL_VERIFY(SchemaVersion);
     if (SchemaVersion) {
-        auto schema = index.GetSchema(SchemaVersion.value());
+        auto schema = index.GetSchemaVerified(SchemaVersion.value());
         AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value());
         return schema;
     }
-    return index.GetSchema(MinSnapshotDeprecated);
+    return index.GetSchemaVerified(MinSnapshotDeprecated);
 }
 
 ISnapshotSchema::TPtr TPortionInfo::TSchemaCursor::GetSchema(const TPortionInfoConstructor& portion) {

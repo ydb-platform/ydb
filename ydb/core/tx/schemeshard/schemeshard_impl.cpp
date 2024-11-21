@@ -18,8 +18,8 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <util/random/random.h>
 #include <util/system/byteorder.h>
 #include <util/system/unaligned_mem.h>
@@ -1626,6 +1626,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
         Y_UNREACHABLE();
     case TTxState::TxMoveTable:
     case TTxState::TxMoveTableIndex:
+    case TTxState::TxMoveSequence:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxRestoreIncrementalBackupAtTable:
         return TPathElement::EPathState::EPathStateOutgoingIncrementalRestore;
@@ -3649,6 +3650,22 @@ void TSchemeShard::PersistSequence(NIceDb::TNiceDb& db, TPathId pathId, const TS
         NIceDb::TUpdate<Schema::Sequences::Sharding>(serializedSharding));
 }
 
+void TSchemeShard::PersistSequence(NIceDb::TNiceDb& db, TPathId pathId)
+{
+    Y_ABORT_UNLESS(PathsById.contains(pathId));
+    TPathElement::TPtr elem = PathsById.at(pathId);
+
+    Y_ABORT_UNLESS(Sequences.contains(pathId));
+    TSequenceInfo::TPtr sequenceInfo = Sequences.at(pathId);
+
+    Y_ABORT_UNLESS(elem->IsSequence());
+
+    Y_ABORT_UNLESS(sequenceInfo);
+
+    PersistSequence(db, pathId, *sequenceInfo);
+
+}
+
 void TSchemeShard::PersistSequenceRemove(NIceDb::TNiceDb& db, TPathId pathId)
 {
     Y_ABORT_UNLESS(IsLocalId(pathId));
@@ -3681,6 +3698,22 @@ void TSchemeShard::PersistSequenceAlter(NIceDb::TNiceDb& db, TPathId pathId, con
         NIceDb::TUpdate<Schema::SequencesAlters::AlterVersion>(sequenceInfo.AlterVersion),
         NIceDb::TUpdate<Schema::SequencesAlters::Description>(serializedDescription),
         NIceDb::TUpdate<Schema::SequencesAlters::Sharding>(serializedSharding));
+}
+
+void TSchemeShard::PersistSequenceAlter(NIceDb::TNiceDb& db, TPathId pathId)
+{
+    Y_ABORT_UNLESS(PathsById.contains(pathId));
+    TPathElement::TPtr elem = PathsById.at(pathId);
+
+    Y_ABORT_UNLESS(Sequences.contains(pathId));
+    TSequenceInfo::TPtr sequenceInfo = Sequences.at(pathId);
+
+    Y_ABORT_UNLESS(elem->IsSequence());
+
+    TSequenceInfo::TPtr alterData = sequenceInfo->AlterData;
+    Y_ABORT_UNLESS(alterData);
+
+    PersistSequenceAlter(db, pathId, *alterData);
 }
 
 void TSchemeShard::PersistSequenceAlterRemove(NIceDb::TNiceDb& db, TPathId pathId)
@@ -4818,7 +4851,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
 
-        HFuncTraced(TEvPersQueue::TEvProposeTransactionAttachResult, Handle);
+        HFuncTraced(TEvDataShard::TEvProposeTransactionAttachResult, Handle);
 
         HFuncTraced(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         HFuncTraced(TEvPrivate::TEvSendBaseStatsToSA, Handle);
@@ -5412,12 +5445,12 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TAct
     Execute(CreateTxOperationProgress(TOperationId(txId, ev->Get()->TxPartId)), ctx);
 }
 
-void TSchemeShard::Handle(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx)
+void TSchemeShard::Handle(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx)
 {
     const auto txId = TTxId(ev->Get()->Record.GetTxId());
     if (!Operations.contains(txId)) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Got TEvPersQueue::TEvProposeTransactionAttachResult"
+                   "Got TEvDataShard::TEvProposeTransactionAttachResult"
                    << " for unknown txId: " << txId
                    << " message: " << ev->Get()->Record.ShortDebugString());
         return;
@@ -5427,7 +5460,7 @@ void TSchemeShard::Handle(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr&
     TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
     if (partId == InvalidSubTxId) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Got TEvPersQueue::TEvProposeTransactionAttachResult but partId is unknown"
+                   "Got TEvDataShard::TEvProposeTransactionAttachResult but partId is unknown"
                        << ", for txId: " << txId
                        << ", tabletId: " << tabletId
                        << ", at schemeshard: " << TabletID());

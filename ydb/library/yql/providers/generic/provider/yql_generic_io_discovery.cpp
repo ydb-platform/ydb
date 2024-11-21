@@ -15,16 +15,23 @@ namespace NYql {
 
         using namespace NNodes;
 
-        class IConfigModifier {
+        class IClusterConfigModifier {
         public:
-            virtual ~IConfigModifier() = default;
+            using TPtr = std::unique_ptr<IClusterConfigModifier>;
+
+            virtual void CollectUnresolvedClusters(const TExprNode::TListType& reads);
+            virtual IGraphTransformer::TStatus ResolveClusters(TExprContext& ctx);
+            virtual IGraphTransformer::TStatus ModifyClusterConfigs(TExprContext& ctx);
+            virtual std::size_t Count() const;
+            virtual void Cleanup();
+            virtual ~IClusterConfigModifier() = default;
         };
 
-        class TManagedDatabasesConfigModifier {
+        class TManagedDatabasesConfigModifier: public IClusterConfigModifier {
         public:
             TManagedDatabasesConfigModifier(const TGenericState::TPtr& state): State_(state) {};
 
-            void CollectUnresolvedClusters(const TExprNode::TListType& reads) {
+            void CollectUnresolvedClusters(const TExprNode::TListType& reads) override {
                 ILoggingResolver::TAuthMap loggingFolders;
 
                 for (auto& node : reads) {
@@ -53,7 +60,7 @@ namespace NYql {
                 return;
             }
 
-            IGraphTransformer::TStatus Resolve(TExprContext& ctx) {
+            IGraphTransformer::TStatus ResolveClusters(TExprContext& ctx) override {
                 TDatabaseResolverResponse::TDatabaseDescriptionMap descriptions;
 
                 for (const auto& [databaseIdWithType, databaseAuth] : ManagedDatabases_) {
@@ -85,7 +92,7 @@ namespace NYql {
                 return IGraphTransformer::TStatus::Ok;
             }
 
-            IGraphTransformer::TStatus ModifyClusterConfigs(TExprContext& ctx) {
+            IGraphTransformer::TStatus ModifyClusterConfigs(TExprContext& ctx) override {
                 const auto& databaseIdsToClusterNames = State_->Configuration->DatabaseIdsToClusterNames;
                 auto& clusterNamesToClusterConfigs = State_->Configuration->ClusterNamesToClusterConfigs;
 
@@ -135,13 +142,13 @@ namespace NYql {
                 return IGraphTransformer::TStatus::Ok;
             }
 
-            void Cleanup() {
+            void Cleanup() override {
                 if (!DatabaseDescriptions_.empty()) {
                     DatabaseDescriptions_ = {};
                 }
             }
 
-            std::size_t Count() const {
+            std::size_t Count() const override {
                 return DatabaseDescriptions_.size();
             }
 
@@ -155,7 +162,7 @@ namespace NYql {
         public:
             TGenericIODiscoveryTransformer(TGenericState::TPtr state)
                 : State_(std::move(state))
-                , ManagedDatabasesConfigModifier_(State_)
+                , ManagedDatabasesConfigModifier_(std::make_unique<TManagedDatabasesConfigModifier>(state))
             {
             }
 
@@ -185,12 +192,11 @@ namespace NYql {
                 }
 
                 // Collect clusters that need to be resolved
-                ManagedDatabasesConfigModifier_.CollectUnresolvedClusters(reads);
-
-                YQL_CLOG(DEBUG, ProviderGeneric) << "total database clusters to be resolved: " << ManagedDatabasesConfigModifier_.Count();
+                ManagedDatabasesConfigModifier_->CollectUnresolvedClusters(reads);
+                YQL_CLOG(DEBUG, ProviderGeneric) << "total database clusters to be resolved: " << ManagedDatabasesConfigModifier_->Count();
 
                 // Resolve managed clusters
-                auto status = ManagedDatabasesConfigModifier_.Resolve(ctx);
+                auto status = ManagedDatabasesConfigModifier_->ResolveClusters(ctx);
                 if (status != TStatus::Ok) {
                     return status;
                 }
@@ -214,7 +220,7 @@ namespace NYql {
                 auto status = ManagedDatabasesConfigModifier_.ModifyClusterConfigs(ctx);
 
                 // Clear results map
-                ManagedDatabasesConfigModifier_.Cleanup();
+                ManagedDatabasesConfigModifier_->Cleanup();
 
                 return status;
             }
@@ -222,7 +228,7 @@ namespace NYql {
             void Rewind() final {
                 AsyncFuture_ = {};
                 // Clear results map
-                ManagedDatabasesConfigModifier_.Cleanup();
+                ManagedDatabasesConfigModifier_->Cleanup();
             }
 
         private:
@@ -293,7 +299,7 @@ namespace NYql {
 
 
             const TGenericState::TPtr State_;
-            TManagedDatabasesConfigModifier ManagedDatabasesConfigModifier_;
+            IClusterConfigModifier::TPtr ManagedDatabasesConfigModifier_;
             NThreading::TFuture<void> AsyncFuture_;
         };
     } // namespace

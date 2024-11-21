@@ -27,13 +27,13 @@ struct TCoordinatorMetrics {
     explicit TCoordinatorMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
         : Counters(counters) {
         IncomingRequests = Counters->GetCounter("IncomingRequests", true);
-        LeaderChangedCount = Counters->GetCounter("LeaderChangedCount");
+        LeaderChanged = Counters->GetCounter("LeaderChanged", true);
     }
 
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr IncomingRequests;
-    ::NMonitoring::TDynamicCounters::TCounterPtr LeaderChangedCount;
-
+    ::NMonitoring::TDynamicCounters::TCounterPtr LeaderChanged;
+    ::NMonitoring::TDynamicCounters::TCounterPtr IsActive;
 };
 
 class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
@@ -139,6 +139,8 @@ void TActorCoordinator::Bootstrap() {
     Become(&TActorCoordinator::StateFunc);
     Send(LocalRowDispatcherId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId());
+    auto nodeGroup = Metrics.Counters->GetSubgroup("node", ToString(SelfId().NodeId()));
+    Metrics.IsActive = nodeGroup->GetCounter("IsActive");
 }
 
 void TActorCoordinator::AddRowDispatcher(NActors::TActorId actorId, bool isLocal) {
@@ -234,7 +236,10 @@ void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 
 void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("New leader " << ev->Get()->CoordinatorActorId << ", SelfId " << SelfId());
-    Metrics.LeaderChangedCount->Inc();
+    Metrics.LeaderChanged->Inc();
+
+    bool isActive = (ev->Get()->CoordinatorActorId == SelfId());
+    Metrics.IsActive->Set(isActive);
 }
 
 NActors::TActorId TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& key) {

@@ -30,7 +30,7 @@ NKikimr::TConclusion<NKikimrSchemeOp::TOlapColumn::TSerializer> ConvertFamilyDes
         if (level < minLevel || level > maxLevel) {
             return NKikimr::TConclusionStatus::Fail(TStringBuilder()
                                                     << "family `" << familyDescription.GetName() << "`: incorrect level for codec `"
-                                                    << NArrow::CompressionToString(familyDescription.GetColumnCodec()) << "`. have to be: ["
+                                                    << NArrow::CompressionToString(familyDescription.GetColumnCodec()) << "`. expected: ["
                                                     << minLevel << ":" << maxLevel << "]");
         }
     }

@@ -53,6 +53,8 @@ namespace NKikimr::NSharedCache {
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TActorId Owner;
+        TVector<NPageCollection::TLoadedPage> RegularPages;
+        TVector<NPageCollection::TLoadedPage> StickyPages;
 
         TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TActorId owner)
             : PageCollection(std::move(pageCollection))

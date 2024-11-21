@@ -17,6 +17,7 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/library/actors/core/actor.h>
 
 #include <bitset>
@@ -310,9 +311,21 @@ namespace NTabletFlatExecutor {
 
             for (auto &result : Results) {
                 Y_ABORT_UNLESS(result.PageCollections, "Compaction produced a part without page collections");
+                TVector<TIntrusivePtr<NTable::TLoader::TCache>> pageCollections;
+                for (auto& pageCollection : result.PageCollections) {
+                    auto cache = MakeIntrusive<NTable::TLoader::TCache>(pageCollection.PageCollection);
+                    for (auto &paged : pageCollection.StickyPages) cache->Fill(paged, true);
+                    // for (auto &paged : pageCollection.RegularPages) cache->Fill(paged, false);
+
+                    auto attach = MakeHolder<NSharedCache::TEvAttach>(pageCollection.PageCollection, Owner);
+                    attach->RegularPages.swap(pageCollection.RegularPages);
+                    Send(MakeSharedPageCacheId(), attach.Release());
+
+                    pageCollections.push_back(std::move(cache));
+                }
 
                 NTable::TLoader loader(
-                    std::move(result.PageCollections),
+                    std::move(pageCollections),
                     { },
                     std::move(result.Overlay));
 

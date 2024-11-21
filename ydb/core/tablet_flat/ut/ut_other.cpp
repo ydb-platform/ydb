@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(NOther) {
 
         /*_ Ensure external blob references are accounted correctly */
         UNIT_ASSERT_VALUES_EQUAL(results[0].Growth.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(results[0].Growth[0], NTable::TScreen::THole(0, 3));
+        UNIT_ASSERT(results[0].Growth[0] == NTable::TScreen::THole(0, 3));
     }
 }
 

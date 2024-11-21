@@ -22,6 +22,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto tableClient = kikimr.GetTableClient();

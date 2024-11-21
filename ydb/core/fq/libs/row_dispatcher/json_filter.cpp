@@ -279,8 +279,12 @@ public:
         TCallback callback,
         IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
         const IPureCalcProgramFactory::TSettings& factorySettings)
-        : Sql(GenerateSql(whereFilter, factorySettings)) {
+        : PureCalcProgramFactory(pureCalcProgramFactory)
+        , Sql(GenerateSql(whereFilter, factorySettings)) {
         Y_ENSURE(columns.size() == types.size(), "Number of columns and types should by equal");
+
+        // Shared factory may change during compilation, so it should be locked
+        auto guard = pureCalcProgramFactory->LockFactory();
 
         // Program should be stateless because input values
         // allocated on another allocator and should be released
@@ -304,6 +308,12 @@ public:
         return Sql;
     }
 
+    ~TImpl() {
+        auto guard = PureCalcProgramFactory->LockFactory();
+        InputConsumer.Reset();
+        Program.Reset();
+    }
+
 private:
     TString GenerateSql(const TString& whereFilter, const IPureCalcProgramFactory::TSettings& factorySettings) {
         TStringStream str;
@@ -317,6 +327,7 @@ private:
     }
 
 private:
+    const IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     THolder<NYql::NPureCalc::TPushStreamProgram<TFilterInputSpec, TFilterOutputSpec>> Program;
     THolder<NYql::NPureCalc::IConsumer<TInputType>> InputConsumer;
     const TString Sql;

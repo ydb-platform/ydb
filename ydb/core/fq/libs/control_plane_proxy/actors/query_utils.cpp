@@ -277,7 +277,7 @@ TString MakeCreateExternalDataSourceQuery(
                     SOURCE_TYPE="Logging",
                     FOLDER_ID={folder_id}
                 )",
-                "folder_id"_a = EncloseAndEscapeString(connectionContent.setting().ydb_database().database_id(), '"'));
+                "folder_id"_a = EncloseAndEscapeString(connectionContent.setting().logging().folder_id(), '"'));
             break;
         }
         break;

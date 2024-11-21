@@ -306,10 +306,8 @@ void AddClustersFromConnections(
             const auto& connection = conn.content().setting().logging();
             auto* clusterCfg = gatewaysConfig.MutableGeneric()->AddClusterMapping();
             clusterCfg->SetKind(NYql::NConnector::NApi::EDataSourceKind::LOGGING);
-            clusterCfg->SetProtocol(NYql::NConnector::NApi::EProtocol::NATIVE);
             clusterCfg->SetName(connectionName);
-            clusterCfg->SetUseSsl(!common.GetDisableSslForGenericDataSources());
-            clusterCfg->mutable_datasourceoptions()->insert({TString("folder_id"), TString(connection.folder_id())});
+            clusterCfg->mutable_datasourceoptions()->insert({"folder_id", connection.folder_id()});
             FillClusterAuth(*clusterCfg, connection.auth(), authToken, accountIdSignatures);
             clusters.emplace(connectionName, GenericProviderName);
             break;

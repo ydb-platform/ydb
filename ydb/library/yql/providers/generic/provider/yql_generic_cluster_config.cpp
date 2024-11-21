@@ -289,7 +289,7 @@ namespace NYql {
             return;
         }
 
-        clusterConfig.mutable_datasourceoptions()->insert({TString("folder_id"), TString(it->second)});
+        clusterConfig.mutable_datasourceoptions()->insert({"folder_id", TString(it->second)});
     }
 
     using TProtoProperties = google::protobuf::Map<TProtoStringType, TProtoStringType>;
@@ -345,7 +345,7 @@ namespace NYql {
             UseSsl={use_ssl},
             DatabaseName={database_name},
             Protocol={protocol},
-            Schema={schema}
+            Schema={schema},
             FolderId={folder_id}
         )",
             "context"_a = context,

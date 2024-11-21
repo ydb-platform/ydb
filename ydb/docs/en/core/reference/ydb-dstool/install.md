@@ -1,33 +1,97 @@
-# Installing {{ ydb-short-name }} DSTool
+# Installing the {{ ydb-short-name }} DSTool
 
-To install and configure {{ ydb-short-name }} DSTool:
+<!-- markdownlint-disable blanks-around-fences -->
 
-1. Install the `ydb-dstool` Python package:
+{% include [install_overlay.md](install_overlay.md) %}
 
-   ```bash
-   pip install ydb-dstool
-   ```
+{% list tabs %}
 
-1. Configure the environment:
+- Linux
 
-   ```bash
-   export PATH=${PATH}:${HOME}/.local/bin
-   ```
+  To install the {{ ydb-short-name }} DSTool, run the command:
 
-1. Test it by running the command that shows cluster information:
+  ```bash
+  curl -sSL 'https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.sh' | bash
+  ```
 
-   ```bash
-   ydb-dstool -e <bs_endpoint> cluster list
-   ```
+  The script will install the {{ ydb-short-name }} DSTool and add the executable file path to the `PATH` environment variable.
 
-   * `bs_endpoint`: URI of the interface for {{ ydb-short-name }} cluster distributed storage management. The interface is accessible over HTTP on any cluster node on port 8765 by default. URI example: `http://localhost:8765`.
+  {% note info %}
 
-   Result:
+  The script will update the `PATH` variable only if you run it in the bash or zsh command shell. If you run the script in a different shell, add the path to the CLI to the `PATH` variable yourself.
 
-   ```text
-   ┌───────┬───────┬───────┬────────┬────────┬───────┬────────┐
-   │ Hosts │ Nodes │ Pools │ Groups │ VDisks │ Boxes │ PDisks │
-   ├───────┼───────┼───────┼────────┼────────┼───────┼────────┤
-   │ 8     │ 16    │ 1     │ 5      │ 40     │ 1     │ 32     │
-   └───────┴───────┴───────┴────────┴────────┴───────┴────────┘
-   ```
+  {% endnote %}
+
+  To update the environment variables, restart the command shell.
+
+- macOS
+
+  To install the {{ ydb-short-name }} DSTool, run the command:
+
+  ```bash
+  curl -sSL 'https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.sh' | bash
+  ```
+
+  The script will install the {{ ydb-short-name }} DSTool and add the executable file path to the `PATH` environment variable.
+
+  To update the environment variables, restart the command shell.
+
+- Windows
+
+  You can install the {{ ydb-short-name }} DSTool using:
+
+  **PowerShell.** To do this, run the command:
+
+    ```powershell
+    iex (New-Object System.Net.WebClient).DownloadString('https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.ps1')
+    ```
+
+    Specify whether to add the executable file path to the `PATH` environment variable:
+
+    ```text
+    Add ydb-dstool installation dir to your PATH? [Y/n]
+    ```
+
+  **cmd.** To do this, run the command:
+
+    ```cmd
+    @"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://storage.yandexcloud.net/yandexcloud-ydb-dstool/install.ps1'))"
+    ```
+
+    Specify whether to add the executable file path to the `PATH` environment variable:
+
+    ```text
+    Add ydb-dstool installation dir to your PATH? [Y/n]
+    ```
+
+    To update the environment variables, restart the command shell.
+
+  {% note info %}
+
+  The {{ ydb-short-name }} DSTool uses Unicode characters in the output of some commands. If these characters aren't displayed correctly in the Windows console, switch the encoding to UTF-8:
+
+  ```cmd
+  chcp 65001
+  ```
+
+  {% endnote %}
+
+{% endlist %}
+
+Test it by running the command that shows cluster information:
+
+```bash
+ydb-dstool -e <bs_endpoint> cluster list
+```
+
+* `bs_endpoint`: URI of the interface for {{ ydb-short-name }} cluster distributed storage management. The interface is accessible over HTTP on any cluster node on port 8765 by default. URI example: `http://localhost:8765`.
+
+Result:
+
+```text
+┌───────┬───────┬───────┬────────┬────────┬───────┬────────┐
+│ Hosts │ Nodes │ Pools │ Groups │ VDisks │ Boxes │ PDisks │
+├───────┼───────┼───────┼────────┼────────┼───────┼────────┤
+│ 8     │ 16    │ 1     │ 5      │ 40     │ 1     │ 32     │
+└───────┴───────┴───────┴────────┴────────┴───────┴────────┘
+```

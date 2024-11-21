@@ -70,6 +70,7 @@ public:
     virtual const TSnapshot& GetSnapshot() const = 0;
     virtual ui64 GetVersion() const = 0;
     virtual ui32 GetColumnsCount() const = 0;
+    ui32 GetIndexesCount() const;
 
     std::set<ui32> GetPkColumnsIds() const;
 

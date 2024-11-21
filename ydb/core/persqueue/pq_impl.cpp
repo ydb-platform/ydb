@@ -807,8 +807,6 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
                                          bool newPartition,
                                          const TActorContext& ctx)
 {
-    PQ_LOG_D("Create original partition " << partitionId);
-
     TActorId actorId = ctx.Register(CreatePartitionActor(partitionId,
                                                          topicConverter,
                                                          config,
@@ -1358,9 +1356,6 @@ bool TPersQueue::AllOriginalPartitionsInited() const
 
 void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& ctx)
 {
-    PQ_LOG_D("Handle TEvPQ::TEvInitComplete " <<
-             ev->Get()->Partition);
-
     const auto& partitionId = ev->Get()->Partition;
     auto& partition = GetPartitionInfo(partitionId);
     Y_ABORT_UNLESS(!partition.InitDone);
@@ -3710,7 +3705,6 @@ void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx)
             if (TxStarted) {
                 TxStarted->Inc();
             }
-            PQ_LOG_D("start TxId " << event.GetTxId());
         }
         TDistributedTransaction& tx = Txs[event.GetTxId()];
         if (!tx.BeginTime.Defined()) {
@@ -4329,9 +4323,6 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
     if (!CanExecute(tx)) {
         PQ_LOG_D("Can't execute TxId " << tx.TxId << " Pending " << tx.Pending);
-//        Y_ABORT_UNLESS(!tx.Pending,
-//                       "PQ %" PRIu64 ", TxId %" PRIu64,
-//                       TabletID(), tx.TxId);
         tx.Pending = true;
         PQ_LOG_D("Wait for TxId " << tx.TxId);
         return;

@@ -948,7 +948,6 @@ auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size) -> std::optional<TForm
     std::optional<TFormedBlobInfo> res;
     if (NeedCompactHead) {
         NeedCompactHead = false;
-        //GlueNewHead = false;
         res = CreateFormedBlob(0, false);
 
         StartOffset = NewHead.Offset + NewHead.GetCount();
@@ -958,7 +957,6 @@ auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size) -> std::optional<TForm
 
     TKey newKey(TKeyPrefix::TypeData,
                 Partition,
-                //NewHead.Offset + oldKey.GetOffset(),
                 StartOffset,
                 oldKey.GetPartNo(),
                 oldKey.GetCount(),

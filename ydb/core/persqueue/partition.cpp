@@ -1319,7 +1319,7 @@ void TPartition::CheckHeadConsistency() const {
         Y_ABORT_UNLESS(s < DataKeysHead[j].Border());
     }
     Y_ABORT_UNLESS(DataKeysBody.empty() ||
-                   Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());
+             Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());
     Y_ABORT_UNLESS(p == HeadKeys.size());
     if (!HeadKeys.empty()) {
         Y_ABORT_UNLESS(HeadKeys.size() <= TotalMaxCount);
@@ -2188,7 +2188,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            Head,
                                            NewHead,
                                            Parameters->HeadCleared,  // headCleared
-                                           needCompactHead, // needCompactHead
+                                           needCompactHead,          // needCompactHead
                                            MaxBlobSize);
 
         for (auto& k : t.WriteInfo->BodyKeys) {

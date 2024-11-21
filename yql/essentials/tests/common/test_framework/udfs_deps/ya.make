@@ -19,6 +19,7 @@ SET(
     yql/essentials/udfs/common/url_base
     yql/essentials/udfs/common/unicode_base
     yql/essentials/udfs/common/streaming
+    yql/essentials/udfs/common/vector
     yql/essentials/udfs/examples/callables
     yql/essentials/udfs/examples/dicts
     yql/essentials/udfs/examples/dummylog

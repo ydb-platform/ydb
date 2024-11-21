@@ -18,7 +18,7 @@ public:
     }
 
 private:
-    const TMaybe<TString> FieldName;
+    TMaybe<TString> FieldName;
 };
 
 

@@ -672,7 +672,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseMapToMapReduce(TExp
                 return {};
             }
             if (!*fuseRes) {
-                // Cannot fuse, return switch argument to default
+                // Cannot fuse
                 continue;
             }
 

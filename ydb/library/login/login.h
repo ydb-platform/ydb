@@ -7,6 +7,7 @@
 #include <deque>
 #include <util/generic/string.h>
 #include <ydb/library/login/protos/login.pb.h>
+#include <ydb/library/login/password_checker/password_checker.h>
 
 namespace NLogin {
 
@@ -174,6 +175,7 @@ public:
     TRemoveGroupResponse RemoveGroup(const TRemoveGroupRequest& request);
 
     TLoginProvider();
+    TLoginProvider(const TPasswordCheckParameters& passwordCheckParameters);
     ~TLoginProvider();
 
     std::vector<TString> GetGroupsMembership(const TString& member);
@@ -188,6 +190,8 @@ private:
 
     struct TImpl;
     THolder<TImpl> Impl;
+
+    TPasswordChecker PasswordChecker;
 };
 
 }

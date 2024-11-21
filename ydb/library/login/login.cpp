@@ -12,6 +12,8 @@
 
 #include <deque>
 
+#include <ydb/library/login/password_checker/password_checker.h>
+
 #include "login.h"
 
 namespace NLogin {
@@ -35,6 +37,12 @@ struct TLoginProvider::TImpl {
 
 TLoginProvider::TLoginProvider()
     : Impl(new TImpl())
+    , PasswordChecker(TPasswordCheckParameters())
+{}
+
+TLoginProvider::TLoginProvider(const TPasswordCheckParameters& passwordCheckParameters)
+    : Impl(new TImpl())
+    , PasswordChecker(passwordCheckParameters)
 {}
 
 TLoginProvider::~TLoginProvider()
@@ -61,6 +69,12 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
         return response;
     }
 
+    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
+    if (!passwordCheckResult.Success) {
+        response.Error = passwordCheckResult.Error;
+        return response;
+    }
+
     TSidRecord& user = itUserCreate.first->second;
     user.Name = request.User;
     user.Hash = Impl->GenerateHash(request.Password);
@@ -83,6 +97,12 @@ TLoginProvider::TBasicResponse TLoginProvider::ModifyUser(const TModifyUserReque
     auto itUserModify = Sids.find(request.User);
     if (itUserModify == Sids.end() || itUserModify->second.Type != ESidType::USER) {
         response.Error = "User not found";
+        return response;
+    }
+
+    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
+    if (!passwordCheckResult.Success) {
+        response.Error = passwordCheckResult.Error;
         return response;
     }
 

@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/algorithm.h>
+#include <ydb/library/login/password_checker/password_checker.h>
 #include "login.h"
 
 using namespace NLogin;
@@ -8,7 +9,8 @@ Y_UNIT_TEST_SUITE(Login) {
     void none() {}
 
     Y_UNIT_TEST(TestSuccessfulLogin1) {
-        TLoginProvider provider;
+        TPasswordCheckParameters passwordCheckParameters({.NeedUpperCase = false, .NeedSpecialSymbols = false});
+        TLoginProvider provider(passwordCheckParameters);
         provider.Audience = "test_audience1";
         provider.RotateKeys();
         TLoginProvider::TCreateUserRequest request1;
@@ -29,7 +31,8 @@ Y_UNIT_TEST_SUITE(Login) {
     }
 
     Y_UNIT_TEST(TestFailedLogin1) {
-        TLoginProvider provider;
+        TPasswordCheckParameters passwordCheckParameters({.NeedUpperCase = false, .NeedSpecialSymbols = false});
+        TLoginProvider provider(passwordCheckParameters);
         provider.RotateKeys();
         TLoginProvider::TCreateUserRequest request1;
         request1.User = "user1";
@@ -44,7 +47,8 @@ Y_UNIT_TEST_SUITE(Login) {
     }
 
     Y_UNIT_TEST(TestFailedLogin2) {
-        TLoginProvider provider;
+        TPasswordCheckParameters passwordCheckParameters({.NeedUpperCase = false, .NeedSpecialSymbols = false});
+        TLoginProvider provider(passwordCheckParameters);
         provider.RotateKeys();
         TLoginProvider::TCreateUserRequest request1;
         request1.User = "user1";
@@ -59,7 +63,8 @@ Y_UNIT_TEST_SUITE(Login) {
     }
 
     Y_UNIT_TEST(TestFailedLogin3) {
-        TLoginProvider provider;
+        TPasswordCheckParameters passwordCheckParameters({.NeedUpperCase = false, .NeedSpecialSymbols = false});
+        TLoginProvider provider(passwordCheckParameters);
         provider.Audience = "test_audience1";
         provider.RotateKeys();
         TLoginProvider::TCreateUserRequest request1;
@@ -80,11 +85,12 @@ Y_UNIT_TEST_SUITE(Login) {
     }
 
     Y_UNIT_TEST(TestGroups) {
-        TLoginProvider provider;
+        TPasswordCheckParameters passwordCheckParameters; // Empty password is enabled by default
+        TLoginProvider provider(passwordCheckParameters);
         provider.Audience = "test_audience1";
         provider.RotateKeys();
         {
-            auto response1 = provider.CreateUser({.User = "user1"});
+            auto response1 = provider.CreateUser({.User = "user1"}); // Empty password
             UNIT_ASSERT(!response1.Error);
         }
         {
@@ -220,7 +226,8 @@ Y_UNIT_TEST_SUITE(Login) {
     }
 
     Y_UNIT_TEST(TestTokenWithGroups) {
-        TLoginProvider provider;
+        TPasswordCheckParameters passwordCheckParameters({.NeedUpperCase = false, .NeedSpecialSymbols = false});
+        TLoginProvider provider(passwordCheckParameters);
         provider.Audience = "test_audience1";
         provider.RotateKeys();
         {
@@ -247,7 +254,8 @@ Y_UNIT_TEST_SUITE(Login) {
     }
 
     Y_UNIT_TEST(TestCreateTokenForExternalAuth) {
-        TLoginProvider provider;
+        TPasswordCheckParameters passwordCheckParameters({.NeedUpperCase = false, .NeedSpecialSymbols = false});
+        TLoginProvider provider(passwordCheckParameters);
         provider.Audience = "test_audience1";
         provider.RotateKeys();
         TLoginProvider::TCreateUserRequest request1;

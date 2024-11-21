@@ -483,8 +483,8 @@ void TCsvParser::BuildLineType() {
         auto findIt = DestinationTypes->find(colName);
         if (findIt != DestinationTypes->end()) {
             builder.AddMember(colName, findIt->second);
-            ResultLineTypesSorted.emplace_back(&findIt->second);
-            ResultLineNamesSorted.emplace_back(&colName);
+            ResultLineTypesSorted.push_back(&findIt->second);
+            ResultLineNamesSorted.push_back(&colName);
             SkipBitMap.push_back(false);
             ++ResultColumnCount;
         } else {

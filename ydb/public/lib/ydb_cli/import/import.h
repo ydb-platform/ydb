@@ -70,55 +70,11 @@ public:
     //   fsPaths: vector of paths to input files
     //   dbPath: full path to the database table, including the database path
     //   settings: input data format and operational settings
-    TStatus Import(const TVector<TString>& fsPaths, const TString& dbPath);
+    TStatus Import(const TVector<TString>& filePaths, const TString& dbPath);
 
 private:
-    std::shared_ptr<NTable::TTableClient> TableClient;
-    std::shared_ptr<NScheme::TSchemeClient> SchemeClient;
-    const TImportFileSettings& Settings;
-
-    NTable::TBulkUpsertSettings UpsertSettings;
-    NTable::TRetryOperationSettings RetrySettings;
-
-    std::unique_ptr<const NTable::TTableDescription> DbTableInfo;
-
-    std::atomic<ui64> CurrentFileCount;
-    std::atomic<ui64> TotalBytesRead = 0;
-    // RequestInflight increases on sending a single request to server
-    // Decreases on receiving any response for its request
-    std::unique_ptr<std::counting_semaphore<>> RequestsInflight;
-    // Common pool between all files for building TValues
-    THolder<IThreadPool> ProcessingPool;
-    std::atomic<bool> Failed = false;
-    std::atomic<bool> InformedAboutLimit = false;
-    THolder<TStatus> ErrorStatus;
-    std::mutex StatusLock;
-
-    static constexpr ui32 VerboseModeStepSize = 1 << 27; // 128 MB
-
-    using ProgressCallbackFunc = std::function<void (ui64, ui64)>;
-
-    TStatus UpsertCsv(IInputStream& input,
-                      const TString& dbPath,
-                      const TString& filePath,
-                      std::optional<ui64> inputSizeHint,
-                      ProgressCallbackFunc & progressCallback);
-
-    TStatus UpsertCsvByBlocks(const TString& filePath,
-                              const TString& dbPath);
-
-    TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValueBuilder& builder);
-    TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValue&& rows);
-
-    TStatus UpsertJson(IInputStream &input, const TString &dbPath, std::optional<ui64> inputSizeHint,
-                       ProgressCallbackFunc & progressCallback);
-
-    TStatus UpsertParquet(const TString& filename, const TString& dbPath, ProgressCallbackFunc & progressCallback);
-    TAsyncStatus UpsertParquetBuffer(const TString& dbPath, const TString& buffer, const TString& strSchema);
-
-    TType GetTableType();
-    std::map<TString, TType> GetColumnTypes();
-    void ValidateTValueUpsertTable();
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
 };
 
 }

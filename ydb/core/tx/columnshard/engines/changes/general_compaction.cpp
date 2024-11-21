@@ -128,6 +128,8 @@ void TGeneralCompactColumnEngineChanges::BuildAppendedPortionsByChunks(
             }
 
             for (auto&& i : portions) {
+                NActors::TLogContextGuard gLogging =
+                    NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("portion", i.GetPortionInfo().DebugString(true));
                 auto blobsSchema = i.GetPortionInfo().GetSchema(context.SchemaVersions);
                 auto batch = i.RestoreBatch(*blobsSchema, *resultFiltered, seqDataColumnIds);
                 std::shared_ptr<NArrow::TColumnFilter> filter =
@@ -168,8 +170,8 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
     NChanges::TGeneralCompactionCounters::OnRepackPortions(portionsCount, portionsSize);
 
     {
-        std::vector<TReadPortionInfoWithBlobs> portions =
-            TReadPortionInfoWithBlobs::RestorePortions(SwitchedPortions, Blobs, context.SchemaVersions);
+    NActors::TLogContextGuard gLogging =
+        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("blobs", Blobs.DebugString());
         BuildAppendedPortionsByChunks(context, std::move(portions));
     }
 

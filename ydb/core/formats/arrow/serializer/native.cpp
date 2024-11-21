@@ -75,7 +75,8 @@ arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserial
     }
     auto validation = batch->Validate();
     if (!validation.ok()) {
-        return arrow::Status(arrow::StatusCode::SerializationError, "batch is not valid: " + validation.ToString());
+        validation = batch->ValidateFull();
+        return arrow::Status(arrow::StatusCode::SerializationError, "batch is not valid: " + validation.ToString() + " schema: " + schema->ToString());
     }
     return batch;
 }

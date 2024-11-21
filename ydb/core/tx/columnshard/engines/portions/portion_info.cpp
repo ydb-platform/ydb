@@ -107,7 +107,7 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
         sb << "remove_snapshot:(" << RemoveSnapshot.DebugString() << ");";
     }
     sb << "chunks:(" << Records.size() << ");";
-    if (IS_TRACE_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD)) {
+    if (withDetails) {
         std::vector<TBlobRange> blobRanges;
         for (auto&& i : Records) {
             blobRanges.emplace_back(RestoreBlobRange(i.BlobRange));

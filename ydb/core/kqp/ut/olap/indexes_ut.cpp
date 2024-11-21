@@ -322,6 +322,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         void Execute() const {
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
             csController->SetOverrideReduceMemoryIntervalLimit(1LLU << 30);
+            csController->SetOverrideMemoryLimitForPortionReading(1e+10);
             TLocalHelper(*Kikimr).CreateTestOlapTable();
             auto tableClient = Kikimr->GetTableClient();
 

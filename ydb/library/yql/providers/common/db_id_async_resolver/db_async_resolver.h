@@ -144,6 +144,7 @@ class IDatabaseAsyncResolver {
 public:
     using TPtr = std::shared_ptr<IDatabaseAsyncResolver>;
 
+    // key - (database id, database type), value - credentials to access managed APIs
     using TDatabaseAuthMap = THashMap<std::pair<TString, EDatabaseType>, NYql::TDatabaseAuth>;
 
     virtual NThreading::TFuture<NYql::TDatabaseResolverResponse> ResolveIds(const TDatabaseAuthMap& ids) const = 0;

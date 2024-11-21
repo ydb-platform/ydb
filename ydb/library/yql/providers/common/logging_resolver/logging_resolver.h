@@ -9,6 +9,15 @@ namespace NYql {
     public:
         using TPtr = std::shared_ptr<ILoggingResolver>;
 
+        // TAuth contains credentials to access logging API
+        struct TAuth {
+            TString StructuredToken; // Serialized token value used to access MDB API
+            bool AddBearerToToken = false;
+        };
+
+        // folder_id -> credentials to access logging API;
+        using TAuthMap = THashMap<TString, TAuth>;
+
         struct TRequest {
             TString FolderId;
             TString LogGroupName;

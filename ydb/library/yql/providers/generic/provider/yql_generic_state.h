@@ -3,6 +3,7 @@
 #include "yql_generic_settings.h"
 
 #include <yql/essentials/core/yql_data_provider.h>
+#include <ydb/library/yql/providers/common/logging_resolver/logging_resolver.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
@@ -53,13 +54,14 @@ namespace NYql {
         TGenericConfiguration::TPtr Configuration = MakeIntrusive<TGenericConfiguration>();
         const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
 
-        // key - (database id, database type), value - credentials to access managed APIs
+        // (database_id, database_type) -> credentials to access managed APIs
         IDatabaseAsyncResolver::TDatabaseAuthMap DatabaseAuth;
         std::shared_ptr<IDatabaseAsyncResolver> DatabaseResolver;
 
+
         // key - cluster name, value - TCredentialsProviderPtr
         // It's important to cache credentials providers, because they make IO
-        // (synchronous call via Token Accessor client) during the construction.
+        // (synchronous call via Token Accessor clieпnt) during the construction.
         std::unordered_map<TString, NYdb::TCredentialsProviderPtr> CredentialProviders;
         ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
 

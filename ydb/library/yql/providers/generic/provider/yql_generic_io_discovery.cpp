@@ -47,60 +47,18 @@ namespace NYql {
                     return TStatus::Ok;
                 }
 
-                // Collect clusters that are in need of resolving
-                IDatabaseAsyncResolver::TDatabaseAuthMap unresolvedClusters;
-                for (auto& node : reads) {
-                    const TGenRead read(node);
-                    const auto clusterName = read.DataSource().Cluster().StringValue();
-                    YQL_CLOG(DEBUG, ProviderGeneric) << "discovered cluster name: " << clusterName;
-
-                    auto& cluster = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
-                    auto databaseId = cluster.GetDatabaseId();
-                    if (databaseId) {
-                        YQL_CLOG(DEBUG, ProviderGeneric) << "discovered database id: " << databaseId;
-                        const auto idKey = std::make_pair(databaseId, DatabaseTypeFromDataSourceKind(cluster.GetKind()));
-                        const auto iter = State_->DatabaseAuth.find(idKey);
-                        if (iter != State_->DatabaseAuth.end()) {
-                            YQL_CLOG(DEBUG, ProviderGeneric) << "requesting to resolve"
-                                                             << ": clusterName=" << clusterName
-                                                             << ", databaseId=" << databaseId;
-
-                            unresolvedClusters[idKey] = iter->second;
-                        }
-                    }
-                }
-
+                // Collect clusters that need to be resolved
+                auto unresolvedClusters = CollectUnresolvedClusters(reads);
                 if (unresolvedClusters.empty()) {
                     return TStatus::Ok;
                 }
 
                 YQL_CLOG(DEBUG, ProviderGeneric) << "total database ids to be resolved: " << unresolvedClusters.size();
-                // Resolve MDB clusters
-                TDatabaseResolverResponse::TDatabaseDescriptionMap descriptions;
 
-                for (const auto& [databaseIdWithType, databaseAuth] : unresolvedClusters) {
-                    // Now it's only possible to emit a single request with a single cluster ID simultaneously.
-                    // FIXME: use batch async handling after YQ-2536 is fixed.
-                    IDatabaseAsyncResolver::TDatabaseAuthMap request;
-                    request[databaseIdWithType] = databaseAuth;
-                    auto response = State_->DatabaseResolver->ResolveIds(request).GetValueSync();
-
-                    if (!response.Success) {
-                        ctx.IssueManager.AddIssues(response.Issues);
-                        return TStatus::Error;
-                    }
-
-                    for (const auto& [databaseIdWithType, databaseDescription] : response.DatabaseDescriptionMap) {
-                        YQL_CLOG(INFO, ProviderGeneric) << "resolved database id into endpoint"
-                                                        << ": databaseId=" << databaseIdWithType.first
-                                                        << ", databaseKind=" << databaseIdWithType.second
-                                                        << ", host=" << databaseDescription.Host
-                                                        << ", port=" << databaseDescription.Port;
-                    }
-
-                    // save ids for the further use
-                    DatabaseDescriptions_.insert(response.DatabaseDescriptionMap.cbegin(),
-                                                 response.DatabaseDescriptionMap.cend());
+                // Resolve managed clusters
+                auto status = ResolveManagedClusters(ctx, unresolvedClusters);
+                if (status != TStatus::Ok) {
+                    return status;
                 }
 
                 auto promise = NThreading::NewPromise<void>();
@@ -136,6 +94,83 @@ namespace NYql {
             }
 
         private:
+            // CollectUnresolvedClusters extracts the external data source clusters containing some identifiers
+            // that must be resolved into network endpoints.
+            IDatabaseAsyncResolver::TDatabaseAuthMap CollectUnresolvedClusters(const TExprNode::TListType& reads) const {
+                IDatabaseAsyncResolver::TDatabaseAuthMap unresolvedClusters;
+                for (auto& node : reads) {
+                    const TGenRead read(node);
+                    const auto clusterName = read.DataSource().Cluster().StringValue();
+
+                    YQL_CLOG(DEBUG, ProviderGeneric) << "discovered cluster name: " << clusterName;
+
+                    const auto& cluster = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
+
+                    // 1. Resolve managed databases that have database_id identifier.
+                    auto databaseId = cluster.GetDatabaseId();
+                    if (databaseId) {
+                        YQL_CLOG(DEBUG, ProviderGeneric) << "discovered managed database: databaseId=" << databaseId;
+                        const auto idKey = std::make_pair(databaseId, DatabaseTypeFromDataSourceKind(cluster.GetKind()));
+                        const auto iter = State_->DatabaseAuth.find(idKey);
+                        if (iter != State_->DatabaseAuth.end()) {
+                            YQL_CLOG(DEBUG, ProviderGeneric) << "requesting to resolve"
+                                                             << ": clusterName=" << clusterName
+                                                             << ", databaseId=" << databaseId;
+
+                            unresolvedClusters[idKey] = iter->second;
+                        }
+                    }
+
+                    // 2. Resolve log groups.
+                    if (cluster.GetKind() == NYql::NConnector::NApi::EDataSourceKind::LOGGING) {
+                        const auto& folderId = cluster.datasourceoptions().at("folder_id");
+                        const auto& keyArg = TExprBase(read.FreeArgs().Get(2).Ref().HeadPtr()).Cast<TCoKey>().Ref().Head();
+                        const auto logGroupName = TString(keyArg.Tail().Head().Content());
+
+                        YQL_CLOG(DEBUG, ProviderGeneric) << "discovered logging: folderId=" << folderId << ", logGroupName=" << logGroupName;
+                    }
+                }
+
+
+                return unresolvedClusters;
+            }
+
+            // ResolvedManagedClusters performs database_id -> (host, port) resolving
+            TStatus ResolveManagedClusters(
+                TExprContext& ctx,
+                const IDatabaseAsyncResolver::TDatabaseAuthMap& unresolvedClusters
+            ) {
+                TDatabaseResolverResponse::TDatabaseDescriptionMap descriptions;
+
+                for (const auto& [databaseIdWithType, databaseAuth] : unresolvedClusters) {
+                    // Now it's only possible to emit a single request with a single cluster ID simultaneously.
+                    // FIXME: use batch async handling after YQ-2536 is fixed.
+                    IDatabaseAsyncResolver::TDatabaseAuthMap request;
+                    request[databaseIdWithType] = databaseAuth;
+                    auto response = State_->DatabaseResolver->ResolveIds(request).GetValueSync();
+
+                    if (!response.Success) {
+                        ctx.IssueManager.AddIssues(response.Issues);
+                        return TStatus::Error;
+                    }
+
+                    for (const auto& [databaseIdWithType, databaseDescription] : response.DatabaseDescriptionMap) {
+                        YQL_CLOG(INFO, ProviderGeneric) << "resolved database id into endpoint"
+                                                        << ": databaseId=" << databaseIdWithType.first
+                                                        << ", databaseKind=" << databaseIdWithType.second
+                                                        << ", host=" << databaseDescription.Host
+                                                        << ", port=" << databaseDescription.Port;
+                    }
+
+                    // save ids for the further use
+                    DatabaseDescriptions_.insert(response.DatabaseDescriptionMap.cbegin(),
+                                                 response.DatabaseDescriptionMap.cend());
+
+                }
+
+                return TStatus::Ok;
+            }
+
             TStatus ModifyClusterConfigs(const TDatabaseResolverResponse::TDatabaseDescriptionMap& databaseDescriptions, TExprContext& ctx) {
                 const auto& databaseIdsToClusterNames = State_->Configuration->DatabaseIdsToClusterNames;
                 auto& clusterNamesToClusterConfigs = State_->Configuration->ClusterNamesToClusterConfigs;

@@ -147,8 +147,6 @@ public:
     // Chunks that are owned by killed owner, but have operations InFlight
     TVector<TChunkIdx> QuarantineChunks;
     TVector<TOwner> QuarantineOwners;
-    // Log chunks that are owned by killed owner, but are being read 
-    THashMap<TOwner, TVector<TChunkIdx>> QuarantineLogChunksByOwner;
 
 
     TSysLogRecord SysLogRecord; // Current sys log record state, part 1 of 2

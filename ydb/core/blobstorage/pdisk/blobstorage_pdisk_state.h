@@ -240,7 +240,6 @@ struct TChunkState {
         DATA_RESERVED_DECOMMIT_IN_PROGRESS,
         DATA_COMMITTED_DECOMMIT_IN_PROGRESS,
         LOCKED,
-        LOG_ON_QUARANTINE,
     };
 
     ui64 Nonce;

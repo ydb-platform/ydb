@@ -29,7 +29,7 @@ namespace NYql {
         using TPtr = std::shared_ptr<TGenericTableDescription>;
 
         NConnector::NApi::TDataSourceInstance DataSourceInstance;
-        NConnector::NApi::TDescribeTableResponse Response;
+        std::optional<NConnector::NApi::TDescribeTableResponse> Response;
     };
 
     class TGenericLoadTableMetadataTransformer: public TGraphTransformerBase {
@@ -114,7 +114,7 @@ namespace NYql {
                         // Check only transport errors;
                         // logic errors will be checked later in DoApplyAsyncChanges
                         if (result.Status.Ok()) {
-                            desc->Response = std::move(*result.Response);
+                            desc->Response = std::move(result.Response);
                             promise.SetValue();
                         } else {
                             promise.SetException(result.Status.ToDebugString());
@@ -157,16 +157,9 @@ namespace NYql {
                 if (Results_.cend() != it) {
                     const auto& response = it->second->Response;
 
-                    if (NConnector::IsSuccess(response)) {
-                        if (!response.has_schema()) {
-                            ctx.AddError(TIssue(ctx.GetPosition(read.Pos()),
-                                        "Got empty response from connector, server is probably misbehaving"));
-                            hasErrors = true;
-                            break;
-                        }
-
+                    if (NConnector::IsSuccess(*response)) {
                         TGenericState::TTableMeta tableMeta;
-                        tableMeta.Schema = response.schema();
+                        tableMeta.Schema = response->schema();
                         tableMeta.DataSourceInstance = it->second->DataSourceInstance;
 
                         const auto& parse = ParseTableMeta(tableMeta.Schema, clusterName, tableName, ctx, tableMeta.ColumnOrder);
@@ -200,7 +193,7 @@ namespace NYql {
                             break;
                         }
                     } else {
-                        const auto& error = response.error();
+                        const auto& error = response->error();
                         NConnector::ErrorToExprCtx(error, ctx, ctx.GetPosition(read.Pos()),
                                                    TStringBuilder() << "Loading metadata for table: " << clusterName << '.' << tableName);
                         hasErrors = true;

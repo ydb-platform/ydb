@@ -545,4 +545,202 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseOuterMap(TExprBase 
     return TExprBase(res);
 }
 
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseMapToMapReduce(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
+    auto outerMapReduce = node.Cast<TYtMapReduce>();
+    if (NYql::HasAnySetting(outerMapReduce.Settings().Ref(), EYtSettingType::JobCount)) {
+        return node;
+    }
+    if (!outerMapReduce.Mapper().Maybe<TCoVoid>() && !outerMapReduce.Mapper().Maybe<TCoLambda>()) {
+        return node;
+    }
+
+    TVector<TExprBase> switchArgs;
+    auto identityLambda = Build<TCoLambda>(ctx, node.Pos())
+        .Args({"stream"})
+        .Body("stream")
+        .Done();
+    for (size_t index = 0; index < outerMapReduce.Input().Size(); index++) {
+        switchArgs.push_back(
+            Build<TCoAtomList>(ctx, node.Pos())
+                .Add()
+                    .Value(ToString(index))
+                .Build()
+            .Done());
+        switchArgs.push_back(identityLambda);
+    }
+
+    for (size_t index = 0; index < outerMapReduce.Input().Size(); index++) {
+        // validate input
+        if (outerMapReduce.Input().Item(index).Paths().Size() != 1) {
+            continue;
+        }
+
+        TYtPath path = outerMapReduce.Input().Item(index).Paths().Item(0);
+        auto maybeInnerMap = path.Table().Maybe<TYtOutput>().Operation().Maybe<TYtMap>();
+        if (!maybeInnerMap) {
+            continue;
+        }
+        TYtMap innerMap = maybeInnerMap.Cast();
+        if (innerMap.Ref().StartsExecution() || innerMap.Ref().HasResult()) {
+            continue;
+        }
+        if (innerMap.Output().Size() > 1) {
+            continue;
+        }
+        if (outerMapReduce.DataSink().Cluster().Value() != innerMap.DataSink().Cluster().Value()) {
+            continue;
+        }
+
+        if (NYql::HasAnySetting(innerMap.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::JobCount)) {
+            continue;
+        }
+        if (NYql::HasAnySetting(outerMapReduce.Input().Item(index).Settings().Ref(),
+            EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::DirectRead | EYtSettingType::Sample | EYtSettingType::SysColumns | EYtSettingType::BlockInputApplied))
+        {
+            continue;
+        }
+
+        if (NYql::HasSetting(innerMap.Settings().Ref(), EYtSettingType::Flow) != NYql::HasSetting(outerMapReduce.Settings().Ref(), EYtSettingType::Flow)) {
+            continue;
+        }
+        if (!path.Ranges().Maybe<TCoVoid>()) {
+            continue;
+        }
+        if (NYql::HasNonEmptyKeyFilter(outerMapReduce.Input().Item(index))) {
+            continue;
+        }
+
+        const TParentsMap* parentsMap = getParents();
+        if (IsOutputUsedMultipleTimes(innerMap.Ref(), *parentsMap)) {
+            // Inner map output is used more than once
+            continue;
+        }
+
+        // Check world dependencies
+        auto parentsIt = parentsMap->find(innerMap.Raw());
+        bool failed = false;
+        YQL_ENSURE(parentsIt != parentsMap->cend());
+        for (auto dep: parentsIt->second) {
+            if (!TYtOutput::Match(dep)) {
+                failed = true;
+                break;
+            }
+        }
+        if (failed) {
+            continue;
+        }
+
+        const bool unorderedOut = IsUnorderedOutput(path.Table().Cast<TYtOutput>());
+        auto innerLambda = innerMap.Mapper();
+        innerLambda = FallbackLambdaOutput(innerLambda, ctx);
+        if (unorderedOut) {
+            innerLambda = Build<TCoLambda>(ctx, innerLambda.Pos())
+                .Args({"stream"})
+                .Body<TCoUnordered>()
+                    .Input<TExprApplier>()
+                        .Apply(innerLambda)
+                        .With(0, "stream")
+                    .Build()
+                .Build()
+                .Done();
+        }
+
+        switchArgs[index* 2 + 1] = innerLambda;
+        innerLambda = Build<TCoLambda>(ctx, innerLambda.Pos())
+            .Args({"stream"})
+            .Body<TCoSwitch>()
+                .Input("stream")
+                .BufferBytes()
+                    .Value(ToString(State_->Configuration->SwitchLimit.Get().GetOrElse(DEFAULT_SWITCH_MEMORY_LIMIT)))
+                .Build()
+                .FreeArgs()
+                    .Add(switchArgs)
+                .Build()
+            .Build()
+            .Done();
+        switchArgs[index* 2 + 1] = identityLambda;            
+
+        TMaybeNode<TCoLambda> resultLambda;
+        if (auto maybeOuterLambda = outerMapReduce.Mapper().Maybe<TCoLambda>()) {
+            auto outerLambda = maybeOuterLambda.Cast();
+            if (HasYtRowNumber(outerLambda.Body().Ref())) {
+                return node;
+            }
+
+            auto fuseRes = CanFuseLambdas(innerLambda, outerLambda, ctx);
+            if (!fuseRes) {
+                // Some error
+                return {};
+            }
+            if (!*fuseRes) {
+                // Cannot fuse
+                continue;
+            }
+
+            auto [placeHolder, lambdaWithPlaceholder] = ReplaceDependsOn(outerLambda.Ptr(), ctx, State_->Types);
+            if (!placeHolder) {
+                return {};
+            }
+
+            if (lambdaWithPlaceholder != outerLambda.Ptr()) {
+                outerLambda = TCoLambda(lambdaWithPlaceholder);
+            }
+            outerLambda = FallbackLambdaInput(outerLambda, ctx);
+
+            if (!path.Columns().Maybe<TCoVoid>()) {
+                const bool ordered = !unorderedOut && NYql::HasSetting(innerMap.Settings().Ref(), EYtSettingType::Ordered)
+                    && NYql::HasSetting(outerMapReduce.Settings().Ref(), EYtSettingType::Ordered);
+                outerLambda = MapEmbedInputFieldsFilter(outerLambda, ordered, path.Columns().Cast<TCoAtomList>(), ctx);
+            } else if (TYqlRowSpecInfo(innerMap.Output().Item(index).RowSpec()).HasAuxColumns()) {
+                auto itemType = GetSequenceItemType(path, false, ctx);
+                if (!itemType) {
+                    return {};
+                }
+                TSet<TStringBuf> fields;
+                for (auto item: itemType->Cast<TStructExprType>()->GetItems()) {
+                    fields.insert(item->GetName());
+                }
+                const bool ordered = !unorderedOut && NYql::HasSetting(innerMap.Settings().Ref(), EYtSettingType::Ordered)
+                    && NYql::HasSetting(outerMapReduce.Settings().Ref(), EYtSettingType::Ordered);
+                outerLambda = MapEmbedInputFieldsFilter(outerLambda, ordered, TCoAtomList(ToAtomList(fields, node.Pos(), ctx)), ctx);
+            }
+            resultLambda = Build<TCoLambda>(ctx, node.Pos())
+                .Args({"stream"})
+                .Body<TExprApplier>()
+                    .Apply(outerLambda)
+                    .With<TExprApplier>(0)
+                        .Apply(innerLambda)
+                        .With(0, "stream")
+                    .Build()
+                    .With(TExprBase(placeHolder), "stream")
+                .Build()
+                .Done();
+        } else {
+            resultLambda = Build<TCoLambda>(ctx, node.Pos())
+                .Args({"stream"})
+                .Body<TExprApplier>()            
+                    .Apply(innerLambda)
+                    .With(0, "stream")
+                .Build()
+                .Done();
+        }
+
+        auto resultSettings = MergeSettings(
+            *NYql::RemoveSettings(outerMapReduce.Settings().Ref(), EYtSettingType::Flow | EYtSettingType::BlockInputReady, ctx),
+            *NYql::RemoveSettings(innerMap.Settings().Ref(), EYtSettingType::Ordered | EYtSettingType::KeepSorted, ctx), ctx);
+        return Build<TYtMapReduce>(ctx, node.Pos())
+            .InitFrom(outerMapReduce)
+            .World<TCoSync>()
+                .Add(innerMap.World())
+                .Add(outerMapReduce.World())
+            .Build()
+            .Input(innerMap.Input())
+            .Mapper(resultLambda.Cast())
+            .Settings(resultSettings)
+            .Done();
+    }
+
+    return node;
+}
+
 }  // namespace NYql

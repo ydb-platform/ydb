@@ -61,6 +61,9 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
         AddHandler(1, &TYtMap::Match, HNDL(FuseInnerMap));
         AddHandler(1, &TYtMap::Match, HNDL(FuseOuterMap));
     }
+    if (!State_->Configuration->DisableFuseMapToMapReduce.Get().GetOrElse(DEFAULT_DISABLE_FUSE_MAP_TO_MAPREDUCE)) {
+        AddHandler(1, &TYtMapReduce::Match, HNDL(FuseMapToMapReduce));
+    }
     AddHandler(1, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(MapFieldsSubset));
     AddHandler(1, Names({TYtMapReduce::CallableName(), TYtReduce::CallableName()}), HNDL(ReduceFieldsSubset));
     AddHandler(1, Names({TYtMap::CallableName(), TYtMapReduce::CallableName()}), HNDL(MultiMapFieldsSubset));

@@ -130,6 +130,9 @@ protected:
     virtual TDuration DoGetLagForCompactionBeforeTierings(const TDuration defaultValue) const {
         return defaultValue;
     }
+    virtual ui64 DoGetMemoryLimitScanPortion(const ui64 defaultValue) const {
+        return defaultValue;
+    }
 
 private:
     inline static const NKikimrConfig::TColumnShardConfig DefaultConfig = {};
@@ -146,6 +149,9 @@ public:
         const std::set<NOlap::TSnapshot>& /*snapshotsToSave*/, const std::set<NOlap::TSnapshot>& /*snapshotsToRemove*/) {
     }
 
+    ui64 GetMemoryLimitScanPortion() const {
+        return DoGetMemoryLimitScanPortion(GetConfig().GetMemoryLimitScanPortion());
+    }
     virtual bool CheckPortionForEvict(const NOlap::TPortionInfo& portion) const;
 
     TDuration GetPingCheckPeriod() const {

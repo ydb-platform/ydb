@@ -8,7 +8,6 @@ struct TWriteRequestInfoImpl : public TSimpleRefCount<TWriteRequestInfoImpl<TEvW
 
     struct TUserWriteRequest {
         THolder<TEvWrite> Write;
-        TInstant BeginTime;
     };
 
     explicit TWriteRequestInfoImpl(ui64 cookie)
@@ -35,9 +34,6 @@ struct TWriteRequestInfoImpl : public TSimpleRefCount<TWriteRequestInfoImpl<TEvW
 
     // Quota in term of RUs
     ui64 RequiredQuota;
-
-    TInstant QuotaTime;
-    TInstant SendTime;
 };
 
 template<class TEvWrite>

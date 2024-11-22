@@ -169,7 +169,9 @@ struct TEvPartitionWriter {
         TString TxId;
         THolder<TEvWriteRequest> Request;
     };
+
 }; // TEvPartitionWriter
+
 
 struct TPartitionWriterOpts {
     bool CheckState = false;

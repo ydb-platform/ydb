@@ -18,12 +18,6 @@ void TPartitionWriterCacheActor::Bootstrap(const TActorContext& ctx)
 {
     RegisterDefaultPartitionWriter(ctx);
 
-    RequestLatency = NPQ::CreateSLIDurationCounter(ctx,
-                                                   "SessionCacheLatency",
-                                                   {2, 5, 10, 20, 50, 100, 150, 200, 250, 300, 400, 500, 750, 1'000, 1'500, 2'000},
-                                                   "", // account
-                                                   0);
-
     this->Become(&TPartitionWriterCacheActor::StateWork);
 }
 
@@ -181,9 +175,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteRespons
     if (result.IsSuccess()) {
         ui64 cookie = result.Record.GetPartitionResponse().GetCookie();
         if (cookie == p->second->AcceptedRequests.front().Cookie) {
-            TInstant beginTime = p->second->OnWriteResponse(result);
-
-            RequestLatency.IncFor(NPQ::ToMilliSeconds(ctx.Now() - beginTime));
+            p->second->OnWriteResponse(result);
 
             TryForwardToOwner(ev->Release().Release(), PendingWriteResponse,
                               cookie,

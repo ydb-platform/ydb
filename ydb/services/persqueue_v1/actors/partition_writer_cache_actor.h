@@ -3,15 +3,12 @@
 #include "events.h"
 #include "partition_writer.h"
 
-#include <ydb/core/persqueue/sli_duration_counter.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
 class TPartitionWriterCacheActor : public NActors::TActorBootstrapped<TPartitionWriterCacheActor> {
 public:
-    static constexpr char ActorName[] = "TPartitionWriterCacheActor";
-
     TPartitionWriterCacheActor(const TActorId& owner,
                                ui32 partition,
                                ui64 tabletId,
@@ -75,8 +72,6 @@ private:
 
     TEventQueue<NPQ::TEvPartitionWriter::TEvWriteAccepted> PendingWriteAccepted;
     TEventQueue<NPQ::TEvPartitionWriter::TEvWriteResponse> PendingWriteResponse;
-
-    NPQ::TPercentileCounter RequestLatency;
 };
 
 }

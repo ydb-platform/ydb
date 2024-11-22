@@ -269,8 +269,6 @@ private:
     TInstant StartTime;
     NKikimr::NPQ::TPercentileCounter InitLatency;
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
-    NKikimr::NPQ::TPercentileCounter RequestLatency;
-    NKikimr::NPQ::TPercentileCounter QuotaLatency;
 
     TInitRequest InitRequest;
 

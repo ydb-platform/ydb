@@ -13,7 +13,6 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
-#include <ydb/core/persqueue/sli_duration_counter.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
 #include <util/generic/deque.h>
@@ -106,20 +105,19 @@ TString TEvPartitionWriter::TEvWriteResponse::ToString() const {
     return out;
 }
 
-class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRlHelpers {
+class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TRlHelpers {
     using EErrorCode = TEvPartitionWriter::TEvWriteResponse::EErrorCode;
 
     struct TUserWriteRequest {
         NKikimrClient::TPersQueueRequest Request;
-        TInstant BeginTime;
     };
 
-    struct RequestHolder {
+    struct TRequestHolder {
         TUserWriteRequest Write;
         bool QuotaCheckEnabled;
         bool QuotaAccepted;
 
-        RequestHolder(TUserWriteRequest&& write, bool quotaCheckEnabled)
+        TRequestHolder(TUserWriteRequest&& write, bool quotaCheckEnabled)
             : Write(std::move(write))
             , QuotaCheckEnabled(quotaCheckEnabled)
             , QuotaAccepted(false) {
@@ -128,8 +126,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
     struct TSentRequest {
         ui64 Cookie;
-        TInstant BeginTime;
-        TInstant SendTime;
     };
 
     static constexpr size_t MAX_QUOTA_INFLIGHT = 3;
@@ -171,22 +167,16 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     }
 
     void SendError(const TString& error) {
-        TInstant now = ActorContext().Now();
-        for (auto request : std::exchange(PendingWrite, {})) {
-            RequestLatency.IncFor(ToMilliSeconds(now - request.BeginTime));
-            PQTabletLatency.IncFor(ToMilliSeconds(now - request.SendTime));
-            SendWriteResult(ErrorCode, error, MakeResponse(request.Cookie));
-        }
-        for (const auto& [cookie, request] : std::exchange(PendingReserve, {})) {
-            RequestLatency.IncFor(ToMilliSeconds(now - request.Write.BeginTime));
+        for (auto& [cookie] : std::exchange(PendingWrite, {})) {
             SendWriteResult(ErrorCode, error, MakeResponse(cookie));
         }
-        for (const auto& [cookie, request] : std::exchange(ReceivedReserve, {})) {
-            RequestLatency.IncFor(ToMilliSeconds(now - request.Write.BeginTime));
+        for (const auto& [cookie, _] : std::exchange(PendingReserve, {})) {
             SendWriteResult(ErrorCode, error, MakeResponse(cookie));
         }
-        for (const auto& [cookie, request] : std::exchange(Pending, {})) {
-            RequestLatency.IncFor(ToMilliSeconds(now - request.BeginTime));
+        for (const auto& [cookie, _] : std::exchange(ReceivedReserve, {})) {
+            SendWriteResult(ErrorCode, error, MakeResponse(cookie));
+        }
+        for (const auto& [cookie, _] : std::exchange(Pending, {})) {
             SendWriteResult(ErrorCode, error, MakeResponse(cookie));
         }
     }
@@ -256,9 +246,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
     /// GetWriteId
 
     void GetWriteId(const TActorContext& ctx) {
-        GetWriteIdBegin = ctx.Now();
         auto ev = MakeWriteIdRequest();
-        GetWriteIdBegin = ctx.Now();
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
         Become(&TThis::StateGetWriteId);
     }
@@ -284,8 +272,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         default:
             return InitResult("Invalid KQP session", record);
         }
-
-        GetWriteIdLatency.IncFor(ToMilliSeconds(ctx.Now() - GetWriteIdBegin));
 
         WriteId = NPQ::GetWriteId(record.GetResponse().GetTopicOperations());
 
@@ -410,13 +396,11 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         Y_ABORT_UNLESS(HasWriteId());
         Y_ABORT_UNLESS(HasSupportivePartitionId());
 
-        SavePartitionIdBegin = ctx.Now();
-
         auto ev = MakeWriteIdRequest();
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
 
-    void HandlePartitionIdSaved(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandlePartitionIdSaved(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext&) {
         auto& record = ev->Get()->Record;
         switch (record.GetYdbStatus()) {
         case Ydb::StatusIds::SUCCESS:
@@ -427,8 +411,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         default:
             return InitResult("Invalid KQP session", record);
         }
-
-        SavePartitionIdLatency.IncFor(ToMilliSeconds(ctx.Now() - SavePartitionIdBegin));
 
         GetMaxSeqNo();
     }
@@ -576,8 +558,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         SetWriteId(*record.MutablePartitionRequest());
 
-        TUserWriteRequest request{std::move(record), ActorContext().Now()};
-        Pending.emplace(cookie, std::move(request));
+        Pending.emplace(cookie, TUserWriteRequest(std::move(record)));
 
         return true;
     }
@@ -621,7 +602,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
             NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
 
-            PendingReserve.emplace(it->first, RequestHolder{ std::move(it->second), needToRequestQuota });
+            PendingReserve.emplace(it->first, TRequestHolder{std::move(it->second), needToRequestQuota});
             Pending.erase(it);
 
             if (needToRequestQuota && processed == MAX_QUOTA_INFLIGHT) {
@@ -710,7 +691,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
         ReceivedQuota.clear();
     }
 
-    void Write(ui64 cookie, RequestHolder&& holder) {
+    void Write(ui64 cookie, TRequestHolder&& holder) {
         auto ev = MakeHolder<TEvPersQueue::TEvRequest>();
         ev->Record = std::move(holder.Write.Request);
 
@@ -728,7 +709,7 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
 
-        PendingWrite.emplace_back(cookie, holder.Write.BeginTime, ActorContext().Now());
+        PendingWrite.emplace_back(cookie);
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
@@ -785,11 +766,6 @@ class TPartitionWriter: public TActorBootstrapped<TPartitionWriter>, private TRl
                     << ", got# " << response.GetCookie();
                 return WriteResult(EErrorCode::InternalError, error, std::move(record));
             }
-
-            TInstant now = ActorContext().Now();
-
-            PQTabletLatency.IncFor(ToMilliSeconds(now - front.SendTime));
-            RequestLatency.IncFor(ToMilliSeconds(now - front.BeginTime));
 
             WriteResult(std::move(record));
         }
@@ -899,27 +875,6 @@ public:
 
         PipeClient = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), TabletId, config));
 
-        RequestLatency = NPQ::CreateSLIDurationCounter(ctx,
-                                                       "PartitionWriterLatency",
-                                                       {2, 5, 10, 20, 50, 100, 150, 200, 250, 300, 400, 500, 750, 1'000, 1'500, 2'000},
-                                                       "", // account
-                                                       0);
-        GetWriteIdLatency = NPQ::CreateSLIDurationCounter(ctx,
-                                                          "GetWriteIdLatency",
-                                                          {2, 5, 10, 20, 50, 100, 150, 200, 250, 300, 400, 500, 750, 1'000, 1'500, 2'000},
-                                                          "", // account
-                                                          0);
-        SavePartitionIdLatency = NPQ::CreateSLIDurationCounter(ctx,
-                                                               "SavePartitionIdLatency",
-                                                               {2, 5, 10, 20, 50, 100, 150, 200, 250, 300, 400, 500, 750, 1'000, 1'500, 2'000},
-                                                               "", // account
-                                                               0);
-        PQTabletLatency = NPQ::CreateSLIDurationCounter(ctx,
-                                                        "PQTabletLatency",
-                                                        {2, 5, 10, 20, 50, 100, 150, 200, 250, 300, 400, 500, 750, 1'000, 1'500, 2'000},
-                                                        "", // account
-                                                        0);
-
         if (Opts.Database && Opts.SessionId && Opts.TxId) {
             GetWriteId(ctx);
         } else {
@@ -965,8 +920,8 @@ private:
     ui64 MessageNo = 0;
 
     TMap<ui64, TUserWriteRequest> Pending;
-    TMap<ui64, RequestHolder> PendingReserve;
-    TMap<ui64, RequestHolder> ReceivedReserve;
+    TMap<ui64, TRequestHolder> PendingReserve;
+    TMap<ui64, TRequestHolder> ReceivedReserve;
     TDeque<ui64> PendingQuota;
     ui64 PendingQuotaAmount = 0;
     TDeque<ui64> ReceivedQuota;
@@ -995,14 +950,6 @@ private:
     };
 
     IRetryState::TPtr RetryState;
-
-    TPercentileCounter RequestLatency;
-    TPercentileCounter GetWriteIdLatency;
-    TPercentileCounter SavePartitionIdLatency;
-    TPercentileCounter PQTabletLatency;
-
-    TInstant GetWriteIdBegin;
-    TInstant SavePartitionIdBegin;
 }; // TPartitionWriter
 
 

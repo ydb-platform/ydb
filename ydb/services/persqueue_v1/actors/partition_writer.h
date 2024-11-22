@@ -12,7 +12,7 @@ struct TPartitionWriter {
     void OnEvInitResult(const NPQ::TEvPartitionWriter::TEvInitResult::TPtr& ev);
     void OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteRequest>&& ev, const TActorContext& ctx);
     void OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAccepted& ev, const TActorContext& ctx);
-    TInstant OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteResponse& ev);
+    void OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteResponse& ev);
 
     bool HasPendingRequests() const;
 
@@ -23,12 +23,10 @@ struct TPartitionWriter {
 
     struct TUserWriteRequest {
         THolder<NPQ::TEvPartitionWriter::TEvWriteRequest> Write;
-        TInstant BeginTime;
     };
 
     struct TSentRequest {
         ui64 Cookie;
-        TInstant BeginTime;
     };
 
     // Quoted, but not sent requests

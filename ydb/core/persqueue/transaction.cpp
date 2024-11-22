@@ -60,13 +60,6 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     }
 
     PartitionsData = std::move(tx.GetPartitions());
-
-    if (tx.HasBeginTime()) {
-        BeginTime = TInstant::MicroSeconds(tx.GetBeginTime());
-    }
-    if (tx.HasChangeStateTime()) {
-        ChangeStateTime = TInstant::MicroSeconds(tx.GetChangeStateTime());
-    }
 }
 
 TString TDistributedTransaction::LogPrefix() const
@@ -426,13 +419,6 @@ NKikimrPQ::TTransaction TDistributedTransaction::Serialize(EState state) {
     ActorIdToProto(SourceActor, tx.MutableSourceActor());
 
     *tx.MutablePartitions() = PartitionsData;
-
-    if (BeginTime.Defined()) {
-        tx.SetBeginTime(BeginTime->MicroSeconds());
-    }
-    if (ChangeStateTime.Defined()) {
-        tx.SetChangeStateTime(ChangeStateTime->MicroSeconds());
-    }
 
     return tx;
 }

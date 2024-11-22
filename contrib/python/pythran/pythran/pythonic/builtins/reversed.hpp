@@ -18,8 +18,7 @@ namespace builtins
     }
 
     template <class Iterable>
-    reversed<Iterable>::reversed(Iterable const &iterable)
-        : iterable(iterable)
+    reversed<Iterable>::reversed(Iterable const &iterable) : iterable(iterable)
     {
     }
 
@@ -47,14 +46,14 @@ namespace builtins
     {
       return iterable.rend();
     }
-  }
+  } // namespace details
 
   template <class Iterable>
   details::reversed<Iterable> reversed(Iterable const &iterable)
   {
     return {iterable};
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

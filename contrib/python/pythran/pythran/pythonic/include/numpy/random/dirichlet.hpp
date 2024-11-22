@@ -15,13 +15,13 @@ namespace numpy
     types::ndarray<double, pS> dirichlet(double alpha, pS const &shape);
 
     auto dirichlet(double alpha, long size)
-        -> decltype(dirichlet(alpha, types::array<long, 1>{{size}}));
+        -> decltype(dirichlet(alpha, types::array_tuple<long, 1>{{size}}));
 
     double dirichlet(double alpha, types::none_type size = {});
 
     DEFINE_FUNCTOR(pythonic::numpy::random, dirichlet);
-  }
-}
+  } // namespace random
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

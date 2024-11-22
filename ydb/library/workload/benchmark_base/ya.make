@@ -10,6 +10,7 @@ SRCS(
 PEERDIR(
     ydb/library/accessor
     ydb/library/workload/abstract
+    ydb/library/yaml_json
     ydb/public/api/protos
 )
 

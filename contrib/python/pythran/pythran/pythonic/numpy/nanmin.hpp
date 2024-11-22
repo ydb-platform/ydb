@@ -37,7 +37,7 @@ namespace numpy
                          utils::int_<N - 1>());
       return found;
     }
-  }
+  } // namespace
 
   template <class E>
   typename E::dtype nanmin(E const &expr)
@@ -49,7 +49,7 @@ namespace numpy
       min = std::numeric_limits<typename E::dtype>::quiet_NaN();
     return min;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

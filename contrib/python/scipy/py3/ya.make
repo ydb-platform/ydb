@@ -2069,6 +2069,7 @@ RUN_PROGRAM(
     pythonic/builtins/float_.hpp
     pythonic/builtins/getattr.hpp
     pythonic/builtins/pythran/make_shape.hpp
+    pythonic/builtins/pythran/restrict_assign.hpp
     pythonic/builtins/range.hpp
     pythonic/builtins/tuple.hpp
     pythonic/core.hpp
@@ -2077,6 +2078,7 @@ RUN_PROGRAM(
     pythonic/include/builtins/float_.hpp
     pythonic/include/builtins/getattr.hpp
     pythonic/include/builtins/pythran/make_shape.hpp
+    pythonic/include/builtins/pythran/restrict_assign.hpp
     pythonic/include/builtins/range.hpp
     pythonic/include/builtins/tuple.hpp
     pythonic/include/numpy/empty.hpp
@@ -2338,23 +2340,25 @@ RUN_PROGRAM(
     IN scipy/stats/_stats_pythran.py
     OUT scipy/stats/_stats_pythran.cpp
     OUTPUT_INCLUDES
+    pythonic/__dispatch__/append.hpp
     pythonic/builtins/getattr.hpp
     pythonic/builtins/int_.hpp
     pythonic/builtins/len.hpp
     pythonic/builtins/list.hpp
-    pythonic/builtins/list/append.hpp
     pythonic/builtins/max.hpp
     pythonic/builtins/min.hpp
+    pythonic/builtins/pythran/restrict_assign.hpp
     pythonic/builtins/range.hpp
     pythonic/builtins/tuple.hpp
     pythonic/core.hpp
+    pythonic/include/__dispatch__/append.hpp
     pythonic/include/builtins/getattr.hpp
     pythonic/include/builtins/int_.hpp
     pythonic/include/builtins/len.hpp
     pythonic/include/builtins/list.hpp
-    pythonic/include/builtins/list/append.hpp
     pythonic/include/builtins/max.hpp
     pythonic/include/builtins/min.hpp
+    pythonic/include/builtins/pythran/restrict_assign.hpp
     pythonic/include/builtins/range.hpp
     pythonic/include/builtins/tuple.hpp
     pythonic/include/numpy/asarray.hpp

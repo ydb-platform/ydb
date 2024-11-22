@@ -1129,6 +1129,9 @@ struct TRichYPath
     /// Specifies columnar mapping which will be applied to columns before transfer to job.
     FLUENT_FIELD_OPTION(TRenameColumnsDescriptor, RenameColumns);
 
+    /// Specifies cluster for the YPath
+    FLUENT_FIELD_OPTION(TString, Cluster);
+
     /// Create empty path with no attributes
     TRichYPath()
     { }

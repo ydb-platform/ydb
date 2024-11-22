@@ -2410,6 +2410,8 @@ namespace NKikimr {
         friend class TActorBootstrapped<TSkeleton>;
 
         void Bootstrap(const TActorContext &ctx) {
+            ctx.Mailbox.EnableStats();
+
             LOG_INFO_S(ctx, BS_SKELETON, VCtx->VDiskLogPrefix << "SKELETON START"
                     << " Marker# BSVS37");
             Become(&TThis::StateLocalRecovery);
@@ -2599,6 +2601,21 @@ namespace NKikimr {
             ActiveActors.Insert(BalancingId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
+        void CountStats() {
+            auto stats = TlsActivationContext->Mailbox.GetElapsedSeconds();
+            if (stats) {
+                *SkeletonBusyTimeUs = *stats * 1e6;
+            }
+            if (LastEventsQueueSize) {
+                --LastEventsQueueSize;
+            }
+            if (LastEventsQueueSize == 0) {
+                auto events = TlsActivationContext->Mailbox.CountMailboxEvents(SelfId().LocalId(), 128);
+                ActorQueueLight.Set(events.first >= 64, ++ActorQueueSeqNo);
+                LastEventsQueueSize = events.first;
+            }
+        }
+
         // NOTES: we have 4 state functions, one of which is an error state (StateDatabaseError) and
         // others are good: StateLocalRecovery, StateSyncGuidRecovery, StateNormal
         // We switch between states in the following manner:
@@ -2613,28 +2630,13 @@ namespace NKikimr {
         //    state. We don't care about sync quorum anymore, it's responsibility of blobstorage
         //    proxy to perform some action if too many vdisks become unavailable.
 
-class TInstantCounter {
-    ::NMonitoring::TDynamicCounters::TCounterPtr Counter;
-    TInstant Start;
-
-public:
-    TInstantCounter(::NMonitoring::TDynamicCounters::TCounterPtr counter)
-        : Counter(counter)
-        , Start(TInstant::Now())
-    {}
-
-    ~TInstantCounter() {
-        *Counter += (TInstant::Now() - Start).MicroSeconds();
-    }
-};
-
-#define COUNTED_STRICT_STFUNC(NAME, COUNTER, HANDLERS)  \
-    void NAME(STFUNC_SIG) {                             \
-        TInstantCounter t(COUNTER);                     \
-        STRICT_STFUNC_BODY(HANDLERS)                    \
+#define COUNTED_STRICT_STFUNC(NAME, HANDLERS)                              \
+    void NAME(STFUNC_SIG) {                                                \
+        CountStats();                                                      \
+        STRICT_STFUNC_BODY(HANDLERS)                                       \
     }
 
-        COUNTED_STRICT_STFUNC(StateLocalRecovery, SkeletonBusyTimeUs,
+        COUNTED_STRICT_STFUNC(StateLocalRecovery,
             // We should not get these requests while performing LocalRecovery
             // TEvBlobStorage::TEvVPut
             // TEvDelLogoBlobDataSyncLog
@@ -2675,7 +2677,7 @@ public:
             hFunc(TEvReplInvoke, HandleReplNotInProgress)
         )
 
-        COUNTED_STRICT_STFUNC(StateSyncGuidRecovery, SkeletonBusyTimeUs,
+        COUNTED_STRICT_STFUNC(StateSyncGuidRecovery,
             HFunc(TEvBlobStorage::TEvVPut, HandlePutSyncGuidRecovery)
             HFunc(TEvHullLogHugeBlob, Handle)
             HFunc(TEvDelLogoBlobDataSyncLog, Handle)
@@ -2728,7 +2730,7 @@ public:
             hFunc(TEvReplInvoke, HandleReplNotInProgress)
         )
 
-        COUNTED_STRICT_STFUNC(StateNormal, SkeletonBusyTimeUs,
+        COUNTED_STRICT_STFUNC(StateNormal,
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
             HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvBlobStorage::TEvVMovedPatch, Handle)
@@ -2798,7 +2800,7 @@ public:
             CFunc(TEvStartBalancing::EventType, RunBalancing)
         )
 
-        COUNTED_STRICT_STFUNC(StateDatabaseError, SkeletonBusyTimeUs,
+        COUNTED_STRICT_STFUNC(StateDatabaseError,
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             CFunc(TEvBlobStorage::EvCompactionFinished, LevelIndexCompactionFinished)
             CFunc(TEvBlobStorage::EvWakeupEmergencyPutQueue, WakeupEmergencyPutQueue)
@@ -2854,8 +2856,11 @@ public:
             , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(
                 VCtx->VDiskCounters, "subsystem", "interface"))
             , EnableVPatch(cfg->EnableVPatch)
-            , SkeletonBusyTimeUs(VCtx->VDiskCounters->GetSubgroup("subsystem", "cpu")->GetCounter("skeletonBusyTimeUs"))
-        {}
+        {
+            auto cpuGroup = VCtx->VDiskCounters->GetSubgroup("subsystem", "cpu");
+            SkeletonBusyTimeUs = cpuGroup->GetCounter("skeletonBusyTimeUs");
+            ActorQueueLight.Initialize(cpuGroup, "Queue");
+        }
 
         virtual ~TSkeleton() {
         }
@@ -2919,6 +2924,9 @@ public:
         std::deque<TMonotonic> SnapshotExpirationCheckSchedule;
 
         ::NMonitoring::TDynamicCounters::TCounterPtr SkeletonBusyTimeUs;
+        size_t LastEventsQueueSize = 0;
+        TLight ActorQueueLight;
+        ui16 ActorQueueSeqNo = 0;
     };
 
     ////////////////////////////////////////////////////////////////////////////

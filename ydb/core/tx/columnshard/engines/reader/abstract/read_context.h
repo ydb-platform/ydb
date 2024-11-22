@@ -53,13 +53,16 @@ private:
     const TActorId ReadCoordinatorActorId;
     const TComputeShardingPolicy ComputeShardingPolicy;
     TAtomic AbortFlag = 0;
-
 public:
     template <class T>
     std::shared_ptr<const T> GetReadMetadataPtrVerifiedAs() const {
         auto result = dynamic_pointer_cast<const T>(ReadMetadata);
         AFL_VERIFY(result);
         return result;
+    }
+
+    const std::shared_ptr<IScanCursor>& GetScanCursor() const {
+        return ReadMetadata->GetScanCursor();
     }
 
     void AbortWithError(const TString& errorMessage) {

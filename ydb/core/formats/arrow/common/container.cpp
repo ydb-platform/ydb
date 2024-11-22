@@ -173,7 +173,7 @@ std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableOptional(const TTable
 std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableVerified(const TTableConstructionContext& context) const {
     auto result = BuildTableOptional(context);
     AFL_VERIFY(result);
-    AFL_VERIFY(!context->GetColumnNames() || result->schema()->num_fields() == (i32)context->GetColumnNames()->size());
+    AFL_VERIFY(!context.GetColumnNames() || result->schema()->num_fields() == (i32)context.GetColumnNames()->size());
     return result;
 }
 

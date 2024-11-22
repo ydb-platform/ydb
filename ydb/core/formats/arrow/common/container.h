@@ -71,9 +71,11 @@ public:
     public:
         TTableConstructionContext() = default;
         TTableConstructionContext(std::set<std::string>&& columnNames)
-            : ColumnNames(std::move(columnNames))
-        {
+            : ColumnNames(std::move(columnNames)) {
+        }
 
+        TTableConstructionContext(const std::set<std::string>& columnNames)
+            : ColumnNames(columnNames) {
         }
     };
 

@@ -86,7 +86,7 @@ protected:
 public:
     class TCompareForScanSequence {
     public:
-        bool operator()(const std::shared_ptr<IDataSource>& l, const std::shared_ptr<IDataSource>& r) {
+        bool operator()(const std::shared_ptr<IDataSource>& l, const std::shared_ptr<IDataSource>& r) const {
             const std::partial_ordering compareResult = l->GetStart().Compare(r->GetStart());
             if (compareResult == std::partial_ordering::equivalent) {
                 return l->GetSourceId() < r->GetSourceId();

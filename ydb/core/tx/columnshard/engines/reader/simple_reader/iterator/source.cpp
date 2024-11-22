@@ -25,7 +25,7 @@ void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr)
     AFL_VERIFY(FetchingPlan);
     AFL_VERIFY(!Context->IsAborted());
     Started = true;
-    StageData = std::make_unique<TFetchedData>(GetExclusiveIntervalOnly());
+    StageData = std::make_unique<TFetchedData>(true);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", SourceIdx);
     NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
     TFetchingScriptCursor cursor(FetchingPlan, 0);

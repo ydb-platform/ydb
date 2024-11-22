@@ -213,6 +213,10 @@ public:
         ChunkToReply = std::move(table);
     }
 
+    bool IsFinished() const {
+        return GetPagesToResultVerified().empty();
+    }
+
     bool HasResultChunk() const {
         return !!ChunkToReply;
     }

@@ -25,13 +25,10 @@ public:
 class TScanHead {
 private:
     std::shared_ptr<TSpecialReadContext> Context;
-    bool SourcesInitialized = false;
     std::set<std::shared_ptr<IDataSource>, IDataSource::TCompareForScanSequence> SortedSources;
     std::set<std::shared_ptr<IDataSource>, IDataSource::TCompareForScanSequence> FetchingSources;
-    ui32 SegmentIdxCounter = 0;
     ui64 InFlightLimit = 1;
     ui64 MaxInFlight = 256;
-    ui64 ZeroCount = 0;
 public:
 
     bool IsReverse() const;

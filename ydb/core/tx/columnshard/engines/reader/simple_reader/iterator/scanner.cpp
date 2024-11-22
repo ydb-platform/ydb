@@ -19,9 +19,9 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
             break;
         }
         auto table = (*FetchingSources.begin())->MutableStageResult().ExtractResultChunk();
-        std::make_shared<TSimpleScanCursor> cursor(frontSource->GetStart(), frontSource->GetSourceId(), startIndex + recordsCount);
+        auto cursor = std::make_shared<TSimpleScanCursor>(frontSource->GetStart(), frontSource->GetSourceId(), startIndex + recordsCount);
         reader.OnIntervalResult(std::make_shared<TPartialReadResult>(nullptr, nullptr, table, cursor, source->GetSourceIdx()));
-        if ((*FetchingSources.begin())->IsFinished()) {
+        if ((*FetchingSources.begin())->GetStageResult().IsFinished()) {
             FetchingSources.erase(FetchingSources.begin());
         } else {
             break;
@@ -52,7 +52,7 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
         if (!context->GetCommonContext()->GetScanCursor()->CheckPortionUsage(i)) {
             continue;
         }
-        SortedSources.emplace(source);
+        SortedSources.emplace(i);
     }
 }
 
@@ -61,7 +61,7 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
         return false;
     }
     while (SortedSources.size() && FetchingSources.size() < InFlightLimit) {
-        (*SortedSources.begin())->Start(*SortedSources.begin());
+        (*SortedSources.begin())->StartProcessing(*SortedSources.begin());
         FetchingSources.emplace(*SortedSources.begin());
         SortedSources.erase(SortedSources.begin());
         return true;

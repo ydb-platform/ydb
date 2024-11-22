@@ -239,6 +239,7 @@ protected:
         virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
             const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
         virtual void DoOnAllocationImpossible(const TString& errorMessage) override;
+
     public:
         TFetchingStepAllocation(const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step);
     };
@@ -265,9 +266,7 @@ public:
     TAllocateMemoryStep(const ui64 memSize, const EStageFeaturesIndexes stageIndex)
         : TBase("ALLOCATE_MEMORY::" + ::ToString(stageIndex))
         , StageIndex(stageIndex)
-        , PredefinedSize(memSize)
-    {
-
+        , PredefinedSize(memSize) {
     }
 
     TAllocateMemoryStep(const TColumnsSetIds& columns, const EMemType memType, const EStageFeaturesIndexes stageIndex)
@@ -294,6 +293,25 @@ public:
         : TBase("FETCHING_COLUMNS")
         , Columns(columns) {
         AFL_VERIFY(Columns.GetColumnsCount());
+    }
+};
+
+class TPrepareResultStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+
+protected:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override {
+
+    }
+    virtual TString DoDebugString() const override {
+        return TStringBuilder();
+    }
+
+public:
+    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
+    TPrepareResultStep()
+        : TBase("PREPARE_RESULT") {
     }
 };
 
@@ -451,8 +469,7 @@ public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     TDetectInMem(const TColumnsSetIds& columns)
         : TBase("DETECT_IN_MEM")
-        , Columns(columns)
-    {
+        , Columns(columns) {
     }
 };
 

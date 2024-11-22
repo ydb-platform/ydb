@@ -29,7 +29,6 @@ class IFetchingStep;
 
 class IDataSource {
 private:
-    YDB_ACCESSOR(bool, ExclusiveIntervalOnly, true);
     YDB_READONLY(ui32, SourceIdx, 0);
     YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Start);
     YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Finish);
@@ -41,25 +40,17 @@ private:
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY_DEF(std::optional<ui64>, ShardingVersionOptional);
     YDB_READONLY(bool, HasDeletions, false);
-    YDB_READONLY(ui32, IntervalsCount, 0);
     virtual NJson::TJsonValue DoDebugJson() const = 0;
-    bool MergingStartedFlag = false;
-    TAtomic SourceStartedFlag = 0;
     std::shared_ptr<TFetchingScript> FetchingPlan;
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
-    std::optional<ui64> FirstIntervalId;
-    ui32 CurrentPlanStepIndex = 0;
     YDB_READONLY(TPKRangeFilter::EUsageClass, UsageClass, TPKRangeFilter::EUsageClass::PartialUsage);
+    bool Started = false;
 
 protected:
     std::optional<bool> IsSourceInMemoryFlag;
-    THashMap<ui32, TFetchingInterval*> Intervals;
 
     std::unique_ptr<TFetchedData> StageData;
     std::unique_ptr<TFetchedResult> StageResult;
-
-    TAtomic FilterStageFlag = 0;
-    bool IsReadyFlag = false;
 
     virtual bool DoStartFetchingColumns(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
@@ -75,6 +66,19 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
+    class TCompareForScanSequence {
+    public:
+        bool operator()(const std::shared_ptr<IDataSource>& l, const std::shared_ptr<IDataSource>& r) {
+            const std::partial_ordering compareResult = l->GetStart().Compare(r->GetStart());
+            if (compareResult == std::partial_ordering::equivalent) {
+                return l->GetSourceIdx() < r->GetSourceIdx();
+            } else {
+                return compareResult == std::partial_ordering::less;
+            }
+        };
+    };
+
+    void Start(const std::shared_ptr<IDataSource>& sourcePtr);
     virtual ui64 PredictAccessorsSize() const = 0;
 
     bool StartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
@@ -99,7 +103,6 @@ public:
         }
         return result;
     }
-
     void RegisterAllocationGuard(const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard) {
         ResourceGuards.emplace_back(guard);
     }
@@ -139,8 +142,6 @@ public:
         AFL_VERIFY(!!StageResult);
         return *StageResult;
     }
-
-    void SetIsReady();
 
     void Finalize() {
         TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
@@ -182,17 +183,7 @@ public:
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const = 0;
 
-    bool IsMergingStarted() const {
-        return MergingStartedFlag;
-    }
-
-    void StartMerging() {
-        AFL_VERIFY(!MergingStartedFlag);
-        MergingStartedFlag = true;
-    }
-
     void Abort() {
-        Intervals.clear();
         DoAbort();
     }
 
@@ -214,10 +205,6 @@ public:
 
     bool OnIntervalFinished(const ui32 intervalIdx);
 
-    bool IsDataReady() const {
-        return IsReadyFlag;
-    }
-
     void OnEmptyStageData() {
         if (!ResourceGuards.size()) {
             return;
@@ -238,8 +225,6 @@ public:
         AFL_VERIFY(StageData);
         return *StageData;
     }
-
-    void RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr);
 
     IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TReplaceKey& start,
         const NArrow::TReplaceKey& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
@@ -264,9 +249,7 @@ public:
         Y_ABORT_UNLESS(Start.Compare(Finish) != std::partial_ordering::greater);
     }
 
-    virtual ~IDataSource() {
-        AFL_VERIFY(Intervals.empty());
-    }
+    virtual ~IDataSource() = default;
 };
 
 class TPortionDataSource: public IDataSource {

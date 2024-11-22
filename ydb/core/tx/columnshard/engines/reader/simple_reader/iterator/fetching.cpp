@@ -302,4 +302,19 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSour
     return false;
 }
 
+TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    if (Columns.GetColumnsCount()) {
+        source->SetSourceInMemory(source->GetColumnRawBytes(Columns.GetColumnIds()) < 1e+8);
+    } else {
+        source->SetSourceInMemory(true);
+    }
+    AFL_VERIFY(source->GetStageData().HasPortionAccessor());
+    auto plan = source->GetContext()->GetColumnsFetchingPlan(source);
+    source->InitFetchingPlan(plan);
+    TFetchingScriptCursor cursor(plan, 0);
+    auto task = std::make_shared<TStepAction>(source, std::move(cursor), source->GetContext()->GetCommonContext()->GetScanActorId());
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+    return false;
+}
+
 }   // namespace NKikimr::NOlap::NReader::NSimple

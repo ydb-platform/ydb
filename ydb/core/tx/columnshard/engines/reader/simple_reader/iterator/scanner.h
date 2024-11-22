@@ -36,48 +36,13 @@ public:
     }
 };
 
-class TScanContext {
-private:
-    using TCurrentSources = THashMap<ui32, std::shared_ptr<IDataSource>>;
-    YDB_READONLY(bool, IncludeStart, false);
-    YDB_READONLY(bool, IncludeFinish, false);
-    YDB_READONLY_DEF(TCurrentSources, CurrentSources);
-    YDB_READONLY(bool, IsSpecialPoint, false);
-    YDB_READONLY(bool, IsExclusiveInterval, false);
-public:
-    void OnStartPoint(const TDataSourceEndpoint& point) {
-        IsSpecialPoint = point.GetStartSources().size() && point.GetFinishSources().size();
-        IncludeStart = point.GetStartSources().size() && !IsSpecialPoint;
-        for (auto&& i : point.GetStartSources()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("add_source", i->GetSourceIdx());
-            AFL_VERIFY(CurrentSources.emplace(i->GetSourceIdx(), i).second)("idx", i->GetSourceIdx());
-        }
-    }
-
-    void OnFinishPoint(const TDataSourceEndpoint& point) {
-        for (auto&& i : point.GetFinishSources()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("remove_source", i->GetSourceIdx());
-            AFL_VERIFY(CurrentSources.erase(i->GetSourceIdx()))("idx", i->GetSourceIdx());
-        }
-    }
-
-    void OnNextPointInfo(const TDataSourceEndpoint& nextPoint) {
-        IncludeFinish = nextPoint.GetStartSources().empty();
-        IsExclusiveInterval = (CurrentSources.size() == 1) && IncludeStart && IncludeFinish;
-    }
-};
-
 class TScanHead {
 private:
     std::shared_ptr<TSpecialReadContext> Context;
     bool SourcesInitialized = false;
-    TScanContext CurrentState;
-    std::map<NArrow::NMerger::TSortableBatchPosition, TDataSourceEndpoint> BorderPoints;
-    std::optional<NArrow::NMerger::TSortableBatchPosition> CurrentStart;
-    std::map<ui32, std::shared_ptr<TFetchingInterval>> FetchingIntervals;
-    THashMap<ui32, std::shared_ptr<TPartialReadResult>> ReadyIntervals;
+    std::set<std::shared_ptr<IDataSource>, IDataSource::TCompareForScanSequence> SortedSources;
+    std::set<std::shared_ptr<IDataSource>, IDataSource::TCompareForScanSequence> FetchingSources;
     ui32 SegmentIdxCounter = 0;
-    std::vector<TIntervalStat> IntervalStats;
     ui64 InFlightLimit = 1;
     ui64 MaxInFlight = 256;
     ui64 ZeroCount = 0;

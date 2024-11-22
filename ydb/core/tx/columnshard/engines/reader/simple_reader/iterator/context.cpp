@@ -194,6 +194,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         acc.AddFetchingStep(*result, *FFColumns, EStageFeaturesIndexes::Fetching);
         acc.AddAssembleStep(*result, *FFColumns, "LAST", EStageFeaturesIndexes::Fetching, false);
     }
+    result->AddStep<TPrepareResult>();
     return result;
 }
 

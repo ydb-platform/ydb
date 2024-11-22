@@ -21,36 +21,17 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
     FetchingPlan = fetching;
 }
 
-void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr) {
+void IDataSource::Start(const std::shared_ptr<IDataSource>& sourcePtr) {
+    AFL_VERIFY(!Started);
     AFL_VERIFY(FetchingPlan);
     AFL_VERIFY(!Context->IsAborted());
-    if (!IsReadyFlag) {
-        AFL_VERIFY(Intervals.emplace(interval.GetIntervalIdx(), &interval).second);
-    }
-    if (AtomicCas(&SourceStartedFlag, 1, 0)) {
-        SetFirstIntervalId(interval.GetIntervalId());
-        AFL_VERIFY(FetchingPlan);
-        StageData = std::make_unique<TFetchedData>(GetExclusiveIntervalOnly());
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", SourceIdx);
-        NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
-        if (Context->IsAborted()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "InitFetchingPlanAborted");
-            return;
-        }
-        TFetchingScriptCursor cursor(FetchingPlan, 0);
-        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), Context->GetCommonContext()->GetScanActorId());
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
-    }
-}
-
-void IDataSource::SetIsReady() {
-    AFL_VERIFY(!IsReadyFlag);
-    IsReadyFlag = true;
-    for (auto&& i : Intervals) {
-        i.second->OnSourceFetchStageReady(SourceIdx);
-    }
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "source_ready")("intervals_count", Intervals.size())("source_idx", SourceIdx);
-    Intervals.clear();
+    Started = true;
+    StageData = std::make_unique<TFetchedData>(GetExclusiveIntervalOnly());
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", SourceIdx);
+    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
+    TFetchingScriptCursor cursor(FetchingPlan, 0);
+    auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), Context->GetCommonContext()->GetScanActorId());
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task);
 }
 
 void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,

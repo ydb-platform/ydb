@@ -328,7 +328,6 @@ namespace NTabletFlatExecutor {
                         saveCompactedPages->Pages.push_back(sharedPage);
                         cache->Fill(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), GCList), sticky);
                     };
-
                     for (auto &page : pageCollection.StickyPages) {
                         addPage(page, true);
                     }
@@ -393,7 +392,7 @@ namespace NTabletFlatExecutor {
             }
 
             if (fail) {
-                Y_VERIFY(!prod->Results); /* shouldn't sent w/o fixation in bs */
+                Y_ABORT_IF(prod->Results); /* shouldn't sent w/o fixation in bs */
             } else if (bool(prod->Results) != bool(WriteStats.Rows > 0)) {
                 Y_ABORT("Unexpected rows production result after compaction");
             } else if ((bool(prod->Results) || bool(prod->TxStatus)) != bool(Blobs > 0)) {

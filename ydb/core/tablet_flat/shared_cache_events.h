@@ -65,8 +65,8 @@ namespace NKikimr::NSharedCache {
     };
 
     // Note: compacted pages do not have an owner yet
-    // at first they should be accepted by executor
-    // and it will send TEvAttach itself whe a compaction result is applied
+    // at first they should be accepted by an executor
+    // and it will send TEvAttach itself when it have happened
     struct TEvSaveCompactedPages : public TEventLocal<TEvSaveCompactedPages, EvSaveCompactedPages> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TVector<TIntrusivePtr<TPage>> Pages;

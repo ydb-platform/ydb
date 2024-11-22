@@ -21,7 +21,6 @@
 namespace NKikimr::NSharedCache {
 
 using namespace NTabletFlatExecutor;
-using TBlocks = TVector<NSharedCache::TEvResult::TLoaded>;
 
 TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
     : Counters(counters)
@@ -68,7 +67,7 @@ struct TRequest : public TSimpleRefCount<TRequest> {
     ui64 EventCookie = 0;
     ui64 RequestCookie = 0;
     ui64 PendingBlocks = 0;
-    TBlocks ReadyBlocks;
+    TVector<TEvResult::TLoaded> ReadyPages;
     TDeque<ui32> PagesToRequest;
     NWilson::TTraceId TraceId;
 };
@@ -436,8 +435,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         TStackVec<std::pair<ui32, ui32>> pendingPages; // pageId, reqIdx
         ui32 pagesToLoad = 0;
 
-        TBlocks readyBlocks;
-        readyBlocks.reserve(msg->Fetch->Pages.size());
+        TVector<TEvResult::TLoaded> readyPages(::Reserve(msg->Fetch->Pages.size()));
         TVector<ui32> pagesToWait;
         if (logsat)
             pagesToWait.reserve(msg->Fetch->Pages.size());
@@ -479,7 +477,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             case PageStateLoaded:
                 Counters.CacheHitPages->Inc();
                 Counters.CacheHitBytes->Add(page->Size);
-                readyBlocks.emplace_back(pageId, TSharedPageRef::MakeUsed(page, GCList));
+                readyPages.emplace_back(pageId, TSharedPageRef::MakeUsed(page, GCList));
                 if (logsat)
                     pagesToWait.emplace_back(pageId);
                 Evict(Cache.Touch(page));
@@ -492,7 +490,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             case PageStatePending:
                 Counters.CacheMissPages->Inc();
                 Counters.CacheMissBytes->Add(page->Size);
-                readyBlocks.emplace_back(pageId, TSharedPageRef());
+                readyPages.emplace_back(pageId, TSharedPageRef());
                 pendingPages.emplace_back(pageId, reqIdx);
                 break;
             }
@@ -505,7 +503,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         waitingRequest->Priority = msg->Priority;
         waitingRequest->EventCookie = ev->Cookie;
         waitingRequest->RequestCookie = msg->Fetch->Cookie;
-        waitingRequest->ReadyBlocks = std::move(readyBlocks);
+        waitingRequest->ReadyPages = std::move(readyPages);
 
         if (pendingPages) {
             TVector<ui32> pagesToKeep;
@@ -966,7 +964,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             return;
         for (auto &xpair : expectantIt->second.SourceRequests) {
             auto &r = xpair.first;
-            auto &rblock = r->ReadyBlocks[xpair.second];
+            auto &rblock = r->ReadyPages[xpair.second];
             Y_ABORT_UNLESS(rblock.PageId == page->PageId);
             rblock.Page = TSharedPageRef::MakeUsed(page, GCList);
 
@@ -981,7 +979,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         TAutoPtr<NSharedCache::TEvResult> result =
             new NSharedCache::TEvResult(std::move(wa.PageCollection), wa.RequestCookie, NKikimrProto::OK);
-        result->Loaded = std::move(wa.ReadyBlocks);
+        result->Loaded = std::move(wa.ReadyPages);
 
         Send(wa.Source, result.Release(), 0, wa.EventCookie);
         wa.Source = TActorId();

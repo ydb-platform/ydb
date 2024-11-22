@@ -1,5 +1,6 @@
 #pragma once
 #include "abstract_scheme.h"
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
 #include <ydb/core/tx/sharding/sharding.h>
 
 namespace NKikimr::NOlap {
@@ -31,8 +32,14 @@ class TVersionedIndex {
     ui64 LastSchemaVersion = 0;
     std::optional<ui64> SchemeVersionForActualization;
     ISnapshotSchema::TPtr SchemeForActualization;
+    std::shared_ptr<TVersionCounters> VersionCounters;
 
 public:
+    TVersionedIndex(const std::shared_ptr<TVersionCounters>& versionCounters)
+        : VersionCounters(versionCounters)
+    {
+    }
+
     ISnapshotSchema::TPtr GetLastCriticalSchema() const {
         return SchemeForActualization;
     }
@@ -71,6 +78,14 @@ public:
             sb << i.first << ":" << i.second->DebugString() << ";";
         }
         return sb;
+    }
+
+   std::map<ui64, ISnapshotSchema::TPtr>::const_iterator FindSchema(ui64 schemaVersion) const {
+        return SnapshotByVersion.find(schemaVersion);
+    }
+
+    const std::map<ui64, ISnapshotSchema::TPtr>& GetSnapshotByVersion() const {
+        return SnapshotByVersion;
     }
 
     ISnapshotSchema::TPtr GetSchemaOptional(const ui64 version) const {
@@ -121,5 +136,7 @@ public:
     const TIndexInfo* AddIndex(const TSnapshot& snapshot, TIndexInfo&& indexInfo);
 
     bool LoadShardingInfo(IDbWrapper& db);
+
+    void RemoveVersion(const ui64 version);
 };
 }   // namespace NKikimr::NOlap

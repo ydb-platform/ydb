@@ -146,6 +146,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         }
     }
 
+    NOlap::TVersionCounters::TVersionToKey& versionToKey = VersionCounters->GetVersionToKey();
     {
         TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->SchemaPresetVersionsLoadTimeCounters.StartGuard();
         TMemoryProfileGuard g("TTablesManager/InitFromDB::PresetVersions");
@@ -164,6 +165,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
 
             TSchemaPreset::TSchemaPresetVersionInfo info;
             Y_ABORT_UNLESS(info.ParseFromString(rowset.GetValue<Schema::SchemaPresetVersionInfo::InfoProto>()));
+            auto& key = versionToKey[info.GetSchema().GetVersion()];
+            key.emplace_back(id, version.GetPlanStep(), version.GetTxId());
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "load_preset")("preset_id", id)("snapshot", version)(
                 "version", info.HasSchema() ? info.GetSchema().GetVersion() : -1);
             preset.AddVersion(version, info);
@@ -190,7 +193,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
             NOlap::IColumnEngine::TSchemaInitializationData schemaInitializationData(schemaInfo);
             if (!PrimaryIndex) {
                 PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, DataAccessorsManager, StoragesManager,
-                    preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()), schemaInitializationData);
+                    preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()), schemaInitializationData, VersionCounters);
             } else {
                 PrimaryIndex->RegisterSchemaVersion(preset.GetMinVersionForId(schemaInfo.GetSchema().GetVersion()), schemaInitializationData);
             }
@@ -291,17 +294,22 @@ void TTablesManager::AddSchemaVersion(const ui32 presetId, const NOlap::TSnapsho
     }
 
     Schema::SaveSchemaPresetVersionInfo(db, presetId, version, versionInfo);
-    if (!PrimaryIndex) {
-        PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(
-            TabletId, DataAccessorsManager, StoragesManager, version, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
-        for (auto&& i : Tables) {
-            PrimaryIndex->RegisterTable(i.first);
+    if (versionInfo.HasSchema()) {
+        if (!PrimaryIndex) {
+            PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(
+                TabletId, DataAccessorsManager, StoragesManager, version, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), VersionCounters);
+            for (auto&& i : Tables) {
+                PrimaryIndex->RegisterTable(i.first);
+            }
+            if (manager->IsReady()) {
+                PrimaryIndex->OnTieringModified(manager, Ttl, {});
+            }
+        } else {
+            PrimaryIndex->RegisterSchemaVersion(version, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
         }
-        if (manager->IsReady()) {
-            PrimaryIndex->OnTieringModified(manager, Ttl, {});
-        }
-    } else {
-        PrimaryIndex->RegisterSchemaVersion(version, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo));
+        auto& key = VersionCounters->GetVersionToKey()[versionInfo.GetSchema().GetVersion()];
+        key.emplace_back(presetId, version.GetPlanStep(), version.GetTxId());
+        AFL_VERIFY((key.size() == 1) || (key[key.size() - 2] < key.back()));
     }
 }
 
@@ -346,11 +354,13 @@ void TTablesManager::AddTableVersion(const ui64 pathId, const NOlap::TSnapshot& 
 }
 
 TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
-    const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager, const ui64 tabletId)
+    const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager, const ui64 tabletId, const std::shared_ptr<NOlap::TVersionCounters>& versionCounters)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , LoadTimeCounters(std::make_unique<TTableLoadTimeCounters>())
-    , TabletId(tabletId) {
+    , VersionCounters(versionCounters)
+    , TabletId(tabletId)
+{
 }
 
 bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const {

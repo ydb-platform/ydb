@@ -156,13 +156,12 @@ private:
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
+    std::shared_ptr<NOlap::TVersionCounters> VersionCounters;
     ui64 TabletId = 0;
 
 public:
-    friend class TTxInit;
-
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
-        const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager, const ui64 tabletId);
+        const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager, const ui64 tabletId, const std::shared_ptr<NOlap::TVersionCounters>& versionCounters);
 
     const std::unique_ptr<TTableLoadTimeCounters>& GetLoadTimeCounters() const {
         return LoadTimeCounters;

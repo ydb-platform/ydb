@@ -29,11 +29,13 @@ namespace NKikimr::NOlap {
 
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const TSchemaInitializationData& schema)
+    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const TSchemaInitializationData& schema, const std::shared_ptr<TVersionCounters>& versionCounters)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
+    , VersionedIndex(versionCounters)
     , TabletId(tabletId)
+    , VersionCounters(versionCounters)
     , LastPortion(0)
     , LastGranule(0) {
     ActualizationController = std::make_shared<NActualizer::TController>();
@@ -42,13 +44,16 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId,
 
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema)
+    const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, TIndexInfo&& schema, const std::shared_ptr<TVersionCounters>& versionCounters)
     : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
+    , VersionedIndex(versionCounters)
     , TabletId(tabletId)
+    , VersionCounters(versionCounters)
     , LastPortion(0)
-    , LastGranule(0) {
+    , LastGranule(0)
+{
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, std::move(schema));
 }
@@ -581,7 +586,7 @@ void TColumnEngineForLogs::OnTieringModified(
 }
 
 void TColumnEngineForLogs::DoRegisterTable(const ui64 pathId) {
-    std::shared_ptr<TGranuleMeta> g = GranulesStorage->RegisterTable(pathId, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex);
+    std::shared_ptr<TGranuleMeta> g = GranulesStorage->RegisterTable(pathId, SignalCounters.RegisterGranuleDataCounters(), VersionedIndex, VersionCounters);
     if (ActualizationStarted) {
         g->StartActualizationIndex();
         g->RefreshScheme();

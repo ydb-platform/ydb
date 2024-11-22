@@ -6,6 +6,7 @@
 #include "predicate/filter.h"
 #include "scheme/snapshot_scheme.h"
 #include "scheme/versions/versioned_index.h"
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
 
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
@@ -355,7 +356,8 @@ public:
     virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
     virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) = 0;
-    virtual void RegisterOldSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) = 0;
+   virtual void RemoveSchemaVersion(const ui64 version) = 0;
+   virtual void RegisterOldSchemaVersion(const TSnapshot& snapshot, const TSchemaInitializationData& schema) = 0;
 
     virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0;
     virtual const TColumnEngineStats& GetTotalStats() = 0;

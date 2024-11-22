@@ -93,6 +93,7 @@ class TEvWriteCommitSecondaryTransactionOperator;
 class TTxFinishAsyncTransaction;
 class TTxInsertTableCleanup;
 class TTxRemoveSharedBlobs;
+class TTxSchemaVersionsCleanup;
 class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
 class TTxBlobsWritingFinished;
@@ -173,6 +174,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxMonitoring;
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
+    friend class TTxSchemaVersionsCleanup;
     friend class TWaitEraseTablesTxSubscriber;
 
     friend class NOlap::TCleanupPortionsColumnEngineChanges;
@@ -511,6 +513,7 @@ private:
     std::vector<TActorId> ActorsToStop;
 
     TInFlightReadsTracker InFlightReadsTracker;
+    std::shared_ptr<NOlap::TVersionCounters> VersionCounters;
     TTablesManager TablesManager;
     std::shared_ptr<NSubscriber::TManager> Subscribers;
     std::shared_ptr<TTiersManager> Tiers;
@@ -531,6 +534,7 @@ private:
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
     NDataShard::TSysLocks SysLocks;
+
     static TDuration GetMaxReadStaleness();
 
     void TryRegisterMediatorTimeCast();
@@ -585,6 +589,7 @@ private:
     void SetupCleanupTables();
     void SetupCleanupInsertTable();
     void SetupGC();
+    void SetupCleanupUnusedSchemaVersions();
 
     void UpdateInsertTableCounters();
     void UpdateIndexCounters();

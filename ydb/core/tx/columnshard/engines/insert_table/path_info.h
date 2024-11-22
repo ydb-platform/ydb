@@ -2,6 +2,7 @@
 #include "committed.h"
 #include "inserted.h"
 
+#include <ydb/core/tx/columnshard/common/schema_versions.h>
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
 
 #include <util/generic/noncopyable.h>

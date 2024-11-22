@@ -231,7 +231,7 @@ public:
         if (PopStats.CollectBasic()) {
             PopStats.Bytes += data.Size();
             PopStats.Rows += data.RowCount(); 
-            PopStats.Chunks++; // pop chunks does not match push chunks
+            PopStats.Chunks++; // pop chunks do not match push chunks
             if (!IsFull() || FirstStoredId == NextStoredId) {
                 PopStats.Resume();
             }

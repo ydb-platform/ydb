@@ -401,9 +401,9 @@ DECLARE_YQ_GRPC_ACTOR(GetResultData, GetResultData);
 
 #define TGrpcCallWrapperBase TGrpcCallWrapper<FederatedQuery::DescribeQueryRequest, FQHttp::GetQueryRequest, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse>
 
-class TRestartQueryRequest : public TGrpcCallWrapperBase {
+class TStartQueryRequest : public TGrpcCallWrapperBase {
 public:
-    TRestartQueryRequest(const THttpRequestContext& ctx)
+    TStartQueryRequest(const THttpRequestContext& ctx)
     : TGrpcCallWrapperBase(ctx, &NGRpcService::CreateFederatedQueryDescribeQueryRequestOperationCall)
     {}
 
@@ -446,7 +446,7 @@ public:
                 TGrpcCallWrapper<FederatedQuery::ModifyQueryRequest, int, FederatedQuery::ModifyQueryResult, google::protobuf::Empty, FederatedQuery::ModifyQueryResponse>::SendReply
             );
 
-            // новый тип события, по идее нужна новая фабрика
+            // new event -> new EventFactory
             EventFactory = &NGRpcService::CreateFederatedQueryModifyQueryRequestOperationCall;
             ctx.Send(NGRpcService::CreateGRpcRequestProxyId(), EventFactory(requestContextModify).release());
             this->Die(ctx);

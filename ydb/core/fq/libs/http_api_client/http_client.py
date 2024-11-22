@@ -150,7 +150,7 @@ class YQHttpClient(object):
         self._validate_http_error(response, expected_code=expected_code)
         return response.json()["id"]
     
-    def restart_query(
+    def start_query(
         self,
         query_id: str,
         idempotency_key: str | None = None,

@@ -98,7 +98,7 @@ class TestHttpApi(TestBase):
             response = client.stop_query(query_id)
             assert response.status_code == 204
 
-            response = client.restart_query(query_id)
+            response = client.start_query(query_id)
             assert response.status_code == 204
 
             response = client.stop_query(query_id)
@@ -120,7 +120,7 @@ class TestHttpApi(TestBase):
             resp = client.stop_quert(query_id="nevalidno")
             assert resp.status_code == 404
 
-            resp = client.restart_query(query_id="snova nevalidno")
+            resp = client.start_query(query_id="snova nevalidno")
             assert resp.status_code == 404
 
     def test_warning(self):
@@ -252,18 +252,20 @@ class TestHttpApi(TestBase):
             response1 = client.stop_query(query_id, idempotency_key="Z")
             assert response1.status_code == 204
 
-            response2 = client.restart_query(query_id, idempotency_key="Z")
+            response2 = client.start_query(query_id, idempotency_key="Z")
             assert response2.status_code == 204
 
-            response2 = client.restart_query(query_id, idempotency_key="Z")
+            response2 = client.start_query(query_id, idempotency_key="Z")
             assert response2.status_code == 204
 
-            response2 = client.restart_query(query_id)
+            response2 = client.start_query(query_id)
             assert response2.status_code == 400
+
+            response1 = client.stop_query(query_id, idempotency_key="Z")
+            assert response1.status_code == 204
 
         self.streaming_over_kikimr.compute_plane.start()
         c.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)
-        pass
 
     def test_simple_streaming_query(self):
         self.init_topics("simple_streaming_query", create_output=False)
@@ -296,7 +298,7 @@ class TestHttpApi(TestBase):
             response = client.stop_query(query_id)
             assert response.status_code == 204
 
-            response = client.restart_query(query_id)
+            response = client.start_query(query_id)
             assert response.status_code == 204
 
             wait_for_query_status(client, query_id, ["FAILED"])

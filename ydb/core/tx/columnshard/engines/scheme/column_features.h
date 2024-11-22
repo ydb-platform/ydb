@@ -55,10 +55,13 @@ public:
         return GetColumnId() == other.GetColumnId()
             && GetPKColumnIndex() == other.GetPKColumnIndex()
             && GetColumnName() == other.GetColumnName()
+            && GetDataAccessorConstructor().IsEqualTo(other.GetDataAccessorConstructor())
+            && GetSerializer().IsEqualTo(other.GetSerializer())
             && GetNeedMinMax() == other.GetNeedMinMax()
             && GetIsSorted() == other.GetIsSorted()
             && GetIsNullable() == other.GetIsNullable()
-            && GetDictionaryEncoding() == other.GetDictionaryEncoding();
+            && GetDefaultValue() == other.GetDefaultValue()
+            && *GetDictionaryEncoding() == *other.GetDictionaryEncoding();
     }
 };
 

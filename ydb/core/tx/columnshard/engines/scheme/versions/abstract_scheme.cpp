@@ -368,6 +368,7 @@ bool ISnapshotSchema::IsReplaceableByNext(const ISnapshotSchema& nextSchema) con
             return false;
         }
     }
+    return true;
     const THashMap<ui32, NIndexes::TIndexMetaContainer>& indexes = indexInfo.GetIndexes();
     const THashMap<ui32, NIndexes::TIndexMetaContainer>& nextIndexes = nextIndexInfo.GetIndexes();
     if (indexes.size() != nextIndexes.size()) {

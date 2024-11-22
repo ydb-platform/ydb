@@ -381,7 +381,14 @@ namespace NYql {
         void FillTablePath(NConnector::NApi::TDescribeTableRequest& request, const TGenericClusterConfig& clusterConfig,
                            const TString& tablePath) {
             request.mutable_data_source_instance()->set_database(clusterConfig.GetDatabaseName());
-            request.set_table(tablePath);
+
+            if (clusterConfig.GetKind() == NConnector::NApi::EDataSourceKind::LOGGING) {
+                // For logging external data source the real table name is different from 
+                // the log group name that was used as a table name in the YQL request.
+                request.set_table(clusterConfig.datasourceoptions().at("table"));
+            } else {
+                request.set_table(tablePath);
+            }
         }
 
     private:

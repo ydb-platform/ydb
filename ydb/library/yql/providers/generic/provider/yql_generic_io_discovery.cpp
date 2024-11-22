@@ -225,22 +225,23 @@ namespace NYql {
             virtual TFutures ResolveClusters() override {
                 TFutures futures;
 
-                for (const auto& [clusterName, auth] : UnresolvedItems_) {
+                for (const auto& [clusterName, item] : UnresolvedItems_) {
                     auto responseFuture = State_->LoggingResolver->Resolve(ILoggingResolver::TRequest{
-                        .FolderId = "",
-                        .LogGroupName = "",
+                        // TODO: fill them
+                        .FolderId = item.FolderId,
+                        .LogGroupName = item.LogGroupName,
                     });
 
                     auto issueFuture = responseFuture.Apply(
-                        [this, clusterName, responseFuture](const NThreading::TFuture<ILoggingResolver::TResponse>&) mutable {
+                        [this, clusterName, item, responseFuture](const NThreading::TFuture<ILoggingResolver::TResponse>&) mutable {
 
                         auto response = responseFuture.ExtractValue();
 
                         if (response.Issues.Empty()) {
                             std::lock_guard<std::mutex> guard(ResolvedItemsMutex_);
                             ResolvedItems_[clusterName] = {
-                                .FolderId = "",
-                                .LogGroupName = "",
+                                .FolderId = item.FolderId,
+                                .LogGroupName = item.LogGroupName,
                                 .Host = response.Host,
                                 .Port = response.Port,
                                 .Database = response.Database,

@@ -493,6 +493,7 @@ bool FillTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in, Ydb::Stat
         if (fillLegacyExpireAfterSeconds) {
             auto& outTTL = *out.mutable_date_type_column();
             outTTL.set_column_name(in.GetColumnName());
+            outTTL.set_expire_after_seconds(*fillLegacyExpireAfterSeconds);
         } else {
             auto& outTTL = *out.mutable_date_type_column_v1();
             outTTL.set_column_name(in.GetColumnName());
@@ -509,6 +510,7 @@ bool FillTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in, Ydb::Stat
             auto& outTTL = *out.mutable_value_since_unix_epoch();
             outTTL.set_column_name(in.GetColumnName());
             outTTL.set_column_unit(unit);
+            outTTL.set_expire_after_seconds(*fillLegacyExpireAfterSeconds);
         } else {
             auto& outTTL = *out.mutable_value_since_unix_epoch_v1();
             outTTL.set_column_name(in.GetColumnName());

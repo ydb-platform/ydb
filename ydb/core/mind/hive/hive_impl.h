@@ -1053,6 +1053,8 @@ protected:
     TString GetDomainName(TSubDomainKey domain);
     TSubDomainKey GetMySubDomainKey() const;
 
+    template <typename TIt>
+    static ui32 CalculateRecommendedNodes(TIt windowBegin, TIt windowEnd, size_t readyNodes, double target);
     void MakeScaleRecommendation();
 };
 

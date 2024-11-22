@@ -562,6 +562,15 @@ TNode SerializeParamsForListJobs(
     if (options.WithMonitoringDescriptor_) {
         result["with_monitoring_descriptor"] = *options.WithMonitoringDescriptor_;
     }
+    if (options.FromTime_) {
+        result["from_time"] = ToString(options.FromTime_);
+    }
+    if (options.ToTime_) {
+        result["to_time"] = ToString(options.ToTime_);
+    }
+    if (options.ContinuationToken_) {
+        result["continuation_token"] = *options.ContinuationToken_;
+    }
 
     if (options.SortField_) {
         result["sort_field"] = ToString(*options.SortField_);

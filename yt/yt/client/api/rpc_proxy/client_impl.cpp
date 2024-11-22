@@ -1486,6 +1486,15 @@ TFuture<TListJobsResult> TClient::ListJobs(
     if (options.TaskName) {
         req->set_task_name(*options.TaskName);
     }
+    if (options.FromTime) {
+        req->set_from_time(NYT::ToProto(*options.FromTime));
+    }
+    if (options.ToTime) {
+        req->set_to_time(NYT::ToProto(*options.ToTime));
+    }
+    if (options.ContinuationToken) {
+        req->set_continuation_token(*options.ContinuationToken);
+    }
 
     req->set_sort_field(static_cast<NProto::EJobSortField>(options.SortField));
     req->set_sort_order(static_cast<NProto::EJobSortDirection>(options.SortOrder));

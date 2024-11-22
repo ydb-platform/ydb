@@ -1,12 +1,12 @@
 #ifndef PYTHONIC_NUMPY_MEAN_HPP
 #define PYTHONIC_NUMPY_MEAN_HPP
 
+#include "pythonic/builtins/None.hpp"
 #include "pythonic/include/numpy/mean.hpp"
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/numpy/asarray.hpp"
 #include "pythonic/numpy/expand_dims.hpp"
 #include "pythonic/numpy/sum.hpp"
-#include "pythonic/builtins/None.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -48,7 +48,7 @@ namespace numpy
   {
     return expand_dims(mean(expr, axis, d), axis);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

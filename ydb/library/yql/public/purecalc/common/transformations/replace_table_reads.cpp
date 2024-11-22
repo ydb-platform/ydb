@@ -3,8 +3,8 @@
 #include <ydb/library/yql/public/purecalc/common/names.h>
 #include <ydb/library/yql/public/purecalc/common/transformations/utils.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 using namespace NYql;
 using namespace NYql::NPureCalc;

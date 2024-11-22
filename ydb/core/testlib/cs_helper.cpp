@@ -2,7 +2,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
-#include <ydb/library/binary_json/write.h>
+#include <yql/essentials/types/binary_json/write.h>
 
 #include <ydb/library/actors/core/event.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>

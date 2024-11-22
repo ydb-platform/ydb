@@ -17,7 +17,7 @@ namespace builtins
   {
     return types::make_tuple(t0 / t1, t0 % t1);
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

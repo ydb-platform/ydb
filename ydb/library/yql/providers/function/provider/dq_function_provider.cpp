@@ -1,10 +1,10 @@
 #include "dq_function_provider.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
 namespace NYql {
 

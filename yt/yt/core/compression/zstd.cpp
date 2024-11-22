@@ -36,8 +36,9 @@ void VerifyError(size_t result)
     }
 
     if (result == ZSTD_error_memory_allocation) {
-        YT_LOG_ERROR("Zstd compression failed with memory allocation error; terminating");
-        AbortProcess(ToUnderlying(EProcessExitCode::OutOfMemory));
+        AbortProcessDramatically(
+            EProcessExitCode::OutOfMemory,
+            "Zstd codec failed with memory allocation error");
     }
 
     YT_LOG_FATAL("Zstd compression failed (Error: %v)",

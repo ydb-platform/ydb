@@ -6,7 +6,7 @@
 #include <ydb/core/fq/libs/common/debug_info.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb/library/yql/utils/exceptions.h>
+#include <yql/essentials/utils/exceptions.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 
 namespace NFq {

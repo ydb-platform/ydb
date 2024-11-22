@@ -1,10 +1,10 @@
 #include "yql_mkql_ungrouping_list.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_custom_list.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NYql {
 

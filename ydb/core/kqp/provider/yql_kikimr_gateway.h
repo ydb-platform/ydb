@@ -1,16 +1,16 @@
 #pragma once
 
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/library/yql/providers/common/gateway/yql_provider_gateway.h>
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
+#include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/utils/resetable_setting.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/utils/resetable_setting.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/abstract.h>
@@ -699,6 +699,7 @@ struct TCreateTableStoreSettings {
     TVector<TString> KeyColumnNames;
     TVector<TString> ColumnOrder;
     TVector<TIndexDescription> Indexes;
+    TVector<TColumnFamily> ColumnFamilies;
 };
 
 struct TAlterTableStoreSettings {
@@ -739,6 +740,8 @@ struct TSequenceSettings {
     TMaybe<bool> Cycle;
     TMaybe<TString> OwnedBy;
     TMaybe<TString> DataType;
+    TMaybe<bool> Restart;
+    TMaybe<i64> RestartValue;
 };
 
 struct TCreateSequenceSettings {
@@ -872,6 +875,10 @@ struct TDropBackupCollectionSettings {
     TString Name;
     TString Prefix;
     bool Cascade = false;
+};
+
+struct TBackupSettings {
+    TString Name;
 };
 
 struct TKikimrListPathItem {
@@ -1064,6 +1071,8 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropBackupCollection(const TString& cluster, const TDropBackupCollectionSettings& settings) = 0;
 
+    virtual NThreading::TFuture<TGenericResult> Backup(const TString& cluster, const TBackupSettings& settings) = 0;
+
     virtual NThreading::TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterUser(const TString& cluster, const TAlterUserSettings& settings) = 0;
@@ -1117,6 +1126,8 @@ public:
     virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 
     virtual NThreading::TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
+
+    virtual TExecuteLiteralResult ExecuteLiteralInstant(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
 
 public:
     using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>;

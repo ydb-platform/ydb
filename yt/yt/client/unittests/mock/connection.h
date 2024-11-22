@@ -34,6 +34,7 @@ public:
 
     MOCK_METHOD(void, ClearMetadataCaches, (), (override));
     MOCK_METHOD(void, Terminate, (), (override));
+    MOCK_METHOD(bool, IsTerminated, (), (const, override));
 
     MOCK_METHOD(NYson::TYsonString, GetConfigYson, (), (const, override));
 };

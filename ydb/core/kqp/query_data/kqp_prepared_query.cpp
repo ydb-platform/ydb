@@ -4,9 +4,9 @@
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_node.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/core/kqp/common/simple/helpers.h>
 #include <ydb/core/protos/kqp_physical.pb.h>

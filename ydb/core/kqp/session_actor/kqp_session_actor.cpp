@@ -627,7 +627,10 @@ public:
 
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
-        QueryState->SaveAndCheckSplitResult(ev->Get());
+        if (!QueryState->SaveAndCheckSplitResult(ev->Get())) {
+            ReplySplitError(ev->Get());
+            return;
+        }
         OnSuccessSplitRequest();
     }
 
@@ -844,9 +847,11 @@ public:
         }
 
         const NKqpProto::TKqpPhyQuery& phyQuery = QueryState->PreparedQuery->GetPhysicalQuery();
-        QueryState->TxCtx->HasOlapTable |= ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
-        QueryState->TxCtx->HasOltpTable |= ::NKikimr::NKqp::HasOltpTableReadInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
-        QueryState->TxCtx->HasTableWrite |= ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery) || ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
+        const bool hasOlapWrite = ::NKikimr::NKqp::HasOlapTableWriteInTx(phyQuery);
+        const bool hasOltpWrite = ::NKikimr::NKqp::HasOltpTableWriteInTx(phyQuery);
+        QueryState->TxCtx->HasOlapTable |= hasOlapWrite || ::NKikimr::NKqp::HasOlapTableReadInTx(phyQuery);
+        QueryState->TxCtx->HasOltpTable |= hasOltpWrite || ::NKikimr::NKqp::HasOltpTableReadInTx(phyQuery);
+        QueryState->TxCtx->HasTableWrite |= hasOlapWrite || hasOltpWrite;
         if (QueryState->TxCtx->HasOlapTable && QueryState->TxCtx->HasOltpTable && QueryState->TxCtx->HasTableWrite
                 && !Settings.TableService.GetEnableHtapTx() && !QueryState->IsSplitted()) {
             ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
@@ -897,7 +902,8 @@ public:
             const auto& parameters = QueryState->GetYdbParameters();
             QueryState->QueryData->ParseParameters(parameters);
             if (QueryState->CompileResult && QueryState->CompileResult->GetAst() && QueryState->CompileResult->GetAst()->PgAutoParamValues) {
-                for(const auto& [name, param] : *QueryState->CompileResult->GetAst()->PgAutoParamValues) {
+                const auto& params = dynamic_cast<TKqpAutoParamBuilder*>(QueryState->CompileResult->GetAst()->PgAutoParamValues.Get())->Values;
+                for(const auto& [name, param] : params) {
                     if (!parameters.contains(name)) {
                         QueryState->QueryData->AddTypedValueParam(name, param);
                     }
@@ -1317,6 +1323,7 @@ public:
                 .TxManager = txCtx->TxManager,
                 .TraceId = request.TraceId.GetTraceId(),
                 .Counters = Counters,
+                .TxProxyMon = RequestCounters->TxProxyMon,
             };
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
@@ -1918,6 +1925,25 @@ public:
         Cleanup(IsFatalError(record->GetYdbStatus()));
     }
 
+    void ReplySplitError(TEvKqp::TEvSplitResponse* ev) {
+        QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
+        auto& record = QueryResponse->Record;
+
+        record.SetYdbStatus(ev->Status);
+        auto& response = *record.MutableResponse();
+        AddQueryIssues(response, ev->Issues);
+
+        auto txId = TTxId();
+        if (auto ctx = Transactions.ReleaseTransaction(txId)) {
+            ctx->Invalidate();
+            Transactions.AddToBeAborted(std::move(ctx));
+        }
+
+        FillTxInfo(record.MutableResponse());
+
+        Cleanup(false);
+    }
+
     void ReplyProcessError(const TEvKqp::TEvQueryRequest::TPtr& request, Ydb::StatusIds::StatusCode ydbStatus,
             const TString& message)
     {
@@ -1999,7 +2025,7 @@ public:
             TlsActivationContext->AsActorContext()
         );
 
-        Send(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
+        Send<ESendingType::Tail>(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         LOG_D("Sent query response back to proxy, proxyRequestId: " << QueryState->ProxyRequestId
             << ", proxyId: " << QueryState->Sender.ToString());
 

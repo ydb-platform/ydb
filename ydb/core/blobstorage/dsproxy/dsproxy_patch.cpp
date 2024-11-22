@@ -428,7 +428,7 @@ public:
                 x2Count++;
             }
         }
-        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA23, "VerifyPartPlacement {mirror-3-dc}",
+        PATCH_LOG(PRI_DEBUG, BS_PROXY_PATCH, BPPA00, "VerifyPartPlacement {mirror-3-dc}",
                 (X2Count, x2Count));
         return x2Count >= 2;
     }

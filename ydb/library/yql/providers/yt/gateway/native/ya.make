@@ -23,22 +23,22 @@ PEERDIR(
     library/cpp/yson/node
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface
-    ydb/library/yql/ast
-    ydb/library/yql/core/file_storage
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/utils
-    ydb/library/yql/utils/log
-    ydb/library/yql/utils/threading
-    ydb/library/yql/core
-    ydb/library/yql/core/expr_nodes
-    ydb/library/yql/core/issue
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/comp_nodes
-    ydb/library/yql/providers/common/mkql
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/providers/common/schema/expr
-    ydb/library/yql/providers/result/expr_nodes
+    yql/essentials/ast
+    yql/essentials/core/file_storage
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/utils
+    yql/essentials/utils/log
+    yql/essentials/utils/threading
+    yql/essentials/core
+    yql/essentials/core/expr_nodes
+    yql/essentials/core/issue
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/comp_nodes
+    yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/proto
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/schema/expr
+    yql/essentials/providers/result/expr_nodes
     ydb/library/yql/providers/stat/expr_nodes
     ydb/library/yql/providers/stat/uploader
     ydb/library/yql/providers/yt/codec

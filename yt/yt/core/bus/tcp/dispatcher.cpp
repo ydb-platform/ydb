@@ -43,7 +43,7 @@ bool TTcpDispatcher::IsNetworkingDisabled()
     return Impl_->IsNetworkingDisabled();
 }
 
-const TString& TTcpDispatcher::GetNetworkNameForAddress(const NNet::TNetworkAddress& address)
+const std::string& TTcpDispatcher::GetNetworkNameForAddress(const NNet::TNetworkAddress& address)
 {
     return Impl_->GetNetworkNameForAddress(address);
 }
@@ -51,6 +51,11 @@ const TString& TTcpDispatcher::GetNetworkNameForAddress(const NNet::TNetworkAddr
 TTosLevel TTcpDispatcher::GetTosLevelForBand(EMultiplexingBand band)
 {
     return Impl_->GetTosLevelForBand(band);
+}
+
+int TTcpDispatcher::GetMultiplexingParallelism(EMultiplexingBand band, int multiplexingParallelism)
+{
+    return Impl_->GetMultiplexingParallelism(band, multiplexingParallelism);
 }
 
 NYTree::IYPathServicePtr TTcpDispatcher::GetOrchidService()

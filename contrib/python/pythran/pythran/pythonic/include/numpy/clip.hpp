@@ -26,7 +26,7 @@ namespace numpy
 
     template <class T, class Mi>
     typename __combined<T, Mi>::type clip(T const &v, Mi a_min);
-  }
+  } // namespace wrapper
 
 #define NUMPY_NARY_FUNC_NAME clip
 #define NUMPY_NARY_FUNC_SYM wrapper::clip
@@ -45,7 +45,7 @@ namespace numpy
   }
 #include "pythonic/include/types/numpy_nary_expr.hpp"
 
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

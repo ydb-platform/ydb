@@ -5,6 +5,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_query/client.h>
 #include <ydb/library/accessor/accessor.h>
 
+#include <util/generic/map.h>
 #include <vector>
 
 namespace NYdb::NConsoleClient::BenchmarkUtils {
@@ -30,37 +31,23 @@ struct TTestInfo {
     void operator /=(const ui32 count);
 };
 
-class TQueryResultInfo {
-    YDB_READONLY_PROTECT_DEF(std::vector<std::vector<NYdb::TValue>>, Result);
-    YDB_READONLY_PROTECT_DEF(TVector<NYdb::TColumn>, Columns);
-protected:
-    using TColumnsRemap = std::map<TString, ui32>;
-    TColumnsRemap GetColumnsRemap() const;
-
-public:
-    bool IsExpected(std::string_view expected) const;
-    TString CalcHash() const;
-};
-
 class TQueryBenchmarkResult {
 public:
-    using TRawResults = TVector<NYdb::TResultSet>;
+    using TRawResults = TMap<ui64, TVector<NYdb::TResultSet>>;
 
 private:
     YDB_READONLY_DEF(TString, ErrorInfo);
     YDB_READONLY_DEF(TRawResults, RawResults);
-    YDB_READONLY_DEF(TQueryResultInfo, QueryResult);
     YDB_READONLY_DEF(TDuration, ServerTiming);
     YDB_READONLY_DEF(TString, QueryPlan);
     YDB_READONLY_DEF(TString, PlanAst);
     TQueryBenchmarkResult() = default;
 public:
-    static TQueryBenchmarkResult Result(TRawResults&& rawResults, const TQueryResultInfo& queryResult,
+    static TQueryBenchmarkResult Result(TRawResults&& rawResults,
         const TDuration& serverTiming, const TString& queryPlan, const TString& planAst)
     {
         TQueryBenchmarkResult result;
         result.RawResults = std::move(rawResults);
-        result.QueryResult = queryResult;
         result.ServerTiming = serverTiming;
         result.QueryPlan = queryPlan;
         result.PlanAst = planAst;
@@ -75,9 +62,15 @@ public:
         return result;
     }
 
+    bool IsExpected(std::string_view expected) const;
+    TString CalcHash() const;
+
     operator bool() const {
         return !ErrorInfo;
     }
+
+private:
+    bool IsExpected(TStringBuf expected, size_t resultSetIndex) const;
 };
 
 struct TQueryBenchmarkDeadline {

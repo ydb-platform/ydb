@@ -33,7 +33,7 @@
 #include <ydb/core/sys_view/common/schema.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -919,7 +919,7 @@ public:
             LocalSessions->StartIdleCheck(info, GetSessionIdleDuration());
         }
 
-        Send(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
+        Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
 
         if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest) {
             LocalSessions->DetachQueryText(info);

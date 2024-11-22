@@ -12,7 +12,7 @@ from six.moves.urllib.parse import urlparse
 
 import yatest
 
-from ydb.library.yql.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
+from yql.essentials.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure

@@ -9,8 +9,8 @@
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/ymq/queues/common/db_queries_maker.h>
 
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/utility.h>

@@ -1023,11 +1023,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
             for (ui32 i = 0; i < 100;) {
                 auto result = testCtx.Recv<NPDisk::TEvLogResult>();
-                if (result->Status == NKikimrProto::OK) {
-                    i += result->Results.size();
-                } else {
-                    ++i;
-                }
+                i += result->Results.size();
             }
             Cerr << "all log writes are received" << Endl;
         }

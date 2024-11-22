@@ -6,6 +6,10 @@
 
 namespace NKikimr {
 
+TRowVersion TRowVersion::Parse(const NKikimrProto::TRowVersion& proto) {
+    return TRowVersion(proto.GetStep(), proto.GetTxId());
+}
+
 void TRowVersion::Serialize(NKikimrProto::TRowVersion& proto) const {
     proto.SetStep(Step);
     proto.SetTxId(TxId);

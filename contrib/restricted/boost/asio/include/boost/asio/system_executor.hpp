@@ -2,7 +2,7 @@
 // system_executor.hpp
 // ~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2022 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -315,20 +315,7 @@ public:
     return false;
   }
 
-#if !defined(GENERATING_DOCUMENTATION)
-private:
-  friend struct boost_asio_execution_execute_fn::impl;
-#endif // !defined(GENERATING_DOCUMENTATION)
-
   /// Execution function.
-  /**
-   * Do not call this function directly. It is intended for use with the
-   * execution::execute customisation point.
-   *
-   * For example:
-   * @code boost::asio::system_executor ex;
-   * execution::execute(ex, my_function_object); @endcode
-   */
   template <typename Function>
   void execute(BOOST_ASIO_MOVE_ARG(Function) f) const
   {

@@ -11,7 +11,7 @@ PEERDIR(
     ydb/public/lib/operation_id/protos
     ydb/public/sdk/cpp/client/ydb_params
     ydb/public/sdk/cpp/client/ydb_value
-    ydb/library/yql/public/issue/protos
+    yql/essentials/public/issue/protos
 )
 
 END()

@@ -395,7 +395,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         EatWholeString(incomingRequest, "GET /" + allowedProxyHost + "/counters HTTP/1.1\r\n"
                                 "Host: oidcproxy.net\r\n"
                                 "Cookie: yc_session=allowed_session_cookie;"
-                                + CreateSecureCookie(settings.ClientId, "session_cookie") + "\r\n\r\n");
+                                + CreateNameSessionCookie(settings.ClientId) + "=" + Base64Encode("session_cookie") + "\r\n\r\n");
         runtime.Send(new IEventHandle(target, edge, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(incomingRequest)));
         TAutoPtr<IEventHandle> handle;
 
@@ -560,10 +560,10 @@ Y_UNIT_TEST_SUITE(Mvp) {
             UNIT_ASSERT_STRINGS_EQUAL("true", headers.Get(accessControlAllowCredentials));
 
             UNIT_ASSERT(headers.Has(accessControlAllowHeaders));
-            UNIT_ASSERT_STRINGS_EQUAL("Content-Type,Authorization,Origin,Accept", headers.Get(accessControlAllowHeaders));
+            UNIT_ASSERT_STRINGS_EQUAL("Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent", headers.Get(accessControlAllowHeaders));
 
             UNIT_ASSERT(headers.Has(accessControlAllowMethods));
-            UNIT_ASSERT_STRINGS_EQUAL("OPTIONS, GET, POST", headers.Get(accessControlAllowMethods));
+            UNIT_ASSERT_STRINGS_EQUAL("OPTIONS,GET,POST,PUT,DELETE", headers.Get(accessControlAllowMethods));
         }
 
         bool IsAjaxRequest() const override {

@@ -31,7 +31,7 @@
 #include <ydb/library/ycloud/api/access_service.h>
 #include <ydb/library/ycloud/impl/access_service.h>
 #include <ydb/library/ycloud/impl/mock_access_service.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <ydb/library/security/util.h>

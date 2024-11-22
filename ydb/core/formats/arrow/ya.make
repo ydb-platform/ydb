@@ -17,11 +17,11 @@ PEERDIR(
     ydb/core/formats/arrow/hash
     ydb/library/actors/core
     ydb/library/arrow_kernels
-    ydb/library/binary_json
-    ydb/library/dynumber
+    yql/essentials/types/binary_json
+    yql/essentials/types/dynumber
     ydb/library/formats/arrow
     ydb/library/services
-    ydb/library/yql/core/arrow_kernels/request
+    yql/essentials/core/arrow_kernels/request
 )
 
 IF (OS_WINDOWS)

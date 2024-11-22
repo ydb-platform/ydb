@@ -46,7 +46,8 @@ namespace NActors {
         ui32 ExecutedEvents = 0;
         TSharedExecutorThreadCtx *SharedThread = nullptr;
         TCpuSensor CpuSensor;
-        
+
+        TMailboxCache MailboxCache;
 
         TWorkerContext(TWorkerId workerId, TCpuId cpuId)
             : WorkerId(workerId)
@@ -154,7 +155,7 @@ namespace NActors {
             }
             RelaxedStore(&Stats->PoolDestroyedActors, (ui64)RelaxedLoad(&Executor->DestroyedActors));
             RelaxedStore(&Stats->PoolActorRegistrations, (ui64)RelaxedLoad(&Executor->ActorRegistrations));
-            RelaxedStore(&Stats->PoolAllocatedMailboxes, MailboxTable->GetAllocatedMailboxCount());
+            RelaxedStore(&Stats->PoolAllocatedMailboxes, MailboxTable->GetAllocatedMailboxCountFast());
         }
 
         void UpdateThreadTime() {
@@ -203,11 +204,13 @@ namespace NActors {
             SoftDeadlineTs = softDeadlineTs;
             Stats = stats;
             PoolId = Executor ? Executor->PoolId : MaxPools;
+            MailboxCache.Switch(mailboxTable);
         }
 
         void SwitchToIdle() {
             Executor = nullptr;
             MailboxTable = nullptr;
+            MailboxCache.Switch(nullptr);
             //Stats = &WorkerStats; // TODO: in actorsystem 2.0 idle stats cannot be related to specific pool
             PoolId = MaxPools;
         }

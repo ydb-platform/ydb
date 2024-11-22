@@ -23,15 +23,15 @@ namespace scipy
       {
         using namespace boost::math::policies;
         return boost::math::gamma_p_inv(a, p,
-                                         make_policy(promote_double<true>()));
+                                        make_policy(promote_double<true>()));
       }
-    }
+    } // namespace details
 
 #define NUMPY_NARY_FUNC_NAME gammaincinv
 #define NUMPY_NARY_FUNC_SYM details::gammaincinv
 #include "pythonic/types/numpy_nary_expr.hpp"
-  }
-}
+  } // namespace special
+} // namespace scipy
 PYTHONIC_NS_END
 
 #endif

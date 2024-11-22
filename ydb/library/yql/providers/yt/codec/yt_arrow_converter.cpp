@@ -1,12 +1,12 @@
 #include "yt_arrow_converter.h"
 
-#include <ydb/library/yql/public/udf/arrow/defs.h>
-#include <ydb/library/yql/public/udf/arrow/block_builder.h>
-#include <ydb/library/yql/public/udf/arrow/block_reader.h>
-#include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <yql/essentials/public/udf/arrow/defs.h>
+#include <yql/essentials/public/udf/arrow/block_builder.h>
+#include <yql/essentials/public/udf/arrow/block_reader.h>
+#include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/detail.h>

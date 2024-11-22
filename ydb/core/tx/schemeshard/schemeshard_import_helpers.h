@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
 #if defined LOG_T || \
     defined LOG_D || \

@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 
 namespace NYql::NDq {
 

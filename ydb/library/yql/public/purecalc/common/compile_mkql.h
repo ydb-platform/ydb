@@ -1,9 +1,9 @@
 #pragma once
 
 #include <ydb/library/yql/public/purecalc/common/interface.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/yql_user_data.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_user_data.h>
 
 namespace NYql {
     namespace NPureCalc {

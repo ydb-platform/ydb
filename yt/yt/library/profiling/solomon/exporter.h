@@ -55,6 +55,7 @@ struct TSolomonExporterConfig
 
     bool ConvertCountersToRateForSolomon;
     bool RenameConvertedCounters;
+    bool ConvertCountersToDeltaGauge;
 
     bool ExportSummary;
     bool ExportSummaryAsMax;
@@ -132,6 +133,8 @@ public:
     void Stop();
 
     NYTree::IYPathServicePtr GetSensorService();
+
+    const TSolomonRegistryPtr& GetRegistry() const;
 
 private:
     const TSolomonExporterConfigPtr Config_;

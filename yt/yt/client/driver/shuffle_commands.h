@@ -15,24 +15,9 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString Account;
+    std::string Account;
     int PartitionCount;
-
-    void DoExecute(ICommandContextPtr context) override;
-};
-
-////////////////////////////////////////////////////////////////////////////
-
-class TFinishShuffleCommand
-    : public TTypedCommand<NApi::TFinishShuffleOptions>
-{
-public:
-    REGISTER_YSON_STRUCT_LITE(TFinishShuffleCommand);
-
-    static void Register(TRegistrar registrar);
-
-private:
-    NApi::TShuffleHandlePtr ShuffleHandle;
+    NObjectClient::TTransactionId ParentTransactionId;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -66,7 +51,7 @@ public:
 
 private:
     NApi::TShuffleHandlePtr ShuffleHandle;
-    TString PartitionColumn;
+    std::string PartitionColumn;
     i64 MaxRowBufferSize;
 
     void DoExecute(ICommandContextPtr context) override;

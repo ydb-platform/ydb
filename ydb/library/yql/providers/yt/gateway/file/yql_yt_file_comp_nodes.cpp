@@ -12,18 +12,18 @@
 #include <ydb/library/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
 #include <ydb/library/yql/providers/yt/lib/yson_helpers/yson_helpers.h>
 #include <ydb/library/yql/providers/yt/common/yql_names.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/comp_factory.h>
-#include <ydb/library/yql/public/udf/udf_version.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
+#include <yql/essentials/public/udf/udf_version.h>
+#include <yql/essentials/utils/yql_panic.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
+#include <yql/essentials/minikql/computation/mkql_custom_list.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 
 #include <library/cpp/yson/node/node_io.h>

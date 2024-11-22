@@ -2,8 +2,8 @@
 
 #include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native_folders.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <util/string/split.h>
 

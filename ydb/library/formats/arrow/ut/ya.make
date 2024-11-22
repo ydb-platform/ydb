@@ -7,8 +7,8 @@ PEERDIR(
     ydb/library/arrow_kernels
 
     # for NYql::NUdf alloc stuff used in binary_json
-    ydb/library/yql/public/udf/service/exception_policy
-    ydb/library/yql/sql/pg_dummy
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg_dummy
 )
 
 ADDINCL(

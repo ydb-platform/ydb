@@ -3,9 +3,9 @@
 
 #include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <ydb/library/yql/providers/yt/lib/row_spec/yql_row_spec.h>
-#include <ydb/library/yql/providers/common/transform/yql_visit.h>
-#include <ydb/library/yql/core/yql_expr_constraint.h>
-#include <ydb/library/yql/ast/yql_constraint.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
+#include <yql/essentials/core/yql_expr_constraint.h>
+#include <yql/essentials/ast/yql_constraint.h>
 
 #include <util/generic/variant.h>
 
@@ -165,13 +165,19 @@ public:
             input.Ptr()->CopyConstraints(section.Ref());
         } else {
             TMultiConstraintNode::TMapType multiItems;
+            bool allEmpty = true;
             for (ui32 index = 0; index < read.Input().Size(); ++index) {
                 auto section = read.Input().Item(index);
                 if (!section.Ref().GetConstraint<TEmptyConstraintNode>()) {
                     multiItems.push_back(std::make_pair(index, section.Ref().GetConstraintSet()));
+                    allEmpty = false;
                 }
             }
-            input.Ptr()->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems)));
+            if (!multiItems.empty()) {
+                input.Ptr()->AddConstraint(ctx.MakeConstraint<TMultiConstraintNode>(std::move(multiItems)));
+            } else if (allEmpty) {
+                input.Ptr()->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
+            }
         }
         return TStatus::Ok;
     }

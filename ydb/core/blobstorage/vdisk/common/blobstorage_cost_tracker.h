@@ -93,7 +93,7 @@ public:
         DeviceWriteSpeedBps = costModel.WriteSpeedBps;
         DeviceReadBlockSize = costModel.ReadBlockSize;
         DeviceWriteBlockSize = costModel.WriteBlockSize;
-        HugeBlobSize = costModel.MinREALHugeBlobInBytes;
+        HugeBlobSize = costModel.MinHugeBlobInBytes;
     }
 
 protected:

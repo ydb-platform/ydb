@@ -8,7 +8,7 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -107,6 +107,11 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
         limit = settings.ItemsLimit;
         settings.ItemsLimit = nullptr;
 
+        matched->Settings = settings.BuildNode(ctx, matched->Settings.Pos());
+    }
+
+    if (kqpCtx.Config->HasMaxSequentialReadsInFlight()) {
+        settings.SequentialInFlight = *kqpCtx.Config->MaxSequentialReadsInFlight.Get();
         matched->Settings = settings.BuildNode(ctx, matched->Settings.Pos());
     }
 

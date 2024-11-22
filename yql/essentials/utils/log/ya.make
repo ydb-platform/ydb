@@ -13,6 +13,7 @@ PEERDIR(
     library/cpp/logger/global
     library/cpp/deprecated/atomic
     yql/essentials/utils/log/proto
+    yql/essentials/utils/backtrace
 )
 
 END()

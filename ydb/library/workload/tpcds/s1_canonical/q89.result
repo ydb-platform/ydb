@@ -1,4 +1,4 @@
-i_category,i_class,i_brand,s_store_name,s_company_name,d_moy,sum_sales,avg_monthly_sales
+item.i_category,item.i_class,item.i_brand,s_store_name,store.s_company_name,date_dim.d_moy,sum_sales,avg_monthly_sales
 Men,shirts,importoimporto #1,ese,Unknown,3,2070.65,5492.8175
 Men,shirts,importoimporto #1,ought,Unknown,6,2152.15,5045.75833
 Men,shirts,importoimporto #1,able,Unknown,2,2333.43,5194.81833

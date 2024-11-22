@@ -5,8 +5,8 @@
 // clang-format off
 #include INCLUDE_FILE(pythonic/numpy,UFUNC_NAME)
 // clang-format on
-#include <pythonic/numpy/partial_sum.hpp>
 #include "pythonic/utils/functor.hpp"
+#include <pythonic/numpy/partial_sum.hpp>
 
 PYTHONIC_NS_BEGIN
 namespace numpy
@@ -21,6 +21,6 @@ namespace numpy
       return partial_sum<numpy::functor::UFUNC_NAME>(std::forward<T>(a), axis,
                                                      d);
     }
-  }
-}
+  } // namespace UFUNC_NAME
+} // namespace numpy
 PYTHONIC_NS_END

@@ -56,6 +56,7 @@ public:
         AddHandler(0, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<false>));
         AddHandler(0, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<false>));
         AddHandler(0, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<false>));
+        AddHandler(0, &TCoTop::Match, HNDL(BuildTopStageRemoveSort<false>));
         AddHandler(0, &TCoTop::Match, HNDL(BuildTopStage<false>));
         AddHandler(0, &TCoTopSort::Match, HNDL(BuildTopSortStage<false>));
         AddHandler(0, &TCoTakeBase::Match, HNDL(BuildTakeSkipStage<false>));
@@ -104,6 +105,7 @@ public:
         AddHandler(1, &TCoFinalizeByKey::Match, HNDL(BuildFinalizeByKeyStage<true>));
         AddHandler(1, &TCoShuffleByKeys::Match, HNDL(BuildShuffleStage<true>));
         AddHandler(1, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage<true>));
+        AddHandler(1, &TCoTop::Match, HNDL(BuildTopStageRemoveSort<true>));
         AddHandler(1, &TCoTop::Match, HNDL(BuildTopStage<true>));
         AddHandler(1, &TCoTopSort::Match, HNDL(BuildTopSortStage<true>));
         AddHandler(1, &TCoTakeBase::Match, HNDL(BuildTakeSkipStage<true>));
@@ -353,6 +355,14 @@ protected:
     {
         TExprBase output = DqBuildPartitionStage(node, ctx, optCtx, *getParents(), IsGlobal);
         DumpAppliedRule("BuildPartitionStage", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> BuildTopStageRemoveSort(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        TExprBase output = DqBuildTopStageRemoveSort(node, ctx, optCtx, TypesCtx, *getParents(), IsGlobal);
+        DumpAppliedRule("BuildTopStageRemoveSort", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

@@ -27,11 +27,9 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
 
     int nAttrs = 0;
     bool readRange = false;
-    TString tablePathName;
 
     if (auto readTable = inputNode.Maybe<TKqlReadTableBase>()) {
         inputStats = typeCtx->GetStats(readTable.Cast().Table().Raw());
-        tablePathName = readTable.Cast().Table().Path().StringValue();
         nAttrs = readTable.Cast().Columns().Size();
 
         auto range = readTable.Cast().Range();
@@ -43,7 +41,6 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
     } else if (auto readRanges = inputNode.Maybe<TKqlReadTableRangesBase>()) {
         inputStats = typeCtx->GetStats(readRanges.Cast().Table().Raw());
         nAttrs = readRanges.Cast().Columns().Size();
-        tablePathName = readRanges.Cast().Table().Path().StringValue();
     } else {
         Y_ENSURE(false, "Invalid node type for InferStatisticsForReadTable");
     }
@@ -76,7 +73,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
             for (auto c : keyColumns->Data ) {
                 if (std::find(indexColumns.begin(), indexColumns.end(), c) != indexColumns.end()) {
                     sortedPrefixCols.push_back(c);
-                    sortedPrefixAliases.push_back(tablePathName);
+                    sortedPrefixAliases.push_back("");
                 } else {
                     break;
                 }
@@ -295,12 +292,10 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
     TVector<TString> sortedPrefixAliases;
 
     if (inputStats->StorageType == EStorageType::RowStorage && keyColumns) {
-
-        auto tablePathName = sourceSettings.Table().Path().StringValue();
         for (auto c : keyColumns->Data ) {
             if (std::find(indexColumns.begin(), indexColumns.end(), c) != indexColumns.end()) {
                 sortedPrefixCols.push_back(c);
-                sortedPrefixAliases.push_back(tablePathName);
+                sortedPrefixAliases.push_back("");
             } else {
                 break;
             }
@@ -376,7 +371,7 @@ void InferStatisticsForReadTableIndexRanges(const TExprNode::TPtr& input, TTypeA
     for (size_t i=0; i<indexColumns.size(); i++) {
         if (indexColumns[i] == sortedColumns[i]) {
             sortedPrefixCols.push_back(indexColumns[i]);
-            sortedPrefixAliases.push_back(tablePath.StringValue());
+            sortedPrefixAliases.push_back("");
         } else {
             break;
         }

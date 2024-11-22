@@ -116,6 +116,7 @@ class TPartition : public TActorBootstrapped<TPartition> {
     friend TInitInfoRangeStep;
     friend TInitDataRangeStep;
     friend TInitDataStep;
+    friend TInitEndWriteTimestampStep;
 
     friend TPartitionSourceManager;
 

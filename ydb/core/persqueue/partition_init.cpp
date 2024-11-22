@@ -30,6 +30,7 @@ TInitializer::TInitializer(TPartition* partition)
     Steps.push_back(MakeHolder<TInitInfoRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataRangeStep>(this));
     Steps.push_back(MakeHolder<TInitDataStep>(this));
+    Steps.push_back(MakeHolder<TInitEndWriteTimestampStep>(this));
 
     CurrentStep = Steps.begin();
 }
@@ -650,6 +651,112 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 
         };
     }
+
+    Done(ctx);
+}
+
+
+//
+// TInitEndWriteTimestampStep
+//
+
+TInitEndWriteTimestampStep::TInitEndWriteTimestampStep(TInitializer* initializer)
+    : TBaseKVStep(initializer, "TInitEndWriteTimestampStep", true) {
+}
+
+void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
+    if (Partition()->EndWriteTimestamp != TInstant::Zero() || Partition()->EndOffset <= Partition()->StartOffset) {
+        PQ_LOG_D("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
+            << "' partition " << Partition()->Partition
+            << " skiped because already initialized.");
+        return Done(ctx);
+    }
+
+    PQ_LOG_D("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
+            << "' partition " << Partition()->Partition
+            << " EndOffset " << Partition()->EndOffset
+            << " StartOffset " << Partition()->StartOffset
+            << " .");
+
+    auto& head = Partition()->Head;
+    for (auto it = head.GetBatches().rbegin(); it != head.GetBatches().rend(); ++it) {
+        if (!it->Empty()) {
+            Partition()->EndWriteTimestamp = head.GetBatches().back().GetLastMessageWriteTimestamp();
+            Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
+
+            PQ_LOG_I("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
+                << "' partition " << Partition()->Partition
+                << " from head completed. Value " << Partition()->EndWriteTimestamp);
+
+            return Done(ctx);
+        }
+    }
+
+    if (Partition()->DataKeysBody.empty()) {
+        PQ_LOG_I("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
+            << "' partition " << Partition()->Partition
+            << " skiped because DataKeys is empty.");
+
+        return Done(ctx);
+    }
+
+    auto& p = Partition()->DataKeysBody.back();
+
+    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
+    auto read = request->Record.AddCmdRead();
+    read->SetKey({p.Key.Data(), p.Key.Size()});
+    ctx.Send(Partition()->Tablet, request.Release());
+}
+
+void TInitEndWriteTimestampStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
+    if (!ValidateResponse(*this, ev, ctx)) {
+        PoisonPill(ctx);
+        return;
+    }
+
+    auto& response = ev->Get()->Record;
+    Y_ABORT_UNLESS(1 == response.ReadResultSize());
+
+    auto& read = response.GetReadResult(0);
+    Y_ABORT_UNLESS(read.HasStatus());
+    switch(read.GetStatus()) {
+        case NKikimrProto::OK: {
+            auto& key = Partition()->DataKeysBody.back().Key;
+
+            for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
+                auto b = it.GetBatch();
+                if (!b.Empty()) {
+                    Partition()->EndWriteTimestamp = b.GetLastMessageWriteTimestamp();
+                }
+            }
+
+            PQ_LOG_I("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
+                << "' partition " << Partition()->Partition
+                << " from last blob completed. Value " << Partition()->EndWriteTimestamp);
+
+            Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
+
+            break;
+            }
+        case NKikimrProto::OVERRUN:
+            Y_ABORT("implement overrun in readresult!!");
+            return;
+        case NKikimrProto::NODATA:
+            Y_ABORT("NODATA can't be here");
+            return;
+        case NKikimrProto::ERROR:
+            PQ_LOG_ERROR("tablet " << Partition()->TabletID << " HandleOnInit topic '" << TopicName()
+                    << "' partition " << PartitionId()
+                    << "  status NKikimrProto::ERROR result message: \"" << read.GetMessage()
+                    << " \" errorReason: \"" << response.GetErrorReason() << "\""
+            );
+            PoisonPill(ctx);
+            return;
+        default:
+            Cerr << "ERROR " << read.GetStatus() << " message: \"" << read.GetMessage() << "\"\n";
+            Y_ABORT("bad status");
+
+    };
 
     Done(ctx);
 }

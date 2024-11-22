@@ -1,15 +1,12 @@
 Init tables ...
 --!syntax_v1
+CREATE EXTERNAL DATA SOURCE `/Root/db/Root/db/clickbench/s1_s3_external_source` WITH (
+    SOURCE_TYPE="ObjectStorage",
+    LOCATION="https://storage.yandexcloud.net/tpc",
+    AUTH_METHOD="NONE"
+);
 
-            CREATE EXTERNAL DATA SOURCE `/Root/db/Root/db/clickbench/s1_s3_external_source` WITH (
-                SOURCE_TYPE="ObjectStorage",
-                LOCATION="https://storage.yandexcloud.net/tpc",
-                AUTH_METHOD="NONE"
-            );
-        
-
-CREATE EXTERNAL TABLE `/Root/db/Root/db/clickbench/s1`
-(
+CREATE EXTERNAL TABLE `/Root/db/Root/db/clickbench/s1` (
     WatchID Int64 NOT NULL,
     JavaEnable Int16 NOT NULL,
     Title Utf8 NOT NULL,
@@ -115,13 +112,9 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/clickbench/s1`
     RefererHash Int64 NOT NULL,
     URLHash Int64 NOT NULL,
     CLID Int32 NOT NULL
-    --(CounterID, EventDate, UserID, EventTime, WatchID)
 )
--- (CounterID, EventDate, UserID, EventTime, WatchID)
 WITH (
---    AUTO_PARTITIONING_BY_SIZE = "ENABLED",
-    DATA_SOURCE = "/Root/db/Root/db/clickbench/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/hits"
-    -- = 128
+    DATA_SOURCE = "/Root/db/Root/db/clickbench/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/s1"
 );
 
 Init tables ...Ok

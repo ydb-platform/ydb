@@ -4,8 +4,8 @@
 #include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/utils/seq.hpp"
 
-#include <utility>
 #include <tuple>
+#include <utility>
 
 PYTHONIC_NS_BEGIN
 
@@ -33,10 +33,10 @@ namespace functools
 
       task();
       task(task const &) = default;
-      task(ClosureTypes const &... types);
+      task(ClosureTypes const &...types);
 
       template <std::size_t... S, typename... Types>
-      auto call(utils::index_sequence<S...>, Types &&... types) const
+      auto call(utils::index_sequence<S...>, Types &&...types) const
           -> decltype(std::get<0>(closure)(std::get<S + 1>(closure)...,
                                            std::forward<Types>(types)...))
       {
@@ -45,20 +45,21 @@ namespace functools
       }
 
       template <typename... Types>
-      auto operator()(Types &&... types) const -> decltype(
-          this->call(utils::make_index_sequence<sizeof...(ClosureTypes)-1>(),
-                     std::forward<Types>(types)...));
+      auto operator()(Types &&...types) const
+          -> decltype(this->call(
+              utils::make_index_sequence<sizeof...(ClosureTypes) - 1>(),
+              std::forward<Types>(types)...));
     };
-  }
+  } // namespace details
 
   template <typename... Types>
   // remove references as closure capture the env by copy
   details::task<typename std::remove_cv<
       typename std::remove_reference<Types>::type>::type...>
-  partial(Types &&... types);
+  partial(Types &&...types);
 
   DEFINE_FUNCTOR(pythonic::functools, partial);
-}
+} // namespace functools
 PYTHONIC_NS_END
 
 #endif

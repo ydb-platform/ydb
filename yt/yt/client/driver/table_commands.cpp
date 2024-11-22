@@ -129,6 +129,7 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
         format,
         reader->GetNameTable(),
         {reader->GetTableSchema()},
+        {Path.GetColumns()},
         context->Request().OutputStream,
         false,
         ControlAttributes,

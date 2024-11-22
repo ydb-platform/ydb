@@ -115,6 +115,17 @@ Y_UNIT_TEST(AlterGroup) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(AlterSequence) {
+    TCases cases = {
+        {"use plato;alter sequence sequence start with 10 increment 2 restart with 5;","USE plato;\n\nALTER SEQUENCE sequence START WITH 10 INCREMENT 2 RESTART WITH 5;\n"},
+        {"use plato;alter sequence if exists sequence increment 1000 start 100 restart;","USE plato;\n\nALTER SEQUENCE IF EXISTS sequence INCREMENT 1000 START 100 RESTART;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+
 Y_UNIT_TEST(Use) {
     TCases cases = {
         {"use user;","USE user;\n"},
@@ -226,6 +237,16 @@ Y_UNIT_TEST(CreateTable) {
             "CREATE TABLE user (\n\tuser int32\n)\nWITH (ttl = interval('P1D') ON user AS MICROSECONDS);\n"},
         {"create table user(user int32) with (ttl=interval('P1D') on user as nAnOsEcOnDs)",
             "CREATE TABLE user (\n\tuser int32\n)\nWITH (ttl = interval('P1D') ON user AS NANOSECONDS);\n"},
+        {"create table user(user int32) with (ttl=interval('P1D') delete on user as nAnOsEcOnDs)",
+            "CREATE TABLE user (\n\tuser int32\n)\nWITH (ttl = interval('P1D') DELETE ON user AS NANOSECONDS);\n"},
+        {"create table user(user int32) with (ttl=interval('P1D')to external data source tier1 ,interval('P10D')delete on user as seconds)",
+            "CREATE TABLE user (\n"
+            "\tuser int32\n"
+            ")\n"
+            "WITH (ttl =\n"
+            "\tinterval('P1D') TO EXTERNAL DATA SOURCE tier1,\n"
+            "\tinterval('P10D') DELETE\n"
+            "ON user AS SECONDS);\n"},
         {"create table user(index user global unique sync on (user,user) with (user=user,user=user))",
             "CREATE TABLE user (\n\tINDEX user GLOBAL UNIQUE SYNC ON (user, user) WITH (user = user, user = user)\n);\n"},
         {"create table user(index user global async on (user) with (user=user,))",

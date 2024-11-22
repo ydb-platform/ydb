@@ -1,10 +1,10 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_RANDOM_CHOICE_HPP
 #define PYTHONIC_INCLUDE_NUMPY_RANDOM_CHOICE_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/numpy/random/randint.hpp"
 #include "pythonic/include/types/ndarray.hpp"
 #include "pythonic/include/types/tuple.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 namespace numpy
@@ -20,8 +20,8 @@ namespace numpy
                                                      bool replace, P &&p);
 
     template <class T>
-    auto choice(long max, T &&size)
-        -> decltype(randint(0, max, std::forward<T>(size)));
+    auto choice(long max,
+                T &&size) -> decltype(randint(0, max, std::forward<T>(size)));
 
     long choice(long max);
 
@@ -44,8 +44,8 @@ namespace numpy
     choice(T &&a, long size, bool replace, P &&p);
 
     DEFINE_FUNCTOR(pythonic::numpy::random, choice);
-  }
-}
+  } // namespace random
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

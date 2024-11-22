@@ -16,8 +16,8 @@ namespace builtins
     auto values(D &&d) -> decltype(std::forward<D>(d).values());
 
     DEFINE_FUNCTOR(pythonic::builtins::dict, values);
-  }
-}
+  } // namespace dict
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

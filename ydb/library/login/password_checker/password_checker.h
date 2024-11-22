@@ -10,7 +10,7 @@ class TPasswordCheckParameters {
 public:
     struct TInitializer {
         ui32 MinPasswordLength = 8;
-        ui32 MaxPasswordLength = 16;
+        ui32 MaxPasswordLength = 15;
         bool NeedLowerCase = true;
         bool NeedUpperCase = true;
         bool NeedNumbers = true;
@@ -23,7 +23,7 @@ private:
     static const std::unordered_set<char> VALID_SPECIAL_SYMBOLS;
 
     ui32 MinPasswordLength = 8;
-    ui32 MaxPasswordLength = 16;
+    ui32 MaxPasswordLength = 15;
     bool NeedLowerCase = true;
     bool NeedUpperCase = true;
     bool NeedNumbers = true;

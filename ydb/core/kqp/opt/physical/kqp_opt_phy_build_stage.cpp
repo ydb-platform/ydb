@@ -768,8 +768,12 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
 }
 
 NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    TTypeAnnotationContext& typeCtx) 
+    TTypeAnnotationContext& typeCtx, bool ruleEnabled) 
 {
+    if (!ruleEnabled) {
+        return node;
+    }
+    
     if (!node.Maybe<TKqlIndexLookupJoin>()) {
         return node;
     }

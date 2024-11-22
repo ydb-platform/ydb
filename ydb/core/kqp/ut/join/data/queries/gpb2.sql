@@ -1,3 +1,5 @@
+PRAGMA ydb.EnableOrderPreservingLookupJoin="true";
+
 SELECT
     doc.id AS document_id
 FROM (

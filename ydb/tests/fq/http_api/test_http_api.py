@@ -247,7 +247,7 @@ class TestHttpApi(TestBase):
         self.streaming_over_kikimr.compute_plane.stop()
         query_id = c.create_query("select1", "select 1").result.query_id
         c.wait_query_status(query_id, fq.QueryMeta.STARTING)
-    
+
         with self.create_client() as client:
             response1 = client.stop_query(query_id, idempotency_key="Z")
             assert response1.status_code == 204
@@ -260,8 +260,7 @@ class TestHttpApi(TestBase):
 
             response2 = client.restart_query(query_id)
             assert response2.status_code == 400
-            
-        
+
         self.streaming_over_kikimr.compute_plane.start()
         c.wait_query_status(query_id, fq.QueryMeta.ABORTED_BY_USER)
         pass

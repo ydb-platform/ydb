@@ -198,8 +198,7 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
         auto response = MakeHasDataInfoResponse(0, cookie, true);
         ctx.Send(sender, response.Release());
     } else {
-
-        THasDataReq req{++HasDataReqNum, GetReadOffset((ui64)record.GetOffset(), readTimestamp), sender, cookie,
+        THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
                         record.HasClientId() && InitDone ? record.GetClientId() : ""};
         THasDataDeadline dl{TInstant::MilliSeconds(record.GetDeadline()), req};
         auto res = HasDataRequests.insert(req);

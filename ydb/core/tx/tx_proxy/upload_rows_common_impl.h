@@ -569,8 +569,7 @@ private:
         entry.Path = ::NKikimr::SplitPath(table);
         if (entry.Path.empty()) {
             return ReplyWithError(
-                TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Bulk upsert. Invalid table path specified: '" << table << "'"),
-                ctx);
+                Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Bulk upsert. Invalid table path specified: '" << table << "'", ctx);
         }
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
         entry.SyncVersion = true;
@@ -586,9 +585,9 @@ private:
 
     void HandleTimeout(const TActorContext& ctx) {
         ShardRepliesLeft.clear();
-        return ReplyWithError(
-            TUploadStatus(Ydb::StatusIds::TIMEOUT, TStringBuilder() << "longTx " << LongTxId.ToString() << " timed out, duration: "
-                                                                    << (TAppData::TimeProvider->Now() - StartTime).Seconds() << " sec"),
+        return ReplyWithError(Ydb::StatusIds::TIMEOUT,
+            TStringBuilder() << "longTx " << LongTxId.ToString()
+                             << " timed out, duration: " << (TAppData::TimeProvider->Now() - StartTime).Seconds() << " sec",
             ctx);
     }
 
@@ -606,7 +605,7 @@ private:
         bool isColumnTable = (TableKind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
 
         if (entry.TableId.IsSystemView()) {
-            return ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, "is not supported. Table is a system view"), ctx);
+            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "is not supported. Table is a system view", ctx);
         }
 
         // TODO: fast fail for all tables?
@@ -621,20 +620,20 @@ private:
         bool makeYdbSchema = isColumnTable || (GetSourceType() != EUploadSource::ProtoValues);
         TString errorMessage;
         if (!BuildSchema(ctx, errorMessage, makeYdbSchema)) {
-            return ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, errorMessage), ctx);
+            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, errorMessage, ctx);
         }
 
         switch (GetSourceType()) {
             case EUploadSource::ProtoValues:
             {
                 if (!ExtractRows(errorMessage)) {
-                    return ReplyWithError(TUploadStatus(Ydb::StatusIds::BAD_REQUEST, errorMessage), ctx);
+                    return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
                 }
 
                 if (isColumnTable) {
                     // TUploadRowsRPCPublic::ExtractBatch() - converted JsonDocument, DynNumbers, ...
                     if (!ExtractBatch(errorMessage)) {
-                        return ReplyWithError(TUploadStatus(Ydb::StatusIds::BAD_REQUEST, errorMessage), ctx);
+                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
                     }
                 } else {
                     FindMinMaxKeys();
@@ -647,15 +646,13 @@ private:
                 if (isColumnTable) {
                     // TUploadColumnsRPCPublic::ExtractBatch() - NOT converted JsonDocument, DynNumbers, ...
                     if (!ExtractBatch(errorMessage)) {
-                        return ReplyWithError(TUploadStatus(Ydb::StatusIds::BAD_REQUEST, errorMessage), ctx);
+                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
                     }
                     if (!ColumnsToConvertInplace.empty()) {
                         auto convertResult = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
                         if (!convertResult.ok()) {
-                            return ReplyWithError(
-                                TUploadStatus(Ydb::StatusIds::BAD_REQUEST,
-                                    TStringBuilder() << "Cannot convert arrow batch inplace:" << convertResult.status().ToString()),
-                                ctx);
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
+                                TStringBuilder() << "Cannot convert arrow batch inplace:" << convertResult.status().ToString(), ctx);
                         }
                         Batch = *convertResult;
                     }
@@ -663,20 +660,19 @@ private:
                     if (!ColumnsToConvert.empty()) {
                         auto convertResult = NArrow::ConvertColumns(Batch, ColumnsToConvert);
                         if (!convertResult.ok()) {
-                            return ReplyWithError(TUploadStatus(Ydb::StatusIds::BAD_REQUEST,
-                                                      TStringBuilder() << "Cannot convert arrow batch:" << convertResult.status().ToString()),
-                                ctx);
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
+                                TStringBuilder() << "Cannot convert arrow batch:" << convertResult.status().ToString(), ctx);
                         }
                         Batch = *convertResult;
                     }
                 } else {
                     // TUploadColumnsRPCPublic::ExtractBatch() - NOT converted JsonDocument, DynNumbers, ...
                     if (!ExtractBatch(errorMessage)) {
-                        return ReplyWithError(TUploadStatus(Ydb::StatusIds::BAD_REQUEST, errorMessage), ctx);
+                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
                     }
                     // Implicit types conversion inside ExtractRows(), in TArrowToYdbConverter
                     if (!ExtractRows(errorMessage)) {
-                        return ReplyWithError(TUploadStatus(Ydb::StatusIds::BAD_REQUEST, errorMessage), ctx);
+                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
                     }
                     FindMinMaxKeys();
                 }
@@ -704,7 +700,7 @@ private:
             // Batch is already converted
             WriteToColumnTable(ctx);
         } else {
-            return ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, "is not supported"), ctx);
+            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "is not supported", ctx);
         }
     }
 
@@ -712,7 +708,7 @@ private:
         UploadCountersGuard.OnWritingStarted();
         TString accessCheckError;
         if (!CheckAccess(accessCheckError)) {
-            return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAUTHORIZED, accessCheckError), ctx);
+            return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, accessCheckError, ctx);
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "starting LongTx");
@@ -751,7 +747,7 @@ private:
         auto outputColumns = GetOutputColumns(ctx);
         if (!outputColumns.empty()) {
             if (!Batch) {
-                return ReplyWithError(TUploadStatus(Ydb::StatusIds::BAD_REQUEST, "no data or conversion error"), ctx);
+                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, "no data or conversion error", ctx);
             }
 
             auto batch = NArrow::TColumnOperator().ErrorIfAbsent().Extract(Batch, outputColumns);
@@ -759,11 +755,10 @@ private:
                 for (auto& columnName : outputColumns) {
                     if (Batch->schema()->GetFieldIndex(columnName) < 0) {
                         return ReplyWithError(
-                            TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "no expected column '" << columnName << "' in data"),
-                            ctx);
+                            Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "no expected column '" << columnName << "' in data", ctx);
                     }
                 }
-                return ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, "cannot prepare data"), ctx);
+                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "cannot prepare data", ctx);
             }
 
             Y_ABORT_UNLESS(batch);
@@ -771,10 +766,8 @@ private:
 #if 1 // TODO: check we call ValidateFull() once over pipeline (upsert -> long tx -> shard insert)
             auto validationInfo = batch->ValidateFull();
             if (!validationInfo.ok()) {
-                return ReplyWithError(
-                    TUploadStatus(Ydb::StatusIds::SCHEME_ERROR,
-                        TStringBuilder() << "bad batch in data: " + validationInfo.message() << "; order:" + JoinSeq(", ", outputColumns)),
-                    ctx);
+                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
+                    TStringBuilder() << "bad batch in data: " + validationInfo.message() << "; order:" + JoinSeq(", ", outputColumns), ctx);
             }
 #endif
 
@@ -788,19 +781,19 @@ private:
         Y_ABORT_UNLESS(ResolveNamesResult);
 
         if (ResolveNamesResult->ErrorCount > 0) {
-            ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, "failed to get table schema"), ctx);
+            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "failed to get table schema", ctx);
             return {};
         }
 
         auto& entry = ResolveNamesResult->ResultSet[0];
 
         if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
-            ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, "specified path is not a column table"), ctx);
+            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "specified path is not a column table", ctx);
             return {};
         }
 
         if (!entry.ColumnTableInfo || !entry.ColumnTableInfo->Description.HasSchema()) {
-            ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, "column table has no schema"), ctx);
+            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "column table has no schema", ctx);
             return {};
         }
 
@@ -968,12 +961,12 @@ private:
         ResolvePartitionsResult = msg->Request;
 
         if (ResolvePartitionsResult->ErrorCount > 0) {
-            return ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, "unknown table"), ctx);
+            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "unknown table", ctx);
         }
 
         TString accessCheckError;
         if (!CheckAccess(accessCheckError)) {
-            return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAUTHORIZED, accessCheckError), ctx);
+            return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, accessCheckError, ctx);
         }
 
         auto getShardsString = [] (const TVector<TKeyDesc::TPartitionInfo>& partitions) {
@@ -1208,6 +1201,10 @@ private:
         }
 
         return ReplyWithResult(Status, ctx);
+    }
+
+    void ReplyWithError(const Ydb::StatusIds::StatusCode code, const TString& errorMessage, const TActorContext& ctx) {
+        return ReplyWithError(TUploadStatus(code, errorMessage), ctx);
     }
 
     void ReplyWithError(const TUploadStatus& status, const TActorContext& ctx) {

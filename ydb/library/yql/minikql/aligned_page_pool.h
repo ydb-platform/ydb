@@ -218,6 +218,10 @@ public:
         IsMaximumLimitValueReached = isReached;
     }
 
+    bool GetMaximumLimitValueReached() const noexcept {
+        return IsMaximumLimitValueReached;
+    }
+
     bool IsMemoryYellowZoneEnabled() const noexcept {
         return IsMemoryYellowZoneReached;
     }

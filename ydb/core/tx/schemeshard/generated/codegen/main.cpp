@@ -1,4 +1,4 @@
-#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <google/protobuf/descriptor.pb.h>
 #include <jinja2cpp/reflected_value.h>

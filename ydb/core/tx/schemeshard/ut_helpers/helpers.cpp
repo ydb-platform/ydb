@@ -16,6 +16,7 @@
 
 #include <ydb/core/util/pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <library/cpp/testing/unittest/registar.h>

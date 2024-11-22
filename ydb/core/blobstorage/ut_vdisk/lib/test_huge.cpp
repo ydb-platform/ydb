@@ -137,6 +137,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
 
     bool InitHugeBlobKeeper(const TActorContext &ctx, const TStartingPoints &startingPoints) {
         Y_UNUSED(ctx);
+        const ui32 oldMinHugeBlobInBytes = 64 << 10;
         const ui32 milestoneHugeBlobInBytes = 64 << 10;
         const ui32 maxBlobInBytes = 128 << 10;
         auto logFunc = [] (const TString) { /* empty */ };
@@ -149,6 +150,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
                         HmCtx->PDiskCtx->Dsk->ChunkSize,
                         HmCtx->PDiskCtx->Dsk->AppendBlockSize,
                         HmCtx->PDiskCtx->Dsk->AppendBlockSize,
+                        oldMinHugeBlobInBytes,
                         milestoneHugeBlobInBytes,
                         maxBlobInBytes,
                         HmCtx->Config->HugeBlobOverhead,
@@ -167,6 +169,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
                         HmCtx->PDiskCtx->Dsk->ChunkSize,
                         HmCtx->PDiskCtx->Dsk->AppendBlockSize,
                         HmCtx->PDiskCtx->Dsk->AppendBlockSize,
+                        oldMinHugeBlobInBytes,
                         milestoneHugeBlobInBytes,
                         maxBlobInBytes,
                         HmCtx->Config->HugeBlobOverhead,

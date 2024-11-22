@@ -210,7 +210,7 @@ namespace NKikimr {
         void QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EVDiskQueueId queueId, bool connected,
             bool extraBlockChecksSupport, std::shared_ptr<const TCostModel> costModel, const TBlobStorageGroupInfo::TTopology& topology);
         ui32 GetNumUnconnectedDisks();
-        ui32 GetMinHugeBlobInBytes() const;
+        ui32 GetMinREALHugeBlobInBytes() const;
     };
 
     struct TEvRequestProxySessionsState : TEventLocal<TEvRequestProxySessionsState, TEvBlobStorage::EvRequestProxySessionsState>

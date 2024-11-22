@@ -71,7 +71,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     bool UseActorSystemTimeInBSQueue;
     bool IsLimitedKeyless = false;
     bool IsFullMonitoring = false; // current state of monitoring
-    ui32 MinHugeBlobInBytes = 0;
+    ui32 MinREALHugeBlobInBytes = 0;
 
     TActorId MonActor;
     TIntrusivePtr<TBlobStorageGroupProxyMon> Mon;

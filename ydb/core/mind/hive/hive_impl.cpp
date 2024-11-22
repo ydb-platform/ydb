@@ -3031,8 +3031,8 @@ void THive::ProcessEvent(std::unique_ptr<IEventHandle> event) {
         hFunc(TEvHive::TEvUpdateDomain, Handle);
         hFunc(TEvPrivate::TEvDeleteNode, Handle);
         hFunc(TEvHive::TEvRequestTabletDistribution, Handle);
-        hFunc(TEvHive::TEvRequestScaleRecommendation, Handle);
-        hFunc(TEvPrivate::TEvRefreshScaleRecommendation, Handle)
+        hFunc(TEvPrivate::TEvRefreshScaleRecommendation, Handle);
+        hFunc(TEvHive::TEvConfigureScaleRecommender, Handle);
     }
 }
 
@@ -3137,6 +3137,7 @@ STFUNC(THive::StateWork) {
         fFunc(TEvHive::TEvRequestTabletDistribution::EventType, EnqueueIncomingEvent);
         fFunc(TEvHive::TEvRequestScaleRecommendation::EventType, EnqueueIncomingEvent);
         fFunc(TEvPrivate::TEvRefreshScaleRecommendation::EventType, EnqueueIncomingEvent);
+        fFunc(TEvHive::TEvConfigureScaleRecommender::EventType, EnqueueIncomingEvent);
         hFunc(TEvPrivate::TEvProcessIncomingEvent, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
@@ -3589,6 +3590,10 @@ void THive::Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev) {
     response->Record.SetStatus(NKikimrProto::OK);
     response->Record.SetRecommendedNodes(domainInfo.LastScaleRecommendation->Nodes);
     Send(ev->Sender, response.release());
+}
+
+void THive::Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev) {
+    BLOG_D("Handle TEvHive::TEvConfigureScaleRecommender(" << ev->Get()->Record.ShortDebugString() << ")");
 }
 
 TVector<TNodeId> THive::GetNodesForWhiteboardBroadcast(size_t maxNodesToReturn) {

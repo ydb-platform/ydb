@@ -201,6 +201,41 @@ public:
                 return Error(Ydb::StatusIds::BAD_REQUEST, "Data size soft quota cannot be larger than hard quota", ctx);
             }
         }
+
+        // Check scale recommender policies.
+        if (rec.has_scale_recommender_policies()) {
+            const auto& policies = rec.scale_recommender_policies();
+            if (policies.policies().size() > 1) {
+                return Error(Ydb::StatusIds::BAD_REQUEST, "Currently, no more than one policy is supported at a time", ctx);
+            }
+
+            if (!policies.policies().empty()) {
+                const auto& policy = policies.policies()[0];
+                switch (policy.GetPolicyCase()) {
+                    case Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy::kTargetTrackingPolicy: {
+                        const auto& targetTracking = policy.target_tracking_policy();
+                        switch (targetTracking.GetTargetCase()) {
+                            case Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy::kAverageCpuUtilizationPercent: {
+                                auto cpuUtilization = targetTracking.average_cpu_utilization_percent();
+                                if (cpuUtilization < 10 || cpuUtilization > 90) {
+                                    return Error(Ydb::StatusIds::BAD_REQUEST, "Average CPU utilization target must be from 10% to 90%", ctx);
+                                }
+                                break;
+                            }
+                            case Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy::TARGET_NOT_SET:
+                                return Error(Ydb::StatusIds::BAD_REQUEST, "Target type for target tracking policy is not set", ctx);
+                            default:
+                                return Error(Ydb::StatusIds::BAD_REQUEST, "Unsupported target type for target tracking policy", ctx);
+                            }
+                        break;
+                    }
+                    case Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy::POLICY_NOT_SET:
+                        return Error(Ydb::StatusIds::BAD_REQUEST, "Policy type is not set", ctx);
+                    default:
+                        return Error(Ydb::StatusIds::BAD_REQUEST, "Unsupported policy type", ctx);
+                }
+            }
+        }
         
         // Check attributes.
         THashSet<TString> attrNames;
@@ -272,6 +307,11 @@ public:
             DatabaseQuotas.ConstructInPlace(rec.database_quotas());
             Self->DbUpdateDatabaseQuotas(Tenant, *DatabaseQuotas, txc, ctx);
             updateSubdomainVersion = true;
+        }
+
+        if (rec.has_scale_recommender_policies()) {
+            ScaleRecommenderPolicies.ConstructInPlace(rec.scale_recommender_policies());
+            Self->DbUpdateScaleRecommenderPolicies(Tenant, *ScaleRecommenderPolicies, txc, ctx);
         }
 
         if (rec.idempotency_key() || Tenant->AlterIdempotencyKey) {
@@ -367,6 +407,9 @@ public:
             if (DatabaseQuotas) {
                 Tenant->DatabaseQuotas.ConstructInPlace(*DatabaseQuotas);
             }
+            if (ScaleRecommenderPolicies) {
+                Tenant->ScaleRecommenderPolicies.ConstructInPlace(*ScaleRecommenderPolicies);
+            }
             if (SubdomainVersion) {
                 Tenant->SubdomainVersion = *SubdomainVersion;
             }
@@ -389,6 +432,7 @@ private:
     THashMap<TString, ui64> PoolsToAdd;
     TMaybe<Ydb::Cms::SchemaOperationQuotas> SchemaOperationQuotas;
     TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas;
+    TMaybe<Ydb::Cms::ScaleRecommenderPolicies> ScaleRecommenderPolicies;
     TMaybe<ui64> SubdomainVersion;
     bool ComputationalUnitsModified;
     TTenant::TPtr Tenant;

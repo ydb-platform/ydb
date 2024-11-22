@@ -378,7 +378,7 @@ bool ISnapshotSchema::IsReplaceableByNext(const ISnapshotSchema& nextSchema) con
         if (it == nextIndexes.end()) {
             return false;
         }
-        if (meta.GetObjectPtr()->SerializeToProto().SerializeAsString() != it->second.GetObjectPtr()->SerializeToProto().SerializeAsString()) {
+        if ((*meta.GetObjectPtr() != *it->second.GetObjectPtr()) || (meta.GetObjectPtr()->SerializeToProto().SerializeAsString() != it->second.GetObjectPtr()->SerializeToProto().SerializeAsString())) {
             return false;
         }
     }

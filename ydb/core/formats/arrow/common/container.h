@@ -70,6 +70,11 @@ public:
 
     public:
         TTableConstructionContext() = default;
+        TTableConstructionContext(std::set<std::string>&& columnNames)
+            : ColumnNames(std::move(columnNames))
+        {
+
+        }
     };
 
     std::shared_ptr<arrow::Table> BuildTableVerified(const TTableConstructionContext& context = Default<TTableConstructionContext>()) const;

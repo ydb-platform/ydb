@@ -1,6 +1,5 @@
 #include "constructor.h"
 #include "fetched_data.h"
-#include "interval.h"
 #include "plain_read_data.h"
 #include "source.h"
 

@@ -332,7 +332,10 @@ public:
         return 0;
     }
     TBuildResultStep(const ui32 startIndex, const ui32 recordsCount)
-        : TBase("BUILD_RESULT") {
+        : TBase("BUILD_RESULT")
+        , StartIndex(startIndex)
+        , RecordsCount(recordsCount)
+    {
     }
 };
 

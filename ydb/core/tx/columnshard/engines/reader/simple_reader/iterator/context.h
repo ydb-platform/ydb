@@ -51,7 +51,6 @@ public:
         AFL_VERIFY(ProcessMemoryGuard);
         return ProcessMemoryGuard->GetProcessId();
     }
-    ui64 GetMemoryForSources(const THashMap<ui32, std::shared_ptr<IDataSource>>& sources);
     ui64 GetRequestedMemoryBytes() const {
         return MergeStageMemory->GetFullMemory() + FilterStageMemory->GetFullMemory() + FetchingStageMemory->GetFullMemory();
     }

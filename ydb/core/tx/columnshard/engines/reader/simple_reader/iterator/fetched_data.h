@@ -178,7 +178,7 @@ class TFetchedResult {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotAppliedFilter);
-    std::optional<std::vector<TPortionDataAccessor::TReadPage>> PagesToResult;
+    std::optional<std::deque<TPortionDataAccessor::TReadPage>> PagesToResult;
     std::optional<std::shared_ptr<arrow::Table>> ChunkToReply;
 
 public:
@@ -187,22 +187,28 @@ public:
         , NotAppliedFilter(data->GetNotAppliedFilter()) {
     }
 
-    const std::vector<TPortionDataAccessor::TReadPage>& GetPagesToResultVerified() const {
+    TPortionDataAccessor::TReadPage ExtractPageForResult() {
+        AFL_VERIFY(PagesToResult);
+        AFL_VERIFY(PagesToResult->size());
+        auto result = PagesToResult->front();
+        PagesToResult->pop_front();
+        return result;
+    }
+
+    const std::deque<TPortionDataAccessor::TReadPage>& GetPagesToResultVerified() const {
         AFL_VERIFY(PagesToResult);
         return *PagesToResult;
     }
 
     void SetPages(std::vector<TPortionDataAccessor::TReadPage>&& pages) {
         AFL_VERIFY(!PagesToResult);
-        PagesToResult = std::move(pages);
+        PagesToResult = std::deque<TPortionDataAccessor::TReadPage>(pages.begin(), pages.end());
     }
 
-    void SetResultChunk(std::shared_ptr<arrow::Table>&& table, const ui32 startIndex, const ui32 recordsCount) {
-        auto& pages = GetPagesToResultVerified();
-        AFL_VERIFY(pages.size());
-        AFL_VERIFY(pages.front().GetStartIndex() == startIndex)("real", pages.front().GetStartIndex())("expected", startIndex);
-        AFL_VERIFY(pages.front().GetRecordsCount() == recordsCount)("real", pages.front().GetRecordsCount())("expected", recordsCount);
-        pages.pop_front();
+    void SetResultChunk(std::shared_ptr<arrow::Table>&& table, const ui32 indexStart, const ui32 recordsCount) {
+        auto page = ExtractPageForResult();
+        AFL_VERIFY(page.GetIndexStart() == indexStart)("real", page.GetIndexStart())("expected", indexStart);
+        AFL_VERIFY(page.GetRecordsCount() == recordsCount)("real", page.GetRecordsCount())("expected", recordsCount);
         AFL_VERIFY(!ChunkToReply);
         ChunkToReply = std::move(table);
     }

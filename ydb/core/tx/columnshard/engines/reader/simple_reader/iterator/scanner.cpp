@@ -52,7 +52,7 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
         if (!context->GetCommonContext()->GetScanCursor()->CheckPortionUsage(i)) {
             continue;
         }
-        FetchingSources.emplace(source);
+        SortedSources.emplace(source);
     }
 }
 

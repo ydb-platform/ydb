@@ -59,7 +59,7 @@ ui64 TAssemblerStep::GetProcessingDataSize(const std::shared_ptr<IDataSource>& s
 
 TConclusion<bool> TOptionalAssemblerStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    source->AssembleColumns(Columns, !source->GetExclusiveIntervalOnly() || !source->IsSourceInMemory());
+    source->AssembleColumns(Columns, !source->IsSourceInMemory());
     return true;
 }
 

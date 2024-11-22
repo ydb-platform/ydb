@@ -389,17 +389,15 @@ std::vector<TPortionDataAccessor::TReadPage> TPortionDataAccessor::BuildReadPage
 
     ui32 lastAppliedId = 0;
     ui32 currentRecordIdx = 0;
-    ui64 sumMemory = 0;
     bool needOne = false;
     const TColumnRecord* lastRecord = nullptr;
-    for (auto&& i : Records) {
+    for (auto&& i : GetRecordsVerified()) {
         if (lastAppliedId != i.GetEntityId()) {
             if (delimiters.size()) {
                 AFL_VERIFY(delimiters.back().GetIndexStart() == PortionInfo->GetRecordsCount());
             }
             needOne = entityIds.contains(i.GetEntityId());
             currentRecordIdx = 0;
-            sumMemory = 0;
             lastAppliedId = i.GetEntityId();
             lastRecord = nullptr;
         }
@@ -435,7 +433,7 @@ std::vector<TPortionDataAccessor::TReadPage> TPortionDataAccessor::BuildReadPage
     for (auto&& i : sumDelimiters) {
         const i64 sumMemory = (i64)i.GetUsedMemory() - (i64)lastBorder->GetWholeChunksMemory();
         AFL_VERIFY(sumMemory > 0);
-        if ((sumMemory >= memoryLimit || i.GetIndexStart() == PortionInfo.GetRecordsCount()) && i.GetIndexStart()) {
+        if (((ui64)sumMemory >= memoryLimit || i.GetIndexStart() == PortionInfo->GetRecordsCount()) && i.GetIndexStart()) {
             AFL_VERIFY(lastBorder->GetIndexStart() < i.GetIndexStart());
             recordIdx.emplace_back(i.GetIndexStart());
             packMemorySize.emplace_back(sumMemory);
@@ -443,7 +441,7 @@ std::vector<TPortionDataAccessor::TReadPage> TPortionDataAccessor::BuildReadPage
         }
     }
     AFL_VERIFY(recordIdx.front() == 0);
-    AFL_VERIFY(recordIdx.back() == PortionInfo.GetRecordsCount());
+    AFL_VERIFY(recordIdx.back() == PortionInfo->GetRecordsCount());
     AFL_VERIFY(recordIdx.size() == packMemorySize.size() + 1);
     std::vector<TReadPage> pages;
     for (ui32 i = 0; i < packMemorySize.size(); ++i) {

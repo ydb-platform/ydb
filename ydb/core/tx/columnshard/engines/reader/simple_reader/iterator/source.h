@@ -98,9 +98,8 @@ public:
 
     void InitPages(const ui64 memoryLimit) {
         AFL_VERIFY(StageData);
-        AFL_VERIFY(!PagesToResult);
         const auto& accessor = StageData->GetPortionAccessor();
-        StageResult.SetPages(accessor.BuildReadPages(memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
+        StageResult->SetPages(accessor.BuildReadPages(memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
     }
 
     void StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr);
@@ -142,14 +141,6 @@ public:
         if (!value) {
             StageData->SetUseFilter(value);
         }
-    }
-    void SetFirstIntervalId(const ui64 value) {
-        AFL_VERIFY(!FirstIntervalId);
-        FirstIntervalId = value;
-    }
-    ui64 GetFirstIntervalId() const {
-        AFL_VERIFY(!!FirstIntervalId);
-        return *FirstIntervalId;
     }
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
 
@@ -207,9 +198,6 @@ public:
     std::shared_ptr<arrow::RecordBatch> GetLastPK() const {
         return Finish.BuildSortingCursor().ExtractSortingPosition(Finish.GetSortFields());
     }
-    void IncIntervalsCount() {
-        ++IntervalsCount;
-    }
 
     virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const = 0;
 
@@ -243,11 +231,7 @@ public:
         if (!ResourceGuards.size()) {
             return;
         }
-        if (ExclusiveIntervalOnly) {
-            ResourceGuards.back()->Update(0);
-        } else {
-            ResourceGuards.back()->Update(GetColumnRawBytes(Context->GetPKColumns()->GetColumnIds()));
-        }
+        ResourceGuards.back()->Update(0);
     }
 
     const TFetchedData& GetStageData() const {
@@ -392,7 +376,7 @@ public:
     }
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context)
-        : TBase(sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(), portion->RecordSnapshotMin(TSnapshot::Zero()),
+        : TBase(portion->GetPortionId(), sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(), portion->RecordSnapshotMin(TSnapshot::Zero()),
               portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(), portion->GetShardingVersionOptional(),
               portion->GetMeta().GetDeletionsCount())
         , Portion(portion)

@@ -46,7 +46,7 @@ PEERDIR(
 )
 
 RESOURCE(
-    contrib/ydb/library/yql/cfg/tests/fs.conf fs.conf
+    yql/essentials/cfg/tests/fs.conf fs.conf
 )
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)

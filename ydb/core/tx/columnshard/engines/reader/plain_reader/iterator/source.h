@@ -75,8 +75,9 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
+    virtual bool NeedAccessorsForRead() const = 0;
     virtual bool NeedAccessorsFetching() const = 0;
-
+    virtual ui64 PredictAccessorsMemory() const = 0;
     bool StartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
         return DoStartFetchingAccessor(sourcePtr, step);
     }
@@ -110,7 +111,7 @@ public:
     void SetSourceInMemory(const bool value) {
         AFL_VERIFY(!IsSourceInMemoryFlag);
         IsSourceInMemoryFlag = value;
-        if (NeedAccessorsFetching()) {
+        if (NeedAccessorsForRead()) {
             AFL_VERIFY(StageData);
             if (!value) {
                 StageData->SetUseFilter(value);
@@ -317,6 +318,14 @@ private:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
 
 public:
+    virtual ui64 PredictAccessorsMemory() const override {
+        return Portion->GetApproxChunksCount(GetContext()->GetCommonContext()->GetReadMetadata()->GetResultSchema()->GetColumnsCount()) * sizeof(TColumnRecord);
+    }
+
+    virtual bool NeedAccessorsForRead() const override {
+        return true;
+    }
+
     virtual bool NeedAccessorsFetching() const override {
         return !StageData  || !StageData->HasPortionAccessor();
     }
@@ -425,6 +434,14 @@ private:
     }
 
 public:
+    virtual ui64 PredictAccessorsMemory() const override {
+        return 0;
+    }
+
+    virtual bool NeedAccessorsForRead() const override {
+        return false;
+    }
+
     virtual bool NeedAccessorsFetching() const override {
         return false;
     }

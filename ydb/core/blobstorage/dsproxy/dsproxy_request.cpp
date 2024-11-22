@@ -178,13 +178,12 @@ namespace NKikimr {
         Send(MonActor, new TEvThroughputAddRequest(ev->Get()->HandleClass, bytes));
         EnableWilsonTracing(ev, Mon->PutSamplePPM);
 
-        Y_DEBUG_ABORT_UNLESS(MinREALHugeBlobInBytes);
+        Y_DEBUG_ABORT_UNLESS(MinHugeBlobInBytes);
         const ui32 partSize = Info->Type.PartSize(ev->Get()->Id);
 
         TInstant now = TActivationContext::Now();
 
-        if (Controls.EnablePutBatching.Update(now) && partSize < MinREALHugeBlobInBytes &&
-                partSize <= MaxBatchedPutSize) {
+        if (Controls.EnablePutBatching.Update(now) && partSize < MinHugeBlobInBytes && partSize <= MaxBatchedPutSize) {
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
             TEvBlobStorage::TEvPut::ETactic tactic = ev->Get()->Tactic;
             Y_ABORT_UNLESS((ui64)handleClass <= PutHandleClassCount);

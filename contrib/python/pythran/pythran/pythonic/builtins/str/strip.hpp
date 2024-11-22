@@ -25,7 +25,7 @@ namespace builtins
                           self.chars().begin() + self.find_last_not_of(to_del) +
                               1);
     }
-  }
-}
+  } // namespace str
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

@@ -18,6 +18,8 @@ namespace NYT::NRpc {
 
 using namespace NConcurrency;
 
+using NYT::FromProto;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 YT_DEFINE_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch_);
@@ -140,7 +142,7 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, Compression)
     {
-        auto requestCodecId = CheckedEnumCast<NCompression::ECodec>(request->request_codec());
+        auto requestCodecId = FromProto<NCompression::ECodec>(request->request_codec());
         auto serializedRequestBody = SerializeProtoToRefWithCompression(*request, requestCodecId);
         const auto& compressedRequestBody = context->GetRequestBody();
         EXPECT_TRUE(TRef::AreBitwiseEqual(serializedRequestBody, compressedRequestBody));

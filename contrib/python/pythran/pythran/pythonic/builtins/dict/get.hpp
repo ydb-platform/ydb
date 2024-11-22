@@ -3,8 +3,8 @@
 
 #include "pythonic/include/builtins/dict/get.hpp"
 
-#include "pythonic/types/dict.hpp"
 #include "pythonic/types/NoneType.hpp"
+#include "pythonic/types/dict.hpp"
 #include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
@@ -32,8 +32,8 @@ namespace builtins
     {
       return default_;
     }
-  }
-}
+  } // namespace dict
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

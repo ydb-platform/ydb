@@ -928,7 +928,7 @@ namespace NActors {
         RegistrationObserver(*this, parentId ? parentId : CurrentRecipient, actorId);
         DoActorInit(node->ActorSystem.Get(), actor, actorId, parentId ? parentId : CurrentRecipient);
 
-        mailbox->Unlock(node->ExecutorPools[0], GetCycleCountFast(), revolvingCounter);
+        // Note: test actorsystem mailboxes stay permanently locked
 
         return actorId;
     }

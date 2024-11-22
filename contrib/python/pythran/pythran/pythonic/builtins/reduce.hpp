@@ -40,7 +40,7 @@ namespace builtins
         s.begin(), s.end(),
         static_cast<reduce_helper_t<Iterable, Operator, T>>(init), op);
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

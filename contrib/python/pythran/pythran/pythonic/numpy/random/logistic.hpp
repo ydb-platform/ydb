@@ -29,9 +29,9 @@ namespace numpy
     }
 
     inline auto logistic(double loc, double scale, long size)
-        -> decltype(logistic(loc, scale, types::array<long, 1>{{size}}))
+        -> decltype(logistic(loc, scale, types::array_tuple<long, 1>{{size}}))
     {
-      return logistic(loc, scale, types::array<long, 1>{{size}});
+      return logistic(loc, scale, types::array_tuple<long, 1>{{size}});
     }
 
     inline double logistic(double loc, double scale, types::none_type d)

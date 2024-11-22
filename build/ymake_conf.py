@@ -1551,7 +1551,6 @@ class GnuCompiler(Compiler):
                 '-Wno-deprecated-enum-float-conversion',
                 '-Wno-deprecated-volatile',
                 '-Wno-pessimizing-move',
-                '-Wno-return-std-move',
                 '-Wno-undefined-var-template',
             ]
 
@@ -2082,11 +2081,10 @@ class MSVCCompiler(MSVC, Compiler):
             elif target.is_x86_64:
                 flags.append('-m64')
 
-            c_warnings.extend((
-                '-Wno-format',
+            c_warnings += [
                 '-Wno-parentheses',
                 '-Wno-unknown-warning-option',
-            ))
+            ]
 
             cxx_warnings += [
                 '-Wimport-preprocessor-directive-pedantic',

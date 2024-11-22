@@ -1,5 +1,5 @@
 diff --git a/include/__config b/include/__config
-index e431997..3b1c3a6 100644
+index ab696fb..6e3b0e3 100644
 --- a/include/__config
 +++ b/include/__config
 @@ -28,13 +28,35 @@
@@ -48,7 +48,7 @@ index e431997..3b1c3a6 100644
  #    define _LIBCPP_OBJECT_FORMAT_COFF 1
  #  elif defined(__wasm__)
  #    define _LIBCPP_OBJECT_FORMAT_WASM 1
-@@ -772,7 +794,7 @@ typedef __char32_t char32_t;
+@@ -771,7 +793,7 @@ typedef __char32_t char32_t;
  // TODO: We provide a escape hatch with _LIBCPP_NO_ABI_TAG for folks who want to avoid increasing
  //       the length of symbols with an ABI tag. In practice, we should remove the escape hatch and
  //       use compression mangling instead, see https://github.com/itanium-cxx-abi/cxx-abi/issues/70.
@@ -57,7 +57,7 @@ index e431997..3b1c3a6 100644
  #    define _LIBCPP_HIDE_FROM_ABI                                                                                      \
        _LIBCPP_HIDDEN _LIBCPP_EXCLUDE_FROM_EXPLICIT_INSTANTIATION                                                       \
            __attribute__((__abi_tag__(_LIBCPP_TOSTRING(_LIBCPP_VERSIONED_IDENTIFIER))))
-@@ -1075,7 +1097,8 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+@@ -1074,7 +1096,8 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
          defined(__APPLE__) ||                                                                                          \
          defined(__MVS__) ||                                                                                            \
          defined(_AIX) ||                                                                                               \
@@ -67,7 +67,7 @@ index e431997..3b1c3a6 100644
  // clang-format on
  #      define _LIBCPP_HAS_THREAD_API_PTHREAD
  #    elif defined(__Fuchsia__)
-@@ -1211,6 +1234,10 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+@@ -1210,6 +1233,10 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
  #    define _LIBCPP_CONSTINIT
  #  endif
  
@@ -78,7 +78,7 @@ index e431997..3b1c3a6 100644
  #  if __has_attribute(__diagnose_if__) && !defined(_LIBCPP_DISABLE_ADDITIONAL_DIAGNOSTICS)
  #    define _LIBCPP_DIAGNOSE_WARNING(...) __attribute__((__diagnose_if__(__VA_ARGS__, "warning")))
  #  else
-@@ -1232,6 +1259,12 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+@@ -1231,6 +1258,12 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
  #    define _LIBCPP_LIFETIMEBOUND
  #  endif
  
@@ -91,7 +91,7 @@ index e431997..3b1c3a6 100644
  #  if __has_attribute(__nodebug__)
  #    define _LIBCPP_NODEBUG __attribute__((__nodebug__))
  #  else
-@@ -1289,6 +1322,10 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
+@@ -1288,6 +1321,10 @@ __sanitizer_verify_double_ended_contiguous_container(const void*, const void*, c
  #    define _LIBCPP_ENABLE_CXX20_REMOVED_TYPE_TRAITS
  #  endif // _LIBCPP_ENABLE_CXX20_REMOVED_FEATURES
  

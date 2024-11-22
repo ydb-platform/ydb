@@ -26,7 +26,6 @@ namespace NKikimr {
                     Contexts.GetVCtx(),
                     ChunkSize,
                     AppendBlockSize,
-                    AppendBlockSize,
                     cfg.MinHugeBlobInBytes,
                     cfg.MilestoneHugeBlobInBytes,
                     cfg.MaxLogoBlobDataSize,

@@ -108,9 +108,8 @@ public:
 
 public:
     TAbortableHttpResponse(
+        TRequestContext context,
         IInputStream* socketStream,
-        const TString& requestId,
-        const TString& hostName,
         const TString& url);
 
     /// @brief Abort any responses which match `urlPattern` (i.e. contain it in url).

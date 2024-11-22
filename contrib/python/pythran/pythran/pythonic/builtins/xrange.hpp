@@ -24,7 +24,7 @@ namespace builtins
         return _begin +
                std::min(0L, _step * ((_end - _begin + _step + 1) / _step));
     }
-  }
+  } // namespace
 
   xrange_iterator::xrange_iterator(long v, long s) : value_(v), step_(s)
   {
@@ -102,7 +102,7 @@ namespace builtins
   {
     return {begin_ - step_, -step_};
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

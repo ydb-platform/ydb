@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         auto source = BuildSource(topicName);
         StartSession(ReadActorId1, source);
 
-        const std::vector<TString> data = { Json1, Json2 }; // offset 0, 1
+        const std::vector<TString> data = { Json1, Json2, Json3 }; // offset 0, 1, 2
         PQWrite(data, topicName);
         ExpectNewDataArrived({ReadActorId1});
         ExpectMessageBatch(ReadActorId1, data);
@@ -341,11 +341,11 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(ReadActorId2, source, 1);
         ExpectNewDataArrived({ReadActorId2});
 
-        PQWrite({ Json3 }, topicName);
+        PQWrite({ Json4 }, topicName);
         ExpectNewDataArrived({ReadActorId1});
 
-        ExpectMessageBatch(ReadActorId1, { Json3 });
-        ExpectMessageBatch(ReadActorId2, { Json2, Json3 });
+        ExpectMessageBatch(ReadActorId1, { Json4 });
+        ExpectMessageBatch(ReadActorId2, { Json2, Json3, Json4 });
 
         StopSession(ReadActorId1, source);
         StopSession(ReadActorId2, source);

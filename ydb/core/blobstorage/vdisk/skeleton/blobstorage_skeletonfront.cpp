@@ -42,12 +42,12 @@ namespace NKikimr {
     TEvFrontRecoveryStatus::TEvFrontRecoveryStatus(EPhase phase,
             NKikimrProto::EReplyStatus status,
             const TIntrusivePtr<TPDiskParams> &dsk,
-            ui32 minREALHugeBlobInBytes,
+            ui32 minHugeBlobInBytes,
             TVDiskIncarnationGuid vdiskIncarnationGuid)
         : Phase(phase)
         , Status(status)
         , Dsk(dsk)
-        , MinREALHugeBlobInBytes(minREALHugeBlobInBytes)
+        , MinHugeBlobInBytes(minHugeBlobInBytes)
         , VDiskIncarnationGuid(vdiskIncarnationGuid)
     {}
 
@@ -816,7 +816,7 @@ namespace NKikimr {
                         TBlobStorageGroupType type = (GInfo ? GInfo->Type : TErasureType::ErasureNone);
                         VCtx->UpdateCostModel(std::make_unique<TCostModel>(msg->Dsk->SeekTimeUs, msg->Dsk->ReadSpeedBps,
                             msg->Dsk->WriteSpeedBps, msg->Dsk->ReadBlockSize, msg->Dsk->WriteBlockSize,
-                            msg->MinREALHugeBlobInBytes, type));
+                            msg->MinHugeBlobInBytes, type));
                         break;
                     }
                     case TEvFrontRecoveryStatus::SyncGuidRecoveryDone:
@@ -831,7 +831,7 @@ namespace NKikimr {
         void Handle(TEvMinHugeBlobSizeUpdate::TPtr &ev) {
             VCtx->UpdateCostModel(std::make_unique<TCostModel>(VCtx->CostModel->SeekTimeUs, VCtx->CostModel->ReadSpeedBps,
                 VCtx->CostModel->WriteSpeedBps, VCtx->CostModel->ReadBlockSize, VCtx->CostModel->WriteBlockSize,
-                ev->Get()->MinREALHugeBlobInBytes, VCtx->CostModel->GType));
+                ev->Get()->MinHugeBlobInBytes, VCtx->CostModel->GType));
         }
 
         static NKikimrWhiteboard::EFlag ToLightSignal(NKikimrWhiteboard::EVDiskState st) {

@@ -482,7 +482,7 @@ class HttpClient(Client):
         See BaseClient doc_string for this method
         """
         body, params, fields = self._prep_raw_query(query, parameters, settings, fmt, use_database, external_data)
-        return self._raw_request(body, params, fields=fields, stream=True)
+        return self._raw_request(body, params, fields=fields, stream=True, server_wait=False)
 
     def _prep_raw_query(self, query: str,
                         parameters: Optional[Union[Sequence, Dict[str, Any]]],

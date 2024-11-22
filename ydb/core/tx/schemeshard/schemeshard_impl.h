@@ -59,6 +59,10 @@
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/filestore/core/filestore.h>
 
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/blob_depot/events.h>
+
 #include <ydb/library/login/login.h>
 
 #include <util/generic/ptr.h>
@@ -1070,7 +1074,7 @@ public:
 
     void Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TActorContext &ctx);
 
-    void Handle(TEvPersQueue::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvProposeTransactionAttachResult::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);

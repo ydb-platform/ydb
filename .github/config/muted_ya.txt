@@ -56,7 +56,6 @@ ydb/core/kqp/ut/scheme [*/*]+chunk+chunk
 ydb/core/kqp/ut/service KqpService.CloseSessionsWithLoad
 ydb/core/kqp/ut/service [*/*] chunk chunk
 ydb/core/kqp/ut/service [*/*]+chunk+chunk
-ydb/core/kqp/ut/spilling KqpScanSpilling.SelfJoinQueryService
 ydb/core/mind/hive/ut THiveTest.DrainWithHiveRestart
 ydb/core/persqueue/ut TPQTest.TestReadAndDeleteConsumer
 ydb/core/persqueue/ut [*/*] chunk chunk
@@ -80,7 +79,6 @@ ydb/library/yql/providers/generic/connector/tests/datasource/clickhouse test.py.
 ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[constant-dqrun]
 ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[primitives-dqrun]
 ydb/library/yql/providers/generic/connector/tests/datasource/ms_sql_server test.py.test_select_positive[primitives-kqprun]
-ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[constant-kqprun]
 ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[primitives-dqrun]
 ydb/library/yql/providers/generic/connector/tests/datasource/mysql test.py.test_select_positive[primitives-kqprun]
 ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_positive[PRIMITIVES-dqrun]
@@ -89,7 +87,6 @@ ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_se
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[primitive_types-kqprun]
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch_ch-dqrun]
 ydb/library/yql/tests/sql/hybrid_file/part1 test.py.test[in-in_noansi_join--Debug]
-ydb/public/sdk/cpp/client/ydb_topic/ut BasicUsage.ReadSessionCorrectClose
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*] chunk chunk
 ydb/public/sdk/cpp/client/ydb_topic/ut [*/*]+chunk+chunk
 ydb/services/datastreams/ut DataStreams.TestPutRecordsCornerCases
@@ -139,7 +136,6 @@ ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_hop_alloc[v1]
 ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
-ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_start_new_query
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
 ydb/tests/fq/yt/kqp_yt_file/part18 test.py.test[pg-join_brackets2-default.txt]

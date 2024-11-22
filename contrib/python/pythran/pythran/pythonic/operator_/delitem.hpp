@@ -3,8 +3,8 @@
 
 #include "pythonic/include/operator_/delitem.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/builtins/None.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -17,7 +17,7 @@ namespace operator_
     std::forward<A>(a).remove(std::forward<B>(b));
     return builtins::None;
   }
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

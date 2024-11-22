@@ -13,7 +13,7 @@ namespace builtins
   types::file open(types::str const &filename, types::str const &strmode = "r");
 
   DEFINE_FUNCTOR(pythonic::builtins, open);
-}
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

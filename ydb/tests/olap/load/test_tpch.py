@@ -73,10 +73,7 @@ class TestTpch100(TpchSuiteBase):
 class TestTpch1000(TpchSuiteBase):
     scale: int = 1000
     check_canonical: bool = False
-    timeout = max(TpchSuiteBase.timeout, 1000.)
-    query_settings = {
-        9: LoadSuiteBase.QuerySettings(timeout=max(TpchSuiteBase.timeout, 3600.)),
-    }
+    timeout = max(TpchSuiteBase.timeout, 3600.)
 
 
 class TestTpch10000(TpchSuiteBase):

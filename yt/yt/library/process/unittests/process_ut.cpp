@@ -209,6 +209,9 @@ TEST(TProcessTest, KillFinished)
 
 TEST(TProcessTest, KillZombie)
 {
+    // TODO(arkady-e1ppa): This code is for debugging test failures purposes
+    // remove it when investigation is complete.
+    ::signal(SIGCHLD, SIG_DFL);
     auto p = New<TSimpleProcess>("/bin/bash");
     p->AddArgument("-c");
     p->AddArgument("/bin/sleep 1; /bin/true");

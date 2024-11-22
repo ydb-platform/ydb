@@ -78,6 +78,7 @@ struct TRowDispatcherReadActorMetrics {
         auto sink = SubGroup->GetSubgroup("tx_id", TxId);
         auto task = sink->GetSubgroup("task_id", ToString(taskId));
         InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
+        InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
     }
 
     ~TRowDispatcherReadActorMetrics() {
@@ -88,6 +89,7 @@ struct TRowDispatcherReadActorMetrics {
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounterPtr SubGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyGetNextBatch;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
 };
 
 struct TEvPrivate {
@@ -140,6 +142,7 @@ private:
     TRowDispatcherReadActorMetrics Metrics;
     bool SchedulePrintStatePeriod = false;
     bool ProcessStateScheduled = false;
+    bool InFlyAsyncInputData = false;
 
     struct SessionInfo {
         enum class ESessionStatus {
@@ -248,6 +251,7 @@ public:
     template <class TEventPtr>
     bool CheckSession(SessionInfo& session, const TEventPtr& ev, ui64 partitionId);
     void SendStopSession(const NActors::TActorId& recipient, ui64 partitionId, ui64 cookie);
+    void NotifyCA();
 };
 
 TDqPqRdReadActor::TDqPqRdReadActor(
@@ -388,6 +392,8 @@ void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
 
 i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& /*watermark*/, bool&, i64 freeSpace) {
     SRC_LOG_T("GetAsyncInputData freeSpace = " << freeSpace);
+    Metrics.InFlyAsyncInputData->Set(0);
+    InFlyAsyncInputData = false;
 
     ProcessState();
     if (ReadyBuffer.empty() || !freeSpace) {
@@ -414,7 +420,7 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     SRC_LOG_T("Return " << buffer.RowCount() << " rows, buffer size " << ReadyBufferSizeBytes << ", free space " << freeSpace << ", result size " << usedSpace);
 
     if (!ReadyBuffer.empty()) {
-        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        NotifyCA();
     }
     for (auto& [partitionId, sessionInfo] : Sessions) {
         TrySendGetNextBatch(sessionInfo);
@@ -591,7 +597,7 @@ void TDqPqRdReadActor::ReInit(const TString& reason) {
     Sessions.clear();
     State = EState::INIT;
     if (!ReadyBuffer.empty()) {
-        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        NotifyCA();
     }
     PrintInternalState();
 }
@@ -691,7 +697,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     ReadyBufferSizeBytes += bytes;
     activeBatch.NextOffset = ev->Get()->Record.GetNextMessageOffset();
     sessionInfo.IsWaitingMessageBatch = false;
-    Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+    NotifyCA();
 }
 
 std::pair<NUdf::TUnboxedValuePod, i64> TDqPqRdReadActor::CreateItem(const TString& data) {
@@ -736,10 +742,10 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvPrintState::TPtr&) {
 
 void TDqPqRdReadActor::PrintInternalState() {
     TStringStream str;
-    str << "State:\n";
+    str << "State: used buffer size " << ReadyBufferSizeBytes << " ready buffer event size " << ReadyBuffer.size()  << " state " << static_cast<ui64>(State) << " InFlyAsyncInputData " << InFlyAsyncInputData << "\n";
     for (auto& [partitionId, sessionInfo] : Sessions) {
         str << "   partId " << partitionId << " status " << static_cast<ui64>(sessionInfo.Status)
-            << " next offset " << sessionInfo.NextOffset << " used buffer size " << ReadyBufferSizeBytes
+            << " next offset " << sessionInfo.NextOffset
             << " is waiting ack " << sessionInfo.IsWaitingStartSessionAck << " is waiting batch " << sessionInfo.IsWaitingMessageBatch
             << " has pending data " << sessionInfo.HasPendingData << " connection id " << sessionInfo.Generation << " ";
         sessionInfo.EventsQueue.PrintInternalState(str);
@@ -787,6 +793,12 @@ void TDqPqRdReadActor::SendStopSession(const NActors::TActorId& recipient, ui64 
     *event->Record.MutableSource() = SourceParams;
     event->Record.SetPartitionId(partitionId);
     Send(recipient, event.release(), 0, cookie);
+}
+
+void TDqPqRdReadActor::NotifyCA() {
+    Metrics.InFlyAsyncInputData->Set(1);
+    InFlyAsyncInputData = true;
+    Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
 }
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(

@@ -203,11 +203,18 @@ namespace NKikimr::NStorage {
 
         vdiskConfig->FeatureFlags = Cfg->FeatureFlags;
 
-        if (StorageConfig.HasBlobStorageConfig() && StorageConfig.GetBlobStorageConfig().HasVDiskPerformanceSettings()) {
-            for (auto &type : StorageConfig.GetBlobStorageConfig().GetVDiskPerformanceSettings().GetVDiskTypes()) {
-                if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
-                    if (type.HasMinHugeBlobSizeInBytes()) {
-                        vdiskConfig->MinHugeBlobInBytes = type.GetMinHugeBlobSizeInBytes();
+        if (StorageConfig.HasBlobStorageConfig()) {
+            const auto& bsConfig = StorageConfig.GetBlobStorageConfig();
+            if (bsConfig.HasVDiskPerformanceSettings()) {
+                const auto& vdiskPerf = bsConfig.GetVDiskPerformanceSettings();
+                for (const auto& type : vdiskPerf.GetVDiskTypes()) {
+                    if (type.HasPDiskType() && deviceType == PDiskTypeToPDiskType(type.GetPDiskType())) {
+                        if (type.HasMinHugeBlobSizeInBytes()) {
+                            vdiskConfig->MinHugeBlobInBytes = type.GetMinHugeBlobSizeInBytes();
+                        }
+                        for (ui32 extra : type.GetExtraHugeSlotsForBlobSize()) {
+                            vdiskConfig->ExtraHugeSlots.push_back(extra);
+                        }
                     }
                 }
             }

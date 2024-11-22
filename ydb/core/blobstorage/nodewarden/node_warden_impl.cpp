@@ -1120,6 +1120,18 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         }
     }
 
+    if (bsFrom.HasVDiskPerformanceSettings()) {
+        bsTo->MutableVDiskPerformanceSettings()->CopyFrom(bsFrom.GetVDiskPerformanceSettings());
+    } else {
+        bsTo->ClearVDiskPerformanceSettings();
+    }
+
+    if (bsFrom.HasVDiskBalancingConfig()) {
+        bsTo->MutableVDiskBalancingConfig()->CopyFrom(bsFrom.GetVDiskBalancingConfig());
+    } else {
+        bsTo->ClearVDiskBalancingConfig();
+    }
+
     // copy nameservice-related things
     if (!appConfig.HasNameserviceConfig()) {
         *errorReason = "origin config missing mandatory NameserviceConfig section";

@@ -1,5 +1,8 @@
 #include "blobstorage_hullhugeheap.h"
 
+#include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
+
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <ranges>
@@ -388,7 +391,9 @@ namespace NKikimr {
                 ui32 minHugeBlobInBytes,
                 ui32 milestoneBlobInBytes,
                 ui32 maxBlobInBytes,
-                ui32 overhead)
+                ui32 overhead,
+                const TVDiskConfig *vdiskConfig,
+                TBlobStorageGroupType gtype)
             : VDiskLogPrefix(vdiskLogPrefix)
             , ChunkSize(chunkSize)
             , AppendBlockSize(appendBlockSize)
@@ -405,7 +410,7 @@ namespace NKikimr {
                             << " MilestoneBlobInBytes# " << MilestoneBlobInBytes << " ChunkSize# " << ChunkSize
                             << " AppendBlockSize# " << AppendBlockSize << ")");
 
-            BuildChains();
+            BuildChains(vdiskConfig, gtype);
         }
 
         TChain *TAllChains::GetChain(ui32 size) {
@@ -592,7 +597,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TAllChains: Private
         ////////////////////////////////////////////////////////////////////////////
-        void TAllChains::BuildChains() {
+        void TAllChains::BuildChains(const TVDiskConfig *vdiskConfig, TBlobStorageGroupType gtype) {
             const ui32 startBlocks = MinHugeBlobInBlocks;
             const ui32 milestoneBlocks = MilestoneBlobInBytes / AppendBlockSize;
             const ui32 endBlocks = MaxHugeBlobInBlocks;
@@ -600,10 +605,33 @@ namespace NKikimr {
             NPrivate::TChainLayoutBuilder builder(startBlocks, milestoneBlocks, endBlocks, Overhead);
             const ui32 blocksInChunk = ChunkSize / AppendBlockSize;
 
+            std::vector<ui32> slotSizes;
+
             for (auto x : builder.GetLayout()) {
-                const ui32 slotSizeInBlocks = x.Right;
-                const ui32 slotSize = slotSizeInBlocks * AppendBlockSize;
-                const ui32 slotsInChunk = blocksInChunk / slotSizeInBlocks;
+                slotSizes.push_back(AppendBlockSize * x.Right /* slot size in blocks */);
+            }
+
+            if (vdiskConfig) {
+                for (ui32 blobSize : vdiskConfig->ExtraHugeSlots) {
+                    // maximum part size for specified user blob size
+                    const ui32 partSize = gtype.MaxPartSize(TBlobStorageGroupType::CrcModeNone, blobSize);
+                    // add header size
+                    const ui32 partSizeWithHeader = partSize + (vdiskConfig->AddHeader ? TDiskBlob::HeaderSize : 0);
+                    // calculate number of slots in chunk with part size aligned up to block size
+                    const ui32 aligned = partSizeWithHeader + AppendBlockSize - 1;
+                    const ui32 slotsInChunk = ChunkSize / (aligned - aligned % AppendBlockSize);
+                    // calculate optimal slot size
+                    slotSizes.push_back(blocksInChunk / slotsInChunk * AppendBlockSize);
+                }
+            }
+
+            std::ranges::sort(slotSizes);
+            const auto [begin, end] = std::ranges::unique(slotSizes);
+            slotSizes.erase(begin, end);
+
+            for (ui32 slotSize : slotSizes) {
+                Y_DEBUG_ABORT_UNLESS(slotSize % AppendBlockSize == 0);
+                const ui32 slotsInChunk = blocksInChunk / (slotSize / AppendBlockSize);
                 Chains.emplace_back(VDiskLogPrefix, slotsInChunk, slotSize);
             }
 
@@ -658,12 +686,14 @@ namespace NKikimr {
                 ui32 mileStoneBlobInBytes,
                 ui32 maxBlobInBytes,
                 ui32 overhead,
-                ui32 freeChunksReservation)
+                ui32 freeChunksReservation,
+                const TVDiskConfig *vdiskConfig,
+                TBlobStorageGroupType gtype)
             : VDiskLogPrefix(vdiskLogPrefix)
             , FreeChunksReservation(freeChunksReservation)
             , FreeChunks()
             , Chains(vdiskLogPrefix, chunkSize, appendBlockSize, minHugeBlobInBytes, mileStoneBlobInBytes,
-                maxBlobInBytes, overhead)
+                maxBlobInBytes, overhead, vdiskConfig, gtype)
         {}
 
         //////////////////////////////////////////////////////////////////////////////////////////

@@ -301,6 +301,7 @@ message TBlobStorageConfig {
     message TVDiskPerformanceConfig {
         optional NKikimrBlobStorage.EPDiskType PDiskType = 1;
         optional uint32 MinHugeBlobSizeInBytes = 4;
+        repeated uint32 ExtraHugeSlotsForBlobSize = 5;
     }
 
     message TVDiskPerformanceSettings {

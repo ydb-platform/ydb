@@ -11,6 +11,8 @@
 
 namespace NKikimr {
 
+    struct TVDiskConfig;
+
     namespace NHuge {
 
         // private structures
@@ -184,7 +186,9 @@ namespace NKikimr {
                 ui32 minHugeBlobInBytes,
                 ui32 milestoneBlobInBytes,
                 ui32 maxBlobInBytes,
-                ui32 overhead);
+                ui32 overhead,
+                const TVDiskConfig *vdiskConfig,
+                TBlobStorageGroupType gtype);
             // return a pointer to corresponding chain delegator by object byte size
             TChain *GetChain(ui32 size);
             const TChain *GetChain(ui32 size) const;
@@ -203,7 +207,7 @@ namespace NKikimr {
             void FinishRecovery();
 
         private:
-            void BuildChains();
+            void BuildChains(const TVDiskConfig *vdiskConfig, TBlobStorageGroupType gtype);
             void BuildSearchTable();
             inline ui32 SizeToBlocks(ui32 size) const;
 
@@ -247,7 +251,9 @@ namespace NKikimr {
                 ui32 maxBlobInBytes,
                 // difference between buckets is 1/overhead
                 ui32 overhead,
-                ui32 freeChunksReservation);
+                ui32 freeChunksReservation,
+                const TVDiskConfig *vdiskConfig,
+                TBlobStorageGroupType gtype);
 
 
             ui32 SlotNumberOfThisSize(ui32 size) const {

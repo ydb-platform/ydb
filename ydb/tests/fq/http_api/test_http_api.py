@@ -121,7 +121,7 @@ class TestHttpApi(TestBase):
             assert resp.status_code == 404
 
             resp = client.restart_query(query_id="snova nevalidno")
-            assert resp.status_code == 404s
+            assert resp.status_code == 404
 
     def test_warning(self):
         with self.create_client() as client:

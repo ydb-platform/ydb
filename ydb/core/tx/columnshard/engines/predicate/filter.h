@@ -88,4 +88,32 @@ public:
     }
 };
 
-}
+class IScanCursor {
+public:
+};
+
+class TSimpleScanCursor: public IScanCursor {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PrimaryKey);
+    YDB_READONLY(ui64, PortionId, 0);
+    YDB_READONLY(ui32, RecordIndex, 0);
+
+public:
+    TSimpleScanCursor(const std::shared_ptr<arrow::RecordBatch>& pk, const ui64 portionId, const ui32 recordIndex)
+        : PrimaryKey(pk)
+        , PortionId(portionId)
+        , RecordIndex(recordIndex) {
+    }
+};
+
+class TPlainScanCursor: public IScanCursor {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PrimaryKey);
+
+public:
+    TPlainScanCursor(const std::shared_ptr<arrow::RecordBatch>& pk)
+        : PrimaryKey(pk) {
+    }
+};
+
+}   // namespace NKikimr::NOlap

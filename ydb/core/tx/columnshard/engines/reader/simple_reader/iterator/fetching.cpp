@@ -338,10 +338,10 @@ public:
 
 TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto context = source->GetContext();
-    NArrow::TGeneralContainer::TTableConstructionContext context;
-    context.SetColumnNames(context->GetProgramInputColumns()->GetColumnNamesVector());
-    context.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
-    auto resultBatch = source->GetStageResult().GetBatch().BuildTableVerified(context);
+    NArrow::TGeneralContainer::TTableConstructionContext contextTableConstruct;
+    contextTableConstruct.SetColumnNames(context->GetProgramInputColumns()->GetColumnNamesVector());
+    contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
+    auto resultBatch = source->GetStageResult().GetBatch().BuildTableVerified(contextTableConstruct);
     AFL_VERIFY((ui32)resultBatch->num_columns() == context->GetProgramInputColumns()->GetColumnNamesVector().size());
     if (auto filter = source->GetStageResult().GetNotAppliedFilter()) {
         AFL_VERIFY(filter->Apply(resultBatch, StartIndex, RecordsCount));
@@ -354,13 +354,13 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
 }
 
 TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    std::shared_ptr<TFetchingScript> plan;
+    source->Finalize();
     source->InitPages(NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
-    plan = std::make_shared<TFetchingScript>(*this);
+    std::shared_ptr<TFetchingScript> plan = std::make_shared<TFetchingScript>(*source->GetContext());
     if (source->IsSourceInMemory()) {
         AFL_VERIFY(source->GetStageResult().GetPagesToResultVerified().size() == 1);
     }
-    for (auto&& i : source->GetReadPagesVerified()) {
+    for (auto&& i : source->GetStageResult().GetReadPagesVerified()) {
         if (!source->GetContext()->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
                 source->GetSourceId(), i.GetStartIndex(), i.GetRecordsCount())) {
             continue;

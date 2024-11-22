@@ -96,6 +96,8 @@ public:
         };
     };
 
+    virtual std::shared_ptr<arrow::RecordBatch> GetStartPKRecordBatch() const = 0;
+
     void InitPages(const ui64 memoryLimit) {
         AFL_VERIFY(StageData);
         const auto& accessor = StageData->GetPortionAccessor();
@@ -320,6 +322,10 @@ private:
 public:
     virtual ui64 PredictAccessorsSize() const override {
         return Portion->GetApproxChunksCount(GetContext()->GetCommonContext()->GetReadMetadata()->GetResultSchema()->GetColumnsCount()) * sizeof(TColumnRecord);
+    }
+
+    virtual std::shared_ptr<arrow::RecordBatch> GetStartPKRecordBatch() const override {
+        return Portion->GetMeta().GetFirstLastPK().GetBatch()->Slice(0, 1);
     }
 
     virtual bool DoAddTxConflict() override {

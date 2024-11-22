@@ -19,7 +19,7 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
             break;
         }
         auto table = (*FetchingSources.begin())->MutableStageResult().ExtractResultChunk();
-        auto cursor = std::make_shared<TSimpleScanCursor>(frontSource->GetStart(), frontSource->GetSourceId(), startIndex + recordsCount);
+        auto cursor = std::make_shared<TSimpleScanCursor>(frontSource->GetStartPKRecordBatch(), frontSource->GetSourceId(), startIndex + recordsCount);
         reader.OnIntervalResult(std::make_shared<TPartialReadResult>(nullptr, nullptr, table, cursor, source->GetSourceIdx()));
         if ((*FetchingSources.begin())->GetStageResult().IsFinished()) {
             FetchingSources.erase(FetchingSources.begin());

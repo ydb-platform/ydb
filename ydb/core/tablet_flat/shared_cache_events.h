@@ -21,6 +21,7 @@ namespace NKikimr::NSharedCache {
         EvUnregister,
         EvInvalidate,
         EvAttach,
+        EvSaveCompactedPages,
         EvRequest,
         EvResult,
         EvUpdated,
@@ -54,13 +55,25 @@ namespace NKikimr::NSharedCache {
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TActorId Owner;
-        TVector<TIntrusivePtr<TPage>> Pages;
 
         TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TActorId owner)
             : PageCollection(std::move(pageCollection))
             , Owner(owner)
         {
             Y_ABORT_UNLESS(Owner, "Cannot send request with empty owner");
+        }
+    };
+
+    // Note: compacted pages do not have an owner yet
+    // at first they should be accepted by executor
+    // and it will send TEvAttach itself whe a compaction result is applied
+    struct TEvSaveCompactedPages : public TEventLocal<TEvSaveCompactedPages, EvSaveCompactedPages> {
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<TIntrusivePtr<TPage>> Pages;
+
+        TEvSaveCompactedPages(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
+            : PageCollection(std::move(pageCollection))
+        {
         }
     };
 

@@ -397,13 +397,20 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         const auto &pageCollection = *msg->PageCollection;
         const TLogoBlobID metaId = pageCollection.Label();
 
-        if (!msg->Pages) {
-            AttachCollection(metaId, pageCollection, msg->Owner);
-            return;
-        }
+        AttachCollection(metaId, pageCollection, msg->Owner);
+    }
 
-        Y_ABORT_IF(Collections.contains(metaId), "Only new collections may have pages");
-        TCollection &collection = AttachCollection(metaId, pageCollection, msg->Owner);
+    void Handle(NSharedCache::TEvSaveCompactedPages::TPtr &ev) {
+        NSharedCache::TEvSaveCompactedPages *msg = ev->Get();
+        const auto &pageCollection = *msg->PageCollection;
+        const TLogoBlobID metaId = pageCollection.Label();
+
+        Y_ABORT_UNLESS(metaId);
+        Y_ABORT_IF(Collections.contains(metaId), "Only new collections can save their pages");
+        TCollection &collection = Collections[metaId];
+        collection.MetaId = metaId;
+        collection.PageMap.resize(pageCollection.Total());
+
         for (auto &page : msg->Pages) {
             Y_ABORT_UNLESS(page->PageId < collection.PageMap.size());
 
@@ -1238,6 +1245,7 @@ public:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NSharedCache::TEvAttach, Handle);
+            hFunc(NSharedCache::TEvSaveCompactedPages, Handle);
             hFunc(NSharedCache::TEvRequest, Handle);
             hFunc(NSharedCache::TEvTouch, Handle);
             hFunc(NSharedCache::TEvUnregister, Handle);

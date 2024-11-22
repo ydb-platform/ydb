@@ -178,11 +178,44 @@ class TFetchedResult {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotAppliedFilter);
+    std::optional<std::vector<TPortionDataAccessor::TReadPage>> PagesToResult;
+    std::optional<std::shared_ptr<arrow::Table>> ChunkToReply;
 
 public:
     TFetchedResult(std::unique_ptr<TFetchedData>&& data)
         : Batch(data->GetTable())
         , NotAppliedFilter(data->GetNotAppliedFilter()) {
+    }
+
+    const std::vector<TPortionDataAccessor::TReadPage>& GetPagesToResultVerified() const {
+        AFL_VERIFY(PagesToResult);
+        return *PagesToResult;
+    }
+
+    void SetPages(std::vector<TPortionDataAccessor::TReadPage>&& pages) {
+        AFL_VERIFY(!PagesToResult);
+        PagesToResult = std::move(pages);
+    }
+
+    void SetResultChunk(std::shared_ptr<arrow::Table>&& table, const ui32 startIndex, const ui32 recordsCount) {
+        auto& pages = GetPagesToResultVerified();
+        AFL_VERIFY(pages.size());
+        AFL_VERIFY(pages.front().GetStartIndex() == startIndex)("real", pages.front().GetStartIndex())("expected", startIndex);
+        AFL_VERIFY(pages.front().GetRecordsCount() == recordsCount)("real", pages.front().GetRecordsCount())("expected", recordsCount);
+        pages.pop_front();
+        AFL_VERIFY(!ChunkToReply);
+        ChunkToReply = std::move(table);
+    }
+
+    bool HasResultChunk() const {
+        return !!ChunkToReply;
+    }
+
+    std::shared_ptr<arrow::Table> ExtractResultChunk() {
+        AFL_VERIFY(!!ChunkToReply);
+        auto result = std::move(*ChunkToReply);
+        ChunkToReply.reset();
+        return result;
     }
 
     bool IsEmpty() const {

@@ -1,6 +1,5 @@
 #pragma once
 #include "source.h"
-#include "interval.h"
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
@@ -23,19 +22,6 @@ public:
     }
 };
 
-class TIntervalStat {
-private:
-    YDB_READONLY(ui32, SourcesCount, 0);
-    YDB_READONLY(bool, IsPoint, false);
-public:
-    TIntervalStat(const ui32 sourcesCount, const bool isPoint)
-        : SourcesCount(sourcesCount)
-        , IsPoint(isPoint)
-    {
-
-    }
-};
-
 class TScanHead {
 private:
     std::shared_ptr<TSpecialReadContext> Context;
@@ -46,39 +32,32 @@ private:
     ui64 InFlightLimit = 1;
     ui64 MaxInFlight = 256;
     ui64 ZeroCount = 0;
-    void DrainSources();
-    [[nodiscard]] TConclusionStatus DetectSourcesFeatureInContextIntervalScan(const THashMap<ui32, std::shared_ptr<IDataSource>>& intervalSources, const bool isExclusiveInterval) const;
 public:
-    void OnSentDataFromInterval(const ui32 intervalIdx) const {
-        if (Context->IsAborted()) {
-            return;
-        }
-        auto it = FetchingIntervals.find(intervalIdx);
-        AFL_VERIFY(it != FetchingIntervals.end())("interval_idx", intervalIdx)("count", FetchingIntervals.size());
-        it->second->OnPartSendingComplete();
-    }
 
     bool IsReverse() const;
     void Abort();
 
     bool IsFinished() const {
-        return BorderPoints.empty() && FetchingIntervals.empty();
+        return FetchingSources.empty() && SortedSources.empty();
     }
 
     const TReadContext& GetContext() const;
 
     TString DebugString() const {
         TStringBuilder sb;
-        for (auto&& i : IntervalStats) {
-            sb << (i.GetIsPoint() ? "^" : "") << i.GetSourcesCount() << ";";
+        sb << "S:";
+        for (auto&& i : SortedSources) {
+            sb << i->GetSourceId() << ";";
+        }
+        sb << "F:";
+        for (auto&& i : FetchingSources) {
+            sb << i->GetSourceId() << ";";
         }
         return sb;
     }
 
-    void OnIntervalResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard,
-        const std::optional<NArrow::TShardedRecordBatch>& batch,
-        const std::shared_ptr<arrow::RecordBatch>& lastPK, std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger,
-        const ui32 intervalIdx, TPlainReadData& reader);
+    void OnSourceReady(const std::shared_ptr<IDataSource>& source, std::shared_ptr<arrow::Table>&& table, const ui32 startIndex,
+        const ui32 recordsCount, TPlainReadData& reader);
 
     TConclusionStatus Start();
 

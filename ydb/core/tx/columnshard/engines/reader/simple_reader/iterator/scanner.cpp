@@ -7,62 +7,25 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-void TScanHead::OnSourceResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& allocationGuard,
-    const std::optional<NArrow::TShardedRecordBatch>& newBatch, const std::shared_ptr<arrow::RecordBatch>& lastPK,
-    std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, const ui32 intervalIdx, TPlainReadData& reader) {
-    if (Context->GetReadMetadata()->Limit && (!newBatch || newBatch->GetRecordsCount() == 0) && InFlightLimit < MaxInFlight) {
-        InFlightLimit = std::min<ui32>(MaxInFlight, InFlightLimit * 4);
-    }
-    auto itInterval = FetchingIntervals.find(intervalIdx);
-    AFL_VERIFY(itInterval != FetchingIntervals.end());
-    itInterval->second->SetMerger(std::move(merger));
-    AFL_VERIFY(Context->GetCommonContext()->GetReadMetadata()->IsSorted());
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result_received")("interval_idx", intervalIdx)(
-        "intervalId", itInterval->second->GetIntervalId());
-    if (newBatch && newBatch->GetRecordsCount()) {
-        std::optional<ui32> callbackIdxSubscriber;
-        std::shared_ptr<NGroupedMemoryManager::TGroupGuard> gGuard;
-        if (itInterval->second->HasMerger()) {
-            callbackIdxSubscriber = intervalIdx;
-        } else {
-            gGuard = itInterval->second->GetGroupGuard();
-        }
-        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, std::make_shared<TPartialReadResult>(std::move(allocationGuard), std::move(gGuard), *newBatch, lastPK, callbackIdxSubscriber)).second);
-    } else {
-        AFL_VERIFY(ReadyIntervals.emplace(intervalIdx, nullptr).second);
-    }
-    Y_ABORT_UNLESS(FetchingIntervals.size());
-    while (FetchingIntervals.size()) {
-        const auto interval = FetchingIntervals.begin()->second;
-        const ui32 intervalIdx = interval->GetIntervalIdx();
-        auto it = ReadyIntervals.find(intervalIdx);
-        if (it == ReadyIntervals.end()) {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result_absent")("interval_idx", intervalIdx)(
-                "merger", interval->HasMerger())("interval_id", interval->GetIntervalId());
+void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::shared_ptr<arrow::Table>&& table, const ui32 startIndex,
+    const ui32 recordsCount, TPlainReadData& reader) {
+    source->MutableStageResult().SetResultChunk(std::move(table), startIndex, recordsCount);
+    while (FetchingSources.size()) {
+        auto& frontSource = *FetchingSources.begin();
+        if (!frontSource->HasStageResult()) {
             break;
-        } else {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_result")("interval_idx", intervalIdx)("count",
-                it->second ? it->second->GetRecordsCount() : 0)("merger", interval->HasMerger())("interval_id", interval->GetIntervalId());
         }
-        auto result = it->second;
-        ReadyIntervals.erase(it);
-        if (result) {
-            reader.OnIntervalResult(result);
-        }
-        if (!interval->HasMerger()) {
-            FetchingIntervals.erase(FetchingIntervals.begin());
-        } else if (result) {
+        if (!frontSource->GetStageResult().HasResultChunk()) {
             break;
-        } else {
-            interval->OnPartSendingComplete();
         }
-    }
-    if (FetchingIntervals.empty()) {
-        AFL_VERIFY(ReadyIntervals.empty());
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "intervals_finished");
-    } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "wait_interval")("remained", FetchingIntervals.size())(
-            "interval_idx", FetchingIntervals.begin()->first);
+        auto table = (*FetchingSources.begin())->MutableStageResult().ExtractResultChunk();
+        std::make_shared<TSimpleScanCursor> cursor(frontSource->GetStart(), frontSource->GetSourceId(), startIndex + recordsCount);
+        reader.OnIntervalResult(std::make_shared<TPartialReadResult>(nullptr, nullptr, table, cursor, source->GetSourceIdx()));
+        if ((*FetchingSources.begin())->IsFinished()) {
+            FetchingSources.erase(FetchingSources.begin());
+        } else {
+            break;
+        }
     }
 }
 
@@ -98,9 +61,9 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
         return false;
     }
     while (SortedSources.size() && FetchingSources.size() < InFlightLimit) {
-        SortedSources.front()->Start(SortedSources.front());
-        FetchingSources.emplace(SortedSources.front());
-        SortedSources.pop_front();
+        (*SortedSources.begin())->Start(*SortedSources.begin());
+        FetchingSources.emplace(*SortedSources.begin());
+        SortedSources.erase(SortedSources.begin());
         return true;
     }
     return false;

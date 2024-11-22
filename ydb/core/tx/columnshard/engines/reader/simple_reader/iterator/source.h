@@ -27,8 +27,26 @@ class TPlainReadData;
 class IFetchTaskConstructor;
 class IFetchingStep;
 
+class TPortionPage {
+private:
+    YDB_READONLY(ui32, StartIndex, 0);
+    YDB_READONLY(ui32, RecordsCount, 0);
+    YDB_READONLY(ui64, MemoryBytes, 0);
+    YDB_ACCESSOR_DEF(std::shared_ptr<arrow::Table>, Result);
+
+public:
+    TPortionPage(const ui32 startIndex, const ui32 recordsCount, const ui64 memoryBytes)
+        : StartIndex(startIndex)
+        , RecordsCount(recordsCount)
+        , MemoryBytes(memoryBytes)
+    {
+
+    }
+};
+
 class IDataSource {
 private:
+    YDB_READONLY(ui32, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);
     YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Start);
     YDB_READONLY_DEF(NArrow::NMerger::TSortableBatchPosition, Finish);
@@ -71,14 +89,21 @@ public:
         bool operator()(const std::shared_ptr<IDataSource>& l, const std::shared_ptr<IDataSource>& r) {
             const std::partial_ordering compareResult = l->GetStart().Compare(r->GetStart());
             if (compareResult == std::partial_ordering::equivalent) {
-                return l->GetSourceIdx() < r->GetSourceIdx();
+                return l->GetSourceId() < r->GetSourceId();
             } else {
                 return compareResult == std::partial_ordering::less;
             }
         };
     };
 
-    void Start(const std::shared_ptr<IDataSource>& sourcePtr);
+    void InitPages(const ui64 memoryLimit) {
+        AFL_VERIFY(StageData);
+        AFL_VERIFY(!PagesToResult);
+        const auto& accessor = StageData->GetPortionAccessor();
+        StageResult.SetPages(accessor.BuildReadPages(memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
+    }
+
+    void StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr);
     virtual ui64 PredictAccessorsSize() const = 0;
 
     bool StartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
@@ -138,7 +163,16 @@ public:
         return FinishReplaceKey;
     }
 
+    bool HasStageResult() const {
+        return !!StageResult;
+    }
+
     const TFetchedResult& GetStageResult() const {
+        AFL_VERIFY(!!StageResult);
+        return *StageResult;
+    }
+
+    TFetchedResult& MutableStageResult() {
         AFL_VERIFY(!!StageResult);
         return *StageResult;
     }
@@ -226,10 +260,12 @@ public:
         return *StageData;
     }
 
-    IDataSource(const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const NArrow::TReplaceKey& start,
+    IDataSource(const ui32 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
+        const NArrow::TReplaceKey& start,
         const NArrow::TReplaceKey& finish, const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
         const std::optional<ui64> shardingVersion, const bool hasDeletions)
-        : SourceIdx(sourceIdx)
+        : SourceId(sourceId)
+        , SourceIdx(sourceIdx)
         , Start(context->GetReadMetadata()->BuildSortedPosition(start))
         , Finish(context->GetReadMetadata()->BuildSortedPosition(finish))
         , StartReplaceKey(start)

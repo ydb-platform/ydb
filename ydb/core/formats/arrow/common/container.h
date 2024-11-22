@@ -62,8 +62,18 @@ public:
         return Columns[idx];
     }
 
-    std::shared_ptr<arrow::Table> BuildTableVerified(const std::optional<std::set<std::string>>& columnNames = {}) const;
-    std::shared_ptr<arrow::Table> BuildTableOptional(const std::optional<std::set<std::string>>& columnNames = {}) const;
+    class TTableConstructionContext {
+    private:
+        YDB_ACCESSOR_DEF(std::optional<std::set<std::string>>, ColumnNames);
+        YDB_ACCESSOR_DEF(std::optional<ui32>, StartIndex);
+        YDB_ACCESSOR_DEF(std::optional<ui32>, RecordsCount);
+
+    public:
+        TTableConstructionContext() = default;
+    };
+
+    std::shared_ptr<arrow::Table> BuildTableVerified(const TTableConstructionContext& context = Default<TTableConstructionContext>()) const;
+    std::shared_ptr<arrow::Table> BuildTableOptional(const TTableConstructionContext& context = Default<TTableConstructionContext>()) const;
 
     std::shared_ptr<TGeneralContainer> BuildEmptySame() const;
 

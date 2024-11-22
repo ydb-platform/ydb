@@ -1,10 +1,11 @@
 #include "fetching.h"
 #include "source.h"
 
-#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 #include <ydb/core/tx/columnshard/engines/filter.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <yql/essentials/minikql/mkql_terminator.h>
 
@@ -197,9 +198,7 @@ void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(cons
     }
 }
 
-TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(
-    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
-
+TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     ui64 size = PredefinedSize.value_or(0);
     for (auto&& i : Packs) {
         ui32 sizeLocal = source->GetColumnsVolume(i.GetColumns().GetColumnIds(), i.GetMemType());
@@ -212,7 +211,6 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(
         }
         size += sizeLocal;
     }
-
 
     auto allocation = std::make_shared<TFetchingStepAllocation>(source, size, step);
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(source->GetContext()->GetProcessMemoryControlId(),
@@ -302,15 +300,75 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSour
     return false;
 }
 
-TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    if (Columns.GetColumnsCount()) {
-        source->SetSourceInMemory(source->GetColumnRawBytes(Columns.GetColumnIds()) < 1e+8);
-    } else {
-        source->SetSourceInMemory(true);
+namespace {
+class TApplySourceResult: public IDataTasksProcessor::ITask {
+private:
+    using TBase = IDataTasksProcessor::ITask;
+    YDB_READONLY_DEF(std::shared_ptr<arrow::Table>, Result);
+    YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
+    YDB_READONLY(ui32, StartIndex, 0);
+    YDB_READONLY(ui32, OriginalRecordsCount, 0);
+
+public:
+    TString GetTaskClassIdentifier() const override {
+        return "TApplySourceResult";
     }
-    AFL_VERIFY(source->GetStageData().HasPortionAccessor());
-    auto plan = source->GetContext()->GetColumnsFetchingPlan(source);
+
+    TApplySourceResult(const std::shared_ptr<IDataSource>& source, std::shared_ptr<arrow::Table>&& result, const ui32 startIndex,
+        const ui32 originalRecordsCount)
+        : TBase(NActors::TActorId())
+        , Result(result)
+        , Source(source)
+        , OriginalRecordsCount(originalRecordsCount) {
+    }
+
+    virtual TConclusionStatus DoExecuteImpl() override {
+        AFL_VERIFY(false)("event", "not applicable");
+        return TConclusionStatus::Success();
+    }
+    virtual bool DoApply(IDataReader& indexedDataRead) const override {
+        static_cast<TPlainReadData&>(indexedDataRead)
+            .MutableScanner()
+            .OnSourceReady(Source, std::move(Result), StartIndex, OriginalRecordsCount);
+        return true;
+    }
+};
+
+}   // namespace
+
+TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    auto context = source->GetContext();
+    NArrow::TGeneralContainer::TTableConstructionContext context;
+    context.SetColumnNames(context->GetProgramInputColumns()->GetColumnNamesVector());
+    context.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
+    auto resultBatch = source->GetStageResult().GetBatch().BuildTableVerified(context);
+    AFL_VERIFY((ui32)resultBatch->num_columns() == context->GetProgramInputColumns()->GetColumnNamesVector().size());
+    if (auto filter = source->GetStageResult().GetNotAppliedFilter()) {
+        AFL_VERIFY(filter->Apply(resultBatch, StartIndex, RecordsCount));
+    }
+    NArrow::TStatusValidator::Validate(context->GetReadMetadata()->GetProgram().ApplyProgram(resultBatch));
+    NActors::TActivationContext::AsActorContext().Send(
+        OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
+                     std::make_shared<TApplySourceResult>(source, resultBatch, StartIndex, RecordsCount)));
+    return false;
+}
+
+TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    std::shared_ptr<TFetchingScript> plan;
+    source->InitPages(NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
+    plan = std::make_shared<TFetchingScript>(*this);
+    if (source->IsSourceInMemory()) {
+        AFL_VERIFY(source->GetStageResult().GetPagesToResultVerified().size() == 1);
+    }
+    for (auto&& i : source->GetReadPagesVerified()) {
+        if (!source->GetContext()->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
+                source->GetSourceId(), i.GetStartIndex(), i.GetRecordsCount())) {
+            continue;
+        }
+        plan->AddStep<TBuildResultStep>(source, i.GetStartIndex(), i.GetRecordsCount());
+    }
     source->InitFetchingPlan(plan);
+
     TFetchingScriptCursor cursor(plan, 0);
     auto task = std::make_shared<TStepAction>(source, std::move(cursor), source->GetContext()->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);

@@ -301,17 +301,38 @@ private:
     using TBase = IFetchingStep;
 
 protected:
-    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override {
-
-    }
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     virtual TString DoDebugString() const override {
         return TStringBuilder();
     }
 
 public:
-    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
+    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& /*source*/) const override {
+        return 0;
+    }
     TPrepareResultStep()
         : TBase("PREPARE_RESULT") {
+    }
+};
+
+class TBuildResultStep: public IFetchingStep {
+private:
+    using TBase = IFetchingStep;
+    const ui32 StartIndex;
+    const ui32 RecordsCount;
+
+protected:
+    virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
+    virtual TString DoDebugString() const override {
+        return TStringBuilder();
+    }
+
+public:
+    virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& /*source*/) const override {
+        return 0;
+    }
+    TBuildResultStep(const ui32 startIndex, const ui32 recordsCount)
+        : TBase("BUILD_RESULT") {
     }
 };
 

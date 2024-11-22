@@ -21,7 +21,7 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
     FetchingPlan = fetching;
 }
 
-void IDataSource::Start(const std::shared_ptr<IDataSource>& sourcePtr) {
+void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr) {
     AFL_VERIFY(!Started);
     AFL_VERIFY(FetchingPlan);
     AFL_VERIFY(!Context->IsAborted());

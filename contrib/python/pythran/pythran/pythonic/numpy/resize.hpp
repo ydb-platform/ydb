@@ -3,7 +3,7 @@
 
 #include "pythonic/include/numpy/resize.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/numpy/ndarray/reshape.hpp"
+#include "pythonic/utils/functor.hpp"
 
 #endif

@@ -14,7 +14,7 @@ namespace operator_
   A imod(A const &a, B &&b);
 
   DEFINE_FUNCTOR(pythonic::operator_, imod);
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

@@ -24,15 +24,16 @@ namespace numpy
 
   template <class Op, class E, class dtype = result_dtype<Op, E>>
   using partial_sum_type =
-      types::ndarray<typename dtype::type, types::array<long, E::value>>;
+      types::ndarray<typename dtype::type, types::array_tuple<long, E::value>>;
   template <class Op, class E, class dtype = result_dtype<Op, E>>
   using partial_sum_type2 =
-      types::ndarray<typename dtype::type, types::array<long, E::value - 1>>;
+      types::ndarray<typename dtype::type,
+                     types::array_tuple<long, E::value - 1>>;
 
   template <class Op, class E, class dtype = result_dtype<Op, E>>
   typename std::enable_if<E::value != 1, partial_sum_type<Op, E, dtype>>::type
   partial_sum(E const &expr, long axis, dtype d = dtype());
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

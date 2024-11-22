@@ -20,7 +20,7 @@ namespace numpy
           return false;
       return true;
     }
-  }
+  } // namespace
 
   template <class U, class V>
   typename std::enable_if<U::value == V::value, bool>::type
@@ -45,7 +45,7 @@ namespace numpy
   {
     return array_equiv(v, u);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

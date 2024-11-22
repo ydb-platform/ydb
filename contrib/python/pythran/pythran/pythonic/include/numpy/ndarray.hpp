@@ -1,9 +1,9 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_NDARRAY_HPP
 #define PYTHONIC_INCLUDE_NUMPY_NDARRAY_HPP
 
+#include "pythonic/include/types/ndarray.hpp"
 #include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/utils/nested_container.hpp"
-#include "pythonic/include/types/ndarray.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -24,7 +24,7 @@ namespace numpy
   ndarray(std::integral_constant<long, N>, dtype d = dtype());
 
   DEFINE_FUNCTOR(pythonic::numpy, ndarray);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

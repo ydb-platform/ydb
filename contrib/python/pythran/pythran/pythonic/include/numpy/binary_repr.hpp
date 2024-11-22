@@ -13,7 +13,7 @@ namespace numpy
   types::str binary_repr(long number, long width);
 
   DEFINE_FUNCTOR(pythonic::numpy, binary_repr);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

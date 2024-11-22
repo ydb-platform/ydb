@@ -33,7 +33,7 @@ namespace builtins
     {
       return other;
     }
-  }
-}
+  } // namespace set
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

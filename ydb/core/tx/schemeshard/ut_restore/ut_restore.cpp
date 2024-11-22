@@ -2661,12 +2661,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     Y_UNIT_TEST(ShouldRestoreTtlSettingsInDateTypeColumnMode) {
         ShouldRestoreSettings(R"(
             ttl_settings {
-              date_type_column_v1 {
+              date_type_column {
                 column_name: "created_at"
-              }
-              tiers {
-                apply_after_seconds: 3600
-                delete {}
+                expire_after_seconds: 3600
               }
             }
         )", {
@@ -2677,13 +2674,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     Y_UNIT_TEST(ShouldRestoreTtlSettingsInValueSinceUnixEpochMode) {
         ShouldRestoreSettings(R"(
             ttl_settings {
-              value_since_unix_epoch_v1 {
+              value_since_unix_epoch {
                 column_name: "modified_at"
                 column_unit: UNIT_SECONDS
-              }
-              tiers {
-                apply_after_seconds: 7200
-                delete {}
+                expire_after_seconds: 7200
               }
             }
         )", {

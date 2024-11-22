@@ -462,11 +462,13 @@ bool FillIndexTablePartitioning(
 
 template <typename TTtl>
 bool FillTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in, Ydb::StatusIds::StatusCode& code, TString& error) {
+    std::optional<ui32> fillLegacyExpireAfterSeconds;
     if (!in.TiersSize()) {
-        // handle legacy format for backwards-compatibility
-        auto* deleteTier = out.add_tiers();
-        deleteTier->mutable_delete_();
-        deleteTier->set_apply_after_seconds(in.GetExpireAfterSeconds());
+        // handle legacy input format for backwards-compatibility
+        fillLegacyExpireAfterSeconds = in.GetExpireAfterSeconds();
+    } else if (in.TiersSize() == 1 && in.GetTiers(0).HasDelete()) {
+        // convert delete-only TTL to legacy mode for backwards-compatibility
+        fillLegacyExpireAfterSeconds = in.GetTiers(0).GetApplyAfterSeconds();
     } else {
         for (const auto& inTier : in.GetTiers()) {
             auto* outTier = out.add_tiers();
@@ -488,8 +490,13 @@ bool FillTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in, Ydb::Stat
 
     switch (in.GetColumnUnit()) {
     case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {
-        auto& outTTL = *out.mutable_date_type_column_v1();
-        outTTL.set_column_name(in.GetColumnName());
+        if (fillLegacyExpireAfterSeconds) {
+            auto& outTTL = *out.mutable_date_type_column();
+            outTTL.set_column_name(in.GetColumnName());
+        } else {
+            auto& outTTL = *out.mutable_date_type_column_v1();
+            outTTL.set_column_name(in.GetColumnName());
+        }
         break;
     }
 
@@ -497,9 +504,16 @@ bool FillTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in, Ydb::Stat
     case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
     case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
     case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: {
-        auto& outTTL = *out.mutable_value_since_unix_epoch_v1();
-        outTTL.set_column_name(in.GetColumnName());
-        outTTL.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(in.GetColumnUnit()));
+        const auto unit = static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(in.GetColumnUnit());
+        if (fillLegacyExpireAfterSeconds) {
+            auto& outTTL = *out.mutable_value_since_unix_epoch();
+            outTTL.set_column_name(in.GetColumnName());
+            outTTL.set_column_unit(unit);
+        } else {
+            auto& outTTL = *out.mutable_value_since_unix_epoch_v1();
+            outTTL.set_column_name(in.GetColumnName());
+            outTTL.set_column_unit(unit);
+        }
         break;
     }
 

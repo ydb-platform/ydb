@@ -84,7 +84,7 @@ namespace NKikimr {
     void CompactFreshSegment(
             TIntrusivePtr<THullDs> &hullDs,
             THugeBlobCtxPtr hugeBlobCtx,
-            ui32 minHugeBlobInBytes,
+            ui32 minREALHugeBlobInBytes,
             std::shared_ptr<TLevelIndexRunTimeCtx<TKey, TMemRec>> &rtCtx,
             const TActorContext &ctx,
             bool allowGarbageCollection);
@@ -93,7 +93,7 @@ namespace NKikimr {
     bool CompactFreshSegmentIfRequired(
             TIntrusivePtr<THullDs> &hullDs,
             THugeBlobCtxPtr hugeBlobCtx,
-            ui32 minHugeBlobInBytes,
+            ui32 minREALHugeBlobInBytes,
             std::shared_ptr<TLevelIndexRunTimeCtx<TKey, TMemRec>> &rtCtx,
             const TActorContext &ctx,
             bool force,
@@ -102,7 +102,7 @@ namespace NKikimr {
         ui64 yardFreeUpToLsn = rtCtx->GetFreeUpToLsn();
         bool compact = hullDs->HullCtx->FreshCompaction && rtCtx->LevelIndex->NeedsFreshCompaction(yardFreeUpToLsn, force);
         if (compact) {
-            CompactFreshSegment<TKey, TMemRec>(hullDs, std::move(hugeBlobCtx), minHugeBlobInBytes, rtCtx, ctx,
+            CompactFreshSegment<TKey, TMemRec>(hullDs, std::move(hugeBlobCtx), minREALHugeBlobInBytes, rtCtx, ctx,
                 allowGarbageCollection);
         }
         return compact;
@@ -116,7 +116,7 @@ namespace NKikimr {
             TIntrusivePtr<THullDs> hullDs,
             std::shared_ptr<THullLogCtx> hullLogCtx,
             THugeBlobCtxPtr hugeBlobCtx,
-            ui32 minHugeBlobInBytes,
+            ui32 minREALHugeBlobInBytes,
             TActorId loggerId,
             std::shared_ptr<TLevelIndexRunTimeCtx<TKeyLogoBlob, TMemRecLogoBlob>> rtCtx,
             std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep);

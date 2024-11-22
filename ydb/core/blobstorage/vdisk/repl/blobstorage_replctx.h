@@ -15,7 +15,7 @@ namespace NKikimr {
         TIntrusivePtr<THullCtx> HullCtx;
         TPDiskCtxPtr PDiskCtx;
         std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
-        ui32 MinHugeBlobInBytes;
+        ui32 MinREALHugeBlobInBytes;
         TIntrusivePtr<THullDs> HullDs;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
         TActorId SkeletonId;
@@ -31,7 +31,7 @@ namespace NKikimr {
                 TIntrusivePtr<THullCtx> hullCtx,
                 TPDiskCtxPtr pdiskCtx,
                 std::shared_ptr<THugeBlobCtx> hugeBlobCtx,
-                ui32 minHugeBlobInBytes,
+                ui32 minREALHugeBlobInBytes,
                 TIntrusivePtr<THullDs> hullDs,
                 TIntrusivePtr<TBlobStorageGroupInfo> info,
                 const TActorId &skeletonId,
@@ -42,7 +42,7 @@ namespace NKikimr {
             , HullCtx(std::move(hullCtx))
             , PDiskCtx(std::move(pdiskCtx))
             , HugeBlobCtx(std::move(hugeBlobCtx))
-            , MinHugeBlobInBytes(minHugeBlobInBytes)
+            , MinREALHugeBlobInBytes(minREALHugeBlobInBytes)
             , HullDs(std::move(hullDs))
             , GInfo(std::move(info))
             , SkeletonId(skeletonId)
@@ -51,7 +51,7 @@ namespace NKikimr {
             , PDiskWriteBytes(std::move(pdiskWriteBytes))
             , PausedAtStart(pausedAtStart)
         {
-            Y_ABORT_UNLESS(MinHugeBlobInBytes);
+            Y_ABORT_UNLESS(MinREALHugeBlobInBytes);
         }
 
         bool GetAddHeader() const { return !HullCtx || HullCtx->AddHeader; }

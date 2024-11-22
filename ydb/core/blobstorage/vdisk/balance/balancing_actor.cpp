@@ -142,7 +142,7 @@ namespace NBalancing {
 
                 const auto& key = It.GetCurKey().LogoBlobID();
 
-                if (Ctx->Cfg.BalanceOnlyHugeBlobs && !Ctx->HugeBlobCtx->IsHugeBlob(GInfo->Type, key, Ctx->MinHugeBlobInBytes)) {
+                if (Ctx->Cfg.BalanceOnlyHugeBlobs && !Ctx->HugeBlobCtx->IsHugeBlob(GInfo->Type, key, Ctx->MinREALHugeBlobInBytes)) {
                     // skip non huge blobs
                     continue;
                 }

@@ -362,7 +362,6 @@ def deploy(arguments):
     if os.environ.get('YDB_KAFKA_API_ENABLED', "0") == "1":
         kafka_api_port = int(os.environ.get("YDB_KAFKA_PROXY_PORT", "9092"))
         optionals['kafka_api_port'] = kafka_api_port
-        print(f"rekby-debug: kafka enabled, port {kafka_api_port}")
 
     configuration = KikimrConfigGenerator(
         erasure=parse_erasure(arguments),

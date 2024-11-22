@@ -431,7 +431,6 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]["enable_external_data_sources"] = True
             self.yaml_config["feature_flags"]["enable_script_execution_operations"] = True
 
-        print(f"rekby-debug: kafka port for config: {kafka_api_port}")
         if kafka_api_port is not None:
             kafka_proxy_config = dict()
             kafka_proxy_config["enable_kafka_proxy"] = True

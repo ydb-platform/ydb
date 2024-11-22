@@ -14,8 +14,9 @@ namespace NKikimr {
 
 class TUploadStatus {
 private:
-    YDB_ACCESSOR_DEF(Ydb::StatusIds::StatusCode, Code);
+    YDB_READONLY_DEF(Ydb::StatusIds::StatusCode, Code);
     YDB_READONLY_DEF(std::optional<TString>, Subcode);
+    YDB_READONLY_DEF(std::optional<TString>, ErrorMessage);
 
 public:
     enum class ECustomSubcode {
@@ -27,18 +28,19 @@ public:
     TUploadStatus(const Ydb::StatusIds::StatusCode code)
         : Code(code) {
     }
-    TUploadStatus(const Ydb::StatusIds::StatusCode code, const NSchemeCache::TSchemeCacheNavigate::EStatus subcode)
-        : Code(code) {
-        SetSubcode(subcode);
+    TUploadStatus(const Ydb::StatusIds::StatusCode code, const TString& errorMessage)
+        : Code(code)
+        , ErrorMessage(errorMessage) {
+        AFL_VERIFY(code != Ydb::StatusIds::SUCCESS);
     }
-    TUploadStatus(const Ydb::StatusIds::StatusCode code, const NKikimrTxDataShard::TError::EKind subcode)
-        : Code(code) {
-        SetSubcode(subcode);
+    TUploadStatus(const Ydb::StatusIds::StatusCode code, const ECustomSubcode& subcode, const TString& errorMessage)
+        : Code(code)
+        , Subcode(ToString(subcode))
+        , ErrorMessage(errorMessage) {
+        AFL_VERIFY(code != Ydb::StatusIds::SUCCESS);
     }
-    TUploadStatus(const Ydb::StatusIds::StatusCode code, const ECustomSubcode subcode)
-        : Code(code) {
-        SetSubcode(subcode);
-    }
+    TUploadStatus(const NSchemeCache::TSchemeCacheNavigate::EStatus status);
+    TUploadStatus(const NKikimrTxDataShard::TError::EKind status, const TString& errorDescription);
 
     struct THasher {
         ui64 operator()(const TUploadStatus& object) const {
@@ -52,16 +54,6 @@ public:
 
     TString GetCodeString() const {
         return Ydb::StatusIds::StatusCode_Name(Code);
-    }
-
-    void SetSubcode(const NSchemeCache::TSchemeCacheNavigate::EStatus subcode) {
-        Subcode = ToString(subcode);
-    }
-    void SetSubcode(const NKikimrTxDataShard::TError::EKind subcode) {
-        Subcode = NKikimrTxDataShard::TError::EKind_Name(subcode);
-    }
-    void SetSubcode(const ECustomSubcode subcode) {
-        Subcode = ToString(subcode);
     }
 };
 

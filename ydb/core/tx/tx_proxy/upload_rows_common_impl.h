@@ -141,7 +141,6 @@ private:
     THashSet<TTabletId> ShardRepliesLeft;
     THashMap<TTabletId, TShardUploadRetryState> ShardUploadRetryStates;
     TUploadStatus Status;
-    TString ErrorMessage;
     std::shared_ptr<NYql::TIssues> Issues = std::make_shared<NYql::TIssues>();
     NLongTxService::TLongTxId LongTxId;
     TUploadCounters UploadCounters;
@@ -569,8 +568,9 @@ private:
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = ::NKikimr::SplitPath(table);
         if (entry.Path.empty()) {
-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder()
-                << "Bulk upsert. Invalid table path specified: '" << table << "'", ctx);
+            return ReplyWithError(
+                TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Bulk upsert. Invalid table path specified: '" << table << "'"),
+                ctx);
         }
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
         entry.SyncVersion = true;
@@ -586,9 +586,10 @@ private:
 
     void HandleTimeout(const TActorContext& ctx) {
         ShardRepliesLeft.clear();
-        return ReplyWithError(Ydb::StatusIds::TIMEOUT,
-            LogPrefix() << "longTx " << LongTxId.ToString()
-            << " timed out, duration: " << (TAppData::TimeProvider->Now() - StartTime).Seconds() << " sec", ctx);
+        return ReplyWithError(
+            TUploadStatus(Ydb::StatusIds::TIMEOUT, TStringBuilder() << "longTx " << LongTxId.ToString() << " timed out, duration: "
+                                                                    << (TAppData::TimeProvider->Now() - StartTime).Seconds() << " sec"),
+            ctx);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
@@ -598,51 +599,21 @@ private:
         const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = request.ResultSet.front();
 
         if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            Ydb::StatusIds::StatusCode code = Ydb::StatusIds::GENERIC_ERROR;
-            TString message;
-            switch (entry.Status) {
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
-                    Y_ABORT("unreachable");
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError:
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError:
-                    code = Ydb::StatusIds::UNAVAILABLE;
-                    message = "table unavaliable";
-                    break;
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
-                    code = Ydb::StatusIds::SCHEME_ERROR;
-                    message = "unknown table";
-                    break;
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
-                    code = Ydb::StatusIds::SCHEME_ERROR;
-                    message = "unknown database";
-                    break;
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
-                    code = Ydb::StatusIds::UNAUTHORIZED;
-                    message = "access denied";
-                    break;
-                case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
-                    code = Ydb::StatusIds::GENERIC_ERROR;
-                    message = "unknown error";
-                    break;
-            }
-            return ReplyWithError(TUploadStatus(code, entry.Status), LogPrefix() << message, ctx);
+            return ReplyWithError(entry.Status, ctx);
         }
 
         TableKind = entry.Kind;
         bool isColumnTable = (TableKind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
 
         if (entry.TableId.IsSystemView()) {
-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
-                LogPrefix() << "is not supported. Table is a system view", ctx);
+            return ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, "is not supported. Table is a system view"), ctx);
         }
 
         // TODO: fast fail for all tables?
         if (isColumnTable && DiskQuotaExceeded) {
-            return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DISK_QUOTA_EXCEEDED),
-                LogPrefix() << "cannot perform writes: database is out of disk space", ctx);
+            return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DISK_QUOTA_EXCEEDED,
+                                      "cannot perform writes: database is out of disk space"),
+                ctx);
         }
 
         ResolveNamesResult.reset(ev->Get()->Request.Release());
@@ -650,20 +621,20 @@ private:
         bool makeYdbSchema = isColumnTable || (GetSourceType() != EUploadSource::ProtoValues);
         TString errorMessage;
         if (!BuildSchema(ctx, errorMessage, makeYdbSchema)) {
-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << errorMessage, ctx);
+            return ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, errorMessage), ctx);
         }
 
         switch (GetSourceType()) {
             case EUploadSource::ProtoValues:
             {
                 if (!ExtractRows(errorMessage)) {
-                    return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
+                    return ReplyWithError(TUploadStatus(Ydb::StatusIds::BAD_REQUEST, errorMessage), ctx);
                 }
 
                 if (isColumnTable) {
                     // TUploadRowsRPCPublic::ExtractBatch() - converted JsonDocument, DynNumbers, ...
                     if (!ExtractBatch(errorMessage)) {
-                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
+                        return ReplyWithError(TUploadStatus(Ydb::StatusIds::BAD_REQUEST, errorMessage), ctx);
                     }
                 } else {
                     FindMinMaxKeys();
@@ -676,12 +647,15 @@ private:
                 if (isColumnTable) {
                     // TUploadColumnsRPCPublic::ExtractBatch() - NOT converted JsonDocument, DynNumbers, ...
                     if (!ExtractBatch(errorMessage)) {
-                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
+                        return ReplyWithError(TUploadStatus(Ydb::StatusIds::BAD_REQUEST, errorMessage), ctx);
                     }
                     if (!ColumnsToConvertInplace.empty()) {
                         auto convertResult = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
                         if (!convertResult.ok()) {
-                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot convert arrow batch inplace:" << convertResult.status().ToString(), ctx);
+                            return ReplyWithError(
+                                TUploadStatus(Ydb::StatusIds::BAD_REQUEST,
+                                    TStringBuilder() << "Cannot convert arrow batch inplace:" << convertResult.status().ToString()),
+                                ctx);
                         }
                         Batch = *convertResult;
                     }
@@ -689,18 +663,20 @@ private:
                     if (!ColumnsToConvert.empty()) {
                         auto convertResult = NArrow::ConvertColumns(Batch, ColumnsToConvert);
                         if (!convertResult.ok()) {
-                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << "Cannot convert arrow batch:" << convertResult.status().ToString(), ctx);
+                            return ReplyWithError(TUploadStatus(Ydb::StatusIds::BAD_REQUEST,
+                                                      TStringBuilder() << "Cannot convert arrow batch:" << convertResult.status().ToString()),
+                                ctx);
                         }
                         Batch = *convertResult;
                     }
                 } else {
                     // TUploadColumnsRPCPublic::ExtractBatch() - NOT converted JsonDocument, DynNumbers, ...
                     if (!ExtractBatch(errorMessage)) {
-                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
+                        return ReplyWithError(TUploadStatus(Ydb::StatusIds::BAD_REQUEST, errorMessage), ctx);
                     }
                     // Implicit types conversion inside ExtractRows(), in TArrowToYdbConverter
                     if (!ExtractRows(errorMessage)) {
-                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, LogPrefix() << errorMessage, ctx);
+                        return ReplyWithError(TUploadStatus(Ydb::StatusIds::BAD_REQUEST, errorMessage), ctx);
                     }
                     FindMinMaxKeys();
                 }
@@ -728,7 +704,7 @@ private:
             // Batch is already converted
             WriteToColumnTable(ctx);
         } else {
-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "is not supported", ctx);
+            return ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, "is not supported"), ctx);
         }
     }
 
@@ -736,10 +712,10 @@ private:
         UploadCountersGuard.OnWritingStarted();
         TString accessCheckError;
         if (!CheckAccess(accessCheckError)) {
-            return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, LogPrefix() << accessCheckError, ctx);
+            return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAUTHORIZED, accessCheckError), ctx);
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "starting LongTx");
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "starting LongTx");
 
         // Begin Long Tx for writing a batch into OLAP table
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
@@ -770,24 +746,24 @@ private:
 
         LongTxId = msg->GetLongTxId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "started LongTx '" << LongTxId.ToString() << "'");
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, TStringBuilder() << "started LongTx '" << LongTxId.ToString() << "'");
 
         auto outputColumns = GetOutputColumns(ctx);
         if (!outputColumns.empty()) {
             if (!Batch) {
-                return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
-                    LogPrefix() << "no data or conversion error", ctx);
+                return ReplyWithError(TUploadStatus(Ydb::StatusIds::BAD_REQUEST, "no data or conversion error"), ctx);
             }
 
             auto batch = NArrow::TColumnOperator().ErrorIfAbsent().Extract(Batch, outputColumns);
             if (!batch) {
                 for (auto& columnName : outputColumns) {
                     if (Batch->schema()->GetFieldIndex(columnName) < 0) {
-                        return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR,
-                            LogPrefix() << "no expected column '" << columnName << "' in data", ctx);
+                        return ReplyWithError(
+                            TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "no expected column '" << columnName << "' in data"),
+                            ctx);
                     }
                 }
-                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "cannot prepare data", ctx);
+                return ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, "cannot prepare data"), ctx);
             }
 
             Y_ABORT_UNLESS(batch);
@@ -795,9 +771,10 @@ private:
 #if 1 // TODO: check we call ValidateFull() once over pipeline (upsert -> long tx -> shard insert)
             auto validationInfo = batch->ValidateFull();
             if (!validationInfo.ok()) {
-                return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix()
-                    << "bad batch in data: " + validationInfo.message()
-                    << "; order:" + JoinSeq(", ", outputColumns), ctx);
+                return ReplyWithError(
+                    TUploadStatus(Ydb::StatusIds::SCHEME_ERROR,
+                        TStringBuilder() << "bad batch in data: " + validationInfo.message() << "; order:" + JoinSeq(", ", outputColumns)),
+                    ctx);
             }
 #endif
 
@@ -811,19 +788,19 @@ private:
         Y_ABORT_UNLESS(ResolveNamesResult);
 
         if (ResolveNamesResult->ErrorCount > 0) {
-            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "failed to get table schema", ctx);
+            ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, "failed to get table schema"), ctx);
             return {};
         }
 
         auto& entry = ResolveNamesResult->ResultSet[0];
 
         if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
-            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "specified path is not a column table", ctx);
+            ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, "specified path is not a column table"), ctx);
             return {};
         }
 
         if (!entry.ColumnTableInfo || !entry.ColumnTableInfo->Description.HasSchema()) {
-            ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "column table has no schema", ctx);
+            ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, "column table has no schema"), ctx);
             return {};
         }
 
@@ -858,8 +835,7 @@ private:
     }
 
     void RollbackLongTx(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST,
-            LogPrefix() << "rolling back LongTx '" << LongTxId.ToString() << "'");
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, TStringBuilder() << "rolling back LongTx '" << LongTxId.ToString() << "'");
 
         TActorId longTxServiceId = NLongTxService::MakeLongTxServiceID(ctx.SelfID.NodeId());
         ctx.Send(longTxServiceId, new NLongTxService::TEvLongTxService::TEvRollbackTx(LongTxId), 0, 0, Span.GetTraceId());
@@ -992,12 +968,12 @@ private:
         ResolvePartitionsResult = msg->Request;
 
         if (ResolvePartitionsResult->ErrorCount > 0) {
-            return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, LogPrefix() << "unknown table", ctx);
+            return ReplyWithError(TUploadStatus(Ydb::StatusIds::SCHEME_ERROR, "unknown table"), ctx);
         }
 
         TString accessCheckError;
         if (!CheckAccess(accessCheckError)) {
-            return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, LogPrefix() << accessCheckError, ctx);
+            return ReplyWithError(TUploadStatus(Ydb::StatusIds::UNAUTHORIZED, accessCheckError), ctx);
         }
 
         auto getShardsString = [] (const TVector<TKeyDesc::TPartitionInfo>& partitions) {
@@ -1130,7 +1106,8 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
-        SetError(Ydb::StatusIds::INTERNAL_ERROR, "Internal error: pipe cache is not available, the cluster might not be configured properly");
+        SetError(TUploadStatus(
+            Ydb::StatusIds::INTERNAL_ERROR, "Internal error: pipe cache is not available, the cluster might not be configured properly"));
 
         ShardRepliesLeft.clear();
 
@@ -1140,8 +1117,8 @@ private:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const TActorContext &ctx) {
         ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
 
-        SetError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM),
-            Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId));
+        SetError(TUploadStatus(Ydb::StatusIds::UNAVAILABLE, TUploadStatus::ECustomSubcode::DELIVERY_PROBLEM,
+            Sprintf("Failed to connect to shard %" PRIu64, ev->Get()->TabletId)));
         ShardRepliesLeft.erase(ev->Get()->TabletId);
 
         return ReplyIfDone(ctx);
@@ -1171,28 +1148,10 @@ private:
                     << " from shard " << shardResponse.GetTabletID());
 
         if (shardResponse.GetStatus() != NKikimrTxDataShard::TError::OK) {
-            TUploadStatus status(Ydb::StatusIds::GENERIC_ERROR, (NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus());
-
-            switch (shardResponse.GetStatus()) {
-            case NKikimrTxDataShard::TError::WRONG_SHARD_STATE:
-            case NKikimrTxDataShard::TError::SHARD_IS_BLOCKED:
+            if (shardResponse.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE ||
+                shardResponse.GetStatus() == NKikimrTxDataShard::TError::SHARD_IS_BLOCKED) {
                 ctx.Send(SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(GetKeyRange()->TableId, TActorId()), 0, 0, Span.GetTraceId());
-                status.SetCode(Ydb::StatusIds::OVERLOADED);
-                break;
-            case NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED:
-            case NKikimrTxDataShard::TError::OUT_OF_SPACE:
-                status.SetCode(Ydb::StatusIds::UNAVAILABLE);
-                break;
-            case NKikimrTxDataShard::TError::SCHEME_ERROR:
-                status.SetCode(Ydb::StatusIds::SCHEME_ERROR);
-                break;
-            case NKikimrTxDataShard::TError::BAD_ARGUMENT:
-                status.SetCode(Ydb::StatusIds::BAD_REQUEST);
-                break;
-            case NKikimrTxDataShard::TError::EXECUTION_CANCELLED:
-                status.SetCode(Ydb::StatusIds::TIMEOUT);
-                break;
-            };
+            }
 
             if (auto* state = ShardUploadRetryStates.FindPtr(shardId)) {
                 if (!shardResponse.HasOverloadSubscribed()) {
@@ -1205,7 +1164,8 @@ private:
                 }
             }
 
-            SetError(status, shardResponse.GetErrorDescription());
+            SetError(
+                TUploadStatus(static_cast<NKikimrTxDataShard::TError::EKind>(shardResponse.GetStatus()), shardResponse.GetErrorDescription()));
         }
 
         // Notify the cache that we are done with the pipe
@@ -1229,13 +1189,12 @@ private:
         }
     }
 
-    void SetError(const TUploadStatus& status, const TString& message) {
+    void SetError(const TUploadStatus& status) {
         if (Status.GetCode() != ::Ydb::StatusIds::SUCCESS) {
             return;
         }
 
         Status = status;
-        ErrorMessage = message;
     }
 
     void ReplyIfDone(const NActors::TActorContext& ctx) {
@@ -1244,17 +1203,18 @@ private:
             return;
         }
 
-        if (!ErrorMessage.empty()) {
-            RaiseIssue(NYql::TIssue(ErrorMessage));
+        if (Status.GetErrorMessage()) {
+            RaiseIssue(NYql::TIssue(LogPrefix() << *Status.GetErrorMessage()));
         }
 
         return ReplyWithResult(Status, ctx);
     }
 
-    void ReplyWithError(const TUploadStatus& status, const TString& message, const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::RPC_REQUEST, message);
+    void ReplyWithError(const TUploadStatus& status, const TActorContext& ctx) {
+        AFL_VERIFY(status.GetCode() != Ydb::StatusIds::SUCCESS);
+        LOG_NOTICE_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << status.GetErrorMessage());
 
-        SetError(status, message);
+        SetError(status);
 
         Y_DEBUG_ABORT_UNLESS(ShardRepliesLeft.empty());
         return ReplyIfDone(ctx);
@@ -1264,7 +1224,7 @@ private:
         UploadCountersGuard.OnReply(status);
         SendResult(ctx, status.GetCode());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, LogPrefix() << "completed with status " << status.GetCode());
+        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, TStringBuilder() << "completed with status " << status.GetCode());
 
         if (LongTxId != NLongTxService::TLongTxId()) {
             // LongTxId is reset after successful commit

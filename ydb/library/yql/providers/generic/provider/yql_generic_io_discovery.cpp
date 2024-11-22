@@ -70,6 +70,8 @@ namespace NYql {
 
                             UnresolvedItems_[idKey] = iter->second;
                         }
+
+                        // FIXME: why no error returned if idKey is not found?
                     }
                 }
 
@@ -199,8 +201,8 @@ namespace NYql {
                         const auto& keyArg = TExprBase(read.FreeArgs().Get(2).Ref().HeadPtr()).Cast<TCoKey>().Ref().Head();
                         const auto logGroupName = TString(keyArg.Tail().Head().Content());
 
-                        const auto iter = State_->LoggingAuth.find(folderId);
-                        if (iter != State_->LoggingAuth.cend()) {
+                        const auto iter = State_->Configuration->LoggingAuth.find(clusterName);
+                        if (iter != State_->Configuration->LoggingAuth.cend()) {
                             YQL_CLOG(DEBUG, ProviderGeneric) << "discovered logging external data source: "
                                 << "clusterName=" << clusterName 
                                 << ", folderId=" << folderId 
@@ -213,6 +215,8 @@ namespace NYql {
                             };
                         }
                     }
+
+                    // FIXME: why no error returned if clusterName is not found?
                 }
 
                 return;
@@ -221,24 +225,25 @@ namespace NYql {
             virtual TFutures ResolveClusters() override {
                 TFutures futures;
 
-                for (const auto& [clusterId, auth] : UnresolvedItems_) {
+                for (const auto& [clusterName, auth] : UnresolvedItems_) {
                     auto responseFuture = State_->LoggingResolver->Resolve(ILoggingResolver::TRequest{
                         .FolderId = "",
                         .LogGroupName = "",
                     });
 
                     auto issueFuture = responseFuture.Apply(
-                        [this, clusterId, responseFuture](const NThreading::TFuture<ILoggingResolver::TResponse>&) mutable {
+                        [this, clusterName, responseFuture](const NThreading::TFuture<ILoggingResolver::TResponse>&) mutable {
 
                         auto response = responseFuture.ExtractValue();
 
                         if (response.Issues.Empty()) {
                             std::lock_guard<std::mutex> guard(ResolvedItemsMutex_);
-                            ResolvedItems_[clusterId] = {
+                            ResolvedItems_[clusterName] = {
                                 .FolderId = "",
                                 .LogGroupName = "",
                                 .Host = response.Host,
                                 .Port = response.Port,
+                                .Database = response.Database,
                                 .Table = response.Table,
                             };
                         }
@@ -268,9 +273,11 @@ namespace NYql {
                         continue;
                     }
 
+                    clusterConfig.set_databasename(itemIter->second.Database);
                     clusterConfig.mutable_endpoint()->set_host(itemIter->second.Host);
                     clusterConfig.mutable_endpoint()->set_port(itemIter->second.Port);
                     clusterConfig.mutable_datasourceoptions()->insert({"table", itemIter->second.Table});
+                    clusterConfig.set_usessl(true);
                 }
 
                 return issues;
@@ -307,13 +314,13 @@ namespace NYql {
                 TString LogGroupName; 
                 TString Host;
                 ui32    Port;
+                TString Database;
                 TString Table;
             };
 
-            std::mutex ResolvedItemsMutex_;
-
             // cluster_name -> resolved item
             THashMap<TString, TResolvedItem> ResolvedItems_;
+            std::mutex ResolvedItemsMutex_;
 
             const TGenericState::TPtr& State_;
         };

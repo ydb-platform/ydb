@@ -45,7 +45,9 @@ namespace NYql {
     public:
         THashMap<TString, TString> Tokens;
         THashMap<TString, TGenericClusterConfig> ClusterNamesToClusterConfigs; // cluster name -> cluster config
-        THashMap<TString, TVector<TString>> DatabaseIdsToClusterNames;         // database id -> cluster name
+        // FIXME: why TVector<TString> instead of just TString?
+        THashMap<TString, TVector<TString>> DatabaseIdsToClusterNames;         // database id -> [cluster name]
         IDatabaseAsyncResolver::TDatabaseAuthMap DatabaseAuth;                 // (database_id, database_type) -> credentials to access managed APIs
+        ILoggingResolver::TAuthMap LoggingAuth;                                // cluster_id -> credentials to access logging API;
     };
 } // namespace NYql

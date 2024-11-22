@@ -25,10 +25,11 @@ namespace NYql {
         };
 
         struct TResponse {
-            TString Host;   // database hostname
-            ui32 Port;      // database port
-            TString Table;  // table to read from
-            TIssues Issues; // possible troubles
+            TString Host;     // database hostname
+            ui32 Port;        // database port
+            TString Database; // database name
+            TString Table;    // table to read from
+            TIssues Issues;   // possible troubles
         };
 
         virtual NThreading::TFuture<TResponse> Resolve(const TRequest& request) const = 0;

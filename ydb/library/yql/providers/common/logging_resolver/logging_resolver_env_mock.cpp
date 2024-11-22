@@ -21,10 +21,13 @@ namespace NYql {
             Y_ENSURE(portStr, "LOGGING_YDB_PORT is not set");
             auto port = FromString<ui32>(portStr);
 
+            auto database = GetEnv("LOGGING_YDB_DATABASE");
+            Y_ENSURE(database, "LOGGING_YDB_DATABASE is not set");
+
             auto table = GetEnv("LOGGING_YDB_TABLE");
             Y_ENSURE(table, "LOGGING_YDB_TABLE is not set");
 
-            promise.SetValue(ILoggingResolver::TResponse{host, port, table, {}});
+            promise.SetValue(ILoggingResolver::TResponse{ host, port, database, table, {}});
 
             return promise.GetFuture();
         }

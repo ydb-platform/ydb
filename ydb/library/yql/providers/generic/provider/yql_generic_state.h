@@ -56,12 +56,8 @@ namespace NYql {
         TGenericConfiguration::TPtr Configuration = MakeIntrusive<TGenericConfiguration>();
         const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
 
-        std::shared_ptr<IDatabaseAsyncResolver> DatabaseResolver;
-
-
+        IDatabaseAsyncResolver::TPtr DatabaseResolver;
         ILoggingResolver::TPtr LoggingResolver;
-        // cluster_id -> credentials to access logging API;
-        ILoggingResolver::TAuthMap LoggingAuth;
 
         // key - cluster name, value - TCredentialsProviderPtr
         // It's important to cache credentials providers, because they make IO

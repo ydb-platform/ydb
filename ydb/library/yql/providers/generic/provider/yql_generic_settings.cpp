@@ -39,7 +39,7 @@ namespace NYql {
 
         const auto& clusterName = clusterConfig.GetName();
 
-        // 1. Preserve managed database ids for the further resolving
+        // 1. Preserve managed database clusters for the further endpoint resolving
         const auto& databaseId = clusterConfig.GetDatabaseId();
         if (databaseId) {
             if (!databaseResolver) {
@@ -56,11 +56,24 @@ namespace NYql {
                     .Protocol = clusterConfig.GetProtocol()};
 
             DatabaseIdsToClusterNames[databaseId].emplace_back(clusterName);
-            YQL_CLOG(DEBUG, ProviderGeneric) << "database id '" << databaseId << "' added to mapping";
+
+            YQL_CLOG(DEBUG, ProviderGeneric) << "Managed database external data source registered"
+                << ": clusterName=" << clusterName
+                << ", databaseId=" << databaseId;
         }
 
+        // 2. Preserve cloud logging soruces for the further endpoint/database/table resolving
         if (clusterConfig.GetKind() == NConnector::NApi::EDataSourceKind::LOGGING) {
             Y_ENSURE(loggingResolver, "logging resolver is not configured");
+
+            LoggingAuth[clusterName] = NYql::ILoggingResolver::TAuth{
+                .StructuredToken = MakeStructuredToken(clusterConfig, credentials),
+                .AddBearerToToken = true,
+            };
+
+            YQL_CLOG(DEBUG, ProviderGeneric) << "Logging external data source registered"
+                << ": clusterName=" << clusterName
+                << ", folderId=" << clusterConfig.GetDataSourceOptions().at("folder_id");
         }
 
         // NOTE: Tokens map is filled just because it's required by DQ/KQP.

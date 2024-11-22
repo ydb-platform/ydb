@@ -2,6 +2,7 @@
 
 #include <util/system/types.h>
 #include <util/generic/string.h>
+#include <limits>
 #include <unordered_set>
 
 namespace NLogin {
@@ -9,27 +10,25 @@ namespace NLogin {
 class TPasswordCheckParameters {
 public:
     struct TInitializer {
-        ui32 MinPasswordLength = 8;
-        ui32 MaxPasswordLength = 15;
-        bool NeedLowerCase = true;
-        bool NeedUpperCase = true;
-        bool NeedNumbers = true;
-        bool NeedSpecialSymbols = true;
+        ui32 MinPasswordLength = 0;
+        ui32 MaxPasswordLength = std::numeric_limits<ui32>::max();
+        bool NeedLowerCase = false;
+        bool NeedUpperCase = false;
+        bool NeedNumbers = false;
+        bool NeedSpecialSymbols = false;
         TString SpecialSymbols;
-        bool EnableEmptyPassword = true;
     };
 
 private:
     static const std::unordered_set<char> VALID_SPECIAL_SYMBOLS;
 
-    ui32 MinPasswordLength = 8;
-    ui32 MaxPasswordLength = 15;
-    bool NeedLowerCase = true;
-    bool NeedUpperCase = true;
-    bool NeedNumbers = true;
-    bool NeedSpecialSymbols = true;
+    ui32 MinPasswordLength = 0;
+    ui32 MaxPasswordLength = std::numeric_limits<ui32>::max();
+    bool NeedLowerCase = false;
+    bool NeedUpperCase = false;
+    bool NeedNumbers = false;
+    bool NeedSpecialSymbols = false;
     std::unordered_set<char> SpecialSymbols;
-    bool EnableEmptyPassword = true;
 
 public:
     TPasswordCheckParameters();
@@ -41,7 +40,6 @@ public:
     bool NeedUpperCaseUse() const;
     bool NeedNumbersUse() const;
     bool NeedSpecialSymbolsUse() const;
-    bool IsEmptyPasswordEnable() const;
     bool IsSpecialSymbolValid(char symbol) const;
 };
 

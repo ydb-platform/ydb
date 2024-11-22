@@ -125,12 +125,11 @@ message TLdapAuthentication {
 }
 
 message TPasswordCheckerParameters {
-    optional uint32 MinimumLength = 1 [default = 8];
-    optional uint32 MaximumLength = 2 [default = 15];
-    optional bool RestrictLower = 3 [default = true];
-    optional bool RestrictUpper = 4 [default = true];
-    optional bool RestrictNumbers = 5 [default = true];
-    optional bool RestrictSpecial = 6 [default = true];
+    optional uint32 MinimumLength = 1 [default = 0];
+    optional uint32 MaximumLength = 2 [default = 4294967295];
+    optional bool RestrictLower = 3;
+    optional bool RestrictUpper = 4;
+    optional bool RestrictNumbers = 5;
+    optional bool RestrictSpecial = 6;
     optional string SpecialChars = 7 [default = "!@#$%^&*()_+{}|<>?="];
-    optional bool EnableEmptyPassword = 8 [default = true];
 }

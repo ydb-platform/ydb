@@ -4,18 +4,24 @@
 
 using namespace NLogin;
 
+namespace {
+    const TString VALID_SPECIAL_SYMBOLS = "!@#$%^&*()_+{}|<>?=";
+}
+
 Y_UNIT_TEST_SUITE(PasswordChecker) {
 
     Y_UNIT_TEST(CheckCorrectPassword) {
-        TPasswordCheckParameters checkParameters;
+        TPasswordCheckParameters checkParameters({
+            .MinPasswordLength = 8,
+            .MaxPasswordLength = 16,
+            .NeedLowerCase = true,
+            .NeedUpperCase = true,
+            .NeedNumbers = true,
+            .NeedSpecialSymbols = true,
+            .SpecialSymbols = VALID_SPECIAL_SYMBOLS
+        });
         TPasswordChecker passwordChecker(checkParameters);
         TString username = "testuser";
-        // Correct password has:
-        //  lower case
-        //  upper case
-        //  numbers
-        //  special symbols from list !@#$%^&*()_+{}|<>?=
-        //  length from 8 to 16 characters
         TString password = "qwer%Bs7*S";
         TPasswordChecker::TResult result = passwordChecker.Check(username, password);
         UNIT_ASSERT_C(result.Success, "Must not be error");
@@ -53,7 +59,7 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
     }
 
     Y_UNIT_TEST(CannotAcceptPasswordWithoutLowerCaseCharacters) {
-        TPasswordCheckParameters checkParameters;
+        TPasswordCheckParameters checkParameters({.NeedLowerCase = true, .SpecialSymbols = VALID_SPECIAL_SYMBOLS});
         TPasswordChecker passwordChecker(checkParameters);
         TString username = "testuser";
         TString password = "12345$*QWERTY";
@@ -63,7 +69,7 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
     }
 
     Y_UNIT_TEST(CannotAcceptPasswordWithoutUpperCaseCharacters) {
-        TPasswordCheckParameters checkParameters;
+        TPasswordCheckParameters checkParameters({.NeedUpperCase = true, .SpecialSymbols = VALID_SPECIAL_SYMBOLS});
         TPasswordChecker passwordChecker(checkParameters);
         TString username = "testuser";
         TString password = "12345$*qwerty";
@@ -73,7 +79,7 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
     }
 
     Y_UNIT_TEST(CannotAcceptPasswordWithoutNumbers) {
-        TPasswordCheckParameters checkParameters;
+        TPasswordCheckParameters checkParameters({.NeedNumbers = true, .SpecialSymbols = VALID_SPECIAL_SYMBOLS});
         TPasswordChecker passwordChecker(checkParameters);
         TString username = "testuser";
         TString password = "ASDF$*qwerty";
@@ -83,7 +89,7 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
     }
 
     Y_UNIT_TEST(CannotAcceptPasswordWithoutSpecialSymbols) {
-        TPasswordCheckParameters checkParameters;
+        TPasswordCheckParameters checkParameters({.NeedSpecialSymbols = true, .SpecialSymbols = VALID_SPECIAL_SYMBOLS});
         TPasswordChecker passwordChecker(checkParameters);
         TString username = "testuser";
         TString password = "ASDF42qwerty";
@@ -93,7 +99,7 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
     }
 
     Y_UNIT_TEST(CannotAcceptPasswordWithInvalidCharacters) {
-        TPasswordCheckParameters checkParameters;
+        TPasswordCheckParameters checkParameters({.SpecialSymbols = VALID_SPECIAL_SYMBOLS});
         TPasswordChecker passwordChecker(checkParameters);
         TString username = "testuser";
         TString password = "ASDF42*qwerty~~";
@@ -103,7 +109,7 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
     }
 
     Y_UNIT_TEST(CannotAcceptPasswordWithoutLowerCaseAndSpecialSymbols) {
-        TPasswordCheckParameters checkParameters;
+        TPasswordCheckParameters checkParameters({.NeedLowerCase = true, .NeedSpecialSymbols = true, .SpecialSymbols = VALID_SPECIAL_SYMBOLS});
         TPasswordChecker passwordChecker(checkParameters);
         TString username = "testuser";
         TString password = "ASDF42Q6S7D8";
@@ -113,8 +119,8 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
     }
 
     Y_UNIT_TEST(AcceptPasswordWithCustomSpecialSymbolsList) {
-        std::unordered_set<char> customSpecialSymbols {'!', '&', '*'}; // Only 3 special symbols are accepted
-        TPasswordCheckParameters checkParameters({.SpecialSymbols = customSpecialSymbols});
+        TString customSpecialSymbols = "!&*"; // Only 3 special symbols are accepted
+        TPasswordCheckParameters checkParameters({.NeedSpecialSymbols = true, .SpecialSymbols = customSpecialSymbols});
         TPasswordChecker passwordChecker(checkParameters);
         TString username = "testuser";
         TString correctPassword = "pass45!WOR*d";
@@ -127,18 +133,16 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
         UNIT_ASSERT_STRINGS_EQUAL(result.Error, "Password contains unacceptable characters");
     }
 
-    Y_UNIT_TEST(AcceptEmptyPasswordByEnableSpecialFlag) {
-        TPasswordCheckParameters checkParameters({.EnableEmptyPassword = true}); // Enable empty password, min length is 8
-        TPasswordChecker passwordChecker(checkParameters);
-        TString username = "testuser";
-        TString password = "";
-        TPasswordChecker::TResult result = passwordChecker.Check(username, password);
-        UNIT_ASSERT_C(result.Success, "Must not be error");
-        UNIT_ASSERT(result.Error.empty());
-    }
-
-    Y_UNIT_TEST(AcceptEmptyPasswordBySetMinPasswordLengthAsZero) {
-        TPasswordCheckParameters checkParameters({.MinPasswordLength = 0, .EnableEmptyPassword = false}); // Enable empty password by set MinPasswordLength as 0
+    Y_UNIT_TEST(AcceptEmptyPassword) {
+        TPasswordCheckParameters checkParameters({
+            .MinPasswordLength = 0,
+            .MaxPasswordLength = 16,
+            .NeedLowerCase = true,
+            .NeedUpperCase = true,
+            .NeedNumbers = true,
+            .NeedSpecialSymbols = true,
+            .SpecialSymbols = VALID_SPECIAL_SYMBOLS
+        }); // Enable empty password by set MinPasswordLength as 0, default value
         TPasswordChecker passwordChecker(checkParameters);
         TString username = "testuser";
         TString password = "";
@@ -148,7 +152,7 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
     }
 
     Y_UNIT_TEST(CannotAcceptEmptyPassword) {
-        TPasswordCheckParameters checkParameters({.EnableEmptyPassword = false}); // Disable empty password, min length is 8
+        TPasswordCheckParameters checkParameters({.MinPasswordLength = 8}); // Disable empty password, min length is 8
         TPasswordChecker passwordChecker(checkParameters);
         TString username = "testuser";
         TString password = "";

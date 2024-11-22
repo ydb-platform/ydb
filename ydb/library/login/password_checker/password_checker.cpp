@@ -15,7 +15,6 @@ TPasswordCheckParameters::TPasswordCheckParameters(const TInitializer& initializ
     , NeedUpperCase(initializer.NeedUpperCase)
     , NeedNumbers(initializer.NeedNumbers)
     , NeedSpecialSymbols(initializer.NeedSpecialSymbols)
-    , EnableEmptyPassword((MinPasswordLength == 0 ? true : initializer.EnableEmptyPassword))
 {
     for (const char symbol : initializer.SpecialSymbols) {
         if (VALID_SPECIAL_SYMBOLS.contains(symbol)) {
@@ -46,10 +45,6 @@ bool TPasswordCheckParameters::NeedNumbersUse() const {
 
 bool TPasswordCheckParameters::NeedSpecialSymbolsUse() const {
     return NeedSpecialSymbols;
-}
-
-bool TPasswordCheckParameters::IsEmptyPasswordEnable() const {
-    return EnableEmptyPassword;
 }
 
 bool TPasswordCheckParameters::IsSpecialSymbolValid(char symbol) const {
@@ -95,7 +90,7 @@ TPasswordChecker::TPasswordChecker(const TPasswordCheckParameters& checkParamete
 {}
 
 TPasswordChecker::TResult TPasswordChecker::Check(const TString& username, const TString& password) const {
-    if (CheckParameters.IsEmptyPasswordEnable() && password.empty()) {
+    if (password.empty() && CheckParameters.GetMinPasswordLength() == 0) {
         return {.Success = true};
     }
     if (password.length() < CheckParameters.GetMinPasswordLength()) {

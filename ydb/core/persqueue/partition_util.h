@@ -113,7 +113,6 @@ struct TPartition::THasDataReq {
     TActorId Sender;
     TMaybe<ui64> Cookie;
     TString ClientId;
-    TMaybe<TInstant> ReadTimestamp;
 
     bool operator < (const THasDataReq& req) const {
         return Num < req.Num;

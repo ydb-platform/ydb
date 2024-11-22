@@ -441,6 +441,7 @@ private:
     void HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx);
 
+    ui64 GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

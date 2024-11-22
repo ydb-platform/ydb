@@ -41,6 +41,13 @@ TMaybe<TInstant> GetReadFrom(ui32 maxTimeLagMs, ui64 readTimestampMs, TInstant c
     return timestamp;
 }
 
+ui64 TPartition::GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const {
+    if (!readTimestamp) {
+        return offset;
+    }
+    return Max(GetOffsetEstimate(DataKeysBody, *readTimestamp, Min(Head.Offset, EndOffset - 1)), offset);
+}
+
 void TPartition::SendReadingFinished(const TString& consumer) {
     Send(Tablet, new TEvPQ::TEvReadingPartitionStatusRequest(consumer, Partition.OriginalPartitionId, TabletGeneration, ++PQRBCookie));
 }
@@ -144,7 +151,7 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     };
 
     for (auto request = HasDataRequests.begin(); request != HasDataRequests.end();) {
-        if (request->Offset < EndOffset && (!request->ReadTimestamp || *request->ReadTimestamp < EndWriteTimestamp)) {
+        if (request->Offset < EndOffset) {
             auto response = MakeHasDataInfoResponse(GetSizeLag(request->Offset), request->Cookie);
             ctx.Send(request->Sender, response.Release());
         } else if (!IsActive()) {
@@ -184,15 +191,16 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     auto readTimestamp = GetReadFrom(record.GetMaxTimeLagMs(), record.GetReadTimestampMs(), TInstant::Zero() /* TODO */, ctx);
 
     TActorId sender = ActorIdFromProto(record.GetSender());
-    if (InitDone && EndOffset > (ui64)record.GetOffset() && (!readTimestamp || EndWriteTimestamp > *readTimestamp)) { //already has data, answer right now
+    if (InitDone && EndOffset > (ui64)record.GetOffset() && (!readTimestamp || EndWriteTimestamp >= *readTimestamp)) { //already has data, answer right now
         auto response = MakeHasDataInfoResponse(GetSizeLag(record.GetOffset()), cookie);
         ctx.Send(sender, response.Release());
     } else if (InitDone && !IsActive()) {
         auto response = MakeHasDataInfoResponse(0, cookie, true);
         ctx.Send(sender, response.Release());
     } else {
-        THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
-                        record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};
+
+        THasDataReq req{++HasDataReqNum, GetReadOffset((ui64)record.GetOffset(), readTimestamp), sender, cookie,
+                        record.HasClientId() && InitDone ? record.GetClientId() : ""};
         THasDataDeadline dl{TInstant::MilliSeconds(record.GetDeadline()), req};
         auto res = HasDataRequests.insert(req);
         HasDataDeadlines.insert(dl);
@@ -779,7 +787,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
 
     auto readTimestamp = GetReadFrom(read->MaxTimeLagMs, read->ReadTimestampMs, userInfo->ReadFromTimestamp, ctx);
     if (read->PartNo == 0 && readTimestamp) {
-        offset = Max(GetOffsetEstimate(DataKeysBody, *readTimestamp, Min(Head.Offset, EndOffset - 1)), offset);
+        offset = GetReadOffset(offset, readTimestamp);
         userInfo->ReadOffsetRewindSum += offset - read->Offset;
     }
 

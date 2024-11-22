@@ -22,7 +22,7 @@ namespace numpy
   array_equiv(U const &u, V const &v);
 
   DEFINE_FUNCTOR(pythonic::numpy, array_equiv);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

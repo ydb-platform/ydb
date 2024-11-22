@@ -11,7 +11,7 @@ namespace time
   double time();
 
   DEFINE_FUNCTOR(pythonic::time, time)
-}
+} // namespace time
 PYTHONIC_NS_END
 
 #endif

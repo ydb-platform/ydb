@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_SCIPY_SPECIAL_HANKEL1_HPP
 #define PYTHONIC_INCLUDE_SCIPY_SPECIAL_HANKEL1_HPP
 
-#include "pythonic/include/types/ndarray.hpp"
 #include "pythonic/include/types/complex.hpp"
+#include "pythonic/include/types/ndarray.hpp"
 #include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/utils/numpy_traits.hpp"
 
@@ -22,8 +22,8 @@ namespace scipy
 #define NUMPY_NARY_FUNC_NAME hankel1
 #define NUMPY_NARY_FUNC_SYM details::hankel1
 #include "pythonic/include/types/numpy_nary_expr.hpp"
-  }
-}
+  } // namespace special
+} // namespace scipy
 PYTHONIC_NS_END
 
 #endif

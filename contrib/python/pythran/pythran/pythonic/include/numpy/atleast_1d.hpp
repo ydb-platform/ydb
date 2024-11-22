@@ -19,7 +19,7 @@ namespace numpy
                               decltype(asarray(t))>::type;
 
   DEFINE_FUNCTOR(pythonic::numpy, atleast_1d);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

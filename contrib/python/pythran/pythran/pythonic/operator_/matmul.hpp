@@ -3,8 +3,8 @@
 
 #include "pythonic/include/operator_/matmul.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/numpy/dot.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -17,7 +17,7 @@ namespace operator_
   {
     return numpy::functor::dot{}(std::forward<A>(a), std::forward<B>(b));
   }
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

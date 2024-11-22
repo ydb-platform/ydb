@@ -3,14 +3,14 @@
 
 #include "pythonic/include/numpy/searchsorted.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/utils/numpy_conversion.hpp"
-#include "pythonic/utils/int_.hpp"
-#include "pythonic/types/ndarray.hpp"
-#include "pythonic/types/str.hpp"
 #include "pythonic/builtins/None.hpp"
 #include "pythonic/builtins/ValueError.hpp"
 #include "pythonic/numpy/asarray.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/types/str.hpp"
+#include "pythonic/utils/functor.hpp"
+#include "pythonic/utils/int_.hpp"
+#include "pythonic/utils/numpy_conversion.hpp"
 
 #include <algorithm>
 
@@ -39,7 +39,7 @@ namespace numpy
         throw types::ValueError("'" + side +
                                 "' is an invalid value for keyword 'side'");
     }
-  }
+  } // namespace details
 
   template <class T, class U>
   typename std::enable_if<!types::is_numexpr_arg<T>::value, long>::type
@@ -67,25 +67,25 @@ namespace numpy
         _search_sorted(a, (*ibegin).begin(), (*ibegin).end(), (*obegin).begin(),
                        left, utils::int_<N - 1>());
     }
-  }
+  } // namespace
 
   template <class E, class T>
   typename std::enable_if<
       types::is_numexpr_arg<E>::value,
-      types::ndarray<long, types::array<long, E::value>>>::type
+      types::ndarray<long, types::array_tuple<long, E::value>>>::type
   searchsorted(T const &a, E const &v, types::str const &side)
   {
     static_assert(T::value == 1,
                   "Not Implemented : searchsorted for dimension != 1");
     bool left = details::issearchsortedleft(side);
 
-    types::ndarray<long, types::array<long, E::value>> out(asarray(v)._shape,
-                                                           builtins::None);
+    types::ndarray<long, types::array_tuple<long, E::value>> out(
+        asarray(v)._shape, builtins::None);
     _search_sorted(a, v.begin(), v.end(), out.begin(), left,
                    utils::int_<E::value>());
     return out;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

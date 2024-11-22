@@ -362,13 +362,90 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         TChainTester(65).Test();
     }
 
+<<<<<<< HEAD
     TString ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
+||||||| parent of 5bb1c8b5b11 (actually run preserving join)
+    TString ExecuteJoinOrderTestGenericQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
+=======
+    TString ExecuteJoinOrderTestGenericQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true, TMaybe<TString> dataQuery = {}, TMaybe<TString> canonicalResult = {}) {
+>>>>>>> 5bb1c8b5b11 (actually run preserving join)
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
         CreateSampleTable(session, useColumnStore);
+<<<<<<< HEAD
+||||||| parent of 5bb1c8b5b11 (actually run preserving join)
+        sleep(5);
+
+        /* join with parameters */
+        {
+            const TString query = GetStatic(queryPath);
+            auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                .ExecMode(NYdb::NQuery::EExecMode::Explain);
+            
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            PrintPlan(*result.GetStats()->GetPlan());
+            return *result.GetStats()->GetPlan();
+        }
+    }
+
+    TString ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
+        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTable(session, useColumnStore);
+=======
+        sleep(5);
+
+        TString plan;
+        /* join with parameters */
+        {
+            const TString query = GetStatic(queryPath);
+            auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                .ExecMode(NYdb::NQuery::EExecMode::Explain);
+            
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            PrintPlan(*result.GetStats()->GetPlan());
+            Cout << *result.GetStats()->GetAst() << Endl;
+            plan = *result.GetStats()->GetPlan();
+        }
+
+        if (dataQuery) {
+            Cerr << "actually run queries" << Endl;
+            TString query = GetStatic(*dataQuery);
+            auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                .ExecMode(NYdb::NQuery::EExecMode::Execute);
+            
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            query = GetStatic(queryPath);
+            result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            if (canonicalResult) {
+               CompareYson(*canonicalResult, FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+
+        return plan;
+    }
+
+    TString ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
+        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTable(session, useColumnStore);
+>>>>>>> 5bb1c8b5b11 (actually run preserving join)
 
         /* join with parameters */
         {

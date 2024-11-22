@@ -184,7 +184,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildStreamIdxLookupJoinStages(TExprBase node, TExprContext& ctx) {
-        TExprBase output = KqpBuildStreamIdxLookupJoinStages(node, ctx);
+        TExprBase output = KqpBuildStreamIdxLookupJoinStages(node, ctx, TypesCtx);
         DumpAppliedRule("BuildStreamIdxLookupJoinStages", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

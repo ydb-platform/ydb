@@ -46,12 +46,19 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
     os << "Type: " << ConvertToStatisticsTypeString(s.Type) << ", Nrows: " << s.Nrows
         << ", Ncols: " << s.Ncols << ", ByteSize: " << s.ByteSize << ", Cost: " << s.Cost;
     if (s.KeyColumns) {
+        os << ", keys: ";
         for (const auto& c : s.KeyColumns->Data) {
-            os << ", " << c;
+            os << c << ", " ;
         }
     }
     os << ", Sel: " << s.Selectivity;
     os << ", Storage: " << ConvertToStatisticsTypeString(s.StorageType);
+    if (s.SortColumns) {
+        os << ", sorted: ";
+        for (const auto& c : s.SortColumns->Columns) {
+            os << c << ", ";
+        }
+    }
     return os;
 }
 
@@ -68,6 +75,7 @@ TOptimizerStatistics::TOptimizerStatistics(
     TIntrusivePtr<TKeyColumns> keyColumns,
     TIntrusivePtr<TColumnStatMap> columnMap,
     EStorageType storageType,
+    TIntrusivePtr<TSortColumns> sortColumns,
     std::shared_ptr<IProviderStatistics> specific)
     : Type(type)
     , Nrows(nrows)
@@ -77,6 +85,7 @@ TOptimizerStatistics::TOptimizerStatistics(
     , KeyColumns(keyColumns)
     , ColumnStatistics(columnMap)
     , StorageType(storageType)
+    , SortColumns(sortColumns)
     , Specific(std::move(specific))
 {
 }
@@ -90,7 +99,7 @@ TOptimizerStatistics& TOptimizerStatistics::operator+=(const TOptimizerStatistic
 }
 
 std::shared_ptr<TOptimizerStatistics> NYql::OverrideStatistics(const NYql::TOptimizerStatistics& s, const TStringBuf& tablePath, const std::shared_ptr<NJson::TJsonValue>& stats) {
-    auto res = std::make_shared<TOptimizerStatistics>(s.Type, s.Nrows, s.Ncols, s.ByteSize, s.Cost, s.KeyColumns, s.ColumnStatistics, s.StorageType, s.Specific);
+    auto res = std::make_shared<TOptimizerStatistics>(s.Type, s.Nrows, s.Ncols, s.ByteSize, s.Cost, s.KeyColumns, s.ColumnStatistics, s.StorageType, s.SortColumns, s.Specific);
 
     auto dbStats = stats->GetMapSafe();
 

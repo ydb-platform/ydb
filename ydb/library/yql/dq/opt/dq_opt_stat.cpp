@@ -246,7 +246,6 @@ bool IsConstantExprWithParams(const TExprNode::TPtr& input) {
     return false;
 }
 
-
 /**
  * Compute statistics for map join
  * FIX: Currently we treat all join the same from the cost perspective, need to refine cost function
@@ -481,7 +480,8 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
             inputStats->Cost, 
             inputStats->KeyColumns,
             inputStats->ColumnStatistics,
-            inputStats->StorageType);
+            inputStats->StorageType,
+            inputStats->SortColumns);
 
         outputStats.Labels = inputStats->Labels;
         outputStats.Selectivity *= (inputStats->Selectivity * selectivity);
@@ -534,7 +534,8 @@ void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationConte
         inputStats->Cost, 
         inputStats->KeyColumns,
         inputStats->ColumnStatistics,
-        inputStats->StorageType);
+        inputStats->StorageType,
+        inputStats->SortColumns);
 
     outputStats.Selectivity *= (selectivity * inputStats->Selectivity);
     outputStats.Labels = inputStats->Labels;
@@ -562,24 +563,6 @@ void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TTypeAnnota
 }
 
 /**
- * Infer statistics and costs for ExtractlMembers
- * We just return the input statistics.
-*/
-void InferStatisticsForExtractMembers(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
-
-    auto inputNode = TExprBase(input);
-    auto extractMembers = inputNode.Cast<TCoExtractMembers>();
-    auto extractMembersInput = extractMembers.Input();
-
-    auto inputStats = typeCtx->GetStats(extractMembersInput.Raw() );
-    if (!inputStats) {
-        return;
-    }
-
-    typeCtx->SetStats( input.Get(), inputStats );
-}
-
-/**
  * Infer statistics and costs for AggregateCombine
  * We just return the input statistics.
 */
@@ -594,7 +577,7 @@ void InferStatisticsForAggregateCombine(const TExprNode::TPtr& input, TTypeAnnot
         return;
     }
 
-    typeCtx->SetStats( input.Get(), inputStats );
+    typeCtx->SetStats( input.Get(), RemoveOrdering(inputStats));
 }
 
 /**
@@ -718,5 +701,28 @@ void InferStatisticsForStage(const TExprNode::TPtr& input, TTypeAnnotationContex
         typeCtx->SetStats( stage.Raw(), lambdaStats );
     }
 }
+
+std::shared_ptr<TOptimizerStatistics> RemoveOrdering(const std::shared_ptr<TOptimizerStatistics>& stats) {
+    if (stats->SortColumns) {
+        auto newStats = *stats;
+        newStats.SortColumns = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
+        return std::make_shared<TOptimizerStatistics>(std::move(newStats));
+    } else {
+        return stats;
+    }
+}
+
+std::shared_ptr<TOptimizerStatistics> RemoveOrdering(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input) {
+    if (TCoTop::Match(input.Get()) ||
+        TDqCnHashShuffle::Match(input.Get()) ||
+        TDqCnBroadcast::Match(input.Get()) ||
+        TCoTopBase::Match(input.Get()) ||
+        TCoSortBase::Match(input.Get())) {
+            return RemoveOrdering(stats);
+        } else {
+            return stats;
+        }
+}
+
 
 } // namespace NYql::NDq {

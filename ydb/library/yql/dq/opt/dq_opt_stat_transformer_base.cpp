@@ -3,6 +3,9 @@
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
+#include <yql/essentials/utils/log/log.h>
+
+
 namespace NYql::NDq {
 
 using namespace NNodes;
@@ -42,9 +45,6 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     }
     else if(TCoSkipNullMembers::Match(input.Get())){
         InferStatisticsForSkipNullMembers(input, TypeCtx);
-    }
-    else if(TCoExtractMembers::Match(input.Get())){
-        InferStatisticsForExtractMembers(input, TypeCtx);
     }
     else if(TCoAggregateCombine::Match(input.Get())){
         InferStatisticsForAggregateCombine(input, TypeCtx);
@@ -90,7 +90,8 @@ bool TDqStatisticsTransformerBase::BeforeLambdasUnmatched(const TExprNode::TPtr&
     if (input->ChildrenSize() >= 1) {
         auto stats = TypeCtx->GetStats(input->ChildRef(0).Get());
         if (stats) {
-            TypeCtx->SetStats(input.Get(), stats);
+            YQL_CLOG(TRACE, CoreDq) << "Infer statistics for " << input->Content() << " with stats " << stats->ToString();
+            TypeCtx->SetStats(input.Get(), RemoveOrdering(stats, input));
         }
     }
     return true;

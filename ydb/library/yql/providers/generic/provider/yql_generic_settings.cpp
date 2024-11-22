@@ -15,14 +15,15 @@ namespace NYql {
     }
 
     void TGenericConfiguration::Init(const NYql::TGenericGatewayConfig& gatewayConfig,
-                                     const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,
+                                     const NYql::IDatabaseAsyncResolver::TPtr databaseResolver,
+                                     const NYql::ILoggingResolver::TPtr loggingResolver,
                                      NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
                                      const TCredentials::TPtr& credentials)
     {
         Dispatch(gatewayConfig.GetDefaultSettings());
 
         for (const auto& cluster : gatewayConfig.GetClusterMapping()) {
-            AddCluster(cluster, databaseResolver, databaseAuth, credentials);
+            AddCluster(cluster, databaseResolver, loggingResolver, databaseAuth, credentials);
         }
 
         // TODO: check if it's necessary
@@ -30,7 +31,8 @@ namespace NYql {
     }
 
     void TGenericConfiguration::AddCluster(const TGenericClusterConfig& clusterConfig,
-                                           const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,
+                                           const NYql::IDatabaseAsyncResolver::TPtr databaseResolver,
+                                           const NYql::ILoggingResolver::TPtr loggingResolver,
                                            NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
                                            const TCredentials::TPtr& credentials) {
         ValidateGenericClusterConfig(clusterConfig, "TGenericConfiguration::AddCluster");
@@ -38,8 +40,9 @@ namespace NYql {
         YQL_CLOG(INFO, ProviderGeneric) << "GenericConfiguration::AddCluster: " << DumpGenericClusterConfig(clusterConfig);
 
         const auto& clusterName = clusterConfig.GetName();
-        const auto& databaseId = clusterConfig.GetDatabaseId();
 
+        // 1. Preserve managed database ids for the further resolving
+        const auto& databaseId = clusterConfig.GetDatabaseId();
         if (databaseId) {
             if (!databaseResolver) {
                 ythrow yexception() << "You're trying to access managed database, but database resolver is not configured.";
@@ -56,6 +59,10 @@ namespace NYql {
 
             DatabaseIdsToClusterNames[databaseId].emplace_back(clusterName);
             YQL_CLOG(DEBUG, ProviderGeneric) << "database id '" << databaseId << "' added to mapping";
+        }
+
+        if (clusterConfig.GetKind() == NConnector::NApi::EDataSourceKind::LOGGING) {
+            Y_ENSURE(loggingResolver, "logging resolver is not configured");
         }
 
         // NOTE: Tokens map is filled just because it's required by DQ/KQP.

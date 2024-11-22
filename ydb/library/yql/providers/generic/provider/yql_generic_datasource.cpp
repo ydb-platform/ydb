@@ -143,6 +143,7 @@ namespace NYql {
                 State_->Configuration->AddCluster(
                     GenericClusterConfigFromProperties(clusterName, properties),
                     State_->DatabaseResolver,
+                    State_->LoggingResolver,
                     State_->DatabaseAuth,
                     State_->Types->Credentials);
             }

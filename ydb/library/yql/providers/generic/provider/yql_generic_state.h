@@ -45,7 +45,7 @@ namespace NYql {
             , CredentialsFactory(credentialsFactory)
             , GenericClient(genericClient)
         {
-            Configuration->Init(gatewayConfig, databaseResolver, DatabaseAuth, types->Credentials);
+            Configuration->Init(gatewayConfig, databaseResolver, loggingResolver, DatabaseAuth, types->Credentials);
         }
 
         void AddTable(const TStringBuf& clusterName, const TStringBuf& tableName, TTableMeta&& tableMeta);
@@ -57,12 +57,12 @@ namespace NYql {
         const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
 
         // (database_id, database_type) -> credentials to access managed APIs
-        IDatabaseAsyncResolver::TDatabaseAuthMap DatabaseAuth;
         std::shared_ptr<IDatabaseAsyncResolver> DatabaseResolver;
+        IDatabaseAsyncResolver::TDatabaseAuthMap DatabaseAuth;
 
         // cluster_id -> credentials to access logging API;
-        ILoggingResolver::TAuthMap LoggingAuth;
         ILoggingResolver::TPtr LoggingResolver;
+        ILoggingResolver::TAuthMap LoggingAuth;
 
         // key - cluster name, value - TCredentialsProviderPtr
         // It's important to cache credentials providers, because they make IO

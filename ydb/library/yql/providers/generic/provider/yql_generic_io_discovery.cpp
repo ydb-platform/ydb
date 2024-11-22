@@ -43,11 +43,11 @@ namespace NYql {
             virtual ~IClusterConfigModifier() = default;
         };
 
-        class TManagedDatabasesConfigModifier: public IClusterConfigModifier {
+        class TManagedDatabaseConfigModifier: public IClusterConfigModifier {
         public:
-            TManagedDatabasesConfigModifier() = delete;
+            TManagedDatabaseConfigModifier() = delete;
 
-            TManagedDatabasesConfigModifier(const TGenericState::TPtr& state): State_(state) {};
+            TManagedDatabaseConfigModifier(const TGenericState::TPtr& state): State_(state) {};
 
             void CollectUnresolvedClusters(const TExprNode::TListType& reads) override {
                 for (auto& node : reads) {
@@ -68,7 +68,7 @@ namespace NYql {
                                                              << ": clusterName=" << clusterName
                                                              << ", databaseId=" << databaseId;
 
-                            ManagedDatabases_[idKey] = iter->second;
+                            UnresolvedItems_[idKey] = iter->second;
                         }
                     }
                 }
@@ -79,7 +79,7 @@ namespace NYql {
             virtual TFutures ResolveClusters() override {
                 TFutures futures;
 
-                for (const auto& [databaseIdWithType, databaseAuth] : ManagedDatabases_) {
+                for (const auto& [databaseIdWithType, databaseAuth] : UnresolvedItems_) {
                     auto promise = NThreading::NewPromise<TIssues>();
 
                     // Now it's only possible to emit a single request with a single cluster ID simultaneously.
@@ -100,8 +100,8 @@ namespace NYql {
                         }
 
                         // save ids for the further use
-                        DatabaseDescriptions_.insert(response.DatabaseDescriptionMap.cbegin(),
-                                                    response.DatabaseDescriptionMap.cend());
+                        ResolvedItems_.insert(response.DatabaseDescriptionMap.cbegin(),
+                                              response.DatabaseDescriptionMap.cend());
 
                         promise.SetValue({});
                     }
@@ -117,7 +117,7 @@ namespace NYql {
                 const auto& databaseIdsToClusterNames = State_->Configuration->DatabaseIdsToClusterNames;
                 auto& clusterNamesToClusterConfigs = State_->Configuration->ClusterNamesToClusterConfigs;
 
-                for (const auto& [databaseIdWithType, databaseDescription] : DatabaseDescriptions_) {
+                for (const auto& [databaseIdWithType, databaseDescription] : ResolvedItems_) {
                     const auto& databaseId = databaseIdWithType.first;
 
                     Y_ENSURE(databaseDescription.Host, "Empty resolved database host");
@@ -160,14 +160,17 @@ namespace NYql {
                 return issues;
             }
 
-            void Cleanup() override {
-                if (!DatabaseDescriptions_.empty()) {
-                    DatabaseDescriptions_ = {};
-                }
+            std::size_t Count() const override {
+                return UnresolvedItems_.size();
             }
 
-            std::size_t Count() const override {
-                return DatabaseDescriptions_.size();
+            void Cleanup() override {
+                if (!UnresolvedItems_.empty()) {
+                    ResolvedItems_ = {};
+                }
+                if (!ResolvedItems_.empty()) {
+                    UnresolvedItems_ = {};
+                }
             }
 
             virtual TString Name() const override {
@@ -175,8 +178,8 @@ namespace NYql {
             }
 
         private:
-            IDatabaseAsyncResolver::TDatabaseAuthMap ManagedDatabases_;
-            TDatabaseResolverResponse::TDatabaseDescriptionMap DatabaseDescriptions_;
+            IDatabaseAsyncResolver::TDatabaseAuthMap UnresolvedItems_;
+            TDatabaseResolverResponse::TDatabaseDescriptionMap ResolvedItems_;
             const TGenericState::TPtr& State_;
         };
 
@@ -278,8 +281,12 @@ namespace NYql {
             };
 
             virtual void Cleanup() override {
-                UnresolvedItems_.clear();
-                ResolvedItems_.clear();
+                if (!UnresolvedItems_.empty()) {
+                    ResolvedItems_ = {};
+                }
+                if (!ResolvedItems_.empty()) {
+                    UnresolvedItems_ = {};
+                }
             };
 
             virtual TString Name() const override {
@@ -317,7 +324,7 @@ namespace NYql {
                 : State_(std::move(state))
             {
                 ClusterConfigModifiers_.push_back(std::make_unique<TLoggingConfigModifier>(State_));
-                ClusterConfigModifiers_.push_back(std::make_unique<TManagedDatabasesConfigModifier>(State_));
+                ClusterConfigModifiers_.push_back(std::make_unique<TManagedDatabaseConfigModifier>(State_));
             }
 
             TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {

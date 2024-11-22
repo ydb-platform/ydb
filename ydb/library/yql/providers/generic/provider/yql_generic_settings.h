@@ -3,6 +3,7 @@
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/library/yql/providers/common/logging_resolver/logging_resolver.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 namespace NYql {
@@ -25,11 +26,17 @@ namespace NYql {
         TGenericConfiguration();
         TGenericConfiguration(const TGenericConfiguration&) = delete;
 
-        void Init(const NYql::TGenericGatewayConfig& gatewayConfig, const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,
-                  NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth, const TCredentials::TPtr& credentials);
+        void Init(const NYql::TGenericGatewayConfig& gatewayConfig,
+                  const NYql::IDatabaseAsyncResolver::TPtr databaseResolver,
+                  const NYql::ILoggingResolver::TPtr loggingResolver,
+                  NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth, 
+                  const TCredentials::TPtr& credentials);
 
-        void AddCluster(const TGenericClusterConfig& clusterConfig, const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,
-                        NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth, const TCredentials::TPtr& credentials);
+        void AddCluster(const TGenericClusterConfig& clusterConfig,
+                        const NYql::IDatabaseAsyncResolver::TPtr databaseResolver,
+                        const NYql::ILoggingResolver::TPtr loggingResolver,
+                        NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
+                        const TCredentials::TPtr& credentials);
 
         TGenericSettings::TConstPtr Snapshot() const;
         bool HasCluster(TStringBuf cluster) const;

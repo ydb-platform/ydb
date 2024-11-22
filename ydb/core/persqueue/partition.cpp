@@ -356,6 +356,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     meta.SetStartOffset(StartOffset);
     meta.SetEndOffset(Max(NewHead.GetNextOffset(), EndOffset));
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
+    meta.SetLastMessageWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
 
     if (IsSupportive()) {
         auto* counterData = meta.MutableCounterData();

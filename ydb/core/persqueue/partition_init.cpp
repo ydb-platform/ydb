@@ -316,6 +316,8 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
            }
            */
         Partition()->SubDomainOutOfSpace = meta.GetSubDomainOutOfSpace();
+        Partition()->EndWriteTimestamp = TInstant::MilliSeconds(meta.GetLastMessageWriteTimestamp());
+        Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
         if (Partition()->IsSupportive()) {
             const auto& counterData = meta.GetCounterData();
             Partition()->BytesWrittenGrpc.SetSavedValue(counterData.GetBytesWrittenGrpc());

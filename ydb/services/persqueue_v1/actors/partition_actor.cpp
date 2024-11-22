@@ -25,7 +25,7 @@ TPartitionActor::TPartitionActor(
         const TString& session, const TPartitionId& partition, const ui32 generation, const ui32 step,
         const ui64 tabletID, const TTopicCounters& counters, bool commitsDisabled,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic,
-        bool directRead, bool useMigrationProtocol
+        bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs
 )
     : ParentId(parentId)
     , ClientId(clientId)
@@ -37,6 +37,8 @@ TPartitionActor::TPartitionActor(
     , Generation(generation)
     , Step(step)
     , TabletID(tabletID)
+    , MaxTimeLagMs(maxTimeLagMs)
+    , ReadTimestampMs(readTimestampMs)
     , ReadOffset(0)
     , ClientReadOffset(0)
     , ClientCommitOffset(0)
@@ -1017,6 +1019,13 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     ui64 deadline = (ctx.Now() + WAIT_DATA - WAIT_DELTA).MilliSeconds();
     event->Record.SetDeadline(deadline);
     event->Record.SetClientId(ClientId);
+    if (MaxTimeLagMs) {
+        event->Record.SetMaxTimeLagMs(MaxTimeLagMs);
+    }
+    if (ReadTimestampMs) {
+        event->Record.SetReadTimestampMs(ReadTimestampMs);
+    }
+
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY,
             PQ_LOG_PREFIX << " " << Partition << " wait data in partition inited, cookie " << WaitDataCookie << " from offset" << ReadOffset);

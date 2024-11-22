@@ -26,7 +26,8 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
 
     auto describeTopicResult = TCommandWorkloadTopicDescribe::DescribeTopic(params.Database, params.TopicName, params.Driver);
     NYdb::NTopic::TReadSessionSettings settings;
-    settings.AutoPartitioningSupport(true);
+    settings.AutoPartitioningSupport(false);
+    settings.MaxLag(TDuration::Seconds(30));
 
     if (!params.ReadWithoutConsumer) {
         auto consumerName = TCommandWorkloadTopicDescribe::GenerateConsumerName(params.ConsumerPrefix, params.ConsumerIdx);
@@ -105,7 +106,7 @@ void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInsta
                 }
 
                 if (!params.ReadWithoutConsumer && (!txSupport || params.UseTopicCommit)) {
-                    dataEvent->Commit();
+                    //dataEvent->Commit();
                 }
             } else if (auto* createPartitionStreamEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
                 auto stream = createPartitionStreamEvent->GetPartitionSession();

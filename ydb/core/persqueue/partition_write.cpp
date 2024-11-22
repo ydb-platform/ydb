@@ -381,8 +381,9 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::SyncMemoryStateWithKVState.");
 
-    if (!CompactedKeys.empty())
+    if (!CompactedKeys.empty()) {
         HeadKeys.clear();
+    }
 
     if (NewHeadKey.Size > 0) {
         while (!HeadKeys.empty() &&
@@ -437,6 +438,8 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     }
 
     EndOffset = Head.GetNextOffset();
+    EndWriteTimestamp = PendingWriteTimestamp;
+
     NewHead.Clear();
     NewHead.Offset = EndOffset;
 
@@ -1397,12 +1400,19 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
         Y_ABORT_UNLESS(Head.GetBatch(pp).GetPartNo() == key.GetPartNo());
         for (; pp < Head.GetBatches().size(); ++pp) { //TODO - merge small batches here
             Y_ABORT_UNLESS(Head.GetBatch(pp).Packed);
-            Head.GetBatch(pp).SerializeTo(valueD);
+            auto& batch = Head.GetBatch(pp);
+            batch.SerializeTo(valueD);
+            if (!batch.Empty()) {
+                PendingWriteTimestamp = batch.GetLastMessageWriteTimestamp();
+            }
         }
     }
     for (auto& b : NewHead.GetBatches()) {
         Y_ABORT_UNLESS(b.Packed);
         b.SerializeTo(valueD);
+        if (!b.Empty()) {
+            PendingWriteTimestamp = b.GetLastMessageWriteTimestamp();
+        }
     }
 
     Y_ABORT_UNLESS(res.second >= valueD.size());

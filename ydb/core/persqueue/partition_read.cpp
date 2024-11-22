@@ -30,6 +30,34 @@ namespace NKikimr::NPQ {
 
 static const ui32 MAX_USER_ACTS = 1000;
 
+struct TReadFrom {
+
+    TReadFrom(ui32 maxTimeLagMs, ui64 readTimestampMs, TInstant consumerReadFromTimestamp = TInstant())
+        : MaxTimeLagMs(maxTimeLagMs)
+        , ReadTimestampMs(readTimestampMs)
+        , ConsumerReadFromTimestamp(consumerReadFromTimestamp) {
+    }
+
+    bool HasReadTimestamp() const {
+        return MaxTimeLagMs > 0 || ReadTimestampMs > 0 || ConsumerReadFromTimestamp > TInstant::MilliSeconds(1);
+    }
+
+    TMaybe<TInstant> AsInstant(const TActorContext& ctx) {
+        if (!HasReadTimestamp()) {
+            return {};
+        }
+
+        TInstant timestamp = MaxTimeLagMs > 0 ? ctx.Now() - TDuration::MilliSeconds(MaxTimeLagMs) : TInstant::Zero();
+        timestamp = Max(timestamp, TInstant::MilliSeconds(ReadTimestampMs));
+        timestamp = Max(timestamp, ConsumerReadFromTimestamp);
+        return timestamp;
+    }
+
+    ui32 MaxTimeLagMs;
+    ui64 ReadTimestampMs;
+    TInstant ConsumerReadFromTimestamp;
+};
+
 void TPartition::SendReadingFinished(const TString& consumer) {
     Send(Tablet, new TEvPQ::TEvReadingPartitionStatusRequest(consumer, Partition.OriginalPartitionId, TabletGeneration, ++PQRBCookie));
 }
@@ -133,7 +161,7 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     };
 
     for (auto request = HasDataRequests.begin(); request != HasDataRequests.end();) {
-        if (request->Offset < EndOffset) {
+        if (request->Offset < EndOffset && (!request->ReadTimestamp || *request->ReadTimestamp < EndWriteTimestamp)) {
             auto response = MakeHasDataInfoResponse(GetSizeLag(request->Offset), request->Cookie);
             ctx.Send(request->Sender, response.Release());
         } else if (!IsActive()) {
@@ -170,8 +198,11 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
 
     auto cookie = record.HasCookie() ? TMaybe<ui64>(record.GetCookie()) : TMaybe<ui64>();
 
+    TReadFrom readFrom(record.GetMaxTimeLagMs(), record.GetReadTimestampMs(), TInstant::Zero() /* TODO */);
+    auto readTimestamp = readFrom.AsInstant(ctx);
+
     TActorId sender = ActorIdFromProto(record.GetSender());
-    if (InitDone && EndOffset > (ui64)record.GetOffset()) { //already has data, answer right now
+    if (InitDone && EndOffset > (ui64)record.GetOffset() && (!readTimestamp || EndWriteTimestamp > *readTimestamp)) { //already has data, answer right now
         auto response = MakeHasDataInfoResponse(GetSizeLag(record.GetOffset()), cookie);
         ctx.Send(sender, response.Release());
     } else if (InitDone && !IsActive()) {
@@ -179,7 +210,7 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
         ctx.Send(sender, response.Release());
     } else {
         THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
-                        record.HasClientId() && InitDone ? record.GetClientId() : ""};
+                        record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};
         THasDataDeadline dl{TInstant::MilliSeconds(record.GetDeadline()), req};
         auto res = HasDataRequests.insert(req);
         HasDataDeadlines.insert(dl);
@@ -763,11 +794,9 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     }
     userInfo->ReadsInQuotaQueue--;
     ui64 offset = read->Offset;
-    if (read->PartNo == 0 && (read->MaxTimeLagMs > 0 || read->ReadTimestampMs > 0 || userInfo->ReadFromTimestamp > TInstant::MilliSeconds(1))) {
-        TInstant timestamp = read->MaxTimeLagMs > 0 ? ctx.Now() - TDuration::MilliSeconds(read->MaxTimeLagMs) : TInstant::Zero();
-        timestamp = Max(timestamp, TInstant::MilliSeconds(read->ReadTimestampMs));
-        timestamp = Max(timestamp, userInfo->ReadFromTimestamp);
-        offset = Max(GetOffsetEstimate(DataKeysBody, timestamp, Min(Head.Offset, EndOffset - 1)), offset);
+    TReadFrom readFrom(read->MaxTimeLagMs, read->ReadTimestampMs, userInfo->ReadFromTimestamp);
+    if (read->PartNo == 0 && readFrom.HasReadTimestamp()) {
+        offset = Max(GetOffsetEstimate(DataKeysBody, *readFrom.AsInstant(ctx), Min(Head.Offset, EndOffset - 1)), offset);
         userInfo->ReadOffsetRewindSum += offset - read->Offset;
     }
 

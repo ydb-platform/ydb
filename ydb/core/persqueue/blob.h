@@ -101,7 +101,7 @@ struct TClientBlob {
     void SerializeTo(TBuffer& buffer) const;
     static TClientBlob Deserialize(const char *data, ui32 size);
 
-    static void CheckBlob(const TKey& key, const TString& blob); 
+    static void CheckBlob(const TKey& key, const TString& blob);
 };
 
 static constexpr const ui32 MAX_BLOB_SIZE = 8_MB;
@@ -167,20 +167,33 @@ struct TBatch {
     ui64 GetOffset() const {
         return Header.GetOffset();
     }
+
     ui16 GetPartNo() const {
         return Header.GetPartNo();
     }
+
     ui32 GetUnpackedSize() const {
         return Header.GetUnpackedSize();
     }
+
     ui32 GetCount() const {
         return Header.GetCount();
     }
+
     ui16 GetInternalPartsCount() const {
         return Header.GetInternalPartsCount();
     }
+
     bool IsGreaterThan(ui64 offset, ui16 partNo) const {
         return GetOffset() > offset || GetOffset() == offset && GetPartNo() > partNo;
+    }
+
+    bool Empty() const {
+        return Blobs.empty();
+    }
+
+    TInstant GetLastMessageWriteTimestamp() const {
+        return Blobs.back().WriteTimestamp;
     }
 
     TBatch(const NKikimrPQ::TBatchHeader &header, const char* data)
@@ -239,7 +252,7 @@ struct THead {
 private:
     std::deque<TBatch> Batches;
     ui16 InternalPartsCount = 0;
-    
+
     friend class TPartitionedBlob;
 
     class TBatchAccessor {

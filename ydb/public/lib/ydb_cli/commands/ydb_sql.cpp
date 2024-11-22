@@ -9,6 +9,7 @@
 #include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include <ydb/public/lib/ydb_cli/common/waiting_bar.h>
 #include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <util/generic/guid.h>
 #include <util/generic/queue.h>
 #include <google/protobuf/text_format.h>
 
@@ -43,6 +44,8 @@ void TCommandSql::Config(TConfig& config) {
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
         .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
         .Hidden();
+    config.Opts->AddLongOption("collect-diagnostics", "Collects diagnostics and saves it to file")
+        .StoreTrue(&CollectFullDiagnostics);
 
     AddOutputFormats(config, {
         EDataFormat::Pretty,
@@ -146,6 +149,10 @@ int TCommandSql::RunCommand(TConfig& config) {
         throw TMisuseException() << "Unknow syntax option \"" << Syntax << "\"";
     }
 
+    if (CollectFullDiagnostics) {
+        settings.CollectFullDiagnostics(true);
+    }
+
     if (!Parameters.empty() || InputParamStream) {
         // Execute query with parameters
         THolder<TParamsBuilder> paramBuilder;
@@ -183,6 +190,7 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
     std::optional<std::string> stats;
     std::optional<std::string> plan;
     std::optional<std::string> ast;
+    TString diagnostics;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
@@ -205,12 +213,14 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
                     plan = queryStats.GetPlan();
                 }
             }
+
+            diagnostics = streamPart.GetDiagnostics();
         }
     } // TResultSetPrinter destructor should be called before printing stats
 
     if (ExplainAst) {
         Cout << "Query AST:" << Endl << ast << Endl;
-        
+
         if (IsInterrupted()) {
             Cerr << "<INTERRUPTED>" << Endl;
             return EXIT_FAILURE;
@@ -233,6 +243,11 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
             ? EDataFormat::PrettyTable : OutputFormat;
         TQueryPlanPrinter queryPlanPrinter(format, /* show actual costs */ !ExplainMode);
         queryPlanPrinter.Print(TString{*plan});
+    }
+
+    if (CollectFullDiagnostics) {
+        TFileOutput file(TStringBuilder() << "diagnostics_" << TGUID::Create().AsGuidString() << ".txt");
+        file << diagnostics;
     }
 
     if (IsInterrupted()) {

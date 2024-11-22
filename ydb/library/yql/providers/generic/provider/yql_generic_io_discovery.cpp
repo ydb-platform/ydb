@@ -25,11 +25,21 @@ namespace NYql {
 
             using TFutures = TVector<NThreading::TFuture<TIssues>>;
 
+            // CollectUnresolvedClusters traverses AST and checks out which clusters have unresolved identifiers.
             virtual void CollectUnresolvedClusters(const TExprNode::TListType& reads) = 0;
+
+            // ResolveCluster performs the resolving (possibly with some I/O)
             virtual TFutures ResolveClusters() = 0;
+
+            // ModifyClusterConfigs mutates the state of provider with resolved endpoints.
             virtual TIssues ModifyClusterConfigs() = 0;
+
             virtual std::size_t Count() const = 0;
             virtual void Cleanup() = 0;
+
+            // Name returns some keyword convenient for logging
+            virtual TString Name() const = 0;
+
             virtual ~IClusterConfigModifier() = default;
         };
 
@@ -160,6 +170,10 @@ namespace NYql {
                 return DatabaseDescriptions_.size();
             }
 
+            virtual TString Name() const override {
+                return "managed databases"; 
+            }
+
         private:
             IDatabaseAsyncResolver::TDatabaseAuthMap ManagedDatabases_;
             TDatabaseResolverResponse::TDatabaseDescriptionMap DatabaseDescriptions_;
@@ -241,6 +255,10 @@ namespace NYql {
                 auto& clusterNamesToClusterConfigs = State_->Configuration->ClusterNamesToClusterConfigs;
 
                 for (auto& [clusterName, clusterConfig] : clusterNamesToClusterConfigs) {
+                    if (clusterConfig.GetKind() != NConnector::NApi::EDataSourceKind::LOGGING) {
+                        continue;
+                    }
+
                     auto itemIter = ResolvedItems_.find(clusterName);
                     if (itemIter == ResolvedItems_.cend()) {
                         issues.AddIssue(TIssue{TStringBuilder() << "no resolved item for cluster " << clusterName});
@@ -264,6 +282,9 @@ namespace NYql {
                 ResolvedItems_.clear();
             };
 
+            virtual TString Name() const override {
+                return "logging"; 
+            }
         private:
             struct TUnresolvedItem {
                 TString FolderId;
@@ -294,8 +315,9 @@ namespace NYql {
         public:
             TGenericIODiscoveryTransformer(TGenericState::TPtr state)
                 : State_(std::move(state))
-                , ManagedDatabasesConfigModifier_(std::make_unique<TManagedDatabasesConfigModifier>(State_))
             {
+                ClusterConfigModifiers_.push_back(std::make_unique<TLoggingConfigModifier>(State_));
+                ClusterConfigModifiers_.push_back(std::make_unique<TManagedDatabasesConfigModifier>(State_));
             }
 
             TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
@@ -324,11 +346,23 @@ namespace NYql {
                 }
 
                 // Collect clusters that need to be resolved
-                ManagedDatabasesConfigModifier_->CollectUnresolvedClusters(reads);
-                YQL_CLOG(DEBUG, ProviderGeneric) << "total database clusters to be resolved: " << ManagedDatabasesConfigModifier_->Count();
+                for (auto& modifier: ClusterConfigModifiers_) {
+                    modifier->CollectUnresolvedClusters(reads);
+                    YQL_CLOG(DEBUG, ProviderGeneric) << "total clusters to be resolved" 
+                        << ": kind= " << modifier->Name()
+                        << ", count= " << modifier->Count();
+                }
 
-                // Resolve clusters
-                auto futures = ManagedDatabasesConfigModifier_->ResolveClusters();
+                // Resolve clusters asynchronously
+                IClusterConfigModifier::TFutures futures;
+                for (auto& modifier: ClusterConfigModifiers_) {
+                    auto result = modifier->ResolveClusters();
+                    futures.insert(
+                         futures.end(), 
+                         std::make_move_iterator(result.begin()), 
+                         std::make_move_iterator(result.end())
+                    );
+                }
 
                 // Block until all futures are ready
                 TIssues issues;
@@ -357,11 +391,12 @@ namespace NYql {
                 output = input;
                 AsyncFuture_.GetValue();
 
-                // Modify cluster configs with resolved ids
-                auto issues = ManagedDatabasesConfigModifier_->ModifyClusterConfigs();
-
-                // Clear results map
-                ManagedDatabasesConfigModifier_->Cleanup();
+                // Modify cluster configs with resolved endpoints
+                TIssues issues;
+                for (auto& modifier: ClusterConfigModifiers_) {
+                    issues.AddIssues(modifier->ModifyClusterConfigs());
+                    modifier->Cleanup();
+                }
 
                 if (!issues.Empty()) {
                     ctx.IssueManager.AddIssues(issues);
@@ -373,13 +408,16 @@ namespace NYql {
 
             void Rewind() final {
                 AsyncFuture_ = {};
-                // Clear results map
-                ManagedDatabasesConfigModifier_->Cleanup();
+
+                // Clear resources
+                for (auto& modifier: ClusterConfigModifiers_) {
+                    modifier->Cleanup();
+                }
             }
 
         private:
             const TGenericState::TPtr State_;
-            IClusterConfigModifier::TPtr ManagedDatabasesConfigModifier_;
+            TVector<IClusterConfigModifier::TPtr> ClusterConfigModifiers_;
             NThreading::TFuture<void> AsyncFuture_;
         };
     } // namespace

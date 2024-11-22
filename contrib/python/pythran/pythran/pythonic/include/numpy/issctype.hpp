@@ -24,7 +24,7 @@ namespace numpy
                               bool>::type;
 
   DEFINE_FUNCTOR(pythonic::numpy, issctype);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

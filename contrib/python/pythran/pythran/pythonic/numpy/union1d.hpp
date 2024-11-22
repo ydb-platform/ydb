@@ -3,8 +3,8 @@
 
 #include "pythonic/include/numpy/union1d.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 #include <set>
 
@@ -27,7 +27,7 @@ namespace numpy
       for (; begin != end; ++begin)
         _union1d((*begin).begin(), (*begin).end(), out, utils::int_<N - 1>());
     }
-  }
+  } // namespace
 
   template <class E, class F>
   types::ndarray<
@@ -41,7 +41,7 @@ namespace numpy
     _union1d(f.begin(), f.end(), res, utils::int_<F::value>());
     return {res};
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

@@ -95,8 +95,8 @@ namespace numpy
       std::random_device rd;
       pcg generator(rd);
     } // namespace details
-  }   // namespace random
-}
+  } // namespace random
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

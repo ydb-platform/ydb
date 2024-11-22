@@ -3,13 +3,13 @@
 
 #include "pythonic/include/numpy/unwrap.hpp"
 
+#include "pythonic/numpy/pi.hpp"
+#include "pythonic/types/ndarray.hpp"
 #include "pythonic/utils/functor.hpp"
 #include "pythonic/utils/int_.hpp"
-#include "pythonic/types/ndarray.hpp"
-#include "pythonic/numpy/pi.hpp"
 
-#include <pythonic/numpy/maximum.hpp>
 #include <pythonic/numpy/abs.hpp>
+#include <pythonic/numpy/maximum.hpp>
 #include <pythonic/numpy/round.hpp>
 
 PYTHONIC_NS_BEGIN
@@ -40,7 +40,7 @@ namespace numpy
         _unwrap((*ibegin).begin(), (*ibegin).end(), (*obegin).begin(), discont,
                 utils::int_<N - 1>());
     }
-  }
+  } // namespace
 
   template <class E>
   types::ndarray<double, typename E::shape_t> unwrap(E const &expr,
@@ -53,7 +53,7 @@ namespace numpy
             utils::int_<E::value>());
     return out;
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

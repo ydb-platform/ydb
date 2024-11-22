@@ -1646,6 +1646,10 @@ message THiveConfig {
     optional uint64 ScaleRecommendationRefreshFrequency = 80 [default = 60000]; // calculate scale recommendation every x milliseconds
 }
 
+message TBSCConfig {
+    optional NKikimrBlobStorage.TUpdateSettings UpdateSettings = 1;
+}
+
 message TBlobCacheConfig {
     optional uint64 MaxSizeBytes = 1 [default = 1073741824];
 }
@@ -2099,6 +2103,7 @@ message TAppConfig {
 
     optional TConfigVersion Version = 102;
     repeated TLabel Labels = 103;
+    optional TBSCConfig BSCConfig = 104;
 }
 
 message TYdbVersion {

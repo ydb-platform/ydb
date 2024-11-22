@@ -50,6 +50,7 @@ namespace NKikimrConfig {
     class TAuthConfig;
 
     class THiveConfig;
+    class TBSCConfig;
     class TDataShardConfig;
     class TColumnShardConfig;
     class TSchemeShardConfig;
@@ -205,6 +206,7 @@ struct TAppData {
     NKikimrProto::TKeyConfig& PDiskKeyConfig;
     TFeatureFlags& FeatureFlags;
     NKikimrConfig::THiveConfig& HiveConfig;
+    NKikimrConfig::TBSCConfig& BscConfig;
     NKikimrConfig::TDataShardConfig& DataShardConfig;
     NKikimrConfig::TColumnShardConfig& ColumnShardConfig;
     NKikimrConfig::TSchemeShardConfig& SchemeShardConfig;

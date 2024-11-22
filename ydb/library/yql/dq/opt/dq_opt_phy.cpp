@@ -1577,15 +1577,28 @@ TExprBase GetSortDirection(const TExprBase& sortDirections, size_t index) {
 }
 } // End of anonymous namespace
 
-TExprBase DqBuildTopStageRemoveSort(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+bool CompatibleSort(TOptimizerStatistics::TSortColumns& existingOrder, const TCoLambda& keySelector, const TExprBase& sortDirections) {
+    return true;
+}
+
+TExprBase DqBuildTopStageRemoveSort(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, TTypeAnnotationContext& typeCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
-        if (!node.Maybe<TCoTop>().Input().Maybe<TDqCnUnionAll>()) {
+    if (!node.Maybe<TCoTop>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
     }
 
     const auto top = node.Cast<TCoTop>();
     const auto dqUnion = top.Input().Cast<TDqCnUnionAll>();
+
+    auto inputStats = typeCtx.GetStats(dqUnion.Output().Raw());
+    
+    if (!inputStats || !inputStats->SortColumns) {
+        return node;
+    }
+
+    YQL_CLOG(TRACE, CoreDq) << "Input type:" << *dqUnion.Output().Raw()->GetTypeAnn();
+
     if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
         return node;
     }
@@ -1598,8 +1611,51 @@ TExprBase DqBuildTopStageRemoveSort(TExprBase node, TExprContext& ctx, IOptimiza
         return TExprBase(ctx.ChangeChild(*node.Raw(), TCoTop::idx_Input, std::move(connToPushableStage)));
     }
 
-    const auto result = dqUnion.Output().Stage().Program().Body();
-    return node;
+    const auto sortKeySelector = top.KeySelectorLambda();
+    const auto sortDirections = top.SortDirections();
+
+    if (!CompatibleSort(*inputStats->SortColumns, sortKeySelector, sortDirections)) {
+        return node;
+    }
+
+    auto builder = Build<TDqSortColumnList>(ctx, node.Pos());
+    for (size_t i = 0; i < inputStats->SortColumns->Columns.size(); i++) {
+        auto columnName = inputStats->SortColumns->Columns[i];
+        //if (inputStats->SortColumns->Aliases[i] != "") {
+        //    columnName = inputStats->SortColumns->Aliases[i] + "." + columnName;
+        //}
+        builder.Add<TDqSortColumn>()
+            .Column<TCoAtom>().Build(columnName)
+            .SortDirection().Build(TTopSortSettings::AscendingSort)
+            .Build();
+    }
+    auto columnList = builder.Build().Value();
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage<TDqStage>()
+                .Inputs()
+                    .Add<TDqCnMerge>()
+                        .Output()
+                            .Stage(dqUnion.Output().Stage())
+                            .Index(dqUnion.Output().Index())
+                            .Build()
+                        .SortColumns(columnList)
+                        .Build()
+                    .Build()
+                .Program()
+                    .Args({"stream"})
+                    .Body<TCoTake>()
+                        .Input("stream")
+                        .Count(top.Count())
+                        .Build()
+                    .Build()
+                .Settings(TDqStageSettings().BuildNode(ctx, top.Pos()))
+                .Build()
+            .Index().Build(0U)
+            .Build()
+        //.SortColumns(columnList)
+        .Done();
 }
 
 TExprBase DqBuildTopStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,

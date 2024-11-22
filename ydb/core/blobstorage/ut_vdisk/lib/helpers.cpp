@@ -394,7 +394,7 @@ class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
     bool Started = false;
     // how many deadline statuses we got
     ui64 RequestDeadlines = 0;
-    ui32 MinHugeBlobInBytes = 0;
+    ui32 MinREALHugeBlobInBytes = 0;
 
     ui64 LastBatchSize = 0;
 
@@ -413,8 +413,8 @@ class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
     void Handle(TEvProxyQueueState::TPtr& ev, const TActorContext& ctx) {
         if (ev->Get()->IsConnected && !Started) {
             // put logo blob
-            MinHugeBlobInBytes = ev->Get()->CostModel->MinHugeBlobInBytes;
-            Y_ABORT_UNLESS(MinHugeBlobInBytes);
+            MinREALHugeBlobInBytes = ev->Get()->CostModel->MinREALHugeBlobInBytes;
+            Y_ABORT_UNLESS(MinREALHugeBlobInBytes);
             SendPut(ctx);
             Started = true;
         }
@@ -485,12 +485,12 @@ class TManyMultiPuts : public TActorBootstrapped<TManyMultiPuts> {
         Y_ABORT_UNLESS(status == NKikimrProto::OK || noTimeout && status == NKikimrProto::DEADLINE,
             "Event# %s", ev->Get()->ToString().data());
 
-        Y_ABORT_UNLESS(MinHugeBlobInBytes);
+        Y_ABORT_UNLESS(MinREALHugeBlobInBytes);
 
         switch (status) {
         case NKikimrProto::OK:
             for (auto &item : record.GetItems()) {
-                Y_ABORT_UNLESS(item.GetStatus() == (MsgData.size() < MinHugeBlobInBytes ? NKikimrProto::OK : NKikimrProto::ERROR));
+                Y_ABORT_UNLESS(item.GetStatus() == (MsgData.size() < MinREALHugeBlobInBytes ? NKikimrProto::OK : NKikimrProto::ERROR));
             }
             break;
         case NKikimrProto::DEADLINE:

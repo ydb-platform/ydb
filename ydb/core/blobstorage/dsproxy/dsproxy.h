@@ -30,7 +30,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 constexpr ui32 TypicalPartsInBlob = 6;
 constexpr ui32 TypicalDisksInSubring = 8;
 
-constexpr ui32 MaxBatchedPutSize = 64 * 1024 - 512 - 5; // (MinHugeBlobInBytes - 1 - TDiskBlob::HugeBlobOverhead) for ssd and nvme
+constexpr ui32 MaxBatchedPutSize = 64 * 1024 - 512 - 5; // (MinREALHugeBlobInBytes - 1 - TDiskBlob::HugeBlobOverhead) for ssd and nvme
 
 const TDuration ProxyConfigurationTimeout = TDuration::Seconds(20);
 const ui32 ProxyRetryConfigurationInitialTimeout = 200;

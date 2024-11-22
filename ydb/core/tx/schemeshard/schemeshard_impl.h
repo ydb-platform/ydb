@@ -65,6 +65,7 @@
 #include <ydb/core/blob_depot/events.h>
 
 #include <ydb/library/login/login.h>
+#include <ydb/library/login/password_checker/password_checker.h>
 
 #include <util/generic/ptr.h>
 
@@ -1456,6 +1457,7 @@ public:
     void ChangeDiskSpaceSoftQuotaBytes(i64 delta) override;
     void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) override;
 
+    NLogin::TPasswordCheckParameters PasswordCheckParameters;
     NLogin::TLoginProvider LoginProvider;
 
 private:

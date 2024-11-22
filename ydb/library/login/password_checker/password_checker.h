@@ -15,7 +15,7 @@ public:
         bool NeedUpperCase = true;
         bool NeedNumbers = true;
         bool NeedSpecialSymbols = true;
-        std::unordered_set<char> SpecialSymbols = VALID_SPECIAL_SYMBOLS;
+        TString SpecialSymbols;
         bool EnableEmptyPassword = true;
     };
 

@@ -12,6 +12,7 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/statistics/events.h>
@@ -19,6 +20,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
+#include <ydb/library/login/password_checker/password_checker.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <util/random/random.h>
@@ -4435,6 +4437,16 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
             COUNTER_PQ_STATS_WRITTEN,
             COUNTER_PQ_STATS_BATCH_LATENCY)
     , AllowDataColumnForIndexTable(0, 0, 1)
+    , PasswordCheckParameters({
+        .MinPasswordLength = AppData()->AuthConfig.GetPasswordCheckerParameters().GetMinimumLength(),
+        .MaxPasswordLength = AppData()->AuthConfig.GetPasswordCheckerParameters().GetMaximumLength(),
+        .NeedLowerCase = AppData()->AuthConfig.GetPasswordCheckerParameters().GetRestrictLower(),
+        .NeedUpperCase = AppData()->AuthConfig.GetPasswordCheckerParameters().GetRestrictUpper(),
+        .NeedNumbers = AppData()->AuthConfig.GetPasswordCheckerParameters().GetRestrictNumbers(),
+        .NeedSpecialSymbols = AppData()->AuthConfig.GetPasswordCheckerParameters().GetRestrictSpecial(),
+        .SpecialSymbols = AppData()->AuthConfig.GetPasswordCheckerParameters().GetSpecialChars()
+    })
+    , LoginProvider(PasswordCheckParameters)
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,

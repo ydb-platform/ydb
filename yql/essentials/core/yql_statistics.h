@@ -53,6 +53,14 @@ struct TOptimizerStatistics {
         TKeyColumns(const TVector<TString>& vec) : Data(vec) {}
     };
 
+    struct TSortColumns : public TSimpleRefCount<TSortColumns> {
+        TVector<TString> Columns;
+        TVector<TString> Aliases;
+        TSortColumns(const TVector<TString>& cols, const TVector<TString>& aliases) : 
+            Columns(cols)
+            ,Aliases(aliases)  {}
+    };
+
     struct TColumnStatMap : public TSimpleRefCount<TColumnStatMap> {
         THashMap<TString,TColumnStatistics> Data;
         TColumnStatMap() {}
@@ -68,8 +76,10 @@ struct TOptimizerStatistics {
     TIntrusivePtr<TKeyColumns> KeyColumns;
     TIntrusivePtr<TColumnStatMap> ColumnStatistics;
     EStorageType StorageType = EStorageType::NA;
+    TIntrusivePtr<TSortColumns> SortColumns;
     std::shared_ptr<IProviderStatistics> Specific;
     std::shared_ptr<TVector<TString>> Labels = {};
+
 
     TOptimizerStatistics(TOptimizerStatistics&&) = default;
     TOptimizerStatistics& operator=(TOptimizerStatistics&&) = default;
@@ -86,6 +96,7 @@ struct TOptimizerStatistics {
         TIntrusivePtr<TKeyColumns> keyColumns = {},
         TIntrusivePtr<TColumnStatMap> columnMap = {},
         EStorageType storageType = EStorageType::NA,
+        TIntrusivePtr<TSortColumns> sortColumns = {},
         std::shared_ptr<IProviderStatistics> specific = nullptr);
 
     TOptimizerStatistics& operator+=(const TOptimizerStatistics& other);

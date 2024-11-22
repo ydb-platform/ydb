@@ -562,8 +562,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST(GPB) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/gpb.sql", "stats/gpb.json", true, false, true, "queries/gpb-data.sql",
-            R"([[99];[100];[103]])");
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/gpb.sql", "stats/gpb.json", true, false, true,
+            "queries/gpb-data.sql", R"([[99];[100];[103]])");
     }
 
     Y_UNIT_TEST(GPB2) {

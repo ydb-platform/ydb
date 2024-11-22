@@ -293,7 +293,7 @@ private:
         //        result.InsertValue("sequential_columns", JoinSeq(",", SequentialEntityIds));
         if (SequentialEntityIds.size()) {
             result.InsertValue("min_memory_seq", Portion->GetMinMemoryForReadColumns(SequentialEntityIds));
-            result.InsertValue("min_memory_seq_blobs", Portion->GetColumnBlobBytes(SequentialEntityIds));
+            result.InsertValue("min_memory_seq_blobs", Portion->GetColumnBlobBytes(SequentialEntityIds, true));
             result.InsertValue("in_mem", Portion->GetColumnRawBytes(columns, false));
         }
         result.InsertValue("columns_in_mem", JoinSeq(",", columns));

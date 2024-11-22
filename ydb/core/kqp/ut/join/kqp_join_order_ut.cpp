@@ -564,7 +564,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST(GPB2) {
-        ExecuteJoinOrderTestDataQueryWithStats("queries/gpb2.sql", "", true, false);
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/gpb2.sql", "stats/gpb.json", true, false);
     }
 
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS34, StreamLookupJoin, ColumnStore) {

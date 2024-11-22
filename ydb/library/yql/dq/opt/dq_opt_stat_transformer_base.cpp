@@ -90,7 +90,6 @@ bool TDqStatisticsTransformerBase::BeforeLambdasUnmatched(const TExprNode::TPtr&
     if (input->ChildrenSize() >= 1) {
         auto stats = TypeCtx->GetStats(input->ChildRef(0).Get());
         if (stats) {
-            YQL_CLOG(TRACE, CoreDq) << "Infer statistics for " << input->Content() << " with stats " << stats->ToString();
             TypeCtx->SetStats(input.Get(), RemoveOrdering(stats, input));
         }
     }

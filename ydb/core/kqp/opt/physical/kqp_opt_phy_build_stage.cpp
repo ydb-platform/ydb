@@ -846,9 +846,9 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes
     auto builder = Build<TDqSortColumnList>(ctx, node.Pos());
     for (size_t i = 0; i < inputStats->SortColumns->Columns.size(); i++) {
         auto columnName = inputStats->SortColumns->Columns[i];
-        //if (inputStats->SortColumns->Aliases[i] != "") {
-        //    columnName = inputStats->SortColumns->Aliases[i] + "." + columnName;
-        //}
+        if (inputStats->SortColumns->Aliases[i] != "") {
+            columnName = inputStats->SortColumns->Aliases[i] + "." + columnName;
+        }
         builder.Add<TDqSortColumn>()
             .Column<TCoAtom>().Build(columnName)
             .SortDirection().Build(TTopSortSettings::AscendingSort)

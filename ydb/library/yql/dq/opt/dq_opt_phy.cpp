@@ -1577,18 +1577,58 @@ TExprBase GetSortDirection(const TExprBase& sortDirections, size_t index) {
 }
 } // End of anonymous namespace
 
-bool CompatibleSort(TOptimizerStatistics::TSortColumns& existingOrder, const TCoLambda& keySelector, const TExprBase& sortDirections) {
-    return true;
+bool CompatibleSort(TOptimizerStatistics::TSortColumns& existingOrder, const TCoLambda& keySelector, const TExprBase& sortDirections, TVector<TString>& sortKeys) {
+    if (auto body = keySelector.Body().Maybe<TCoMember>()) {
+        auto attrRef = body.Cast().Name().StringValue();
+        auto attrName = existingOrder.Columns[0];
+        auto attrNameWithAlias = existingOrder.Aliases[0] + "." + attrName;
+        if (attrName == attrRef || attrNameWithAlias == attrRef){
+            auto sortValue = sortDirections.Cast<TCoDataCtor>().Literal().Value();
+            if (FromString<bool>(sortValue)) {
+                sortKeys.push_back(attrRef);
+                return true;
+            }
+        }
+    }
+    else if (auto body = keySelector.Body().Maybe<TExprList>()) {
+        if (body.Cast().Size() > existingOrder.Columns.size()) {
+            return false;
+        }
+
+        bool allMatched = false;
+        auto dirs = sortDirections.Cast<TExprList>();
+        for (size_t i=0; i < body.Cast().Size(); i++) {
+            allMatched = false;
+            auto item = body.Cast().Item(i);
+            if (auto member = item.Maybe<TCoMember>()) {
+                auto attrRef = member.Cast().Name().StringValue();
+                auto attrName = existingOrder.Columns[i];
+                auto attrNameWithAlias = existingOrder.Aliases[i] + "." + attrName;
+                if (attrName == attrRef || attrNameWithAlias == attrRef){
+                    auto sortValue = dirs.Item(i).Cast<TCoDataCtor>().Literal().Value();
+                    if (FromString<bool>(sortValue)) {
+                        sortKeys.push_back(attrRef);
+                        allMatched = true;
+                    }
+                }
+            }
+            if (!allMatched) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
 }
 
 TExprBase DqBuildTopStageRemoveSort(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, TTypeAnnotationContext& typeCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
-    if (!node.Maybe<TCoTop>().Input().Maybe<TDqCnUnionAll>()) {
+    if (!node.Maybe<TCoTopBase>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
     }
 
-    const auto top = node.Cast<TCoTop>();
+    const auto top = node.Cast<TCoTopBase>();
     const auto dqUnion = top.Input().Cast<TDqCnUnionAll>();
 
     auto inputStats = typeCtx.GetStats(dqUnion.Output().Raw());
@@ -1596,8 +1636,6 @@ TExprBase DqBuildTopStageRemoveSort(TExprBase node, TExprContext& ctx, IOptimiza
     if (!inputStats || !inputStats->SortColumns) {
         return node;
     }
-
-    YQL_CLOG(TRACE, CoreDq) << "Input type:" << *dqUnion.Output().Raw()->GetTypeAnn();
 
     if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
         return node;
@@ -1613,17 +1651,14 @@ TExprBase DqBuildTopStageRemoveSort(TExprBase node, TExprContext& ctx, IOptimiza
 
     const auto sortKeySelector = top.KeySelectorLambda();
     const auto sortDirections = top.SortDirections();
+    TVector<TString> sortKeys;
 
-    if (!CompatibleSort(*inputStats->SortColumns, sortKeySelector, sortDirections)) {
+    if (!CompatibleSort(*inputStats->SortColumns, sortKeySelector, sortDirections, sortKeys)) {
         return node;
     }
 
     auto builder = Build<TDqSortColumnList>(ctx, node.Pos());
-    for (size_t i = 0; i < inputStats->SortColumns->Columns.size(); i++) {
-        auto columnName = inputStats->SortColumns->Columns[i];
-        //if (inputStats->SortColumns->Aliases[i] != "") {
-        //    columnName = inputStats->SortColumns->Aliases[i] + "." + columnName;
-        //}
+    for (auto columnName : sortKeys ) {
         builder.Add<TDqSortColumn>()
             .Column<TCoAtom>().Build(columnName)
             .SortDirection().Build(TTopSortSettings::AscendingSort)

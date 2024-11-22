@@ -8,6 +8,7 @@ LEFT JOIN `/Root/bank_sub_document` VIEW IX_BANK_SUB_DOCUMENT_DOCUMENT_ID AS sd
 WHERE sd.document_id IS NULL
   AND d.exec_dt >= Cast('1990-12-10' as Date)
   AND d.acc_dt_id = 15
-ORDER BY exec_dt, id
+--ORDER BY exec_dt, id
+ORDER BY d.exec_dt, id
 LIMIT 1000
 ) AS doc;

@@ -1231,7 +1231,11 @@ public:
                     record.SetUserToken(UserToken->GetSerializedToken());
                 }
 
-                const auto& [dirname, basename] = path.second;
+                auto [dirname, basename] = path.second;
+                if (dirname.size() > 0 && dirname.front() != '/') {
+                    dirname = JoinPath({Database, dirname});
+                }
+
                 NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
                 modifyScheme->SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
                 modifyScheme->SetWorkingDir(dirname);

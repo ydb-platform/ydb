@@ -12,7 +12,7 @@ namespace math
   T factorial(T x);
 
   DEFINE_FUNCTOR(pythonic::math, factorial);
-}
+} // namespace math
 PYTHONIC_NS_END
 
 #endif

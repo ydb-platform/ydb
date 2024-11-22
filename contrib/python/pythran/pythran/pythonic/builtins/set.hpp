@@ -26,7 +26,7 @@ namespace builtins
     {
       return {t.begin(), t.end()};
     }
-  }
-}
+  } // namespace anonymous
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

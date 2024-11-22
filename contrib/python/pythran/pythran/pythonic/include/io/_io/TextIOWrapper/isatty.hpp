@@ -14,7 +14,7 @@ namespace io
     {
       USING_FUNCTOR(isatty, builtins::file::functor::isatty);
     }
-  }
-}
+  } // namespace _io
+} // namespace io
 PYTHONIC_NS_END
 #endif

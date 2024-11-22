@@ -39,6 +39,7 @@ struct TCreatePartitionParams {
     TMaybe<ui64> TxId;
     TVector<TTransaction> Transactions;
     TConfigParams Config;
+    ui64 EndWriteTimestamp = 0;
 };
 
 }
@@ -237,7 +238,9 @@ protected:
     void WaitDiskStatusRequest();
     void SendDiskStatusResponse(TMaybe<ui64>* cookie = nullptr);
     void WaitMetaReadRequest();
-    void SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txId);
+    void SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txId, ui64 endWriteTimestamp);
+    void WaitLastBlobReadRequest();
+    void SendLastBlobReadResponse(ui64 begin, ui64 end);
     void WaitInfoRangeRequest();
     void SendInfoRangeResponse(ui32 partition,
                                const TVector<TCreateConsumerParams>& consumers);
@@ -412,13 +415,18 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
         SendDiskStatusResponse();
 
         WaitMetaReadRequest();
-        SendMetaReadResponse(params.PlanStep, params.TxId);
+        SendMetaReadResponse(params.PlanStep, params.TxId, params.EndWriteTimestamp);
 
         WaitInfoRangeRequest();
         SendInfoRangeResponse(params.Partition.InternalPartitionId, params.Config.Consumers);
 
         WaitDataRangeRequest();
         SendDataRangeResponse(params.Begin, params.End);
+
+        if (!params.EndWriteTimestamp) {
+            WaitLastBlobReadRequest();
+            SendLastBlobReadResponse(params.Begin, params.End);
+        }
     }
     return ret;
 }
@@ -766,7 +774,7 @@ void TPartitionFixture::WaitMetaReadRequest()
     UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadSize(), 2);
 }
 
-void TPartitionFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txId)
+void TPartitionFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txId, ui64 endWriteTimestamp)
 {
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -775,7 +783,18 @@ void TPartitionFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txI
     // NKikimrPQ::TPartitionMeta
     //
     auto read = event->Record.AddReadResult();
-    read->SetStatus(NKikimrProto::NODATA);
+    if (endWriteTimestamp) {
+        read->SetStatus(NKikimrProto::OK);
+
+        NKikimrPQ::TPartitionMeta meta;
+        meta.SetLastMessageWriteTimestamp(endWriteTimestamp);
+
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out);
+        read->SetValue(out);
+    } else {
+        read->SetStatus(NKikimrProto::NODATA);
+    }
 
     //
     // NKikimrPQ::TPartitionTxMeta
@@ -799,6 +818,42 @@ void TPartitionFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txI
     } else {
         read->SetStatus(NKikimrProto::NODATA);
     }
+
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+}
+
+void TPartitionFixture::WaitLastBlobReadRequest()
+{
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
+    UNIT_ASSERT(event != nullptr);
+
+    UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadSize(), 1);
+}
+
+void TPartitionFixture::SendLastBlobReadResponse(ui64 begin, ui64 end)
+{
+    THead head;
+    TBatch batch;
+
+    for (size_t i = begin; i < end; ++i) {
+        TString data = TStringBuilder() << "message-data-" << i;
+        TClientBlob blob("source-id-1", 13 + i /* seqNo */, data, {} /* partData */, TInstant::Now() + TDuration::Seconds(150) /* writeTimestamp */,
+        TInstant::Now() + TDuration::Seconds(100) /* createTimestamp */, data.size(), "partitionKey", "explicitHashKey");
+        batch.AddBlob(blob);
+    }
+
+    batch.Pack();
+    head.AddBatch(batch);
+
+    TString valueD;
+    batch.SerializeTo(valueD);
+
+    auto event = MakeHolder<TEvKeyValue::TEvResponse>();
+    event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+
+    auto read = event->Record.AddReadResult();
+    read->SetStatus(NKikimrProto::OK);
+    read->SetValue(valueD);
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }

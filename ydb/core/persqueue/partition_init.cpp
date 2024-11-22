@@ -665,7 +665,7 @@ TInitEndWriteTimestampStep::TInitEndWriteTimestampStep(TInitializer* initializer
 }
 
 void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
-    if (Partition()->EndWriteTimestamp != TInstant::Zero() || Partition()->EndOffset <= Partition()->StartOffset) {
+    if (Partition()->EndWriteTimestamp != TInstant::Zero() || (Partition()->HeadKeys.empty() && Partition()->DataKeysBody.empty())) {
         PQ_LOG_D("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
             << "' partition " << Partition()->Partition
             << " skiped because already initialized.");
@@ -674,9 +674,7 @@ void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
 
     PQ_LOG_D("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
             << "' partition " << Partition()->Partition
-            << " EndOffset " << Partition()->EndOffset
-            << " StartOffset " << Partition()->StartOffset
-            << " .");
+            << ".");
 
     auto& head = Partition()->Head;
     for (auto it = head.GetBatches().rbegin(); it != head.GetBatches().rend(); ++it) {
@@ -705,6 +703,7 @@ void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
     auto read = request->Record.AddCmdRead();
     read->SetKey({p.Key.Data(), p.Key.Size()});
+
     ctx.Send(Partition()->Tablet, request.Release());
 }
 
@@ -725,6 +724,7 @@ void TInitEndWriteTimestampStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, cons
 
             for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
                 auto b = it.GetBatch();
+                b.Unpack();
                 if (!b.Empty()) {
                     Partition()->EndWriteTimestamp = b.GetLastMessageWriteTimestamp();
                 }

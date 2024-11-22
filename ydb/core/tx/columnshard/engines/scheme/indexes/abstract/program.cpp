@@ -443,7 +443,7 @@ public:
 
 std::shared_ptr<TDataForIndexesCheckers> TDataForIndexesCheckers::Build(const TProgramContainer& program) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("program", program.DebugString());
-    auto fStep = program.GetSteps().front();
+    auto fStep = program.GetStepsVerified().front();
     TNormalForm nForm;
     for (auto&& s : fStep->GetAssignes()) {
         if (!nForm.Add(s, program)) {

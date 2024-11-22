@@ -29,6 +29,8 @@ namespace NYql {
 
         class TManagedDatabasesConfigModifier: public IClusterConfigModifier {
         public:
+            TManagedDatabasesConfigModifier() = delete;
+
             TManagedDatabasesConfigModifier(const TGenericState::TPtr& state): State_(state) {};
 
             void CollectUnresolvedClusters(const TExprNode::TListType& reads) override {
@@ -162,7 +164,7 @@ namespace NYql {
         public:
             TGenericIODiscoveryTransformer(TGenericState::TPtr state)
                 : State_(std::move(state))
-                , ManagedDatabasesConfigModifier_(std::make_unique<TManagedDatabasesConfigModifier>(state))
+                , ManagedDatabasesConfigModifier_(std::make_unique<TManagedDatabasesConfigModifier>(State_))
             {
             }
 

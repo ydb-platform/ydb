@@ -1,6 +1,7 @@
 #pragma once
 
 #include <library/cpp/threading/future/future.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NYql {
     // ILoggingResolver determines the reading endpoint for the YDB database
@@ -15,7 +16,7 @@ namespace NYql {
             bool AddBearerToToken = false;
         };
 
-        // folder_id -> credentials to access logging API;
+        // cluster_name -> auth information
         using TAuthMap = THashMap<TString, TAuth>;
 
         struct TRequest {
@@ -24,9 +25,10 @@ namespace NYql {
         };
 
         struct TResponse {
-            TString Host;  // database hostname
-            ui32 Port;     // database port
-            TString Table; // table to read from
+            TString Host;   // database hostname
+            ui32 Port;      // database port
+            TString Table;  // table to read from
+            TIssues Issues; // possible troubles
         };
 
         virtual NThreading::TFuture<TResponse> Resolve(const TRequest& request) const = 0;

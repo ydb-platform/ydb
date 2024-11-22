@@ -1,12 +1,12 @@
 #include "yql_generic_provider_impl.h"
 #include "yql_generic_utils.h"
 
+#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -23,8 +23,10 @@ namespace NYql {
         public:
             using TPtr = std::unique_ptr<IClusterConfigModifier>;
 
+            using TFutures = TVector<NThreading::TFuture<TIssues>>;
+
             virtual void CollectUnresolvedClusters(const TExprNode::TListType& reads) = 0;
-            virtual NThreading::TFuture<TIssues> ResolveClusters() = 0;
+            virtual TFutures ResolveClusters() = 0;
             virtual TIssues ModifyClusterConfigs() = 0;
             virtual std::size_t Count() const = 0;
             virtual void Cleanup() = 0;
@@ -38,8 +40,6 @@ namespace NYql {
             TManagedDatabasesConfigModifier(const TGenericState::TPtr& state): State_(state) {};
 
             void CollectUnresolvedClusters(const TExprNode::TListType& reads) override {
-                ILoggingResolver::TAuthMap loggingFolders;
-
                 for (auto& node : reads) {
                     const TGenRead read(node);
                     const auto clusterName = read.DataSource().Cluster().StringValue();
@@ -66,11 +66,12 @@ namespace NYql {
                 return;
             }
 
-            virtual NThreading::TFuture<TIssues> ResolveClusters() override {
-                auto promise = NThreading::NewPromise<TIssues>();
-                TDatabaseResolverResponse::TDatabaseDescriptionMap descriptions;
+            virtual TFutures ResolveClusters() override {
+                TFutures futures;
 
                 for (const auto& [databaseIdWithType, databaseAuth] : ManagedDatabases_) {
+                    auto promise = NThreading::NewPromise<TIssues>();
+
                     // Now it's only possible to emit a single request with a single cluster ID simultaneously.
                     // FIXME: use batch async handling after YQ-2536 is fixed.
                     IDatabaseAsyncResolver::TDatabaseAuthMap request;
@@ -79,25 +80,26 @@ namespace NYql {
 
                     if (!response.Success) {
                         promise.SetValue(std::move(response.Issues));
-                        return promise.GetFuture();
+                    } else {
+                        for (const auto& [databaseIdWithType, databaseDescription] : response.DatabaseDescriptionMap) {
+                            YQL_CLOG(INFO, ProviderGeneric) << "resolved database id into endpoint"
+                                                            << ": databaseId=" << databaseIdWithType.first
+                                                            << ", kind=" << databaseIdWithType.second
+                                                            << ", host=" << databaseDescription.Host
+                                                            << ", port=" << databaseDescription.Port;
+                        }
+
+                        // save ids for the further use
+                        DatabaseDescriptions_.insert(response.DatabaseDescriptionMap.cbegin(),
+                                                    response.DatabaseDescriptionMap.cend());
+
+                        promise.SetValue({});
                     }
 
-                    for (const auto& [databaseIdWithType, databaseDescription] : response.DatabaseDescriptionMap) {
-                        YQL_CLOG(INFO, ProviderGeneric) << "resolved database id into endpoint"
-                                                        << ": databaseId=" << databaseIdWithType.first
-                                                        << ", kind=" << databaseIdWithType.second
-                                                        << ", host=" << databaseDescription.Host
-                                                        << ", port=" << databaseDescription.Port;
-                    }
-
-                    // save ids for the further use
-                    DatabaseDescriptions_.insert(response.DatabaseDescriptionMap.cbegin(),
-                                                 response.DatabaseDescriptionMap.cend());
-
+                    futures.emplace_back(promise.GetFuture());
                 }
 
-                promise.SetValue({});
-                return promise.GetFuture();
+                return futures;
             }
 
             TIssues ModifyClusterConfigs() override {
@@ -164,6 +166,130 @@ namespace NYql {
             const TGenericState::TPtr& State_;
         };
 
+        class TLoggingConfigModifier: public IClusterConfigModifier {
+        public:
+            TLoggingConfigModifier(const TGenericState::TPtr& state)
+                : State_(state) {}
+
+            virtual void CollectUnresolvedClusters(const TExprNode::TListType& reads) override {
+                for (auto& node : reads) {
+                    const TGenRead read(node);
+                    const auto clusterName = read.DataSource().Cluster().StringValue();
+                    const auto& cluster = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
+
+                    if (cluster.GetKind() == NYql::NConnector::NApi::EDataSourceKind::LOGGING) {
+                        const auto& folderId = cluster.datasourceoptions().at("folder_id");
+                        const auto& keyArg = TExprBase(read.FreeArgs().Get(2).Ref().HeadPtr()).Cast<TCoKey>().Ref().Head();
+                        const auto logGroupName = TString(keyArg.Tail().Head().Content());
+
+                        const auto iter = State_->LoggingAuth.find(folderId);
+                        if (iter != State_->LoggingAuth.cend()) {
+                            YQL_CLOG(DEBUG, ProviderGeneric) << "discovered logging external data source: "
+                                << "clusterName=" << clusterName 
+                                << ", folderId=" << folderId 
+                                << ", logGroupName=" << logGroupName;
+
+                            UnresolvedItems_[clusterName] = {
+                                .FolderId = folderId,
+                                .LogGroupName = logGroupName,
+                                .Auth = iter->second,
+                            };
+                        }
+                    }
+                }
+
+                return;
+            }
+
+            virtual TFutures ResolveClusters() override {
+                TFutures futures;
+
+                for (const auto& [clusterId, auth] : UnresolvedItems_) {
+                    auto responseFuture = State_->LoggingResolver->Resolve(ILoggingResolver::TRequest{
+                        .FolderId = "",
+                        .LogGroupName = "",
+                    });
+
+                    auto issueFuture = responseFuture.Apply(
+                        [this, clusterId, responseFuture](const NThreading::TFuture<ILoggingResolver::TResponse>&) mutable {
+
+                        auto response = responseFuture.ExtractValue();
+
+                        if (response.Issues.Empty()) {
+                            std::lock_guard<std::mutex> guard(ResolvedItemsMutex_);
+                            ResolvedItems_[clusterId] = {
+                                .FolderId = "",
+                                .LogGroupName = "",
+                                .Host = response.Host,
+                                .Port = response.Port,
+                                .Table = response.Table,
+                            };
+                        }
+
+                        return response.Issues;
+                    });
+
+                    futures.emplace_back(std::move(issueFuture));
+                }
+
+                return futures;
+            };
+
+            virtual TIssues ModifyClusterConfigs() override {
+                TIssues issues;
+
+                auto& clusterNamesToClusterConfigs = State_->Configuration->ClusterNamesToClusterConfigs;
+
+                for (auto& [clusterName, clusterConfig] : clusterNamesToClusterConfigs) {
+                    auto itemIter = ResolvedItems_.find(clusterName);
+                    if (itemIter == ResolvedItems_.cend()) {
+                        issues.AddIssue(TIssue{TStringBuilder() << "no resolved item for cluster " << clusterName});
+                        continue;
+                    }
+
+                    clusterConfig.mutable_endpoint()->set_host(itemIter->second.Host);
+                    clusterConfig.mutable_endpoint()->set_port(itemIter->second.Port);
+                    clusterConfig.mutable_datasourceoptions()->insert({"table", itemIter->second.Table});
+                }
+
+                return issues;
+            };
+
+            virtual std::size_t Count() const override {
+                return UnresolvedItems_.size();
+            };
+
+            virtual void Cleanup() override {
+                UnresolvedItems_.clear();
+                ResolvedItems_.clear();
+            };
+
+        private:
+            struct TUnresolvedItem {
+                TString FolderId;
+                TString LogGroupName;
+                ILoggingResolver::TAuth Auth;
+            };
+
+            // cluster_name -> unresolved item
+            THashMap<TString, TUnresolvedItem> UnresolvedItems_;
+
+            struct TResolvedItem {
+                TString FolderId;
+                TString LogGroupName; 
+                TString Host;
+                ui32    Port;
+                TString Table;
+            };
+
+            std::mutex ResolvedItemsMutex_;
+
+            // cluster_name -> resolved item
+            THashMap<TString, TResolvedItem> ResolvedItems_;
+
+            const TGenericState::TPtr& State_;
+        };
+
         class TGenericIODiscoveryTransformer: public TGraphTransformerBase {
         public:
             TGenericIODiscoveryTransformer(TGenericState::TPtr state)
@@ -202,7 +328,14 @@ namespace NYql {
                 YQL_CLOG(DEBUG, ProviderGeneric) << "total database clusters to be resolved: " << ManagedDatabasesConfigModifier_->Count();
 
                 // Resolve clusters
-                auto issues = ManagedDatabasesConfigModifier_->ResolveClusters().GetValueSync();
+                auto futures = ManagedDatabasesConfigModifier_->ResolveClusters();
+
+                // Block until all futures are ready
+                TIssues issues;
+                for (auto& future : futures) {
+                    issues.AddIssues(future.GetValueSync());
+                }
+
                 if (!issues.Empty()) {
                     ctx.IssueManager.AddIssues(issues);
                     return TStatus::Error;
@@ -245,72 +378,6 @@ namespace NYql {
             }
 
         private:
-/*
-            struct TUnresolvedClusters {
-                IDatabaseAsyncResolver::TDatabaseAuthMap ManagedDatabases;
-                ILoggingResolver::TAuthMap LoggingFolders;
-
-                bool Empty() const {
-                    return ManagedDatabases.empty() && LoggingFolders.empty();
-                }
-
-                std::size_t Size() const {
-                    return ManagedDatabases.size() + LoggingFolders.size();
-                }
-            };
-
-            // CollectUnresolvedClusters extracts the external data source clusters containing some identifiers
-            // that must be resolved into network endpoints.
-            TUnresolvedClusters CollectUnresolvedClusters(const TExprNode::TListType& reads) const {
-                IDatabaseAsyncResolver::TDatabaseAuthMap managedDatabases;
-                ILoggingResolver::TAuthMap loggingFolders;
-
-                for (auto& node : reads) {
-                    const TGenRead read(node);
-                    const auto clusterName = read.DataSource().Cluster().StringValue();
-
-                    const auto& cluster = State_->Configuration->ClusterNamesToClusterConfigs[clusterName];
-
-                    // 1. Resolve managed databases that have database_id identifier.
-                    auto databaseId = cluster.GetDatabaseId();
-                    if (databaseId) {
-                        YQL_CLOG(DEBUG, ProviderGeneric) << "discovered managed database external data source: "
-                            << "clusterName=" << clusterName 
-                            << ", databaseId=" << databaseId;
-                        const auto idKey = std::make_pair(databaseId, DatabaseTypeFromDataSourceKind(cluster.GetKind()));
-                        const auto iter = State_->DatabaseAuth.find(idKey);
-                        if (iter != State_->DatabaseAuth.cend()) {
-                            YQL_CLOG(DEBUG, ProviderGeneric) << "requesting to resolve"
-                                                             << ": clusterName=" << clusterName
-                                                             << ", databaseId=" << databaseId;
-
-                            managedDatabases[idKey] = iter->second;
-                        }
-                    }
-
-                    // 2. Resolve log groups.
-                    if (cluster.GetKind() == NYql::NConnector::NApi::EDataSourceKind::LOGGING) {
-                        const auto& folderId = cluster.datasourceoptions().at("folder_id");
-                        const auto& keyArg = TExprBase(read.FreeArgs().Get(2).Ref().HeadPtr()).Cast<TCoKey>().Ref().Head();
-                        const auto logGroupName = TString(keyArg.Tail().Head().Content());
-
-                        const auto iter = State_->LoggingAuth.find(folderId);
-                        if (iter != State_->LoggingAuth.cend()) {
-                            YQL_CLOG(DEBUG, ProviderGeneric) << "discovered logging external data source: "
-                                << "clusterName=" << clusterName 
-                                << ", folderId=" << folderId 
-                                << ", logGroupName=" << logGroupName;
-
-                            loggingFolders[folderId] = iter->second;
-                        }
-                    }
-                }
-
-                return TUnresolvedClusters{std::move(managedDatabases), std::move(loggingFolders)};
-            }
-*/
-
-
             const TGenericState::TPtr State_;
             IClusterConfigModifier::TPtr ManagedDatabasesConfigModifier_;
             NThreading::TFuture<void> AsyncFuture_;

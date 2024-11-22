@@ -24,7 +24,7 @@ namespace NYql {
             auto table = GetEnv("LOGGING_YDB_TABLE");
             Y_ENSURE(table, "LOGGING_YDB_TABLE is not set");
 
-            promise.SetValue(ILoggingResolver::TResponse{host, port, table});
+            promise.SetValue(ILoggingResolver::TResponse{host, port, table, {}});
 
             return promise.GetFuture();
         }

@@ -60,7 +60,7 @@ namespace NYql {
         IDatabaseAsyncResolver::TDatabaseAuthMap DatabaseAuth;
         std::shared_ptr<IDatabaseAsyncResolver> DatabaseResolver;
 
-        // folder_id -> credentials to access logging API;
+        // cluster_id -> credentials to access logging API;
         ILoggingResolver::TAuthMap LoggingAuth;
         ILoggingResolver::TPtr LoggingResolver;
 

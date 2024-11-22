@@ -414,8 +414,11 @@ void InferStatisticsForLookupJoin(const TExprNode::TPtr& input, TTypeAnnotationC
 
     if (sortedPrefix) {
         sortedPrefixCols = sortedPrefix->Columns;
-        for (size_t i=0; i<sortedPrefix->Aliases.size(); i++) {
-            sortedPrefixAliases.push_back(aliasName);
+        sortedPrefixAliases = sortedPrefix->Aliases;
+        if (aliasName != "") {
+            for (size_t i=0; i<sortedPrefix->Aliases.size(); i++) {
+                sortedPrefixAliases[i] = aliasName;
+            }
         }
     }
 
@@ -428,6 +431,9 @@ void InferStatisticsForLookupJoin(const TExprNode::TPtr& input, TTypeAnnotationC
     outputStats.SortColumns = sortedPrefixPtr;
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for lookup join: " << outputStats.ToString();
+    YQL_CLOG(TRACE, CoreDq) << "Added alias: " << aliasName;
+
+
 
     typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(outputStats)));
 }

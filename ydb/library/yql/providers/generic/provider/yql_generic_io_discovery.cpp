@@ -15,13 +15,17 @@ namespace NYql {
 
         using namespace NNodes;
 
+        // IClusterConfigModifier provides interface for modifying generic cluster configs 
+        // that describe connections to the cloud-based resources.
+        // Since they do not have information about network endpoints, we need to resolve and
+        // add them to the configs explicitly.
         class IClusterConfigModifier {
         public:
             using TPtr = std::unique_ptr<IClusterConfigModifier>;
 
             virtual void CollectUnresolvedClusters(const TExprNode::TListType& reads) = 0;
-            virtual IGraphTransformer::TStatus ResolveClusters(TExprContext& ctx) = 0;
-            virtual IGraphTransformer::TStatus ModifyClusterConfigs(TExprContext& ctx) = 0;
+            virtual NThreading::TFuture<TIssues> ResolveClusters() = 0;
+            virtual TIssues ModifyClusterConfigs() = 0;
             virtual std::size_t Count() const = 0;
             virtual void Cleanup() = 0;
             virtual ~IClusterConfigModifier() = default;
@@ -62,7 +66,8 @@ namespace NYql {
                 return;
             }
 
-            IGraphTransformer::TStatus ResolveClusters(TExprContext& ctx) override {
+            virtual NThreading::TFuture<TIssues> ResolveClusters() override {
+                auto promise = NThreading::NewPromise<TIssues>();
                 TDatabaseResolverResponse::TDatabaseDescriptionMap descriptions;
 
                 for (const auto& [databaseIdWithType, databaseAuth] : ManagedDatabases_) {
@@ -73,8 +78,8 @@ namespace NYql {
                     auto response = State_->DatabaseResolver->ResolveIds(request).GetValueSync();
 
                     if (!response.Success) {
-                        ctx.IssueManager.AddIssues(response.Issues);
-                        return IGraphTransformer::TStatus::Error;
+                        promise.SetValue(std::move(response.Issues));
+                        return promise.GetFuture();
                     }
 
                     for (const auto& [databaseIdWithType, databaseDescription] : response.DatabaseDescriptionMap) {
@@ -91,10 +96,12 @@ namespace NYql {
 
                 }
 
-                return IGraphTransformer::TStatus::Ok;
+                promise.SetValue({});
+                return promise.GetFuture();
             }
 
-            IGraphTransformer::TStatus ModifyClusterConfigs(TExprContext& ctx) override {
+            TIssues ModifyClusterConfigs() override {
+                TIssues issues;
                 const auto& databaseIdsToClusterNames = State_->Configuration->DatabaseIdsToClusterNames;
                 auto& clusterNamesToClusterConfigs = State_->Configuration->ClusterNamesToClusterConfigs;
 
@@ -107,10 +114,8 @@ namespace NYql {
                     auto clusterNamesIter = databaseIdsToClusterNames.find(databaseId);
 
                     if (clusterNamesIter == databaseIdsToClusterNames.cend()) {
-                        TIssues issues;
                         issues.AddIssue(TStringBuilder() << "no cluster names for database id " << databaseId);
-                        ctx.IssueManager.AddIssues(issues);
-                        return IGraphTransformer::TStatus::Error;
+                        return issues;
                     }
 
                     for (const auto& clusterName : clusterNamesIter->second) {
@@ -122,8 +127,7 @@ namespace NYql {
                                                              << databaseIdWithType.first
                                                              << " and cluster name "
                                                              << clusterName);
-                            ctx.IssueManager.AddIssues(issues);
-                            return IGraphTransformer::TStatus::Error;
+                            return issues;
                         }
 
                         auto endpointDst = clusterConfigIter->second.mutable_endpoint();
@@ -141,7 +145,7 @@ namespace NYql {
                     }
                 }
 
-                return IGraphTransformer::TStatus::Ok;
+                return issues;
             }
 
             void Cleanup() override {
@@ -197,12 +201,14 @@ namespace NYql {
                 ManagedDatabasesConfigModifier_->CollectUnresolvedClusters(reads);
                 YQL_CLOG(DEBUG, ProviderGeneric) << "total database clusters to be resolved: " << ManagedDatabasesConfigModifier_->Count();
 
-                // Resolve managed clusters
-                auto status = ManagedDatabasesConfigModifier_->ResolveClusters(ctx);
-                if (status != TStatus::Ok) {
-                    return status;
+                // Resolve clusters
+                auto issues = ManagedDatabasesConfigModifier_->ResolveClusters().GetValueSync();
+                if (!issues.Empty()) {
+                    ctx.IssueManager.AddIssues(issues);
+                    return TStatus::Error;
                 }
 
+                // We're done
                 auto promise = NThreading::NewPromise<void>();
                 promise.SetValue();
                 AsyncFuture_ = promise.GetFuture();
@@ -219,12 +225,17 @@ namespace NYql {
                 AsyncFuture_.GetValue();
 
                 // Modify cluster configs with resolved ids
-                auto status = ManagedDatabasesConfigModifier_->ModifyClusterConfigs(ctx);
+                auto issues = ManagedDatabasesConfigModifier_->ModifyClusterConfigs();
 
                 // Clear results map
                 ManagedDatabasesConfigModifier_->Cleanup();
 
-                return status;
+                if (!issues.Empty()) {
+                    ctx.IssueManager.AddIssues(issues);
+                    return TStatus::Error;
+                }
+
+                return TStatus::Ok;
             }
 
             void Rewind() final {

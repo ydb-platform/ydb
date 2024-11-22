@@ -154,10 +154,16 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
                 TDuration Delay; // The first time retry will be done instantly.
         };
 
+        struct TCounters {
+            ui64 Connected = 0;
+            ui64 Disconnected = 0;
+        };
+
         struct TNodeState {
             bool Connected = false;
             bool RetryScheduled = false;
             TMaybe<TRetryState> RetryState;
+            TCounters Counters;
         };
     public:
         void Init(const NActors::TActorId& selfId) {
@@ -195,11 +201,13 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             auto& state = Nodes[nodeId];
             state.Connected = true;
             state.RetryState = Nothing();
+            state.Counters.Connected++;
         }
 
         void HandleNodeDisconnected(ui32 nodeId) {
             auto& state = Nodes[nodeId];
             state.Connected = false;
+            state.Counters.Disconnected++;
             if (state.RetryScheduled) {
                 return;
             }
@@ -215,7 +223,8 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         void PrintInternalState(TStringStream& stream) const {
             stream << "Nodes states: \n"; 
             for (const auto& [nodeId, state] : Nodes) {
-               stream << "  id " << nodeId << " connected " << state.Connected << " retry scheduled " << state.RetryScheduled << "\n";
+                stream << "  id " << nodeId << " connected " << state.Connected << " retry scheduled " << state.RetryScheduled
+                    << " connected count " << state.Counters.Connected << " disconnected count " << state.Counters.Disconnected << "\n";
             }
         }
 

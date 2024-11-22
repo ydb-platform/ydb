@@ -144,7 +144,6 @@ namespace NYql {
                     GenericClusterConfigFromProperties(clusterName, properties),
                     State_->DatabaseResolver,
                     State_->LoggingResolver,
-                    State_->DatabaseAuth,
                     State_->Types->Credentials);
             }
 

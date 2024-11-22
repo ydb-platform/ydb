@@ -29,13 +29,11 @@ namespace NYql {
         void Init(const NYql::TGenericGatewayConfig& gatewayConfig,
                   const NYql::IDatabaseAsyncResolver::TPtr databaseResolver,
                   const NYql::ILoggingResolver::TPtr loggingResolver,
-                  NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth, 
                   const TCredentials::TPtr& credentials);
 
         void AddCluster(const TGenericClusterConfig& clusterConfig,
                         const NYql::IDatabaseAsyncResolver::TPtr databaseResolver,
                         const NYql::ILoggingResolver::TPtr loggingResolver,
-                        NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
                         const TCredentials::TPtr& credentials);
 
         TGenericSettings::TConstPtr Snapshot() const;
@@ -48,5 +46,6 @@ namespace NYql {
         THashMap<TString, TString> Tokens;
         THashMap<TString, TGenericClusterConfig> ClusterNamesToClusterConfigs; // cluster name -> cluster config
         THashMap<TString, TVector<TString>> DatabaseIdsToClusterNames;         // database id -> cluster name
+        IDatabaseAsyncResolver::TDatabaseAuthMap DatabaseAuth;                 // (database_id, database_type) -> credentials to access managed APIs
     };
 } // namespace NYql

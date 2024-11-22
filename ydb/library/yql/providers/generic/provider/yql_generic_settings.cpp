@@ -17,13 +17,12 @@ namespace NYql {
     void TGenericConfiguration::Init(const NYql::TGenericGatewayConfig& gatewayConfig,
                                      const NYql::IDatabaseAsyncResolver::TPtr databaseResolver,
                                      const NYql::ILoggingResolver::TPtr loggingResolver,
-                                     NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
                                      const TCredentials::TPtr& credentials)
     {
         Dispatch(gatewayConfig.GetDefaultSettings());
 
         for (const auto& cluster : gatewayConfig.GetClusterMapping()) {
-            AddCluster(cluster, databaseResolver, loggingResolver, databaseAuth, credentials);
+            AddCluster(cluster, databaseResolver, loggingResolver,  credentials);
         }
 
         // TODO: check if it's necessary
@@ -33,7 +32,6 @@ namespace NYql {
     void TGenericConfiguration::AddCluster(const TGenericClusterConfig& clusterConfig,
                                            const NYql::IDatabaseAsyncResolver::TPtr databaseResolver,
                                            const NYql::ILoggingResolver::TPtr loggingResolver,
-                                           NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
                                            const TCredentials::TPtr& credentials) {
         ValidateGenericClusterConfig(clusterConfig, "TGenericConfiguration::AddCluster");
 
@@ -50,7 +48,7 @@ namespace NYql {
 
             const auto token = MakeStructuredToken(clusterConfig, credentials);
 
-            databaseAuth[std::make_pair(databaseId, DatabaseTypeFromDataSourceKind(clusterConfig.GetKind()))] =
+            DatabaseAuth[std::make_pair(databaseId, DatabaseTypeFromDataSourceKind(clusterConfig.GetKind()))] =
                 NYql::TDatabaseAuth{
                     .StructuredToken = token,
                     .AddBearerToToken = true,

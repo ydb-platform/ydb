@@ -45,7 +45,7 @@ namespace NYql {
             , CredentialsFactory(credentialsFactory)
             , GenericClient(genericClient)
         {
-            Configuration->Init(gatewayConfig, databaseResolver, loggingResolver, DatabaseAuth, types->Credentials);
+            Configuration->Init(gatewayConfig, databaseResolver, loggingResolver,  types->Credentials);
         }
 
         void AddTable(const TStringBuf& clusterName, const TStringBuf& tableName, TTableMeta&& tableMeta);
@@ -56,12 +56,11 @@ namespace NYql {
         TGenericConfiguration::TPtr Configuration = MakeIntrusive<TGenericConfiguration>();
         const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
 
-        // (database_id, database_type) -> credentials to access managed APIs
         std::shared_ptr<IDatabaseAsyncResolver> DatabaseResolver;
-        IDatabaseAsyncResolver::TDatabaseAuthMap DatabaseAuth;
 
-        // cluster_id -> credentials to access logging API;
+
         ILoggingResolver::TPtr LoggingResolver;
+        // cluster_id -> credentials to access logging API;
         ILoggingResolver::TAuthMap LoggingAuth;
 
         // key - cluster name, value - TCredentialsProviderPtr

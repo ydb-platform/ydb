@@ -62,8 +62,8 @@ namespace NYql {
                             << "clusterName=" << clusterName 
                             << ", databaseId=" << databaseId;
                         const auto idKey = std::make_pair(databaseId, DatabaseTypeFromDataSourceKind(clusterConfig.GetKind()));
-                        const auto iter = State_->DatabaseAuth.find(idKey);
-                        if (iter != State_->DatabaseAuth.cend()) {
+                        const auto iter = State_->Configuration->DatabaseAuth.find(idKey);
+                        if (iter != State_->Configuration->DatabaseAuth.cend()) {
                             YQL_CLOG(DEBUG, ProviderGeneric) << "requesting to resolve"
                                                              << ": clusterName=" << clusterName
                                                              << ", databaseId=" << databaseId;

@@ -1577,6 +1577,31 @@ TExprBase GetSortDirection(const TExprBase& sortDirections, size_t index) {
 }
 } // End of anonymous namespace
 
+TExprBase DqBuildTopStageRemoveSort(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+        if (!node.Maybe<TCoTop>().Input().Maybe<TDqCnUnionAll>()) {
+        return node;
+    }
+
+    const auto top = node.Cast<TCoTop>();
+    const auto dqUnion = top.Input().Cast<TDqCnUnionAll>();
+    if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
+
+    if (!CanPushDqExpr(top.Count(), dqUnion) || !CanPushDqExpr(top.KeySelectorLambda(), dqUnion)) {
+        return node;
+    }
+
+    if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+        return TExprBase(ctx.ChangeChild(*node.Raw(), TCoTop::idx_Input, std::move(connToPushableStage)));
+    }
+
+    const auto result = dqUnion.Output().Stage().Program().Body();
+    return node;
+}
+
 TExprBase DqBuildTopStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {

@@ -55,7 +55,12 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
     os << ", Storage: " << ConvertToStatisticsTypeString(s.StorageType);
     if (s.SortColumns) {
         os << ", sorted: ";
-        for (const auto& c : s.SortColumns->Columns) {
+        for (size_t i = 0; i<s.SortColumns->Columns.size() && i<s.SortColumns->Aliases.size(); i++) {
+            auto c = s.SortColumns->Columns[i];
+            auto a = s.SortColumns->Aliases[i];
+            if (a != "") {
+                os << a << ".";
+            }
             os << c << ", ";
         }
     }

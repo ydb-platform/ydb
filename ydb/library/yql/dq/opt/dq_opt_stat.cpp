@@ -713,11 +713,11 @@ std::shared_ptr<TOptimizerStatistics> RemoveOrdering(const std::shared_ptr<TOpti
 }
 
 std::shared_ptr<TOptimizerStatistics> RemoveOrdering(const std::shared_ptr<TOptimizerStatistics>& stats, const TExprNode::TPtr& input) {
-    if (TCoTop::Match(input.Get()) ||
+    if (TCoTopBase::Match(input.Get()) ||
+        TCoSortBase::Match(input.Get()) ||
         TDqCnHashShuffle::Match(input.Get()) ||
         TDqCnBroadcast::Match(input.Get()) ||
-        TCoTopBase::Match(input.Get()) ||
-        TCoSortBase::Match(input.Get())) {
+        TDqCnUnionAll::Match(input.Get())) {
             return RemoveOrdering(stats);
         } else {
             return stats;

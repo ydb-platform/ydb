@@ -174,8 +174,9 @@ void TRetryEventsQueue::PrintInternalState(TStringStream& stream) const {
         return;
     }
     stream << ", NextSeqNo "
-        << NextSeqNo << ", MyConfSeqNo " << MyConfirmedSeqNo << ", SeqNos " << ReceivedEventsSeqNos.size() << ", events size " << Events.size() << ", connected " << Connected << "\n";
+        << NextSeqNo << ", MyConfSeqNo " << MyConfirmedSeqNo << ", SeqNos " << ReceivedEventsSeqNos.size() << ", events size " 
+        << Events.size() << ", connected " << Connected  << ", heartbeat shed " << HeartbeatScheduled 
+        << ", last received " << LastReceivedDataTime << ", last sent " << LastSentDataTime << "\n";
 }
-
 
 } // namespace NYql::NDq

@@ -49,6 +49,8 @@ TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ReplacementPolic
     return Counters->GetCounter(TStringBuilder() << "ReplacementPolicySize/" << policy);
 }
 
+TIntrusivePtr<TSharedPageGCList> GCList = new TSharedPageGCList;
+
 struct TRequest : public TSimpleRefCount<TRequest> {
     TRequest(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, NWilson::TTraceId &&traceId)
         : Label(pageCollection->Label())
@@ -245,8 +247,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     };
 
-    TIntrusivePtr<TSharedPageGCList> GCList = new TSharedPageGCList;
-
     TActorId Owner;
     TAutoPtr<NUtil::ILogger> Logger;
     THashMap<TLogoBlobID, TCollection> Collections;
@@ -397,24 +397,25 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         const auto &pageCollection = *msg->PageCollection;
         const TLogoBlobID metaId = pageCollection.Label();
 
-        TCollection &collection = AttachCollection(metaId, pageCollection, msg->Owner);
-        if (msg->RegularPages) {
-            for (auto &paged : msg->RegularPages) {
-                Y_ABORT_UNLESS(paged.PageId < collection.PageMap.size());
-                auto* page = collection.PageMap[paged.PageId].Get();
-                if (!page) {
-                    Y_ABORT_UNLESS(collection.PageMap.emplace(paged.PageId, (page = new TPage(paged.PageId, pageCollection.Page(paged.PageId).Size, &collection))));
-                }
-                if (!page->HasMissingBody()) {
-                    continue;
-                }
-
-                page->Initialize(std::move(paged.Data));
-                BodyProvided(collection, paged.PageId, page);
-                Evict(Cache.Touch(page));
-            }
-            DoGC();
+        if (!msg->Pages) {
+            AttachCollection(metaId, pageCollection, msg->Owner);
+            return;
         }
+
+        Y_ABORT_IF(Collections.contains(metaId), "Only new collections may have pages");
+        TCollection &collection = AttachCollection(metaId, pageCollection, msg->Owner);
+        for (auto &page : msg->Pages) {
+            Y_ABORT_UNLESS(page->PageId < collection.PageMap.size());
+
+            auto emplaced = collection.PageMap.emplace(page->PageId, page);
+            Y_ABORT_UNLESS(emplaced, "Pages should be unique");
+
+            page->Collection = &collection;
+            BodyProvided(collection, page.Get());
+            Evict(Cache.Touch(page.Get()));
+        }
+
+        DoGC();
     }
 
     void Handle(NSharedCache::TEvRequest::TPtr &ev) {
@@ -732,7 +733,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 if (auto body = std::move(x.second)) {
                     if (page->HasMissingBody()) {
                         page->Initialize(std::move(body));
-                        BodyProvided(collection, x.first, page);
+                        BodyProvided(collection, page);
                     }
 
                     auto ref = TSharedPageRef::MakeUsed(page, GCList);
@@ -852,7 +853,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 }
 
                 page->Initialize(std::move(paged.Data));
-                BodyProvided(collection, paged.PageId, page);
+                BodyProvided(collection, page);
                 Evict(Cache.Touch(page));
             }
         }
@@ -951,15 +952,15 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    void BodyProvided(TCollection &collection, ui32 pageId, TPage *page) {
+    void BodyProvided(TCollection &collection, TPage *page) {
         AddActivePage(page);
-        auto expectantIt = collection.Expectants.find(pageId);
+        auto expectantIt = collection.Expectants.find(page->PageId);
         if (expectantIt == collection.Expectants.end())
             return;
         for (auto &xpair : expectantIt->second.SourceRequests) {
             auto &r = xpair.first;
             auto &rblock = r->ReadyBlocks[xpair.second];
-            Y_ABORT_UNLESS(rblock.PageId == pageId);
+            Y_ABORT_UNLESS(rblock.PageId == page->PageId);
             rblock.Page = TSharedPageRef::MakeUsed(page, GCList);
 
             if (--r->PendingBlocks == 0)

@@ -138,6 +138,10 @@ public:
             EnsurePage(loaded.PageId)->Fill(std::move(loaded.Page), sticky);
         }
 
+        void Fill(ui32 pageId, TSharedPageRef page, bool sticky = false) noexcept {
+            EnsurePage(pageId)->Fill(page, sticky);
+        }
+
         const TLogoBlobID Id;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TPageMap<THolder<TPage>> PageMap;

@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "flat_bio_events.h"
 #include "shared_handle.h"
+#include "shared_page.h"
 #include <ydb/core/protos/shared_cache.pb.h>
 
 #include <util/generic/map.h>
@@ -53,8 +54,7 @@ namespace NKikimr::NSharedCache {
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TActorId Owner;
-        TVector<NPageCollection::TLoadedPage> RegularPages;
-        TVector<NPageCollection::TLoadedPage> StickyPages;
+        TVector<TIntrusivePtr<TPage>> Pages;
 
         TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TActorId owner)
             : PageCollection(std::move(pageCollection))

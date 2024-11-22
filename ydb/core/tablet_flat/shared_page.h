@@ -8,6 +8,8 @@ namespace NKikimr::NSharedCache {
 
 struct TCollection;
 
+extern TIntrusivePtr<TSharedPageGCList> GCList;
+
 enum EPageState {
     PageStateNo,
     PageStateLoaded,

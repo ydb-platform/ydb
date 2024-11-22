@@ -314,11 +314,24 @@ namespace NTabletFlatExecutor {
                 TVector<TIntrusivePtr<NTable::TLoader::TCache>> pageCollections;
                 for (auto& pageCollection : result.PageCollections) {
                     auto cache = MakeIntrusive<NTable::TLoader::TCache>(pageCollection.PageCollection);
-                    for (auto &paged : pageCollection.StickyPages) cache->Fill(paged, true);
-                    // for (auto &paged : pageCollection.RegularPages) cache->Fill(paged, false);
-
                     auto attach = MakeHolder<NSharedCache::TEvAttach>(pageCollection.PageCollection, Owner);
-                    attach->RegularPages.swap(pageCollection.RegularPages);
+                    
+                    auto addPage = [&attach, &pageCollection, &cache](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
+                        auto pageId = loadedPage.PageId;
+                        auto pageSize = pageCollection.PageCollection->Page(pageId).Size;
+                        auto sharedPage = MakeIntrusive<TPage>(pageId, pageSize, nullptr);
+                        sharedPage->Initialize(std::move(loadedPage.Data));
+                        attach->Pages.push_back(sharedPage);
+                        cache->Fill(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), GCList), sticky);
+                    };
+
+                    for (auto &loadedPage : pageCollection.StickyPages) {
+                        addPage(loadedPage, true);
+                    }
+                    for (auto &loadedPage : pageCollection.RegularPages) {
+                        addPage(loadedPage, false);
+                    }
+
                     Send(MakeSharedPageCacheId(), attach.Release());
 
                     pageCollections.push_back(std::move(cache));

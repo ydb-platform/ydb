@@ -255,15 +255,15 @@ bool TColumnShardScan::ProduceResults() noexcept {
             "batch_columns", JoinSeq(",", batch->schema()->field_names()));
     }
     if (CurrentLastReadKey) {
-        NArrow::NMerger::TSortableBatchPosition pNew(
-            result.GetLastReadKey(), 0, result.GetLastReadKey()->schema()->field_names(), {}, ReadMetadataRange->IsDescSorted());
-        NArrow::NMerger::TSortableBatchPosition pOld(
-            CurrentLastReadKey, 0, CurrentLastReadKey->schema()->field_names(), {}, ReadMetadataRange->IsDescSorted());
+        NArrow::NMerger::TSortableBatchPosition pNew(result.GetScanCursor()->GetPKCursor(), 0,
+            result.GetScanCursor()->GetPKCursor()->schema()->field_names(), {}, ReadMetadataRange->IsDescSorted());
+        NArrow::NMerger::TSortableBatchPosition pOld(CurrentLastReadKey->GetPKCursor(), 0,
+            CurrentLastReadKey->GetPKCursor()->schema()->field_names(), {}, ReadMetadataRange->IsDescSorted());
         AFL_VERIFY(pOld < pNew)("old", pOld.DebugJson().GetStringRobust())("new", pNew.DebugJson().GetStringRobust());
     }
-    CurrentLastReadKey = result.GetLastReadKey();
+    CurrentLastReadKey = result.GetScanCursor();
 
-    Result->LastKey = ConvertLastKey(result.GetLastReadKey());
+    Result->LastKey = ConvertLastKey(result.GetScanCursor()->GetPKCursor());
     SendResult(false, false);
     ScanIterator->OnSentDataFromInterval(result.GetNotFinishedIntervalIdx());
     ACFL_DEBUG("stage", "finished")("iterator", ScanIterator->DebugString());

@@ -89,7 +89,15 @@ public:
 };
 
 class IScanCursor {
+private:
+    virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const = 0;
+
 public:
+    virtual ~IScanCursor() = default;
+
+    const std::shared_ptr<arrow::RecordBatch>& GetPKCursor() const {
+        return DoGetPKCursor();
+    }
 };
 
 class TSimpleScanCursor: public IScanCursor {
@@ -97,6 +105,10 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PrimaryKey);
     YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY(ui32, RecordIndex, 0);
+
+    virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const override {
+        return PrimaryKey;
+    }
 
 public:
     TSimpleScanCursor(const std::shared_ptr<arrow::RecordBatch>& pk, const ui64 portionId, const ui32 recordIndex)
@@ -109,6 +121,10 @@ public:
 class TPlainScanCursor: public IScanCursor {
 private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PrimaryKey);
+
+    virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const override {
+        return PrimaryKey;
+    }
 
 public:
     TPlainScanCursor(const std::shared_ptr<arrow::RecordBatch>& pk)

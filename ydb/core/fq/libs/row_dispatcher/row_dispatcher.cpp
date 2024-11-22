@@ -590,6 +590,9 @@ TString TRowDispatcher::GetInternalState() {
             str << " / " << LeftPad(actorId, 32)
                 << " data rate " << toHumanDR(sessionInfo.AggrReadBytes.Sum) << " unread bytes " << toHuman(sessionInfo.Stat.UnreadBytes)
                 << " offset " << LeftPad(sessionInfo.Stat.LastReadedOffset, 12) << " restarts by offsets " << sessionInfo.Stat.RestartSessionByOffsets << "\n";
+            ui64 maxInitialOffset = 0;
+            ui64 minInitialOffset = std::numeric_limits<ui64>::max();
+
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
                 str << "    " << consumer->QueryId << " " << LeftPad(readActorId, 32) << " unread bytes "
                     << toHuman(consumer->Stat.UnreadBytes) << " (" << leftPad(consumer->Stat.UnreadRows) << " rows) "
@@ -601,7 +604,11 @@ TString TRowDispatcher::GetInternalState() {
                     << " conn id " <<  consumer->Generation << " ";
                 str << " retry queue: ";
                 consumer->EventsQueue.PrintInternalState(str);
+
+                maxInitialOffset = std::max(maxInitialOffset, consumer->Stat.InitialOffset);
+                minInitialOffset = std::min(minInitialOffset, consumer->Stat.InitialOffset);
             }
+            str << "    initial offset max " << leftPad(maxInitialOffset) << " min " << leftPad(minInitialOffset) << "\n";;
         }
     }
     return str.Str();

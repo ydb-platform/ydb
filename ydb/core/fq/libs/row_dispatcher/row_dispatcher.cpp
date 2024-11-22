@@ -543,6 +543,7 @@ TString TRowDispatcher::GetInternalState() {
     };
     str << "Consumers count: " << Consumers.size() << "\n";
     str << "TopicSessions count: " << TopicSessions.size() << "\n";
+    str << "Max session buffer size: " << toHuman(MaxSessionBufferSizeBytes) << "\n";
     str << "DataRate (all sessions): ";
     printDataRate(AggrStats.AllSessionsReadBytes);
     str << "\n";

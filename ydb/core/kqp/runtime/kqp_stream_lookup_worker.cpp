@@ -856,7 +856,8 @@ private:
     };
 
     bool ShoulKeepRowsOrder() const {
-        return Settings.HasKeepRowsOrder() && Settings.GetKeepRowsOrder();
+        return true;
+        // return Settings.HasKeepRowsOrder() && Settings.GetKeepRowsOrder();
     }
 
     bool IsRowSeqNoValid(const ui64& seqNo) const {

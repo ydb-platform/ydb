@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         TChainTester(65).Test();
     }
 
-    TString ExecuteJoinOrderTestGenericQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
+    TString ExecuteJoinOrderTestGenericQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true, TMaybe<TString> dataQuery = {}, TMaybe<TString> canonicalResult = {}) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
@@ -375,6 +375,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         CreateSampleTable(session, useColumnStore);
         sleep(5);
 
+        TString plan;
         /* join with parameters */
         {
             const TString query = GetStatic(queryPath);
@@ -385,8 +386,30 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             PrintPlan(*result.GetStats()->GetPlan());
-            return *result.GetStats()->GetPlan();
+            Cout << *result.GetStats()->GetAst() << Endl;
+            plan = *result.GetStats()->GetPlan();
         }
+
+        if (dataQuery) {
+            Cerr << "actually run queries" << Endl;
+            TString query = GetStatic(*dataQuery);
+            auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                .ExecMode(NYdb::NQuery::EExecMode::Execute);
+            
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            query = GetStatic(queryPath);
+            result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            if (canonicalResult) {
+               CompareYson(*canonicalResult, FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+
+        return plan;
     }
 
     TString ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
@@ -539,7 +562,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST(GPB) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/gpb.sql", "stats/gpb.json", true, false);
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/gpb.sql", "stats/gpb.json", true, false, true, "queries/gpb-data.sql",
+            R"([[99];[100];[103]])");
     }
 
     Y_UNIT_TEST(GPB2) {

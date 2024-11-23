@@ -57,7 +57,7 @@ void CreateTables(TSession session, const TString& schemaPath, bool useColumnSto
     UNIT_ASSERT(res.IsSuccess());
 }
 
-void CreateTables(NYdb::NQuery::TSession session, const TString& schemaPath, bool useColumnStore) {
+void CreateTablesGeneric(NYdb::NQuery::TSession session, const TString& schemaPath, bool useColumnStore) {
     std::string query = GetStatic(schemaPath);
 
     if (useColumnStore) {
@@ -93,24 +93,20 @@ static void CreateSampleTable(TSession session, bool useColumnStore) {
     CreateTables(session, "schema/tpcc.sql", useColumnStore);
 
     CreateTables(session, "schema/lookupbug.sql", useColumnStore);
-
-    CreateTables(session, "schema/gpb.sql", useColumnStore);
-
 }
 
-static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStore) {
-    CreateTables(session, "schema/rstuv.sql", useColumnStore);
+static void CreateSampleTableGeneric(NYdb::NQuery::TSession session, bool useColumnStore) {
+    CreateTablesGeneric(session, "schema/rstuv.sql", useColumnStore);
 
-    CreateTables(session, "schema/tpch.sql", useColumnStore);
+    CreateTablesGeneric(session, "schema/tpch.sql", useColumnStore);
 
-    CreateTables(session, "schema/tpcds.sql", useColumnStore);
+    CreateTablesGeneric(session, "schema/tpcds.sql", useColumnStore);
 
-    CreateTables(session, "schema/tpcc.sql", useColumnStore);
+    CreateTablesGeneric(session, "schema/tpcc.sql", useColumnStore);
 
-    CreateTables(session, "schema/lookupbug.sql", useColumnStore);
+    CreateTablesGeneric(session, "schema/lookupbug.sql", useColumnStore);
 
-    CreateTables(session, "schema/gpb.sql", useColumnStore);
-
+    CreateTablesGeneric(session, "schema/gpb.sql", false);
 }
 
 static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = "", bool useCBO = true){
@@ -373,7 +369,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateSampleTable(session, useColumnStore);
+        CreateSampleTableGeneric(session, useColumnStore);
         sleep(5);
 
         TString plan;
@@ -425,12 +421,12 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         {
             const TString query = GetStatic(queryPath);
             
-            auto execRes = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            auto execRes = db.StreamExecuteScanQuery(query, TStreamExecScanQuerySettings().Explain(true)).ExtractValueSync();
             execRes.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(execRes.GetStatus(), EStatus::SUCCESS);
-            auto result = session.ExplainDataQuery(query).ExtractValueSync();
-            PrintPlan(result.GetPlan());
-            return result.GetPlan();
+            auto plan = CollectStreamResult(execRes).PlanJson;
+            PrintPlan(plan.GetRef());
+            return plan.GetRef();
         }
     }
 

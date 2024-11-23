@@ -26,6 +26,7 @@ PEERDIR(
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
     ydb/library/yql/providers/s3/expr_nodes
+    ydb/library/yql/providers/s3/statistics
     ydb/library/yql/utils/plan
     ydb/core/kqp/provider
     ydb/library/formats/arrow/protos

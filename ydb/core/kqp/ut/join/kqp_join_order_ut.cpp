@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
@@ -56,6 +57,19 @@ void CreateTables(TSession session, const TString& schemaPath, bool useColumnSto
     UNIT_ASSERT(res.IsSuccess());
 }
 
+void CreateTablesGeneric(NYdb::NQuery::TSession session, const TString& schemaPath, bool useColumnStore) {
+    std::string query = GetStatic(schemaPath);
+
+    if (useColumnStore) {
+        std::regex pattern(R"(CREATE TABLE [^\(]+ \([^;]*\))", std::regex::multiline);
+        query = std::regex_replace(query, pattern, "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);");
+    }
+
+    auto res = session.ExecuteQuery(TString(query), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+    res.GetIssues().PrintTo(Cerr);
+    UNIT_ASSERT(res.IsSuccess());
+}
+
 TString GetPrettyJSON(const NJson::TJsonValue& json) {
     TStringStream ss;
     NJsonWriter::TBuf writer;
@@ -81,14 +95,28 @@ static void CreateSampleTable(TSession session, bool useColumnStore) {
     CreateTables(session, "schema/lookupbug.sql", useColumnStore);
 }
 
-static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = ""){
+static void CreateSampleTableGeneric(NYdb::NQuery::TSession session, bool useColumnStore) {
+    CreateTablesGeneric(session, "schema/rstuv.sql", useColumnStore);
+
+    CreateTablesGeneric(session, "schema/tpch.sql", useColumnStore);
+
+    CreateTablesGeneric(session, "schema/tpcds.sql", useColumnStore);
+
+    CreateTablesGeneric(session, "schema/tpcc.sql", useColumnStore);
+
+    CreateTablesGeneric(session, "schema/lookupbug.sql", useColumnStore);
+
+    CreateTablesGeneric(session, "schema/gpb.sql", false);
+}
+
+static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false, TString stats = "", bool useCBO = true){
     TVector<NKikimrKqp::TKqpSetting> settings;
 
     NKikimrKqp::TKqpSetting setting;
 
-    setting.SetName("CostBasedOptimizationLevel");
-    setting.SetValue("4");
-    settings.push_back(setting);
+    setting.SetName("EnableKqpDataQueryStreamLookup");
+    setting.SetValue("true");
+    settings.push_back(setting); 
 
     if (stats != "") {
         setting.SetName("OptOverrideStatistics");
@@ -333,8 +361,54 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     //    TChainTester(65).Test();
     //}
 
-    TString ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore) {
-        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath));
+    TString ExecuteJoinOrderTestGenericQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true, TMaybe<TString> dataQuery = {}, TMaybe<TString> canonicalResult = {}) {
+        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateSampleTableGeneric(session, useColumnStore);
+        sleep(5);
+
+        TString plan;
+        /* join with parameters */
+        {
+            const TString query = GetStatic(queryPath);
+            auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                .ExecMode(NYdb::NQuery::EExecMode::Explain);
+            
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            PrintPlan(*result.GetStats()->GetPlan());
+            Cout << *result.GetStats()->GetAst() << Endl;
+            plan = *result.GetStats()->GetPlan();
+        }
+
+        if (dataQuery) {
+            Cerr << "actually run queries" << Endl;
+            TString query = GetStatic(*dataQuery);
+            auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                .ExecMode(NYdb::NQuery::EExecMode::Execute);
+            
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            query = GetStatic(queryPath);
+            result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            if (canonicalResult) {
+                Cerr << "checking results" << Endl;
+               CompareYson(*canonicalResult, FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+
+        return plan;
+    }
+
+    TString ExecuteJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
+        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -474,6 +548,16 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
+    Y_UNIT_TEST(GPB) {
+        SetDefaultIteratorQuotaSettings(1, 1e7);
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/gpb.sql", "stats/gpb.json", true, false, true,
+            "queries/gpb-data.sql", R"([[99];[100];[103]])");
+    }
+
+    Y_UNIT_TEST(GPB2) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/gpb2.sql", "stats/gpb.json", true, false);
+    }
+
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS34, StreamLookupJoin, ColumnStore) {
         ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds34.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);       
     }
@@ -535,6 +619,8 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT_C(joinOrder.find(R"(["R","S"])") != TString::npos, joinOrder);
         UNIT_ASSERT_C(joinOrder.find(R"(["T","U"])") != TString::npos, joinOrder);
     }
+
+
 
     void CanonizedJoinOrderTest(const TString& queryPath, const TString& statsPath, TString correctJoinOrderPath, bool useStreamLookupJoin, bool useColumnStore
     ) {

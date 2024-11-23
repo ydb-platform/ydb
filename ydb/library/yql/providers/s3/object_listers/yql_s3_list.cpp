@@ -203,6 +203,7 @@ public:
                     object.Path = filename;
                     object.Size = entry.fts_statp->st_size;
                     object.MatchedGlobs.swap(matches);
+                    output.ListedObjectSize += object.Size;
                 }
             }
             promise.SetValue(std::move(output));
@@ -367,6 +368,7 @@ private:
                     object.Path = content.Path;
                     object.Size = content.Size;
                     object.MatchedGlobs.swap(matchedGlobs);
+                    ctx.Output->ListedObjectSize += object.Size;
                 }
                 if (ctx.EarlyStopChecker(content.Path)) {
                     earlyStop = true;

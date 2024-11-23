@@ -273,6 +273,7 @@ message TKqpPhyCnStreamLookup {
     bytes LookupKeysType = 4;
     bytes ResultType = 5;
     EStreamLookupStrategy LookupStrategy = 6;
+    bool KeepRowsOrder = 7;
 }
 
 message TKqpPhyCnSequencer {

@@ -6,6 +6,7 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/statistics/yql_s3_statistics.h>
 
 #include <charconv>
 
@@ -57,6 +58,33 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
             new TOptimizerStatistics::TKeyColumns(indexMeta->KeyColumnNames));
     }
 
+    auto sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
+
+    if (auto readRanges = inputNode.Maybe<TKqlReadTableRangesBase>()) {
+        TVector<TString> indexColumns;
+        for (auto c : readRanges.Cast().Columns()) {
+            indexColumns.push_back(c.StringValue());
+        }
+
+        TVector<TString> sortedPrefixCols;
+        TVector<TString> sortedPrefixAliases;
+
+        if (inputStats->StorageType == EStorageType::RowStorage && keyColumns) {
+            for (auto c : keyColumns->Data ) {
+                if (std::find(indexColumns.begin(), indexColumns.end(), c) != indexColumns.end()) {
+                    sortedPrefixCols.push_back(c);
+                    sortedPrefixAliases.push_back("");
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if (sortedPrefixCols.size()) {
+            sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>(new TOptimizerStatistics::TSortColumns(sortedPrefixCols, sortedPrefixAliases));
+        }
+    }
+
     /**
      * We need index statistics to calculate this in the future
      * Right now we use very small estimates to make sure CBO picks Lookup Joins
@@ -80,7 +108,8 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
         0.0, 
         keyColumns,
         inputStats->ColumnStatistics,
-        inputStats->StorageType);
+        inputStats->StorageType,
+        sortedPrefixPtr);
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table" << stats->ToString();
 
@@ -152,11 +181,13 @@ void InferStatisticsForSteamLookup(const TExprNode::TPtr& input, TTypeAnnotation
     auto streamLookup = inputNode.Cast<TKqpCnStreamLookup>();
 
     int nAttrs = streamLookup.Columns().Size();
-    auto inputStats = typeCtx->GetStats(streamLookup.Table().Raw());
-    if (!inputStats) {
+    auto tableStats = typeCtx->GetStats(streamLookup.Table().Raw());
+    auto inputStats = typeCtx->GetStats(streamLookup.Output().Raw());
+
+    if (!inputStats || !tableStats) {
         return;
     }
-    auto byteSize = inputStats->ByteSize * (nAttrs / (double) inputStats->Ncols);
+    auto byteSize = tableStats->ByteSize * (nAttrs / (double) tableStats->Ncols) * inputStats->Selectivity;
 
     auto res = std::make_shared<TOptimizerStatistics>(
         EStatisticsType::BaseTable, 
@@ -166,7 +197,8 @@ void InferStatisticsForSteamLookup(const TExprNode::TPtr& input, TTypeAnnotation
         0, 
         inputStats->KeyColumns,
         inputStats->ColumnStatistics,
-        inputStats->StorageType);
+        inputStats->StorageType,
+        inputStats->SortColumns);
 
     typeCtx->SetStats(input.Get(), res); 
 
@@ -192,12 +224,8 @@ void InferStatisticsForLookupTable(const TExprNode::TPtr& input, TTypeAnnotation
     }
 
     if (lookupTable.LookupKeys().Maybe<TCoIterator>()) {
-        if (inputStats) {
-            nRows = inputStats->Nrows;
-            byteSize = inputStats->ByteSize * (nAttrs / (double) inputStats->Ncols);
-        } else {
-            return;
-        }
+        nRows = inputStats->Nrows;
+        byteSize = inputStats->ByteSize * (nAttrs / (double) inputStats->Ncols);
     } else {
         nRows = 1;
         byteSize = 10;
@@ -253,13 +281,38 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
             new TOptimizerStatistics::TKeyColumns(indexMeta->KeyColumnNames));
     }
 
+    auto sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
+
+    TVector<TString> indexColumns;
+    for (auto c : sourceSettings.Columns()) {
+        indexColumns.push_back(c.StringValue());
+    }
+
+    TVector<TString> sortedPrefixCols;
+    TVector<TString> sortedPrefixAliases;
+
+    if (inputStats->StorageType == EStorageType::RowStorage && keyColumns) {
+        for (auto c : keyColumns->Data ) {
+            if (std::find(indexColumns.begin(), indexColumns.end(), c) != indexColumns.end()) {
+                sortedPrefixCols.push_back(c);
+                sortedPrefixAliases.push_back("");
+            } else {
+                break;
+            }
+        }
+    }
+
+    if (sortedPrefixCols.size()) {
+        sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>(new TOptimizerStatistics::TSortColumns(sortedPrefixCols, sortedPrefixAliases));
+    }
+
     int nAttrs = sourceSettings.Columns().Size();
 
     double sizePerRow = inputStats->ByteSize / (inputRows==0?1:inputRows);
     double byteSize = nRows * sizePerRow * (nAttrs / (double)inputStats->Ncols);
     double cost = inputStats->Cost;
 
-    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(
+    auto outputStats = std::make_shared<TOptimizerStatistics>(
         EStatisticsType::BaseTable, 
         nRows, 
         nAttrs, 
@@ -267,7 +320,12 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
         cost, 
         keyColumns, 
         inputStats->ColumnStatistics,
-        inputStats->StorageType));
+        inputStats->StorageType,
+        sortedPrefixPtr);
+
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for source settings: " << outputStats->ToString();
+
+    typeCtx->SetStats(input.Get(), outputStats); 
 }
 
 /**
@@ -275,10 +333,20 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
  * Currently we just make up a number for cardinality (5) and set cost to 0
  */
 void InferStatisticsForIndexLookup(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
-    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 5, 5, 20, 0.0));
+    auto inputNode = TExprBase(input);
+    auto lookupIndex = inputNode.Cast<TKqlLookupIndexBase>();
+
+    auto inputStats = typeCtx->GetStats(lookupIndex.LookupKeys().Raw());
+    if (!inputStats) {
+        return;
+    }
+
+    typeCtx->SetStats(input.Get(), inputStats);
 }
 
-void InferStatisticsForReadTableIndexRanges(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+void InferStatisticsForReadTableIndexRanges(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx,
+    const TKqpOptimizeContext& kqpCtx) {
+
     auto indexRanges = TKqlReadTableIndexRanges(input);
 
     auto inputStats = typeCtx->GetStats(indexRanges.Table().Raw());
@@ -291,20 +359,83 @@ void InferStatisticsForReadTableIndexRanges(const TExprNode::TPtr& input, TTypeA
         indexColumns.push_back(c.StringValue());
     }
 
+    auto tablePath = indexRanges.Table().Path();
+    const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, tablePath);
+    const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(indexRanges.Index().StringValue());
+
+    auto sortedColumns = indexMeta->KeyColumnNames;
+
+    TVector<TString> sortedPrefixCols;
+    TVector<TString> sortedPrefixAliases;
+
+    for (size_t i=0; i<indexColumns.size(); i++) {
+        if (indexColumns[i] == sortedColumns[i]) {
+            sortedPrefixCols.push_back(indexColumns[i]);
+            sortedPrefixAliases.push_back("");
+        } else {
+            break;
+        }
+    }
+
     auto indexColumnsPtr = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(indexColumns));
+    auto sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
+    if (sortedPrefixCols.size()) {
+        sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>(new TOptimizerStatistics::TSortColumns(sortedPrefixCols, sortedPrefixAliases));
+    }
     auto stats = std::make_shared<TOptimizerStatistics>(
         inputStats->Type, 
-        inputStats->Nrows, 
+        inputStats->Nrows,
         inputStats->Ncols, 
         inputStats->ByteSize, 
         inputStats->Cost, 
         indexColumnsPtr,
         inputStats->ColumnStatistics,
-        inputStats->StorageType);
+        inputStats->StorageType,
+        sortedPrefixPtr);
 
     typeCtx->SetStats(input.Get(), stats);
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for index: " << stats->ToString();
+}
+
+void InferStatisticsForLookupJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto lookupJoin = TKqlIndexLookupJoinBase(input);
+
+    auto inputStats = typeCtx->GetStats(lookupJoin.Input().Raw());
+    if (!inputStats) {
+        return;
+    }
+
+    auto sortedPrefix = inputStats->SortColumns;
+    auto aliasName = lookupJoin.LeftLabel().StringValue();
+
+    TVector<TString> sortedPrefixCols;
+    TVector<TString> sortedPrefixAliases;
+
+    if (sortedPrefix) {
+        sortedPrefixCols = sortedPrefix->Columns;
+        sortedPrefixAliases = sortedPrefix->Aliases;
+        if (aliasName != "") {
+            for (size_t i=0; i<sortedPrefix->Aliases.size(); i++) {
+                sortedPrefixAliases[i] = aliasName;
+            }
+        }
+    }
+
+    auto sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
+    if (sortedPrefixCols.size()) {
+        sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>(new TOptimizerStatistics::TSortColumns(sortedPrefixCols, sortedPrefixAliases));
+    }
+
+    auto outputStats = *inputStats;
+    outputStats.SortColumns = sortedPrefixPtr;
+
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for lookup join: " << outputStats.ToString();
+    YQL_CLOG(TRACE, CoreDq) << "Added alias: " << aliasName;
+
+
+
+    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(std::move(outputStats)));
 }
 
 /***
@@ -455,6 +586,128 @@ void InferStatisticsForOlapRead(const TExprNode::TPtr& input, TTypeAnnotationCon
     }
 }
 
+double EstimateRowSize(const TStructExprType& rowType, const TString& format, const TString& compression, bool decoded) {
+    double result = 0.0;
+    for (auto item : rowType.GetItems()) {
+        auto itemType = item->GetItemType();
+        if (itemType->GetKind() == ETypeAnnotationKind::Data) {
+            switch(itemType->Cast<TDataExprType>()->GetSlot()) {
+                case EDataSlot::Bool:
+                    result += decoded ? 1.0 : 0.2;
+                    break;
+                case EDataSlot::Int8:
+                    [[fallthrough]];
+                case EDataSlot::Uint8:
+                    result += decoded ? 1.0 : 0.72;
+                    break;
+                case EDataSlot::Int16:
+                    [[fallthrough]];
+                case EDataSlot::Uint16:
+                    result += decoded ? 2.0 : 1.44;
+                    break;
+                case EDataSlot::Int32:
+                    [[fallthrough]];
+                case EDataSlot::Uint32:
+                    result += decoded ? 4.0 : 2.88;
+                    break;
+                case EDataSlot::Int64:
+                    [[fallthrough]];
+                case EDataSlot::Uint64:
+                    [[fallthrough]];
+                case EDataSlot::Double:
+                    result += decoded ? 8.0 : 3.88;
+                    break;
+                case EDataSlot::Float:
+                    result += decoded ? 4.0 : 2.88;
+                    break;
+                case EDataSlot::String:
+                    [[fallthrough]];
+                case EDataSlot::Utf8:
+                    result += decoded ? 28.0 : 8.0;
+                    break;
+                case EDataSlot::Yson:
+                    [[fallthrough]];
+                case EDataSlot::Json:
+                    result += decoded ? 56.0 : 16.0;
+                    break;
+                case EDataSlot::Uuid:
+                    break;
+                case EDataSlot::Date:
+                    result += decoded ? 2.0 : 1.51;
+                    break;
+                case EDataSlot::Datetime:
+                    [[fallthrough]];
+                case EDataSlot::Timestamp:
+                    result += decoded ? 8.0 : 6.04;
+                    break;
+                case EDataSlot::Interval:
+                    break;
+                case EDataSlot::TzDate:
+                    break;
+                case EDataSlot::TzDatetime:
+                    break;
+                case EDataSlot::TzTimestamp:
+                    break;
+                case EDataSlot::Decimal:
+                    result += decoded ? 16.0 : 7.76;
+                    break;
+                case EDataSlot::DyNumber:
+                    break;
+                case EDataSlot::JsonDocument:
+                    break;
+                case EDataSlot::Date32:
+                    result += decoded ? 4.0 : 2.88;
+                    break;
+                case EDataSlot::Datetime64:
+                    [[fallthrough]];
+                case EDataSlot::Timestamp64:
+                case EDataSlot::Interval64:
+                    result += decoded ? 8.0 : 3.88;
+                    break;
+                case EDataSlot::TzDate32:
+                    break;
+                case EDataSlot::TzDatetime64:
+                    break;
+                case EDataSlot::TzTimestamp64:
+                    break;
+            }
+        }
+    }
+
+    if (result == 0.0) {
+        result = 1000.0;
+    }
+
+    if (format != "parquet" && !decoded) {
+        double compressionRatio = 1.0;
+        if (format == "csv_with_names" || format == "tsv_with_names") {
+            result *= 5.0;
+            compressionRatio = 4.5;   // gzip
+        } else if (format != "raw") { // json's
+            result *= 12.0;
+            compressionRatio = 14.0;   // gzip
+        }
+        if (compression) {
+            if (compression == "gzip") {
+                // 1.00
+            } else if (compression == "zstd") {
+                compressionRatio *= 1.05;
+            } else if (compression == "lz4") {
+                compressionRatio *= 1.43;
+            } else if (compression == "brotli") {
+                compressionRatio *= 1.20;
+            } else if (compression == "bzip2") {
+                compressionRatio *= 1.24;
+            } else if (compression == "xz") {
+                compressionRatio *= 1.45;
+            }
+            result /= compressionRatio; 
+        }
+    }
+
+    return result;
+}
+
 void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx,
     TKqpOptimizeContext& kqpCtx) {
     auto inputNode = TExprBase(input);
@@ -462,21 +715,88 @@ void InferStatisticsForDqSourceWrap(const TExprNode::TPtr& input, TTypeAnnotatio
         if (auto maybeS3DataSource = wrapBase.Cast().DataSource().Maybe<TS3DataSource>()) {
             auto s3DataSource = maybeS3DataSource.Cast();
             if (s3DataSource.Name()) {
-                auto path = s3DataSource.Name().Cast().StringValue();
-                if (kqpCtx.Config->OptOverrideStatistics.Get() && path) {
-                    auto stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 0.0, 0, 0, 0.0, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>());
-                    stats = OverrideStatistics(*stats, path, kqpCtx.GetOverrideStatistics());
-                    if (stats->ByteSize == 0.0) {
+                auto stats = typeCtx->GetStats(s3DataSource.Raw());
+                if (!stats) {
+                    stats = std::make_shared<TOptimizerStatistics>(EStatisticsType::BaseTable, 0.0, 0, 0, 0.0, TIntrusivePtr<TOptimizerStatistics::TKeyColumns>());
+                }
+                if (!stats->Specific) {
+                    stats->Specific = std::make_shared<TS3ProviderStatistics>();
+                }
+
+                const TS3ProviderStatistics* specific = dynamic_cast<const TS3ProviderStatistics*>((stats->Specific.get()));
+
+                if (!specific->OverrideApplied && kqpCtx.Config->OptOverrideStatistics.Get()) {
+                    auto path = s3DataSource.Name().Cast().StringValue();
+                    auto dbStats = kqpCtx.GetOverrideStatistics()->GetMapSafe();
+                    if (!dbStats.contains(path)) {
                         auto n = path.find_last_of('/');
                         if (n != path.npos) {
-                            stats = OverrideStatistics(*stats, path.substr(n + 1), kqpCtx.GetOverrideStatistics());
+                            path = path.substr(n + 1);
                         }
                     }
-                    if (stats->ByteSize != 0.0) {
-                        YQL_CLOG(TRACE, CoreDq) << "Infer statistics for s3 data source " << path;
-                        typeCtx->SetStats(input.Get(), stats);
+                    if (dbStats.contains(path)) {
+                        YQL_CLOG(TRACE, CoreDq) << "Override statistics for s3 data source " << path;
+                        stats = OverrideStatistics(*stats, path, kqpCtx.GetOverrideStatistics());
+                        auto newSpecific = std::make_shared<TS3ProviderStatistics>(*specific);
+                        newSpecific->OverrideApplied = true;
+                        stats->Specific = newSpecific;
+                        specific = newSpecific.get();
                         typeCtx->SetStats(s3DataSource.Raw(), stats);
                     }
+                }
+
+                auto dataSourceStats = stats;
+
+                auto rowType = wrapBase.Cast().RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                if (specific->FullRawRowAvgSize == 0.0) {
+                    auto newSpecific = std::make_shared<TS3ProviderStatistics>(*specific);
+                    stats = std::make_shared<TOptimizerStatistics>(stats->Type, stats->Nrows, stats->Ncols, stats->ByteSize, stats->Cost, stats->KeyColumns, stats->ColumnStatistics, stats->StorageType, stats->SortColumns, newSpecific);
+                    newSpecific->FullRawRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, false);
+                    newSpecific->FullDecodedRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, true);
+                    specific = newSpecific.get();
+                    typeCtx->SetStats(s3DataSource.Raw(), stats);
+                }
+
+                auto wrapStats = typeCtx->GetStats(input.Get());
+                if (!wrapStats) {
+                    typeCtx->SetStats(input.Get(), stats);
+                } else {
+                    stats = wrapStats;
+                }
+
+                if (stats->Ncols == 0 || stats->Ncols > static_cast<int>(rowType->GetSize()) || stats->Nrows == 0 || stats->ByteSize == 0.0 || stats->Cost == 0.0) {
+                    auto newSpecific = std::make_shared<TS3ProviderStatistics>(*specific);
+                    stats = std::make_shared<TOptimizerStatistics>(stats->Type, stats->Nrows, stats->Ncols, stats->ByteSize, stats->Cost, stats->KeyColumns, stats->ColumnStatistics, stats->StorageType, stats->SortColumns, newSpecific);
+
+                    if (stats->Nrows == 0 && newSpecific->FullRawRowAvgSize) {
+                        stats->Nrows = newSpecific->RawByteSize / newSpecific->FullRawRowAvgSize;
+                    }
+                    if (stats->Ncols == 0 || stats->Ncols > static_cast<int>(rowType->GetSize())) {
+                        stats->Ncols = rowType->GetSize();
+                        newSpecific->PrunedRawRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, false);
+                        newSpecific->PrunedDecodedRowAvgSize = EstimateRowSize(*rowType, newSpecific->Format, newSpecific->Compression, true);
+                        stats->ByteSize = 0.0;
+                    }
+                    if (stats->ByteSize == 0.0) {
+                        stats->ByteSize = stats->Nrows * newSpecific->PrunedDecodedRowAvgSize;
+                    }
+                    double rowSize = 0.0;
+                    if (stats->Cost == 0.0) {
+                        if (newSpecific->Format == "parquet") {
+                            rowSize = newSpecific->PrunedRawRowAvgSize;
+                        } else {
+                            rowSize = newSpecific->FullRawRowAvgSize;
+                        }
+                        stats->Cost = rowSize * stats->Nrows;
+                        if (newSpecific->Compression) {
+                            stats->Cost *= 1.5;
+                        }
+                        {
+                            auto specific = const_cast<TS3ProviderStatistics*>(dynamic_cast<const TS3ProviderStatistics*>((dataSourceStats->Specific.get())));
+                            specific->Costs[TStructExprType::MakeHash(rowType->GetItems())] = stats->Cost;
+                        }
+                    }
+                    typeCtx->SetStats(input.Get(), stats);
                 }
             }
         }
@@ -522,16 +842,16 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
     bool matched = true;
     // KQP Matchers
     if(TKqlReadTableIndexRanges::Match(input.Get())) {
-        InferStatisticsForReadTableIndexRanges(input, TypeCtx);
+        InferStatisticsForReadTableIndexRanges(input, TypeCtx, KqpCtx);
     }
     else if(TKqlReadTableBase::Match(input.Get()) || TKqlReadTableRangesBase::Match(input.Get())){
         InferStatisticsForReadTable(input, TypeCtx, KqpCtx);
     }
-    else if(TKqlLookupTableBase::Match(input.Get())) {
-        InferStatisticsForLookupTable(input, TypeCtx);
-    }
     else if(TKqlLookupIndexBase::Match(input.Get())){
         InferStatisticsForIndexLookup(input, TypeCtx);
+    }
+    else if(TKqlLookupTableBase::Match(input.Get())) {
+        InferStatisticsForLookupTable(input, TypeCtx);
     }
     else if(TKqpTable::Match(input.Get())) {
         InferStatisticsForKqpTable(input, TypeCtx, KqpCtx);
@@ -541,6 +861,9 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
     }
     else if (TKqpCnStreamLookup::Match(input.Get())) {
         InferStatisticsForSteamLookup(input, TypeCtx);
+    }
+    else if (TKqlIndexLookupJoinBase::Match(input.Get())) {
+        InferStatisticsForLookupJoin(input, TypeCtx);
     }
 
     // Match a result binding atom and connect it to a stage

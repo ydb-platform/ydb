@@ -774,6 +774,7 @@ message TKqpStreamLookupSettings {
     optional NKqpProto.EStreamLookupStrategy LookupStrategy = 8;
     optional bool AllowInconsistentReads = 9 [default = false];
     optional uint32 LockNodeId = 10;
+    optional bool KeepRowsOrder = 11;
 }
 
 message TKqpSequencerSettings {

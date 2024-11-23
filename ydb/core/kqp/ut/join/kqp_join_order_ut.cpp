@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
@@ -405,6 +406,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             if (canonicalResult) {
+                Cerr << "checking results" << Endl;
                CompareYson(*canonicalResult, FormatResultSetYson(result.GetResultSet(0)));
             }
         }
@@ -562,6 +564,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST(GPB) {
+        SetDefaultIteratorQuotaSettings(1, 1e7);
         ExecuteJoinOrderTestGenericQueryWithStats("queries/gpb.sql", "stats/gpb.json", true, false, true,
             "queries/gpb-data.sql", R"([[99];[100];[103]])");
     }

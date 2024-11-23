@@ -40,7 +40,7 @@ using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
 template <typename TKey = ui64>
 bool DataHas(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::pair<ui64, ui64> range, bool requireUniq = false,
-    const std::string& columnName = "timestamp") {
+    const std::string& columnName = "timestamp", const bool inverseCheck = false) {
     static constexpr const bool isStrKey = std::is_same_v<TKey, std::string>;
 
     THashMap<TKey, ui32> keys;
@@ -83,7 +83,7 @@ bool DataHas(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, st
 
     bool problems = false;
     for (auto& [key, count] : keys) {
-        if (!count) {
+        if (!count && !inverseCheck) {
             Cerr << "No key: " << key << "\n";
             problems = true;
         }
@@ -106,6 +106,11 @@ bool DataHas(const std::vector<TString>& blobs, const TString& srtSchema, std::p
     }
 
     return DataHas<TKey>(batches, range, requireUniq, columnName);
+}
+
+bool DataNotHas(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::pair<ui64, ui64> range, bool requireUniq = false,
+    const std::string& columnName = "timestamp") {
+    return DataHas<ui64>(batches, range, requireUniq, columnName, true);
 }
 
 template <typename TKey = ui64>
@@ -788,8 +793,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         UNIT_ASSERT(rb->num_rows());
         UNIT_ASSERT(CheckOrdered(rb));
         UNIT_ASSERT(DataHas({ rb }, portion[0]));
-        UNIT_ASSERT(!DataHas({ rb }, portion[1]));
-        UNIT_ASSERT(!DataHas({ rb }, portion[2]));
+        UNIT_ASSERT(DataNotHas({ rb }, portion[1]));
+        UNIT_ASSERT(DataNotHas({ rb }, portion[2]));
     }
 
     // read 8, planstep 22 (full index)

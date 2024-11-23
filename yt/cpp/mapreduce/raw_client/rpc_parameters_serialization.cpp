@@ -84,11 +84,7 @@ static TString GetDefaultTransactionTitle()
 
     res << "User transaction. Created by: " << processState->UserName << " on " << processState->FqdnHostName
         << " client: " << processState->ClientVersion << " pid: " << processState->Pid;
-    if (!processState->CommandLine.empty()) {
-        res << " program: " << processState->CommandLine[0];
-    } else {
-        res << " command line is unknown probably NYT::Initialize was never called";
-    }
+    res << " program: " << processState->BinaryName;
 
 #ifndef NDEBUG
     res << " build: debug";

@@ -166,7 +166,7 @@ NLogging::ELogLevel ToCoreLogLevel(ILogger::ELevel level)
     Y_ABORT();
 }
 
-void CommonInitialize(int argc, const char** argv)
+void CommonInitialize(int, const char**)
 {
     auto logLevelStr = to_lower(TConfig::Get()->LogLevel);
     ILogger::ELevel logLevel;
@@ -187,8 +187,6 @@ void CommonInitialize(int argc, const char** argv)
         NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
     }
     SetLogger(logger);
-
-    TProcessState::Get()->SetCommandLine(argc, argv);
 }
 
 void NonJobInitialize(const TInitializeOptions& options)

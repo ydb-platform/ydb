@@ -1,10 +1,10 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.3
 Name: blinker
-Version: 1.8.2
+Version: 1.9.0
 Summary: Fast, simple object-to-object and broadcast signaling
 Author: Jason Kirtland
 Maintainer-email: Pallets Ecosystem <contact@palletsprojects.com>
-Requires-Python: >=3.8
+Requires-Python: >=3.9
 Description-Content-Type: text/markdown
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: License :: OSI Approved :: MIT License

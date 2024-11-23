@@ -1,3 +1,4 @@
+/* custom error:Expected list with at least two columns, group: "g1"*/
 USE plato;
 
 -- too short group

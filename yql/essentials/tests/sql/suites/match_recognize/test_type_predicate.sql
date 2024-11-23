@@ -1,3 +1,4 @@
+/* custom error:DEFINE expression must be a predicate*/
 pragma FeatureR010="prototype";
 pragma config.flags("MatchRecognizeStream", "disable");
 

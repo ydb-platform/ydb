@@ -1689,7 +1689,7 @@ TServiceBase::TServiceBase(
     , ServiceDescriptor_(descriptor)
     , ServiceId_(descriptor.FullServiceName, options.RealmId)
     , MemoryUsageTracker_(std::move(options.MemoryUsageTracker))
-    , Profiler_(RpcServerProfiler
+    , Profiler_(RpcServerProfiler()
         .WithHot(options.UseHotProfiler)
         .WithTag("yt_service", ServiceId_.ServiceName))
     , AuthenticationTimer_(Profiler_.Timer("/authentication_time"))
@@ -1697,7 +1697,7 @@ TServiceBase::TServiceBase(
         TDispatcher::Get()->GetLightInvoker(),
         BIND(&TServiceBase::OnServiceLivenessCheck, MakeWeak(this)),
         ServiceLivenessCheckPeriod))
-    , PerformanceCounters_(New<TServiceBase::TPerformanceCounters>(RpcServerProfiler))
+    , PerformanceCounters_(New<TServiceBase::TPerformanceCounters>(RpcServerProfiler()))
     , UnknownMethodPerformanceCounters_(CreateUnknownMethodPerformanceCounters())
 {
     RegisterMethod(RPC_SERVICE_METHOD_DESC(Discover)

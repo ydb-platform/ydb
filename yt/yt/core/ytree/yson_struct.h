@@ -313,6 +313,9 @@ public:
         // requires std::derived_from<TStruct, TExternalizedYsonStruct<TExternal, TStruct>>
     TYsonStructParameter<TValue>& ExternalClassParameter(const TString& key, TValue(TExternal::*field));
 
+    template <class TBase, class TValue>
+    TYsonStructParameter<TValue>& ExternalBaseClassParameter(const TString& key, TValue(TBase::*field));
+
     template <class TExternalPreprocessor>
         // requires (CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>)
     void ExternalPreprocessor(TExternalPreprocessor preprocessor);

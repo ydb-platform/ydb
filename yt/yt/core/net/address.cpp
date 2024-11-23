@@ -987,7 +987,7 @@ public:
         : TAsyncExpiringCache(
             config,
             /*logger*/ {},
-            DnsProfiler.WithPrefix("/resolve_cache"))
+            DnsProfiler().WithPrefix("/resolve_cache"))
     {
         Configure(std::move(config));
     }

@@ -804,10 +804,8 @@ void BuildCommonOperationPart(
     startedBySpec["user"] = properties->UserName;
     startedBySpec["wrapper_version"] = properties->ClientVersion;
 
-    startedBySpec["command"] = TNode::CreateList();
-    for (const auto& arg : properties->CensoredCommandLine) {
-        startedBySpec["command"].Add(arg);
-    }
+    startedBySpec["binary"] = properties->BinaryPath;
+    startedBySpec["binary_name"] = properties->BinaryName;
     auto nirvanaBlockUrl = GetNirvanaBlockUrlFromContext();
     if (!nirvanaBlockUrl.IsUndefined()) {
         startedBySpec["nirvana_block_url"] = nirvanaBlockUrl;

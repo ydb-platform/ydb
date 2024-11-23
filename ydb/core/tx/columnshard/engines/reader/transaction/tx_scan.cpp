@@ -63,12 +63,13 @@ void TTxScan::Complete(const TActorContext& ctx) {
         read.PathId = request.GetLocalPathId();
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         read.TableName = table;
+        const TString defaultReader = "SIMPLE";
         std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
             auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
             if (!sysViewPolicy) {
                 auto constructor = NReader::IScannerConstructor::TFactory::MakeHolder(
                     AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName()
-                                                                             : "PLAIN",
+                                                                             : defaultReader,
                     context);
                 if (!constructor) {
                     return std::unique_ptr<IScannerConstructor>();
@@ -80,6 +81,13 @@ void TTxScan::Complete(const TActorContext& ctx) {
         }();
         if (!scannerConstructor) {
             return SendError("cannot build scanner", AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
+        }
+        {
+            auto cursorConclusion = scannerConstructor->BuildCursorFromProto(request.GetScanCursor());
+            if (cursorConclusion.IsFail()) {
+                return SendError("cannot build scanner cursor", cursorConclusion.GetErrorMessage(), ctx);
+            }
+            read.SetScanCursor(cursorConclusion.DetachResult());
         }
         read.ColumnIds.assign(request.GetColumnTags().begin(), request.GetColumnTags().end());
         read.StatsMode = request.GetStatsMode();

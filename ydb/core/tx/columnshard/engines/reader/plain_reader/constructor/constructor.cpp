@@ -3,6 +3,7 @@
 #include "resolver.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/engines/predicate/filter.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -42,6 +43,10 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
         return initResult;
     }
     return static_pointer_cast<TReadMetadataBase>(readMetadata);
+}
+
+std::shared_ptr<IScanCursor> TIndexScannerConstructor::DoBuildCursor() const {
+    return std::make_shared<TPlainScanCursor>();
 }
 
 }   // namespace NKikimr::NOlap::NReader::NPlain

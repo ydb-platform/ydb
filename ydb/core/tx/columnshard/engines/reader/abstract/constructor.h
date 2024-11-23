@@ -33,6 +33,8 @@ protected:
         const TString& serializedProgram, TReadDescription& read, const IColumnResolver& columnResolver) const;
 private:
     virtual TConclusion<std::shared_ptr<TReadMetadataBase>> DoBuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const = 0;
+    virtual std::shared_ptr<IScanCursor> DoBuildCursor() const = 0;
+
 public:
     using TFactory = NObjectFactory::TParametrizedObjectFactory<IScannerConstructor, TString, TScannerConstructorContext>;
     virtual ~IScannerConstructor() = default;
@@ -45,6 +47,7 @@ public:
 
     }
 
+    TConclusion<std::shared_ptr<IScanCursor>> BuildCursorFromProto(const NKikimrTxDataShard::TEvKqpScanCursor& proto) const;
     virtual TConclusionStatus ParseProgram(const TVersionedIndex* vIndex, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const = 0;
     virtual std::vector<TNameTypeInfo> GetPrimaryKeyScheme(const NColumnShard::TColumnShard* self) const = 0;
     TConclusion<std::shared_ptr<TReadMetadataBase>> BuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const;

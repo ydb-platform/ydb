@@ -25,12 +25,20 @@ void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr)
     AFL_VERIFY(FetchingPlan);
     AFL_VERIFY(!Context->IsAborted());
     ProcessingStarted = true;
-    StageData = std::make_unique<TFetchedData>(true);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", SourceIdx);
     NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
     TFetchingScriptCursor cursor(FetchingPlan, 0);
     auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), Context->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+}
+
+void IDataSource::ContinueCursor(const std::shared_ptr<IDataSource>& sourcePtr) {
+    AFL_VERIFY(!!ScriptCursor);
+    if (ScriptCursor->Next()) {
+        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(*ScriptCursor), Context->GetCommonContext()->GetScanActorId());
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+        ScriptCursor.reset();
+    }
 }
 
 void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,

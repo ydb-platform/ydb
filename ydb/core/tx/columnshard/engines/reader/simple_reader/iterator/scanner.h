@@ -25,11 +25,18 @@ public:
 class TScanHead {
 private:
     std::shared_ptr<TSpecialReadContext> Context;
+    THashMap<ui64, std::shared_ptr<IDataSource>> FetchingSourcesByIdx;
     std::set<std::shared_ptr<IDataSource>, IDataSource::TCompareForScanSequence> SortedSources;
     std::set<std::shared_ptr<IDataSource>, IDataSource::TCompareForScanSequence> FetchingSources;
     ui64 InFlightLimit = 1;
     ui64 MaxInFlight = 256;
 public:
+
+    void ContinueSource(const ui32 sourceIdx) const {
+        auto it = FetchingSourcesByIdx.find(sourceIdx);
+        AFL_VERIFY(it != FetchingSourcesByIdx.end())("source_idx", sourceIdx)("count", FetchingSourcesByIdx.size());
+        it->second->ContinueCursor(it->second);
+    }
 
     bool IsReverse() const;
     void Abort();

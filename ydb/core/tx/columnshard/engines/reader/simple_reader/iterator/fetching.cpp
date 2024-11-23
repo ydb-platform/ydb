@@ -12,9 +12,11 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-bool TStepAction::DoApply(IDataReader& /*owner*/) const {
+bool TStepAction::DoApply(IDataReader& owner) const {
     if (FinishedFlag) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "apply");
+        auto* plainReader = static_cast<TPlainReadData*>(&owner);
+        plainReader->MutableScanner().OnSourceReady(Source, nullptr, 0, Source->GetRecordsCount(), *plainReader);
     }
     return true;
 }
@@ -286,7 +288,8 @@ TConclusion<bool> TPortionAccessorFetchingStep::DoExecuteInplace(
 
 TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     if (Columns.GetColumnsCount()) {
-        source->SetSourceInMemory(source->GetColumnRawBytes(Columns.GetColumnIds()) < 1e+8);
+        source->SetSourceInMemory(
+            source->GetColumnRawBytes(Columns.GetColumnIds()) < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     } else {
         source->SetSourceInMemory(true);
     }
@@ -307,6 +310,8 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
     YDB_READONLY(ui32, StartIndex, 0);
     YDB_READONLY(ui32, OriginalRecordsCount, 0);
+    NColumnShard::TCounterGuard Guard;
+    TFetchingScriptCursor Step;
 
 public:
     TString GetTaskClassIdentifier() const override {
@@ -314,11 +319,15 @@ public:
     }
 
     TApplySourceResult(const std::shared_ptr<IDataSource>& source, std::shared_ptr<arrow::Table>&& result, const ui32 startIndex,
-        const ui32 originalRecordsCount)
+        const ui32 originalRecordsCount, const TFetchingScriptCursor& step)
         : TBase(NActors::TActorId())
         , Result(result)
         , Source(source)
-        , OriginalRecordsCount(originalRecordsCount) {
+        , StartIndex(startIndex)
+        , OriginalRecordsCount(originalRecordsCount)
+        , Guard(source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard())
+        , Step(step)
+    {
     }
 
     virtual TConclusionStatus DoExecuteImpl() override {
@@ -328,6 +337,7 @@ public:
     virtual bool DoApply(IDataReader& indexedDataRead) const override {
         auto* plainReader = static_cast<TPlainReadData*>(&indexedDataRead);
         auto resultCopy = Result;
+        Source->SetCursor(Step);
         plainReader->MutableScanner().OnSourceReady(Source, std::move(resultCopy), StartIndex, OriginalRecordsCount, *plainReader);
         return true;
     }
@@ -335,20 +345,23 @@ public:
 
 }   // namespace
 
-TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     auto context = source->GetContext();
     NArrow::TGeneralContainer::TTableConstructionContext contextTableConstruct;
     contextTableConstruct.SetColumnNames(context->GetProgramInputColumns()->GetColumnNamesVector());
     contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
-    auto resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
-    AFL_VERIFY((ui32)resultBatch->num_columns() == context->GetProgramInputColumns()->GetColumnNamesVector().size());
-    if (auto filter = source->GetStageResult().GetNotAppliedFilter()) {
-        AFL_VERIFY(filter->Apply(resultBatch, StartIndex, RecordsCount));
+    std::shared_ptr<arrow::Table> resultBatch;
+    if (!source->GetStageResult().IsEmpty()) {
+        resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
+        AFL_VERIFY((ui32)resultBatch->num_columns() == context->GetProgramInputColumns()->GetColumnNamesVector().size());
+        if (auto filter = source->GetStageResult().GetNotAppliedFilter()) {
+            AFL_VERIFY(filter->Apply(resultBatch, StartIndex, RecordsCount));
+        }
+        NArrow::TStatusValidator::Validate(context->GetReadMetadata()->GetProgram().ApplyProgram(resultBatch));
     }
-    NArrow::TStatusValidator::Validate(context->GetReadMetadata()->GetProgram().ApplyProgram(resultBatch));
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
         new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
-            std::make_shared<TApplySourceResult>(source, std::move(resultBatch), StartIndex, RecordsCount)));
+            std::make_shared<TApplySourceResult>(source, std::move(resultBatch), StartIndex, RecordsCount, step)));
     return false;
 }
 
@@ -360,11 +373,9 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
         AFL_VERIFY(source->GetStageResult().GetPagesToResultVerified().size() == 1);
     }
     for (auto&& i : source->GetStageResult().GetPagesToResultVerified()) {
-        if (source->GetIsStartedByCursor()) {
-            if (!source->GetContext()->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
-                    source->GetSourceId(), i.GetIndexStart(), i.GetRecordsCount())) {
-                continue;
-            }
+        if (source->GetIsStartedByCursor() && !source->GetContext()->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
+                source->GetSourceId(), i.GetIndexStart(), i.GetRecordsCount())) {
+            continue;
         }
         plan->AddStep<TBuildResultStep>(i.GetIndexStart(), i.GetRecordsCount());
     }

@@ -69,6 +69,8 @@ private:
         return SourceId;
     }
 
+    std::optional<TFetchingScriptCursor> ScriptCursor;
+
 protected:
     std::optional<bool> IsSourceInMemoryFlag;
 
@@ -97,6 +99,13 @@ public:
     void SetIsStartedByCursor() {
         IsStartedByCursor = true;
     }
+
+    void SetCursor(const TFetchingScriptCursor& scriptCursor) {
+        AFL_VERIFY(!ScriptCursor);
+        ScriptCursor = scriptCursor;
+    }
+
+    void ContinueCursor(const std::shared_ptr<IDataSource>& sourcePtr);
 
     class TCompareForScanSequence {
     public:
@@ -185,6 +194,7 @@ public:
     }
 
     void Finalize() {
+        AFL_VERIFY(!StageResult);
         TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
     }
@@ -248,6 +258,9 @@ public:
             return;
         }
         ResourceGuards.back()->Update(0);
+        Finalize();
+        AFL_VERIFY(StageResult);
+        StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
     }
 
     const TFetchedData& GetStageData() const {
@@ -276,6 +289,7 @@ public:
         , RecordsCount(recordsCount)
         , ShardingVersionOptional(shardingVersion)
         , HasDeletions(hasDeletions) {
+        StageData = std::make_unique<TFetchedData>(true);
         UsageClass = Context->GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(GetStartReplaceKey(), GetFinishReplaceKey());
         AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::DontUsage);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());

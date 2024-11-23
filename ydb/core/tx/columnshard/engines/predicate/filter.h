@@ -1,5 +1,8 @@
 #pragma once
 #include "range.h"
+
+#include <ydb/core/protos/tx_datashard.pb.h>
+
 #include <deque>
 
 namespace NKikimr::NOlap {
@@ -103,8 +106,13 @@ private:
     virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const = 0;
     virtual bool DoCheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& entity) const = 0;
     virtual bool DoCheckSourceIntervalUsage(const ui64 sourceId, const ui32 indexStart, const ui32 recordsCount) const = 0;
+    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrTxDataShard::TEvKqpScanCursor& proto) = 0;
 
 public:
+    virtual bool IsInitialized() const = 0;
+
+    using TFactory = NObjectFactory::TObjectFactory<IScanCursor, TString>;
+
     virtual ~IScanCursor() = default;
 
     const std::shared_ptr<arrow::RecordBatch>& GetPKCursor() const {
@@ -112,30 +120,56 @@ public:
     }
 
     bool CheckSourceIntervalUsage(const ui64 sourceId, const ui32 indexStart, const ui32 recordsCount) const {
+        AFL_VERIFY(IsInitialized());
         return DoCheckSourceIntervalUsage(sourceId, indexStart, recordsCount);
     }
 
     bool CheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& entity) const {
+        AFL_VERIFY(IsInitialized());
         return DoCheckEntityIsBorder(entity);
+    }
+
+    TConclusionStatus DeserializeFromProto(const NKikimrTxDataShard::TEvKqpScanCursor& proto) {
+        return DoDeserializeFromProto(proto);
     }
 };
 
 class TSimpleScanCursor: public IScanCursor {
 private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PrimaryKey);
-    YDB_READONLY(ui64, PortionId, 0);
+    YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY(ui32, RecordIndex, 0);
 
     virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const override {
+        AFL_VERIFY(!!PrimaryKey);
         return PrimaryKey;
     }
 
+    virtual bool IsInitialized() const override {
+        return !!SourceId;
+    }
+
     virtual bool DoCheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& entity) const override {
-        return PortionId == entity->GetEntityId();
+        return SourceId == entity->GetEntityId();
+    }
+
+    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrTxDataShard::TEvKqpScanCursor& proto) override {
+        if (!proto.HasColumnShardSimple()) {
+            return TConclusionStatus::Success();
+        }
+        if (!proto.GetColumnShardSimple().HasSourceId()) {
+            return TConclusionStatus::Fail("incorrect source id for cursor initialization");
+        }
+        SourceId = proto.GetColumnShardSimple().GetSourceId();
+        if (!proto.GetColumnShardSimple().HasStartRecordIndex()) {
+            return TConclusionStatus::Fail("incorrect record index for cursor initialization");
+        }
+        RecordIndex = proto.GetColumnShardSimple().GetStartRecordIndex();
+        return TConclusionStatus::Success();
     }
 
     virtual bool DoCheckSourceIntervalUsage(const ui64 sourceId, const ui32 indexStart, const ui32 recordsCount) const override {
-        AFL_VERIFY(sourceId == PortionId);
+        AFL_VERIFY(sourceId == SourceId);
         if (indexStart >= RecordIndex) {
             return true;
         }
@@ -144,9 +178,11 @@ private:
     }
 
 public:
+    TSimpleScanCursor() = default;
+
     TSimpleScanCursor(const std::shared_ptr<arrow::RecordBatch>& pk, const ui64 portionId, const ui32 recordIndex)
         : PrimaryKey(pk)
-        , PortionId(portionId)
+        , SourceId(portionId)
         , RecordIndex(recordIndex) {
     }
 };
@@ -155,8 +191,17 @@ class TPlainScanCursor: public IScanCursor {
 private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PrimaryKey);
 
+    virtual bool IsInitialized() const override {
+        return !!PrimaryKey;
+    }
+
     virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const override {
+        AFL_VERIFY(!!PrimaryKey);
         return PrimaryKey;
+    }
+
+    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrTxDataShard::TEvKqpScanCursor& /*proto*/) override {
+        return TConclusionStatus::Success();
     }
 
     virtual bool DoCheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& /*entity*/) const override {
@@ -168,8 +213,11 @@ private:
     }
 
 public:
+    TPlainScanCursor() = default;
+
     TPlainScanCursor(const std::shared_ptr<arrow::RecordBatch>& pk)
         : PrimaryKey(pk) {
+        AFL_VERIFY(PrimaryKey);
     }
 };
 

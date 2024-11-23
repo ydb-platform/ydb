@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    constructor.cpp
+    GLOBAL constructor.cpp
     resolver.cpp
     read_metadata.cpp
 )

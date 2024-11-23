@@ -149,8 +149,9 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             columnsFetch = columnsFetch + *PredicateColumns;
         }
 
-        AFL_VERIFY(columnsFetch.GetColumnsCount());
-        acc.AddFetchingStep(*result, columnsFetch, EStageFeaturesIndexes::Filter);
+        if (columnsFetch.GetColumnsCount()) {
+            acc.AddFetchingStep(*result, columnsFetch, EStageFeaturesIndexes::Filter);
+        }
 
         if (needFilterDeletion) {
             acc.AddAssembleStep(*result, *DeletionColumns, "SPEC_DELETION", EStageFeaturesIndexes::Filter, false);

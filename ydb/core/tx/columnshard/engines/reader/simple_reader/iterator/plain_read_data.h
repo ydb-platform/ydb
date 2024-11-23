@@ -58,8 +58,11 @@ public:
     TScanHead& MutableScanner() {
         return *Scanner;
     }
-    virtual void OnSentDataFromInterval(const ui32 /*intervalIdx*/) const override {
-        AFL_VERIFY(false);
+    virtual void OnSentDataFromInterval(const ui32 sourceIdx) const override {
+        if (SpecialReadContext->IsAborted()) {
+            return;
+        }
+        Scanner->ContinueSource(sourceIdx);
     }
 
     void OnIntervalResult(const std::shared_ptr<TPartialReadResult>& result);

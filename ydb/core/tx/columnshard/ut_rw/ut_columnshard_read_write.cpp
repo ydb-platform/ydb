@@ -81,18 +81,19 @@ bool DataHas(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, st
         }
     }
 
+    bool problems = false;
     for (auto& [key, count] : keys) {
         if (!count) {
             Cerr << "No key: " << key << "\n";
-            return false;
+            problems = true;
         }
         if (requireUniq && count > 1) {
             Cerr << "Not unique key: " << key << " (count: " << count << ")\n";
-            return false;
+            problems = true;
         }
     }
 
-    return true;
+    return !problems;
 }
 
 template <typename TKey = ui64>

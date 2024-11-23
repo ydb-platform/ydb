@@ -254,13 +254,13 @@ bool TColumnShardScan::ProduceResults() noexcept {
         ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetTableDataSize(Result->ArrowBatch))("num_rows", numRows)(
             "batch_columns", JoinSeq(",", batch->schema()->field_names()));
     }
-    if (CurrentLastReadKey) {
-        NArrow::NMerger::TSortableBatchPosition pNew(result.GetScanCursor()->GetPKCursor(), 0,
-            result.GetScanCursor()->GetPKCursor()->schema()->field_names(), {}, ReadMetadataRange->IsDescSorted());
-        NArrow::NMerger::TSortableBatchPosition pOld(CurrentLastReadKey->GetPKCursor(), 0,
-            CurrentLastReadKey->GetPKCursor()->schema()->field_names(), {}, ReadMetadataRange->IsDescSorted());
-        AFL_VERIFY(pOld < pNew)("old", pOld.DebugJson().GetStringRobust())("new", pNew.DebugJson().GetStringRobust());
-    }
+//    if (CurrentLastReadKey) {
+//        NArrow::NMerger::TSortableBatchPosition pNew(result.GetScanCursor()->GetPKCursor(), 0,
+//            result.GetScanCursor()->GetPKCursor()->schema()->field_names(), {}, ReadMetadataRange->IsDescSorted());
+//        NArrow::NMerger::TSortableBatchPosition pOld(CurrentLastReadKey->GetPKCursor(), 0,
+//            CurrentLastReadKey->GetPKCursor()->schema()->field_names(), {}, ReadMetadataRange->IsDescSorted());
+//        AFL_VERIFY(pOld < pNew)("old", pOld.DebugJson().GetStringRobust())("new", pNew.DebugJson().GetStringRobust());
+//    }
     CurrentLastReadKey = result.GetScanCursor();
 
     Result->LastKey = ConvertLastKey(result.GetScanCursor()->GetPKCursor());

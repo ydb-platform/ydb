@@ -11,17 +11,26 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
     const ui32 recordsCount, TPlainReadData& reader) {
     source->MutableStageResult().SetResultChunk(std::move(table), startIndex, recordsCount);
     while (FetchingSources.size()) {
-        auto& frontSource = *FetchingSources.begin();
+        auto frontSource = *FetchingSources.begin();
         if (!frontSource->HasStageResult()) {
             break;
         }
         if (!frontSource->GetStageResult().HasResultChunk()) {
             break;
         }
-        auto table = (*FetchingSources.begin())->MutableStageResult().ExtractResultChunk();
-        auto cursor = std::make_shared<TSimpleScanCursor>(frontSource->GetStartPKRecordBatch(), frontSource->GetSourceId(), startIndex + recordsCount);
-        reader.OnIntervalResult(std::make_shared<TPartialReadResult>(nullptr, nullptr, table, cursor, source->GetSourceIdx()));
-        if ((*FetchingSources.begin())->GetStageResult().IsFinished()) {
+        auto table = frontSource->MutableStageResult().ExtractResultChunk();
+        const bool isFinished = frontSource->GetStageResult().IsFinished();
+        std::optional<ui32> sourceIdxToContinue;
+        if (!isFinished) {
+            sourceIdxToContinue = frontSource->GetSourceIdx();
+        }
+        if (table) {
+            auto cursor =
+                std::make_shared<TSimpleScanCursor>(frontSource->GetStartPKRecordBatch(), frontSource->GetSourceId(), startIndex + recordsCount);
+            reader.OnIntervalResult(std::make_shared<TPartialReadResult>(nullptr, nullptr, table, cursor, sourceIdxToContinue));
+        }
+        if (isFinished) {
+            AFL_VERIFY(FetchingSourcesByIdx.erase(frontSource->GetSourceIdx()));
             FetchingSources.erase(FetchingSources.begin());
         } else {
             break;
@@ -30,7 +39,7 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
 }
 
 TConclusionStatus TScanHead::Start() {
-    for (auto&& i : FetchingSources) {
+    for (auto&& i : SortedSources) {
         i->InitFetchingPlan(Context->GetColumnsFetchingPlan(i));
     }
     return TConclusionStatus::Success();
@@ -48,7 +57,7 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
     } else {
         InFlightLimit = MaxInFlight;
     }
-    bool started = false;
+    bool started = !context->GetCommonContext()->GetScanCursor()->IsInitialized();
     for (auto&& i : sources) {
         if (!started) {
             if (!context->GetCommonContext()->GetScanCursor()->CheckEntityIsBorder(i)) {
@@ -68,10 +77,10 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
     while (SortedSources.size() && FetchingSources.size() < InFlightLimit) {
         (*SortedSources.begin())->StartProcessing(*SortedSources.begin());
         FetchingSources.emplace(*SortedSources.begin());
+        FetchingSourcesByIdx.emplace((*SortedSources.begin())->GetSourceIdx(), *SortedSources.begin());
         SortedSources.erase(SortedSources.begin());
-        return true;
     }
-    return false;
+    return SortedSources.size() > 0;
 }
 
 const TReadContext& TScanHead::GetContext() const {

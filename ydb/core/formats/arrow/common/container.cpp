@@ -167,7 +167,7 @@ std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableOptional(const TTable
         return nullptr;
     }
     AFL_VERIFY(RecordsCount);
-    return arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns, *RecordsCount);
+    return arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns, context.GetRecordsCount().value_or(*RecordsCount));
 }
 
 std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableVerified(const TTableConstructionContext& context) const {

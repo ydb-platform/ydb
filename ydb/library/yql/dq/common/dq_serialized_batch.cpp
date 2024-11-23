@@ -65,11 +65,13 @@ TChunkedBuffer SaveForSpilling(TDqSerializedBatch&& batch) {
 
     ui32 transportversion = batch.Proto.GetTransportVersion();
     ui32 rowCount = batch.Proto.GetRows();
+    ui32 chunkCount = batch.Proto.GetChunks();
 
     TChunkedBuffer protoPayload(std::move(*batch.Proto.MutableRaw()));
 
     AppendNumber(result, transportversion);
     AppendNumber(result, rowCount);
+    AppendNumber(result, chunkCount);
     AppendNumber(result, protoPayload.Size());
     result.Append(std::move(protoPayload));
     AppendNumber(result, batch.Payload.Size());
@@ -85,6 +87,7 @@ TDqSerializedBatch LoadSpilled(TBuffer&& blob) {
     TDqSerializedBatch result;
     result.Proto.SetTransportVersion(ReadNumber<ui32>(source));
     result.Proto.SetRows(ReadNumber<ui32>(source));
+    result.Proto.SetChunks(ReadNumber<ui32>(source));
 
     size_t protoSize = ReadNumber<size_t>(source);
     YQL_ENSURE(source.size() >= protoSize, "Premature end of spilled data");

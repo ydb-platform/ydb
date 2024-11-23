@@ -16,6 +16,7 @@ enum EDataTransportVersion {
 message TData {
     uint32 TransportVersion = 1;
     bytes Raw = 2;
-    uint32 Rows = 3;
+    uint32 Rows = 5;
+    uint32 Chunks = 3;
     optional uint32 PayloadId = 4;
 }

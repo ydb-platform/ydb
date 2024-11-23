@@ -1,4 +1,5 @@
 #include "fetching.h"
+#include "plain_read_data.h"
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/engines/filter.h>
@@ -14,7 +15,6 @@ namespace NKikimr::NOlap::NReader::NSimple {
 bool TStepAction::DoApply(IDataReader& /*owner*/) const {
     if (FinishedFlag) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "apply");
-        Source->SetIsReady();
     }
     return true;
 }
@@ -28,7 +28,6 @@ TConclusionStatus TStepAction::DoExecuteImpl() {
         return executeResult;
     }
     if (*executeResult) {
-        Source->Finalize();
         FinishedFlag = true;
     }
     return TConclusionStatus::Success();
@@ -214,7 +213,7 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<ID
 
     auto allocation = std::make_shared<TFetchingStepAllocation>(source, size, step);
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(source->GetContext()->GetProcessMemoryControlId(),
-        source->GetContext()->GetCommonContext()->GetScanId(), source->GetFirstIntervalId(), { allocation }, (ui32)StageIndex);
+        source->GetContext()->GetCommonContext()->GetScanId(), source->GetMemoryGroupId(), { allocation }, (ui32)StageIndex);
     return false;
 }
 
@@ -327,9 +326,9 @@ public:
         return TConclusionStatus::Success();
     }
     virtual bool DoApply(IDataReader& indexedDataRead) const override {
-        static_cast<TPlainReadData&>(indexedDataRead)
-            .MutableScanner()
-            .OnSourceReady(Source, std::move(Result), StartIndex, OriginalRecordsCount);
+        auto* plainReader = static_cast<TPlainReadData*>(&indexedDataRead);
+        auto resultCopy = Result;
+        plainReader->MutableScanner().OnSourceReady(Source, std::move(resultCopy), StartIndex, OriginalRecordsCount, *plainReader);
         return true;
     }
 };
@@ -341,15 +340,15 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
     NArrow::TGeneralContainer::TTableConstructionContext contextTableConstruct;
     contextTableConstruct.SetColumnNames(context->GetProgramInputColumns()->GetColumnNamesVector());
     contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
-    auto resultBatch = source->GetStageResult().GetBatch().BuildTableVerified(contextTableConstruct);
+    auto resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
     AFL_VERIFY((ui32)resultBatch->num_columns() == context->GetProgramInputColumns()->GetColumnNamesVector().size());
     if (auto filter = source->GetStageResult().GetNotAppliedFilter()) {
         AFL_VERIFY(filter->Apply(resultBatch, StartIndex, RecordsCount));
     }
     NArrow::TStatusValidator::Validate(context->GetReadMetadata()->GetProgram().ApplyProgram(resultBatch));
-    NActors::TActivationContext::AsActorContext().Send(
-        OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
-                     std::make_shared<TApplySourceResult>(source, resultBatch, StartIndex, RecordsCount)));
+    NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
+        new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
+            std::make_shared<TApplySourceResult>(source, std::move(resultBatch), StartIndex, RecordsCount)));
     return false;
 }
 
@@ -360,12 +359,14 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
     if (source->IsSourceInMemory()) {
         AFL_VERIFY(source->GetStageResult().GetPagesToResultVerified().size() == 1);
     }
-    for (auto&& i : source->GetStageResult().GetReadPagesVerified()) {
-        if (!source->GetContext()->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
-                source->GetSourceId(), i.GetStartIndex(), i.GetRecordsCount())) {
-            continue;
+    for (auto&& i : source->GetStageResult().GetPagesToResultVerified()) {
+        if (source->GetIsStartedByCursor()) {
+            if (!source->GetContext()->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
+                    source->GetSourceId(), i.GetIndexStart(), i.GetRecordsCount())) {
+                continue;
+            }
         }
-        plan->AddStep<TBuildResultStep>(source, i.GetStartIndex(), i.GetRecordsCount());
+        plan->AddStep<TBuildResultStep>(i.GetIndexStart(), i.GetRecordsCount());
     }
     source->InitFetchingPlan(plan);
 

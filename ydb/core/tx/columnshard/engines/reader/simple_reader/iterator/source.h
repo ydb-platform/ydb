@@ -44,7 +44,7 @@ public:
     }
 };
 
-class IDataSource {
+class IDataSource: public ICursorEntity {
 private:
     YDB_READONLY(ui32, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);
@@ -62,7 +62,12 @@ private:
     std::shared_ptr<TFetchingScript> FetchingPlan;
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
     YDB_READONLY(TPKRangeFilter::EUsageClass, UsageClass, TPKRangeFilter::EUsageClass::PartialUsage);
-    bool Started = false;
+    bool ProcessingStarted = false;
+    bool IsStartedByCursor = false;
+
+    virtual ui64 DoGetEntityId() const override {
+        return SourceId;
+    }
 
 protected:
     std::optional<bool> IsSourceInMemoryFlag;
@@ -84,6 +89,15 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
+    virtual ui64 GetMemoryGroupId() const = 0;
+    bool GetIsStartedByCursor() const {
+        return IsStartedByCursor;
+    }
+
+    void SetIsStartedByCursor() {
+        IsStartedByCursor = true;
+    }
+
     class TCompareForScanSequence {
     public:
         bool operator()(const std::shared_ptr<IDataSource>& l, const std::shared_ptr<IDataSource>& r) const {
@@ -279,6 +293,7 @@ private:
     using TBase = IDataSource;
     const TPortionInfo::TConstPtr Portion;
     std::shared_ptr<ISnapshotSchema> Schema;
+    const std::shared_ptr<NGroupedMemoryManager::TGroupGuard> SourceGroupGuard;
 
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
@@ -320,6 +335,10 @@ private:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
 
 public:
+    virtual ui64 GetMemoryGroupId() const override {
+        return SourceGroupGuard->GetGroupId();
+    }
+
     virtual ui64 PredictAccessorsSize() const override {
         return Portion->GetApproxChunksCount(GetContext()->GetCommonContext()->GetReadMetadata()->GetResultSchema()->GetColumnsCount()) * sizeof(TColumnRecord);
     }
@@ -381,13 +400,7 @@ public:
         return Portion;
     }
 
-    TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context)
-        : TBase(portion->GetPortionId(), sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(), portion->RecordSnapshotMin(TSnapshot::Zero()),
-              portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(), portion->GetShardingVersionOptional(),
-              portion->GetMeta().GetDeletionsCount())
-        , Portion(portion)
-        , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion)) {
-    }
+    TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

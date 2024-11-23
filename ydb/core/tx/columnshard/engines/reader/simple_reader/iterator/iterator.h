@@ -2,9 +2,10 @@
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/constructor/read_metadata.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
+
+struct TReadMetadata;
 
 class TReadyResults {
 private:
@@ -55,7 +56,7 @@ public:
 class TColumnShardScanIterator: public TScanIteratorBase {
 private:
     std::shared_ptr<TReadContext> Context;
-    const TReadMetadata::TConstPtr ReadMetadata;
+    std::shared_ptr<const TReadMetadata> ReadMetadata;
     TReadyResults ReadyResults;
     std::shared_ptr<IDataReader> IndexedData;
     ui64 ItemsRead = 0;
@@ -63,7 +64,7 @@ private:
     virtual void DoOnSentDataFromInterval(const ui32 intervalIdx) const override;
 
 public:
-    TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context, const TReadMetadata::TConstPtr& readMetadata);
+    TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context, const std::shared_ptr<const TReadMetadata>& readMetadata);
     ~TColumnShardScanIterator();
 
     virtual TConclusionStatus Start() override {
@@ -75,9 +76,7 @@ public:
         return ReadyResults.size();
     }
 
-    virtual const TReadStats& GetStats() const override {
-        return *ReadMetadata->ReadStats;
-    }
+    virtual const TReadStats& GetStats() const override;
 
     virtual TString DebugString(const bool verbose) const override {
         return TStringBuilder()

@@ -1,12 +1,13 @@
 #include "iterator.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/constructor/read_metadata.h>
+
 namespace NKikimr::NOlap::NReader::NSimple {
 
 TColumnShardScanIterator::TColumnShardScanIterator(const std::shared_ptr<TReadContext>& context, const TReadMetadata::TConstPtr& readMetadata)
     : Context(context)
     , ReadMetadata(readMetadata)
-    , ReadyResults(context->GetCounters())
-{
+    , ReadyResults(context->GetCounters()) {
     IndexedData = readMetadata->BuildReader(Context);
     Y_ABORT_UNLESS(Context->GetReadMetadata()->IsSorted());
 }
@@ -41,7 +42,8 @@ void TColumnShardScanIterator::FillReadyResults() {
     }
 
     if (limitLeft == 0) {
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "limit_reached_on_scan")("limit", Context->GetReadMetadata()->Limit)("ready", ItemsRead);
+        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "limit_reached_on_scan")("limit", Context->GetReadMetadata()->Limit)(
+            "ready", ItemsRead);
         IndexedData->Abort("records count limit exhausted");
     }
 }
@@ -59,4 +61,8 @@ void TColumnShardScanIterator::Apply(const std::shared_ptr<IApplyAction>& task) 
     }
 }
 
+const TReadStats& TColumnShardScanIterator::GetStats() const {
+    return *ReadMetadata->ReadStats;
 }
+
+}   // namespace NKikimr::NOlap::NReader::NSimple

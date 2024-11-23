@@ -88,15 +88,35 @@ public:
     }
 };
 
+class ICursorEntity {
+private:
+    virtual ui64 DoGetEntityId() const = 0;
+
+public:
+    ui64 GetEntityId() const {
+        return DoGetEntityId();
+    }
+};
+
 class IScanCursor {
 private:
     virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const = 0;
+    virtual bool DoCheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& entity) const = 0;
+    virtual bool DoCheckSourceIntervalUsage(const ui64 sourceId, const ui32 indexStart, const ui32 recordsCount) const = 0;
 
 public:
     virtual ~IScanCursor() = default;
 
     const std::shared_ptr<arrow::RecordBatch>& GetPKCursor() const {
         return DoGetPKCursor();
+    }
+
+    bool CheckSourceIntervalUsage(const ui64 sourceId, const ui32 indexStart, const ui32 recordsCount) const {
+        return DoCheckSourceIntervalUsage(sourceId, indexStart, recordsCount);
+    }
+
+    bool CheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& entity) const {
+        return DoCheckEntityIsBorder(entity);
     }
 };
 
@@ -108,6 +128,19 @@ private:
 
     virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const override {
         return PrimaryKey;
+    }
+
+    virtual bool DoCheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& entity) const override {
+        return PortionId == entity->GetEntityId();
+    }
+
+    virtual bool DoCheckSourceIntervalUsage(const ui64 sourceId, const ui32 indexStart, const ui32 recordsCount) const override {
+        AFL_VERIFY(sourceId == PortionId);
+        if (indexStart >= RecordIndex) {
+            return true;
+        }
+        AFL_VERIFY(indexStart + recordsCount <= RecordIndex);
+        return false;
     }
 
 public:
@@ -124,6 +157,14 @@ private:
 
     virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const override {
         return PrimaryKey;
+    }
+
+    virtual bool DoCheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& /*entity*/) const override {
+        return true;
+    }
+
+    virtual bool DoCheckSourceIntervalUsage(const ui64 /*sourceId*/, const ui32 /*indexStart*/, const ui32 /*recordsCount*/) const override {
+        return true;
     }
 
 public:

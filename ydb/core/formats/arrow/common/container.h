@@ -77,6 +77,10 @@ public:
         TTableConstructionContext(const std::set<std::string>& columnNames)
             : ColumnNames(columnNames) {
         }
+
+        void SetColumnNames(const std::vector<TString>& names) {
+            ColumnNames = std::set<std::string>(names.begin(), names.end());
+        }
     };
 
     std::shared_ptr<arrow::Table> BuildTableVerified(const TTableConstructionContext& context = Default<TTableConstructionContext>()) const;

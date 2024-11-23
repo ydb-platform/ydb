@@ -21,10 +21,10 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
 }
 
 void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr) {
-    AFL_VERIFY(!Started);
+    AFL_VERIFY(!ProcessingStarted);
     AFL_VERIFY(FetchingPlan);
     AFL_VERIFY(!Context->IsAborted());
-    Started = true;
+    ProcessingStarted = true;
     StageData = std::make_unique<TFetchedData>(true);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", SourceIdx);
     NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
@@ -221,6 +221,17 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSour
     request->RegisterSubscriber(std::make_shared<TPortionAccessorFetchingSubscriber>(step, sourcePtr));
     GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
     return true;
+}
+
+TPortionDataSource::TPortionDataSource(
+    const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context)
+    : TBase(portion->GetPortionId(), sourceIdx, context, portion->IndexKeyStart(), portion->IndexKeyEnd(),
+          portion->RecordSnapshotMin(TSnapshot::Zero()), portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(),
+          portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
+    , Portion(portion)
+    , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
+    , SourceGroupGuard(NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(
+          GetContext()->GetProcessMemoryControlId(), GetContext()->GetCommonContext()->GetScanId())) {
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

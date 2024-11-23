@@ -48,9 +48,14 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
     } else {
         InFlightLimit = MaxInFlight;
     }
+    bool started = false;
     for (auto&& i : sources) {
-        if (!context->GetCommonContext()->GetScanCursor()->CheckPortionUsage(i)) {
-            continue;
+        if (!started) {
+            if (!context->GetCommonContext()->GetScanCursor()->CheckEntityIsBorder(i)) {
+                continue;
+            }
+            i->SetIsStartedByCursor();
+            started = true;
         }
         SortedSources.emplace(i);
     }

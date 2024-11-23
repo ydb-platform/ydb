@@ -306,7 +306,7 @@ public:
 
 private:
     size_t GetSemaphoreMaxValue(size_t orderNum) const {
-        return Max(1ul, MaxJobInFlight / CurrentFileCount
+        return Max((size_t)1, MaxJobInFlight / CurrentFileCount
             // One more thread for the first <MaxJobInFlight % CurrentFileCount> managers to utilize max jobs inflight
             + (orderNum < MaxJobInFlight % CurrentFileCount ? 1 : 0));
     }
@@ -748,7 +748,7 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
 TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
                                              const TString& dbPath) {
     TString headerRow;
-    ui64 maxThreads = Max(1ul, Settings.Threads_ / CurrentFileCount);
+    ui64 maxThreads = Max((size_t)1, Settings.Threads_ / CurrentFileCount);
     TCsvFileReader splitter(filePath, Settings, headerRow, maxThreads);
     ui64 threadCount = splitter.GetSplitCount();
     THolder<IThreadPool> readingPool = CreateThreadPool(maxThreads, 0,

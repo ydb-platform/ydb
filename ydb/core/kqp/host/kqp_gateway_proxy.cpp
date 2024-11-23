@@ -1100,7 +1100,10 @@ public:
             }
 
             for (const auto& path : pathPairs) {
-                const auto& [dirname, basename] = path.second;
+                auto [dirname, basename] = path.second;
+                if (!IsStartWithSlash(dirname)) {
+                    dirname = JoinPath({GetDatabase(), dirname});
+                }
 
                 NKikimrSchemeOp::TModifyScheme schemeTx;
                 schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);

@@ -63,7 +63,7 @@ void CreateView(NYdb::NQuery::TSession session, const TString& viewPath) {
     UNIT_ASSERT(res.IsSuccess());
 }
 
-void CreateTables(NYdb::NQuery::TSession session, const TString& schemaPath, bool useColumnStore) {
+void CreateTablesGeneric(NYdb::NQuery::TSession session, const TString& schemaPath, bool useColumnStore) {
     std::string query = GetStatic(schemaPath);
 
     if (useColumnStore) {
@@ -92,15 +92,13 @@ TString GetPrettyJSON(const NJson::TJsonValue& json) {
 static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStore) {
     CreateTables(session, "schema/rstuv.sql", useColumnStore);
 
-    CreateTables(session, "schema/tpch.sql", useColumnStore);
+    CreateTablesGeneric(session, "schema/tpch.sql", useColumnStore);
 
-    CreateTables(session, "schema/tpcds.sql", useColumnStore);
+    CreateTablesGeneric(session, "schema/tpcds.sql", useColumnStore);
 
-    CreateTables(session, "schema/tpcc.sql", useColumnStore);
+    CreateTablesGeneric(session, "schema/tpcc.sql", useColumnStore);
 
-    CreateTables(session, "schema/lookupbug.sql", useColumnStore);
-
-    CreateTables(session, "schema/gpb.sql", useColumnStore);
+    CreateTablesGeneric(session, "schema/lookupbug.sql", useColumnStore);
 
     CreateView(session, "view/tpch_random_join_view.sql");
 }
@@ -386,7 +384,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        CreateSampleTable(session, useColumnStore);
+        CreateSampleTableGeneric(session, useColumnStore);
         sleep(5);
 
         /* join with parameters */

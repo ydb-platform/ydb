@@ -58,7 +58,7 @@ public:
     }
 
     ui64 GetValuesCount() const override {
-        return SpilledRowCount + PackedRowCount + ChunkRowCount;
+        return SpilledRowCount + PackedRowCount + PackerCurrentRowCount;
     }
 
     const TDqOutputStats& GetPushStats() const override {
@@ -95,8 +95,12 @@ public:
             return;
         }
 
+        ui32 rows = Packer.IsBlock() ?
+            NKikimr::NMiniKQL::TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value
+            : 1;
+
         if (PushStats.CollectBasic()) {
-            PushStats.Rows++;
+            PushStats.Rows += rows;
             PushStats.Chunks++;
             PushStats.Resume();
         }
@@ -110,7 +114,8 @@ public:
             values[i] = {};
         }
 
-        ChunkRowCount++;
+        PackerCurrentRowCount += rows;
+        PackerCurrentChunkCount++;
 
         size_t packerSize = Packer.PackedSizeEstimate();
         if (packerSize >= MaxChunkBytes) {
@@ -120,9 +125,12 @@ public:
                 PushStats.Bytes += Data.back().Buffer.Size();
             }
             PackedDataSize += Data.back().Buffer.Size();
-            PackedRowCount += ChunkRowCount;
-            Data.back().RowCount = ChunkRowCount;
-            ChunkRowCount = 0;
+            PackedRowCount += PackerCurrentRowCount;
+            PackedChunkCount += PackerCurrentChunkCount;
+            Data.back().RowCount = PackerCurrentRowCount;
+            Data.back().ChunkCount = PackerCurrentChunkCount;
+            PackerCurrentRowCount = 0;
+            PackerCurrentChunkCount = 0;
             packerSize = 0;
         }
 
@@ -134,11 +142,13 @@ public:
             TDqSerializedBatch data;
             data.Proto.SetTransportVersion(TransportVersion);
             data.Proto.SetRows(head.RowCount);
+            data.Proto.SetChunks(head.ChunkCount);
             data.SetPayload(std::move(head.Buffer));
             Storage->Put(NextStoredId++, SaveForSpilling(std::move(data)));
 
             PackedDataSize -= bufSize;
             PackedRowCount -= head.RowCount;
+            PackedChunkCount -= head.ChunkCount;
 
             SpilledRowCount += head.RowCount;
 
@@ -199,22 +209,29 @@ public:
         } else if (!Data.empty()) {
             auto& packed = Data.front();
             PackedRowCount -= packed.RowCount;
+            PackedChunkCount -= packed.ChunkCount;
             PackedDataSize -= packed.Buffer.Size();
             data.Proto.SetRows(packed.RowCount);
+            data.Proto.SetChunks(packed.ChunkCount);
             data.SetPayload(std::move(packed.Buffer));
             Data.pop_front();
         } else {
-            data.Proto.SetRows(ChunkRowCount);
+            data.Proto.SetRows(PackerCurrentRowCount);
+            data.Proto.SetChunks(PackerCurrentChunkCount);
             data.SetPayload(FinishPackAndCheckSize());
-            ChunkRowCount = 0;
+            if (PushStats.CollectBasic()) {
+                PushStats.Bytes += data.Payload.Size();
+            }
+            PackerCurrentRowCount = 0;
+            PackerCurrentChunkCount = 0;
         }
 
         DLOG("Took " << data.RowCount() << " rows");
 
         if (PopStats.CollectBasic()) {
             PopStats.Bytes += data.Size();
-            PopStats.Rows += data.RowCount();
-            PopStats.Chunks++;
+            PopStats.Rows += data.RowCount(); 
+            PopStats.Chunks++; // pop chunks do not match push chunks
             if (!IsFull() || FirstStoredId == NextStoredId) {
                 PopStats.Resume();
             }
@@ -256,20 +273,31 @@ public:
         data.Clear();
         data.Proto.SetTransportVersion(TransportVersion);
         if (SpilledRowCount == 0 && PackedRowCount == 0) {
-            data.Proto.SetRows(ChunkRowCount);
+            data.Proto.SetRows(PackerCurrentRowCount);
+            data.Proto.SetChunks(PackerCurrentChunkCount);
             data.SetPayload(FinishPackAndCheckSize());
-            ChunkRowCount = 0;
+            if (PushStats.CollectBasic()) {
+                PushStats.Bytes += data.Payload.Size();
+            }
+            PackerCurrentRowCount = 0;
+            PackerCurrentChunkCount = 0;
             return true;
         }
 
         // Repack all - thats why PopAll should never be used
-        if (ChunkRowCount) {
+        if (PackerCurrentRowCount) {
             Data.emplace_back();
             Data.back().Buffer = FinishPackAndCheckSize();
+            if (PushStats.CollectBasic()) {
+                PushStats.Bytes += Data.back().Buffer.Size();
+            }
             PackedDataSize += Data.back().Buffer.Size();
-            PackedRowCount += ChunkRowCount;
-            Data.back().RowCount = ChunkRowCount;
-            ChunkRowCount = 0;
+            PackedRowCount += PackerCurrentRowCount;
+            PackedChunkCount += PackerCurrentChunkCount;
+            Data.back().RowCount = PackerCurrentRowCount;
+            Data.back().ChunkCount = PackerCurrentChunkCount;
+            PackerCurrentRowCount = 0;
+            PackerCurrentChunkCount = 0;
         }
 
         NKikimr::NMiniKQL::TUnboxedValueBatch rows(OutputType);
@@ -332,7 +360,9 @@ public:
         ui64 rows = GetValuesCount();
         Data.clear();
         Packer.Clear();
-        SpilledRowCount = PackedDataSize = PackedRowCount = ChunkRowCount = 0;
+        PackedDataSize = 0;
+        SpilledRowCount = PackedRowCount = PackerCurrentRowCount = 0;
+        PackedChunkCount = PackerCurrentChunkCount = 0;
         FirstStoredId = NextStoredId;
         return rows;
     }
@@ -359,6 +389,7 @@ private:
     struct TSerializedBatch {
         TChunkedBuffer Buffer;
         ui64 RowCount = 0;
+        ui64 ChunkCount = 0;
     };
     std::deque<TSerializedBatch> Data;
 
@@ -368,8 +399,10 @@ private:
 
     size_t PackedDataSize = 0;
     size_t PackedRowCount = 0;
+    size_t PackedChunkCount = 0;
     
-    size_t ChunkRowCount = 0;
+    size_t PackerCurrentRowCount = 0;
+    size_t PackerCurrentChunkCount = 0;
 
     bool Finished = false;
 

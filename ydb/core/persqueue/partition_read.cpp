@@ -151,7 +151,7 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     };
 
     for (auto request = HasDataRequests.begin(); request != HasDataRequests.end();) {
-        if (request->Offset < EndOffset) {
+        if (request->Offset < EndOffset && (IsActive() || !request->ReadTimestamp || request->ReadTimestamp < EndWriteTimestamp)) {
             auto response = MakeHasDataInfoResponse(GetSizeLag(request->Offset), request->Cookie);
             ctx.Send(request->Sender, response.Release());
         } else if (!IsActive()) {
@@ -199,7 +199,7 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
         ctx.Send(sender, response.Release());
     } else {
         THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
-                        record.HasClientId() && InitDone ? record.GetClientId() : ""};
+                        record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};
         THasDataDeadline dl{TInstant::MilliSeconds(record.GetDeadline()), req};
         auto res = HasDataRequests.insert(req);
         HasDataDeadlines.insert(dl);

@@ -1,4 +1,4 @@
-/* postgres can not */
+/* custom error:Duplicated member: magic*/
 PRAGMA SimpleColumns;
 
 USE plato;
@@ -6,7 +6,7 @@ USE plato;
 $req = (SELECT 100500 as magic, t.* FROM Input as t);
 
 --INSERT INTO Output
-SELECT 
+SELECT
   ff.*,
   subkey as magic, -- 'magic' is exist from ff.magic
   value as val

@@ -8,7 +8,7 @@ import yql.essentials.providers.common.proto.gateways_config_pb2 as gateways_con
 
 from google.protobuf import text_format
 from yql_utils import execute_sql, get_supported_providers, get_tables, get_files, get_http_files, \
-    get_pragmas, KSV_ATTR, is_xfail, get_param, YQLExecResult, yql_binary_path
+    get_pragmas, KSV_ATTR, is_xfail, get_param, YQLExecResult, yql_binary_path, do_custom_error_check
 from yqlrun import YQLRun
 
 from test_utils import get_parameters_json, DATA_PATH, replace_vars
@@ -70,7 +70,7 @@ def get_sql_query(provider, suite, case, config):
 
     pragmas.append(sql_query)
     sql_query = ';\n'.join(pragmas)
-    if 'Python' in sql_query or 'Javascript' in sql_query:
+    if provider != 'yt' and 'Javascript' in sql_query:
         pytest.skip('ScriptUdf')
 
     assert 'UseBlocks' not in sql_query, 'UseBlocks should not be used directly, only via ForceBlocks'
@@ -96,7 +96,7 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, 
             content = table.content
         else:
             content = table.attr
-        if 'Python' in content or 'Javascript' in content:
+        if provider != 'yt' and 'Javascript' in content:
             pytest.skip('ScriptUdf')
 
     parameters = get_parameters_json(suite, config)
@@ -124,11 +124,8 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server, 
     fixed_stderr = res.std_err
     if xfail:
         assert res.execution_result.exit_code != 0
-        custom_error = re.search(r"/\* custom error:(.*)\*/", sql_query)
-        if custom_error:
-            err_string = custom_error.group(1)
-            assert res.std_err.find(err_string) != -1
-            fixed_stderr = None
+        do_custom_error_check(res, sql_query)
+        fixed_stderr = None
 
     fixed_result = YQLExecResult(res.std_out,
                                  fixed_stderr,

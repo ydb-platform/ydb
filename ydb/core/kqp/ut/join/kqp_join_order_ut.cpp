@@ -567,6 +567,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/gpb2.sql", "stats/gpb.json", true, false);
     }
 
+    Y_UNIT_TEST(GPB3) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/gpb3.sql", "stats/gpb.json", true, false);
+    }
+
+    Y_UNIT_TEST(GPB4) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/gpb4.sql", "stats/gpb.json", true, false);
+    }
+
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TPCDS34, StreamLookupJoin, ColumnStore) {
         ExecuteJoinOrderTestDataQueryWithStats("queries/tpcds34.sql", "stats/tpcds1000s.json", StreamLookupJoin, ColumnStore);       
     }

@@ -1,4 +1,6 @@
 PRAGMA ydb.EnableOrderPreservingLookupJoin="true";
+PRAGMA ydb.CostBasedOptimizationLevel="1";
+
 
 SELECT
     doc.id AS document_id

@@ -117,8 +117,8 @@ void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationCon
 
     const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, path.Value());
     if (!tableData.Metadata->StatsLoaded && !kqpCtx.Config->OptOverrideStatistics.Get()) {
-        YQL_CLOG(TRACE, CoreDq) << "Cannot infer statistics for index: " << path.Value();
-        return;
+        YQL_CLOG(TRACE, CoreDq) << "Cannot infer statistics for table: " << path.Value();
+        //return;
     }
 
     double nRows = tableData.Metadata->RecordsCount;

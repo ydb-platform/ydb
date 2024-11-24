@@ -7,14 +7,37 @@
 namespace NKikimr::NSchemeShard {
 
 TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
-    TString bcPathStr = JoinPath({tx.GetWorkingDir().c_str(), tx.GetBackupIncrementalBackupCollection().GetName().c_str()});
+    TVector<ISubOperation::TPtr> result;
+
+    TString bcPathStr = JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()});
 
     const TPath& bcPath = TPath::Resolve(bcPathStr, context.SS);
+    {
+        auto checks = bcPath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotUnderDeleting()
+            .NotUnderOperation()
+            .IsBackupCollection();
+
+        if (!checks) {
+            result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+            return result;
+        }
+    }
+
+    Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
     const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+    bool incrBackupEnabled = bc->Description.HasIncrementalBackupConfig();
+
+    if (!incrBackupEnabled) {
+        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Incremental backup is disabled on this collection")};
+    }
 
     size_t cutLen = bcPath.GetDomainPathString().size() + 1;
-
-    TVector<ISubOperation::TPtr> result;
 
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         NKikimrSchemeOp::TModifyScheme modifyScheme;

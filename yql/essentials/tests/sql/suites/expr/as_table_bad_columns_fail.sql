@@ -1,4 +1,5 @@
 /* postgres can not */
+/* custom error:Member not found: Value3. Did you mean Value1?*/
 
 $data = AsList(
     AsStruct(1u AS Key, "v1" AS Value1, 100 AS Value2),

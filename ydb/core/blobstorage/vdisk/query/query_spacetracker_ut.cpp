@@ -32,7 +32,7 @@ namespace NKikimr {
         costSettings.SetWriteSpeedBps(Max<ui64>());
         costSettings.SetReadBlockSize(Max<ui64>());
         costSettings.SetWriteBlockSize(Max<ui64>());
-        costSettings.SetMinHugeBlobInBytes(Max<ui32>());
+        costSettings.SetMinREALHugeBlobInBytes(Max<ui32>());
         return costSettings;
     }
 

@@ -1,5 +1,4 @@
-/* syntax version 1 */
-/* postgres can not */
+/* custom error:Member not found*/
 
 -- Accessing absent object member will cause jsonpath error in strict mode
 $json = CAST("{}" as Json);

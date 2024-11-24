@@ -1,5 +1,4 @@
-/* postgres can not */
-/* syntax version 1 */
+/* custom error:Input #1 does not have ordered columns. Consider making column order explicit by using SELECT with column names*/
 pragma PositionalUnionAll;
 
 select 1 as c, 2 as b, 3 as a

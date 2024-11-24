@@ -119,7 +119,7 @@ private:
                                     for (auto& tx : Transactions) {
                                         TABLER() {
                                             TABLED() {
-                                                HREF(TStringBuilder() << "?TxId=" << tx.TxId) {
+                                                HREF(TStringBuilder() << "?TabletID=" << TabletID << "&TxId=" << tx.TxId) {
                                                     str << tx.TxId;
                                                 }
                                             }

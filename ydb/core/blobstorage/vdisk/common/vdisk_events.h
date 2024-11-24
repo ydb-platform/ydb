@@ -703,8 +703,8 @@ namespace NKikimr {
                 if (costSettings.HasWriteBlockSize()) {
                     str << " WriteBlockSize# " << costSettings.GetWriteBlockSize();
                 }
-                if (costSettings.HasMinHugeBlobInBytes()) {
-                    str << " MinHugeBlobInBytes# " << costSettings.GetMinHugeBlobInBytes();
+                if (costSettings.HasMinREALHugeBlobInBytes()) {
+                    str << " MinREALHugeBlobInBytes# " << costSettings.GetMinREALHugeBlobInBytes();
                 }
                 str << "}";
             }
@@ -3199,9 +3199,9 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TEvMinHugeBlobSizeUpdate : public TEventLocal<TEvMinHugeBlobSizeUpdate, TEvBlobStorage::EvMinHugeBlobSizeUpdate> {
     public:
-        ui32 MinHugeBlobInBytes;
+        ui32 MinREALHugeBlobInBytes;
 
-        TEvMinHugeBlobSizeUpdate(ui32 minHugeBlobInBytes) : MinHugeBlobInBytes(minHugeBlobInBytes) {  
+        TEvMinHugeBlobSizeUpdate(ui32 minREALHugeBlobInBytes) : MinREALHugeBlobInBytes(minREALHugeBlobInBytes) {  
         };
     };
 } // NKikimr

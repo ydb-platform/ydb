@@ -50,6 +50,16 @@ def do_custom_query_check(res, sql_query):
     return True
 
 
+def do_custom_error_check(res, sql_query):
+    err_string = None
+    custom_error = re.search(r"/\* custom error:(.*)\*/", sql_query)
+    if custom_error:
+        err_string = custom_error.group(1).strip()
+    assert err_string, 'Expected custom error check in test.\nTest error: %s' % res.std_err
+    log('Custom error: ' + err_string)
+    assert err_string in res.std_err
+
+
 def get_gateway_cfg_suffix():
     default_suffix = None
     return get_param('gateway_config_suffix', default_suffix) or ''

@@ -702,6 +702,48 @@ void InferStatisticsForStage(const TExprNode::TPtr& input, TTypeAnnotationContex
     }
 }
 
+void InferStatisticsForDqMerge(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto merge = inputNode.Cast<TDqCnMerge>();
+
+    auto inputStats = typeCtx->GetStats(merge.Output().Raw());
+    if (!inputStats) {
+        return;
+    }
+
+    auto newStats = RemoveOrdering(inputStats);
+
+    auto sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
+
+    TVector<TString> sortedPrefixCols;
+    TVector<TString> sortedPrefixAliases;
+
+    for ( auto c : merge.SortColumns() ) {
+        auto column = c.Column().StringValue();
+        auto sortDir = c.SortDirection().StringValue();
+
+        if (sortDir != "Asc") {
+            break;
+        }
+
+        auto alias = ExtractAlias(column);
+        auto columnNoAlias = RemoveAliases(column);
+
+        sortedPrefixCols.push_back(columnNoAlias);
+        sortedPrefixAliases.push_back(alias);
+    }
+
+    if (sortedPrefixCols.size()) {
+        sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>(new TOptimizerStatistics::TSortColumns(sortedPrefixCols, sortedPrefixAliases));
+    }
+
+    newStats->SortColumns = sortedPrefixPtr;
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for Merge: " << newStats->ToString();
+
+    typeCtx->SetStats(merge.Raw(), newStats);
+}
+
+
 std::shared_ptr<TOptimizerStatistics> RemoveOrdering(const std::shared_ptr<TOptimizerStatistics>& stats) {
     if (stats->SortColumns) {
         auto newStats = *stats;

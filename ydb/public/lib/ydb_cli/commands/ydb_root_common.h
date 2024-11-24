@@ -85,6 +85,7 @@ private:
     bool IsIamEndpointSet = false;
     bool IsCaCertsFileSet = false;
     bool IsAuthSet = false;
+    bool OTelTrace = true;
 };
 
 }

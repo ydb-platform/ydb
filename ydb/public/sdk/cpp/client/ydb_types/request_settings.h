@@ -15,6 +15,7 @@ struct TRequestSettings {
     using THeader = std::vector<std::pair<TString, TString>>;
 
     FLUENT_SETTING(TString, TraceId);
+    FLUENT_SETTING(TString, OTelTraceId);
     FLUENT_SETTING(TString, RequestType);
     FLUENT_SETTING(THeader, Header);
     FLUENT_SETTING(TDuration, ClientTimeout);
@@ -24,6 +25,7 @@ struct TRequestSettings {
     template <typename T>
     explicit TRequestSettings(const TRequestSettings<T>& other)
         : TraceId_(other.TraceId_)
+        , OTelTraceId_(other.OTelTraceId_)
         , RequestType_(other.RequestType_)
         , Header_(other.Header_)
         , ClientTimeout_(other.ClientTimeout_)

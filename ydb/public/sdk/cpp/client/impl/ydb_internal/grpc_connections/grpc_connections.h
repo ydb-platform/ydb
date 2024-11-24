@@ -201,6 +201,10 @@ public:
                     meta.Aux.push_back({YDB_TRACE_ID_HEADER, requestSettings.TraceId});
                 }
 
+                if (!requestSettings.OTelTraceId.empty()) {
+                    meta.Aux.push_back({OTEL_TRACE_HEADER, requestSettings.OTelTraceId});
+                }
+
                 if (!requestSettings.RequestType.empty()) {
                     meta.Aux.push_back({YDB_REQUEST_TYPE_HEADER, requestSettings.RequestType});
                 }
@@ -435,6 +439,10 @@ public:
                     meta.Aux.push_back({YDB_TRACE_ID_HEADER, requestSettings.TraceId});
                 }
 
+                if (!requestSettings.OTelTraceId.empty()) {
+                    meta.Aux.push_back({OTEL_TRACE_HEADER, requestSettings.OTelTraceId});
+                }
+
                 if (!requestSettings.RequestType.empty()) {
                     meta.Aux.push_back({YDB_REQUEST_TYPE_HEADER, requestSettings.RequestType});
                 }
@@ -529,6 +537,10 @@ public:
         #endif
                 if (!requestSettings.TraceId.empty()) {
                     meta.Aux.push_back({YDB_TRACE_ID_HEADER, requestSettings.TraceId});
+                }
+
+                if (!requestSettings.OTelTraceId.empty()) {
+                    meta.Aux.push_back({OTEL_TRACE_HEADER, requestSettings.OTelTraceId});
                 }
 
                 if (!requestSettings.RequestType.empty()) {

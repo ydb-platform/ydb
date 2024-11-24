@@ -57,12 +57,13 @@ public:
 
 protected:
     template<typename TSettingsType>
-    TSettingsType&& FillSettings(TSettingsType&& settings) {
+    TSettingsType&& FillSettings(TSettingsType&& settings, const TConfig& config) {
         if (OperationTimeout) {
             ui64 operationTimeout = FromString<ui64>(OperationTimeout);
             settings.OperationTimeout(TDuration::MilliSeconds(operationTimeout));
             settings.ClientTimeout(TDuration::MilliSeconds(operationTimeout + 200));
         }
+        settings.OTelTraceId(config.OTelTraceId);
         return std::forward<TSettingsType>(settings);
     }
 

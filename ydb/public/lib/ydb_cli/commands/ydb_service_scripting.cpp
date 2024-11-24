@@ -120,7 +120,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
                 auto asyncResult = client.ExecuteYqlScript(
                         Script,
                         paramBuilder->Build(),
-                        FillSettings(settings)
+                        FillSettings(settings, config)
                 );
 
                 auto result = asyncResult.GetValueSync();
@@ -131,7 +131,7 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
         } else {
             auto asyncResult = client.ExecuteYqlScript(
                     Script,
-                    FillSettings(settings)
+                    FillSettings(settings, config)
             );
             auto result = asyncResult.GetValueSync();
             ThrowOnError(result);

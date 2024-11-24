@@ -8,6 +8,7 @@ namespace NYdb {
 
 struct TRpcRequestSettings {
     TStringType TraceId;
+    TStringType OTelTraceId;
     TStringType RequestType;
     std::vector<std::pair<TStringType, TStringType>> Header;
     TEndpointKey PreferredEndpoint = {};
@@ -23,6 +24,7 @@ struct TRpcRequestSettings {
     static TRpcRequestSettings Make(const TRequestSettings& settings, const TEndpointKey& preferredEndpoint = {}, TEndpointPolicy endpointPolicy = TEndpointPolicy::UsePreferredEndpointOptionally) {
         TRpcRequestSettings rpcSettings;
         rpcSettings.TraceId = settings.TraceId_;
+        rpcSettings.OTelTraceId = settings.OTelTraceId_;
         rpcSettings.RequestType = settings.RequestType_;
         rpcSettings.Header = settings.Header_;
         rpcSettings.PreferredEndpoint = preferredEndpoint;

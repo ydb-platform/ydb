@@ -8,6 +8,9 @@
     "test_generator.TestTpcdsGenerator.test_s1_state": {
         "uri": "file://test_generator.TestTpcdsGenerator.test_s1_state/s1.hash"
     },
+    "test_generator.TestTpcdsGenerator.test_s1_state_and_parts": {
+        "uri": "file://test_generator.TestTpcdsGenerator.test_s1_state_and_parts/s1.hash"
+    },
     "test_generator.TestTpchGenerator.test_s1": {
         "uri": "file://test_generator.TestTpchGenerator.test_s1/s1.hash"
     },
@@ -16,6 +19,9 @@
     },
     "test_generator.TestTpchGenerator.test_s1_state": {
         "uri": "file://test_generator.TestTpchGenerator.test_s1_state/s1.hash"
+    },
+    "test_generator.TestTpchGenerator.test_s1_state_and_parts": {
+        "uri": "file://test_generator.TestTpchGenerator.test_s1_state_and_parts/s1.hash"
     },
     "test_init.TestClickbenchInit.test_s1_column": {
         "uri": "file://test_init.TestClickbenchInit.test_s1_column/s1_column"

@@ -66,7 +66,7 @@ ENDIF()
         ydb/library/yql/providers/ydb/provider
         yql/essentials/providers/pg/provider
 
-        yql/essentials/public/udf/service/terminate_policy
+        yql/essentials/public/udf/service/exception_policy
         yql/essentials/utils/backtrace
         ydb/library/yql/utils/bindings
         yql/essentials/utils/log

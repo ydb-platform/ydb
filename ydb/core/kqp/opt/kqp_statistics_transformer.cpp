@@ -71,18 +71,16 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
 
         if (inputStats->StorageType == EStorageType::RowStorage && keyColumns) {
             for (auto c : keyColumns->Data ) {
-                if (std::find(indexColumns.begin(), indexColumns.end(), c) != indexColumns.end()) {
-                    sortedPrefixCols.push_back(c);
-                    sortedPrefixAliases.push_back("");
-                } else {
-                    break;
-                }
+                sortedPrefixCols.push_back(c);
+                sortedPrefixAliases.push_back("");
             }
         }
 
         if (sortedPrefixCols.size()) {
             sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>(new TOptimizerStatistics::TSortColumns(sortedPrefixCols, sortedPrefixAliases));
         }
+    } else {
+        sortedPrefixPtr = inputStats->SortColumns;
     }
 
     /**
@@ -162,6 +160,24 @@ void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationCon
     }
     stats->StorageType = storageType;
 
+    auto sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
+
+    TVector<TString> sortedPrefixCols;
+    TVector<TString> sortedPrefixAliases;
+
+    if (stats->StorageType == EStorageType::RowStorage && stats->KeyColumns) {
+        for (auto c : keyColumns->Data ) {
+            sortedPrefixCols.push_back(c);
+            sortedPrefixAliases.push_back("");
+        }
+    }
+
+    if (sortedPrefixCols.size()) {
+        sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>(new TOptimizerStatistics::TSortColumns(sortedPrefixCols, sortedPrefixAliases));
+    }
+
+    stats->SortColumns = sortedPrefixPtr;
+
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ": " << stats->ToString();
 
     typeCtx->SetStats(input.Get(), stats);
@@ -213,33 +229,15 @@ void InferStatisticsForSteamLookup(const TExprNode::TPtr& input, TTypeAnnotation
 void InferStatisticsForLookupTable(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
     auto inputNode = TExprBase(input);
     auto lookupTable = inputNode.Cast<TKqlLookupTableBase>();
+    auto lookupKeys = lookupTable.LookupKeys();
 
-    int nAttrs = lookupTable.Columns().Size();
-    double nRows = 0;
-    double byteSize = 0;
-
-    auto inputStats = typeCtx->GetStats(lookupTable.Table().Raw());
-    if (!inputStats) {
+    auto inputTableStats = typeCtx->GetStats(lookupTable.Table().Raw());
+    auto inputLookupStats = typeCtx->GetStats(lookupKeys.Raw());
+    if (!inputTableStats || !inputLookupStats) {
         return;
     }
 
-    if (lookupTable.LookupKeys().Maybe<TCoIterator>()) {
-        nRows = inputStats->Nrows;
-        byteSize = inputStats->ByteSize * (nAttrs / (double) inputStats->Ncols);
-    } else {
-        nRows = 1;
-        byteSize = 10;
-    }
-
-    typeCtx->SetStats(input.Get(), std::make_shared<TOptimizerStatistics>(
-        EStatisticsType::BaseTable, 
-        nRows,
-        nAttrs, 
-        byteSize, 
-        0, 
-        inputStats->KeyColumns,
-        inputStats->ColumnStatistics,
-        inputStats->StorageType));
+    typeCtx->SetStats(input.Get(), inputLookupStats);
 }
 
 /**
@@ -283,22 +281,13 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
 
     auto sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
 
-    TVector<TString> indexColumns;
-    for (auto c : sourceSettings.Columns()) {
-        indexColumns.push_back(c.StringValue());
-    }
-
     TVector<TString> sortedPrefixCols;
     TVector<TString> sortedPrefixAliases;
 
     if (inputStats->StorageType == EStorageType::RowStorage && keyColumns) {
         for (auto c : keyColumns->Data ) {
-            if (std::find(indexColumns.begin(), indexColumns.end(), c) != indexColumns.end()) {
-                sortedPrefixCols.push_back(c);
-                sortedPrefixAliases.push_back("");
-            } else {
-                break;
-            }
+            sortedPrefixCols.push_back(c);
+            sortedPrefixAliases.push_back("");
         }
     }
 
@@ -368,13 +357,9 @@ void InferStatisticsForReadTableIndexRanges(const TExprNode::TPtr& input, TTypeA
     TVector<TString> sortedPrefixCols;
     TVector<TString> sortedPrefixAliases;
 
-    for (size_t i=0; i<indexColumns.size(); i++) {
-        if (indexColumns[i] == sortedColumns[i]) {
-            sortedPrefixCols.push_back(indexColumns[i]);
-            sortedPrefixAliases.push_back("");
-        } else {
-            break;
-        }
+    for (auto c: sortedColumns ) {
+        sortedPrefixCols.push_back(c);
+        sortedPrefixAliases.push_back("");
     }
 
     auto indexColumnsPtr = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(indexColumns));

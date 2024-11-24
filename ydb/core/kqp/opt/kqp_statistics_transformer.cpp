@@ -60,27 +60,18 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
 
     auto sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
 
-    if (auto readRanges = inputNode.Maybe<TKqlReadTableRangesBase>()) {
-        TVector<TString> indexColumns;
-        for (auto c : readRanges.Cast().Columns()) {
-            indexColumns.push_back(c.StringValue());
-        }
+    TVector<TString> sortedPrefixCols;
+    TVector<TString> sortedPrefixAliases;
 
-        TVector<TString> sortedPrefixCols;
-        TVector<TString> sortedPrefixAliases;
-
-        if (inputStats->StorageType == EStorageType::RowStorage && keyColumns) {
-            for (auto c : keyColumns->Data ) {
-                sortedPrefixCols.push_back(c);
-                sortedPrefixAliases.push_back("");
-            }
+    if (inputStats->StorageType == EStorageType::RowStorage && keyColumns) {
+        for (auto c : keyColumns->Data ) {
+            sortedPrefixCols.push_back(c);
+            sortedPrefixAliases.push_back("");
         }
+    }
 
-        if (sortedPrefixCols.size()) {
-            sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>(new TOptimizerStatistics::TSortColumns(sortedPrefixCols, sortedPrefixAliases));
-        }
-    } else {
-        sortedPrefixPtr = inputStats->SortColumns;
+    if (sortedPrefixCols.size()) {
+        sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>(new TOptimizerStatistics::TSortColumns(sortedPrefixCols, sortedPrefixAliases));
     }
 
     /**
@@ -126,6 +117,7 @@ void InferStatisticsForKqpTable(const TExprNode::TPtr& input, TTypeAnnotationCon
 
     const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, path.Value());
     if (!tableData.Metadata->StatsLoaded && !kqpCtx.Config->OptOverrideStatistics.Get()) {
+        YQL_CLOG(TRACE, CoreDq) << "Cannot infer statistics for index: " << path.Value();
         return;
     }
 

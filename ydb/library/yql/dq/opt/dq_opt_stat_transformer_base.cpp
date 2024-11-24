@@ -74,6 +74,11 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if (TDqSource::Match(input.Get())) {
         InferStatisticsForDqSource(input, TypeCtx);
     }
+
+    // In case of DqCnMerge, update the sorted info with correct sorting
+    else if (TDqCnMerge::Match(input.Get())) {
+        InferStatisticsForDqMerge(input, TypeCtx);
+    }
     else {
         matched = false;
     }

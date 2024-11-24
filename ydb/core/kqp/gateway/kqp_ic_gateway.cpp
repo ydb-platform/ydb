@@ -1232,7 +1232,7 @@ public:
                 }
 
                 auto [dirname, basename] = path.second;
-                if (!IsStartWithSlash(dirname)) {
+                if (!dirname.empty() && !IsStartWithSlash(dirname)) {
                     dirname = JoinPath({Database, dirname});
                 }
 

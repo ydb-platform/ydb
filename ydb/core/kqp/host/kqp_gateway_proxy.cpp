@@ -1101,7 +1101,7 @@ public:
 
             for (const auto& path : pathPairs) {
                 auto [dirname, basename] = path.second;
-                if (!IsStartWithSlash(dirname)) {
+                if (!dirname.empty() && !IsStartWithSlash(dirname)) {
                     dirname = JoinPath({GetDatabase(), dirname});
                 }
 

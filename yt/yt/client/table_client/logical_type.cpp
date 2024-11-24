@@ -1193,7 +1193,7 @@ void FromProto(TLogicalTypePtr* logicalType, const NProto::TLogicalType& protoLo
         case NProto::TLogicalType::TypeCase::kTagged: {
             TLogicalTypePtr element;
             FromProto(&element, protoLogicalType.tagged().element());
-            *logicalType = TaggedLogicalType(protoLogicalType.tagged().tag(), std::move(element));
+            *logicalType = TaggedLogicalType(FromProto<TString>(protoLogicalType.tagged().tag()), std::move(element));
             return;
         }
         case NProto::TLogicalType::TypeCase::TYPE_NOT_SET:

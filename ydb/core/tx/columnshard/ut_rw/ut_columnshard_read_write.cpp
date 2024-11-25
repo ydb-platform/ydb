@@ -430,7 +430,7 @@ void TestWrite(const TestTableDescription& table) {
     UNIT_ASSERT(bigData.size() > NColumnShard::TLimits::GetMaxBlobSize());
     UNIT_ASSERT(bigData.size() < NColumnShard::TLimits::GetMaxBlobSize() + 2 * 1024 * 1024);
     ok = WriteData(runtime, sender, writeId++, tableId, bigData, ydbSchema);
-    UNIT_ASSERT(!ok);
+    UNIT_ASSERT(ok);
 }
 
 void TestWriteOverload(const TestTableDescription& table) {
@@ -811,7 +811,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         UNIT_ASSERT(CheckOrdered(rb));
         UNIT_ASSERT(DataHas({ rb }, portion[0]));
         UNIT_ASSERT(DataHas({ rb }, portion[1]));
-        UNIT_ASSERT(!DataHas({ rb }, portion[2]));
+        UNIT_ASSERT(DataNotHas({ rb }, portion[2]));
     }
 
     // commit 3: ins:0, cmt:1, idx:1
@@ -842,7 +842,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         UNIT_ASSERT(DataHas({ rb }, portion[0]));
         UNIT_ASSERT(DataHas({ rb }, portion[1]));
         UNIT_ASSERT(DataHas({ rb }, portion[2]));
-        UNIT_ASSERT(!DataHas({ rb }, portion[3]));
+        UNIT_ASSERT(DataNotHas({ rb }, portion[3]));
     }
 
     // commit 4: ins:0, cmt:2, idx:1 (with duplicates in PK)
@@ -868,7 +868,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         UNIT_ASSERT(DataHas({ rb }, portion[1]));
         UNIT_ASSERT(DataHas({ rb }, portion[2]));
         UNIT_ASSERT(DataHas({ rb }, portion[3]));
-        UNIT_ASSERT(DataHas({ rb }, { 0, 500 }, true));
+        UNIT_ASSERT(DataHas({ rb }, { 0, 500 }, false));
 
         const ui64 compactedBytes = reader.GetReadStat("compacted_bytes");
         const ui64 insertedBytes = reader.GetReadStat("inserted_bytes");

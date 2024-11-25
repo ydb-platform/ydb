@@ -63,7 +63,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         read.PathId = request.GetLocalPathId();
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         read.TableName = table;
-        const TString defaultReader = "SIMPLE";
+        const TString defaultReader = "PLAIN";
         std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
             auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
             if (!sysViewPolicy) {

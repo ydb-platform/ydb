@@ -45,7 +45,7 @@ void TWriteOperation::Start(
 
 void TWriteOperation::CommitOnExecute(
     TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc, const NOlap::TSnapshot& snapshot) const {
-    Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
+    Y_ABORT_UNLESS(Status == EOperationStatus::Prepared || InsertWriteIds.empty());
 
     TBlobGroupSelector dsGroupSelector(owner.Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
@@ -65,7 +65,7 @@ void TWriteOperation::CommitOnExecute(
 }
 
 void TWriteOperation::CommitOnComplete(TColumnShard& owner, const NOlap::TSnapshot& /*snapshot*/) const {
-    Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
+    Y_ABORT_UNLESS(Status == EOperationStatus::Prepared || InsertWriteIds.empty());
     if (!WritePortions) {
         owner.UpdateInsertTableCounters();
     } else {

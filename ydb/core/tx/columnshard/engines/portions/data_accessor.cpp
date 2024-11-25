@@ -412,6 +412,9 @@ std::vector<TPortionDataAccessor::TReadPage> TPortionDataAccessor::BuildReadPage
         }
         lastRecord = &i;
     }
+    if (delimiters.empty()) {
+        return { TPortionDataAccessor::TReadPage(0, PortionInfo->GetRecordsCount(), 0) };
+    }
     std::sort(delimiters.begin(), delimiters.end());
     std::vector<TGlobalDelimiter> sumDelimiters;
     for (auto&& i : delimiters) {
@@ -441,7 +444,7 @@ std::vector<TPortionDataAccessor::TReadPage> TPortionDataAccessor::BuildReadPage
         }
     }
     AFL_VERIFY(recordIdx.front() == 0);
-    AFL_VERIFY(recordIdx.back() == PortionInfo->GetRecordsCount());
+    AFL_VERIFY(recordIdx.back() == PortionInfo->GetRecordsCount())("real", JoinSeq(",", recordIdx))("expected", PortionInfo->GetRecordsCount());
     AFL_VERIFY(recordIdx.size() == packMemorySize.size() + 1);
     std::vector<TReadPage> pages;
     for (ui32 i = 0; i < packMemorySize.size(); ++i) {

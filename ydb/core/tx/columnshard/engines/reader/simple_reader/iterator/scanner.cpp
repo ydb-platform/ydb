@@ -74,13 +74,15 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
     if (Context->IsAborted()) {
         return false;
     }
+    bool changed = false;
     while (SortedSources.size() && FetchingSources.size() < InFlightLimit) {
         (*SortedSources.begin())->StartProcessing(*SortedSources.begin());
         FetchingSources.emplace(*SortedSources.begin());
         FetchingSourcesByIdx.emplace((*SortedSources.begin())->GetSourceIdx(), *SortedSources.begin());
         SortedSources.erase(SortedSources.begin());
+        changed = true;
     }
-    return SortedSources.size() > 0;
+    return changed;
 }
 
 const TReadContext& TScanHead::GetContext() const {

@@ -349,7 +349,12 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
     auto context = source->GetContext();
     NArrow::TGeneralContainer::TTableConstructionContext contextTableConstruct;
     contextTableConstruct.SetColumnNames(context->GetProgramInputColumns()->GetColumnNamesVector());
-    contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
+    if (source->GetStageResult().GetNotAppliedFilter()) {
+        contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
+    } else {
+        AFL_VERIFY(StartIndex == 0);
+        AFL_VERIFY(RecordsCount == source->GetRecordsCount());
+    }
     std::shared_ptr<arrow::Table> resultBatch;
     if (!source->GetStageResult().IsEmpty()) {
         resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
@@ -366,8 +371,7 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
 }
 
 TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    source->Finalize();
-    source->InitPages(NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
+    source->Finalize(NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     std::shared_ptr<TFetchingScript> plan = std::make_shared<TFetchingScript>(*source->GetContext());
     if (source->IsSourceInMemory()) {
         AFL_VERIFY(source->GetStageResult().GetPagesToResultVerified().size() == 1);

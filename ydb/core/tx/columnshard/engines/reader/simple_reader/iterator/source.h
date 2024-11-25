@@ -121,12 +121,6 @@ public:
 
     virtual std::shared_ptr<arrow::RecordBatch> GetStartPKRecordBatch() const = 0;
 
-    void InitPages(const ui64 memoryLimit) {
-        AFL_VERIFY(StageData);
-        const auto& accessor = StageData->GetPortionAccessor();
-        StageResult->SetPages(accessor.BuildReadPages(memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
-    }
-
     void StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr);
     virtual ui64 PredictAccessorsSize() const = 0;
 
@@ -193,10 +187,18 @@ public:
         return *StageResult;
     }
 
-    void Finalize() {
+    void Finalize(const std::optional<ui64> memoryLimit) {
         AFL_VERIFY(!StageResult);
+        AFL_VERIFY(StageData);
         TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
+
+        const auto accessor = StageData->GetPortionAccessor();
         StageResult = std::make_unique<TFetchedResult>(std::move(StageData));
+        if (memoryLimit) {
+            StageResult->SetPages(accessor.BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
+        } else {
+            StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
+        }
     }
 
     void ApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) {
@@ -258,9 +260,7 @@ public:
             return;
         }
         ResourceGuards.back()->Update(0);
-        Finalize();
-        AFL_VERIFY(StageResult);
-        StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
+        Finalize(std::nullopt);
     }
 
     const TFetchedData& GetStageData() const {

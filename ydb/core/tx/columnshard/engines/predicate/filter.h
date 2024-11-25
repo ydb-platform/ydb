@@ -108,6 +108,7 @@ private:
     virtual bool DoCheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& entity) const = 0;
     virtual bool DoCheckSourceIntervalUsage(const ui64 sourceId, const ui32 indexStart, const ui32 recordsCount) const = 0;
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) = 0;
+    virtual void DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const = 0;
 
 public:
     virtual bool IsInitialized() const = 0;
@@ -131,6 +132,12 @@ public:
     TConclusionStatus DeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) {
         return DoDeserializeFromProto(proto);
     }
+
+    NKikimrKqp::TEvKqpScanCursor SerializeToProto() const {
+        NKikimrKqp::TEvKqpScanCursor result;
+        DoSerializeToProto(result);
+        return result;
+    }
 };
 
 class TSimpleScanCursor: public IScanCursor {
@@ -138,6 +145,11 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PrimaryKey);
     YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY(ui32, RecordIndex, 0);
+
+    virtual void DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const override {
+        proto.MutableColumnShardSimple()->SetSourceId(SourceId);
+        proto.MutableColumnShardSimple()->SetStartRecordIndex(RecordIndex);
+    }
 
     virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const override {
         AFL_VERIFY(!!PrimaryKey);
@@ -189,6 +201,10 @@ public:
 class TPlainScanCursor: public IScanCursor {
 private:
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PrimaryKey);
+
+    virtual void DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const override {
+        *proto.MutableColumnShardPlain() = {};
+    }
 
     virtual bool IsInitialized() const override {
         return !!PrimaryKey;

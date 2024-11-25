@@ -351,7 +351,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySet
             auto readShard = std::move(PendingShards.front());
             PendingShards.pop_front();
             PendingShards.front().LastKey = std::move(readShard.LastKey);
-            PendingShards.front().LastCursor = std::move(readShard.LastCursor);
+            PendingShards.front().LastCursorProto = std::move(readShard.LastCursorProto);
         }
 
         AFL_ENSURE(!PendingShards.empty());

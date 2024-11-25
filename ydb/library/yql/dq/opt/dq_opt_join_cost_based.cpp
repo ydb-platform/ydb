@@ -318,7 +318,7 @@ private:
     TExprContext* ExprCtx;
 };
 
-IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& ctx, const ui32 maxDPhypDPTableSize, TExprContext* exprCtx = nullptr) {
+IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& ctx, const ui32 maxDPhypDPTableSize, TExprContext* exprCtx) {
     return new TOptimizerNativeNew(ctx, maxDPhypDPTableSize, exprCtx);
 }
 

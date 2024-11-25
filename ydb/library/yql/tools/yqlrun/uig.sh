@@ -8,7 +8,7 @@
 #
 
 SCRIPT_DIR="$(dirname $(readlink -f "$0"))"
-UDFS_DIR="${SKRIPT_DIR}/../../udfs;${SCRIPT_DIR}/../../../../../../yql/essentials/udfs"
+UDFS_DIR="${SCRIPT_DIR}/../../udfs;${SCRIPT_DIR}/../../../../../../yql/essentials/udfs"
 if [ -d "${SCRIPT_DIR}/../../../../../../yql/udfs" ]; then
 UDFS_DIR="${UDFS_DIR};${SCRIPT_DIR}/../../../../../../yql/udfs"
 fi

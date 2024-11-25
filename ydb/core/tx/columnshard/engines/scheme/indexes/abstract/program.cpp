@@ -444,7 +444,10 @@ public:
 std::shared_ptr<TDataForIndexesCheckers> TDataForIndexesCheckers::Build(const TProgramContainer& program) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("program", program.DebugString());
     auto& steps = program.GetStepsVerified();
-    AFL_VERIFY(steps.size());
+    if (!steps.size()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "no_steps_in_program");
+        return nullptr;
+    }
     auto fStep = steps.front();
     TNormalForm nForm;
     for (auto&& s : fStep->GetAssignes()) {

@@ -472,6 +472,8 @@ public:
     // Minimal offset, the data from which cannot be deleted, because it is required by an important consumer
     ui64 ImportantClientsMinOffset() const;
 
+    TInstant GetEndWriteTimestamp() const;
+
 
     //Bootstrap sends kvRead
     //Become StateInit

@@ -317,7 +317,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
            }
            */
         Partition()->SubDomainOutOfSpace = meta.GetSubDomainOutOfSpace();
-        Partition()->EndWriteTimestamp = TInstant::MilliSeconds(meta.GetLastMessageWriteTimestamp());
+        Partition()->EndWriteTimestamp = TInstant::MilliSeconds(meta.GetEndWriteTimestamp());
         Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
         if (Partition()->IsSupportive()) {
             const auto& counterData = meta.GetCounterData();
@@ -677,17 +677,22 @@ void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
             << ".");
 
     auto& head = Partition()->Head;
-    for (auto it = head.GetBatches().rbegin(); it != head.GetBatches().rend(); ++it) {
-        if (!it->Empty()) {
-            Partition()->EndWriteTimestamp = head.GetBatches().back().GetLastMessageWriteTimestamp();
-            Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
+    if (!head.GetBatches().empty()) {
+        auto& batch = head.GetLastBatch();
+        Y_VERIFY (batch.Packed);
 
-            PQ_LOG_I("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
-                << "' partition " << Partition()->Partition
-                << " from head completed. Value " << Partition()->EndWriteTimestamp);
+        TVector<TClientBlob> result;
+        batch.UnpackTo(&result);
+        Y_VERIFY(!result.empty());
 
-            return Done(ctx);
-        }
+        Partition()->EndWriteTimestamp = result.back().WriteTimestamp;
+        Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
+
+        PQ_LOG_I("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
+            << "' partition " << Partition()->Partition
+            << " from head completed. Value " << Partition()->EndWriteTimestamp);
+
+        return Done(ctx);
     }
 
     if (Partition()->DataKeysBody.empty()) {

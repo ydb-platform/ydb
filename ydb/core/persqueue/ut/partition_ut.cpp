@@ -39,7 +39,7 @@ struct TCreatePartitionParams {
     TMaybe<ui64> TxId;
     TVector<TTransaction> Transactions;
     TConfigParams Config;
-    ui64 EndWriteTimestamp = 0;
+    TInstant EndWriteTimestamp;
 };
 
 }
@@ -238,7 +238,7 @@ protected:
     void WaitDiskStatusRequest();
     void SendDiskStatusResponse(TMaybe<ui64>* cookie = nullptr);
     void WaitMetaReadRequest();
-    void SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txId, ui64 endWriteTimestamp);
+    void SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txId, TInstant endWriteTimestamp);
     void WaitLastBlobReadRequest();
     void SendLastBlobReadResponse(ui64 begin, ui64 end);
     void WaitInfoRangeRequest();
@@ -423,7 +423,9 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
         WaitDataRangeRequest();
         SendDataRangeResponse(params.Begin, params.End);
 
-        if (!params.EndWriteTimestamp) {
+        Cerr << ">>>> " << params.EndWriteTimestamp << Endl << Flush;
+        if (params.EndWriteTimestamp == TInstant::Zero()) {
+            Cerr << ">>>> EQUALS" << Endl << Flush;
             WaitLastBlobReadRequest();
             SendLastBlobReadResponse(params.Begin, params.End);
         }
@@ -774,7 +776,7 @@ void TPartitionFixture::WaitMetaReadRequest()
     UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadSize(), 2);
 }
 
-void TPartitionFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txId, ui64 endWriteTimestamp)
+void TPartitionFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txId, TInstant endWriteTimestamp)
 {
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -787,7 +789,7 @@ void TPartitionFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txI
         read->SetStatus(NKikimrProto::OK);
 
         NKikimrPQ::TPartitionMeta meta;
-        meta.SetLastMessageWriteTimestamp(endWriteTimestamp);
+        meta.SetEndWriteTimestamp(endWriteTimestamp.MilliSeconds());
 
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out);
@@ -836,9 +838,11 @@ void TPartitionFixture::SendLastBlobReadResponse(ui64 begin, ui64 end)
     TBatch batch;
 
     for (size_t i = begin; i < end; ++i) {
+        Cerr << ">>>> ADD BLOB " << i << " writeTimestamp=" << (TInstant::Now() - TDuration::MilliSeconds(10)) << Endl << Flush;
+
         TString data = TStringBuilder() << "message-data-" << i;
-        TClientBlob blob("source-id-1", 13 + i /* seqNo */, data, {} /* partData */, TInstant::Now() + TDuration::Seconds(150) /* writeTimestamp */,
-        TInstant::Now() + TDuration::Seconds(100) /* createTimestamp */, data.size(), "partitionKey", "explicitHashKey");
+        TClientBlob blob("source-id-1", 13 + i /* seqNo */, data, {} /* partData */, TInstant::Now() - TDuration::MilliSeconds(10) /* writeTimestamp */,
+        TInstant::Now() - TDuration::MilliSeconds(50) /* createTimestamp */, data.size(), "partitionKey", "explicitHashKey");
         batch.AddBlob(blob);
     }
 
@@ -3220,6 +3224,50 @@ Y_UNIT_TEST_F(GetUsedStorage, TPartitionFixture) {
 
 
 } // GetPartitionWriteInfoErrors
+
+Y_UNIT_TEST_F(EndWriteTimestamp_FromBlob, TPartitionFixture) {
+    auto* actor = CreatePartition({
+                    .Partition=TPartitionId{2},
+                    .Begin=0, .End=10,
+                    //
+                    // partition configuration
+                    //
+                    .Config={.Version=1, .Consumers={}, .MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY}
+                    },
+                    //
+                    // tablet configuration
+                    //
+                    {.Version=2, .Consumers={}, .MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY}
+    );
+
+    auto now = TInstant::Now();
+
+    auto endWriteTimestamp = actor->GetEndWriteTimestamp();
+    UNIT_ASSERT_C(now - TDuration::Seconds(1) < endWriteTimestamp && endWriteTimestamp < now, "" << (now - TDuration::Seconds(1)) << " < " << endWriteTimestamp << " < " << now );
+} // EndWriteTimestamp_FromBlob
+
+Y_UNIT_TEST_F(EndWriteTimestamp_FromMeta, TPartitionFixture) {
+    auto now = TInstant::Now();
+
+    auto* actor = CreatePartition({
+                    .Partition=TPartitionId{2},
+                    .Begin=0, .End=10,
+                    //
+                    // partition configuration
+                    //
+                    .Config={.Version=1, .Consumers={}, .MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY},
+                    .EndWriteTimestamp = now
+                    },
+                    //
+                    // tablet configuration
+                    //
+                    {.Version=2, .Consumers={}, .MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY}
+    );
+
+
+    auto endWriteTimestamp = actor->GetEndWriteTimestamp();
+    UNIT_ASSERT_VALUES_EQUAL(endWriteTimestamp.MilliSeconds(), now.MilliSeconds());
+} // EndWriteTimestamp_FromMeta
 
 } // End of suite
 

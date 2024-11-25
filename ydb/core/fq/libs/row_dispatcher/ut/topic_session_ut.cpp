@@ -161,10 +161,14 @@ public:
         return eventHolder->Get()->Record.MessagesSize();
     }
 
-    void ExpectStatisticToReadActor(NActors::TActorId readActorId) {
-        auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvStatistics>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
-        UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
+    void ExpectStatisticToReadActor(TSet<NActors::TActorId> readActorIds) {
+        size_t count = readActorIds.size();
+        for (size_t i = 0; i < count; ++i) {
+            auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvStatistics>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
+            UNIT_ASSERT(eventHolder.Get() != nullptr);
+            UNIT_ASSERT(readActorIds.contains(eventHolder->Get()->ReadActorId));
+            readActorIds.erase(eventHolder->Get()->ReadActorId);
+        }
     }
 
     IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
@@ -200,8 +204,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         ExpectMessageBatch(ReadActorId1, { Json1 });
         ExpectMessageBatch(ReadActorId2, { Json1 });
-        ExpectStatisticToReadActor(ReadActorId1);
-        ExpectStatisticToReadActor(ReadActorId2);
+        ExpectStatisticToReadActor({ReadActorId1, ReadActorId2});
 
         auto source2 = BuildSource(topicName, false, "OtherConsumer");
         StartSession(ReadActorId3, source2);

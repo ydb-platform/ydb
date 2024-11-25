@@ -48,10 +48,9 @@ Y_UNIT_TEST_SUITE(NOther) {
 
         for (auto &one: globs) {
             UNIT_ASSERT(NPageCollection::TGroupBlobsByCookie::IsInPlane(one.GId.Logo, mask));
-            UNIT_ASSERT_VALUES_EQUAL(one.GId.Group, 13);
-            UNIT_ASSERT_VALUES_EQUAL(one.GId.Logo.Channel(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(one.GId.Group, 17);
-            UNIT_ASSERT_VALUES_EQUAL(one.GId.Logo.Channel(), 5);
+            UNIT_ASSERT(
+                (one.GId.Group == 13 && one.GId.Logo.Channel() == 3)
+                ||(one.GId.Group == 17 && one.GId.Logo.Channel() == 5));
         }
 
         /*_ Ensure external blob references are accounted correctly */

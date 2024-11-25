@@ -5885,7 +5885,7 @@ void TSchemeShard::Handle(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, c
     const TSubTxId partId = Operations.at(txId)->FindRelatedPartByTabletId(tabletId, ctx);
     if (partId == InvalidSubTxId) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Got TEvProposeTransactionResult but partId is unknown"
+                   "Got TEvPersQueue::TEvProposeTransactionResult but partId is unknown"
                        << ", for txId: " << txId
                        << ", tabletId: " << tabletId
                        << ", at schemeshard: " << TabletID());

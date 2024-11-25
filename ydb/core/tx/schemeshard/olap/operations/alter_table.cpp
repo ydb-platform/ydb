@@ -145,7 +145,7 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
 
         LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply ProgressState"
+                     DebugHint() << " ProgressState"
                      << " at tablet: " << ssId);
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxAlterColumnTable);

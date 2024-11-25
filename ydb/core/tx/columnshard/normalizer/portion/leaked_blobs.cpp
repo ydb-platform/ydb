@@ -47,8 +47,7 @@ public:
 
     TString DebugString() const override {
         TStringBuilder sb;
-        sb << "class=TLeakedBlobsNormalizerChanges";
-        sb << ";tablet=" << TabletId;
+        sb << "tablet=" << TabletId;
         sb << ";leaked_blobs=[" << JoinStrings(Leaks.begin(), Leaks.end(), ",") << "]";
         return sb;
     }

@@ -560,18 +560,12 @@ public:
                     << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
                     << " Sink=" << this->SelfId() << "."
                     << getIssues().ToOneLineString());
-            // TODO: Add new status for splits in datashard. This is tmp solution.
-            if (getIssues().ToOneLineString().Contains("in a pre/offline state assuming this is due to a finished split (wrong shard state)")) {
-                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
-                RetryResolveTable();
-            } else {
-                RuntimeError(
-                    TStringBuilder() << "Internal error for table `"
-                        << TablePath << "`. "
-                        << getIssues().ToOneLineString(),
-                    NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                    getIssues());
-            }
+            RuntimeError(
+                TStringBuilder() << "Internal error for table `"
+                    << TablePath << "`. "
+                    << getIssues().ToOneLineString(),
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                getIssues());
             return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_SPACE_EXHAUSTED: {

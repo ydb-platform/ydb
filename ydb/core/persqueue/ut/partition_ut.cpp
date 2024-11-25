@@ -1211,7 +1211,7 @@ void TPartitionFixture::TestWriteSubDomainOutOfSpace(TDuration quotaWaitDuration
 
     CreatePartition({
                     .Partition=TPartitionId{1},
-                    .Begin=0, .End=10,
+                    .Begin=0, .End=0,
                     //
                     // partition configuration
                     //
@@ -2274,7 +2274,7 @@ Y_UNIT_TEST_F(ReserveSubDomainOutOfSpace, TPartitionFixture)
 
     CreatePartition({
                     .Partition=TPartitionId{1},
-                    .Begin=0, .End=10,
+                    .Begin=0, .End=0,
                     //
                     // partition configuration
                     //
@@ -2324,7 +2324,7 @@ Y_UNIT_TEST_F(WriteSubDomainOutOfSpace, TPartitionFixture)
     Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
     CreatePartition({
                     .Partition=TPartitionId{1},
-                    .Begin=0, .End=10,
+                    .Begin=0, .End=0,
                     //
                     // partition configuration
                     //

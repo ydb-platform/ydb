@@ -36,7 +36,7 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
             break;
         }
         if (!isFinished) {
-            break
+            break;
         }
         AFL_VERIFY(FetchingSourcesByIdx.erase(frontSource->GetSourceIdx()));
         if (Context->GetCommonContext()->GetReadMetadata()->Limit) {

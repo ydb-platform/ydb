@@ -143,11 +143,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     {
         ui64 keyBytes = 0;
         for (ui16 keyColIdx = 0; keyColIdx < tableInfo.KeyColumnIds.size(); ++keyColIdx) {
-            const auto& cellType = tableInfo.KeyColumnTypes[keyColIdx];
             const TCell& cell = Matrix.GetCell(rowIdx, keyColIdx);
-            if (cellType.GetTypeId() == NScheme::NTypeIds::Uint8 && !cell.IsNull() && cell.AsValue<ui8>() > 127)
-                return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Keys with Uint8 column values >127 are currently prohibited"};
-
             keyBytes += cell.IsNull() ? 1 : cell.Size();
         }
 

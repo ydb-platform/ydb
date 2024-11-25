@@ -68,7 +68,7 @@ namespace NKikimr {
         const bool AddHeader;
 
         // check whether this NEW blob is huge one; userPartSize doesn't include any metadata stored along with blob
-        bool IsHugeBlob(TBlobStorageGroupType gtype, const TLogoBlobID& fullId, ui32 minREALHugeBlobInBytes) const;
+        bool IsHugeBlob(TBlobStorageGroupType gtype, const TLogoBlobID& fullId, ui32 minHugeBlobInBytes) const;
 
         THugeBlobCtx(const std::shared_ptr<const THugeSlotsMap> &hugeSlotsMap, bool addHeader)
             : HugeSlotsMap(hugeSlotsMap)

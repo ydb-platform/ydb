@@ -545,15 +545,15 @@ Y_UNIT_TEST_F(Offsets_Cannot_Be_Promoted_When_Reading_In_A_Transaction, TFixture
     UNIT_ASSERT_EXCEPTION(ReadMessage(reader, {.Tx = tx, .CommitOffsets = true}), yexception);
 }
 
-//Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)
-//{
-//    WriteToTopicWithInvalidTxId(false);
-//}
-//
-//Y_UNIT_TEST_F(WriteToTopic_Invalid_Tx, TFixture)
-//{
-//    WriteToTopicWithInvalidTxId(true);
-//}
+Y_UNIT_TEST_F(WriteToTopic_Invalid_Session, TFixture)
+{
+    WriteToTopicWithInvalidTxId(false);
+}
+
+Y_UNIT_TEST_F(WriteToTopic_Invalid_Tx, TFixture)
+{
+    WriteToTopicWithInvalidTxId(true);
+}
 
 Y_UNIT_TEST_F(WriteToTopic_Two_WriteSession, TFixture)
 {

@@ -62,7 +62,7 @@ namespace NKikimr {
             TIntrusivePtr<TLsnMngr> lsnMngr,
             TPDiskCtxPtr pdiskCtx,
             THugeBlobCtxPtr hugeBlobCtx,
-            ui32 minREALHugeBlobInBytes,
+            ui32 minHugeBlobInBytes,
             const TActorId skeletonId,
             bool runHandoff,
             THullDbRecovery &&uncond,
@@ -215,7 +215,7 @@ namespace NKikimr {
 
         void PermitGarbageCollection(const TActorContext& ctx);
 
-        void ApplyHugeBlobSize(ui32 minREALHugeBlobInBytes, const TActorContext& ctx);
+        void ApplyHugeBlobSize(ui32 minHugeBlobInBytes, const TActorContext& ctx);
 
         void CompactFreshLogoBlobsIfRequired(const TActorContext& ctx);
     };

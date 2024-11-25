@@ -65,6 +65,9 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if(TCoGraceJoinCore::Match(input.Get())) {
         InferStatisticsForGraceJoin(input, TypeCtx, Pctx, CardinalityHints);
     }
+    else if(TDqPhyCrossJoin::Match(input.Get())) {
+        InferStatisticsForDqPhyCrossJoin(input, TypeCtx);
+    }
 
     // Do nothing in case of EquiJoin, otherwise the EquiJoin rule won't fire
     else if(TCoEquiJoin::Match(input.Get())){

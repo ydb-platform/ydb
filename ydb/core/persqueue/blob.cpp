@@ -418,13 +418,13 @@ void TBatch::Unpack() {
     UnpackTo(&Blobs);
     Y_ABORT_UNLESS(InternalPartsPos.empty());
     for (ui32 i = 0; i < Blobs.size(); ++i) {
-        if (!Blobs[i].IsLastPart())
+        auto& b = Blobs[i];
+        if (!b.IsLastPart()) {
             InternalPartsPos.push_back(i);
+        }
+        EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
     }
     Y_ABORT_UNLESS(InternalPartsPos.size() == GetInternalPartsCount());
-    if (!Blobs.empty()) {
-        EndWriteTimestamp = Blobs.back().WriteTimestamp;
-    }
 
     PackedData.Clear();
 }

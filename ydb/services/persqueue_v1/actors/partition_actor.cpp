@@ -929,7 +929,7 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
         ClientCommitOffset = CommittedOffset;
     }
 
-    if (EndOffset > ReadOffset) {
+    if (EndOffset > ReadOffset && !MaxTimeLagMs && !ReadTimestampMs) {
         SendPartitionReady(ctx);
     } else {
         WaitForData = true;
@@ -1010,7 +1010,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
 
     Y_ABORT_UNLESS(InitDone);
     Y_ABORT_UNLESS(PipeClient);
-    Y_ABORT_UNLESS(ReadOffset >= EndOffset);
+    Y_ABORT_UNLESS(ReadOffset >= EndOffset || MaxTimeLagMs || ReadTimestampMs);
 
     TAutoPtr<TEvPersQueue::TEvHasDataInfo> event(new TEvPersQueue::TEvHasDataInfo());
     event->Record.SetPartition(Partition.Partition);
@@ -1058,7 +1058,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
     Y_ABORT_UNLESS(record.HasEndOffset());
     Y_ABORT_UNLESS(EndOffset <= record.GetEndOffset()); //end offset could not be changed if no data arrived, but signal will be sended anyway after timeout
-    Y_ABORT_UNLESS(ReadOffset >= EndOffset); //otherwise no WaitData were needed
+    Y_ABORT_UNLESS(ReadOffset >= EndOffset || MaxTimeLagMs || ReadingFinishedSent); //otherwise no WaitData were needed
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                     << " wait for data done: " << " readOffset " << ReadOffset << " EndOffset " << EndOffset << " newEndOffset "
@@ -1068,7 +1068,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     EndOffset = record.GetEndOffset();
     SizeLag = record.GetSizeLag();
 
-    if (ReadOffset < EndOffset) {
+    if (ReadOffset < EndOffset && !record.GetReadingFinished()) {
         WaitForData = false;
         WaitDataInfly.clear();
         SendPartitionReady(ctx);

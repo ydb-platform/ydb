@@ -743,6 +743,48 @@ void InferStatisticsForDqMerge(const TExprNode::TPtr& input, TTypeAnnotationCont
     typeCtx->SetStats(merge.Raw(), newStats);
 }
 
+/** 
+ * Just update the sorted order with alias
+ */
+void InferStatisticsForDqPhyCrossJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
+    auto inputNode = TExprBase(input);
+    auto cross = inputNode.Cast<TDqPhyCrossJoin>();
+
+    auto inputStats = typeCtx->GetStats(cross.LeftInput().Raw());
+    if (!inputStats) {
+        return;
+    }
+
+    auto sortedPrefix = inputStats->SortColumns;
+    TString aliasName = "";
+    if (auto leftLabel = cross.LeftLabel().Maybe<TCoAtom>()) {
+        aliasName = leftLabel.Cast().StringValue();
+    }
+    
+    TVector<TString> sortedPrefixCols;
+    TVector<TString> sortedPrefixAliases;
+
+    if (sortedPrefix) {
+        sortedPrefixCols = sortedPrefix->Columns;
+        sortedPrefixAliases = sortedPrefix->Aliases;
+        if (aliasName != "") {
+            for (size_t i=0; i<sortedPrefix->Aliases.size(); i++) {
+                sortedPrefixAliases[i] = aliasName;
+            }
+        }
+    }
+
+    auto sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>();
+    if (sortedPrefixCols.size()) {
+        sortedPrefixPtr = TIntrusivePtr<TOptimizerStatistics::TSortColumns>(new TOptimizerStatistics::TSortColumns(sortedPrefixCols, sortedPrefixAliases));
+    }
+
+    auto outputStats = RemoveOrdering(inputStats);
+    outputStats->SortColumns = sortedPrefixPtr;
+    typeCtx->SetStats(cross.Raw(), outputStats);
+}
+
+
 
 std::shared_ptr<TOptimizerStatistics> RemoveOrdering(const std::shared_ptr<TOptimizerStatistics>& stats) {
     if (stats->SortColumns) {

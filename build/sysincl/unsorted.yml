@@ -154,10 +154,6 @@
   - vasprintf.h
   #endif
 
-- source_filter: "^contrib/(libs/(apache|libuv)|python/uWSGI)"
-  includes:
-  - port.h
-
 - includes:
   - cpu-features.h
   - cpuid.h

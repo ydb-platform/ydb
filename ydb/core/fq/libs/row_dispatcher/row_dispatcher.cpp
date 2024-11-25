@@ -40,6 +40,7 @@ struct TRowDispatcherMetrics {
         ClientsCount = Counters->GetCounter("ClientsCount");
         RowsSent = Counters->GetCounter("RowsSent", true);
         NewClients = Counters->GetCounter("NewClients", true);
+        NodesReconnect = Counters->GetCounter("NodesReconnect", true);
     }
 
     ::NMonitoring::TDynamicCounterPtr Counters;
@@ -47,6 +48,7 @@ struct TRowDispatcherMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr ClientsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr RowsSent;
     ::NMonitoring::TDynamicCounters::TCounterPtr NewClients;
+    ::NMonitoring::TDynamicCounters::TCounterPtr NodesReconnect;
 };
 
 
@@ -450,6 +452,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
 
 void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected, node id " << ev->Get()->NodeId);
+    Metrics.NodesReconnect->Inc();
     NodesTracker.HandleNodeConnected(ev->Get()->NodeId);
     for (auto& [actorId, consumer] : Consumers) {
         consumer->EventsQueue.HandleNodeConnected(ev->Get()->NodeId);
@@ -458,6 +461,7 @@ void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev
 
 void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
+    Metrics.NodesReconnect->Inc();
     NodesTracker.HandleNodeDisconnected(ev->Get()->NodeId);
     for (auto& [actorId, consumer] : Consumers) {
         consumer->EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);

@@ -24,10 +24,13 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
         if (!isFinished) {
             sourceIdxToContinue = frontSource->GetSourceIdx();
         }
-        if (table) {
+        if (table && table->num_rows()) {
             auto cursor =
                 std::make_shared<TSimpleScanCursor>(frontSource->GetStartPKRecordBatch(), frontSource->GetSourceId(), startIndex + recordsCount);
             reader.OnIntervalResult(std::make_shared<TPartialReadResult>(nullptr, nullptr, table, cursor, sourceIdxToContinue));
+        } else if (sourceIdxToContinue) {
+            ContinueSource(*sourceIdxToContinue);
+            break;
         }
         if (isFinished) {
             AFL_VERIFY(FetchingSourcesByIdx.erase(frontSource->GetSourceIdx()));

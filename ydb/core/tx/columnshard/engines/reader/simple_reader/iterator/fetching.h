@@ -162,6 +162,7 @@ private:
     std::shared_ptr<IDataSource> Source;
     TFetchingScriptCursor Cursor;
     bool FinishedFlag = false;
+    NColumnShard::TCounterGuard CountersGuard;
 
 protected:
     virtual bool DoApply(IDataReader& owner) const override;
@@ -172,11 +173,7 @@ public:
         return "STEP_ACTION";
     }
 
-    TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId)
-        : TBase(ownerActorId)
-        , Source(source)
-        , Cursor(std::move(cursor)) {
-    }
+    TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId);
 };
 
 class TBuildFakeSpec: public IFetchingStep {

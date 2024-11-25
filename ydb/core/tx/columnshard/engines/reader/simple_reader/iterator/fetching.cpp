@@ -35,6 +35,13 @@ TConclusionStatus TStepAction::DoExecuteImpl() {
     return TConclusionStatus::Success();
 }
 
+TStepAction::TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId)
+    : TBase(ownerActorId)
+    , Source(source)
+    , Cursor(std::move(cursor))
+    , CountersGuard(Source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard()) {
+}
+
 TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     return !source->StartFetchingColumns(source, step, Columns);
@@ -349,20 +356,22 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
     auto context = source->GetContext();
     NArrow::TGeneralContainer::TTableConstructionContext contextTableConstruct;
     contextTableConstruct.SetColumnNames(context->GetProgramInputColumns()->GetColumnNamesVector());
-    if (source->GetStageResult().GetNotAppliedFilter()) {
+    if (!source->IsSourceInMemory()) {
         contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
     } else {
         AFL_VERIFY(StartIndex == 0);
-        AFL_VERIFY(RecordsCount == source->GetRecordsCount());
+        AFL_VERIFY(RecordsCount == source->GetRecordsCount())("records_count", RecordsCount)("source", source->GetRecordsCount());
     }
     std::shared_ptr<arrow::Table> resultBatch;
     if (!source->GetStageResult().IsEmpty()) {
         resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
         AFL_VERIFY((ui32)resultBatch->num_columns() == context->GetProgramInputColumns()->GetColumnNamesVector().size());
         if (auto filter = source->GetStageResult().GetNotAppliedFilter()) {
-            AFL_VERIFY(filter->Apply(resultBatch, StartIndex, RecordsCount));
+            filter->Apply(resultBatch, StartIndex, RecordsCount);
         }
-        NArrow::TStatusValidator::Validate(context->GetReadMetadata()->GetProgram().ApplyProgram(resultBatch));
+        if (resultBatch && resultBatch->num_rows()) {
+            NArrow::TStatusValidator::Validate(context->GetReadMetadata()->GetProgram().ApplyProgram(resultBatch));
+        }
     }
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
         new NColumnShard::TEvPrivate::TEvTaskProcessedResult(

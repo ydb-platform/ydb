@@ -42,6 +42,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     TErasureSplitContext ErasureSplitContext = TErasureSplitContext::Init(MaxBytesToSplitAtOnce);
     TBatchedVec<TStackVec<TRope, TypicalPartsInBlob>> PartSets;
 
+    std::set<TInstant> PutDeadlines;
     TStackVec<ui64, TypicalDisksInGroup> WaitingVDiskResponseCount;
     ui64 WaitingVDiskCount = 0;
 
@@ -646,9 +647,8 @@ public:
             << " Tactic# " << TEvBlobStorage::TEvPut::TacticName(Tactic)
             << " RestartCounter# " << RestartCounter);
 
-        TInstant firstDeadline = TInstant::Max();
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
-            firstDeadline = std::min(firstDeadline, PutImpl.Blobs[blobIdx].Deadline);
+            PutDeadlines.insert(PutImpl.Blobs[blobIdx].Deadline);
             LWTRACK(DSProxyPutBootstrapStart, PutImpl.Blobs[blobIdx].Orbit);
         }
 
@@ -669,9 +669,8 @@ public:
             getTotalSize()
         );
 
-        TInstant now = TActivationContext::Now();
-        TInstant wakeupTime = std::min(now + TDuration::MilliSeconds(DsPutWakeupMs), firstDeadline);
-        Become(&TBlobStorageGroupPutRequest::StateWait, wakeupTime, new TKikimrEvents::TEvWakeup);
+        Become(&TBlobStorageGroupPutRequest::StateWait);
+        ScheduleWakeup();
 
         PartSets.resize(PutImpl.Blobs.size());
         for (auto& partSet : PartSets) {
@@ -730,7 +729,7 @@ public:
             }
         }
         ReplyAndDieWithLastResponse(putResults);
-        Schedule(TDuration::MilliSeconds(DsPutWakeupMs), new TKikimrEvents::TEvWakeup);
+        ScheduleWakeup();
     }
 
     void UpdatePengingVDiskResponseCount(const TDeque<TPutImpl::TPutEvent>& putEvents) {
@@ -795,6 +794,17 @@ public:
             << " ExpiredVDiskSet# " << ExpiredVDiskSet.ToString()
             << " IncarnationRecords# " << dumpIncarnationRecords()
             << " State# " << PutImpl.DumpFullState());
+    }
+
+    void ScheduleWakeup() {
+        TInstant deadline = TActivationContext::Now() + TDuration::MilliSeconds(DsPutWakeupMs);
+    
+        auto it = PutDeadlines.begin();
+        if (it != PutDeadlines.end() && *it <= deadline) {
+            deadline = *it;
+            PutDeadlines.erase(it);
+        }
+        Schedule(deadline, new TKikimrEvents::TEvWakeup);
     }
 
     STATEFN(StateWait) {

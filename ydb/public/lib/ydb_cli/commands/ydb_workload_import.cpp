@@ -161,22 +161,34 @@ private:
 void TWorkloadCommandImport::TUploadCommand::ProcessDataGenerator(std::shared_ptr<NYdbWorkload::IBulkDataGenerator> dataGen) noexcept try {
     TAtomic counter = 0;
     for (auto portions = dataGen->GenerateDataPortion(); !portions.empty() && !AtomicGet(ErrorsCount); portions = dataGen->GenerateDataPortion()) {
+        TVector<TAsyncStatus> sendingResults;
         for (const auto& data: portions) {
             AtomicIncrement(counter);
-            Writer->WriteDataPortion(data).Apply(
-                [data, this, &counter, g = MakeAtomicShared<TGuard<TFastSemaphore>>(*InFlightSemaphore)](const TAsyncStatus& result) {
-                    const auto& res = result.GetValueSync();
-                    data->SetSendResult(res);
-                    auto guard = Guard(Lock);
-                    if (!res.IsSuccess()) {
-                        Cerr << "Bulk upset to " << data->GetTable() << " failed, " << res.GetStatus() << ", " << res.GetIssues().ToString() << Endl;
-                        AtomicIncrement(ErrorsCount);
-                    } else if (data->GetSize()) {
-                        Bar->AddProgress(data->GetSize());
-                    }
-                    AtomicDecrement(counter);
-                });
+            sendingResults.emplace_back(Writer->WriteDataPortion(data).Apply([&counter, g = MakeAtomicShared<TGuard<TFastSemaphore>>(*InFlightSemaphore)](const TAsyncStatus& result) {
+                AtomicDecrement(counter);
+                return result.GetValueSync();
+            }));
         }
+        NThreading::WaitAll(sendingResults).Apply([this, sendingResults, portions](const NThreading::TFuture<void>&) {
+            bool success = true;
+            for (size_t i = 0; i < portions.size(); ++i) {
+                const auto& data = portions[i];
+                const auto& res = sendingResults[i].GetValueSync();
+                auto guard = Guard(Lock);
+                if (!res.IsSuccess()) {
+                    Cerr << "Bulk upset to " << data->GetTable() << " failed, " << res.GetStatus() << ", " << res.GetIssues().ToString() << Endl;
+                    AtomicIncrement(ErrorsCount);
+                    success = false;
+                } else if (data->GetSize()) {
+                    Bar->AddProgress(data->GetSize());
+                }
+            }
+            if (success) {
+                for (size_t i = 0; i < portions.size(); ++i) {
+                    portions[i]->SetSendResult(sendingResults[i].GetValueSync());
+                }
+            }
+        });
         if (AtomicGet(ErrorsCount)) {
             break;
         }

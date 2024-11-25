@@ -333,6 +333,7 @@ inline std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths(
     const auto& bc = context.SS->BackupCollections[bcPath->PathId];
 
     auto& collectionPaths = paths[targetPath];
+    collectionPaths.emplace(targetDir);
 
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         std::pair<TString, TString> paths;

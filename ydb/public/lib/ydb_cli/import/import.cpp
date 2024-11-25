@@ -650,9 +650,9 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
     std::vector<TString> buffer;
 
     auto upsertCsvFunc = [&, jobInflightManager](std::vector<TString>&& buffer, ui64 row) {
-            auto buildFunc = [jobInflightManager, &parser, buffer = std::move(buffer), &filePath, row, this]() {
+            auto buildFunc = [jobInflightManager, &parser, buffer = std::move(buffer), &filePath, row, this] () mutable {
                 try {
-                    return parser.BuildList(const_cast<std::vector<TString>&>(buffer), filePath, row);
+                    return parser.BuildList(buffer, filePath, row);
                 } catch (const std::exception& e) {
                     if (!Failed.exchange(true)) {
                         ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
@@ -777,9 +777,9 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
             // Job ends on receiving final request (after all retries)
             std::counting_semaphore<> jobsInflight(maxJobInflight);
             auto upsertCsvFunc = [&](std::vector<TString>&& buffer) {
-                auto buildFunc = [&jobsInflight, &parser, buffer = std::move(buffer), &filePath, this]() {
+                auto buildFunc = [&jobsInflight, &parser, buffer = std::move(buffer), &filePath, this]() mutable {
                     try {
-                        return parser.BuildList(const_cast<std::vector<TString>&>(buffer), filePath);
+                        return parser.BuildList(buffer, filePath);
                     } catch (const std::exception& e) {
                         if (!Failed.exchange(true)) {
                             ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));

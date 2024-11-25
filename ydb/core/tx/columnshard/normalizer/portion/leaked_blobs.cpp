@@ -9,6 +9,8 @@
 
 #include <ydb/library/actors/core/actor.h>
 
+#include <util/string/vector.h>
+
 namespace NKikimr::NOlap {
 
 class TLeakedBlobsNormalizerChanges: public INormalizerChanges {
@@ -41,6 +43,13 @@ public:
 
     ui64 GetSize() const override {
         return Leaks.size();
+    }
+
+    TString DebugString() const override {
+        TStringBuilder sb;
+        sb << "tablet=" << TabletId;
+        sb << ";leaked_blobs=[" << JoinStrings(Leaks.begin(), Leaks.end(), ",") << "]";
+        return sb;
     }
 };
 

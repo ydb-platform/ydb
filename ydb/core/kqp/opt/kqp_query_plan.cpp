@@ -1063,7 +1063,6 @@ private:
 
     TString OlapFilterExpr(const TExprNode::TPtr& node) {
         TVector<TString> s;
-Cerr << node->Dump() << Endl;
         if (TMaybeNode<TKqpOlapNot>(node)) {
             s.emplace_back("NOT");
         } else if (auto maybeList = TMaybeNode<TCoAtomList>(node)) {
@@ -1071,12 +1070,12 @@ Cerr << node->Dump() << Endl;
             size_t listSize = listPtr->Children().size();
             if (listSize == 3) {
                 THashMap<TString, TString> strComp = {
-                    {"eq", "=="}, 
-                    {"neq", "!="},
-                    {"lt", "<"},
-                    {"lte", "<="},
-                    {"gt", ">"},
-                    {"gte", ">="}
+                    {"eq", " == "},
+                    {"neq", " != "},
+                    {"lt", " < "},
+                    {"lte", " <= "},
+                    {"gt", " > "},
+                    {"gte", " >= "}
                 };
                 THashMap<TString, TString> strRegexp = {
                     {"string_contains", "%s LIKE \"%%%s%%\""},
@@ -1090,13 +1089,13 @@ Cerr << node->Dump() << Endl;
                     if (listPtr->Child(2)->ChildrenSize() >= 1) {
                         value = TString(listPtr->Child(2)->Child(0)->Content());
                         if (TString(listPtr->Child(2)->Content()) == "String") {
-                            value = '"' + value + '"';
+                            value = TStringBuilder() << '"' << value << '"';
                         }
                     } else if (listPtr->Child(2)->ChildrenSize() == 0 && listPtr->Child(2)->Content()) {
                         value = TString(listPtr->Child(2)->Content());
                     }
                     
-                    return Sprintf("%s %s %s", attr.c_str(), strComp[compSign].c_str(), value.c_str());
+                    return TStringBuilder() << attr << strComp[compSign] << value;
                 } else if (strRegexp.contains(compSign)) {
                     TString attr = TString(listPtr->Child(1)->Content());
                     TString value;
@@ -1130,7 +1129,7 @@ Cerr << node->Dump() << Endl;
     TString OlapFilterStr(const TKqpOlapFilter& filter) {
         auto result = OlapFilterExpr(filter.Condition().Ptr());
         if (auto maybeInnerFilter = TMaybeNode<TKqpOlapFilter>(filter.Input().Ptr())) {
-            result = "(" + result + ") AND (" + OlapFilterStr(maybeInnerFilter.Cast()) + ")";
+            return TStringBuilder() << '(' << OlapFilterStr(maybeInnerFilter.Cast()) << ") AND (" << result << ')';
         }
         return result;
     }

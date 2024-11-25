@@ -1,6 +1,7 @@
 #include <util/string/join.h>
 
 #include <ydb/library/login/login.h>
+#include <ydb/library/login/password_checker/password_checker.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/testlib/service_mocks/ldap_mock/ldap_simple_server.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -13,6 +14,27 @@
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
+
+namespace NSchemeShardUT_Private {
+
+void SetPasswordCheckerParameters(TTestActorRuntime &runtime, ui64 schemeShard, const NLogin::TPasswordCheckParameters::TInitializer& parameters) {
+    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+
+    ::NKikimrProto::TPasswordCheckerParameters passwordCheckParameters;
+    passwordCheckParameters.SetMinimumLength(parameters.MinPasswordLength);
+    passwordCheckParameters.SetMaximumLength(parameters.MaxPasswordLength);
+    passwordCheckParameters.SetRestrictLower(parameters.NeedLowerCase);
+    passwordCheckParameters.SetRestrictUpper(parameters.NeedUpperCase);
+    passwordCheckParameters.SetRestrictNumbers(parameters.NeedNumbers);
+    passwordCheckParameters.SetRestrictSpecial(parameters.NeedSpecialSymbols);
+    passwordCheckParameters.SetSpecialChars(parameters.SpecialSymbols);
+    *request->Record.MutableConfig()->MutableAuthConfig()->MutablePasswordCheckerParameters() = passwordCheckParameters;
+    SetConfig(runtime, schemeShard, std::move(request));
+}
+
+const TString VALID_SPECIAL_SYMBOLS = "!@#$%^&*()_+{}|<>?=";
+
+}  // namespace NSchemeShardUT_Private
 
 Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
 
@@ -50,6 +72,128 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
         UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
         UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() > 0);
+    }
+
+    Y_UNIT_TEST(ChangeAcceptablePasswordParameters) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        // Password parameters:
+        //  length 0 - 4294967295
+        //  optional: lower case, upper case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1", {{NKikimrScheme::StatusSuccess}});
+        auto resultLogin = Login(runtime, "user1", "password1");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+        UNIT_ASSERT(describe.HasPathDescription());
+        UNIT_ASSERT(describe.GetPathDescription().HasDomainDescription());
+        UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().HasSecurityState());
+        UNIT_ASSERT(describe.GetPathDescription().GetDomainDescription().GetSecurityState().PublicKeysSize() > 0);
+
+        // Accept password without lower case symbols
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user2", "PASSWORDU2", {{NKikimrScheme::StatusSuccess}});
+         resultLogin = Login(runtime, "user2", "PASSWORDU2");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        // Password parameters:
+        //  length 0 - 4294967295
+        //  optional: upper case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
+        //  required: lower case
+        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.NeedLowerCase = true, .SpecialSymbols = VALID_SPECIAL_SYMBOLS});
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user3", "PASSWORDU3", {{NKikimrScheme::StatusPreconditionFailed}});
+        // Add lower case symbols to password
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user3", "PASswORDu3", {{NKikimrScheme::StatusSuccess}});
+        resultLogin = Login(runtime, "user3", "PASswORDu3");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+
+        // Accept password without upper case symbols
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user4", "passwordu4", {{NKikimrScheme::StatusSuccess}});
+        resultLogin = Login(runtime, "user4", "passwordu4");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        // Password parameters:
+        //  length 0 - 4294967295
+        //  optional: numbers, special symbols from list !@#$%^&*()_+{}|<>?=
+        //  required: lower case, upper case
+        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.NeedLowerCase = true, .NeedUpperCase = true, .SpecialSymbols = VALID_SPECIAL_SYMBOLS});
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user5", "passwordu5", {{NKikimrScheme::StatusPreconditionFailed}});
+        // Add upper case symbols to password
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user5", "PASswORDu5", {{NKikimrScheme::StatusSuccess}});
+        resultLogin = Login(runtime, "user5", "PASswORDu5");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+
+        // Accept short and long passwords
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user6", "pasSWu6", {{NKikimrScheme::StatusSuccess}});
+        resultLogin = Login(runtime, "user6", "pasSWu6");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user7", "pasSW12345Word!*&u7", {{NKikimrScheme::StatusSuccess}});
+        resultLogin = Login(runtime, "user7", "pasSW12345Word!*&u7");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        // Password parameters:
+        //  length 8 - 15
+        //  optional: numbers, special symbols from list !@#$%^&*()_+{}|<>?=
+        //  required: lower case, upper case
+        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinPasswordLength = 8, .MaxPasswordLength = 15, .NeedLowerCase = true, .NeedUpperCase = true, .SpecialSymbols = VALID_SPECIAL_SYMBOLS});
+        // Too short password
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user8", "pasSWu8", {{NKikimrScheme::StatusPreconditionFailed}});
+        // Too long password
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user8", "pasSW12345Word!*&u8", {{NKikimrScheme::StatusPreconditionFailed}});
+        // Password has correct length
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user8", "PASswORDu8", {{NKikimrScheme::StatusSuccess}});
+        resultLogin = Login(runtime, "user8", "PASswORDu8");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+
+        // Accept password without numbers
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user9", "passWorDunine", {{NKikimrScheme::StatusSuccess}});
+        resultLogin = Login(runtime, "user9", "passWorDunine");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        // Password parameters:
+        //  length 8 - 15
+        //  optional: special symbols from list !@#$%^&*()_+{}|<>?=
+        //  required: lower case, upper case, numbers
+        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinPasswordLength = 8,
+                                                                                         .MaxPasswordLength = 15,
+                                                                                         .NeedLowerCase = true,
+                                                                                         .NeedUpperCase = true,
+                                                                                         .NeedNumbers = true,
+                                                                                         .SpecialSymbols = VALID_SPECIAL_SYMBOLS});
+         TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user10", "passWorDuten", {{NKikimrScheme::StatusPreconditionFailed}});
+        // Password with numbers
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user10", "PASswORDu10", {{NKikimrScheme::StatusSuccess}});
+        resultLogin = Login(runtime, "user10", "PASswORDu10");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+
+        // Accept password without special symbols
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user11", "passWorDu11", {{NKikimrScheme::StatusSuccess}});
+        resultLogin = Login(runtime, "user11", "passWorDu11");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        // Password parameters:
+        //  length 8 - 15
+        //  required: lower case, upper case, numbers, special symbols from list !@#$%^&*()_+{}|<>?=
+        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinPasswordLength = 8,
+                                                                                         .MaxPasswordLength = 15,
+                                                                                         .NeedLowerCase = true,
+                                                                                         .NeedUpperCase = true,
+                                                                                         .NeedNumbers = true,
+                                                                                         .NeedSpecialSymbols = true,
+                                                                                         .SpecialSymbols = VALID_SPECIAL_SYMBOLS});
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user12", "passWorDu12", {{NKikimrScheme::StatusPreconditionFailed}});
+        // Password with special symbols
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user12", "PASswORDu12*&%#", {{NKikimrScheme::StatusSuccess}});
+        resultLogin = Login(runtime, "user12", "PASswORDu12*&%#");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+        // Password parameters:
+        //  length 8 - 15
+        //  required: lower case, upper case, numbers, special symbols from list *#
+        SetPasswordCheckerParameters(runtime, TTestTxConfig::SchemeShard, {.MinPasswordLength = 8,
+                                                                                         .MaxPasswordLength = 15,
+                                                                                         .NeedLowerCase = true,
+                                                                                         .NeedUpperCase = true,
+                                                                                         .NeedNumbers = true,
+                                                                                         .NeedSpecialSymbols = true,
+                                                                                         .SpecialSymbols = "*#"}); // Only 2 special symbols are valid
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user13", "PASswORDu13*&%#", {{NKikimrScheme::StatusPreconditionFailed}});
+        TestCreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user13", "PASswORDu12*#", {{NKikimrScheme::StatusSuccess}});
+        resultLogin = Login(runtime, "user13", "PASswORDu12*#");
+        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
     }
 }
 

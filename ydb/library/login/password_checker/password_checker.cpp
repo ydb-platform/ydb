@@ -51,6 +51,39 @@ bool TPasswordCheckParameters::IsSpecialSymbolValid(char symbol) const {
     return SpecialSymbols.contains(symbol);
 }
 
+void TPasswordCheckParameters::SetMinPasswordLength(ui32 length) {
+    MinPasswordLength = length;
+}
+
+void TPasswordCheckParameters::SetMaxPasswordLength(ui32 length) {
+    MaxPasswordLength = length;
+}
+
+void TPasswordCheckParameters::SetLowerCaseUse(bool flag) {
+    NeedLowerCase = flag;
+}
+
+void TPasswordCheckParameters::SetUpperCaseUse(bool flag) {
+    NeedUpperCase = flag;
+}
+
+void TPasswordCheckParameters::SetNumbersUse(bool flag) {
+    NeedNumbers = flag;
+}
+
+void TPasswordCheckParameters::SetSpecialSymbolsUse(bool flag) {
+    NeedSpecialSymbols = flag;
+}
+
+void TPasswordCheckParameters::SetSpecialSymbols(const TString& specialSymbols) {
+    SpecialSymbols.clear();
+    for (const char symbol : specialSymbols) {
+        if (VALID_SPECIAL_SYMBOLS.contains(symbol)) {
+            SpecialSymbols.insert(symbol);
+        }
+    }
+}
+
 const std::unordered_set<char> TPasswordCheckParameters::VALID_SPECIAL_SYMBOLS = {'!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '{', '}', '|', '<', '>', '?', '='};
 
 void TPasswordChecker::TFlagsStore::SetLowerCase(bool flag) {
@@ -151,6 +184,10 @@ TPasswordChecker::TResult TPasswordChecker::Check(const TString& username, const
         return {.Success = false, .Error = errorMessage};
     }
     return {.Success = true};
+}
+
+void TPasswordChecker::Update(const TPasswordCheckParameters& checkParameters) {
+    CheckParameters = checkParameters;
 }
 
 } // NLogin

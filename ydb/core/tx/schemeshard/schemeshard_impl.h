@@ -36,6 +36,7 @@
 #include <ydb/core/protos/counters_schemeshard.pb.h>
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/pipe_tracker.h>
@@ -496,6 +497,10 @@ public:
 
     void ConfigureBackgroundCleaningQueue(
         const NKikimrConfig::TBackgroundCleaningConfig& config,
+        const TActorContext &ctx);
+
+    void ConfigureLoginProvider(
+        const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx);
 
     void StartStopCompactionQueues();

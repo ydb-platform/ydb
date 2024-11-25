@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(PasswordChecker) {
         TPasswordCheckParameters checkParameters({.SpecialSymbols = VALID_SPECIAL_SYMBOLS});
         TPasswordChecker passwordChecker(checkParameters);
         TString username = "testuser";
-        TString password = "ASDF42*qwerty~~";
+        TString password = "ASDF42*qwerty~~"; // ~ is invalid character
         TPasswordChecker::TResult result = passwordChecker.Check(username, password);
         UNIT_ASSERT_C(!result.Success, "Must be error");
         UNIT_ASSERT_STRINGS_EQUAL(result.Error, "Password contains unacceptable characters");

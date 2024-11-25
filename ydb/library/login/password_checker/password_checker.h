@@ -19,9 +19,9 @@ public:
         TString SpecialSymbols;
     };
 
-private:
     static const std::unordered_set<char> VALID_SPECIAL_SYMBOLS;
 
+private:
     ui32 MinPasswordLength = 0;
     ui32 MaxPasswordLength = std::numeric_limits<ui32>::max();
     bool NeedLowerCase = false;
@@ -41,6 +41,14 @@ public:
     bool NeedNumbersUse() const;
     bool NeedSpecialSymbolsUse() const;
     bool IsSpecialSymbolValid(char symbol) const;
+
+    void SetMinPasswordLength(ui32 length);
+    void SetMaxPasswordLength(ui32 length);
+    void SetLowerCaseUse(bool flag);
+    void SetUpperCaseUse(bool flag);
+    void SetNumbersUse(bool flag);
+    void SetSpecialSymbolsUse(bool flag);
+    void SetSpecialSymbols(const TString& specialSymbols);
 };
 
 class TPasswordChecker {
@@ -76,6 +84,7 @@ private:
 public:
     TPasswordChecker(const TPasswordCheckParameters& checkParameters);
     TResult Check(const TString& username, const TString& password) const;
+    void Update(const TPasswordCheckParameters& checkParameters);
 };
 
 } // NLogin

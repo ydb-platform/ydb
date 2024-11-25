@@ -7132,6 +7132,10 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         );
     }
 
+    if (appConfig.HasAuthConfig()) {
+        ConfigureLoginProvider(appConfig.GetAuthConfig(), ctx);
+    }
+
     if (IsSchemeShardConfigured()) {
         StartStopCompactionQueues();
         if (BackgroundCleaningQueue) {
@@ -7323,6 +7327,35 @@ void TSchemeShard::ConfigureBackgroundCleaningQueue(
                  << ", Rate# " << BackgroundCleaningQueue->GetRate()
                  << ", WakeupInterval# " << cleaningConfig.WakeupInterval
                  << ", InflightLimit# " << cleaningConfig.InflightLimit);
+}
+
+void TSchemeShard::ConfigureLoginProvider(
+        const ::NKikimrProto::TAuthConfig& config,
+        const TActorContext &ctx)
+{
+    const auto& passwordCheckParameters = config.GetPasswordCheckerParameters();
+    PasswordCheckParameters.SetMinPasswordLength(passwordCheckParameters.GetMinimumLength());
+    PasswordCheckParameters.SetMaxPasswordLength(passwordCheckParameters.GetMaximumLength());
+    PasswordCheckParameters.SetLowerCaseUse(passwordCheckParameters.GetRestrictLower());
+    PasswordCheckParameters.SetUpperCaseUse(passwordCheckParameters.GetRestrictUpper());
+    PasswordCheckParameters.SetNumbersUse(passwordCheckParameters.GetRestrictNumbers());
+    PasswordCheckParameters.SetSpecialSymbolsUse(passwordCheckParameters.GetRestrictSpecial());
+    PasswordCheckParameters.SetSpecialSymbols(passwordCheckParameters.GetSpecialChars());
+
+    LoginProvider.UpdatePasswordCheckParameters(PasswordCheckParameters);
+
+    auto printBool = [] (bool flag) -> TString {
+        return (flag ? "true" : "false");
+    };
+
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                 "LoginProvider configured: MinPasswordLength# " << PasswordCheckParameters.GetMinPasswordLength()
+                 << ", MaxPasswordLength# " << PasswordCheckParameters.GetMaxPasswordLength()
+                 << ", NeedLowerCase# " << printBool(PasswordCheckParameters.NeedLowerCaseUse())
+                 << ", NeedUpperCase# " << printBool(PasswordCheckParameters.NeedUpperCaseUse())
+                 << ", NeedNumbers# " << printBool(PasswordCheckParameters.NeedNumbersUse())
+                 << ", NeedSpecialSymbols# " << printBool(PasswordCheckParameters.NeedSpecialSymbolsUse())
+                 << ", SpecialSymbols# " << passwordCheckParameters.GetSpecialChars());
 }
 
 void TSchemeShard::StartStopCompactionQueues() {

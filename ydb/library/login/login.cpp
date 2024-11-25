@@ -59,6 +59,13 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
         response.Error = "Name is not allowed";
         return response;
     }
+
+    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
+    if (!passwordCheckResult.Success) {
+        response.Error = passwordCheckResult.Error;
+        return response;
+    }
+
     auto itUserCreate = Sids.emplace(request.User, TSidRecord{.Type = NLoginProto::ESidType::USER});
     if (!itUserCreate.second) {
         if (itUserCreate.first->second.Type == ESidType::USER) {
@@ -66,12 +73,6 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
         } else {
             response.Error = "Account already exists";
         }
-        return response;
-    }
-
-    TPasswordChecker::TResult passwordCheckResult = PasswordChecker.Check(request.User, request.Password);
-    if (!passwordCheckResult.Success) {
-        response.Error = passwordCheckResult.Error;
         return response;
     }
 
@@ -677,6 +678,10 @@ TString TLoginProvider::SanitizeJwtToken(const TString& token) {
         return {};
     }
     return TStringBuilder() << TStringBuf(token).SubString(0, signaturePos) << ".**"; // <token>.**
+}
+
+void TLoginProvider::UpdatePasswordCheckParameters(const TPasswordCheckParameters& passwordCheckParameters) {
+    PasswordChecker.Update(passwordCheckParameters);
 }
 
 }

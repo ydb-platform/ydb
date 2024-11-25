@@ -174,6 +174,8 @@ public:
     TRenameGroupResponse RenameGroup(const TRenameGroupRequest& request);
     TRemoveGroupResponse RemoveGroup(const TRemoveGroupRequest& request);
 
+    void UpdatePasswordCheckParameters(const TPasswordCheckParameters& passwordCheckParameters);
+
     TLoginProvider();
     TLoginProvider(const TPasswordCheckParameters& passwordCheckParameters);
     ~TLoginProvider();

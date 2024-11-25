@@ -423,11 +423,10 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
         WaitDataRangeRequest();
         SendDataRangeResponse(params.Begin, params.End);
 
-        Cerr << ">>>> " << params.EndWriteTimestamp << Endl << Flush;
         if (params.EndWriteTimestamp == TInstant::Zero()) {
-            Cerr << ">>>> EQUALS" << Endl << Flush;
             WaitLastBlobReadRequest();
             SendLastBlobReadResponse(params.Begin, params.End);
+            Ctx->Runtime->SimulateSleep(TDuration::Seconds(1));
         }
     }
     return ret;
@@ -3226,19 +3225,7 @@ Y_UNIT_TEST_F(GetUsedStorage, TPartitionFixture) {
 } // GetPartitionWriteInfoErrors
 
 Y_UNIT_TEST_F(EndWriteTimestamp_FromBlob, TPartitionFixture) {
-    auto* actor = CreatePartition({
-                    .Partition=TPartitionId{2},
-                    .Begin=0, .End=10,
-                    //
-                    // partition configuration
-                    //
-                    .Config={.Version=1, .Consumers={}, .MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY}
-                    },
-                    //
-                    // tablet configuration
-                    //
-                    {.Version=2, .Consumers={}, .MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY}
-    );
+    auto* actor = CreatePartition({.Partition=TPartitionId{2}, .Begin=0, .End=10});
 
     auto now = TInstant::Now();
 
@@ -3249,21 +3236,7 @@ Y_UNIT_TEST_F(EndWriteTimestamp_FromBlob, TPartitionFixture) {
 Y_UNIT_TEST_F(EndWriteTimestamp_FromMeta, TPartitionFixture) {
     auto now = TInstant::Now();
 
-    auto* actor = CreatePartition({
-                    .Partition=TPartitionId{2},
-                    .Begin=0, .End=10,
-                    //
-                    // partition configuration
-                    //
-                    .Config={.Version=1, .Consumers={}, .MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY},
-                    .EndWriteTimestamp = now
-                    },
-                    //
-                    // tablet configuration
-                    //
-                    {.Version=2, .Consumers={}, .MeteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY}
-    );
-
+    auto* actor = CreatePartition({.Partition=TPartitionId{2}, .Begin=0, .End=10, .EndWriteTimestamp = now});
 
     auto endWriteTimestamp = actor->GetEndWriteTimestamp();
     UNIT_ASSERT_VALUES_EQUAL(endWriteTimestamp.MilliSeconds(), now.MilliSeconds());

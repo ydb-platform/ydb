@@ -135,7 +135,6 @@ int TCommandSql::RunCommand(TConfig& config) {
     } else if (ExplainAst) {
         // Execute explain request with full stats for the ast
         settings.ExecMode(NQuery::EExecMode::Explain);
-        settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, NQuery::EStatsMode::Full));
     } else {
         // Execute query
         settings.ExecMode(NQuery::EExecMode::Execute);

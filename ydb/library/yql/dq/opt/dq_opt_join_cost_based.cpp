@@ -357,6 +357,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     // of the EquiJoin and n-1 argument are the parameters to EquiJoin
 
     if (!DqCollectJoinRelationsWithStats(rels, typesCtx, equiJoin, providerCollect)){
+        ctx.AddWarning(YqlIssue({}, TIssuesIds::WARNING, "Cost Based Optimizer didn't work: couldn't load statistics"));
         return node;
     }
 

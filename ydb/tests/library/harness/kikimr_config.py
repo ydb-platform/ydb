@@ -179,6 +179,7 @@ class KikimrConfigGenerator(object):
         self._pdisks_info = []
         if self.__grpc_ssl_enable:
             self.__grpc_tls_data_path = grpc_tls_data_path or yatest.common.output_path()
+            cert_pem, key_pem = tls_tools.generate_selfsigned_cert(_get_fqdn())
             self.__grpc_tls_ca = cert_pem
             self.__grpc_tls_key = key_pem
             self.__grpc_tls_cert = cert_pem
@@ -437,7 +438,7 @@ class KikimrConfigGenerator(object):
             kafka_proxy_config["listening_port"] = kafka_api_port
 
             self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
-        
+
         self.full_config = dict()
         if metadata_section:
             self.full_config["metadata"] = metadata_section

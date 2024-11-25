@@ -13,6 +13,7 @@ PEERDIR(
     ydb/library/yql/dq/expr_nodes
     yql/essentials/minikql
     ydb/library/yql/providers/common/db_id_async_resolver
+    ydb/library/yql/providers/common/logging_resolver
     ydb/library/yql/providers/generic/expr_nodes
     yql/essentials/providers/result/provider
     yql/essentials/public/udf/service/stub

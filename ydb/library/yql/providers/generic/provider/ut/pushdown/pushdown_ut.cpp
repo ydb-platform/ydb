@@ -13,6 +13,7 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/library/yql/providers/common/logging_resolver/logging_resolver.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
@@ -198,6 +199,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
 
     TGenericState::TPtr GenericState;
     std::shared_ptr<TFakeDatabaseResolver> DatabaseResolver = std::make_shared<TFakeDatabaseResolver>();
+    NYql::ILoggingResolver::TPtr LoggingResolver = NYql::MakeLoggingResolverEnvMock();
     std::shared_ptr<TFakeGenericClient> GenericClient = std::make_shared<TFakeGenericClient>();
     TIntrusivePtr<IDataProvider> GenericDataSource;
     TIntrusivePtr<IDataProvider> GenericDataSink;
@@ -243,6 +245,7 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
             TypesCtx.Get(),
             FunctionRegistry.Get(),
             DatabaseResolver,
+            LoggingResolver,
             nullptr,
             GenericClient,
             GatewaysCfg.GetGeneric());

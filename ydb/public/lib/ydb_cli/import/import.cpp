@@ -584,7 +584,7 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath,
             // For every retry attempt after first request build value from strings again
             // to prevent copying data in retryFunc in a happy way when there is only one request
             TValue builtValue = prebuiltValue.has_value() ? std::move(prebuiltValue.value()) : buildFunc();
-            //prebuiltValue = std::nullopt;
+            prebuiltValue = std::nullopt;
             return tableClient.BulkUpsert(dbPath, std::move(builtValue), UpsertSettings)
                 .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
                     NYdb::TStatus status = bulkUpsertResult.GetValueSync();

@@ -10,9 +10,9 @@ SRCS(
     columnshard__progress_tx.cpp
     columnshard__propose_cancel.cpp
     columnshard__propose_transaction.cpp
-    columnshard__quota.cpp
     columnshard__scan.cpp
     columnshard__statistics.cpp
+    columnshard_subdomain_path_id.cpp
     columnshard__write.cpp
     columnshard__write_index.cpp
     columnshard.cpp

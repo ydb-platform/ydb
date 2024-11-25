@@ -63,7 +63,6 @@ void TColumnShard::PersistSubDomainPathId(ui64 ownerId, ui64 localPathId,
                                                NTabletFlatExecutor::TTransactionContext &txc) {
     SubDomainPathId.emplace(ownerId, localPathId);
     NIceDb::TNiceDb db(txc.DB);
-    Schema::SaveSpecialValue(db, Schema::EValueIds::SubDomainOwnerId, ownerId);
     Schema::SaveSpecialValue(db, Schema::EValueIds::SubDomainLocalPathId, localPathId);
 }
 

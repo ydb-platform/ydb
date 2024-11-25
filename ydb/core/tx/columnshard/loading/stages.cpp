@@ -173,17 +173,13 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         return false;
     }
 
-    std::optional<ui64> subDomainOwnerId;
     std::optional<ui64> subDomainLocalPathId;
-    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::SubDomainOwnerId, subDomainOwnerId)) {
-        return false;
-    }
     if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::SubDomainLocalPathId, subDomainLocalPathId)) {
         return false;
     }
 
-    if (subDomainOwnerId.has_value() && subDomainLocalPathId.has_value()) {
-        Self->SubDomainPathId.emplace(*subDomainOwnerId, *subDomainLocalPathId);
+    if (subDomainLocalPathId.has_value()) {
+        Self->SubDomainPathId.emplace(Self->CurrentSchemeShardId, *subDomainLocalPathId);
     }
 
     ui64 outOfSpace = 0;

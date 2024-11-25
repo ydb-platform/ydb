@@ -55,8 +55,10 @@ void TWriteOperation::CommitOnExecute(
         auto pathExists = [&](ui64 pathId) {
             return owner.TablesManager.HasTable(pathId);
         };
-        const auto counters = owner.InsertTable->Commit(dbTable, snapshot.GetPlanStep(), snapshot.GetTxId(), insertWriteIds, pathExists);
-        owner.Counters.GetTabletCounters()->OnWriteCommitted(counters);
+        if (insertWriteIds.size()) {
+            const auto counters = owner.InsertTable->Commit(dbTable, snapshot.GetPlanStep(), snapshot.GetTxId(), insertWriteIds, pathExists);
+            owner.Counters.GetTabletCounters()->OnWriteCommitted(counters);
+        }
     } else {
         for (auto&& i : InsertWriteIds) {
             owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).CommitPortionOnExecute(txc, i, snapshot);

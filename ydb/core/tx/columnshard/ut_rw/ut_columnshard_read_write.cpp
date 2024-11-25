@@ -430,7 +430,7 @@ void TestWrite(const TestTableDescription& table) {
     UNIT_ASSERT(bigData.size() > NColumnShard::TLimits::GetMaxBlobSize());
     UNIT_ASSERT(bigData.size() < NColumnShard::TLimits::GetMaxBlobSize() + 2 * 1024 * 1024);
     ok = WriteData(runtime, sender, writeId++, tableId, bigData, ydbSchema);
-    UNIT_ASSERT(!ok);
+    UNIT_ASSERT(ok);
 }
 
 void TestWriteOverload(const TestTableDescription& table) {
@@ -488,11 +488,11 @@ void TestWriteOverload(const TestTableDescription& table) {
         UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testBlob, table.Schema, false));
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrTxColumnShard::EResultStatus::OVERLOADED);
+    UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
 
     while (capturedWrites.size()) {
         resendOneCaptured();
-        UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrTxColumnShard::EResultStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
     }
 
     UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testBlob, table.Schema));   // OK after overload
@@ -530,8 +530,9 @@ void TestWriteReadDup(const TestTableDescription& table = {}) {
         TSet<ui64> txIds;
         for (ui32 i = 0; i <= 5; ++i) {
             std::vector<ui64> writeIds;
-            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds));
-            ProposeCommit(runtime, sender, ++txId, writeIds);
+            ++txId;
+            UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Upsert, txId));
+            ProposeCommit(runtime, sender, txId, writeIds, txId);
             txIds.insert(txId);
         }
         PlanCommit(runtime, sender, planStep, txIds);
@@ -545,69 +546,6 @@ void TestWriteReadDup(const TestTableDescription& table = {}) {
             UNIT_ASSERT(CheckOrdered(rb));
             UNIT_ASSERT(DataHas({ rb }, portion, true));
         }
-    }
-}
-
-void TestWriteReadLongTxDup() {
-    TTestBasicRuntime runtime;
-    TTester::Setup(runtime);
-    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-
-    TActorId sender = runtime.AllocateEdgeActor();
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-    runtime.DispatchEvents(options);
-
-    //
-
-    ui64 tableId = 1;
-    auto ydbSchema = TTestSchema::YdbSchema();
-    SetupSchema(runtime, sender, tableId);
-
-    constexpr ui32 numRows = 10;
-    std::pair<ui64, ui64> portion = { 10, 10 + numRows };
-
-    NLongTxService::TLongTxId longTxId;
-    UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
-
-    ui64 txId = 0;
-    ui64 planStep = 100;
-    std::optional<ui64> writeId;
-
-    // Only the first blob with dedup pair {longTx, dedupId} should be inserted
-    // Others should return OK (write retries emulation)
-    for (ui32 i = 0; i < 4; ++i) {
-        auto data = MakeTestBlob({ portion.first + i, portion.second + i }, ydbSchema);
-        UNIT_ASSERT(data.size() < NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
-
-        auto writeIdOpt = WriteData(runtime, sender, longTxId, tableId, 1, data, ydbSchema);
-        UNIT_ASSERT(writeIdOpt);
-        if (!i) {
-            writeId = *writeIdOpt;
-        }
-        UNIT_ASSERT_EQUAL(*writeIdOpt, *writeId);
-    }
-
-    ProposeCommit(runtime, sender, ++txId, { *writeId });
-    TSet<ui64> txIds = { txId };
-    PlanCommit(runtime, sender, planStep, txIds);
-
-    // read
-    TAutoPtr<IEventHandle> handle;
-    {
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
-        reader.SetReplyColumns(TTestSchema::ExtractNames(ydbSchema));
-        auto rb = reader.ReadAll();
-        UNIT_ASSERT(reader.IsCorrectlyFinished());
-        UNIT_ASSERT(rb);
-        UNIT_ASSERT(rb->num_rows());
-        Y_UNUSED(NArrow::TColumnOperator().VerifyIfAbsent().Extract(rb, TTestSchema::ExtractNames(ydbSchema)));
-        UNIT_ASSERT((ui32)rb->num_columns() == TTestSchema::ExtractNames(ydbSchema).size());
-        UNIT_ASSERT(CheckOrdered(rb));
-        UNIT_ASSERT(DataHas({ rb }, portion, true));
-        UNIT_ASSERT(DataHasOnly({ rb }, portion));
     }
 }
 
@@ -1736,7 +1674,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(WriteReadDuplicate) {
         TestWriteReadDup();
-        TestWriteReadLongTxDup();
     }
 
     Y_UNIT_TEST(WriteReadModifications) {

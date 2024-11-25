@@ -94,7 +94,7 @@ public:
         
         if (status == TStatus::Ok) {
             for (const auto& hint: KqpCtx.GetOptimizerHints().GetUnappliedString()) {
-                ctx.AddWarning(YqlIssue({}, TIssuesIds::YQL_UNUSED_HINT, "Unapplied hint: " + hint));
+                ctx.AddWarning(YqlIssue({}, TIssuesIds::DQ_OPTIMIZE_ERROR, "Unapplied hint: " + hint));
             }
         }
 

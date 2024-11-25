@@ -49,6 +49,7 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
     }
     result << "TABLE `" << path << "` (" << Endl;
     TVector<TStringBuilder> columns;
+    TVector<TStringBuilder> perColumnActions;
     for (const auto& column: table["columns"].GetArray()) {
         const auto& columnName = column["name"].GetString();
         columns.emplace_back();
@@ -62,6 +63,13 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
         }
         if (column["not_null"].GetBooleanSafe(false) && Params.GetStoreType() != TWorkloadBaseParams::EStoreType::Row) {
             so << " NOT NULL";
+        }
+        if (Params.IsColumnStatisticsEnabled()) {
+            perColumnActions.emplace_back();
+            const auto fp = SubstGlobalCopy(Params.GetPath() + (single ? "" : ("/" + tableName)), '/', '_');
+            perColumnActions.back() << "ALTER OBJECT `" << path << "` (TYPE TABLE) "
+                << "SET (ACTION=UPSERT_INDEX, NAME=index_" << fp << "_" << columnName << ", TYPE=COUNT_MIN_SKETCH, "
+                << "FEATURES=`{\"column_names\" : ['" << columnName << "']}`);" << Endl;
         }
     }
     result << JoinSeq(",\n", columns);
@@ -92,6 +100,10 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
         result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << table["partitioning"].GetUIntegerSafe(64) << Endl;
     }
     result << ");" << Endl;
+
+    for (const auto& action: perColumnActions) {
+        result << action;
+    }
 }
 
 std::string TWorkloadGeneratorBase::GetDDLQueries() const {
@@ -170,6 +182,8 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
         opts.AddLongOption("string", "Use String type in tables instead Utf8 one.").NoArgument().StoreValue(&StringType, "String");
         opts.AddLongOption("datetime", "Use Date and Timestamp types in tables instead Date32 and Timestamp64 ones.").NoArgument()
             .StoreValue(&DateType, "Date").StoreValue(&TimestampType, "Timestamp");
+        opts.AddLongOption("column-statistics", "Swith on per column statatistics in tables.").NoArgument()
+            .StoreTrue(&ColumnStatisticsEnabledFlag);
         break;
     case TWorkloadParams::ECommandType::Root:
         opts.AddLongOption('p', "path", "Path where benchmark tables are located")

@@ -13,6 +13,7 @@
 #include "flat_comp.h"
 #include "flat_executor_misc.h"
 #include "flat_bio_stats.h"
+#include "shared_cache_pages.h"
 #include "shared_sausagecache.h"
 #include "util_channel.h"
 
@@ -103,6 +104,7 @@ namespace NTabletFlatExecutor {
 
             Spent = new TSpent(TAppData::TimeProvider.Get());
             Registry = AppData()->TypeRegistry;
+            SharedCachePages = AppData()->SharedCachePages;
             Scheme = std::move(scheme);
             Driver = driver;
 
@@ -319,14 +321,14 @@ namespace NTabletFlatExecutor {
                 for (auto& pageCollection : result.PageCollections) {
                     auto cache = MakeIntrusive<NTable::TLoader::TCache>(pageCollection.PageCollection);
                     auto saveCompactedPages = MakeHolder<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection);
-                    
-                    auto addPage = [&saveCompactedPages, &pageCollection, &cache](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
+                    auto gcList = SharedCachePages->GCList;
+                    auto addPage = [&saveCompactedPages, &pageCollection, &cache, &gcList](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
                         auto pageId = loadedPage.PageId;
                         auto pageSize = pageCollection.PageCollection->Page(pageId).Size;
                         auto sharedPage = MakeIntrusive<TPage>(pageId, pageSize, nullptr);
                         sharedPage->Initialize(std::move(loadedPage.Data));
                         saveCompactedPages->Pages.push_back(sharedPage);
-                        cache->Fill(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), GCList), sticky);
+                        cache->Fill(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList), sticky);
                     };
                     for (auto &page : pageCollection.StickyPages) {
                         addPage(page, true);
@@ -554,6 +556,7 @@ namespace NTabletFlatExecutor {
         TVector<TBundle::TResult> Results;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
         const NScheme::TTypeRegistry * Registry = nullptr;
+        TIntrusivePtr<NSharedCache::TSharedCachePages> SharedCachePages;
 
         bool Finished = false;
         bool Failed = false;/* Failed to write blobs    */

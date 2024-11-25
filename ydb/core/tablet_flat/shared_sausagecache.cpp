@@ -2,6 +2,7 @@
 #include "flat_bio_events.h"
 #include "shared_cache_clock_pro.h"
 #include "shared_cache_events.h"
+#include "shared_cache_pages.h"
 #include "shared_cache_s3fifo.h"
 #include "shared_cache_switchable.h"
 #include "shared_page.h"
@@ -48,15 +49,12 @@ TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ReplacementPolic
     return Counters->GetCounter(TStringBuilder() << "ReplacementPolicySize/" << policy);
 }
 
-TIntrusivePtr<TSharedPageGCList> GCList = new TSharedPageGCList;
-
 struct TRequest : public TSimpleRefCount<TRequest> {
     TRequest(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, NWilson::TTraceId &&traceId)
         : Label(pageCollection->Label())
         , PageCollection(std::move(pageCollection))
         , TraceId(std::move(traceId))
     {
-
     }
 
     const TLogoBlobID Label;
@@ -251,6 +249,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     THashMap<TLogoBlobID, TCollection> Collections;
     THashMap<TActorId, TCollectionsOwner> CollectionsOwners;
     TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
+    TIntrusivePtr<NSharedCache::TSharedCachePages> SharedCachePages;
 
     TRequestQueue AsyncRequests;
     TRequestQueue ScanRequests;
@@ -354,6 +353,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Owner = owner;
 
         Logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_SAUSAGECACHE);
+        SharedCachePages = sys->AppData<TAppData>()->SharedCachePages;
     }
 
     void TakePoison()
@@ -477,7 +477,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             case PageStateLoaded:
                 Counters.CacheHitPages->Inc();
                 Counters.CacheHitBytes->Add(page->Size);
-                readyPages.emplace_back(pageId, TSharedPageRef::MakeUsed(page, GCList));
+                readyPages.emplace_back(pageId, TSharedPageRef::MakeUsed(page, SharedCachePages->GCList));
                 if (logsat)
                     pagesToWait.emplace_back(pageId);
                 Evict(Cache.Touch(page));
@@ -741,7 +741,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                         BodyProvided(collection, page);
                     }
 
-                    auto ref = TSharedPageRef::MakeUsed(page, GCList);
+                    auto ref = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
                     Y_ABORT_UNLESS(ref.IsUsed(), "Unexpected failure to grab a cached page");
                     actions[xpair.first].Accepted[pageId] = std::move(ref);
                 }
@@ -892,7 +892,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     void ProcessGCList() {
         THashSet<TCollection*> recheck;
 
-        while (auto rawPage = GCList->PopGC()) {
+        while (auto rawPage = SharedCachePages->GCList->PopGC()) {
             auto* page = static_cast<TPage*>(rawPage.Get());
             TryDrop(page, recheck);
         }
@@ -967,7 +967,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             auto &r = xpair.first;
             auto &rblock = r->ReadyPages[xpair.second];
             Y_ABORT_UNLESS(rblock.PageId == page->PageId);
-            rblock.Page = TSharedPageRef::MakeUsed(page, GCList);
+            rblock.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
 
             if (--r->PendingBlocks == 0)
                 SendReadyBlocks(*r);
@@ -1020,7 +1020,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 RemoveActivePage(page);
                 AddPassivePage(page);
                 if (page->UnUse()) {
-                    GCList->PushGC(page);
+                    SharedCachePages->GCList->PushGC(page);
                 }
             }
 
@@ -1107,7 +1107,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             RemoveActivePage(page);
             AddPassivePage(page);
             if (page->UnUse()) {
-                GCList->PushGC(page);
+                SharedCachePages->GCList->PushGC(page);
             }
         }
     }

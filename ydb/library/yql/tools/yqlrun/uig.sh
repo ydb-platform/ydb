@@ -8,7 +8,7 @@
 #
 
 SCRIPT_DIR="$(dirname $(readlink -f "$0"))"
-UDFS_DIR="${SCRIPT_DIR}/../../udfs;${SCRIPT_DIR}/../../../../../../yql/essentials/udfs"
+UDFS_DIR="${SCRIPT_DIR}/../../udfs;${SCRIPT_DIR}/../../../../../yql/essentials/udfs"
 if [ -d "${SCRIPT_DIR}/../../../../../../yql/udfs" ]; then
 UDFS_DIR="${UDFS_DIR};${SCRIPT_DIR}/../../../../../../yql/udfs"
 fi
@@ -20,7 +20,7 @@ fi
 
 ASSETS_DIR=${SCRIPT_DIR}/http/www
 MOUNTS_CFG=${SCRIPT_DIR}/mounts.txt
-GATEWAYS_CFG=${SCRIPT_DIR}/../../cfg/tests/gateways.conf
+GATEWAYS_CFG=${SCRIPT_DIR}/../../../../../yql/essentials/cfg/tests/gateways.conf
 
 PORT=${1:-3000}
 

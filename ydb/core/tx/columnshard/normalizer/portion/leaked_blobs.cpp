@@ -173,7 +173,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     const bool ready = (int)Schema::Precharge<Schema::IndexPortions>(db, txc.DB.GetScheme()) &
                        (int)Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme()) &
                        (int)Schema::Precharge<Schema::IndexIndexes>(db, txc.DB.GetScheme()) &
-                       (int)Schema::Precharge<Schema::BlobsToDelete>(db, txc.DB.GetScheme());
+                       (int)Schema::Precharge<Schema::BlobsToDeleteWT>(db, txc.DB.GetScheme());
     if (!ready) {
         return TConclusionStatus::Fail("Not ready");
     }
@@ -273,9 +273,10 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
             continue;
         }
         for (auto&& c : it->second) {
-            if (!BlobsToDelete.contains(c)) {
-                resultLocal.emplace(c.GetLogoBlobId());
-            }
+            resultLocal.emplace(c.GetLogoBlobId());
+        }
+        for (const auto& c : BlobsToDelete) {
+            resultLocal.emplace(c.GetLogoBlobId());
         }
     }
     std::swap(resultLocal, result);

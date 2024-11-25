@@ -85,7 +85,7 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
     const auto topicPath = streamPath.Child("streamImpl");
     TTopicInfo::TPtr topic = context.SS->Topics.at(topicPath.Base()->PathId);
 
-    const auto backupTablePath = workingDirPath.Child(cbOp.GetTakeIncrementalBackup().GetDstPath());
+    const auto backupTablePath = workingDirPath.Child(cbOp.GetTakeIncrementalBackup().GetDstPath(), TPath::TSplitChildTag{});
 
     const NScheme::TTypeRegistry* typeRegistry = AppData(context.Ctx)->TypeRegistry;
 

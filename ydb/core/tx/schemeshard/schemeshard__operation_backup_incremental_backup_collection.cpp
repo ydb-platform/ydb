@@ -37,17 +37,23 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
         return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "Incremental backup is disabled on this collection")};
     }
 
-    size_t cutLen = bcPath.GetDomainPathString().size() + 1;
-
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+        std::pair<TString, TString> paths;
+        TString err;
+        if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
+            result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, err)};
+            return {};
+        }
+        auto& relativeItemPath = paths.second;
+
         NKikimrSchemeOp::TModifyScheme modifyScheme;
         modifyScheme.SetWorkingDir(tx.GetWorkingDir());
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterContinuousBackup);
         modifyScheme.SetInternal(true);
         auto& cb = *modifyScheme.MutableAlterContinuousBackup();
-        cb.SetTableName(item.GetPath().substr(cutLen, item.GetPath().size() - cutLen));
+        cb.SetTableName(relativeItemPath);
         auto& ib = *cb.MutableTakeIncrementalBackup();
-        ib.SetDstPath(tx.GetBackupIncrementalBackupCollection().GetTargetDir() + item.GetPath().substr(cutLen, item.GetPath().size() - cutLen));
+        ib.SetDstPath(JoinPath({tx.GetBackupIncrementalBackupCollection().GetName(), tx.GetBackupIncrementalBackupCollection().GetTargetDir(), relativeItemPath}));
 
         if (!CreateAlterContinuousBackup(opId, modifyScheme, context, result)) {
             return result;

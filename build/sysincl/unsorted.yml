@@ -60,7 +60,6 @@
   - gdbm.h
   - gmp.h
   - hp-timing.h
-  - httpd_wrap.h
   - i86.h
   - ieeedef.h
   - in.h
@@ -155,7 +154,7 @@
   - vasprintf.h
   #endif
 
-- source_filter: "^contrib/(libs/(apache|httpd|libuv)|python/uWSGI)"
+- source_filter: "^contrib/(libs/(apache|libuv)|python/uWSGI)"
   includes:
   - port.h
 

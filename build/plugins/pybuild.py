@@ -209,7 +209,11 @@ def py_program(unit, py3):
         if unit.get('PYTHON_SQLITE3') != 'no':
             peers.append('contrib/tools/python/src/Modules/_sqlite')
     unit.onpeerdir(peers)
-    unit.onwindows_long_path_manifest()
+
+    # DEVTOOLSSUPPORT-53161
+    if os.name == 'nt':
+        unit.onwindows_long_path_manifest()
+
     if unit.get('MODULE_TYPE') == 'PROGRAM':  # can not check DLL
         unit.onadd_check_py_imports()
 

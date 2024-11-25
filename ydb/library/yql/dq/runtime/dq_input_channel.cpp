@@ -47,7 +47,7 @@ private:
 
     void PushImpl(TDqSerializedBatch&& data) {
         const i64 space = data.Size();
-        const size_t rowCount = data.RowCount();
+        const size_t chunkCount = data.ChunkCount();
         auto inputType = Impl.GetInputType();
         NKikimr::NMiniKQL::TUnboxedValueBatch batch(inputType);
         if (Y_UNLIKELY(PushStats.CollectProfile())) {
@@ -58,7 +58,8 @@ private:
             DataSerializer.Deserialize(std::move(data), inputType, batch);
         }
 
-        YQL_ENSURE(batch.RowCount() == rowCount);
+        // single batch row is chunk and may be Arrow block
+        YQL_ENSURE(batch.RowCount() == chunkCount);
         Impl.AddBatch(std::move(batch), space);
     }
 

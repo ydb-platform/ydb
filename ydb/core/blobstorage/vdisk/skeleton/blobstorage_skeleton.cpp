@@ -215,7 +215,7 @@ namespace NKikimr {
         }
 
         bool ApplyHugeBlobSize(ui32 minHugeBlobInBytes) {
-            const ui32 alignedSize = HugeBlobCtx->HugeSlotsMap->AlignByBlockSize(minHugeBlobInBytes);
+            ui32 alignedSize = HugeBlobCtx->HugeSlotsMap->AlignByBlockSize(minHugeBlobInBytes) + 1;
             if (MinHugeBlobInBytes == alignedSize) {
                 return false;
             }

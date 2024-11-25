@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
 

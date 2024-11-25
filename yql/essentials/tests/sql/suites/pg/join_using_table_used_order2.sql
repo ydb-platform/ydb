@@ -1,6 +1,7 @@
 --!syntax_pg
-select * from 
-    ((select 1 as foo, 1 as bar, 1 as zoo) aa 
+/* custom error:common column name "zoo" appears more than once in left table*/
+select * from
+    ((select 1 as foo, 1 as bar, 1 as zoo) aa
     join
     (select 1 as foo, 1 as bar, 1 as zoo) bb
     using (foo)

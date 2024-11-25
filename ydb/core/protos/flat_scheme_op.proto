@@ -975,7 +975,15 @@ message TRestoreIncrementalBackup {
     optional string SrcTableName = 1;
     optional NKikimrProto.TPathID SrcPathId = 3;
 
-    optional string DstTableName = 2;
+    optional string DstTablePath = 2; // Absolute path
+    optional NKikimrProto.TPathID DstPathId = 4;
+}
+
+message TRestoreMultipleIncrementalBackups {
+    repeated string SrcTableNames = 1;
+    repeated NKikimrProto.TPathID SrcPathIds = 3;
+
+    optional string DstTablePath = 2; // Absolute path
     optional NKikimrProto.TPathID DstPathId = 4;
 }
 
@@ -1663,13 +1671,14 @@ message TModifyScheme {
 
     optional TResourcePoolDescription CreateResourcePool = 72;
 
-    optional TRestoreIncrementalBackup RestoreIncrementalBackup = 73;
+    optional TRestoreMultipleIncrementalBackups RestoreMultipleIncrementalBackups = 73;
 
     optional TBackupCollectionDescription CreateBackupCollection = 74;
     optional TBackupCollectionDescription AlterBackupCollection = 75;
     optional TBackupCollectionDescription DropBackupCollection = 76;
     optional TBackupBackupCollection BackupBackupCollection = 78;
     optional TBackupBackupCollection BackupIncrementalBackupCollection = 79;
+    optional TBackupBackupCollection RestoreBackupCollection = 80;
 
     optional TMove MoveSequence = 77;
 

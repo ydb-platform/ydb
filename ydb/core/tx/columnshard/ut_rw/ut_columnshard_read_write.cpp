@@ -430,7 +430,7 @@ void TestWrite(const TestTableDescription& table) {
     UNIT_ASSERT(bigData.size() > NColumnShard::TLimits::GetMaxBlobSize());
     UNIT_ASSERT(bigData.size() < NColumnShard::TLimits::GetMaxBlobSize() + 2 * 1024 * 1024);
     ok = WriteData(runtime, sender, writeId++, tableId, bigData, ydbSchema);
-    UNIT_ASSERT(ok);
+    UNIT_ASSERT(!ok);
 }
 
 void TestWriteOverload(const TestTableDescription& table) {

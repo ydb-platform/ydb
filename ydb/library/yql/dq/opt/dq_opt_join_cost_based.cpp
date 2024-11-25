@@ -235,9 +235,10 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
 
 class TOptimizerNativeNew: public IOptimizerNew {
 public:
-    TOptimizerNativeNew(IProviderContext& ctx, ui32 maxDPhypDPTableSize)
+    TOptimizerNativeNew(IProviderContext& ctx, ui32 maxDPhypDPTableSize, TExprContext* exprCtx = nullptr)
         : IOptimizerNew(ctx)
-        , MaxDPhypTableSize_(maxDPhypDPTableSize)
+        , MaxDPHypTableSize_(maxDPhypDPTableSize)
+        , ExprCtx(exprCtx)
     {}
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(
@@ -272,8 +273,17 @@ private:
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
         TDPHypSolver<TNodeSet> solver(hypergraph, this->Pctx);
 
-        if (solver.CountCC(MaxDPhypTableSize_) >= MaxDPhypTableSize_) {
+        if (solver.CountCC(MaxDPHypTableSize_) >= MaxDPHypTableSize_) {
             YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded";
+            if (ExprCtx) {
+                ExprCtx.AddWarning(
+                    YqlIssue(
+                        {}, TIssuesIds::DQ_OPTIMIZE_ERROR, 
+                        "Cost Based Optimizer didn't work: "
+                        "Enumeration is too large, use PRAGMA MaxDPHypDPTableSize='4294967295' to disable the limitation"
+                    )
+                );
+            }
             ComputeStatistics(joinTree, this->Pctx);
             return joinTree;
         }
@@ -304,11 +314,12 @@ private:
     }
 
 private:
-    ui32 MaxDPhypTableSize_;
+    ui32 MaxDPHypTableSize_;
+    TExprContext* ExprCtx;
 };
 
-IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& ctx, const ui32 maxDPhypDPTableSize) {
-    return new TOptimizerNativeNew(ctx, maxDPhypDPTableSize);
+IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& ctx, const ui32 maxDPhypDPTableSize, TExprContext* exprCtx = nullptr) {
+    return new TOptimizerNativeNew(ctx, maxDPhypDPTableSize, exprCtx);
 }
 
 TExprBase DqOptimizeEquiJoinWithCosts(
@@ -357,7 +368,7 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     // of the EquiJoin and n-1 argument are the parameters to EquiJoin
 
     if (!DqCollectJoinRelationsWithStats(rels, typesCtx, equiJoin, providerCollect)){
-        ctx.AddWarning(YqlIssue({}, TIssuesIds::WARNING, "Cost Based Optimizer didn't work: couldn't load statistics"));
+        ctx.AddWarning(YqlIssue({}, TIssuesIds::DQ_OPTIMIZE_ERROR, "Cost Based Optimizer didn't work: couldn't load statistics"));
         return node;
     }
 

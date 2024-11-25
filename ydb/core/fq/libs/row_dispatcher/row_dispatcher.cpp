@@ -75,6 +75,7 @@ struct TEvPrivate {
 struct TAggQueryStat {
     NYql::TCounters::TEntry ReadBytes;
     NYql::TCounters::TEntry UnreadBytes;
+    bool Updated = false;
 };
 
 struct TQueryState {
@@ -350,6 +351,7 @@ public:
     TString GetInternalState();
     template <class TEventPtr>
     bool CheckSession(TAtomicSharedPtr<ConsumerInfo>& consumer, const TEventPtr& ev);
+    void SetQueryMetrics(const TString queryId, ui64 unreadBytesMax, ui64 unreadBytesAvg);
 
     STRICT_STFUNC(
         StateFunc, {
@@ -494,7 +496,11 @@ void TRowDispatcher::UpdateMetrics() {
     }
 
     AggrStats.AllSessionsReadBytes = NYql::TCounters::TEntry();
-    AggrStats.LastQueryStats.clear();
+    for (auto& [queryId, stat] : AggrStats.LastQueryStats) {
+        stat.Updated = false;
+        stat.ReadBytes = NYql::TCounters::TEntry();
+        stat.UnreadBytes = NYql::TCounters::TEntry();
+    }
 
     for (auto& [key, sessionsInfo] : TopicSessions) {
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
@@ -507,15 +513,27 @@ void TRowDispatcher::UpdateMetrics() {
                 auto& stat = AggrStats.LastQueryStats[consumer->QueryId];
                 stat.UnreadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadBytes));
                 stat.ReadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.ReadBytes));
+                stat.Updated = true;
                 consumer->Stat.Clear();
             }
         }
     }
-    for (const auto& [queryId, stat] : AggrStats.LastQueryStats) {
-        auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryId);
-        queryGroup->GetCounter("MaxUnreadBytes")->Set(stat.UnreadBytes.Max);
-        queryGroup->GetCounter("AvgUnreadBytes")->Set(stat.UnreadBytes.Avg);
+    for (auto it = AggrStats.LastQueryStats.begin(); it != AggrStats.LastQueryStats.end();) {
+        const auto& stats = it->second;
+        if (!stats.Updated) {
+            SetQueryMetrics(it->first, 0, 0);
+            it = AggrStats.LastQueryStats.erase(it);
+            continue;
+        }
+        SetQueryMetrics(it->first, stats.UnreadBytes.Max, stats.UnreadBytes.Avg);
+        ++it;
     }
+}
+
+void TRowDispatcher::SetQueryMetrics(const TString queryId, ui64 unreadBytesMax, ui64 unreadBytesAvg) {
+    auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryId);
+    queryGroup->GetCounter("MaxUnreadBytes")->Set(unreadBytesMax);
+    queryGroup->GetCounter("AvgUnreadBytes")->Set(unreadBytesAvg);
 }
 
 TString TRowDispatcher::GetInternalState() {

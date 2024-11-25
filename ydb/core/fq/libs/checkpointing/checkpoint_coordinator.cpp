@@ -467,6 +467,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvSaveTaskSt
     }
     if (checkpoint.GotAllAcknowledges()) {
         if (checkpoint.GetStats().Aborted) {
+            CC_LOG_E("[" << checkpointId << "] Got all acks for aborted checkpoint, aborting in storage");
             CheckpointingSnapshotRotationIndex = CheckpointingSnapshotRotationPeriod;  // Next checkpoint is snapshot.
             Send(StorageProxy, new TEvCheckpointStorage::TEvAbortCheckpointRequest(CoordinatorId, checkpointId, "Can't save node state"), IEventHandle::FlagTrackDelivery);
         } else {

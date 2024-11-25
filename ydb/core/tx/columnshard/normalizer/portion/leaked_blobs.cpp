@@ -55,7 +55,10 @@ public:
         sb << "tablet=" << TabletId;
         sb << ";leaked_blob_count=" << Leaks.size();
         sb << ";leaked_blobs_size=" << LeakeadBlobsSize;
-        sb << ";leaked_blobs=[" << JoinStrings(Leaks.begin(), Leaks.end(), ",") << "]";
+        auto blobSampleEnd = Leaks.begin();
+        for (ui64 i = 0; i < 10 && blobSampleEnd != Leaks.end(); ++i, ++blobSampleEnd) {
+        }
+        sb << ";leaked_blobs=[" << JoinStrings(Leaks.begin(), blobSampleEnd, ",") << "]";
         return sb;
     }
 };

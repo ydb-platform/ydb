@@ -56,6 +56,7 @@ struct TEvPrivate {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvCoordinatorPing = EvBegin + 20,
         EvUpdateMetrics,
+        EvPrintStateToLog,
         EvTryConnect,
         EvEnd
     };
@@ -63,6 +64,7 @@ struct TEvPrivate {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
     struct TEvCoordinatorPing : NActors::TEventLocal<TEvCoordinatorPing, EvCoordinatorPing> {};
     struct TEvUpdateMetrics : public NActors::TEventLocal<TEvUpdateMetrics, EvUpdateMetrics> {};
+    struct TEvPrintStateToLog : public NActors::TEventLocal<TEvPrintStateToLog, EvPrintStateToLog> {};
     struct TEvTryConnect : public NActors::TEventLocal<TEvTryConnect, EvTryConnect> {
         TEvTryConnect(ui32 nodeId = 0) 
         : NodeId(nodeId) {}
@@ -83,6 +85,8 @@ struct TQueryState {
 };
 
 ui64 UpdateMetricsPeriodSec = 60;
+ui64 PrintStateToLogPeriodSec = 600;
+ui64 PrintStateToLogSplitSize = 512000;
 ui64 MaxSessionBufferSizeBytes = 16000000;
 
 class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
@@ -348,6 +352,7 @@ public:
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr&);
     void Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&);
+    void Handle(NFq::TEvPrivate::TEvPrintStateToLog::TPtr&);
     void Handle(const NMon::TEvHttpInfo::TPtr&);
     
     void DeleteConsumer(const ConsumerSessionKey& key);
@@ -355,6 +360,7 @@ public:
     TString GetInternalState();
     template <class TEventPtr>
     bool CheckSession(TAtomicSharedPtr<ConsumerInfo>& consumer, const TEventPtr& ev);
+    void PrintStateToLog();
 
     STRICT_STFUNC(
         StateFunc, {
@@ -378,6 +384,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvHeartbeat, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, Handle);
         hFunc(NFq::TEvPrivate::TEvUpdateMetrics, Handle);
+        hFunc(NFq::TEvPrivate::TEvPrintStateToLog, Handle);
         hFunc(NMon::TEvHttpInfo, Handle);
     })
 };
@@ -413,6 +420,7 @@ void TRowDispatcher::Bootstrap() {
     Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant, Counters).release());
     Schedule(TDuration::Seconds(CoordinatorPingPeriodSec), new TEvPrivate::TEvCoordinatorPing());
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
+    Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
 
     NActors::TMon* mon = NKikimr::AppData()->Mon;
     if (mon) {
@@ -863,6 +871,23 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&) {
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
     UpdateMetrics();
+}
+
+void TRowDispatcher::Handle(NFq::TEvPrivate::TEvPrintStateToLog::TPtr&) {
+    PrintStateToLog();
+    Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
+}
+
+void TRowDispatcher::PrintStateToLog() {
+    auto str = GetInternalState();
+    auto buf = TStringBuf(str);
+    i64 size = buf.size();
+    ui64 offset = 0;
+    while (size > 0) {
+        LOG_ROW_DISPATCHER_DEBUG(buf.SubString(offset, PrintStateToLogSplitSize));
+        offset += PrintStateToLogSplitSize;
+        size -= PrintStateToLogSplitSize;
+    }
 }
 
 void TRowDispatcher::Handle(const NMon::TEvHttpInfo::TPtr& ev) {

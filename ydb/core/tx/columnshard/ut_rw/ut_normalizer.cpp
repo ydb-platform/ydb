@@ -362,6 +362,33 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         TLocalNormalizerChecker checker;
         TestNormalizerImpl<TTablesCleaner>(checker);
     }
+
+    Y_UNIT_TEST(DryRun) {
+        class TLocalNormalizerChecker: public TNormalizerChecker {
+        public:
+            virtual ui64 RecordsCountAfterReboot(const ui64 initialRecodsCount) const override {
+                return initialRecodsCount;
+            }
+            virtual void CorrectFeatureFlagsOnStart(TFeatureFlags & featuresFlags) const override{
+                featuresFlags.SetEnableWritePortionsOnInsert(true);
+            }
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                {
+                    auto* repair = columnShardConfig.MutableRepairs()->Add();
+                    repair->SetClassName("EmptyPortionsCleaner");
+                    repair->SetDescription("Removing unsync portions");
+                    repair->SetDryRun(true);
+                }
+                {
+                    auto* repair = columnShardConfig.MutableRepairs()->Add();
+                    repair->SetClassName("LeakedBlobsNormalizer");
+                    repair->SetDescription("Removing leaked blobs");
+                    repair->SetDryRun(true);
+                }
+            }
+        };
+        TestNormalizerImpl<TPortionsCleaner>(TLocalNormalizerChecker());
+    }
 }
 
 }   // namespace NKikimr

@@ -138,6 +138,7 @@ public:
     TFetchingScriptCursor(const std::shared_ptr<TFetchingScript>& script, const ui32 index)
         : CurrentStepIdx(index)
         , Script(script) {
+        AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
     }
 
     const TString& GetName() const {

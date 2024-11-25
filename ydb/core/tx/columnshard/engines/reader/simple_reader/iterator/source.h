@@ -69,6 +69,10 @@ private:
         return SourceId;
     }
 
+    virtual ui64 DoGetEntityRecordsCount() const override {
+        return RecordsCount;
+    }
+
     std::optional<TFetchingScriptCursor> ScriptCursor;
 
 protected:

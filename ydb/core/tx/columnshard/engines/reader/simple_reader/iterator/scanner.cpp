@@ -63,11 +63,15 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
     bool started = !context->GetCommonContext()->GetScanCursor()->IsInitialized();
     for (auto&& i : sources) {
         if (!started) {
-            if (!context->GetCommonContext()->GetScanCursor()->CheckEntityIsBorder(i)) {
+            bool usage = false;
+            if (!context->GetCommonContext()->GetScanCursor()->CheckEntityIsBorder(i, usage)) {
+                continue;
+            }
+            started = true;
+            if (!usage) {
                 continue;
             }
             i->SetIsStartedByCursor();
-            started = true;
         }
         SortedSources.emplace(i);
     }

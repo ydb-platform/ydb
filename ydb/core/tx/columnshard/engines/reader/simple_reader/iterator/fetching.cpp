@@ -149,7 +149,6 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
     AFL_VERIFY(source);
     NMiniKQL::TThrowingBindTerminator bind;
     Script->OnExecute();
-    AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
     while (!Script->IsFinished(CurrentStepIdx)) {
         if (source->GetStageData().IsEmpty()) {
             source->OnEmptyStageData();
@@ -392,6 +391,7 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
         }
         plan->AddStep<TBuildResultStep>(i.GetIndexStart(), i.GetRecordsCount());
     }
+    AFL_VERIFY(!plan->IsFinished(0));
     source->InitFetchingPlan(plan);
 
     TFetchingScriptCursor cursor(plan, 0);

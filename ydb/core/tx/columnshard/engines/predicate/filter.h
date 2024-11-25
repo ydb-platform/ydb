@@ -95,17 +95,21 @@ public:
 class ICursorEntity {
 private:
     virtual ui64 DoGetEntityId() const = 0;
+    virtual ui64 DoGetEntityRecordsCount() const = 0;
 
 public:
     ui64 GetEntityId() const {
         return DoGetEntityId();
+    }
+    ui64 GetEntityRecordsCount() const {
+        return DoGetEntityRecordsCount();
     }
 };
 
 class IScanCursor {
 private:
     virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const = 0;
-    virtual bool DoCheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& entity) const = 0;
+    virtual bool DoCheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& entity, bool& usage) const = 0;
     virtual bool DoCheckSourceIntervalUsage(const ui64 sourceId, const ui32 indexStart, const ui32 recordsCount) const = 0;
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) = 0;
     virtual void DoSerializeToProto(NKikimrKqp::TEvKqpScanCursor& proto) const = 0;
@@ -124,9 +128,9 @@ public:
         return DoCheckSourceIntervalUsage(sourceId, indexStart, recordsCount);
     }
 
-    bool CheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& entity) const {
+    bool CheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& entity, bool& usage) const {
         AFL_VERIFY(IsInitialized());
-        return DoCheckEntityIsBorder(entity);
+        return DoCheckEntityIsBorder(entity, usage);
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) {
@@ -160,8 +164,13 @@ private:
         return !!SourceId;
     }
 
-    virtual bool DoCheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& entity) const override {
-        return SourceId == entity->GetEntityId();
+    virtual bool DoCheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& entity, bool& usage) const override {
+        if (SourceId != entity->GetEntityId()) {
+            return false;
+        }
+        AFL_VERIFY(RecordIndex <= entity->GetEntityRecordsCount());
+        usage = RecordIndex < entity->GetEntityRecordsCount();
+        return true;
     }
 
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) override {
@@ -219,7 +228,8 @@ private:
         return TConclusionStatus::Success();
     }
 
-    virtual bool DoCheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& /*entity*/) const override {
+    virtual bool DoCheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& /*entity*/, bool& usage) const override {
+        usage = true;
         return true;
     }
 

@@ -45,6 +45,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             connectorClient,
             nullptr,
             databaseAsyncResolver,
+            nullptr,
             appConfig->GetQueryServiceConfig().GetS3(),
             appConfig->GetQueryServiceConfig().GetGeneric(),
             appConfig->GetQueryServiceConfig().GetYt(),

@@ -168,7 +168,7 @@ namespace NYql {
                     // Managed YDB supports access via IAM token.
                     // If exists, copy service account creds to obtain tokens during request execution phase.
                     // If exists, copy previously created token.
-                    if (clusterConfig.kind() == NConnector::NApi::EDataSourceKind::YDB) {
+                    if (IsIn({NConnector::NApi::EDataSourceKind::YDB, NConnector::NApi::EDataSourceKind::LOGGING}, clusterConfig.kind())) {
                         source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
                         source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
                         source.SetToken(State_->Types->Credentials->FindCredentialContent(

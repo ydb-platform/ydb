@@ -340,7 +340,6 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev);
     void Handle(const TEvPrivate::TEvTryConnect::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr&);
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr&);
     void Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&);
     void Handle(NFq::TEvPrivate::TEvPrintStateToLog::TPtr&);
     void Handle(const NMon::TEvHttpInfo::TPtr&);
@@ -369,7 +368,6 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvSessionStatistic, Handle);
         hFunc(TEvPrivate::TEvTryConnect, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
-        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvHeartbeat, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, Handle);
         hFunc(NFq::TEvPrivate::TEvUpdateMetrics, Handle);
@@ -454,9 +452,15 @@ void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TP
 }
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, ev: " << ev->Get()->ToString() << ", reason " << ev->Get()->Reason);
-    for (auto& [actorId, consumer] : Consumers) {
-        consumer->EventsQueue.HandleUndelivered(ev);
+    LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, from " << ev->Sender << ", reason " << ev->Get()->Reason);
+    for (auto& [key, consumer] : Consumers) {
+        if (ev->Cookie != consumer->Generation) {       // Several partition in one read_actor has different Generation.
+            continue;
+        }
+        if (consumer->EventsQueue.HandleUndelivered(ev) == NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
+            DeleteConsumer(key);
+            break;
+        }
     }
 }
 
@@ -734,7 +738,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
 void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     auto consumerIt = Consumers.find(key);
     if (consumerIt == Consumers.end()) {
-        LOG_ROW_DISPATCHER_ERROR("Ignore (no consumer )DeleteConsumer, " << " read actor id " << key.ReadActorId << " part id " << key.PartitionId);
+        LOG_ROW_DISPATCHER_ERROR("Ignore (no consumer) DeleteConsumer, " << " read actor id " << key.ReadActorId << " part id " << key.PartitionId);
         return;
     }
 
@@ -755,7 +759,7 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     Y_ENSURE(sessionInfo.Consumers.count(consumer->ReadActorId));
     sessionInfo.Consumers.erase(consumer->ReadActorId);
     if (sessionInfo.Consumers.empty()) {
-        LOG_ROW_DISPATCHER_DEBUG("Session is not used, sent TEvPoisonPill");
+        LOG_ROW_DISPATCHER_DEBUG("Session is not used, sent TEvPoisonPill to " << consumerIt->second->TopicSessionId);
         topicSessionInfo.Sessions.erase(consumerIt->second->TopicSessionId);
         Send(consumerIt->second->TopicSessionId, new NActors::TEvents::TEvPoisonPill());
         if (topicSessionInfo.Sessions.empty()) {
@@ -765,17 +769,6 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     ConsumersByEventQueueId.erase(consumerIt->second->EventQueueId);
     Consumers.erase(consumerIt);
     Metrics.ClientsCount->Set(Consumers.size());
-}
-
-void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr& ev) {
-    LOG_ROW_DISPATCHER_WARN("Session closed, event queue id " << ev->Get()->EventQueueId);
-    for (auto& [consumerKey, consumer] : Consumers) {
-        if (consumer->EventQueueId != ev->Get()->EventQueueId) {
-            continue;
-        }
-        DeleteConsumer(consumerKey);
-        break;
-    }
 }
 
 void TRowDispatcher::Handle(const TEvPrivate::TEvTryConnect::TPtr& ev) {

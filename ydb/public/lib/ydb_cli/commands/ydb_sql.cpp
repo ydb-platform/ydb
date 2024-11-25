@@ -31,6 +31,9 @@ void TCommandSql::Config(TConfig& config) {
     config.Opts->AddLongOption("explain", "Execute explain request for the query. Shows query logical plan. "
             "The query is not actually executed, thus does not affect the database.")
         .StoreTrue(&ExplainMode);
+    config.Opts->AddLongOption("explain-ast", "In addition to the query logical plan, you can get an AST (abstract syntax tree). "
+            "The AST section contains a representation in the internal miniKQL language.")
+        .StoreTrue(&ExplainAst);
     config.Opts->AddLongOption("explain-analyze", "Execute query in explain-analyze mode. Shows query execution plan. "
             "Query results are ignored.\n"
             "Important note: The query is actually executed, so any changes will be applied to the database.")
@@ -73,6 +76,14 @@ void TCommandSql::Parse(TConfig& config) {
     }
     if (ExplainMode && ExplainAnalyzeMode) {
         throw TMisuseException() << "Both mutually exclusive options \"Explain mode\" (\"--explain\") "
+            << "and \"Explain-analyze mode\" (\"--explain-analyze\") were provided.";
+    }
+    if (ExplainMode && ExplainAst) {
+        throw TMisuseException() << "Both mutually exclusive options \"Explain mode\" (\"--explain\") "
+            << "and \"Explain-AST mode\" (\"--explain-ast\") were provided.";
+    }
+    if (ExplainAst && ExplainAnalyzeMode) {
+        throw TMisuseException() << "Both mutually exclusive options \"Explain-AST mode\" (\"--explain-ast\") "
             << "and \"Explain-analyze mode\" (\"--explain-analyze\") were provided.";
     }
     if (ExplainAnalyzeMode && !CollectStatsMode.empty()) {
@@ -121,6 +132,10 @@ int TCommandSql::RunCommand(TConfig& config) {
     if (ExplainMode) {
         // Execute explain request for the query
         settings.ExecMode(NQuery::EExecMode::Explain);
+    } else if (ExplainAst) {
+        // Execute explain request with full stats for the ast
+        settings.ExecMode(NQuery::EExecMode::Explain);
+        settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, NQuery::EStatsMode::Full));
     } else {
         // Execute query
         settings.ExecMode(NQuery::EExecMode::Execute);
@@ -171,6 +186,7 @@ int TCommandSql::RunCommand(TConfig& config) {
 int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
     TMaybe<TString> stats;
     TMaybe<TString> plan;
+    TMaybe<TString> ast;
     {
         TResultSetPrinter printer(OutputFormat, &IsInterrupted);
 
@@ -187,6 +203,7 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
             if (!streamPart.GetStats().Empty()) {
                 const auto& queryStats = *streamPart.GetStats();
                 stats = queryStats.ToString();
+                ast = queryStats.GetAst();
 
                 if (queryStats.GetPlan()) {
                     plan = queryStats.GetPlan();
@@ -194,6 +211,16 @@ int TCommandSql::PrintResponse(NQuery::TExecuteQueryIterator& result) {
             }
         }
     } // TResultSetPrinter destructor should be called before printing stats
+
+    if (ExplainAst) {
+        Cout << "Query AST:" << Endl << ast << Endl;
+        
+        if (IsInterrupted()) {
+            Cerr << "<INTERRUPTED>" << Endl;
+            return EXIT_FAILURE;
+        }
+        return EXIT_SUCCESS;
+    }
 
     if (stats && !ExplainMode && !ExplainAnalyzeMode) {
         Cout << Endl << "Statistics:" << Endl << *stats;

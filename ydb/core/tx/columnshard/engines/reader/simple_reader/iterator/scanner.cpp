@@ -49,6 +49,7 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
                 }
                 FinishedSources.erase(FinishedSources.begin());
                 if (FetchedCount > Context->GetCommonContext()->GetReadMetadata()->Limit) {
+                    Context->Abort();
                     Abort();
                 }
             }

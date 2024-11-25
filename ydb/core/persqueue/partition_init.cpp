@@ -731,7 +731,7 @@ void TInitEndWriteTimestampStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, cons
                 auto b = it.GetBatch();
                 b.Unpack();
                 if (!b.Empty()) {
-                    Partition()->EndWriteTimestamp = b.GetLastMessageWriteTimestamp();
+                    Partition()->EndWriteTimestamp = b.GetEndWriteTimestamp();
                 }
             }
 

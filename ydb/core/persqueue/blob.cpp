@@ -399,8 +399,8 @@ void TBatch::Pack() {
         Header.SetPayloadSize(PackedData.size());
     }
 
-    if (!Blobs.empty()) {
-        EndWriteTimestamp = Blobs.back().WriteTimestamp;
+    for (auto& b : Blobs) {
+        EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
     }
 
 

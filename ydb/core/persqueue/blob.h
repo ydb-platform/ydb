@@ -195,7 +195,7 @@ struct TBatch {
         return Blobs.empty();
     }
 
-    TInstant GetLastMessageWriteTimestamp() const {
+    TInstant GetEndWriteTimestamp() const {
         return EndWriteTimestamp;
     }
 

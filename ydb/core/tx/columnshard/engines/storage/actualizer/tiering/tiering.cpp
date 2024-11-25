@@ -88,11 +88,11 @@ void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExt
         AFL_VERIFY(!PortionsInfo.contains(portion.GetPortionId()))("id", portion.GetPortionId())("path_id", portion.GetPathId());
         AFL_VERIFY(!NewPortionIds.contains(portion.GetPortionId()))("id", portion.GetPortionId())("path_id", portion.GetPathId());
     }
-    if (MaxByPortionId.contains(portion.GetPortionId())) {
+    if (!Tiering || MaxByPortionId.contains(portion.GetPortionId())) {
         AddPortionImpl(portion, addContext.GetNow());
     } else {
         auto schema = portion.GetSchema(VersionedIndex);
-        if (*TieringColumnId == schema->GetIndexInfo().GetPKColumnIds().front()) {
+        if (*TValidator::CheckNotNull(TieringColumnId) == schema->GetIndexInfo().GetPKColumnIds().front()) {
             NYDBTest::TControllers::GetColumnShardController()->OnMaxValueUsage();
             auto max = NArrow::TStatusValidator::GetValid(portion.GetMeta().GetFirstLastPK().GetFirst().Column(0).GetScalar(0));
             AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);

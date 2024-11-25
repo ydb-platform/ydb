@@ -85,6 +85,11 @@ public:
         }
     }
 
+    const std::vector<std::shared_ptr<NSsa::TProgramStep>>& GetStepsVerified() const {
+        AFL_VERIFY(!!Program);
+        return Program->Steps;
+    }
+
     template <class TDataContainer>
     inline arrow::Status ApplyProgram(std::shared_ptr<TDataContainer>& batch) const {
         if (Program) {

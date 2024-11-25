@@ -276,7 +276,7 @@ private:
         if (solver.CountCC(MaxDPHypTableSize_) >= MaxDPHypTableSize_) {
             YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded";
             if (ExprCtx) {
-                ExprCtx.AddWarning(
+                ExprCtx->AddWarning(
                     YqlIssue(
                         {}, TIssuesIds::DQ_OPTIMIZE_ERROR, 
                         "Cost Based Optimizer didn't work: "

@@ -38,7 +38,7 @@ struct TShardState: public TCommonRetriesState {
     bool SubscribedOnTablet = false;
     TActorId ActorId;
     TOwnedCellVec LastKey;
-    std::optional<NKikimrTxDataShard::TEvKqpScanCursor> LastCursorProto;
+    std::optional<NKikimrKqp::TEvKqpScanCursor> LastCursorProto;
     std::optional<ui32> AvailablePacks;
 
     TString PrintLastKey(TConstArrayRef<NScheme::TTypeInfo> keyTypes) const;

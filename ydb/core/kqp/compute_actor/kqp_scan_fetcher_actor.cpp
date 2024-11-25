@@ -410,7 +410,7 @@ bool TKqpScanFetcherActor::SendScanFinished() {
 }
 
 std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEvKqpScan(const ui32 scanId, const ui32 gen,
-    const TSmallVec<TSerializedTableRange>& ranges, const std::optional<NKikimrTxDataShard::TEvKqpScanCursor>& cursor) const {
+    const TSmallVec<TSerializedTableRange>& ranges, const std::optional<NKikimrKqp::TEvKqpScanCursor>& cursor) const {
     auto ev = std::make_unique<TEvDataShard::TEvKqpScan>();
     ev->Record.SetLocalPathId(ScanDataMeta.TableId.PathId.LocalPathId);
     for (auto& column : ScanDataMeta.GetColumns()) {

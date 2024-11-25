@@ -15,7 +15,7 @@ namespace NKikimr::NKqp::NScanPrivate {
 class IExternalObjectsProvider {
 public:
     virtual std::unique_ptr<TEvDataShard::TEvKqpScan> BuildEvKqpScan(const ui32 scanId, const ui32 gen, const TSmallVec<TSerializedTableRange>& ranges,
-        const std::optional<NKikimrTxDataShard::TEvKqpScanCursor>& cursor) const = 0;
+        const std::optional<NKikimrKqp::TEvKqpScanCursor>& cursor) const = 0;
     virtual const TVector<NScheme::TTypeInfo>& GetKeyColumnTypes() const = 0;
 };
 

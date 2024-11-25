@@ -53,7 +53,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
     std::vector<std::vector<ui32>> SplittedBatches;
 
     TOwnedCellVec LastKey;
-    NKikimrTxDataShard::TEvKqpScanCursor LastCursorProto;
+    NKikimrKqp::TEvKqpScanCursor LastCursorProto;
     TDuration CpuTime;
     TDuration WaitTime;
     ui32 PageFaults = 0; // number of page faults occurred when filling in this message

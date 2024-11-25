@@ -138,7 +138,7 @@ public:
             EnsurePage(loaded.PageId)->Fill(std::move(loaded.Page), sticky);
         }
 
-        void Fill(ui32 pageId, TSharedPageRef page, bool sticky = false) noexcept {
+        void Fill(ui32 pageId, TSharedPageRef page, bool sticky) noexcept {
             EnsurePage(pageId)->Fill(std::move(page), sticky);
         }
 

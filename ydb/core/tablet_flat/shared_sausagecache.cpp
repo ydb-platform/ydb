@@ -405,7 +405,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         const TLogoBlobID metaId = pageCollection.Label();
 
         Y_ABORT_UNLESS(metaId);
-        Y_ABORT_IF(Collections.contains(metaId), "Only new collections can save their pages");
+        Y_ABORT_IF(Collections.contains(metaId), "Only new collections can save compacted pages");
         TCollection &collection = Collections[metaId];
         collection.MetaId = metaId;
         collection.PageMap.resize(pageCollection.Total());

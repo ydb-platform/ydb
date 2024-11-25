@@ -728,9 +728,10 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
             // trigger periodic stats at shard (after timeout)
             std::vector<ui64> writeIds;
-            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
-            NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
-            NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, {txId});
+            ++txId;
+            NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+            NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+            NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, { txId });
         }
         csController->WaitIndexation(TDuration::Seconds(5));
         {

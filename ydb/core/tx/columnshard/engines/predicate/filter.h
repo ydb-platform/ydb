@@ -106,12 +106,10 @@ private:
     virtual const std::shared_ptr<arrow::RecordBatch>& DoGetPKCursor() const = 0;
     virtual bool DoCheckEntityIsBorder(const std::shared_ptr<ICursorEntity>& entity) const = 0;
     virtual bool DoCheckSourceIntervalUsage(const ui64 sourceId, const ui32 indexStart, const ui32 recordsCount) const = 0;
-    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrTxDataShard::TEvKqpScanCursor& proto) = 0;
+    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) = 0;
 
 public:
     virtual bool IsInitialized() const = 0;
-
-    using TFactory = NObjectFactory::TObjectFactory<IScanCursor, TString>;
 
     virtual ~IScanCursor() = default;
 
@@ -129,7 +127,7 @@ public:
         return DoCheckEntityIsBorder(entity);
     }
 
-    TConclusionStatus DeserializeFromProto(const NKikimrTxDataShard::TEvKqpScanCursor& proto) {
+    TConclusionStatus DeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) {
         return DoDeserializeFromProto(proto);
     }
 };
@@ -153,7 +151,7 @@ private:
         return SourceId == entity->GetEntityId();
     }
 
-    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrTxDataShard::TEvKqpScanCursor& proto) override {
+    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) override {
         if (!proto.HasColumnShardSimple()) {
             return TConclusionStatus::Success();
         }
@@ -200,7 +198,7 @@ private:
         return PrimaryKey;
     }
 
-    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrTxDataShard::TEvKqpScanCursor& /*proto*/) override {
+    virtual TConclusionStatus DoDeserializeFromProto(const NKikimrKqp::TEvKqpScanCursor& /*proto*/) override {
         return TConclusionStatus::Success();
     }
 

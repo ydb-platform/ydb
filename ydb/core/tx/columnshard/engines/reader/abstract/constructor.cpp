@@ -83,7 +83,7 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> IScannerConstructor::Bu
 }
 
 NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::IScanCursor>> IScannerConstructor::BuildCursorFromProto(
-    const NKikimrTxDataShard::TEvKqpScanCursor& proto) const {
+    const NKikimrKqp::TEvKqpScanCursor& proto) const {
     auto result = DoBuildCursor();
     if (!result) {
         return result;

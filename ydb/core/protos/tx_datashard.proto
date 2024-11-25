@@ -1674,19 +1674,6 @@ message TComputeShardingPolicy {
 
 }
 
-message TEvKqpScanCursor {
-    message TColumnShardScanPlain {
-    }
-    message TColumnShardScanSimple {
-        optional uint64 SourceId = 1;
-        optional uint32 StartRecordIndex = 2;
-    }
-    oneof Implementation {
-        TColumnShardScanPlain ColumnShardPlain = 10;
-        TColumnShardScanSimple ColumnShardSimple = 11;
-    }
-}
-
 message TEvKqpScan {
     optional uint64 TxId = 1;
     optional uint64 ScanId = 2;
@@ -1713,7 +1700,8 @@ message TEvKqpScan {
     optional TComputeShardingPolicy ComputeShardingPolicy = 23;
     optional uint64 LockTxId = 24;
     optional uint32 LockNodeId = 25;
-    optional TEvKqpScanCursor ScanCursor = 26;
+    optional string CSScanPolicy = 26;
+    optional NKikimrKqp.TEvKqpScanCursor ScanCursor = 27;
 }
 
 message TEvCompactTable {

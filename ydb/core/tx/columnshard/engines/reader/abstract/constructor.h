@@ -47,7 +47,7 @@ public:
 
     }
 
-    TConclusion<std::shared_ptr<IScanCursor>> BuildCursorFromProto(const NKikimrTxDataShard::TEvKqpScanCursor& proto) const;
+    TConclusion<std::shared_ptr<IScanCursor>> BuildCursorFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) const;
     virtual TConclusionStatus ParseProgram(const TVersionedIndex* vIndex, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const = 0;
     virtual std::vector<TNameTypeInfo> GetPrimaryKeyScheme(const NColumnShard::TColumnShard* self) const = 0;
     TConclusion<std::shared_ptr<TReadMetadataBase>> BuildReadMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const;

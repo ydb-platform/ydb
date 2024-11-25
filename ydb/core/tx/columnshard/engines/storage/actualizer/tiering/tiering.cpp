@@ -88,7 +88,7 @@ void TTieringActualizer::DoAddPortion(const TPortionInfo& portion, const TAddExt
         AFL_VERIFY(!PortionsInfo.contains(portion.GetPortionId()))("id", portion.GetPortionId())("path_id", portion.GetPathId());
         AFL_VERIFY(!NewPortionIds.contains(portion.GetPortionId()))("id", portion.GetPortionId())("path_id", portion.GetPathId());
     }
-    if (MaxByPortionId.contains(portion.GetPortionId())) {
+    if (!Tiering || MaxByPortionId.contains(portion.GetPortionId())) {
         AddPortionImpl(portion, addContext.GetNow());
     } else {
         auto schema = portion.GetSchema(VersionedIndex);

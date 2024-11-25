@@ -143,7 +143,13 @@ namespace NYql {
 
                     // prepare select
                     auto select = source.mutable_select();
-                    select->mutable_from()->set_table(TString(table));
+                    if (clusterConfig.GetKind() == NConnector::NApi::EDataSourceKind::LOGGING) {
+                        // For logging external data source the real table name is differing from 
+                        // the log group name that was used as a table name in the YQL request.
+                        select->mutable_from()->set_table(clusterConfig.datasourceoptions().at("table"));
+                    } else {
+                        select->mutable_from()->set_table(table);
+                    }
                     select->mutable_data_source_instance()->CopyFrom(tableMeta.value()->DataSourceInstance);
 
                     auto items = select->mutable_what()->mutable_items();

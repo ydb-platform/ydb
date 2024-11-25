@@ -383,7 +383,7 @@ namespace NYql {
             request.mutable_data_source_instance()->set_database(clusterConfig.GetDatabaseName());
 
             if (clusterConfig.GetKind() == NConnector::NApi::EDataSourceKind::LOGGING) {
-                // For logging external data source the real table name is different from 
+                // For logging external data source the real table name is differing from 
                 // the log group name that was used as a table name in the YQL request.
                 request.set_table(clusterConfig.datasourceoptions().at("table"));
             } else {

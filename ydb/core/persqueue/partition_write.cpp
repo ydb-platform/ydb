@@ -1403,7 +1403,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
             auto& batch = Head.GetBatch(pp);
             batch.SerializeTo(valueD);
             if (batch.GetLastMessageWriteTimestamp()) {
-                PendingWriteTimestamp = batch.GetLastMessageWriteTimestamp();
+                PendingWriteTimestamp = std::max(PendingWriteTimestamp, batch.GetLastMessageWriteTimestamp());
             }
         }
     }

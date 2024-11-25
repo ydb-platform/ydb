@@ -164,7 +164,7 @@ struct TBatch {
         Header.SetCount(count);
         Header.SetInternalPartsCount(InternalPartsPos.size());
 
-        EndWriteTimestamp = b.WriteTimestamp;
+        EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
     }
 
     ui64 GetOffset() const {

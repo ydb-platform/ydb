@@ -1626,7 +1626,7 @@ TTaskDiskStatistics GetSelfThreadTaskDiskStatistics()
                 if (fields[0] == "read_bytes:") {
                     TryFromString(fields[1], stat.ReadBytes);
                 } else if (fields[0] == "write_bytes:") {
-                    TryFromString(fields[1], stat.ReadBytes);
+                    TryFromString(fields[1], stat.WriteBytes);
                 }
             }
         } catch (const TSystemError& ex) {

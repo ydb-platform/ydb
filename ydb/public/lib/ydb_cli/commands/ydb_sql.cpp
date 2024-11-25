@@ -129,11 +129,8 @@ int TCommandSql::RunCommand(TConfig& config) {
     // Single stream execution
     NQuery::TExecuteQuerySettings settings;
 
-    if (ExplainMode) {
+    if (ExplainMode || ExplainAst) {
         // Execute explain request for the query
-        settings.ExecMode(NQuery::EExecMode::Explain);
-    } else if (ExplainAst) {
-        // Execute explain request with full stats for the ast
         settings.ExecMode(NQuery::EExecMode::Explain);
     } else {
         // Execute query

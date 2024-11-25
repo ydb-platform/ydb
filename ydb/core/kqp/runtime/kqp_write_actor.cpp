@@ -535,6 +535,25 @@ public:
                 getIssues());
             return;
         }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE:
+            CA_LOG_E("Got WRONG SHARD STATE for table `"
+                    << SchemeEntry->TableId.PathId.ToString() << "`."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << "."
+                    << getIssues().ToOneLineString());
+            
+            if (InconsistentTx) {
+                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                RetryResolveTable();
+            } else {
+                RuntimeError(
+                    TStringBuilder() << "Wrong shard state for table `"
+                        << TablePath << "`. "
+                        << getIssues().ToOneLineString(),
+                    NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                    getIssues());
+            }
+            return;
         case NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR: {
             CA_LOG_E("Got INTERNAL ERROR for table `"
                     << SchemeEntry->TableId.PathId.ToString() << "`."
@@ -1795,6 +1814,18 @@ public:
                 TStringBuilder() << "Aborted for table. "
                     << getIssues().ToOneLineString(),
                 NYql::NDqProto::StatusIds::ABORTED,
+                getIssues());
+            return;
+        }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE: {
+            CA_LOG_E("Got WRONG SHARD STATE for table."
+                    << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
+                    << " Sink=" << this->SelfId() << "."
+                    << getIssues().ToOneLineString());
+            ReplyErrorAndDie(
+                TStringBuilder() << "Wrong shard state for table. "
+                    << getIssues().ToOneLineString(),
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                 getIssues());
             return;
         }

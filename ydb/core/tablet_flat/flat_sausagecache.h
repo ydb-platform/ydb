@@ -139,7 +139,7 @@ public:
         }
 
         void Fill(ui32 pageId, TSharedPageRef page, bool sticky = false) noexcept {
-            EnsurePage(pageId)->Fill(page, sticky);
+            EnsurePage(pageId)->Fill(std::move(page), sticky);
         }
 
         const TLogoBlobID Id;

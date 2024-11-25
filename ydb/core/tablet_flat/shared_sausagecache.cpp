@@ -960,8 +960,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     void BodyProvided(TCollection &collection, TPage *page) {
         AddActivePage(page);
         auto expectantIt = collection.Expectants.find(page->PageId);
-        if (expectantIt == collection.Expectants.end())
+        if (expectantIt == collection.Expectants.end()) {
             return;
+        }
         for (auto &xpair : expectantIt->second.SourceRequests) {
             auto &r = xpair.first;
             auto &rblock = r->ReadyPages[xpair.second];

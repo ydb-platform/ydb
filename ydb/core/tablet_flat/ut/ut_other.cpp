@@ -38,8 +38,9 @@ Y_UNIT_TEST_SUITE(NOther) {
 
         auto results = bundle->Results();
         UNIT_ASSERT(results);
+        UNIT_ASSERT_VALUES_EQUAL(results[0].PageCollections.at(0).PageCollection->Total(), 7);
         UNIT_ASSERT_VALUES_EQUAL(results[0].PageCollections.at(0).RegularPages.size(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(results[0].PageCollections.at(0).StickyPages.size(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(results[0].PageCollections.at(0).StickyPages.size(), 0);
 
         UNIT_ASSERT_VALUES_EQUAL(globs.size(), 18 /* 11 page collections + 4 meta + 3 external */);
 

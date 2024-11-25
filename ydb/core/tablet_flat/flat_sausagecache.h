@@ -134,10 +134,6 @@ public:
             EnsurePage(paged.PageId)->Fill(paged.Data, sticky);
         }
 
-        void Fill(NSharedCache::TEvResult::TLoaded&& loaded, bool sticky = false) noexcept {
-            EnsurePage(loaded.PageId)->Fill(std::move(loaded.Page), sticky);
-        }
-
         void Fill(ui32 pageId, TSharedPageRef page, bool sticky) noexcept {
             EnsurePage(pageId)->Fill(std::move(page), sticky);
         }

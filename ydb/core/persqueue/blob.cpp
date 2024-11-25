@@ -399,6 +399,10 @@ void TBatch::Pack() {
         Header.SetPayloadSize(PackedData.size());
     }
 
+    if (!Blobs.empty()) {
+        EndWriteTimestamp = Blobs.back().WriteTimestamp;
+    }
+
 
     TVector<TClientBlob> tmp;
     Blobs.swap(tmp);
@@ -418,7 +422,10 @@ void TBatch::Unpack() {
             InternalPartsPos.push_back(i);
     }
     Y_ABORT_UNLESS(InternalPartsPos.size() == GetInternalPartsCount());
-    
+    if (!Blobs.empty()) {
+        EndWriteTimestamp = Blobs.back().WriteTimestamp;
+    }
+
     PackedData.Clear();
 }
 
@@ -978,4 +985,3 @@ bool TPartitionedBlob::IsNextPart(const TString& sourceId, const ui64 seqNo, con
 
 }// NPQ
 }// NKikimr
-

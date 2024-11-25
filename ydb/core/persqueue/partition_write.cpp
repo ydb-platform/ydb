@@ -1402,7 +1402,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
             Y_ABORT_UNLESS(Head.GetBatch(pp).Packed);
             auto& batch = Head.GetBatch(pp);
             batch.SerializeTo(valueD);
-            if (!batch.Empty()) {
+            if (batch.GetLastMessageWriteTimestamp()) {
                 PendingWriteTimestamp = batch.GetLastMessageWriteTimestamp();
             }
         }
@@ -1410,7 +1410,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
     for (auto& b : NewHead.GetBatches()) {
         Y_ABORT_UNLESS(b.Packed);
         b.SerializeTo(valueD);
-        if (!b.Empty()) {
+        if (b.GetLastMessageWriteTimestamp()) {
             PendingWriteTimestamp = b.GetLastMessageWriteTimestamp();
         }
     }

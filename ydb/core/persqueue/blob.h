@@ -121,6 +121,7 @@ struct TBatch {
     TVector<ui32> InternalPartsPos;
     NKikimrPQ::TBatchHeader Header;
     TBuffer PackedData;
+    TInstant EndWriteTimestamp;
 
     TBatch()
         : Packed(false)
@@ -162,6 +163,8 @@ struct TBatch {
         Header.SetUnpackedSize(unpackedSize);
         Header.SetCount(count);
         Header.SetInternalPartsCount(InternalPartsPos.size());
+
+        EndWriteTimestamp = b.WriteTimestamp;
     }
 
     ui64 GetOffset() const {
@@ -193,7 +196,7 @@ struct TBatch {
     }
 
     TInstant GetLastMessageWriteTimestamp() const {
-        return Blobs.back().WriteTimestamp;
+        return EndWriteTimestamp;
     }
 
     TBatch(const NKikimrPQ::TBatchHeader &header, const char* data)

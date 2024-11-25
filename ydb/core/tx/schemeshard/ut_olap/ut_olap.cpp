@@ -715,8 +715,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
             TSet<ui64> txIds;
             for (ui32 i = 0; i < 10; ++i) {
                 std::vector<ui64> writeIds;
-                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert);
-                NTxUT::ProposeCommit(runtime, sender, shardId, ++txId, writeIds);
+                ++txId;
+                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }
 

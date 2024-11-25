@@ -646,7 +646,9 @@ public:
             << " Tactic# " << TEvBlobStorage::TEvPut::TacticName(Tactic)
             << " RestartCounter# " << RestartCounter);
 
+        TInstant firstDeadline = TInstant::Max();
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
+            firstDeadline = std::min(firstDeadline, PutImpl.Blobs[blobIdx].Deadline);
             LWTRACK(DSProxyPutBootstrapStart, PutImpl.Blobs[blobIdx].Orbit);
         }
 
@@ -667,7 +669,9 @@ public:
             getTotalSize()
         );
 
-        Become(&TBlobStorageGroupPutRequest::StateWait, TDuration::MilliSeconds(DsPutWakeupMs), new TKikimrEvents::TEvWakeup);
+        TInstant now = TActivationContext::Now();
+        TInstant wakeupTime = std::min(now + TDuration::MilliSeconds(DsPutWakeupMs), firstDeadline);
+        Become(&TBlobStorageGroupPutRequest::StateWait, wakeupTime, new TKikimrEvents::TEvWakeup);
 
         PartSets.resize(PutImpl.Blobs.size());
         for (auto& partSet : PartSets) {
@@ -721,7 +725,7 @@ public:
         const TInstant now = TActivationContext::Now();
         TPutImpl::TPutResultVec putResults;
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
-            if (!PutImpl.Blobs[blobIdx].Replied && now > PutImpl.Blobs[blobIdx].Deadline) {
+            if (!PutImpl.Blobs[blobIdx].Replied && now >= PutImpl.Blobs[blobIdx].Deadline) {
                 PutImpl.PrepareOneReply(NKikimrProto::DEADLINE, blobIdx, LogCtx, "Deadline timer hit", putResults);
             }
         }

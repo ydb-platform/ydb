@@ -57,9 +57,8 @@ namespace NKikimr {
                 OriginalId = LogoBlobIDFromLogoBlobID(record.GetOriginalBlobId());
                 Y_ABORT_UNLESS(record.HasPatchedBlobId());
                 PatchedId = LogoBlobIDFromLogoBlobID(record.GetPatchedBlobId());
-                Deadline = TInstant::Seconds(record.GetMsgQoS().HasDeadlineSeconds());
                 if (record.HasMsgQoS() && record.GetMsgQoS().HasDeadlineSeconds()) {
-                    Deadline = TInstant::Seconds(record.GetMsgQoS().HasDeadlineSeconds());
+                    Deadline = TInstant::Seconds(record.GetMsgQoS().GetDeadlineSeconds());
                 }
 
                 DiffCount = record.DiffsSize();

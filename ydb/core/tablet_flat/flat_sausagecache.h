@@ -130,10 +130,6 @@ public:
             return page;
         }
 
-        void Fill(const NPageCollection::TLoadedPage &paged, bool sticky = false) noexcept {
-            EnsurePage(paged.PageId)->Fill(paged.Data, sticky);
-        }
-
         void Fill(ui32 pageId, TSharedPageRef page, bool sticky) noexcept {
             EnsurePage(pageId)->Fill(std::move(page), sticky);
         }

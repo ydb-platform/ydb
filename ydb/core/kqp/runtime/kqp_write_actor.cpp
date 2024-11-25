@@ -60,7 +60,7 @@ namespace {
         evWrite->Record.SetTxId(txId);
         auto* protoLocks = evWrite->Record.MutableLocks();
         protoLocks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-        
+
         const auto prepareSettings = txManager->GetPrepareTransactionInfo();
         if (!prepareSettings.ArbiterColumnShard) {
             for (const ui64 sendingShardId : prepareSettings.SendingShards) {
@@ -360,7 +360,7 @@ public:
         CA_LOG_D("Plan resolve with delay " << CalculateNextAttemptDelay(MessageSettings, ResolveAttempts));
         TlsActivationContext->Schedule(
             CalculateNextAttemptDelay(MessageSettings, ResolveAttempts),
-            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvResolveRequestPlanned{}, 0, 0));   
+            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvResolveRequestPlanned{}, 0, 0));
     }
 
     void Handle(TEvPrivate::TEvResolveRequestPlanned::TPtr&) {
@@ -395,7 +395,6 @@ public:
         TableWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::TableWriteActorTableNavigate, TableWriteActorSpan.GetTraceId(),
             "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
 
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, {}), 0, 0, TableWriteActorStateSpan.GetTraceId());
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, 0, TableWriteActorStateSpan.GetTraceId());
     }
 
@@ -496,7 +495,7 @@ public:
             }()
             << ", Cookie=" << ev->Cookie);
 
-        
+
 
         switch (ev->Get()->GetStatus()) {
         case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {
@@ -568,7 +567,7 @@ public:
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
                 getIssues());
             return;
-        }        
+        }
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
             CA_LOG_W("Got OVERLOADED for table `"
                 << SchemeEntry->TableId.PathId.ToString() << "`."
@@ -795,7 +794,7 @@ public:
                 ? NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE
                 : NKikimrDataEvents::TEvWrite::MODE_PREPARE)
             : NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-        
+
         if (isImmediateCommit) {
             const auto locks = TxManager->GetLocks(shardId);
             if (!locks.empty()) {
@@ -931,7 +930,7 @@ public:
         if (TableWriteActorSpan) {
             TableWriteActorSpan.EndError(message);
         }
-    
+
         Callbacks->OnError(message, statusCode, subIssues);
     }
 
@@ -1346,7 +1345,7 @@ public:
         } else {
             token = *ev->Get()->Token;
         }
-        
+
         auto& queue = DataQueues[token.TableId];
         queue.emplace();
         auto& message = queue.back();
@@ -1359,7 +1358,7 @@ public:
 
         ev->Get()->Data = nullptr;
         ev->Get()->Alloc = nullptr;
-        
+
         Process();
     }
 
@@ -1659,7 +1658,7 @@ public:
                 queue.pop();
             }
         }
-        
+
         for (auto& [_, info] : WriteInfos) {
             if (info.WriteTableActor) {
                 info.WriteTableActor->Terminate();
@@ -1821,7 +1820,7 @@ public:
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
                 getIssues());
                 return;
-        }        
+        }
         case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED: {
             CA_LOG_W("Got OVERLOADED for table ."
                 << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
@@ -1998,7 +1997,7 @@ public:
         BufferWriteActorState.EndError(message);
         BufferWriteActor.EndError(message);
         CA_LOG_E(message << ". statusCode=" << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << ". subIssues=" << subIssues.ToString() << ". sessionActorId=" << SessionActorId << ". isRollback=" << (State == EState::ROLLINGBACK));
-     
+
         Y_ABORT_UNLESS(!HasError);
         HasError = true;
         if (State != EState::ROLLINGBACK) {

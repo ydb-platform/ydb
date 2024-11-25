@@ -148,7 +148,7 @@ private:
         };
 
         struct TEvRetryRead : public TEventLocal<TEvRetryRead, EvRetryRead> {
-            explicit TEvRetryRead(ui64 readId, ui64 lastSeqNo, bool instantStart = false) 
+            explicit TEvRetryRead(ui64 readId, ui64 lastSeqNo, bool instantStart = false)
                 : ReadId(readId)
                 , LastSeqNo(lastSeqNo)
                 , InstantStart(instantStart) {
@@ -259,7 +259,7 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
         CA_LOG_D("TEvResolveKeySetResult was received for table: " << StreamLookupWorker->GetTablePath());
         if (ev->Get()->Request->ErrorCount > 0) {
-            TString errorMsg = TStringBuilder() << "Failed to get partitioning for table: " 
+            TString errorMsg = TStringBuilder() << "Failed to get partitioning for table: "
                 << StreamLookupWorker->GetTablePath();
             LookupActorStateSpan.EndError(errorMsg);
 
@@ -419,7 +419,7 @@ private:
         auto readIt = Reads.find(ev->Get()->ReadId);
         YQL_ENSURE(readIt != Reads.end(), "Unexpected readId: " << ev->Get()->ReadId);
         auto& read = readIt->second;
-        
+
         if (read.State == EReadState::Running && read.LastSeqNo <= ev->Get()->LastSeqNo) {
             if (ev->Get()->InstantStart) {
                 read.SetFinished();
@@ -566,10 +566,9 @@ private:
             keyColumnTypes, TVector<TKeyDesc::TColumnOp>{}));
 
         Counters->IteratorsShardResolve->Inc();
-        LookupActorStateSpan = NWilson::TSpan(TWilsonKqp::LookupActorShardsResolve, LookupActorSpan.GetTraceId(), 
+        LookupActorStateSpan = NWilson::TSpan(TWilsonKqp::LookupActorShardsResolve, LookupActorSpan.GetTraceId(),
             "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
 
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(StreamLookupWorker->GetTableId(), {}));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
 
         SchemeCacheRequestTimeoutTimer = CreateLongTimer(TlsActivationContext->AsActorContext(), SchemeCacheRequestTimeout,

@@ -1058,7 +1058,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
     Y_ABORT_UNLESS(record.HasEndOffset());
     Y_ABORT_UNLESS(EndOffset <= record.GetEndOffset()); //end offset could not be changed if no data arrived, but signal will be sended anyway after timeout
-    Y_ABORT_UNLESS(ReadOffset >= EndOffset || MaxTimeLagMs || ReadingFinishedSent); //otherwise no WaitData were needed
+    Y_ABORT_UNLESS(ReadOffset >= EndOffset || MaxTimeLagMs || ReadTimestampMs); //otherwise no WaitData were needed
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                     << " wait for data done: " << " readOffset " << ReadOffset << " EndOffset " << EndOffset << " newEndOffset "

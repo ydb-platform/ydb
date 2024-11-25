@@ -98,7 +98,8 @@ protected:
         const TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler>& mkqlCompiler,
         const TSession::TPtr& session,
         const TString& cluster,
-        const TYtUrlMapper& urlMapper);
+        const TYtUrlMapper& urlMapper,
+        IMetricsRegistryPtr metrics);
 
 public:
     TString GetInputSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput) const;
@@ -165,6 +166,7 @@ public:
     const TYtUrlMapper& UrlMapper_;
     bool DisableAnonymousClusterAccess_;
     bool Hidden = false;
+    IMetricsRegistryPtr Metrics;
 };
 
 
@@ -180,8 +182,9 @@ public:
         TOptions&& options,
         const TSession::TPtr& session,
         const TString& cluster,
-        const TYtUrlMapper& urlMapper)
-        : TExecContextBase(services, clusters, mkqlCompiler, session, cluster, urlMapper)
+        const TYtUrlMapper& urlMapper,
+        IMetricsRegistryPtr metrics)
+        : TExecContextBase(services, clusters, mkqlCompiler, session, cluster, urlMapper, std::move(metrics))
         , Options_(std::move(options))
     {
     }

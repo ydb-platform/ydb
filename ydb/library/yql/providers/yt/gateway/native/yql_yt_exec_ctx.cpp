@@ -40,7 +40,8 @@ TExecContextBase::TExecContextBase(const TYtNativeServices& services,
     const TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler>& mkqlCompiler,
     const TSession::TPtr& session,
     const TString& cluster,
-    const TYtUrlMapper& urlMapper)
+    const TYtUrlMapper& urlMapper,
+    IMetricsRegistryPtr metrics)
     : FunctionRegistry_(services.FunctionRegistry)
     , FileStorage_(services.FileStorage)
     , Config_(services.Config)
@@ -51,6 +52,7 @@ TExecContextBase::TExecContextBase(const TYtNativeServices& services,
     , UrlMapper_(urlMapper)
     , DisableAnonymousClusterAccess_(services.DisableAnonymousClusterAccess)
     , Hidden(session->SessionId_.EndsWith("_hidden"))
+    , Metrics(std::move(metrics))
 {
     YtServer_ = Clusters_->GetServer(Cluster_);
     LogCtx_ = NYql::NLog::CurrentLogContextPath();
@@ -368,7 +370,7 @@ TTransactionCache::TEntry::TPtr TExecContextBase::GetOrCreateEntry(const TYtSett
         throw yexception() << "Accessing YT cluster " << Cluster_ << " without OAuth token is not allowed";
     }
 
-    return Session_->TxCache_.GetOrCreateEntry(YtServer_, token, impersonationUser, [s = Session_]() { return s->CreateSpecWithDesc(); }, settings);
+    return Session_->TxCache_.GetOrCreateEntry(YtServer_, token, impersonationUser, [s = Session_]() { return s->CreateSpecWithDesc(); }, settings, Metrics);
 }
 
 TExpressionResorceUsage TExecContextBase::ScanExtraResourceUsageImpl(const TExprNode& node, const TYtSettings::TConstPtr& config, bool withInput) {

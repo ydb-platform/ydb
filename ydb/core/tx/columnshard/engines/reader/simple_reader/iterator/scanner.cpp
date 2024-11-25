@@ -35,26 +35,25 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
             ContinueSource(*sourceIdxToContinue);
             break;
         }
-        if (isFinished) {
-            AFL_VERIFY(FetchingSourcesByIdx.erase(frontSource->GetSourceIdx()));
-            if (Context->GetCommonContext()->GetReadMetadata()->Limit) {
-                FinishedSources.emplace(*FetchingSources.begin());
+        if (!isFinished) {
+            break
+        }
+        AFL_VERIFY(FetchingSourcesByIdx.erase(frontSource->GetSourceIdx()));
+        if (Context->GetCommonContext()->GetReadMetadata()->Limit) {
+            FinishedSources.emplace(*FetchingSources.begin());
+        }
+        FetchingSources.erase(FetchingSources.begin());
+        while (FetchingSources.size() && FinishedSources.size()) {
+            auto finishedSource = *FinishedSources.begin();
+            auto fetchingSource = *FetchingSources.begin();
+            if (finishedSource->GetFinish() < fetchingSource->GetStart()) {
+                FetchedCount += finishedSource->GetRecordsCount();
             }
-            FetchingSources.erase(FetchingSources.begin());
-            while (FetchingSources.size() && FinishedSources.size()) {
-                auto finishedSource = *FinishedSources.begin();
-                auto fetchingSource = *FetchingSources.begin();
-                if (finishedSource->GetFinish() < fetchingSource->GetStart()) {
-                    FetchedCount += finishedSource->GetRecordsCount();
-                }
-                FinishedSources.erase(FinishedSources.begin());
-                if (FetchedCount > Context->GetCommonContext()->GetReadMetadata()->Limit) {
-                    Context->Abort();
-                    Abort();
-                }
+            FinishedSources.erase(FinishedSources.begin());
+            if (FetchedCount > Context->GetCommonContext()->GetReadMetadata()->Limit) {
+                Context->Abort();
+                Abort();
             }
-        } else {
-            break;
         }
     }
 }

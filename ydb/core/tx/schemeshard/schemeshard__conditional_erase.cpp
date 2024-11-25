@@ -267,6 +267,7 @@ private:
     }
 
     static TVector<std::pair<ui32, ui32>> MakeColumnIds(TTableInfo::TPtr mainTable, TTableIndexInfo::TPtr index, TTableInfo::TPtr indexImplTable) {
+        Y_ENSURE(index->Type != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
         TVector<std::pair<ui32, ui32>> result;
         THashSet<TString> keys;
 

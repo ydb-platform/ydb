@@ -35,6 +35,7 @@ NKikimrSchemeOp::TModifyScheme CreateIndexTask(NKikimr::NSchemeShard::TTableInde
     operation->SetName(dst.LeafName());
 
     operation->SetType(indexInfo->Type);
+    Y_ENSURE(indexInfo->Type != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
     for (const auto& keyName: indexInfo->IndexKeys) {
         *operation->MutableKeyColumnNames()->Add() = keyName;
     }

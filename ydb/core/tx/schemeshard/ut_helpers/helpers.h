@@ -64,7 +64,7 @@
 
 namespace NYdb::NTable {
     struct TGlobalIndexSettings;
-    struct TVectorIndexSettings;
+    struct TKMeansTreeSettings;
 }
 
 namespace NSchemeShardUT_Private {
@@ -375,7 +375,7 @@ namespace NSchemeShardUT_Private {
         TVector<TString> DataColumns;
         TVector<NYdb::NTable::TGlobalIndexSettings> GlobalIndexSettings = {};
         // implementation note: it was made a pointer, not optional, to enable forward declaration
-        std::unique_ptr<NYdb::NTable::TVectorIndexSettings> VectorIndexSettings = {};
+        std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> KMeansTreeSettings = {};
     };
 
     std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal);

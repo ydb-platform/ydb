@@ -862,6 +862,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             auto operation = schema.MutableCreateTableIndex();
             operation->SetName(name);
             operation->SetType(indexInfo->Type);
+            Y_ENSURE(indexInfo->Type != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
             for (const auto& keyName: indexInfo->IndexKeys) {
                 *operation->MutableKeyColumnNames()->Add() = keyName;
             }

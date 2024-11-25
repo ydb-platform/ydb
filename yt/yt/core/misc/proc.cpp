@@ -64,9 +64,9 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Proc");
+namespace {
 
-////////////////////////////////////////////////////////////////////////////////
+YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Proc");
 
 TString LinuxErrorCodeFormatter(int code)
 {
@@ -74,6 +74,8 @@ TString LinuxErrorCodeFormatter(int code)
 }
 
 YT_DEFINE_ERROR_CODE_RANGE(4200, 4399, "NYT::ELinuxErrorCode", LinuxErrorCodeFormatter);
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 

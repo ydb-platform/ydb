@@ -22,7 +22,7 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, SystemLoggingCategoryName);
 constexpr size_t BufferSize = 64_KB;
 const char* LogrotateTimestampSuffixFormat = ".%Y%m%d-%H%M%S";
 

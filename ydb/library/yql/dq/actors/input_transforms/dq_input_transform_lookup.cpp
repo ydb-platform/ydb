@@ -222,7 +222,7 @@ private: //IDqComputeActorAsyncInput
         auto startCycleCount = GetCycleCountFast();
         auto guard = BindAllocator();
 
-        if (!KeysForLookup) { // Already passed away
+        if (!KeysForLookup) { // Before Bootstrap or after PassAway()
             return 0;
         }
 

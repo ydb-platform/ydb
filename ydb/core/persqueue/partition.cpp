@@ -317,6 +317,10 @@ TInstant TPartition::GetEndWriteTimestamp() const {
     return EndWriteTimestamp;
 }
 
+THead& TPartition::GetHead() {
+    return Head;
+}
+
 void TPartition::HandleWakeup(const TActorContext& ctx) {
     FilterDeadlinedWrites(ctx);
 

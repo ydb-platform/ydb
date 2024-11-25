@@ -40,6 +40,7 @@ struct TCreatePartitionParams {
     TVector<TTransaction> Transactions;
     TConfigParams Config;
     TInstant EndWriteTimestamp;
+    bool FillHead = false;
 };
 
 }
@@ -245,7 +246,7 @@ protected:
     void SendInfoRangeResponse(ui32 partition,
                                const TVector<TCreateConsumerParams>& consumers);
     void WaitDataRangeRequest();
-    void SendDataRangeResponse(ui64 begin, ui64 end);
+    void SendDataRangeResponse(ui64 begin, ui64 end, bool isHead);
     void WaitDataReadRequest();
     void SendDataReadResponse();
 
@@ -421,9 +422,9 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
         SendInfoRangeResponse(params.Partition.InternalPartitionId, params.Config.Consumers);
 
         WaitDataRangeRequest();
-        SendDataRangeResponse(params.Begin, params.End);
+        SendDataRangeResponse(params.Begin, params.End, params.FillHead);
 
-        if (params.EndWriteTimestamp == TInstant::Zero()) {
+        if (params.EndWriteTimestamp == TInstant::Zero() || params.FillHead) {
             WaitLastBlobReadRequest();
             SendLastBlobReadResponse(params.Begin, params.End);
             Ctx->Runtime->SimulateSleep(TDuration::Seconds(1));
@@ -831,12 +832,10 @@ void TPartitionFixture::WaitLastBlobReadRequest()
     UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadSize(), 1);
 }
 
-void TPartitionFixture::SendLastBlobReadResponse(ui64 begin, ui64 end)
-{
-    THead head;
+TBatch CreateBatch(size_t count) {
     TBatch batch;
 
-    for (size_t i = begin; i < end; ++i) {
+    for (size_t i = 0; i < count; ++i) {
         Cerr << ">>>> ADD BLOB " << i << " writeTimestamp=" << (TInstant::Now() - TDuration::MilliSeconds(10)) << Endl << Flush;
 
         TString data = TStringBuilder() << "message-data-" << i;
@@ -846,8 +845,13 @@ void TPartitionFixture::SendLastBlobReadResponse(ui64 begin, ui64 end)
     }
 
     batch.Pack();
-    head.AddBatch(batch);
 
+    return batch;
+}
+
+void TPartitionFixture::SendLastBlobReadResponse(ui64 begin, ui64 end)
+{
+    auto batch = CreateBatch(end - begin);
     TString valueD;
     batch.SerializeTo(valueD);
 
@@ -914,7 +918,7 @@ void TPartitionFixture::WaitDataRangeRequest()
     UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadRangeSize(), 1);
 }
 
-void TPartitionFixture::SendDataRangeResponse(ui64 begin, ui64 end)
+void TPartitionFixture::SendDataRangeResponse(ui64 begin, ui64 end, bool isHead)
 {
     Y_ABORT_UNLESS(begin <= end);
 
@@ -924,10 +928,10 @@ void TPartitionFixture::SendDataRangeResponse(ui64 begin, ui64 end)
     auto read = event->Record.AddReadRangeResult();
     read->SetStatus(NKikimrProto::OK);
     auto pair = read->AddPair();
-    NPQ::TKey key(NPQ::TKeyPrefix::TypeData, TPartitionId(1), begin, 0, end - begin, 0);
+    NPQ::TKey key(NPQ::TKeyPrefix::TypeData, TPartitionId(1), begin, 0, end - begin, 0, isHead);
     pair->SetStatus(NKikimrProto::OK);
     pair->SetKey(key.ToString());
-    //pair->SetValueSize();
+    pair->SetValueSize(684);
     pair->SetCreationUnixTime(0);
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
@@ -3240,6 +3244,15 @@ Y_UNIT_TEST_F(EndWriteTimestamp_FromMeta, TPartitionFixture) {
 
     auto endWriteTimestamp = actor->GetEndWriteTimestamp();
     UNIT_ASSERT_VALUES_EQUAL(endWriteTimestamp.MilliSeconds(), now.MilliSeconds());
+} // EndWriteTimestamp_FromMeta
+
+Y_UNIT_TEST_F(EndWriteTimestamp_FromHead, TPartitionFixture) {
+    auto* actor = CreatePartition({.Partition=TPartitionId{2}, .Begin=0, .End=10, .FillHead = true});
+
+    auto now = TInstant::Now();
+
+    auto endWriteTimestamp = actor->GetEndWriteTimestamp();
+    UNIT_ASSERT_C(now - TDuration::Seconds(1) < endWriteTimestamp && endWriteTimestamp < now, "" << (now - TDuration::Seconds(1)) << " < " << endWriteTimestamp << " < " << now );
 } // EndWriteTimestamp_FromMeta
 
 } // End of suite

@@ -111,10 +111,22 @@ public:
 
     void ContinueCursor(const std::shared_ptr<IDataSource>& sourcePtr);
 
-    class TCompareForScanSequence {
+    class TCompareStartForScanSequence {
     public:
         bool operator()(const std::shared_ptr<IDataSource>& l, const std::shared_ptr<IDataSource>& r) const {
             const std::partial_ordering compareResult = l->GetStart().Compare(r->GetStart());
+            if (compareResult == std::partial_ordering::equivalent) {
+                return l->GetSourceId() < r->GetSourceId();
+            } else {
+                return compareResult == std::partial_ordering::less;
+            }
+        };
+    };
+
+    class TCompareFinishForScanSequence {
+    public:
+        bool operator()(const std::shared_ptr<IDataSource>& l, const std::shared_ptr<IDataSource>& r) const {
+            const std::partial_ordering compareResult = l->GetFinish().Compare(r->GetFinish());
             if (compareResult == std::partial_ordering::equivalent) {
                 return l->GetSourceId() < r->GetSourceId();
             } else {

@@ -10,6 +10,9 @@ namespace NKikimr::NOlap::NReader::NSimple {
 void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::shared_ptr<arrow::Table>&& table, const ui32 startIndex,
     const ui32 recordsCount, TPlainReadData& reader) {
     source->MutableStageResult().SetResultChunk(std::move(table), startIndex, recordsCount);
+    if ((!table || !table->num_rows()) && Context->GetCommonContext()->GetReadMetadata()->Limit && InFlightLimit < MaxInFlight) {
+        InFlightLimit = 2 * InFlightLimit;
+    }
     while (FetchingSources.size()) {
         auto frontSource = *FetchingSources.begin();
         if (!frontSource->HasStageResult()) {
@@ -34,7 +37,21 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
         }
         if (isFinished) {
             AFL_VERIFY(FetchingSourcesByIdx.erase(frontSource->GetSourceIdx()));
+            if (Context->GetCommonContext()->GetReadMetadata()->Limit) {
+                FinishedSources.emplace(*FetchingSources.begin());
+            }
             FetchingSources.erase(FetchingSources.begin());
+            while (FetchingSources.size() && FinishedSources.size()) {
+                auto finishedSource = *FinishedSources.begin();
+                auto fetchingSource = *FetchingSources.begin();
+                if (finishedSource->GetFinish() < fetchingSource->GetStart()) {
+                    FetchedCount += finishedSource->GetRecordsCount();
+                }
+                FinishedSources.erase(FinishedSources.begin());
+                if (FetchedCount > Context->GetCommonContext()->GetReadMetadata()->Limit) {
+                    Abort();
+                }
+            }
         } else {
             break;
         }

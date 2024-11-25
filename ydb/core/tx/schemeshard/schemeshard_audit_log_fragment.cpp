@@ -2,8 +2,9 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include <util/string/builder.h>

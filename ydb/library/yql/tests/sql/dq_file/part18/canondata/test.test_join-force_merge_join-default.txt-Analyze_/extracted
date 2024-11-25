@@ -1,7 +1,0 @@
-<tmp_path>/program.sql:<main>: Info: DQ cannot execute the query
-
-    <tmp_path>/program.sql:<main>: Info: Optimization
-    
-        <tmp_path>/program.sql:<main>:7:68: Info: Cannot execute self join in DQ
-        	        FROM (SELECT * FROM plato.Input1 WHERE subkey != "bar") AS a
-	                                                                   ^

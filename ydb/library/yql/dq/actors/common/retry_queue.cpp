@@ -35,6 +35,9 @@ void TRetryEventsQueue::OnNewRecipientId(const NActors::TActorId& recipientId, b
     ReceivedEventsSeqNos.clear();
     Connected = connected;
     RetryState = Nothing();
+    if (Connected) {
+        ScheduleHeartbeat();
+    }
 }
 
 void TRetryEventsQueue::HandleNodeDisconnected(ui32 nodeId) {

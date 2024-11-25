@@ -69,6 +69,7 @@
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/columnshard.h>

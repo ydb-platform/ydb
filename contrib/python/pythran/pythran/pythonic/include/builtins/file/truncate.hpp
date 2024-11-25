@@ -18,7 +18,7 @@ namespace builtins
     void truncate(types::file &&f, long size);
 
     DEFINE_FUNCTOR(pythonic::builtins::file, truncate);
-  }
-}
+  } // namespace file
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

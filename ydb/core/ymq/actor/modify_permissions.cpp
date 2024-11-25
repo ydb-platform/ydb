@@ -1,5 +1,7 @@
 #include "action.h"
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+
 #include <google/protobuf/text_format.h>
 
 #include <util/string/ascii.h>

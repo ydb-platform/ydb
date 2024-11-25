@@ -2,9 +2,10 @@
 
 #include "fwd.h"
 #include "common.h"
-#include "node.h"
 
 #include <library/cpp/yt/misc/enum.h>
+
+#include <library/cpp/yson/node/node.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
@@ -236,16 +237,13 @@ struct TProcessState
 {
     TString FqdnHostName;
     TString UserName;
-    TVector<TString> CommandLine;
 
-    // Command line with everything that looks like tokens censored.
-    TVector<TString> CensoredCommandLine;
     int Pid;
     TString ClientVersion;
+    TString BinaryPath;
+    TString BinaryName;
 
     TProcessState();
-
-    void SetCommandLine(int argc, const char* argv[]);
 
     static TProcessState* Get();
 };

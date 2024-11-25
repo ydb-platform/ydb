@@ -6,6 +6,7 @@ SET(
     yql/essentials/udfs/common/hyperloglog
     yql/essentials/udfs/common/pire
     yql/essentials/udfs/common/protobuf
+    yql/essentials/udfs/common/python/python3_small
     yql/essentials/udfs/common/re2
     yql/essentials/udfs/common/set
     yql/essentials/udfs/common/stat
@@ -19,6 +20,7 @@ SET(
     yql/essentials/udfs/common/url_base
     yql/essentials/udfs/common/unicode_base
     yql/essentials/udfs/common/streaming
+    yql/essentials/udfs/common/vector
     yql/essentials/udfs/examples/callables
     yql/essentials/udfs/examples/dicts
     yql/essentials/udfs/examples/dummylog

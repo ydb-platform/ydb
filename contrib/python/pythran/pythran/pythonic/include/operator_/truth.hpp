@@ -10,7 +10,7 @@ namespace operator_
   bool truth(bool const &a);
 
   DEFINE_FUNCTOR(pythonic::operator_, truth);
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

@@ -407,6 +407,9 @@ void ToProto(
     if (result.ArchiveJobCount) {
         proto->set_archive_job_count(*result.ArchiveJobCount);
     }
+    if (result.ContinuationToken) {
+        proto->set_continuation_token(*result.ContinuationToken);
+    }
 
     ToProto(proto->mutable_statistics(), result.Statistics);
     ToProto(proto->mutable_errors(), result.Errors);
@@ -432,6 +435,11 @@ void FromProto(
         result->ArchiveJobCount = proto.archive_job_count();
     } else {
         result->ArchiveJobCount.reset();
+    }
+    if (proto.has_continuation_token()) {
+        result->ContinuationToken = proto.continuation_token();
+    } else {
+        result->ContinuationToken.reset();
     }
 
     FromProto(&result->Statistics, proto.statistics());

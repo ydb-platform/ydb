@@ -299,8 +299,7 @@ private:
     {
         for (const auto& rowValues : rowsValues) {
             auto unversionedValue = rowValues[ColumnOffset_];
-            YT_VERIFY(unversionedValue);
-            auto value = CaptureValue(*unversionedValue);
+            auto value = CaptureValue(unversionedValue ? *unversionedValue : MakeUnversionedNullValue());
             Values_.push_back(value);
             ++RowCount_;
         }

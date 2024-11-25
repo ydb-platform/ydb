@@ -11,6 +11,6 @@ namespace builtins
   {
     USING_FUNCTOR(copy, pythonic::__dispatch__::functor::copy);
   }
-}
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

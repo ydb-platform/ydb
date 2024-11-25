@@ -2,6 +2,7 @@
 #include "range.h"
 
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/protos/kqp.pb.h>
 
 #include <deque>
 

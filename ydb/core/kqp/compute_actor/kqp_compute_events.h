@@ -155,7 +155,7 @@ private:
             Remote->Record.SetPageFaults(PageFaults);
             Remote->Record.SetPageFault(PageFault);
             Remote->Record.SetLastKey(TSerializedCellVec::Serialize(LastKey));
-            Remote->Record.SetLastCursor(LastCursorProto);
+            *Remote->Record.MutableLastCursor() = LastCursorProto;
             if (AvailablePacks) {
                 Remote->Record.SetAvailablePacks(*AvailablePacks);
             }

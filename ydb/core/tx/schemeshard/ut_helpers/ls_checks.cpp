@@ -853,9 +853,11 @@ TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames) {
     };
 }
 
-TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Metric metric,
+TCheckFunc KMeansTreeDescription(Ydb::Table::VectorIndexSettings_Metric metric,
                                   Ydb::Table::VectorIndexSettings_VectorType vectorType,
-                                  ui32 vectorDimension
+                                  ui32 vectorDimension,
+                                  ui32 clusters,
+                                  ui32 levels
                                   ) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         if (record.GetPathDescription().GetTableIndex().HasVectorIndexKmeansTreeDescription()) {
@@ -863,11 +865,12 @@ TCheckFunc VectorIndexDescription(Ydb::Table::VectorIndexSettings_Metric metric,
             UNIT_ASSERT_VALUES_EQUAL(settings.settings().metric(), metric);
             UNIT_ASSERT_VALUES_EQUAL(settings.settings().vector_type(), vectorType);
             UNIT_ASSERT_VALUES_EQUAL(settings.settings().vector_dimension(), vectorDimension);
+            UNIT_ASSERT_VALUES_EQUAL(settings.clusters(), clusters);
+            UNIT_ASSERT_VALUES_EQUAL(settings.levels(), levels);
         } else {
             UNIT_FAIL("oneof SpecializedIndexDescription should be set.");
         }
     };
-
 }
 
 

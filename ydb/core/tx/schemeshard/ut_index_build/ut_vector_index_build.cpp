@@ -304,19 +304,6 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             buildIndexOperation.DebugString()
         );
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/by_embedding"), {
-            NLs::PathExist,
-            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
-            NLs::IndexKeys({"embedding"}),
-            NLs::IndexDataColumns({"covered"}),
-            NLs::VectorIndexDescription(
-                Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
-                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
-                1024
-            )
-        });
-
         using namespace NKikimr::NTableIndex::NTableVectorKmeansTreeIndex;
         TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", LevelTable), true, true), {
             NLs::IsTable,
@@ -332,5 +319,26 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             NLs::MaxPartitionsCountEqual(3),
             NLs::SplitBoundaries<ui32>({12345, 54321})
         });
+
+        for (size_t i = 0; i != 3; ++i) {
+            if (i != 0) {
+                // check that specialized index description persisted even after reboot
+                RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            }
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/by_embedding"), {
+                NLs::PathExist,
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
+                NLs::IndexKeys({"embedding"}),
+                NLs::IndexDataColumns({"covered"}),
+                NLs::KMeansTreeDescription(
+                    Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                    Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+                    1024,
+                    4,
+                    5
+                )
+            });
+        }
     }
 }

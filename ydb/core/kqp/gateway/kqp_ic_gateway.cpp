@@ -1214,13 +1214,7 @@ public:
 
             const auto serializedDiffAcl = acl.SerializeAsString();
 
-            TVector<std::pair<const TString*, std::pair<TString, TString>>> pathPairs;
-            pathPairs.reserve(settings.Paths.size());
-            for (const auto& path : settings.Paths) {
-                pathPairs.push_back(std::make_pair(&path, NSchemeHelpers::SplitPathByDirAndBaseNames(path)));
-            }
-
-            for (const auto& path : pathPairs) {
+            for (const auto& currentPath : settings.Paths) {
                 promises.push_back(NewPromise<TGenericResult>());
                 futures.push_back(promises.back().GetFuture());
 
@@ -1231,7 +1225,7 @@ public:
                     record.SetUserToken(UserToken->GetSerializedToken());
                 }
 
-                auto [dirname, basename] = path.second;
+                auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(currentPath);
                 if (!dirname.empty() && !IsStartWithSlash(dirname)) {
                     dirname = JoinPath({Database, dirname});
                 }
@@ -1242,7 +1236,7 @@ public:
                 modifyScheme->MutableModifyACL()->SetName(basename);
 
                 modifyScheme->MutableModifyACL()->SetDiffACL(serializedDiffAcl);
-                SendSchemeRequest(ev.Release()).Apply([promise = promises.back(), path = *path.first](const TFuture<TGenericResult>& future) mutable{
+                SendSchemeRequest(ev.Release()).Apply([promise = promises.back(), path = currentPath](const TFuture<TGenericResult>& future) mutable {
                     auto result = future.GetValue();
                     if (!result.Success()) {
                         result.AddIssue(NYql::TIssue("Error for the path: " + path));

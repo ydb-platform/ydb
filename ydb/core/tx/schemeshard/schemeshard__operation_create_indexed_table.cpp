@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_utils.h"
+#include "schemeshard__op_traits.h"
 
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -10,6 +11,26 @@
 namespace NKikimr::NSchemeShard {
 
 using namespace NTableIndex;
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable>;
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreateIndexedTable().GetTableDescription().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreateIndexedTable()->MutableTableDescription()->SetName(name);
+    return true;
+}
 
 TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable);

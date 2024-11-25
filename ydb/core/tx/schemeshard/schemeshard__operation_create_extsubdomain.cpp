@@ -2,6 +2,7 @@
 #include "schemeshard_impl.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_common_subdomain.h"
+#include "schemeshard__op_traits.h"
 
 #include <ydb/core/base/subdomain.h>
 
@@ -285,6 +286,26 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExtSubDomain>;
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetSubDomain().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableSubDomain()->SetName(name);
+    return true;
+}
 
 ISubOperation::TPtr CreateExtSubDomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateExtSubDomain>(id, tx);

@@ -181,6 +181,7 @@ private:
                         entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
                     }
 
+                    Cerr << "RESOLVING TABLE " << tableInfo->Path << Endl;
                     auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
                     entry.UserData = EncodeStageInfo(stageInfo);
                     switch (operation) {

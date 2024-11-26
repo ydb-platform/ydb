@@ -953,6 +953,10 @@ protected:
             }
             output.SinkSettings.ConstructInPlace();
             output.SinkSettings->PackFrom(settings);
+
+            // output.ColumnTypes
+            // output.ColumnTypeInfos
+            // output.WriteIndexes
         } else {
             output.SinkSettings = intSink.GetSettings();
         }

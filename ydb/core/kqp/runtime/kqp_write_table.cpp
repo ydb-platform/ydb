@@ -221,7 +221,7 @@ std::set<std::string> BuildNotNullColumns(const TConstArrayRef<NKikimrKqp::TKqpC
 std::vector<std::pair<TString, NScheme::TTypeInfo>> BuildBatchBuilderColumns(
     const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns) {
-    YQL_ENSURE(schemeEntry.ColumnTableInfo);
+    /*YQL_ENSURE(schemeEntry.ColumnTableInfo);
     YQL_ENSURE(schemeEntry.ColumnTableInfo->Description.HasSchema());
     const auto& columns = schemeEntry.ColumnTableInfo->Description.GetSchema().GetColumns();
 
@@ -239,7 +239,11 @@ std::vector<std::pair<TString, NScheme::TTypeInfo>> BuildBatchBuilderColumns(
                 column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
             result.emplace_back(column.GetName(), typeInfoMod.TypeInfo);
         }
-    }
+    }*/
+
+    //std::vector<std::pair<TString, NScheme::TTypeInfo>> result;
+
+
     return result;
 }
 
@@ -385,7 +389,7 @@ private:
     TVector<TCellInfo> CellsInfo;
 };
 
-class TColumnDataBatcher : public IDataBatch {
+/*class TColumnDataBatcher : public IDataBatch {
 public:
     using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
 
@@ -405,8 +409,9 @@ public:
     }
 
 private:
+    const TVector<TSysTables::TTableColumnInfo> Columns;
     NArrow::TArrowBatchBuilder BatchBuilder;
-};
+};*/
 
 class TColumnShardPayloadSerializer : public IPayloadSerializer {
     using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;

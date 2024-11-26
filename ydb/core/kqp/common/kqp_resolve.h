@@ -31,6 +31,7 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
     TMap<TString, NSharding::IShardingBase::TColumn> Columns;
     TVector<TString> KeyColumns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    //TVector<NScheme::TTypeInfo> ColumnTypes;
     ETableKind TableKind = ETableKind::Unknown;
     THashMap<TString, std::pair<TString, NYql::TKikimrPathId>> Sequences;
     THashMap<TString, Ydb::TypedValue> DefaultFromLiteral;
@@ -134,6 +135,15 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
             KeyColumns.push_back(keyColumnId.GetName());
             KeyColumnTypes.push_back(column->Type);
         }
+
+        /*ColumnTypes.reserve(phyTable.ColumnsSize());
+        for (const auto& [columnId, phyСolumn] : phyTable.GetColumns()) {
+            const auto& column = Columns.FindPtr(phyСolumn.GetId().GetName(());
+            YQL_ENSURE(column);
+
+            //KeyColumns.push_back(keyColumnId.GetName());
+            ColumnTypes.push_back(column.Type);
+        }*/
     }
 };
 

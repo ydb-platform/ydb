@@ -1596,7 +1596,25 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         return storage;
     }
 
-    struct TStartOfBinaryKernelExec : TBinaryKernelExec<TStartOfBinaryKernelExec> {
+    TMaybe<TTMStorage> EndOf(TTMStorage storage, ui64 interval, const IValueBuilder& valueBuilder) {
+        if (interval >= 86400000000ull) {
+            // treat as EndOfDay
+            SetEndOfDay(storage);
+        } else {
+            auto current = storage.ToTimeOfDay();
+            auto rounded = current / interval * (interval + 1) - 1;
+            storage.FromTimeOfDay(rounded);
+        }
+
+        auto& builder = valueBuilder.GetDateBuilder();
+        if (!storage.Validate(builder)) {
+            return {};
+        }
+        return storage;
+    }
+
+    template<bool UseEnd>
+    struct TStartEndOfBinaryKernelExec : TBinaryKernelExec<TStartEndOfBinaryKernelExec<UseEnd>> {
         template<typename TSink>
         static void Process(const IValueBuilder* valueBuilder, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
             auto& storage = Reference(arg1);
@@ -1606,7 +1624,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                 return;
             }
 
-            if (auto res = StartOf(storage, interval, *valueBuilder)) {
+            if (auto res = (UseEnd ? EndOf : StartOf)(storage, interval, *valueBuilder)) {
                 storage = res.GetRef();
                 sink(arg1);
             } else {
@@ -1627,7 +1645,21 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         }
         return TUnboxedValuePod{};
     }
-    END_SIMPLE_ARROW_UDF(TStartOf, TStartOfBinaryKernelExec::Do);
+    END_SIMPLE_ARROW_UDF(TStartOf, TStartEndOfBinaryKernelExec<false>::Do);
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TEndOf, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, TAutoMap<TInterval>)) {
+        auto result = args[0];
+        ui64 interval = std::abs(args[1].Get<i64>());
+        if (interval == 0) {
+            return result;
+        }
+        if (auto res = EndOf(Reference(result), interval, *valueBuilder)) {
+            Reference(result) = res.GetRef();
+            return result;
+        }
+        return TUnboxedValuePod{};
+    }
+    END_SIMPLE_ARROW_UDF(TEndOf, TStartEndOfBinaryKernelExec<true>::Do);
 
     struct TTimeOfDayKernelExec : TUnaryKernelExec<TTimeOfDayKernelExec, TReaderTraits::TResource<false>, TFixedSizeArrayBuilder<TDataType<TInterval>::TLayout, false>> {
         template<typename TSink>

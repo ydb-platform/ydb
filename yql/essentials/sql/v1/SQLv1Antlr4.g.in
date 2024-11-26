@@ -1205,7 +1205,6 @@ keyword_expr_uncompat:
   | JSON_EXISTS
   | JSON_VALUE
   | JSON_QUERY
-  | LOCAL
   | NOT
   | NULL
   | PROCESS
@@ -1337,6 +1336,7 @@ keyword_as_compat:
   | FOREIGN
   | FUNCTION
   | GLOB
+  | GLOBAL
   | GRANT
   | GROUP
   | GROUPING
@@ -1366,6 +1366,7 @@ keyword_as_compat:
   // | LEFT
   | LEGACY
   | LIKE
+  | LOCAL
   | MANAGE
   | MATCH
   | MATCHES
@@ -1559,6 +1560,7 @@ keyword_compat: (
   | FOREIGN
   | FUNCTION
   | GLOB
+  | GLOBAL
   | GRANT
   | GROUP
   | GROUPING
@@ -1588,6 +1590,7 @@ keyword_compat: (
   | LEFT
   | LEGACY
   | LIKE
+  | LOCAL
   | MANAGE
   | MATCH
   | MATCHES

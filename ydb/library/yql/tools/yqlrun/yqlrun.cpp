@@ -2,6 +2,8 @@
 
 #include <ydb/library/yql/tools/yqlrun/http/yql_server.h>
 
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
+
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <ydb/library/yql/providers/yt/gateway/file/yql_yt_file_services.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
@@ -700,7 +702,7 @@ int Main(int argc, const char *argv[])
         if (gatewayTypes.contains(YtProviderName) || res.Has("opt-collision")) {
             auto yqlNativeServices = NFile::TYtFileServices::Make(funcRegistry.Get(), tablesMapping, fileStorage, tmpDir, res.Has("keep-temp"), tablesDirMapping);
             auto ytNativeGateway = CreateYtFileGateway(yqlNativeServices, &emulateOutputForMultirun);
-            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory()));
         }
     }
 

@@ -1,5 +1,0 @@
-{
-    "exectest.run[protobuf]": {
-        "uri": "file://exectest.run_protobuf_/log.out"
-    }
-}

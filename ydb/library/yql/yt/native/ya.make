@@ -43,6 +43,7 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/core/url_preprocessing
     ydb/library/yql/dq/comp_nodes
+    ydb/library/yql/dq/opt
     ydb/library/yql/providers/dq/actors/yt
     ydb/library/yql/providers/dq/global_worker_manager
     ydb/library/yql/providers/dq/provider

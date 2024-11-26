@@ -6,7 +6,7 @@
 #include <util/string/split.h>
 
 #include "dq_opt_make_join_hypergraph.h"
-#include "dq_opt_log.h"
+#include "dq_opt_join_cost_based.h"
 
 #include <memory>
 
@@ -51,7 +51,7 @@ struct TTestContext : public TBaseProviderContext {
 template <typename TProviderContext = TTestContext>
 std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimizerNode>& root, const TOptimizerHints& hints = {}) {
     auto ctx = TProviderContext();
-    auto optimizer = 
+    auto optimizer =
         std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, std::numeric_limits<ui32>::max()));
     
     Y_ENSURE(root->Kind == EOptimizerNodeKind::JoinNodeType);

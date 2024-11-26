@@ -630,6 +630,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(res.Root);
     }
 
+    Y_UNIT_TEST(SelectAssumeOrderByTableRowAccess) {
+        NYql::TAstParseResult res = SqlToYql("$key = 'foo';select * from plato.Input assume order by TableRow().$key");
+        UNIT_ASSERT(res.Root);
+    }
+
     Y_UNIT_TEST(SelectOrderByDuplicateLabels) {
         NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by a, a");
         UNIT_ASSERT(res.Root);

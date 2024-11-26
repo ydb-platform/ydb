@@ -77,7 +77,7 @@ The operators in the table are listed in descending order of precedence.
 | 4 | `a*b, a/b, a%b` | Multiplication, division, remainder of division | Left |
 | 5 | `a+b, a-b` | Addition/Subtraction | Left |
 | 6 | `a ?? b` | Operator notation for [NVL/COALESCE](../../../builtins/basic.md#coalesce) | Right |
-| 7 | `a<b, a>b, a\|<b, a>\|b,` `a \|b, a^b, a&b` | Shift operators and logical bit operators | Left |
+| 7 | `a<b, a>b, a\|<b, a>\|b,` `a\|b, a^b, a&b` | Shift operators and logical bit operators | Left |
 | 8 | `a<b, a=b, a=b, a>b` | Comparison | Left |
 | 9 | `a IN b` | Occurrence of an element in a set | Left |
 | 9 | `a==b, a=b, a!=b, a<>b,` `a is (not) distinct from b` | Comparison for (non-)equality | Left |

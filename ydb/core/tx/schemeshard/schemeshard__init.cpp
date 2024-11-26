@@ -990,16 +990,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     typedef std::tuple<TPathId, ui64, NKikimrSchemeOp::EIndexType, NKikimrSchemeOp::EIndexState, TString> TTableIndexRec;
     typedef TDeque<TTableIndexRec> TTableIndexRows;
 
-    template <typename SchemaTable, typename TRowSet>
-    static TTableIndexRec MakeTableIndexRec(const TPathId& pathId, TRowSet& rowSet) {
-        return std::make_tuple(pathId,
-            rowSet.template GetValue<typename SchemaTable::AlterVersion>(),
-            rowSet.template GetValue<typename SchemaTable::IndexType>(),
-            rowSet.template GetValue<typename SchemaTable::State>(),
-            TString{}
-        );
-    }
-
     bool LoadTableIndexes(NIceDb::TNiceDb& db, TTableIndexRows& tableIndexes) const {
         {
             auto rowSet = db.Table<Schema::TableIndex>().Range().Select();
@@ -1008,8 +998,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
             while (!rowSet.EndOfSet()) {
                 const auto pathId = Self->MakeLocalId(TLocalPathId(rowSet.GetValue<Schema::TableIndex::PathId>()));
-                auto& back = tableIndexes.emplace_back(MakeTableIndexRec<Schema::TableIndex>(pathId, rowSet));
-                std::get<4>(back) = rowSet.GetValue<Schema::TableIndex::Description>();
+                tableIndexes.emplace_back(
+                    pathId,
+                    rowSet.GetValue<Schema::TableIndex::AlterVersion>(),
+                    rowSet.GetValue<Schema::TableIndex::IndexType>(),
+                    rowSet.GetValue<Schema::TableIndex::State>(),
+                    rowSet.GetValue<Schema::TableIndex::Description>()
+                );
 
                 if (!rowSet.Next()) {
                     return false;
@@ -1026,7 +1021,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TOwnerId(rowSet.GetValue<Schema::MigratedTableIndex::OwnerPathId>()),
                     TLocalPathId(rowSet.GetValue<Schema::MigratedTableIndex::LocalPathId>())
                 );
-                tableIndexes.push_back(MakeTableIndexRec<Schema::MigratedTableIndex>(pathId, rowSet));
+                tableIndexes.emplace_back(
+                    pathId,
+                    rowSet.GetValue<Schema::MigratedTableIndex::AlterVersion>(),
+                    rowSet.GetValue<Schema::MigratedTableIndex::IndexType>(),
+                    rowSet.GetValue<Schema::MigratedTableIndex::State>(),
+                    TString{}
+                );
 
                 if (!rowSet.Next()) {
                     return false;

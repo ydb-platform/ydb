@@ -2396,14 +2396,14 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         return result;
     }
 
-    TString DescriptionToStr() const {
-        return std::visit([](const auto& v) {
-            if constexpr (requires { v.SerializeAsString(); }) {
+    TString SerializeDescription() const {
+        return std::visit([]<typename T>(const T& v) {
+            if constexpr (std::is_same_v<std::monostate, T>) {
+                return TString{};
+            } else {
                 TString str{v.SerializeAsString()};
                 Y_ENSURE(!str.empty());
                 return str;
-            } else {
-                return TString{};
             }
         }, SpecializedIndexDescription);
     }

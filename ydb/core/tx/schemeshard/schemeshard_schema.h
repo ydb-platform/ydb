@@ -1022,6 +1022,7 @@ struct Schema : NIceDb::Schema {
         struct AlterVersion :   Column<3, NScheme::NTypeIds::Uint64> {};
         struct IndexType :      Column<4, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexType; static constexpr Type Default = NKikimrSchemeOp::EIndexTypeInvalid; };
         struct State :          Column<5, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexState; static constexpr Type Default = NKikimrSchemeOp::EIndexStateInvalid; };
+        // One of the SpecializedIndexDescription protobufs serialized as a string.
         struct Description :    Column<6, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;
@@ -1044,6 +1045,7 @@ struct Schema : NIceDb::Schema {
         struct AlterVersion :   Column<3, NScheme::NTypeIds::Uint64> {};
         struct IndexType :      Column<4, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexType; static constexpr Type Default = NKikimrSchemeOp::EIndexTypeInvalid; };
         struct State :          Column<5, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::EIndexState; static constexpr Type Default = NKikimrSchemeOp::EIndexStateInvalid; };
+        // One of the SpecializedIndexDescription protobufs serialized as a string.
         struct Description :    Column<6, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<PathId>;

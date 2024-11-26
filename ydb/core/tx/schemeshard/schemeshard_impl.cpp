@@ -1696,7 +1696,7 @@ void TSchemeShard::PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId)
                 NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(alterData->AlterVersion),
                 NIceDb::TUpdate<Schema::TableIndex::IndexType>(alterData->Type),
                 NIceDb::TUpdate<Schema::TableIndex::State>(alterData->State),
-                NIceDb::TUpdate<Schema::TableIndex::Description>(alterData->DescriptionToStr()));
+                NIceDb::TUpdate<Schema::TableIndex::Description>(alterData->SerializeDescription()));
 
     db.Table<Schema::TableIndexAlterData>().Key(element->PathId.LocalPathId).Delete();
 
@@ -1732,7 +1732,7 @@ void TSchemeShard::PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId
                 NIceDb::TUpdate<Schema::TableIndexAlterData::AlterVersion>(alterData->AlterVersion),
                 NIceDb::TUpdate<Schema::TableIndexAlterData::IndexType>(alterData->Type),
                 NIceDb::TUpdate<Schema::TableIndexAlterData::State>(alterData->State),
-                NIceDb::TUpdate<Schema::TableIndexAlterData::Description>(alterData->DescriptionToStr()));
+                NIceDb::TUpdate<Schema::TableIndexAlterData::Description>(alterData->SerializeDescription()));
 
     for (ui32 keyIdx = 0; keyIdx < alterData->IndexKeys.size(); ++keyIdx) {
         db.Table<Schema::TableIndexKeysAlterData>().Key(elem->PathId.LocalPathId, keyIdx).Update(

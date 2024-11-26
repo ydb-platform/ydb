@@ -58,10 +58,12 @@ class CreateTableLikeObject(ScenarioTestHelper.IYqlble):
     @override
     def to_yql(self, ctx: TestContext) -> str:
         schema_str = ',\n    '.join([c.to_yql() for c in self._schema.columns])
+        column_families_str = ',\n'.join([c.to_yql() for c in self._schema.column_families])
         keys = ', '.join(self._schema.key_columns)
         return f'''CREATE {self._type().upper()} `{ScenarioTestHelper(ctx).get_full_path(self._name)}` (
     {schema_str},
     PRIMARY KEY({keys})
+    {"" if not column_families_str else f", {column_families_str}"}
 )
 {self._partition_by()}
 WITH(
@@ -135,20 +137,33 @@ class CreateTableStore(CreateTableLikeObject):
         return ''
 
 
-class AlterTableAction(ABC):
+class Action(ABC):
+    """The base class for all actions."""
+
+    @abstractmethod
+    def to_yql(self) -> str:
+        """Convert to YQL."""
+        pass
+
+    @abstractmethod
+    def title(self) -> str:
+        """Title to display in Allure."""
+        pass
+
+class AlterTableAction(Action):
     """The base class for all actions when changing table-like objects.
 
     Table-like objects are Tables and TableStore.
     See {AlterTableLikeObject}.
     """
 
-    @abstractmethod
+    @override
     def to_yql(self) -> str:
         """Convert to YQL."""
 
         pass
 
-    @abstractmethod
+    @override
     def title(self) -> str:
         """Title to display in Allure."""
 
@@ -186,6 +201,66 @@ class AddColumn(AlterTableAction):
     def title(self) -> str:
         return f'add column `{self._column.name}`'
 
+class AlterColumnBase(Action):
+    """The base class for all actions on a column."""
+
+    @override
+    def to_yql(self) -> str:
+        """Convert to YQL."""
+        pass
+
+    @override
+    def title(self) -> str:
+        """Title to display in Allure."""
+        pass
+
+class AlterFamily(AlterColumnBase):
+    """Alter family for a column."""
+
+    def __init__(self, colum_family_name: str) -> None:
+        super().__init__()
+        self._colum_family_name = colum_family_name
+    
+    @override
+    def to_yql(self) -> str:
+        return f'SET FAMILY {self._colum_family_name}'
+
+    @override
+    def title(self) -> str:
+        return f'set family {self._colum_family_name}'
+
+class AlterColumn(AlterTableAction):
+    """Alter a column in a table-like object.
+
+    Table-like objects are Tables and TableStore.
+    See {AlterTableLikeObject}.
+
+    Example:
+        sth = ScenarioTestHelper(ctx)
+        sth.execute_scheme_query(
+            AlterTable('testTable')
+                .action(AlterColumn("column", AlterFamily("family2")))
+        )
+    """
+
+    def __init__(self, column_name: str, action: AlterColumnBase) -> None:
+        """Constructor.
+
+        Args:
+            column_name: Column name for alter
+            action: Action description."""
+
+        super().__init__()
+        self._column_name = column_name
+        self._action = action
+
+    @override
+    def to_yql(self) -> str:
+        return f'ALTER COLUMN {self._column_name} {self._action.to_yql()}'
+
+    @override
+    def title(self) -> str:
+        return f'altert column {self._column_name}`{self._action.title()}`'
 
 class DropColumn(AlterTableAction):
     """Remove a column from a table-like object.
@@ -280,6 +355,118 @@ class ResetSetting(AlterTableAction):
     def title(self) -> str:
         return f'reset {self._setting}'
 
+
+class AddColumnFamily(AlterTableAction):
+    """Add a column family to a table-like object.
+
+    Table-like objects are Tables and TableStore.
+    See {AlterTableLikeObject}.
+
+    Example:
+        sth = ScenarioTestHelper(ctx)
+        sth.execute_scheme_query(
+            AlterTable('testTable')
+                .action(AddColumnFamily(sth.ColumnFamily('family1', ScenarioTestHelper.Compression.LZ4, None))
+                .action(AddColumnFamily(sth.ColumnFamily('family2', ScenarioTestHelper.Compression.ZSTD, 4))
+                )
+        )
+    """
+
+    def __init__(self, column_family: ScenarioTestHelper.ColumnFamily) -> None:
+        """Constructor.
+
+        Args:
+            column_family: Column family description."""
+
+        super().__init__()
+        self._column_family = column_family
+
+    @override
+    def to_yql(self) -> str:
+        return f'ADD {self._column_family.to_yql()}'
+
+    @override
+    def title(self) -> str:
+        return f'add family `{self._column_family.name}`'
+
+class ColumnFamilyAction(Action):
+    """The base class for all actions when changing colum family."""
+
+    @override
+    def to_yql(self) -> str:
+        """Convert to YQL."""
+
+        pass
+
+    @override
+    def title(self) -> str:
+        """Title to display in Allure."""
+
+        pass
+
+class AlterCompression(AlterTableAction):
+    """Alter compression codec for a column family."""
+
+    def __init__(self, compression: ScenarioTestHelper.Compression) -> None:
+        super().__init__()
+        self._compression = compression
+    
+    @override
+    def to_yql(self) -> str:
+        return f'SET COMPRESSION "{self._compression.name}"'
+
+    @override
+    def title(self) -> str:
+        return f'set compression "{self._compression.name}"'
+    
+class AlterCompressionLevel(AlterTableAction):
+    """Alter compression codec level for a column family."""
+
+    def __init__(self, compression_level: int) -> None:
+        super().__init__()
+        self._compression_level = compression_level
+    
+    @override
+    def to_yql(self) -> str:
+        return f'SET COMPRESSION_LEVEL {self._compression_level}'
+
+    @override
+    def title(self) -> str:
+        return f'set compression level {self._compression_level}'
+
+class AlterColumnFamily(AlterTableAction):
+    """Alter a column family to a table-like object.
+
+    Table-like objects are Tables and TableStore.
+    See {AlterTableLikeObject}.
+
+    Example:
+        sth = ScenarioTestHelper(ctx)
+        sth.execute_scheme_query(
+            AlterTable('testTable')
+                .action(AlterColumnFamily('family1', AlterCompression(ScenarioTestHelper.Compression.ZSTD)))
+                .action(AlterColumnFamily('family2', AlterCompressionLevel(9)))
+                )
+        )
+    """
+
+    def __init__(self, column_family_name: str, action: ColumnFamilyAction) -> None:
+        """Constructor.
+
+        Args:
+            column: Column description."""
+
+        super().__init__()
+        self._column_family_name = column_family_name
+        self._action = action
+
+    @override
+    def to_yql(self) -> str:
+        return f'ALTER FAMILY {self._column_family_name} {self._action.to_yql()}'
+
+    @override
+    def title(self) -> str:
+        return f'alter family `{self._column_family_name}` {self._action.title()}'
 
 class AlterTableLikeObject(ScenarioTestHelper.IYqlble):
     """The base class for all requests to change table-like objects.
@@ -376,6 +563,19 @@ class AlterTableLikeObject(ScenarioTestHelper.IYqlble):
 
         return self(SetSetting('TTL', f'Interval("{interval}") ON `{column}`'))
 
+    def add_column_family(self, column_family: ScenarioTestHelper.ColumnFamily) -> AlterTableLikeObject:
+        """Add a column_family.
+
+        The method is similar to calling {AlterTableLikeObject.action} with an {AddColumnFamily} instance.
+
+        Args:
+            column: Description of the column_family.
+
+        Returns:
+            self."""
+
+        return self(AddColumnFamily(column_family))
+
     @override
     def params(self) -> Dict[str, str]:
         return {self._type(): self._name, 'actions': ', '.join([a.title() for a in self._actions])}
@@ -387,7 +587,7 @@ class AlterTableLikeObject(ScenarioTestHelper.IYqlble):
     @override
     def to_yql(self, ctx: TestContext) -> str:
         actions = ', '.join([a.to_yql() for a in self._actions])
-        return f'ALTER {self._type().upper()} `{ScenarioTestHelper(ctx).get_full_path(self._name)}` {actions}'
+        return f'ALTER {self._type().upper()} `{ScenarioTestHelper(ctx).get_full_path(self._name)}` {actions};'
 
     @abstractmethod
     def _type(self) -> str:

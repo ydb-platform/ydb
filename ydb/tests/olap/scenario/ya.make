@@ -11,6 +11,7 @@ PY3TEST()
         test_scheme_load.py
         test_alter_tiering.py
         test_insert.py
+        test_alter_compression.py
     )
 
     PEERDIR(

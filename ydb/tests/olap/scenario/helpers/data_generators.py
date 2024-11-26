@@ -4,7 +4,7 @@ from ydb.types import BulkUpsertColumns
 from abc import abstractmethod, ABC
 from ydb import PrimitiveType
 from typing import override, Any, List, Dict
-import random
+import random, string
 
 
 class IColumnValueGenerator(ABC):
@@ -116,6 +116,11 @@ class ColumnValueGeneratorRandom(IColumnValueGenerator):
         super().__init__()
         self._null_propabitity = null_probability
 
+    @staticmethod
+    def random_utf8_string(length):
+        characters = string.ascii_letters + string.digits + string.punctuation + ' '
+        return ''.join(random.choices(characters, k=length)).encode('utf-8')
+
     @override
     def generate_value(self, column: ScenarioTestHelper.Column) -> Any:
         if not column.not_null and random.random() <= self._null_propabitity:
@@ -140,8 +145,10 @@ class ColumnValueGeneratorRandom(IColumnValueGenerator):
             return random.randint(0, 2**64 - 1)
         elif column.type in {PrimitiveType.Float, PrimitiveType.Double}:
             return random.uniform(-1e6, 1e6)
-        elif column.type in {PrimitiveType.String, PrimitiveType.Utf8}:
+        elif column.type == PrimitiveType.String:
             return random.randbytes(15)
+        elif column.type == PrimitiveType.Utf8:
+            return self.random_utf8_string(15)
         elif column.type in {PrimitiveType.Json, PrimitiveType.JsonDocument}:
             return f'"{random.randbytes(15)}"'
         elif column.type == PrimitiveType.Timestamp:

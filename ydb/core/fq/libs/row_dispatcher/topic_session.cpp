@@ -179,6 +179,7 @@ private:
     bool InflightReconnect = false;
     TDuration ReconnectPeriod;
     const TString TopicPath;
+    const TString TopicPathPartition;
     const TString Endpoint;
     const TString Database;
     NActors::TActorId RowDispatcherActorId;
@@ -317,6 +318,7 @@ TTopicSession::TTopicSession(
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize)
     : TopicPath(topicPath)
+    , TopicPathPartition(TStringBuilder() << topicPath << "/" << partitionId)
     , Endpoint(endpoint)
     , Database(database)
     , RowDispatcherActorId(rowDispatcherActorId)
@@ -336,7 +338,7 @@ void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
     Metrics.Init(Counters, TopicPath, PartitionId);
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
-    LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << ", PartitionId " << PartitionId
+    LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << TopicPathPartition
         << ", Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec,  StatusPeriod " << Config.GetSendStatusPeriodSec() << " sec");
     Y_ENSURE(Config.GetSendStatusPeriodSec() > 0);
     Schedule(TDuration::Seconds(Config.GetSendStatusPeriodSec()), new NFq::TEvPrivate::TEvSendStatisticToReadActor());
@@ -401,7 +403,7 @@ NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings(const N
     topicReadSettings.AppendPartitionIds(PartitionId);
 
     TInstant minTime = GetMinStartingMessageTimestamp();
-    LOG_ROW_DISPATCHER_INFO("Create topic session, Path " << TopicPath
+    LOG_ROW_DISPATCHER_INFO("Create topic session, Path " << TopicPathPartition
         << ", StartingMessageTimestamp " << minTime
         << ", BufferSize " << BufferSize << ", WithoutConsumer " << Config.GetWithoutConsumer());
 
@@ -504,7 +506,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatisticToReadActor::TPtr&) 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&) {
     Metrics.ReconnectRate->Inc();
     TInstant minTime = GetMinStartingMessageTimestamp();
-    LOG_ROW_DISPATCHER_DEBUG("Reconnect topic session, Path " << TopicPath
+    LOG_ROW_DISPATCHER_DEBUG("Reconnect topic session, " << TopicPathPartition
         << ", StartingMessageTimestamp " << minTime
         << ", BufferSize " << BufferSize << ", WithoutConsumer " << Config.GetWithoutConsumer());
     StopReadSession();
@@ -582,7 +584,7 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TSessionClosedEvent& ev) {
-    TString message = TStringBuilder() << "Read session to topic \"" << Self.TopicPath << "\" was closed: " << ev.DebugString();
+    TString message = TStringBuilder() << "Read session to topic \"" << Self.TopicPathPartition << "\" was closed: " << ev.DebugString();
     LOG_ROW_DISPATCHER_DEBUG(message);
     NYql::TIssues issues;
     issues.AddIssue(message);
@@ -856,8 +858,8 @@ void TTopicSession::AddDataToClient(TClientsInfo& info, ui64 offset, const TStri
 }
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvStopSession, topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
-        " partitionId " << ev->Get()->Record.GetPartitionId());
+    LOG_ROW_DISPATCHER_DEBUG("TEvStopSession from " << ev->Sender << " topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
+        " partitionId " << ev->Get()->Record.GetPartitionId() << " clients count " << Clients.size());
 
     auto it = Clients.find(ev->Sender);
     if (it == Clients.end()) {

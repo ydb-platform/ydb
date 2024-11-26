@@ -230,7 +230,8 @@ private:
             }
 
             auto index = GetIndex(childPath);
-            if (index->Type == NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+            if (index->Type == NKikimrSchemeOp::EIndexTypeGlobalAsync
+                || index->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
                 continue;
             }
 
@@ -267,7 +268,7 @@ private:
     }
 
     static TVector<std::pair<ui32, ui32>> MakeColumnIds(TTableInfo::TPtr mainTable, TTableIndexInfo::TPtr index, TTableInfo::TPtr indexImplTable) {
-        Y_ENSURE(index->Type != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
+        Y_ABORT_UNLESS(index->Type != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
         TVector<std::pair<ui32, ui32>> result;
         THashSet<TString> keys;
 

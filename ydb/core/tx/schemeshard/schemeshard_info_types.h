@@ -2402,7 +2402,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 return TString{};
             } else {
                 TString str{v.SerializeAsString()};
-                Y_ENSURE(!str.empty());
+                Y_ABORT_UNLESS(!str.empty());
                 return str;
             }
         }, SpecializedIndexDescription);

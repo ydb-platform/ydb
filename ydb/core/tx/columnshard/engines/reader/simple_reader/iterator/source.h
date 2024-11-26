@@ -60,7 +60,7 @@ private:
     YDB_READONLY(bool, HasDeletions, false);
     virtual NJson::TJsonValue DoDebugJson() const = 0;
     std::shared_ptr<TFetchingScript> FetchingPlan;
-    std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>, ResourceGuards);
     YDB_READONLY(TPKRangeFilter::EUsageClass, UsageClass, TPKRangeFilter::EUsageClass::PartialUsage);
     bool ProcessingStarted = false;
     bool IsStartedByCursor = false;
@@ -97,6 +97,11 @@ protected:
 public:
     bool GetIsStartedByCursor() const {
         return IsStartedByCursor;
+    }
+
+    const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& GetGroupGuard() const {
+        AFL_VERIFY(SourceGroupGuard);
+        return SourceGroupGuard;
     }
 
     ui64 GetMemoryGroupId() const {

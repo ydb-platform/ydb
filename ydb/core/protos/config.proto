@@ -1609,6 +1609,7 @@ message TColumnShardConfig {
     message TRepairInfo {
         optional string ClassName = 1;
         optional string Description = 2;
+        optional bool DryRun = 3;
     }
     repeated TRepairInfo Repairs = 15;
 

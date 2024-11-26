@@ -29,7 +29,7 @@ bool Rewrite(TTag, TTxTransaction& tx) {
     return true;
 }
 
-}
+} // namespace NOperation
 
 TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     TVector<ISubOperation::TPtr> result;

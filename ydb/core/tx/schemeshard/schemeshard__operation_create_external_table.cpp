@@ -422,7 +422,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateExternalTable);

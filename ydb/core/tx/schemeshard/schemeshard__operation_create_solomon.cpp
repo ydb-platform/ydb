@@ -469,7 +469,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewSolomon(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateSolomon>(id, tx);

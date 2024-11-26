@@ -905,7 +905,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewColumnTable(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateColumnTable>(id, tx);

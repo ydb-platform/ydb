@@ -419,7 +419,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewRTMR(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateRTMR>(id, tx);

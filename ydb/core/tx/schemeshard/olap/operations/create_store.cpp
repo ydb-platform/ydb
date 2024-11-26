@@ -550,7 +550,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateOlapStore>(id, tx);

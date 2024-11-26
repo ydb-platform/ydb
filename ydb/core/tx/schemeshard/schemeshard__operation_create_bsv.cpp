@@ -412,7 +412,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewBSV(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateBlockStoreVolume>(id, tx);

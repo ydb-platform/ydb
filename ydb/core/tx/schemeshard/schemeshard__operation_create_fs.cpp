@@ -545,7 +545,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewFileStore(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateFileStore>(id, tx);

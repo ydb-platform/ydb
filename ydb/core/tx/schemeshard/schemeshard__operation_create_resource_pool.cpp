@@ -228,7 +228,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewResourcePool(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateResourcePool>(id, tx);

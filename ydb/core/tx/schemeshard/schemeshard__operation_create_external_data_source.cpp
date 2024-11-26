@@ -328,7 +328,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,
                                                          const TTxTransaction& tx,

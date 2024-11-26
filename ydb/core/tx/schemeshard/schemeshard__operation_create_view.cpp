@@ -272,7 +272,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewView(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateView>(id, tx);

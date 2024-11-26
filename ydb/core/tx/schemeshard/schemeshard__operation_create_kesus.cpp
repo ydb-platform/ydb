@@ -453,7 +453,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewKesus(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateKesus>(id, tx);

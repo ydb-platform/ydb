@@ -261,7 +261,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateBackupCollection>(id, tx);

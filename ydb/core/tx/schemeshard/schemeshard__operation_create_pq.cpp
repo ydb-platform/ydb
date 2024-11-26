@@ -608,7 +608,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewPQ(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreatePQ>(id, tx);

@@ -391,7 +391,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 ISubOperation::TPtr CreateSubDomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateSubDomain>(id, tx);

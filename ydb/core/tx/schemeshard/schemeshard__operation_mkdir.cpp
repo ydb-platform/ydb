@@ -312,7 +312,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 ISubOperation::TPtr CreateMkDir(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TMkDir>(id, tx);

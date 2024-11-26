@@ -309,7 +309,7 @@ bool SetName<TTag>(
     return true;
 }
 
-}
+} // namespace NOperation
 
 ISubOperation::TPtr CreateExtSubDomain(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateExtSubDomain>(id, tx);

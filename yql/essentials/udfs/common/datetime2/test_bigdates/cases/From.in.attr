@@ -1,0 +1,31 @@
+{
+    "_yql_row_spec" = {
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "fts64_sec";
+                    [
+                        "DataType";
+                        "Int64"
+                    ]
+                ];
+                [
+                    "fts64_msec";
+                    [
+                        "DataType";
+                        "Int64"
+                    ]
+                ];
+                [
+                    "fts64_usec";
+                    [
+                        "DataType";
+                        "Int64"
+                    ]
+                ];
+            ]
+        ]
+    }
+}
+

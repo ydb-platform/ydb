@@ -364,7 +364,7 @@ public:
     TString GetInternalState();
     template <class TEventPtr>
     bool CheckSession(TAtomicSharedPtr<ConsumerInfo>& consumer, const TEventPtr& ev);
-    void SetQueryMetrics(const TString queryId, ui64 unreadBytesMax, ui64 unreadBytesAvg);
+    void SetQueryMetrics(const TString queryId, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax);
     void PrintStateToLog();
 
     STRICT_STFUNC(

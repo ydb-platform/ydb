@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/formats
     ydb/core/kqp/common
     ydb/core/protos
+    ydb/core/scheme
     ydb/library/mkql_proto
     yql/essentials/core/arrow_kernels/request
     yql/essentials/core/dq_integration

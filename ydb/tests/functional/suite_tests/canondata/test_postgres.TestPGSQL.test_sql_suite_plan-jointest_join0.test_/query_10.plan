@@ -56,7 +56,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.b.thousand == item.a.q1 And item.a.q1 == item.b.hundred"
+                                                "Predicate": "item.b.thousand == item.a.q1 AND item.a.q1 == item.b.hundred"
                                             },
                                             {
                                                 "Condition": "a.q1 = b.unique2",

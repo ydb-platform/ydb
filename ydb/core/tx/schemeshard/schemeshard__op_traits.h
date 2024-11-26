@@ -299,53 +299,64 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCol
     constexpr inline static bool CreateDirsFromName = true;
 };
 
+inline TString ToX509String(const TInstant& datetime) {
+    return datetime.FormatLocalTime("%Y%m%d%H%M%SZ");
+}
+
+inline std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths(
+    const TTxTransaction& tx,
+    const TString& targetDir,
+    const TString& targetName,
+    const TOperationContext& context)
+{
+    THashMap<TString, THashSet<TString>> paths;
+    const TString& targetPath = JoinPath({tx.GetWorkingDir(), targetName});
+
+    const TPath& bcPath = TPath::Resolve(targetPath, context.SS);
+    {
+        auto checks = bcPath.Check();
+        checks
+            .NotEmpty()
+            .NotUnderDomainUpgrade()
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotUnderDeleting()
+            .NotUnderOperation()
+            .IsBackupCollection();
+
+        if (!checks) {
+            return {};
+        }
+    }
+
+    Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
+    const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+
+    auto& collectionPaths = paths[targetPath];
+    collectionPaths.emplace(targetDir);
+
+    for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+        std::pair<TString, TString> paths;
+        TString err;
+        if (!TrySplitPathByDb(item.GetPath(), tx.GetWorkingDir(), paths, err)) {
+            return {};
+        }
+
+        auto pathPieces = SplitPath(paths.second);
+        if (pathPieces.size() > 1) {
+            auto parent = ExtractParent(paths.second);
+            collectionPaths.emplace(JoinPath({targetDir, TString(parent)}));
+        }
+    }
+
+    return paths;
+}
+
 template <>
 struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection> : public TSchemeTxTraitsFallback {
     static std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths(const TTxTransaction& tx, const TOperationContext& context) {
-        THashMap<TString, THashSet<TString>> paths;
-
         const auto& backupOp = tx.GetBackupBackupCollection();
-
-        const auto& targetDir = backupOp.GetTargetDir();
-        const TString& targetPath = JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName()});
-
-        const TPath& bcPath = TPath::Resolve(targetPath, context.SS);
-        {
-            auto checks = bcPath.Check();
-            checks
-                .NotEmpty()
-                .NotUnderDomainUpgrade()
-                .IsAtLocalSchemeShard()
-                .IsResolved()
-                .NotUnderDeleting()
-                .NotUnderOperation()
-                .IsBackupCollection();
-
-            if (!checks) {
-                return {};
-            }
-        }
-
-        Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
-        const auto& bc = context.SS->BackupCollections[bcPath->PathId];
-
-        auto& collectionPaths = paths[targetPath];
-
-        for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
-            std::pair<TString, TString> paths;
-            TString err;
-            if (!TrySplitPathByDb(item.GetPath(), tx.GetWorkingDir(), paths, err)) {
-                return {};
-            }
-
-            auto pathPieces = SplitPath(paths.second);
-            if (pathPieces.size() > 1) {
-                auto parent = ExtractParent(paths.second);
-                collectionPaths.emplace(JoinPath({targetDir, TString(parent)}));
-            }
-        }
-
-        return paths;
+        return ::NKikimr::NSchemeShard::GetRequiredPaths(tx, backupOp.GetTargetDir(), backupOp.GetName(), context);
     }
 
     static bool Rewrite(TTxTransaction& tx) {
@@ -356,10 +367,23 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCol
 
     constexpr inline static bool CreateAdditionalDirs = true;
     constexpr inline static bool NeedRewrite = true;
-private:
-    static inline TString ToX509String(const TInstant& datetime) {
-        return datetime.FormatLocalTime("%Y%m%d%H%M%SZ");
+};
+
+template <>
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection> : public TSchemeTxTraitsFallback {
+    static std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths(const TTxTransaction& tx, const TOperationContext& context) {
+        const auto& backupOp = tx.GetBackupIncrementalBackupCollection();
+        return ::NKikimr::NSchemeShard::GetRequiredPaths(tx, backupOp.GetTargetDir(), backupOp.GetName(), context);
     }
+
+    static bool Rewrite(TTxTransaction& tx) {
+        auto now = ToX509String(TlsActivationContext->AsActorContext().Now());
+        tx.MutableBackupIncrementalBackupCollection()->SetTargetDir(now + "_incremental");
+        return true;
+    }
+
+    constexpr inline static bool CreateAdditionalDirs = true;
+    constexpr inline static bool NeedRewrite = true;
 };
 
 } // namespace NKikimr::NSchemeShard

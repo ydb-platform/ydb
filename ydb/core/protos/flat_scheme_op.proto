@@ -1655,8 +1655,11 @@ message TModifyScheme {
     optional TBackupCollectionDescription AlterBackupCollection = 75;
     optional TBackupCollectionDescription DropBackupCollection = 76;
     optional TBackupBackupCollection BackupBackupCollection = 78;
+    optional TBackupBackupCollection BackupIncrementalBackupCollection = 79;
 
     optional TMove MoveSequence = 77;
+
+    // Some entries are grouped by semantics, so are out of order
 }
 
 message TCopySequence {

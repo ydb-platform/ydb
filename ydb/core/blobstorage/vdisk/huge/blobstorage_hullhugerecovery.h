@@ -133,7 +133,7 @@ namespace NKikimr {
             static bool CheckEntryPoint(TContiguousSpan data);
             TString ToString() const;
             void RenderHtml(IOutputStream &str) const;
-            ui32 GetMinREALHugeBlobInBytes() const;
+            ui32 GetMinHugeBlobInBytes() const;
             ui64 FirstLsnToKeep(ui64 minInFlightLsn = Max<ui64>()) const;
             TString FirstLsnToKeepDecomposed() const;
             bool WouldNewEntryPointAdvanceLog(ui64 freeUpToLsn, ui64 minInFlightLsn, ui32 itemsAfterCommit) const;

@@ -1307,6 +1307,17 @@ TPath TPath::Child(const TString& name) const {
     return result;
 }
 
+TPath TPath::Child(const TString& name, TSplitChildTag) const {
+    TPath result = *this;
+
+    auto pathParts = SplitPath(name);
+    for (const auto& part : pathParts) {
+        result.Dive(part);
+    }
+
+    return result;
+}
+
 TPath TPath::Resolve(const TString path, TSchemeShard* ss) {
     Y_ABORT_UNLESS(ss);
 

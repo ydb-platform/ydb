@@ -417,8 +417,7 @@ namespace NKikimr {
         Y_UNIT_TEST(BorderValues) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
-            ui32 minHugeBlobInBytes = appendBlockSize;
-            ui32 minREALHugeBlobInBytes = minHugeBlobInBytes / appendBlockSize * appendBlockSize + 1;
+            ui32 minHugeBlobInBytes = appendBlockSize + 1;
             ui32 maxBlobInBytes = MaxVDiskBlobSize;
             ui32 overhead = 8u;
             ui32 freeChunksReservation = 1;
@@ -428,7 +427,7 @@ namespace NKikimr {
             THugeSlot hugeSlot;
             ui32 slotSize;
             bool res = false;
-            res = heap.Allocate(minREALHugeBlobInBytes, &hugeSlot, &slotSize);
+            res = heap.Allocate(minHugeBlobInBytes, &hugeSlot, &slotSize);
             UNIT_ASSERT_EQUAL(res, false); // no chunks
             res = heap.Allocate(maxBlobInBytes, &hugeSlot, &slotSize);
             UNIT_ASSERT_EQUAL(res, false); // no chunks

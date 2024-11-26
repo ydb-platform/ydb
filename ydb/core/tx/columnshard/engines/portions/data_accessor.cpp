@@ -350,6 +350,109 @@ std::vector<const TColumnRecord*> TPortionDataAccessor::GetColumnChunksPointers(
     return result;
 }
 
+std::vector<TPortionDataAccessor::TReadPage> TPortionDataAccessor::BuildReadPages(const ui64 memoryLimit, const std::set<ui32>& entityIds) const {
+    class TEntityDelimiter {
+    private:
+        YDB_READONLY(ui32, IndexStart, 0);
+        YDB_READONLY(ui32, EntityId, 0);
+        YDB_READONLY(ui32, ChunkIdx, 0);
+        YDB_READONLY(ui64, MemoryStartChunk, 0);
+        YDB_READONLY(ui64, MemoryFinishChunk, 0);
+
+    public:
+        TEntityDelimiter(const ui32 indexStart, const ui32 entityId, const ui32 chunkIdx, const ui64 memStartChunk, const ui64 memFinishChunk)
+            : IndexStart(indexStart)
+            , EntityId(entityId)
+            , ChunkIdx(chunkIdx)
+            , MemoryStartChunk(memStartChunk)
+            , MemoryFinishChunk(memFinishChunk) {
+        }
+
+        bool operator<(const TEntityDelimiter& item) const {
+            return std::tie(IndexStart, EntityId, ChunkIdx) < std::tie(item.IndexStart, item.EntityId, item.ChunkIdx);
+        }
+    };
+
+    class TGlobalDelimiter {
+    private:
+        YDB_READONLY(ui32, IndexStart, 0);
+        YDB_ACCESSOR(ui64, UsedMemory, 0);
+        YDB_ACCESSOR(ui64, WholeChunksMemory, 0);
+
+    public:
+        TGlobalDelimiter(const ui32 indexStart)
+            : IndexStart(indexStart) {
+        }
+    };
+
+    std::vector<TEntityDelimiter> delimiters;
+
+    ui32 lastAppliedId = 0;
+    ui32 currentRecordIdx = 0;
+    bool needOne = false;
+    const TColumnRecord* lastRecord = nullptr;
+    for (auto&& i : GetRecordsVerified()) {
+        if (lastAppliedId != i.GetEntityId()) {
+            if (delimiters.size()) {
+                AFL_VERIFY(delimiters.back().GetIndexStart() == PortionInfo->GetRecordsCount());
+            }
+            needOne = entityIds.contains(i.GetEntityId());
+            currentRecordIdx = 0;
+            lastAppliedId = i.GetEntityId();
+            lastRecord = nullptr;
+        }
+        if (!needOne) {
+            continue;
+        }
+        delimiters.emplace_back(
+            currentRecordIdx, i.GetEntityId(), i.GetChunkIdx(), i.GetMeta().GetRawBytes(), lastRecord ? lastRecord->GetMeta().GetRawBytes() : 0);
+        currentRecordIdx += i.GetMeta().GetRecordsCount();
+        if (currentRecordIdx == PortionInfo->GetRecordsCount()) {
+            delimiters.emplace_back(currentRecordIdx, i.GetEntityId(), i.GetChunkIdx() + 1, 0, i.GetMeta().GetRawBytes());
+        }
+        lastRecord = &i;
+    }
+    if (delimiters.empty()) {
+        return { TPortionDataAccessor::TReadPage(0, PortionInfo->GetRecordsCount(), 0) };
+    }
+    std::sort(delimiters.begin(), delimiters.end());
+    std::vector<TGlobalDelimiter> sumDelimiters;
+    for (auto&& i : delimiters) {
+        if (sumDelimiters.empty()) {
+            sumDelimiters.emplace_back(i.GetIndexStart());
+        } else if (sumDelimiters.back().GetIndexStart() != i.GetIndexStart()) {
+            AFL_VERIFY(sumDelimiters.back().GetIndexStart() < i.GetIndexStart());
+            TGlobalDelimiter backDelimiter(i.GetIndexStart());
+            backDelimiter.MutableWholeChunksMemory() = sumDelimiters.back().GetWholeChunksMemory();
+            backDelimiter.MutableUsedMemory() = sumDelimiters.back().GetUsedMemory();
+            sumDelimiters.emplace_back(std::move(backDelimiter));
+        }
+        sumDelimiters.back().MutableWholeChunksMemory() += i.GetMemoryFinishChunk();
+        sumDelimiters.back().MutableUsedMemory() += i.GetMemoryStartChunk();
+    }
+    std::vector<ui32> recordIdx = { 0 };
+    std::vector<ui64> packMemorySize;
+    const TGlobalDelimiter* lastBorder = &sumDelimiters.front();
+    for (auto&& i : sumDelimiters) {
+        const i64 sumMemory = (i64)i.GetUsedMemory() - (i64)lastBorder->GetWholeChunksMemory();
+        AFL_VERIFY(sumMemory > 0);
+        if (((ui64)sumMemory >= memoryLimit || i.GetIndexStart() == PortionInfo->GetRecordsCount()) && i.GetIndexStart()) {
+            AFL_VERIFY(lastBorder->GetIndexStart() < i.GetIndexStart());
+            recordIdx.emplace_back(i.GetIndexStart());
+            packMemorySize.emplace_back(sumMemory);
+            lastBorder = &i;
+        }
+    }
+    AFL_VERIFY(recordIdx.front() == 0);
+    AFL_VERIFY(recordIdx.back() == PortionInfo->GetRecordsCount())("real", JoinSeq(",", recordIdx))("expected", PortionInfo->GetRecordsCount());
+    AFL_VERIFY(recordIdx.size() == packMemorySize.size() + 1);
+    std::vector<TReadPage> pages;
+    for (ui32 i = 0; i < packMemorySize.size(); ++i) {
+        pages.emplace_back(recordIdx[i], recordIdx[i + 1] - recordIdx[i], packMemorySize[i]);
+    }
+    return pages;
+}
+
 std::vector<TPortionDataAccessor::TPage> TPortionDataAccessor::BuildPages() const {
     std::vector<TPage> pages;
     struct TPart {

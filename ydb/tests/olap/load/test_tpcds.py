@@ -71,6 +71,7 @@ class TestTpcds1(TpcdsSuiteBase):
 
 class TestTpcds10(TpcdsSuiteBase):
     scale: int = 10
+    check_canonical: bool = True
     timeout = max(TpcdsSuiteBase.timeout, 300.)
     tables_size: dict[str, int] = {
         'call_center': 24,
@@ -96,6 +97,7 @@ class TestTpcds10(TpcdsSuiteBase):
 
 class TestTpcds100(TpcdsSuiteBase):
     scale: int = 100
+    check_canonical: bool = True
     iterations: int = 2
     timeout = max(TpcdsSuiteBase.timeout, 3600.)
     query_settings = {

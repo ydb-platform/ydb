@@ -23,6 +23,8 @@ private:
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideTasksActualizationLag);
     YDB_ACCESSOR_DEF(std::optional<TDuration>, OverrideReadTimeoutClean);
     YDB_ACCESSOR(std::optional<ui64>, OverrideMemoryLimitForPortionReading, 100);
+    YDB_ACCESSOR_DEF(std::optional<NKikimrProto::EReplyStatus>, OverrideBlobPutResultOnWriteValue);
+
     EOptimizerCompactionWeightControl CompactionControl = EOptimizerCompactionWeightControl::Force;
 
     YDB_ACCESSOR(std::optional<ui64>, OverrideReduceMemoryIntervalLimit, 1024);
@@ -202,6 +204,10 @@ protected:
     }
 
 public:
+    virtual NKikimrProto::EReplyStatus OverrideBlobPutResultOnWrite(const NKikimrProto::EReplyStatus originalStatus) const override {
+        return OverrideBlobPutResultOnWriteValue.value_or(originalStatus);
+    }
+
     const TAtomicCounter& GetIndexWriteControllerBrokeCount() const {
         return IndexWriteControllerBrokeCount;
     }

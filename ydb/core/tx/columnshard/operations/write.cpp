@@ -127,7 +127,7 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
 }
 
 void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const {
-    Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
+    Y_ABORT_UNLESS(Status != EOperationStatus::Draft);
 
     TBlobGroupSelector dsGroupSelector(owner.Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
@@ -144,7 +144,7 @@ void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::T
 }
 
 void TWriteOperation::AbortOnComplete(TColumnShard& owner) const {
-    Y_ABORT_UNLESS(Status == EOperationStatus::Prepared);
+    Y_ABORT_UNLESS(Status != EOperationStatus::Draft);
     if (WritePortions) {
         for (auto&& i : InsertWriteIds) {
             owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId).AbortPortionOnComplete(

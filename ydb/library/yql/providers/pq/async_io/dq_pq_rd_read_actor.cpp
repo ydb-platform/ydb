@@ -466,7 +466,7 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr& ev) {
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
-    SRC_LOG_I("TEvStartSessionAck from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
+    SRC_LOG_I("TEvStartSessionAck from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << ", cookie " << ev->Cookie);
     Counters.StartSessionAck++;
 
     ui64 partitionId = ev->Get()->Record.GetConsumer().GetPartitionId();

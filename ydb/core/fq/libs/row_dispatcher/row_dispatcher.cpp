@@ -885,12 +885,8 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvPrintStateToLog::TPtr&) {
 void TRowDispatcher::PrintStateToLog() {
     auto str = GetInternalState();
     auto buf = TStringBuf(str);
-    i64 size = buf.size();
-    ui64 offset = 0;
-    while (size > 0) {
+    for (ui64 offset = 0; offset < buf.size(); offset += PrintStateToLogSplitSize) {
         LOG_ROW_DISPATCHER_DEBUG(buf.SubString(offset, PrintStateToLogSplitSize));
-        offset += PrintStateToLogSplitSize;
-        size -= PrintStateToLogSplitSize;
     }
 }
 

@@ -130,6 +130,7 @@ private:
         {
             if (Settings.HasOffset()) {
                 NextMessageOffset = Settings.GetOffset();
+                InitialOffset = Settings.GetOffset();
             }
             Y_UNUSED(TDuration::TryParse(Settings.GetSource().GetReconnectPeriod(), ReconnectPeriod));
         }
@@ -145,6 +146,7 @@ private:
         TDuration ReconnectPeriod;
         TStats Stat;        // Send (filtered) to read_actor
         NMonitoring::TDynamicCounters::TCounterPtr FilteredDataRate;    // filtered
+        ui64 InitialOffset = 0;
     };
 
     struct TTopicEventProcessor {
@@ -1018,6 +1020,7 @@ void TTopicSession::SendStatisticToRowDispatcher() {
         client.ReadBytes = info.Stat.Bytes;
         client.IsWaiting = LastMessageOffset + 1 < info.NextMessageOffset.GetOrElse(0);
         client.ReadLagMessages = info.NextMessageOffset.GetOrElse(0) - LastMessageOffset - 1;
+        client.InitialOffset = info.InitialOffset;
         info.Stat.Clear();
         stat.Clients.emplace_back(std::move(client));
     }

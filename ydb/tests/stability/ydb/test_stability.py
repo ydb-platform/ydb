@@ -45,7 +45,7 @@ def kikimr_driver_path():
 
 
 def is_deploy_cluster():
-    return yatest.common.get_param("kikimr.ci.deploy_cluster", "false") == "true"
+    return yatest.common.get_param("kikimr.ci.deploy_cluster", "false").lower() == "true"
 
 
 class TestSetupForStability(object):

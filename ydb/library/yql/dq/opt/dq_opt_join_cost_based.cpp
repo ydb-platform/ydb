@@ -279,7 +279,7 @@ private:
                 ExprCtx->AddWarning(
                     YqlIssue(
                         {}, TIssuesIds::DQ_OPTIMIZE_ERROR, 
-                        "Cost Based Optimizer didn't work: "
+                        "Cost Based Optimizer could not be applied to this query: "
                         "Enumeration is too large, use PRAGMA MaxDPHypDPTableSize='4294967295' to disable the limitation"
                     )
                 );
@@ -368,7 +368,11 @@ TExprBase DqOptimizeEquiJoinWithCosts(
     // of the EquiJoin and n-1 argument are the parameters to EquiJoin
 
     if (!DqCollectJoinRelationsWithStats(rels, typesCtx, equiJoin, providerCollect)){
-        ctx.AddWarning(YqlIssue({}, TIssuesIds::DQ_OPTIMIZE_ERROR, "Cost Based Optimizer didn't work: couldn't load statistics"));
+        ctx.AddWarning(
+            YqlIssue({}, TIssuesIds::DQ_OPTIMIZE_ERROR, 
+            "Cost Based Optimizer could not be applied to this query: couldn't load statistics"
+            )
+        );
         return node;
     }
 

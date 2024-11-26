@@ -78,7 +78,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.c > item.d And item.a > item.b - 2 And item.a < item.b + 2 And item.d > item.e"
+                                                "Predicate": "item.c > item.d AND item.a > item.b - 2 AND item.a < item.b + 2 AND item.d > item.e"
                                             }
                                         ],
                                         "PlanNodeId": 2,

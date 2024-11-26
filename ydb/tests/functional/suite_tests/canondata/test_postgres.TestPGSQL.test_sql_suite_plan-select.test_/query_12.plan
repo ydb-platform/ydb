@@ -56,7 +56,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "Exist(item.stringu1) And Exist(item.unique1)"
+                                                "Predicate": "Exist(item.stringu1) AND Exist(item.unique1)"
                                             }
                                         ],
                                         "PlanNodeId": 2,

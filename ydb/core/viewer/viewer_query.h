@@ -20,7 +20,7 @@ class TJsonQuery : public TViewerPipeClient {
     using TThis = TJsonQuery;
     using TBase = TViewerPipeClient;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0;
+    ui32 Timeout = 60000;
     std::vector<std::vector<Ydb::ResultSet>> ResultSets;
     TString Query;
     TString Action;
@@ -64,7 +64,7 @@ public:
     void ParseCgiParameters(const TCgiParameters& params) {
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 60000);
+        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), Timeout);
         if (params.Has("query")) {
             Query = params.Get("query");
         }
@@ -103,6 +103,12 @@ public:
         NJson::TJsonValue requestData;
         bool success = NJson::ReadJsonTree(content, &JsonConfig, &requestData);
         if (success) {
+            if (requestData.Has("timeout")) {
+                Timeout = requestData["timeout"].GetUIntegerRobust();
+                if (Timeout == 0) {
+                    return false;
+                }
+            }
             if (requestData.Has("query")) {
                 Query = requestData["query"].GetStringRobust();
             }

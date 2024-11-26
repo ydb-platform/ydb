@@ -14,6 +14,7 @@ struct TopicSessionClientStatistic {
     ui64 ReadBytes = 0;         // Increment / filtered
     bool IsWaiting = false;     // Current value
     i64 ReadLagMessages = 0;    // Current value
+    ui64 InitialOffset = 0;
     void Add(const TopicSessionClientStatistic& stat) {
         UnreadRows = stat.UnreadRows;
         UnreadBytes = stat.UnreadBytes;
@@ -21,6 +22,7 @@ struct TopicSessionClientStatistic {
         ReadBytes += stat.ReadBytes;
         IsWaiting = stat.IsWaiting;
         ReadLagMessages = stat.ReadLagMessages;
+        InitialOffset = stat.InitialOffset;
     }
     void Clear() {
         ReadBytes = 0;

@@ -90,7 +90,8 @@ struct TAggQueryStat {
 };
 
 ui64 UpdateMetricsPeriodSec = 60;
-ui64 PrintStateToLogPeriodSec = 300;
+ui64 PrintStateToLogPeriodSec = 600;
+ui64 PrintStateToLogSplitSize = 512000;
 ui64 MaxSessionBufferSizeBytes = 16000000;
 
 class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
@@ -159,10 +160,16 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
                 TDuration Delay; // The first time retry will be done instantly.
         };
 
+        struct TCounters {
+            ui64 Connected = 0;
+            ui64 Disconnected = 0;
+        };
+
         struct TNodeState {
             bool Connected = false;
             bool RetryScheduled = false;
             TMaybe<TRetryState> RetryState;
+            TCounters Counters;
         };
     public:
         void Init(const NActors::TActorId& selfId) {
@@ -200,11 +207,13 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             auto& state = Nodes[nodeId];
             state.Connected = true;
             state.RetryState = Nothing();
+            state.Counters.Connected++;
         }
 
         void HandleNodeDisconnected(ui32 nodeId) {
             auto& state = Nodes[nodeId];
             state.Connected = false;
+            state.Counters.Disconnected++;
             if (state.RetryScheduled) {
                 return;
             }
@@ -220,7 +229,8 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         void PrintInternalState(TStringStream& stream) const {
             stream << "Nodes states: \n"; 
             for (const auto& [nodeId, state] : Nodes) {
-               stream << "  id " << nodeId << " connected " << state.Connected << " retry scheduled " << state.RetryScheduled << "\n";
+                stream << "  id " << nodeId << " connected " << state.Connected << " retry scheduled " << state.RetryScheduled
+                    << " connected count " << state.Counters.Connected << " disconnected count " << state.Counters.Disconnected << "\n";
             }
         }
 
@@ -444,6 +454,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
 
 void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected, node id " << ev->Get()->NodeId);
+    Metrics.NodesReconnect->Inc();
     NodesTracker.HandleNodeConnected(ev->Get()->NodeId);
     for (auto& [actorId, consumer] : Consumers) {
         consumer->EventsQueue.HandleNodeConnected(ev->Get()->NodeId);
@@ -452,6 +463,7 @@ void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev
 
 void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
+    Metrics.NodesReconnect->Inc();
     NodesTracker.HandleNodeDisconnected(ev->Get()->NodeId);
     for (auto& [actorId, consumer] : Consumers) {
         consumer->EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
@@ -573,6 +585,7 @@ TString TRowDispatcher::GetInternalState() {
     };
     str << "Consumers count: " << Consumers.size() << "\n";
     str << "TopicSessions count: " << TopicSessions.size() << "\n";
+    str << "Max session buffer size: " << toHuman(MaxSessionBufferSizeBytes) << "\n";
     str << "DataRate (all sessions): ";
     printDataRate(AggrStats.AllSessionsReadBytes);
     str << "\n";
@@ -617,10 +630,13 @@ TString TRowDispatcher::GetInternalState() {
             str << " / " << LeftPad(actorId, 32)
                 << " data rate " << toHumanDR(sessionInfo.AggrReadBytes.Sum) << " unread bytes " << toHuman(sessionInfo.Stat.UnreadBytes)
                 << " offset " << LeftPad(sessionInfo.Stat.LastReadedOffset, 12) << " restarts by offsets " << sessionInfo.Stat.RestartSessionByOffsets << "\n";
+            ui64 maxInitialOffset = 0;
+            ui64 minInitialOffset = std::numeric_limits<ui64>::max();
+
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
                 str << "    " << consumer->QueryId << " " << LeftPad(readActorId, 32) << " unread bytes "
                     << toHuman(consumer->Stat.UnreadBytes) << " (" << leftPad(consumer->Stat.UnreadRows) << " rows) "
-                    << " offset " << leftPad(consumer->Stat.Offset)
+                    << " offset " << leftPad(consumer->Stat.Offset) << " init offset " << leftPad(consumer->Stat.InitialOffset)
                     << " get " << leftPad(consumer->Counters.GetNextBatch)
                     << " arr " << leftPad(consumer->Counters.NewDataArrived) << " btc " << leftPad(consumer->Counters.MessageBatch) 
                     << " pend get " <<  leftPad(consumer->PendingGetNextBatch) << " pend new " << leftPad(consumer->PendingNewDataArrived)
@@ -628,7 +644,11 @@ TString TRowDispatcher::GetInternalState() {
                     << " conn id " <<  consumer->Generation << " ";
                 str << " retry queue: ";
                 consumer->EventsQueue.PrintInternalState(str);
+
+                maxInitialOffset = std::max(maxInitialOffset, consumer->Stat.InitialOffset);
+                minInitialOffset = std::min(minInitialOffset, consumer->Stat.InitialOffset);
             }
+            str << "    initial offset max " << leftPad(maxInitialOffset) << " min " << leftPad(minInitialOffset) << "\n";;
         }
     }
     return str.Str();
@@ -750,7 +770,6 @@ bool TRowDispatcher::CheckSession(TAtomicSharedPtr<ConsumerInfo>& consumer, cons
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     ConsumerSessionKey key{ev->Sender, ev->Get()->Record.GetPartitionId()};
-    LOG_ROW_DISPATCHER_DEBUG(GetInternalState());
     auto it = Consumers.find(key);
     if (it == Consumers.end()) {
         LOG_ROW_DISPATCHER_WARN("Ignore TEvStopSession from " << ev->Sender << " part id " << ev->Get()->Record.GetPartitionId());
@@ -878,8 +897,20 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&) {
 }
 
 void TRowDispatcher::Handle(NFq::TEvPrivate::TEvPrintStateToLog::TPtr&) {
-    LOG_ROW_DISPATCHER_DEBUG(GetInternalState());
+    PrintStateToLog();
     Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
+}
+
+void TRowDispatcher::PrintStateToLog() {
+    auto str = GetInternalState();
+    auto buf = TStringBuf(str);
+    i64 size = buf.size();
+    ui64 offset = 0;
+    while (size > 0) {
+        LOG_ROW_DISPATCHER_DEBUG(buf.SubString(offset, PrintStateToLogSplitSize));
+        offset += PrintStateToLogSplitSize;
+        size -= PrintStateToLogSplitSize;
+    }
 }
 
 void TRowDispatcher::Handle(const NMon::TEvHttpInfo::TPtr& ev) {

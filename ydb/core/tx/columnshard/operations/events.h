@@ -34,6 +34,14 @@ private:
     YDB_READONLY_DEF(std::vector<NOlap::TInsertWriteId>, InsertWriteIds);
 
 public:
+    ui64 GetRecordsCount() const {
+        ui64 result = 0;
+        for (auto&& i : Portions) {
+            result += i.GetPKBatch()->num_rows();
+        }
+        return result;
+    }
+
     const NEvWrite::TWriteMeta& GetWriteMeta() const {
         return WriteMeta;
     }

@@ -66,7 +66,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "item.d > item.e And item.a > item.b - 2 And item.a < item.b + 2 And item.d < 110 Or item.d > 150"
+                                                "Predicate": "item.d > item.e AND item.a > item.b - 2 AND item.a < item.b + 2 AND item.d < 110 OR item.d > 150"
                                             }
                                         ],
                                         "PlanNodeId": 2,

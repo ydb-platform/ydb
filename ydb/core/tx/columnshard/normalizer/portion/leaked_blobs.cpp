@@ -9,6 +9,8 @@
 
 #include <ydb/library/actors/core/actor.h>
 
+#include <util/string/vector.h>
+
 namespace NKikimr::NOlap {
 
 class TLeakedBlobsNormalizerChanges: public INormalizerChanges {
@@ -16,12 +18,17 @@ private:
     THashSet<TLogoBlobID> Leaks;
     const ui64 TabletId;
     NColumnShard::TBlobGroupSelector DsGroupSelector;
+    ui64 LeakeadBlobsSize;
 
 public:
     TLeakedBlobsNormalizerChanges(THashSet<TLogoBlobID>&& leaks, const ui64 tabletId, NColumnShard::TBlobGroupSelector dsGroupSelector)
         : Leaks(std::move(leaks))
         , TabletId(tabletId)
         , DsGroupSelector(dsGroupSelector) {
+        LeakeadBlobsSize = 0;
+        for (const auto& blob : Leaks) {
+            LeakeadBlobsSize += blob.BlobSize();
+        }
     }
 
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /*normController*/) const override {
@@ -41,6 +48,18 @@ public:
 
     ui64 GetSize() const override {
         return Leaks.size();
+    }
+
+    TString DebugString() const override {
+        TStringBuilder sb;
+        sb << "tablet=" << TabletId;
+        sb << ";leaked_blob_count=" << Leaks.size();
+        sb << ";leaked_blobs_size=" << LeakeadBlobsSize;
+        auto blobSampleEnd = Leaks.begin();
+        for (ui64 i = 0; i < 10 && blobSampleEnd != Leaks.end(); ++i, ++blobSampleEnd) {
+        }
+        sb << ";leaked_blobs=[" << JoinStrings(Leaks.begin(), blobSampleEnd, ",") << "]";
+        return sb;
     }
 };
 
@@ -156,7 +175,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     NIceDb::TNiceDb db(txc.DB);
     const bool ready = (int)Schema::Precharge<Schema::IndexPortions>(db, txc.DB.GetScheme()) &
                        (int)Schema::Precharge<Schema::IndexColumns>(db, txc.DB.GetScheme()) &
-                       (int)Schema::Precharge<Schema::IndexIndexes>(db, txc.DB.GetScheme());
+                       (int)Schema::Precharge<Schema::IndexIndexes>(db, txc.DB.GetScheme()) &
+                       (int)Schema::Precharge<Schema::BlobsToDeleteWT>(db, txc.DB.GetScheme());
     if (!ready) {
         return TConclusionStatus::Fail("Not ready");
     }
@@ -219,6 +239,24 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
         }
         Indexes = std::move(indexesLocal);
     }
+    if (BlobsToDelete.empty()) {
+        THashSet<TUnifiedBlobId> blobsToDelete;
+        auto rowset = db.Table<NColumnShard::Schema::BlobsToDeleteWT>().Select();
+        if (!rowset.IsReady()) {
+            return TConclusionStatus::Fail("Not ready: BlobsToDeleteWT");
+        }
+        while (!rowset.EndOfSet()) {
+            const TString& blobIdStr = rowset.GetValue<NColumnShard::Schema::BlobsToDeleteWT::BlobId>();
+            TString error;
+            TUnifiedBlobId blobId = TUnifiedBlobId::ParseFromString(blobIdStr, &DsGroupSelector, error);
+            AFL_VERIFY(blobId.IsValid())("event", "cannot_parse_blob")("error", error)("original_string", blobIdStr);
+            blobsToDelete.emplace(blobId);
+            if (!rowset.Next()) {
+                return TConclusionStatus::Fail("Local table is not loaded: BlobsToDeleteWT");
+            }
+        }
+        BlobsToDelete = std::move(blobsToDelete);
+    }
     AFL_VERIFY(Portions.size() == Records.size())("portions", Portions.size())("records", Records.size());
     THashSet<TLogoBlobID> resultLocal;
     for (auto&& i : Portions) {
@@ -238,6 +276,9 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
             continue;
         }
         for (auto&& c : it->second) {
+            resultLocal.emplace(c.GetLogoBlobId());
+        }
+        for (const auto& c : BlobsToDelete) {
             resultLocal.emplace(c.GetLogoBlobId());
         }
     }

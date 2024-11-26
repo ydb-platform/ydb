@@ -26,4 +26,6 @@ public:
 
 IPureCalcProgramFactory::TPtr CreatePureCalcProgramFactory();
 
+TString CleanupCounterValueString(const TString& value);
+
 } // namespace NFq

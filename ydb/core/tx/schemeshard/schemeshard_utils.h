@@ -23,21 +23,6 @@ namespace NSchemeShard {
 
 inline constexpr TStringBuf SYSTEM_COLUMN_PREFIX = "__ydb_";
 
-inline bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
-    switch (typeInfo.GetTypeId()) {
-        case NScheme::NTypeIds::Json:
-        case NScheme::NTypeIds::Yson:
-        case NScheme::NTypeIds::Float:
-        case NScheme::NTypeIds::Double:
-        case NScheme::NTypeIds::JsonDocument:
-            return false;
-        case NScheme::NTypeIds::Pg:
-            return NPg::TypeDescIsComparable(typeInfo.GetPgTypeDesc());
-        default:
-            return true;
-    }
-}
-
 inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames = false) {
     if (!allowSystemColumnNames && name.StartsWith(SYSTEM_COLUMN_PREFIX)) {
         return false;

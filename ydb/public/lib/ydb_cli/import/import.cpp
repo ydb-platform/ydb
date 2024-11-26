@@ -306,7 +306,7 @@ public:
 
 private:
     size_t GetSemaphoreMaxValue(size_t orderNum) const {
-        return Max(1ul, MaxJobInFlight / CurrentFileCount
+        return Max((size_t)1, MaxJobInFlight / CurrentFileCount
             // One more thread for the first <MaxJobInFlight % CurrentFileCount> managers to utilize max jobs inflight
             + (orderNum < MaxJobInFlight % CurrentFileCount ? 1 : 0));
     }
@@ -341,7 +341,7 @@ private:
     TStatus UpsertCsvByBlocks(const TString& filePath,
                               const TString& dbPath);
     TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValueBuilder& builder);
-    TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValue&& rows);
+    TAsyncStatus UpsertTValueBuffer(const TString& dbPath, std::function<TValue()>&& buildFunc);
     TStatus UpsertJson(IInputStream &input, const TString &dbPath, std::optional<ui64> inputSizeHint,
                        ProgressCallbackFunc & progressCallback);
     TStatus UpsertParquet(const TString& filename, const TString& dbPath, ProgressCallbackFunc & progressCallback);
@@ -389,11 +389,8 @@ TImportFileClient::TImpl::TImpl(const TDriver& driver, const TClientCommand::TCo
         .MaxRetries(TImportFileSettings::MaxRetries)
         .Idempotent(true)
         .Verbose(rootConfig.IsVerbose());
-    IThreadPool::TParams poolParams;
-    if (!Settings.NewlineDelimited_) {
-        poolParams.SetBlocking(true);
-    }
-    ProcessingPool = CreateThreadPool(Settings.Threads_, 0, poolParams);
+    ProcessingPool = CreateThreadPool(Settings.Threads_, 0,
+        IThreadPool::TParams().SetThreadNamePrefix("CsvProcessing"));
     RequestsInflight = std::make_unique<std::counting_semaphore<>>(Settings.MaxInFlightRequests_);
 }
 
@@ -578,15 +575,24 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath,
 }
 
 inline
-TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath, TValue&& rows) {
-    auto retryFunc = [this, dbPath, rows = std::move(rows)]
+TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath, std::function<TValue()>&& buildFunc) {
+    // For the first attempt values are built before acquiring request inflight semaphore
+    std::optional<TValue> prebuiltValue = buildFunc();
+    auto retryFunc = [this, &dbPath, buildFunc = std::move(buildFunc), prebuiltValue = std::move(prebuiltValue)]
             (NYdb::NTable::TTableClient& tableClient) mutable -> TAsyncStatus {
-        NYdb::TValue rowsCopy(rows.GetType(), rows.GetProto());
-        return tableClient.BulkUpsert(dbPath, std::move(rowsCopy), UpsertSettings)
-            .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
-                NYdb::TStatus status = bulkUpsertResult.GetValueSync();
-                return NThreading::MakeFuture(status);
-            });
+        auto buildTValueAndSendRequest = [this, &buildFunc, &dbPath, &tableClient, &prebuiltValue]() {
+            // For every retry attempt after first request build value from strings again
+            // to prevent copying data in retryFunc in a happy way when there is only one request
+            TValue builtValue = prebuiltValue.has_value() ? std::move(prebuiltValue.value()) : buildFunc();
+            prebuiltValue = std::nullopt;
+            return tableClient.BulkUpsert(dbPath, std::move(builtValue), UpsertSettings)
+                .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
+                    NYdb::TStatus status = bulkUpsertResult.GetValueSync();
+                    return NThreading::MakeFuture(status);
+                });
+        };
+        // Running heavy building task on processing pool:
+        return NThreading::Async(std::move(buildTValueAndSendRequest), *ProcessingPool);
     };
     if (!RequestsInflight->try_acquire()) {
         if (Settings.Verbose_ && Settings.NewlineDelimited_) {
@@ -644,18 +650,22 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
     std::vector<TString> buffer;
 
     auto upsertCsvFunc = [&, jobInflightManager](std::vector<TString>&& buffer, ui64 row) {
-        try {
-            UpsertTValueBuffer(dbPath, parser.BuildList(buffer, filePath, row))
+            auto buildFunc = [jobInflightManager, &parser, buffer = std::move(buffer), &filePath, row, this] () mutable {
+                try {
+                    return parser.BuildList(buffer, filePath, row);
+                } catch (const std::exception& e) {
+                    if (!Failed.exchange(true)) {
+                        ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
+                    }
+                    jobInflightManager->ReleaseJob();
+                    throw;
+                }
+            };
+            UpsertTValueBuffer(dbPath, std::move(buildFunc))
                 .Apply([jobInflightManager](const TAsyncStatus& asyncStatus) {
                     jobInflightManager->ReleaseJob();
                     return asyncStatus;
                 });
-        } catch (const std::exception& e) {
-            if (!Failed.exchange(true)) {
-                ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
-            }
-            jobInflightManager->ReleaseJob();
-        }
     };
 
     while (TString line = splitter.ConsumeLine()) {
@@ -738,9 +748,11 @@ TStatus TImportFileClient::TImpl::UpsertCsv(IInputStream& input,
 TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
                                              const TString& dbPath) {
     TString headerRow;
-    ui64 maxThreads = Max(1ul, Settings.Threads_ / CurrentFileCount);
+    ui64 maxThreads = Max((size_t)1, Settings.Threads_ / CurrentFileCount);
     TCsvFileReader splitter(filePath, Settings, headerRow, maxThreads);
     ui64 threadCount = splitter.GetSplitCount();
+    THolder<IThreadPool> readingPool = CreateThreadPool(maxThreads, 0,
+    IThreadPool::TParams().SetThreadNamePrefix("CsvReading"));
     // MaxInFlightRequests_ requests in flight on server and threadCount threads building TValue
     size_t maxJobInflightTotal = threadCount + Settings.MaxInFlightRequests_;
 
@@ -765,19 +777,23 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
             // Job ends on receiving final request (after all retries)
             std::counting_semaphore<> jobsInflight(maxJobInflight);
             auto upsertCsvFunc = [&](std::vector<TString>&& buffer) {
-                jobsInflight.acquire();
-                try {
-                    UpsertTValueBuffer(dbPath, parser.BuildList(buffer, filePath))
-                        .Apply([&jobsInflight](const TAsyncStatus& asyncStatus) {
-                            jobsInflight.release();
-                            return asyncStatus;
-                        });
-                } catch (const std::exception& e) {
-                    if (!Failed.exchange(true)) {
-                        ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
+                auto buildFunc = [&jobsInflight, &parser, buffer = std::move(buffer), &filePath, this]() mutable {
+                    try {
+                        return parser.BuildList(buffer, filePath);
+                    } catch (const std::exception& e) {
+                        if (!Failed.exchange(true)) {
+                            ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
+                        }
+                        jobsInflight.release();
+                        throw;
                     }
-                    jobsInflight.release();
-                }
+                };
+                jobsInflight.acquire();
+                UpsertTValueBuffer(dbPath, std::move(buildFunc))
+                    .Apply([&jobsInflight](const TAsyncStatus& asyncStatus) {
+                        jobsInflight.release();
+                        return asyncStatus;
+                    });
             };
             std::vector<TAsyncStatus> inFlightRequests;
             std::vector<TString> buffer;
@@ -846,7 +862,7 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
             promise.SetValue();
         };
 
-        if (!ProcessingPool->AddFunc(workerFunc)) {
+        if (!readingPool->AddFunc(workerFunc)) {
             return MakeStatus(EStatus::INTERNAL_ERROR, "Couldn't add worker func");
         }
     }

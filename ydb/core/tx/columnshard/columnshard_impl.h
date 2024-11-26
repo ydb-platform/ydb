@@ -59,6 +59,9 @@ class TTxInternalScan;
 namespace NPlain {
 class TIndexScannerConstructor;
 }
+namespace NSimple {
+class TIndexScannerConstructor;
+}
 }   // namespace NReader
 
 namespace NDataSharing {
@@ -109,7 +112,7 @@ class TSharingSessionsInitializer;
 class TInFlightReadsInitializer;
 class TSpecialValuesInitializer;
 class TTablesManagerInitializer;
-}
+}   // namespace NLoading
 
 extern bool gAllowLogBatchingDefaultValue;
 
@@ -198,6 +201,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NOlap::NReader::TTxScan;
     friend class NOlap::NReader::TTxInternalScan;
     friend class NOlap::NReader::NPlain::TIndexScannerConstructor;
+    friend class NOlap::NReader::NSimple::TIndexScannerConstructor;
 
     class TStoragesManager;
     friend class TTxController;
@@ -246,7 +250,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx);
-    
+
     void Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvScanStats::TPtr& ev, const TActorContext& ctx);

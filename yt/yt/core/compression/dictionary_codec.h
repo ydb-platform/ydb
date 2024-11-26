@@ -95,8 +95,9 @@ struct IDictionaryCompressionCodec
     virtual IDictionaryDecompressorPtr CreateDictionaryDecompressor(
         const IDigestedDecompressionDictionaryPtr& digestedDecompressionDictionary) const = 0;
 
-    // NB: Raw #compressionDictionary data will be copied and stored within digested dictionary in a preprocessed form.
+    //! NB: Raw #compressionDictionary data will be copied and stored within digested dictionary in a preprocessed form.
     //! #compressionLevel determines compression level that will be applied for each compression with that dictionary later on.
+    //! These methods may throw.
     virtual IDigestedCompressionDictionaryPtr CreateDigestedCompressionDictionary(
         const TSharedRef& compressionDictionary,
         int compressionLevel) const = 0;
@@ -104,6 +105,7 @@ struct IDictionaryCompressionCodec
         const TSharedRef& compressionDictionary) const = 0;
 
     //! Parses header of compressed frame #input and returns specified frame info.
+    //! This method may throw.
     virtual TDictionaryCompressionFrameInfo GetFrameInfo(TRef input) const = 0;
 };
 

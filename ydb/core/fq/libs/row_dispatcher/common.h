@@ -3,7 +3,7 @@
 #include <util/generic/ptr.h>
 #include <util/system/mutex.h>
 
-#include <ydb/library/yql/public/purecalc/common/fwd.h>
+#include <yql/essentials/public/purecalc/common/fwd.h>
 
 namespace NFq {
 
@@ -25,5 +25,7 @@ public:
 };
 
 IPureCalcProgramFactory::TPtr CreatePureCalcProgramFactory();
+
+TString CleanupCounterValueString(const TString& value);
 
 } // namespace NFq

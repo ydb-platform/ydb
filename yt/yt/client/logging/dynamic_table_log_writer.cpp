@@ -50,7 +50,7 @@ using namespace NYson;
 // We use this logger to (try our best) to avoid perpetual log message production.
 // Currently it is impossible to disable logging along a chain of invocations completely,
 // so some induced log messages will loop back into our writer.
-YT_DEFINE_GLOBAL(const NLogging::TLogger, SystemLogger, SystemLoggingCategoryName);
+static YT_DEFINE_GLOBAL(const NLogging::TLogger, SystemLogger, SystemLoggingCategoryName);
 
 ////////////////////////////////////////////////////////////////////////////////
 

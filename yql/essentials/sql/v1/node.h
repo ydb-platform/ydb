@@ -168,6 +168,8 @@ namespace NSQLTranslationV1 {
         virtual TString GetOpName() const;
         virtual const TString* GetLiteral(const TString& type) const;
         virtual const TString* GetColumnName() const;
+        virtual bool IsPlainColumn() const;
+        virtual bool IsTableRow() const;
         virtual void AssumeColumn();
         virtual const TString* GetSourceName() const;
         virtual const TString* GetAtomContent() const;
@@ -299,6 +301,8 @@ namespace NSQLTranslationV1 {
         virtual TString GetOpName() const override;
         virtual const TString* GetLiteral(const TString &type) const override;
         virtual const TString* GetColumnName() const override;
+        virtual bool IsPlainColumn() const override;
+        virtual bool IsTableRow() const override;
         virtual void AssumeColumn() override;
         virtual const TString* GetSourceName() const override;
         virtual const TString* GetAtomContent() const override;

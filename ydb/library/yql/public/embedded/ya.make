@@ -34,6 +34,7 @@ PEERDIR(
     yql/essentials/providers/common/udf_resolve
     yql/essentials/core/url_preprocessing
     yql/essentials/core/url_lister
+    ydb/library/yql/dq/opt
     ydb/library/yql/providers/yt/gateway/native
     ydb/library/yql/providers/yt/lib/log
     ydb/library/yql/providers/yt/lib/yt_download

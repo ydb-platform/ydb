@@ -26,4 +26,4 @@ def test(suite, case, tmpdir):
     yatest.common.process.execute(cmd, env={'YQL_DETERMINISTIC_MODE': '1'})
     files.append(os.path.join(out_dir, 'formatted.sql'))
 
-    return [yatest.common.canonical_file(file_name) for file_name in files]
+    return [yatest.common.canonical_file(file_name, local=True) for file_name in files]

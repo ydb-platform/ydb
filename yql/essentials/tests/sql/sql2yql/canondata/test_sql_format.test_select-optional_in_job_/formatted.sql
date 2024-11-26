@@ -1,4 +1,5 @@
-/* postgres can not *//* multirun can not */
+/* postgres can not */
+/* multirun can not */
 USE plato;
 
 INSERT INTO @a
@@ -18,14 +19,14 @@ COMMIT;
 -- Everything should be True
 SELECT
     level1_null IS NULL,
-    Yql::Unwrap(level1_just_val) = "val",
+    Yql::Unwrap(level1_just_val) == "val",
     level2_null IS NULL,
     Yql::Unwrap(level2_just_null) IS NULL,
-    Yql::Unwrap(Yql::Unwrap(level2_just_just_val)) = "val",
+    Yql::Unwrap(Yql::Unwrap(level2_just_just_val)) == "val",
     level3_null IS NULL,
     Yql::Unwrap(level3_just_null) IS NULL,
     Yql::Unwrap(Yql::Unwrap(level3_just_just_null)) IS NULL,
-    Yql::Unwrap(Yql::Unwrap(Yql::Unwrap(level3_just_just_just_val))) = "val",
+    Yql::Unwrap(Yql::Unwrap(Yql::Unwrap(level3_just_just_just_val))) == "val",
     TRUE
 FROM @a
-WHERE const = "const";
+WHERE const == "const";

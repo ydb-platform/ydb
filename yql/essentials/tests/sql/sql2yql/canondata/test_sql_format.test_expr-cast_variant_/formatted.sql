@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 $a = AsEnum("a");
 $b = AsEnum("b");
 $c = AsEnum("c");

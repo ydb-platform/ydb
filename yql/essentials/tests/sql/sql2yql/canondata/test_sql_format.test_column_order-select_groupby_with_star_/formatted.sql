@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 PRAGMA OrderedColumns;
 
@@ -18,7 +19,7 @@ FROM Input
 GROUP BY
     value,
     key
-HAVING key = "150";
+HAVING key == "150";
 
 SELECT
     *

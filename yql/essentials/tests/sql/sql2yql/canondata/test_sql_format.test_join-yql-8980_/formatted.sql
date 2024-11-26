@@ -21,9 +21,9 @@ FROM $foo
     AS R0
 LEFT JOIN $foo
     AS R1
-ON R0.subkey = R1.key
+ON R0.subkey == R1.key
 LEFT JOIN $foo
     AS R2
-ON R1.subkey = R2.key
+ON R1.subkey == R2.key
 ORDER BY
     R0.key;

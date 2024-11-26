@@ -1,4 +1,5 @@
-/* custom error:PrintBacktraceToStderr*//* dqfile can not */
+/* custom error:PrintBacktraceToStderr*/
+/* dqfile can not */
 USE plato;
 $f = Python3::f(
     @@

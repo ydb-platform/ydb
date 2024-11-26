@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $lists_2sum = ($l1, $l2) -> (
     ListMap(ListZip($l1, $l2), ($x) -> ($x.0 + $x.1))
 );

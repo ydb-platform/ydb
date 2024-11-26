@@ -1,4 +1,6 @@
-/* postgres can not *//* multirun can not *//* syntax version 1 */
+/* postgres can not */
+/* multirun can not */
+/* syntax version 1 */
 USE plato;
 $keys = ($key) -> {
     RETURN AsTuple($key, $key);

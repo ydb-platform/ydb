@@ -8,19 +8,19 @@ SELECT
     YQL::ShuffleByKeys(
         $input,
         ($_) -> ("dsdsa"),
-        ($_) -> ([1])-- list
+        ($_) -> ([1]) -- list
     );
 
 SELECT
     YQL::ShuffleByKeys(
         $input,
         ($_) -> (12),
-        ($_) -> (Just(2))-- optional
+        ($_) -> (Just(2)) -- optional
     );
 
 SELECT
     YQL::ShuffleByKeys(
         $input,
         ($_) -> (TRUE),
-        ($_) -> (YQL::ToStream([3]))-- stream
+        ($_) -> (YQL::ToStream([3])) -- stream
     );

@@ -1,5 +1,6 @@
 USE plato;
-/* postgres can not *//* kikimr can not */
+/* postgres can not */
+/* kikimr can not */
 PRAGMA DisableSimpleColumns;
 PRAGMA yt.MapJoinLimit = "1m";
 
@@ -9,4 +10,4 @@ FROM Input1
     AS a
 JOIN Input2
     AS b
-ON a.key = b.key AND a.subkey = b.key;
+ON a.key == b.key AND a.subkey == b.key;

@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 $struct = <|du: 3.14, fl: -1.f, i: 0, s: "str"u, u: 123u|>;
 
 SELECT

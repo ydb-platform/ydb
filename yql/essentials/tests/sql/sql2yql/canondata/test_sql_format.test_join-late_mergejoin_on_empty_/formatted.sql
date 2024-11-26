@@ -18,12 +18,12 @@ LEFT ONLY JOIN (
     WHERE key < "010"
 )
     AS b
-ON a.subkey = b.subkey
-JOIN/*+ merge() */ (
+ON a.subkey == b.subkey
+JOIN /*+ merge() */ (
     SELECT
         key,
         value
     FROM Input
 )
     AS c
-ON a.key = c.key;
+ON a.key == c.key;

@@ -1,4 +1,8 @@
-/* syntax version 1 *//* postgres can not *//* dq can not *//* dqfile can not *//* yt can not */
+/* syntax version 1 */
+/* postgres can not */
+/* dq can not */
+/* dqfile can not */
+/* yt can not */
 PRAGMA warning("disable", "4510");
 PRAGMA warning("disable", "1108");
 $Input = [(4, 100), (5, 100)];
@@ -71,7 +75,7 @@ SELECT
         ($row) -> (
             (
                 (
-                    $row.c = 33 AND $row.d = 44 AND (
+                    $row.c == 33 AND $row.d == 44 AND (
                         $row.b,
                         $row.a,
                         $row.b,

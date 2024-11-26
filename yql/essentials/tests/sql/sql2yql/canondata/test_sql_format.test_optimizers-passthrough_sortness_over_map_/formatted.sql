@@ -1,4 +1,5 @@
-/* postgres can not *//* kikimr can not - anon tables */
+/* postgres can not */
+/* kikimr can not - anon tables */
 USE plato;
 
 INSERT INTO @a

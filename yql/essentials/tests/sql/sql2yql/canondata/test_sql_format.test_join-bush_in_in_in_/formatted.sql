@@ -11,10 +11,10 @@ FROM Roots
     AS i1
 INNER JOIN Leaves
     AS i2
-ON i1.leaf = i2.key
+ON i1.leaf == i2.key
 INNER JOIN Branches
     AS i3
-ON i1.branch = i3.key
+ON i1.branch == i3.key
 INNER JOIN Leaves
     AS i4
-ON i3.leaf = i4.key;
+ON i3.leaf == i4.key;

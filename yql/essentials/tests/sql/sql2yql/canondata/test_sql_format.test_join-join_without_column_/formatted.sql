@@ -14,11 +14,11 @@ $data = (
 --INSERT INTO Output
 SELECT
     *
-    WITHOUT
-        d.value
+WITHOUT
+    d.value
 FROM Input
 JOIN $data
     AS d
-ON Input.subkey = CAST(CAST(d.kk AS uint32) / 100 AS string)
+ON Input.subkey == CAST(CAST(d.kk AS uint32) / 100 AS string)
 ORDER BY
     key;

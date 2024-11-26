@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $majority_vote = Python::majority_vote(
     Callable<(List<String?>) -> String>,
     @@

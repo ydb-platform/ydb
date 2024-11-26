@@ -1,5 +1,6 @@
 PRAGMA DisableSimpleColumns;
-/* postgres can not *//* kikimr can not */
+/* postgres can not */
+/* kikimr can not */
 USE plato;
 PRAGMA yt.mapjoinlimit = "1m";
 
@@ -26,7 +27,7 @@ FROM Input
     AS a
 LEFT JOIN $in1
     AS b
-ON a.key = b.key;
+ON a.key == b.key;
 $limit = ($cnt / 100) ?? 0;
 
 $in2 = (
@@ -43,4 +44,4 @@ FROM Input
     AS a
 LEFT ONLY JOIN $in2
     AS b
-ON a.key = b.key;
+ON a.key == b.key;

@@ -1,4 +1,6 @@
-/* postgres can not *//* syntax version 1 *//* kikimr can not - range not supported */
+/* postgres can not */
+/* syntax version 1 */
+/* kikimr can not - range not supported */
 $script = @@
 def f(f):
   def ft(s):

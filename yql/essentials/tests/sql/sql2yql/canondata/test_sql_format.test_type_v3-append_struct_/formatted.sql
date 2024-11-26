@@ -1,4 +1,7 @@
-/* syntax version 1 *//* multirun can not *//* postgres can not *//* custom check: len(yt_res_yson[0]['Write'][0]['Data']) == 10 */
+/* syntax version 1 */
+/* multirun can not */
+/* postgres can not */
+/* custom check: len(yt_res_yson[0]['Write'][0]['Data']) == 10 */
 USE plato;
 PRAGMA yt.UseNativeYtTypes = "1";
 

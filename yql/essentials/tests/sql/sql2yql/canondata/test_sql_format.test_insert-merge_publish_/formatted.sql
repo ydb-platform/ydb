@@ -1,4 +1,6 @@
-/* postgres can not *//* kikimr can not *//* ignore plan diff */
+/* postgres can not */
+/* kikimr can not */
+/* ignore plan diff */
 USE plato;
 PRAGMA yt.ScriptCpu = "1.0";
 

@@ -11,8 +11,7 @@ $data =
             (key, subkey),
             (subkey, value));
 
-INSERT INTO @tmp
-    WITH TRUNCATE
+INSERT INTO @tmp WITH TRUNCATE
 SELECT
     b.value
 FROM $data

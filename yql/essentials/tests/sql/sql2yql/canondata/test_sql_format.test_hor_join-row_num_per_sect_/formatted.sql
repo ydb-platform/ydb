@@ -1,4 +1,6 @@
-/* postgres can not *//* kikimr can not *//* syntax version 1 */
+/* postgres can not */
+/* kikimr can not */
+/* syntax version 1 */
 USE plato;
 
 $with_row1 = (

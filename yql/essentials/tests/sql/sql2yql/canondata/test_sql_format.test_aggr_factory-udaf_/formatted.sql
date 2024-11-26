@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not */-- count example
+/* syntax version 1 */
+/* postgres can not */
+-- count example
 $create = ($_item, $_parent) -> {
     RETURN 1
 };

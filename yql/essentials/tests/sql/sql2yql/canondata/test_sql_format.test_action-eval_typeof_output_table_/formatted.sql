@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not *//* custom error: Table "Output" does not exist */
+/* syntax version 1 */
+/* postgres can not */
+/* custom error: Table "Output" does not exist */
 USE plato;
 
 INSERT INTO Output
@@ -14,8 +16,7 @@ $c = EvaluateCode(ReprCode(FormatType(TypeOf($input))));
 SELECT
     $c;
 
-INSERT INTO Output
-    WITH TRUNCATE
+INSERT INTO Output WITH TRUNCATE
 SELECT
     key || "foo" AS key3
 FROM Input;

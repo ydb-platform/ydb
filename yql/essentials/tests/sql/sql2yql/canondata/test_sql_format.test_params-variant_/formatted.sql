@@ -1,4 +1,5 @@
-/* syntax version 1 */-- underlying type is tuple
+/* syntax version 1 */
+-- underlying type is tuple
 DECLARE $x1 AS Variant<String, Int64>;
 DECLARE $x2 AS Variant<String, Int64>;
 -- underlying type is struct

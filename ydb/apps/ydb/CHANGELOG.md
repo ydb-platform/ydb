@@ -1,5 +1,3 @@
-## 2.16.0 ##
-
 * Improved throughput of `ydb import file csv` command. It is now approximately x3 times faster
 * Allow running stock bench for `OLAP` shards
 * Specify more clearly what concrete type of timestamp is in options in `ydb topic` commands

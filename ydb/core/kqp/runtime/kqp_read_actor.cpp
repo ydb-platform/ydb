@@ -537,7 +537,7 @@ public:
             state->FillUnprocessedRanges(ranges, KeyColumnTypes, false);
 
             for (ui64 i = 1; i < ranges.size(); ++i) {
-                auto comparison = CompareRanges(ranges[j - 1].ToTableRange(), ranges[j].ToTableRange(), KeyColumnTypes);
+                auto comparison = CompareRanges(ranges[i - 1].ToTableRange(), ranges[i].ToTableRange(), KeyColumnTypes);
                 YQL_ENSURE(comparison > 0);
             }
         }

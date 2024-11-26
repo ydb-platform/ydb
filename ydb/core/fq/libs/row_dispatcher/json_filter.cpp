@@ -1,7 +1,6 @@
 #include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
 #include <yql/essentials/public/udf/udf_version.h>
-#include <ydb/library/yql/public/purecalc/purecalc.h>
-#include <ydb/library/yql/public/purecalc/io_specs/mkql/spec.h>
+#include <yql/essentials/public/purecalc/purecalc.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_terminator.h>

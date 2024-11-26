@@ -76,9 +76,6 @@ using TQueryStatKey = std::pair<TString, TString>;  // QueryId / Topic
 struct TAggQueryStat {
     NYql::TCounters::TEntry ReadBytes;
     NYql::TCounters::TEntry UnreadBytes;
-};
-
-struct TQueryState {
     NYql::TCounters::TEntry UnreadRows;
     NYql::TCounters::TEntry ReadLagMessages;
     bool IsWaiting = false;

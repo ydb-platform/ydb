@@ -364,7 +364,7 @@ public:
     TString GetInternalState();
     template <class TEventPtr>
     bool CheckSession(TAtomicSharedPtr<ConsumerInfo>& consumer, const TEventPtr& ev);
-    void SetQueryMetrics(const TString queryId, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax);
+    void SetQueryMetrics(const TQueryStatKey& queryKey, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax);
     void PrintStateToLog();
 
     STRICT_STFUNC(
@@ -542,7 +542,7 @@ void TRowDispatcher::UpdateMetrics() {
     for (auto it = AggrStats.LastQueryStats.begin(); it != AggrStats.LastQueryStats.end();) {
         const auto& stats = it->second;
         if (!stats) {
-            SetQueryMetrics(it->first, 0, 0);
+            SetQueryMetrics(it->first, 0, 0, 0);
             it = AggrStats.LastQueryStats.erase(it);
             continue;
         }
@@ -552,9 +552,9 @@ void TRowDispatcher::UpdateMetrics() {
     PrintStateToLog();
 }
 
-void TRowDispatcher::SetQueryMetrics(const TString queryId, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax) {
-    auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryId);
-    auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(queryStatKey.second));
+void TRowDispatcher::SetQueryMetrics(const TQueryStatKey& queryKey, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax) {
+    auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryKey.first);
+    auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(queryKey.second));
     topicGroup->GetCounter("MaxUnreadBytes")->Set(unreadBytesMax);
     topicGroup->GetCounter("AvgUnreadBytes")->Set(unreadBytesAvg);
     topicGroup->GetCounter("MaxReadLag")->Set(readLagMessagesMax);

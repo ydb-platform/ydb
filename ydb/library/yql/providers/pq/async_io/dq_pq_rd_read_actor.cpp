@@ -692,12 +692,6 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     Counters.Undelivered++;
     for (auto& [partitionId, sessionInfo] : Sessions) {
         if (sessionInfo.EventsQueue.HandleUndelivered(ev) == NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
-            if (State != EState::STARTED) {
-                if (!Sessions.empty()) {
-                    Stop(TStringBuilder() << "Internal error: wrong state on TEvUndelivered, session size " << Sessions.size() << " state " << static_cast<ui64>(State));
-                }
-                break;
-            }
             ReInit(TStringBuilder() << "Session closed, partition id " << sessionInfo.PartitionId);
             break;
         }

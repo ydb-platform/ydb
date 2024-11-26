@@ -11,7 +11,7 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-void AuditLogLogin(IAuditCtx* ctx, const TString& database, const Ydb::Auth::LoginRequest& request, const Ydb::Auth::LoginResponse& response, const TString& errorDetails)
+void AuditLogLogin(IAuditCtx* ctx, const TString& database, const Ydb::Auth::LoginRequest& request, const Ydb::Auth::LoginResponse& response, const TString& errorDetails, const TString& sanitizedToken)
 {
     static const TString GrpcLoginComponentName = "grpc-login";
     static const TString LoginOperationName = "LOGIN";
@@ -49,6 +49,7 @@ void AuditLogLogin(IAuditCtx* ctx, const TString& database, const Ydb::Auth::Log
 
         // Login
         AUDIT_PART("login_user", (!request.user().empty() ? request.user() : EmptyValue))
+        AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue))
 
         //TODO: (?) it is possible to show masked version of the resulting token here
     );
@@ -56,4 +57,3 @@ void AuditLogLogin(IAuditCtx* ctx, const TString& database, const Ydb::Auth::Log
 
 }
 }
-

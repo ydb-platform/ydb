@@ -153,6 +153,7 @@ message TEvLogin {
 message TEvLoginResult {
     optional string Error = 1;
     optional string Token = 2;  // signed jwt token
+    optional string SanitizedToken = 3;  // sanitized token without signature
 }
 
 // Sending actor registers itself to be notified when tx completes

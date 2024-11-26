@@ -4,7 +4,7 @@ This section describes how the TTL mechanism works and what its limits are. It a
 
 ## How it works {#how-it-works}
 
-The table's TTL is a sequence of storage tiers. For each tier, an expression is specified; when the expression triggers, that tier is assigned to the row. When a tier is assigned to a row, TTL automatically performs the specified action: move the row to an external storage or delete it. External storage is represented by the [external data source](https://ydb.tech/docs/en/concepts/datamodel/external_data_source) object. Deletion can only be specified for the last tier.
+The table's TTL is a sequence of storage tiers. Each tier contains an expression (TTL expression) and an action. When the expression triggers, that tier is assigned to the row. When a tier is assigned to a row, the specified action is automatically performed: moving the row to an external storage or deleting it. External storage is represented by the [external data source](https://ydb.tech/docs/en/concepts/datamodel/external_data_source) object. Deleting action can only be specified for the last tier.
 
 {% note info %}
 
@@ -12,7 +12,7 @@ Currently, only an Object Storage is available as external storage.
 
 {% endnote %}
 
-{{ ydb-short-name }} allows you to specify, for both row-oriented and columnar tables, a column (TTL column) whose values are used in TTL expressions. The expression triggers when the specified number of seconds have passed since the time recorded in the TTL column.
+{{ ydb-short-name }} allows you to specify a column (TTL column) whose values are used in TTL expressions. The expression triggers when the specified number of seconds have passed since the time recorded in the TTL column.
 
 {% note info %}
 

@@ -46,18 +46,14 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
 
     for (const auto& kv : info->PageMap) {
         auto* page = kv.second.Get();
-        Y_DEBUG_ABORT_UNLESS(page);
-        
-        if (page->SharedBody)
-            Stats.TotalSharedBody += page->Size;
+        Y_ABORT_UNLESS(page);
+        Y_ABORT_UNLESS(page->SharedBody, "New filled pages can't be without a shared body");
+
+        Stats.TotalSharedBody += page->Size;
         if (page->PinnedBody)
             Stats.TotalPinnedBody += page->Size;
-        if (page->PinnedBody && !page->SharedBody)
-            Stats.TotalExclusive += page->Size;
         if (page->Sticky)
             Stats.TotalSticky += page->Size;
-
-        Y_ABORT_IF(!page->SharedBody && page->PinnedBody, "New filled pages can't be without a shared body");
 
         TryUnload(page);
         Y_DEBUG_ABORT_UNLESS(!page->IsUnnecessary());

@@ -37,7 +37,19 @@ struct TCoordinatorMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr PartitionsLimitPerNode;
 };
 
+struct TEvPrivate {
+    enum EEv : ui32 {
+        EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvPrintState = EvBegin,
+        EvEnd
+    };
+    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+    struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
+};
+
 class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
+
+    const ui64 PrintStatePeriodSec = 300;
 
     struct TPartitionKey {
         TString Endpoint;
@@ -166,6 +178,7 @@ public:
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPtr& ev);
+    void Handle(TEvPrivate::TEvPrintState::TPtr&);
 
     STRICT_STFUNC(
         StateFunc, {
@@ -175,6 +188,7 @@ public:
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorRequest, Handle);
+        hFunc(TEvPrivate::TEvPrintState, Handle);
     })
 
 private:
@@ -208,6 +222,7 @@ TActorCoordinator::TActorCoordinator(
 void TActorCoordinator::Bootstrap() {
     Become(&TActorCoordinator::StateFunc);
     Send(LocalRowDispatcherId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
+    Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped coordinator, id " << SelfId());
 }
 
@@ -426,8 +441,6 @@ bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TC
 
     LOG_ROW_DISPATCHER_DEBUG("Send TEvCoordinatorResult to " << readActorId);
     Send(readActorId, response.release(), IEventHandle::FlagTrackDelivery, request.Cookie);
-    PrintInternalState();
-
     return true;
 }
 
@@ -439,6 +452,11 @@ void TActorCoordinator::UpdatePendingReadActors() {
             ++readActorIt;
         }
     }
+}
+
+void TActorCoordinator::Handle(TEvPrivate::TEvPrintState::TPtr&) {
+    Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
+    PrintInternalState();
 }
 
 } // namespace

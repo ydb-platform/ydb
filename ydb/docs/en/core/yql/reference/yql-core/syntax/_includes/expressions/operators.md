@@ -73,7 +73,7 @@ The operators in the table are listed in descending order of precedence.
 | --- | --- | --- | --- |
 | 1 | `a[], a.foo, a()` | Accessing a container item, calling a function | Left |
 | 2 | `+a, -a, ~a, NOT a` | Unary operators: plus, minus, bitwise and logical negation | Right |
-| 3 | `a  \| \| b` | [String concatenation](../../../syntax/expressions.md#concatenation) | Left |
+| 3 | `a\|\|b` | [String concatenation](../../../syntax/expressions.md#concatenation) | Left |
 | 4 | `a*b, a/b, a%b` | Multiplication, division, remainder of division | Left |
 | 5 | `a+b, a-b` | Addition/Subtraction | Left |
 | 6 | `a ?? b` | Operator notation for [NVL/COALESCE](../../../builtins/basic.md#coalesce) | Right |

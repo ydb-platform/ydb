@@ -1624,6 +1624,7 @@ message TColumnShardConfig {
     optional bool ColumnChunksV0Usage = 25 [default = true];
     optional bool ColumnChunksV1Usage = 26 [default = true];
     optional uint64 MemoryLimitScanPortion = 27 [default = 100000000];
+    optional string ReaderClassName = 28;
 }
 
 message TSchemeShardConfig {

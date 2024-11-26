@@ -1028,6 +1028,7 @@ void TestDropWriteRace() {
     ui64 tableId = 1;
     ui64 planStep = 1000000000; // greater then delays
     ui64 txId = 100;
+    ui32 writeId = 0;
 
     NLongTxService::TLongTxId longTxId;
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
@@ -1038,9 +1039,9 @@ void TestDropWriteRace() {
     UNIT_ASSERT(data.size() < NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
 
     // Write into InsertTable
-    auto writeIdOpt = WriteData(runtime, sender, longTxId, tableId, 1, data, testYdbSchema);
-    UNIT_ASSERT(writeIdOpt);
-    ProposeCommit(runtime, sender, ++txId, {*writeIdOpt});
+    ++txId;
+    AFL_VERIFY(WriteData(runtime, sender, ++writeId, tableId, data, testYdbSchema));
+    ProposeCommit(runtime, sender, txId, { writeId });
     auto commitTxId = txId;
 
     // Drop table

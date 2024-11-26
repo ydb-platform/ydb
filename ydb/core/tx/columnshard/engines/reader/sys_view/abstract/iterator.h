@@ -68,7 +68,7 @@ public:
                 continue;
             }
             auto table = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({resultBatch}));
-            return std::make_shared<TPartialReadResult>(table, lastKey, std::nullopt);
+            return std::make_shared<TPartialReadResult>(table, std::make_shared<TPlainScanCursor>(lastKey), std::nullopt);
         }
         return std::shared_ptr<TPartialReadResult>();
     }

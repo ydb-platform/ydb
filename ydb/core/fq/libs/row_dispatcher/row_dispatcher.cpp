@@ -240,7 +240,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
     struct TAggregatedStats{
         NYql::TCounters::TEntry AllSessionsReadBytes;
-        TMap<TString, TAggQueryStat> LastQueryStats;
+        TMap<TString, TMaybe<TAggQueryStat>> LastQueryStats;
         TDuration LastUpdateMetricsPeriod;
     };
 
@@ -512,9 +512,7 @@ void TRowDispatcher::UpdateMetrics() {
 
     AggrStats.AllSessionsReadBytes = NYql::TCounters::TEntry();
     for (auto& [queryId, stat] : AggrStats.LastQueryStats) {
-        stat.Updated = false;
-        stat.ReadBytes = NYql::TCounters::TEntry();
-        stat.UnreadBytes = NYql::TCounters::TEntry();
+        stat = Nothing();
     }
 
     for (auto& [key, sessionsInfo] : TopicSessions) {
@@ -526,23 +524,26 @@ void TRowDispatcher::UpdateMetrics() {
 
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
                 auto& stat = AggrStats.LastQueryStats[consumer->QueryId];
-                stat.UnreadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadBytes));
-                stat.ReadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.ReadBytes));
-                stat.Updated = true;
+                if (!stat) {
+                    stat = TAggQueryStat();
+                }
+                stat->UnreadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadBytes));
+                stat->ReadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.ReadBytes));
                 consumer->Stat.Clear();
             }
         }
     }
     for (auto it = AggrStats.LastQueryStats.begin(); it != AggrStats.LastQueryStats.end();) {
         const auto& stats = it->second;
-        if (!stats.Updated) {
+        if (!stats) {
             SetQueryMetrics(it->first, 0, 0);
             it = AggrStats.LastQueryStats.erase(it);
             continue;
         }
-        SetQueryMetrics(it->first, stats.UnreadBytes.Max, stats.UnreadBytes.Avg);
+        SetQueryMetrics(it->first, stats->UnreadBytes.Max, stats->UnreadBytes.Avg);
         ++it;
     }
+    PrintStateToLog();
 }
 
 void TRowDispatcher::SetQueryMetrics(const TString queryId, ui64 unreadBytesMax, ui64 unreadBytesAvg) {
@@ -609,7 +610,9 @@ TString TRowDispatcher::GetInternalState() {
         auto sessionsBufferSumSize = sessionCountByQuery[queryId] * MaxSessionBufferSizeBytes;
         auto used = sessionsBufferSumSize ? (stat.UnreadBytes.Sum * 100.0 / sessionsBufferSumSize) : 0.0;
         str << "  " << queryId << " buffer used (all partitions) " << LeftPad(Prec(used, 4), 10) << "% (" << toHuman(stat.UnreadBytes.Sum) <<  ") unread max (one partition) " << toHuman(stat.UnreadBytes.Max) << " data rate";
-        printDataRate(aggStat.ReadBytes);
+        if (aggStat) {
+            printDataRate(aggStat->ReadBytes);
+        }
         str << " waiting " << stat.IsWaiting << " max read lag " << stat.ReadLagMessages.Max;
         str << "\n";
     }

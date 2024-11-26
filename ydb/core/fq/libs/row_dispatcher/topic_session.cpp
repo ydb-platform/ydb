@@ -487,9 +487,6 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatisticToReadActor::TPtr&) 
         if (!info.NextMessageOffset) {
             continue;
         }
-        if (*info.NextMessageOffset <= info.LastSendedNextMessageOffset) {
-            continue;
-        }
         auto event = std::make_unique<TEvRowDispatcher::TEvStatistics>();
         event->Record.SetPartitionId(PartitionId);
         event->Record.SetNextMessageOffset(*info.NextMessageOffset);

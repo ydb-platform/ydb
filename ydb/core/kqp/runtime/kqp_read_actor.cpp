@@ -531,6 +531,17 @@ public:
             }
         }
 
+        //Check ranges are sorted
+        if (state->HasRanges()) {
+            TVector<TSerializedTableRange> ranges;
+            state->FillUnprocessedRanges(ranges, KeyColumnTypes, false);
+
+            for (ui64 i = 1; i < ranges.size(); ++i) {
+                auto comparison = CompareRanges(ranges[j - 1].ToTableRange(), ranges[j].ToTableRange(), KeyColumnTypes);
+                YQL_ENSURE(comparison > 0);
+            }
+        }
+
         if (request->ErrorCount > 0 || !state) {
             CA_LOG_E("Resolve request failed for table '" << Settings->GetTable().GetTablePath() << "', ErrorCount# " << request->ErrorCount);
 

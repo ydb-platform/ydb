@@ -402,6 +402,8 @@ namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalTable>;
 
+namespace NOperation {
+
 template <>
 std::optional<TString> GetTargetName<TTag>(
     TTag,
@@ -418,6 +420,8 @@ bool SetName<TTag>(
 {
     tx.MutableCreateExternalTable()->SetName(name);
     return true;
+}
+
 }
 
 TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {

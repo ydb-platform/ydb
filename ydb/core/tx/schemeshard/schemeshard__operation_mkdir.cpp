@@ -292,6 +292,8 @@ namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpMkDir>;
 
+namespace NOperation {
+
 template <>
 std::optional<TString> GetTargetName<TTag>(
     TTag,
@@ -308,6 +310,8 @@ bool SetName<TTag>(
 {
     tx.MutableMkDir()->SetName(name);
     return true;
+}
+
 }
 
 ISubOperation::TPtr CreateMkDir(TOperationId id, const TTxTransaction& tx) {

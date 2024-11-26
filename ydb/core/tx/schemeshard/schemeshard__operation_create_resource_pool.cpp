@@ -208,6 +208,8 @@ public:
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateResourcePool>;
 
+namespace NOperation {
+
 template <>
 std::optional<TString> GetTargetName<TTag>(
     TTag,
@@ -224,6 +226,8 @@ bool SetName<TTag>(
 {
     tx.MutableCreateResourcePool()->SetName(name);
     return true;
+}
+
 }
 
 ISubOperation::TPtr CreateNewResourcePool(TOperationId id, const TTxTransaction& tx) {

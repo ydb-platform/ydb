@@ -433,6 +433,8 @@ namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateKesus>;
 
+namespace NOperation {
+
 template <>
 std::optional<TString> GetTargetName<TTag>(
     TTag,
@@ -449,6 +451,8 @@ bool SetName<TTag>(
 {
     tx.MutableKesus()->SetName(name);
     return true;
+}
+
 }
 
 ISubOperation::TPtr CreateNewKesus(TOperationId id, const TTxTransaction& tx) {

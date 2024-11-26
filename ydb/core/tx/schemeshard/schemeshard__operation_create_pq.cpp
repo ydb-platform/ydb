@@ -588,6 +588,8 @@ namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup>;
 
+namespace NOperation {
+
 template <>
 std::optional<TString> GetTargetName<TTag>(
     TTag,
@@ -604,6 +606,8 @@ bool SetName<TTag>(
 {
     tx.MutableCreatePersQueueGroup()->SetName(name);
     return true;
+}
+
 }
 
 ISubOperation::TPtr CreateNewPQ(TOperationId id, const TTxTransaction& tx) {

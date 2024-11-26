@@ -449,6 +449,8 @@ namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSolomonVolume>;
 
+namespace NOperation {
+
 template <>
 std::optional<TString> GetTargetName<TTag>(
     TTag,
@@ -465,6 +467,8 @@ bool SetName<TTag>(
 {
     tx.MutableCreateSolomonVolume()->SetName(name);
     return true;
+}
+
 }
 
 ISubOperation::TPtr CreateNewSolomon(TOperationId id, const TTxTransaction& tx) {

@@ -10,6 +10,8 @@ namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection>;
 
+namespace NOperation {
+
 template <>
 std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths<TTag>(
     TTag,
@@ -25,6 +27,8 @@ bool Rewrite(TTag, TTxTransaction& tx) {
     auto now = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now());
     tx.MutableBackupBackupCollection()->SetTargetDir(now + "_full");
     return true;
+}
+
 }
 
 TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {

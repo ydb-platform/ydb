@@ -10,6 +10,8 @@ namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection>;
 
+namespace NOperation {
+
 template <>
 std::optional<THashMap<TString, THashSet<TString>>> GetRequiredPaths<TTag>(
     TTag,
@@ -25,6 +27,8 @@ bool Rewrite(TTag, TTxTransaction& tx) {
     auto now = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now());
     tx.MutableBackupIncrementalBackupCollection()->SetTargetDir(now + "_incremental");
     return true;
+}
+
 }
 
 TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {

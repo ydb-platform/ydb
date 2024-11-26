@@ -14,6 +14,8 @@ using namespace NTableIndex;
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable>;
 
+namespace NOperation {
+
 template <>
 std::optional<TString> GetTargetName<TTag>(
     TTag,
@@ -30,6 +32,8 @@ bool SetName<TTag>(
 {
     tx.MutableCreateIndexedTable()->MutableTableDescription()->SetName(name);
     return true;
+}
+
 }
 
 TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {

@@ -241,6 +241,8 @@ public:
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateBackupCollection>;
 
+namespace NOperation {
+
 template <>
 std::optional<TString> GetTargetName<TTag>(
     TTag,
@@ -257,6 +259,8 @@ bool SetName<TTag>(
 {
     tx.MutableCreateBackupCollection()->SetName(name);
     return true;
+}
+
 }
 
 ISubOperation::TPtr CreateNewBackupCollection(TOperationId id, const TTxTransaction& tx) {

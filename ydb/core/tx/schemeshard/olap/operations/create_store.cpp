@@ -530,6 +530,8 @@ namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore>;
 
+namespace NOperation {
+
 template <>
 std::optional<TString> GetTargetName<TTag>(
     TTag,
@@ -546,6 +548,8 @@ bool SetName<TTag>(
 {
     tx.MutableCreateColumnStore()->SetName(name);
     return true;
+}
+
 }
 
 ISubOperation::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx) {

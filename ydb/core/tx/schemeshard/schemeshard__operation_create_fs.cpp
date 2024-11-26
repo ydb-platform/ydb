@@ -525,6 +525,8 @@ namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateFileStore>;
 
+namespace NOperation {
+
 template <>
 std::optional<TString> GetTargetName<TTag>(
     TTag,
@@ -541,6 +543,8 @@ bool SetName<TTag>(
 {
     tx.MutableCreateFileStore()->SetName(name);
     return true;
+}
+
 }
 
 ISubOperation::TPtr CreateNewFileStore(TOperationId id, const TTxTransaction& tx) {

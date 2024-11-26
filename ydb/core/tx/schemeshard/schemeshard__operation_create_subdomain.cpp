@@ -371,6 +371,8 @@ namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSubDomain>;
 
+namespace NOperation {
+
 template <>
 std::optional<TString> GetTargetName<TTag>(
     TTag,
@@ -387,6 +389,8 @@ bool SetName<TTag>(
 {
     tx.MutableSubDomain()->SetName(name);
     return true;
+}
+
 }
 
 ISubOperation::TPtr CreateSubDomain(TOperationId id, const TTxTransaction& tx) {

@@ -885,6 +885,8 @@ public:
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable>;
 
+namespace NOperation {
+
 template <>
 std::optional<TString> GetTargetName<TTag>(
     TTag,
@@ -901,6 +903,8 @@ bool SetName<TTag>(
 {
     tx.MutableCreateColumnTable()->SetName(name);
     return true;
+}
+
 }
 
 ISubOperation::TPtr CreateNewColumnTable(TOperationId id, const TTxTransaction& tx) {

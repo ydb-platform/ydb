@@ -399,6 +399,8 @@ namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateRtmrVolume>;
 
+namespace NOperation {
+
 template <>
 std::optional<TString> GetTargetName<TTag>(
     TTag,
@@ -415,6 +417,8 @@ bool SetName<TTag>(
 {
     tx.MutableCreateRtmrVolume()->SetName(name);
     return true;
+}
+
 }
 
 ISubOperation::TPtr CreateNewRTMR(TOperationId id, const TTxTransaction& tx) {

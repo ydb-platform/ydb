@@ -252,6 +252,8 @@ namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateView>;
 
+namespace NOperation {
+
 template <>
 std::optional<TString> GetTargetName<TTag>(
     TTag,
@@ -268,6 +270,8 @@ bool SetName<TTag>(
 {
     tx.MutableCreateView()->SetName(name);
     return true;
+}
+
 }
 
 ISubOperation::TPtr CreateNewView(TOperationId id, const TTxTransaction& tx) {

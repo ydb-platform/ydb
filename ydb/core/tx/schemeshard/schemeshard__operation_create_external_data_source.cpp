@@ -308,6 +308,8 @@ namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateExternalDataSource>;
 
+namespace NOperation {
+
 template <>
 std::optional<TString> GetTargetName<TTag>(
     TTag,
@@ -324,6 +326,8 @@ bool SetName<TTag>(
 {
     tx.MutableCreateExternalDataSource()->SetName(name);
     return true;
+}
+
 }
 
 TVector<ISubOperation::TPtr> CreateNewExternalDataSource(TOperationId id,

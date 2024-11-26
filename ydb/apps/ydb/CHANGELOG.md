@@ -1,3 +1,5 @@
+## 2.16.0 ##
+
 * Improved `ydb import file csv` command processing speed. It is now approximately x3 times faster
 * Allow running stock bench for Olap shards
 * Specify more clearly what concrete type of timestamp is in options in `ydb topic` commands
@@ -10,6 +12,7 @@
 * Added pg syntax to tpch and tpcds benchmarks
 * Fixed a bug where restoring from a backup using --import-data could fail if the partitioning of the table was changed
 * In the `ydb topic write` command the `--codec` option now has default value `RAW`.
+* Added log events for `ydb tools dump` and `ydb tools restore` commands
 
 
 ## 2.15.0 ##

@@ -479,7 +479,6 @@ void TPrivatePageCache::ResetTouchesAndToLoad(bool verifyEmpty) {
     Stats.CurrentCacheMisses = 0;
 }
 
-// TODO: do we really need it?
 void TPrivatePageCache::DropSharedBody(TInfo *info, TPageId pageId) {
     TPage *page = info->GetPage(pageId);
     if (!page)

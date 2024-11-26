@@ -240,8 +240,8 @@ protected:
     void SendDiskStatusResponse(TMaybe<ui64>* cookie = nullptr);
     void WaitMetaReadRequest();
     void SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txId, TInstant endWriteTimestamp);
-    void WaitLastBlobReadRequest();
-    void SendLastBlobReadResponse(ui64 begin, ui64 end);
+    void WaitBlobReadRequest();
+    void SendBlobReadResponse(ui64 begin, ui64 end);
     void WaitInfoRangeRequest();
     void SendInfoRangeResponse(ui32 partition,
                                const TVector<TCreateConsumerParams>& consumers);
@@ -424,11 +424,12 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
         WaitDataRangeRequest();
         SendDataRangeResponse(params.Begin, params.End, params.FillHead);
 
-        if (params.EndWriteTimestamp == TInstant::Zero() || params.FillHead) {
-            WaitLastBlobReadRequest();
-            SendLastBlobReadResponse(params.Begin, params.End);
-            Ctx->Runtime->SimulateSleep(TDuration::Seconds(1));
+        if (params.FillHead) {
+            WaitBlobReadRequest();
+            SendBlobReadResponse(params.Begin, params.End);
         }
+
+        Ctx->Runtime->SimulateSleep(TDuration::Seconds(1));
     }
     return ret;
 }
@@ -824,7 +825,7 @@ void TPartitionFixture::SendMetaReadResponse(TMaybe<ui64> step, TMaybe<ui64> txI
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
-void TPartitionFixture::WaitLastBlobReadRequest()
+void TPartitionFixture::WaitBlobReadRequest()
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>();
     UNIT_ASSERT(event != nullptr);
@@ -849,7 +850,7 @@ TBatch CreateBatch(size_t count) {
     return batch;
 }
 
-void TPartitionFixture::SendLastBlobReadResponse(ui64 begin, ui64 end)
+void TPartitionFixture::SendBlobReadResponse(ui64 begin, ui64 end)
 {
     auto batch = CreateBatch(end - begin);
     TString valueD;
@@ -932,7 +933,7 @@ void TPartitionFixture::SendDataRangeResponse(ui64 begin, ui64 end, bool isHead)
     pair->SetStatus(NKikimrProto::OK);
     pair->SetKey(key.ToString());
     pair->SetValueSize(684);
-    pair->SetCreationUnixTime(0);
+    pair->SetCreationUnixTime(TInstant::Now().Seconds());
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
@@ -3228,13 +3229,13 @@ Y_UNIT_TEST_F(GetUsedStorage, TPartitionFixture) {
 
 } // GetPartitionWriteInfoErrors
 
-Y_UNIT_TEST_F(EndWriteTimestamp_FromBlob, TPartitionFixture) {
+Y_UNIT_TEST_F(EndWriteTimestamp_DataKeysBody, TPartitionFixture) {
     auto* actor = CreatePartition({.Partition=TPartitionId{2}, .Begin=0, .End=10});
 
     auto now = TInstant::Now();
 
     auto endWriteTimestamp = actor->GetEndWriteTimestamp();
-    UNIT_ASSERT_C(now - TDuration::Seconds(1) < endWriteTimestamp && endWriteTimestamp < now, "" << (now - TDuration::Seconds(1)) << " < " << endWriteTimestamp << " < " << now );
+    UNIT_ASSERT_C(now - TDuration::Seconds(2) < endWriteTimestamp && endWriteTimestamp < now, "" << (now - TDuration::Seconds(2)) << " < " << endWriteTimestamp << " < " << now );
 } // EndWriteTimestamp_FromBlob
 
 Y_UNIT_TEST_F(EndWriteTimestamp_FromMeta, TPartitionFixture) {
@@ -3246,13 +3247,13 @@ Y_UNIT_TEST_F(EndWriteTimestamp_FromMeta, TPartitionFixture) {
     UNIT_ASSERT_VALUES_EQUAL(endWriteTimestamp.MilliSeconds(), now.MilliSeconds());
 } // EndWriteTimestamp_FromMeta
 
-Y_UNIT_TEST_F(EndWriteTimestamp_FromHead, TPartitionFixture) {
+Y_UNIT_TEST_F(EndWriteTimestamp_HeadKeys, TPartitionFixture) {
     auto* actor = CreatePartition({.Partition=TPartitionId{2}, .Begin=0, .End=10, .FillHead = true});
 
     auto now = TInstant::Now();
 
     auto endWriteTimestamp = actor->GetEndWriteTimestamp();
-    UNIT_ASSERT_C(now - TDuration::Seconds(1) < endWriteTimestamp && endWriteTimestamp < now, "" << (now - TDuration::Seconds(1)) << " < " << endWriteTimestamp << " < " << now );
+    UNIT_ASSERT_C(now - TDuration::Seconds(2) < endWriteTimestamp && endWriteTimestamp < now, "" << (now - TDuration::Seconds(2)) << " < " << endWriteTimestamp << " < " << now );
 } // EndWriteTimestamp_FromMeta
 
 } // End of suite

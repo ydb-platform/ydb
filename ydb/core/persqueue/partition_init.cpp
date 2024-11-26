@@ -309,13 +309,11 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
         bool res = meta.ParseFromString(response.GetValue());
         Y_ABORT_UNLESS(res);
 
-        /* Bring back later, when switch to 21-2 will be unable
-           StartOffset = meta.GetStartOffset();
-           EndOffset = meta.GetEndOffset();
-           if (StartOffset == EndOffset) {
-           NewHead.Offset = Head.Offset = EndOffset;
-           }
-           */
+        Partition()->StartOffset = meta.GetStartOffset();
+        Partition()->EndOffset = meta.GetEndOffset();
+        if (Partition()->StartOffset == Partition()->EndOffset) {
+           Partition()->NewHead.Offset = Partition()->Head.Offset = Partition()->EndOffset;
+        }
         Partition()->SubDomainOutOfSpace = meta.GetSubDomainOutOfSpace();
         Partition()->EndWriteTimestamp = TInstant::MilliSeconds(meta.GetEndWriteTimestamp());
         Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
@@ -661,111 +659,35 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 //
 
 TInitEndWriteTimestampStep::TInitEndWriteTimestampStep(TInitializer* initializer)
-    : TBaseKVStep(initializer, "TInitEndWriteTimestampStep", true) {
+    : TInitializerStep(initializer, "TInitEndWriteTimestampStep", true) {
 }
 
 void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
-    if (Partition()->EndWriteTimestamp != TInstant::Zero() || (Partition()->Head.GetBatches().empty() && Partition()->DataKeysBody.empty())) {
-        PQ_LOG_D("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
+    if (Partition()->EndWriteTimestamp != TInstant::Zero() || (Partition()->HeadKeys.empty() && Partition()->DataKeysBody.empty())) {
+        PQ_LOG_I("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
             << "' partition " << Partition()->Partition
             << " skiped because already initialized.");
         return Done(ctx);
     }
 
-    PQ_LOG_D("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
-            << "' partition " << Partition()->Partition
-            << ".");
+    TDataKey* lastKey = nullptr;
+    if (!Partition()->HeadKeys.empty()) {
+        lastKey = &Partition()->HeadKeys.back();
+    } else if (!Partition()->DataKeysBody.empty()) {
+        lastKey = &Partition()->DataKeysBody.back();
+    }
 
-    auto& head = Partition()->Head;
-    if (!head.GetBatches().empty()) {
-        auto& batch = head.GetLastBatch();
-        Y_VERIFY (batch.Packed);
-
-        TVector<TClientBlob> result;
-        batch.UnpackTo(&result);
-        Y_VERIFY(!result.empty());
-
-        Partition()->EndWriteTimestamp = result.back().WriteTimestamp;
+    if (lastKey) {
+        Partition()->EndWriteTimestamp = lastKey->Timestamp;
         Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
-
-        PQ_LOG_I("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
-            << "' partition " << Partition()->Partition
-            << " from head completed. Value " << Partition()->EndWriteTimestamp);
-
-        return Done(ctx);
     }
 
-    if (Partition()->DataKeysBody.empty()) {
-        PQ_LOG_I("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
-            << "' partition " << Partition()->Partition
-            << " skiped because DataKeys is empty.");
+    PQ_LOG_I("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
+        << "' partition " << Partition()->Partition
+        << " from keys completed. Value " << Partition()->EndWriteTimestamp);
 
-        return Done(ctx);
-    }
-
-    auto& p = Partition()->DataKeysBody.back();
-
-    THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
-    auto read = request->Record.AddCmdRead();
-    read->SetKey({p.Key.Data(), p.Key.Size()});
-
-    ctx.Send(Partition()->Tablet, request.Release());
+    return Done(ctx);
 }
-
-void TInitEndWriteTimestampStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    if (!ValidateResponse(*this, ev, ctx)) {
-        PoisonPill(ctx);
-        return;
-    }
-
-    auto& response = ev->Get()->Record;
-    Y_ABORT_UNLESS(1 == response.ReadResultSize());
-
-    auto& read = response.GetReadResult(0);
-    Y_ABORT_UNLESS(read.HasStatus());
-    switch(read.GetStatus()) {
-        case NKikimrProto::OK: {
-            auto& key = Partition()->DataKeysBody.back().Key;
-
-            for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
-                auto b = it.GetBatch();
-                b.Unpack();
-                if (!b.Empty()) {
-                    Partition()->EndWriteTimestamp = b.GetEndWriteTimestamp();
-                }
-            }
-
-            PQ_LOG_I("Initializing EndWriteTimestamp of the topic '" << Partition()->TopicName()
-                << "' partition " << Partition()->Partition
-                << " from last blob completed. Value " << Partition()->EndWriteTimestamp);
-
-            Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
-
-            break;
-            }
-        case NKikimrProto::OVERRUN:
-            Y_ABORT("implement overrun in readresult!!");
-            return;
-        case NKikimrProto::NODATA:
-            Y_ABORT("NODATA can't be here");
-            return;
-        case NKikimrProto::ERROR:
-            PQ_LOG_ERROR("tablet " << Partition()->TabletID << " HandleOnInit topic '" << TopicName()
-                    << "' partition " << PartitionId()
-                    << "  status NKikimrProto::ERROR result message: \"" << read.GetMessage()
-                    << " \" errorReason: \"" << response.GetErrorReason() << "\""
-            );
-            PoisonPill(ctx);
-            return;
-        default:
-            Cerr << "ERROR " << read.GetStatus() << " message: \"" << read.GetMessage() << "\"\n";
-            Y_ABORT("bad status");
-
-    };
-
-    Done(ctx);
-}
-
 
 //
 // TPartition

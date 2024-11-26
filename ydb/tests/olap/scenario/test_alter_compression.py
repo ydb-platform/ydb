@@ -117,35 +117,34 @@ class TestAlterCompression(BaseTestSet):
                     return False
         return True
     
-    def _scenario(self, ctx: TestContext, tables: list[str], column_names: list[str], alter_action: AlterTable, is_standalone_tables: bool, table_store: str, count_rows_for_bulk_upsert: int, duration_alter_and_insert: timedelta):
+    def _scenario(self, ctx: TestContext, tables: list[str], column_names: list[str], alter_action: AlterTable):
         sth = ScenarioTestHelper(ctx)
-        self._upsert_and_alter(ctx=ctx, is_standalone_tables=is_standalone_tables, table_store=table_store, tables=tables, count_rows=count_rows_for_bulk_upsert, duration=duration_alter_and_insert)
+        self._upsert_and_alter(ctx=ctx, is_standalone_tables=self.is_standalone_tables, table_store=self.table_store, tables=tables, count_rows=self.count_rows_for_bulk_upsert, duration=self.duration_alter_and_insert)
         self._read_data(ctx=ctx, tables=tables, column_names=column_names)
-        # prev_volumes: dict[str, dict[str, tuple[int, int]]] = self._volumes_columns(ctx=ctx, tables=tables, column_names=column_names)
-        # self._volumes_columns(ctx=ctx, tables=tables, column_names=column_names)
+        prev_volumes: dict[str, dict[str, tuple[int, int]]] = self._volumes_columns(ctx=ctx, tables=tables, column_names=column_names)
         sth.execute_scheme_query(alter_action)
-        # time.sleep(10)
-        # current_volumes: dict[str, dict[str, tuple[int, int]]] = self._volumes_columns(ctx=ctx, tables=tables, column_names=column_names)
+        current_volumes: dict[str, dict[str, tuple[int, int]]] = self._volumes_columns(ctx=ctx, tables=tables, column_names=column_names)
         assert(self._read_data(ctx, tables=tables, column_names=column_names))
 
-    # working with the table storage is not supported yet, so use test with is_standalone_tables = True
+    # working with the table store is not supported yet, so is_standalone_tables = True
     def scenario_alter_compression(self, ctx: TestContext):
         random.seed(2)
-        n_tables = int(get_external_param('n_tables', '1'))
-        is_standalone_tables = external_param_is_true('test-standalone-tables') 
-        duration_alter_and_insert = timedelta(seconds=int(get_external_param('duration_alter_and_insert', '50')))
-        count_rows_for_bulk_upsert = int(get_external_param('count_rows_for_bulk_upsert', '100'))
+        n_tables = int(get_external_param('n_tables', '3'))
+        # is_standalone_tables = external_param_is_true('test-standalone-tables')
+        self.is_standalone_tables = True
+        self.duration_alter_and_insert = timedelta(seconds=int(get_external_param('duration_alter_and_insert', '5')))
+        self.count_rows_for_bulk_upsert = int(get_external_param('count_rows_for_bulk_upsert', '1000'))
+        self.table_store = 'TableStore'
 
         sth = ScenarioTestHelper(ctx)
 
-        table_store = 'TableStore'
-        if not is_standalone_tables:
-            sth.execute_scheme_query(CreateTableStore(table_store).with_schema(self.schema1))
+        if not self.is_standalone_tables:
+            sth.execute_scheme_query(CreateTableStore(self.table_store).with_schema(self.schema1))
 
         tables: list[str] = []
         for i in range(n_tables):
             table_name = f'Table{i}'
-            tables.append(table_name if is_standalone_tables else f'{table_store}/{table_name}')
+            tables.append(table_name if self.is_standalone_tables else f'{self.table_store}/{table_name}')
             sth.execute_scheme_query(CreateTable(tables[-1]).with_schema(self.schema1))
         column_names: list[str] = [column.name for column in self.schema1.columns]
         column_families: list[ScenarioTestHelper.ColumnFamily] = [sth.ColumnFamily(name='family1', compression=ScenarioTestHelper.Compression.LZ4, compression_level=None), sth.ColumnFamily(name='family2', compression=ScenarioTestHelper.Compression.ZSTD, compression_level=1)]
@@ -161,15 +160,15 @@ class TestAlterCompression(BaseTestSet):
             prev_compression_level = column_families[-1].compression_level
             
             for family in column_families:
-                self._scenario(ctx=ctx, tables=tables, column_names=column_names, alter_action=AlterTable(table_name).action(AlterColumn(column_name, AlterFamily(family.name))), is_standalone_tables=is_standalone_tables, table_store=table_store, count_rows_for_bulk_upsert=count_rows_for_bulk_upsert, duration_alter_and_insert=duration_alter_and_insert)
+                self._scenario(ctx=ctx, tables=tables, column_names=column_names, alter_action=AlterTable(table_name).action(AlterColumn(column_name, AlterFamily(family.name))))
 
-            self._scenario(ctx=ctx, tables=tables, column_names=column_names, alter_action=AlterTable(table_name).action(AlterColumnFamily(column_families[-1].name, AlterCompressionLevel(9))), is_standalone_tables=is_standalone_tables, table_store=table_store, count_rows_for_bulk_upsert=count_rows_for_bulk_upsert, duration_alter_and_insert=duration_alter_and_insert)
+            self._scenario(ctx=ctx, tables=tables, column_names=column_names, alter_action=AlterTable(table_name).action(AlterColumnFamily(column_families[-1].name, AlterCompressionLevel(9))))
 
-            self._scenario(ctx=ctx, tables=tables, column_names=column_names, alter_action=AlterTable(table_name).action(AlterColumnFamily(column_families[-1].name, AlterCompressionLevel(0))), is_standalone_tables=is_standalone_tables, table_store=table_store, count_rows_for_bulk_upsert=count_rows_for_bulk_upsert, duration_alter_and_insert=duration_alter_and_insert)
+            self._scenario(ctx=ctx, tables=tables, column_names=column_names, alter_action=AlterTable(table_name).action(AlterColumnFamily(column_families[-1].name, AlterCompressionLevel(0))))
 
-            self._scenario(ctx=ctx, tables=tables, column_names=column_names, alter_action=AlterTable(table_name).action(AlterColumnFamily(column_families[-1].name, AlterCompressionLevel(prev_compression_level))), is_standalone_tables=is_standalone_tables, table_store=table_store, count_rows_for_bulk_upsert=count_rows_for_bulk_upsert, duration_alter_and_insert=duration_alter_and_insert)
+            self._scenario(ctx=ctx, tables=tables, column_names=column_names, alter_action=AlterTable(table_name).action(AlterColumnFamily(column_families[-1].name, AlterCompressionLevel(prev_compression_level))))
 
         for table in tables:
             sth.execute_scheme_query(DropTable(table))
-        if not is_standalone_tables:
-            sth.execute_scheme_query(DropTableStore(table_store))
+        if not self.is_standalone_tables:
+            sth.execute_scheme_query(DropTableStore(self.table_store))

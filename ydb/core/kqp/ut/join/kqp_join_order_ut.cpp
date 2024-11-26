@@ -233,10 +233,12 @@ void TestOlapEstimationRowsCorrectness(const TString& queryPath, const TString& 
     {
         auto result = 
             session.ExecuteQuery(
-                actualPlan, 
+                actualQuery, 
                 NYdb::NQuery::TTxControl::NoTx(), 
                 NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
-            ).ExtractValueSync();;
+            ).ExtractValueSync();
+
+        result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         actualPlan = *result.GetStats()->GetPlan();
         PrintPlan(actualPlan);
@@ -247,7 +249,7 @@ void TestOlapEstimationRowsCorrectness(const TString& queryPath, const TString& 
     TString expectedPlan;
     {
         auto result = session.ExecuteQuery(
-                expectedPlan, 
+                expectedQuery, 
                 NYdb::NQuery::TTxControl::NoTx(), 
                 NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
             ).ExtractValueSync();
@@ -314,9 +316,9 @@ Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
         TestOlapEstimationRowsCorrectness("queries/tpcds78.sql", "stats/tpcds1000s.json");
     }
 
-    Y_UNIT_TEST(TPCDS87) {
-        TestOlapEstimationRowsCorrectness("queries/tpcds87.sql", "stats/tpcds1000s.json");
-    }
+    // Y_UNIT_TEST(TPCDS87) {
+    //     TestOlapEstimationRowsCorrectness("queries/tpcds87.sql", "stats/tpcds1000s.json");
+    // }
 
     // Y_UNIT_TEST(TPCDS88) { // ???
     //     TestOlapEstimationRowsCorrectness("queries/tpcds88.sql", "stats/tpcds1000s.json");

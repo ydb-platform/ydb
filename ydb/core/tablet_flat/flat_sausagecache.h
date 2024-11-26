@@ -77,7 +77,7 @@ public:
                 !SharedBody);
         }
 
-        void Fill(TSharedPageRef shared, bool sticky = false) {
+        void Fill(TSharedPageRef shared, bool sticky) {
             Sticky = sticky;
             SharedBody = std::move(shared);
             LoadState = LoadStateLoaded;

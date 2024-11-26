@@ -134,7 +134,7 @@ If there are multiple followers, their delay from the leader may vary: although 
 
 | Parameter name | Type | Acceptable values | Update capability | Reset capability |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |
-| `TTL` | Expression | `<tier>, ..., <tier> ON <column> [AS <unit>]`, где `<tier>` — `Inteval("<literal>") TO EXTERNAL DATA SOURCE <path_to_source>` или `Inteval("<literal>") TO DELETE`. Краткая форма:  `Interval("<literal>") ON <column> [AS <unit>]` — задаёт удаление данных | Да | Да |
+| `TTL` | Expression | `<tier>, ..., <tier> ON <column> [AS <unit>]`, where `<tier>` — `Inteval("<literal>") TO EXTERNAL DATA SOURCE <path_to_source>` or `Inteval("<literal>") TO DELETE`. Short form:  `Interval("<literal>") ON <column> [AS <unit>]` — implies `DELETE` action | Yes | Yes |
 
 Where `<unit>` is a unit of measurement, specified only for column with a [numeric type](../../../concepts/ttl.md#restrictions):
 

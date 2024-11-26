@@ -72,6 +72,9 @@ NNodes::TExprBase DqBuildFinalizeByKeyStage(NNodes::TExprBase node, TExprContext
 NNodes::TExprBase DqBuildAggregationResultStage(NNodes::TExprBase node, TExprContext& ctx,
     IOptimizationContext& optCtx);
 
+NNodes::TExprBase DqBuildTopStageRemoveSort(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    TTypeAnnotationContext& typeCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
+
 NNodes::TExprBase DqBuildTopStage(NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true);
 

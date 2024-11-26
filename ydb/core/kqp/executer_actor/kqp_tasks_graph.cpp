@@ -415,6 +415,7 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
     }
 
     settings->SetLookupStrategy(streamLookup.GetLookupStrategy());
+    settings->SetKeepRowsOrder(streamLookup.GetKeepRowsOrder());
 
     TTransform streamLookupTransform;
     streamLookupTransform.Type = "StreamLookupInputTransformer";

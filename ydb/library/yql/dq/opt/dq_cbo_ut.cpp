@@ -4,7 +4,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/parser/pg_wrapper/interface/optimizer.h>
 
-#include "dq_opt_log.h"
+#include "dq_opt_join_cost_based.h"
 #include "dq_opt_join.h"
 
 using namespace NYql;

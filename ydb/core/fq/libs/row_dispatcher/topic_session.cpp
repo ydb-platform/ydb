@@ -29,7 +29,7 @@ namespace {
 struct TTopicSessionMetrics {
     void Init(const ::NMonitoring::TDynamicCounterPtr& counters, const TString& topicPath, ui32 partitionId) {
 
-        TopicGroup = counters->GetSubgroup("topic", topicPath);
+        TopicGroup = counters->GetSubgroup("topic", CleanupCounterValueString(topicPath));
         PartitionGroup = TopicGroup->GetSubgroup("partition", ToString(partitionId));
         InFlyAsyncInputData = PartitionGroup->GetCounter("InFlyAsyncInputData");
         InFlySubscribe = PartitionGroup->GetCounter("InFlySubscribe");
@@ -127,6 +127,7 @@ private:
             : Settings(ev->Get()->Record)
             , ReadActorId(ev->Sender)
             , FilteredDataRate(counters->GetCounter("FilteredDataRate", true))
+            , RestartSessionByOffsetsByQuery(counters->GetCounter("RestartSessionByOffsetsByQuery", true))
         {
             if (Settings.HasOffset()) {
                 NextMessageOffset = Settings.GetOffset();
@@ -145,6 +146,8 @@ private:
         TDuration ReconnectPeriod;
         TStats Stat;        // Send (filtered) to read_actor
         NMonitoring::TDynamicCounters::TCounterPtr FilteredDataRate;    // filtered
+        NMonitoring::TDynamicCounters::TCounterPtr RestartSessionByOffsetsByQuery;
+        ui64 InitialOffset = 0;
     };
 
     struct TTopicEventProcessor {
@@ -785,11 +788,12 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
             // Parse remains data before adding new client
             DoParsing(true);
         }
-        auto counters = Counters->GetSubgroup("queryId", ev->Get()->Record.GetQueryId());
+        auto queryGroup = Counters->GetSubgroup("queryId", ev->Get()->Record.GetQueryId());
+        auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(TopicPath));
         auto& clientInfo = Clients.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(ev->Sender), 
-            std::forward_as_tuple(ev, counters)).first->second;
+            std::forward_as_tuple(ev, topicGroup)).first->second;
         UpdateFieldsIds(clientInfo);
 
         const auto& source = clientInfo.Settings.GetSource();
@@ -820,6 +824,7 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 LOG_ROW_DISPATCHER_INFO("New client has less offset (" << clientInfo.Settings.GetOffset() << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
                 Metrics.RestartSessionByOffsets->Inc();
                 ++RestartSessionByOffsets;
+                clientInfo.RestartSessionByOffsetsByQuery->Inc();
                 StopReadSession();
             }
         }

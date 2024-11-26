@@ -74,7 +74,7 @@ private:
     }
 
     std::optional<TFetchingScriptCursor> ScriptCursor;
-
+    std::shared_ptr<NGroupedMemoryManager::TGroupGuard> SourceGroupGuard;
 protected:
     std::optional<bool> IsSourceInMemoryFlag;
 
@@ -95,9 +95,20 @@ protected:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) = 0;
 
 public:
-    virtual ui64 GetMemoryGroupId() const = 0;
     bool GetIsStartedByCursor() const {
         return IsStartedByCursor;
+    }
+
+    ui64 GetMemoryGroupId() const {
+        AFL_VERIFY(SourceGroupGuard);
+        return SourceGroupGuard->GetGroupId();
+    }
+
+    virtual void ClearResult() {
+        StageData.reset();
+        StageResult.reset();
+        ResourceGuards.clear();
+        SourceGroupGuard = nullptr;
     }
 
     void SetIsStartedByCursor() {
@@ -323,7 +334,6 @@ private:
     using TBase = IDataSource;
     const TPortionInfo::TConstPtr Portion;
     std::shared_ptr<ISnapshotSchema> Schema;
-    const std::shared_ptr<NGroupedMemoryManager::TGroupGuard> SourceGroupGuard;
 
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
@@ -365,10 +375,6 @@ private:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
 
 public:
-    virtual ui64 GetMemoryGroupId() const override {
-        return SourceGroupGuard->GetGroupId();
-    }
-
     virtual ui64 PredictAccessorsSize() const override {
         return Portion->GetApproxChunksCount(GetContext()->GetCommonContext()->GetReadMetadata()->GetResultSchema()->GetColumnsCount()) * sizeof(TColumnRecord);
     }

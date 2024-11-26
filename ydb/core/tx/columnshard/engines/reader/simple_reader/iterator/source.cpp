@@ -25,6 +25,8 @@ void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr)
     AFL_VERIFY(FetchingPlan);
     AFL_VERIFY(!Context->IsAborted());
     ProcessingStarted = true;
+    SourceGroupGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(
+        GetContext()->GetProcessMemoryControlId(), GetContext()->GetCommonContext()->GetScanId());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", SourceIdx);
     NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
     TFetchingScriptCursor cursor(FetchingPlan, 0);
@@ -237,9 +239,7 @@ TPortionDataSource::TPortionDataSource(
           portion->RecordSnapshotMin(TSnapshot::Zero()), portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(),
           portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
     , Portion(portion)
-    , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
-    , SourceGroupGuard(NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(
-          GetContext()->GetProcessMemoryControlId(), GetContext()->GetCommonContext()->GetScanId())) {
+    , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion)) {
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

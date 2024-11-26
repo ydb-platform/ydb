@@ -249,7 +249,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     THashMap<TLogoBlobID, TCollection> Collections;
     THashMap<TActorId, TCollectionsOwner> CollectionsOwners;
     TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
-    TIntrusivePtr<NSharedCache::TSharedCachePages> SharedCachePages;
+    NSharedCache::TSharedCachePages* SharedCachePages;
 
     TRequestQueue AsyncRequests;
     TRequestQueue ScanRequests;
@@ -353,7 +353,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Owner = owner;
 
         Logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_SAUSAGECACHE);
-        SharedCachePages = sys->AppData<TAppData>()->SharedCachePages;
+        SharedCachePages = sys->AppData<TAppData>()->SharedCachePages.Get();
     }
 
     void TakePoison()

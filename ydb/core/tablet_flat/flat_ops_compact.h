@@ -104,7 +104,7 @@ namespace NTabletFlatExecutor {
 
             Spent = new TSpent(TAppData::TimeProvider.Get());
             Registry = AppData()->TypeRegistry;
-            SharedCachePages = AppData()->SharedCachePages;
+            SharedCachePages = AppData()->SharedCachePages.Get();
             Scheme = std::move(scheme);
             Driver = driver;
 
@@ -556,7 +556,7 @@ namespace NTabletFlatExecutor {
         TVector<TBundle::TResult> Results;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
         const NScheme::TTypeRegistry * Registry = nullptr;
-        TIntrusivePtr<NSharedCache::TSharedCachePages> SharedCachePages;
+        NSharedCache::TSharedCachePages * SharedCachePages;
 
         bool Finished = false;
         bool Failed = false;/* Failed to write blobs    */

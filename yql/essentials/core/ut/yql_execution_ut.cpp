@@ -4,6 +4,7 @@
 
 #include <yql/essentials/ast/yql_ast_annotation.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/cbo/simple/cbo_simple.h>
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
@@ -58,7 +59,7 @@ namespace NYql {
             auto ytGateway = CreateYtFileGateway(yqlNativeServices);
 
             TVector<TDataProviderInitializer> dataProvidersInit;
-            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway));
+            dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytGateway, MakeSimpleCBOOptimizerFactory()));
             TProgramFactory factory(true, funcReg, 0ULL, dataProvidersInit, "ut");
 
             TProgramPtr program = factory.Create("-stdin-", Src);

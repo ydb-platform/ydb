@@ -975,12 +975,15 @@ void CreateOutputTable(
     const TRichYPath& path)
 {
     Y_ENSURE(path.Path_, "Output table is not set");
-    Create(
-        preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        preparer.GetContext(), preparer.GetTransactionId(), path.Path_, NT_TABLE,
-        TCreateOptions()
-            .IgnoreExisting(true)
-            .Recursive(true));
+    if (!path.Create_.Defined()) {
+        // If `create` attribute is defined
+        Create(
+            preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
+            preparer.GetContext(), preparer.GetTransactionId(), path.Path_, NT_TABLE,
+            TCreateOptions()
+                .IgnoreExisting(true)
+                .Recursive(true));
+    }
 }
 
 void CreateOutputTables(

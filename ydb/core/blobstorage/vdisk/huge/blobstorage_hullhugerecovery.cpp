@@ -64,6 +64,7 @@ namespace NKikimr {
                                                            const ui32 chunkSize,
                                                            const ui32 appendBlockSize,
                                                            const ui32 minHugeBlobInBytes,
+                                                           const ui32 oldMinHugeBlobInBytes,
                                                            const ui32 milestoneHugeBlobInBytes,
                                                            const ui32 maxBlobInBytes,
                                                            const ui32 overhead,
@@ -72,11 +73,10 @@ namespace NKikimr {
             : VCtx(std::move(vctx))
             , LogPos(THullHugeRecoveryLogPos::Default())
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
-                                    minHugeBlobInBytes, milestoneHugeBlobInBytes,
+                                    minHugeBlobInBytes, oldMinHugeBlobInBytes, milestoneHugeBlobInBytes,
                                     maxBlobInBytes, overhead, freeChunksReservation))
             , Guid(TAppData::RandomProvider->GenRand64())
         {
-            Heap->FinishRecovery();
             logFunc(VDISKP(VCtx->VDiskLogPrefix,
                 "Recovery started (guid# %" PRIu64 " entryLsn# null): State# %s",
                 Guid, ToString().data()));
@@ -86,6 +86,7 @@ namespace NKikimr {
                                                            const ui32 chunkSize,
                                                            const ui32 appendBlockSize,
                                                            const ui32 minHugeBlobInBytes,
+                                                           const ui32 oldMinHugeBlobInBytes,
                                                            const ui32 milestoneHugeBlobInBytes,
                                                            const ui32 maxBlobInBytes,
                                                            const ui32 overhead,
@@ -96,13 +97,12 @@ namespace NKikimr {
             : VCtx(std::move(vctx))
             , LogPos(THullHugeRecoveryLogPos::Default())
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
-                                    minHugeBlobInBytes, milestoneHugeBlobInBytes,
+                                    minHugeBlobInBytes, oldMinHugeBlobInBytes, milestoneHugeBlobInBytes,
                                     maxBlobInBytes, overhead, freeChunksReservation))
             , Guid(TAppData::RandomProvider->GenRand64())
             , PersistentLsn(entryPointLsn)
         {
             ParseFromString(entryPointData);
-            Heap->FinishRecovery();
             Y_ABORT_UNLESS(entryPointLsn == LogPos.EntryPointLsn);
             logFunc(VDISKP(VCtx->VDiskLogPrefix,
                 "Recovery started (guid# %" PRIu64 " entryLsn# %" PRIu64 "): State# %s",
@@ -113,6 +113,7 @@ namespace NKikimr {
                                                            const ui32 chunkSize,
                                                            const ui32 appendBlockSize,
                                                            const ui32 minHugeBlobInBytes,
+                                                           const ui32 oldMinHugeBlobInBytes,
                                                            const ui32 milestoneHugeBlobInBytes,
                                                            const ui32 maxBlobInBytes,
                                                            const ui32 overhead,
@@ -123,13 +124,12 @@ namespace NKikimr {
             : VCtx(std::move(vctx))
             , LogPos(THullHugeRecoveryLogPos::Default())
             , Heap(new NHuge::THeap(VCtx->VDiskLogPrefix, chunkSize, appendBlockSize,
-                                    minHugeBlobInBytes, milestoneHugeBlobInBytes,
+                                    minHugeBlobInBytes, oldMinHugeBlobInBytes, milestoneHugeBlobInBytes,
                                     maxBlobInBytes, overhead, freeChunksReservation))
             , Guid(TAppData::RandomProvider->GenRand64())
             , PersistentLsn(entryPointLsn)
         {
             ParseFromArray(entryPointData.GetData(), entryPointData.GetSize());
-            Heap->FinishRecovery();
             Y_ABORT_UNLESS(entryPointLsn == LogPos.EntryPointLsn);
             logFunc(VDISKP(VCtx->VDiskLogPrefix,
                 "Recovery started (guid# %" PRIu64 " entryLsn# %" PRIu64 "): State# %s",

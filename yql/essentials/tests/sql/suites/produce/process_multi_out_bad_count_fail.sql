@@ -1,5 +1,4 @@
-/* syntax version 1 */
-/* postgres can not */
+/* custom error:Expected tuple type of size: 3, but got: 2*/
 $udfScript = @@
 def MyFunc(list):
     return [(int(x.key) % 2, x) for x in list]

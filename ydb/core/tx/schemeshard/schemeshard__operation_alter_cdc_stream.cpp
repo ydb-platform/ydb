@@ -362,7 +362,7 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
-        const auto tablePath = TPath::Resolve(workingDir, context.SS).Dive(tableName);
+        const auto tablePath = TPath::Resolve(workingDir, context.SS).Child(tableName, TPath::TSplitChildTag{});
         {
             const auto checks = tablePath.Check();
             checks
@@ -487,7 +487,7 @@ std::variant<TStreamPaths, ISubOperation::TPtr> DoAlterStreamPathChecks(
         const TString& tableName,
         const TString& streamName)
 {
-    const auto tablePath = workingDirPath.Child(tableName);
+    const auto tablePath = workingDirPath.Child(tableName, TPath::TSplitChildTag{});
     {
         const auto checks = tablePath.Check();
         checks

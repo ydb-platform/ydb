@@ -146,6 +146,50 @@ class TpcGeneratorBase(object):
         ]
         return self.get_cannonical(paths=paths, execs=execs)
 
+    def test_s1_state_and_parts(self):
+        state = [self.tmp_path(f'state_{i}.json') for i in range(2)]
+        paths = [self.tmp_path(f's1.{i}') for i in range(4)]
+        execs = [
+            self.execute_generator(
+                output_path=paths[0],
+                generator_args=['--state', state[0], '--proccess-count', 4, '--proccess-index', 0],
+                import_args=['-t', 1]
+            ),
+            self.execute_generator(
+                output_path=paths[1],
+                generator_args=['--state', state[1], '--proccess-count', 4, '--proccess-index', 2],
+                import_args=['-t', 1]
+            )
+        ]
+        for e in execs:
+            e.wait(check_exit_code=True)
+        execs += [
+            self.execute_generator(
+                output_path=paths[2],
+                generator_args=['--state', state[0], '--proccess-count', 2, '--proccess-index', 0],
+            ),
+            self.execute_generator(
+                output_path=paths[3],
+                generator_args=['--state', state[1], '--proccess-count', 2, '--proccess-index', 1],
+            )
+        ]
+        for e in execs:
+            e.wait(check_exit_code=True)
+        counts = {}
+        for p in paths:
+            for table_name, _ in self.tables.items():
+                fpath = os.path.join(p, table_name)
+                if os.path.exists(fpath):
+                    with open(fpath, 'r') as f:
+                        counts[table_name] = counts.get(table_name, 0) + len(f.readlines()) - 1
+        for table_name, _ in self.tables.items():
+            c = counts.get(table_name, 0)
+            e = self.tables[table_name][1]
+            if c - e > 5 * len(paths):              # some lines can be rebuild on continue building
+                pytest.fail(f'Too many lines was generated for table `{table_name}`, fact: {c}, expected: {e}')
+
+        return self.get_cannonical(paths=paths, execs=execs)
+
 
 class TestTpchGenerator(TpcGeneratorBase):
     workload = 'tpch'

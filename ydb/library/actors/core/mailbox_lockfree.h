@@ -104,6 +104,7 @@ namespace NActors {
         void EnableStats();
         void AddElapsedCycles(ui64);
         std::optional<ui64> GetElapsedCycles();
+        std::optional<double> GetElapsedSeconds();
 
         bool CleanupActors() noexcept;
         bool CleanupEvents() noexcept;

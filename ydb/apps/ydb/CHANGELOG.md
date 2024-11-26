@@ -15,7 +15,6 @@
 * Added log events for `ydb tools dump` and `ydb tools restore` commands
 * Added `-c` option for `ydb workload tpcds run` command to compare the result with expected value and show the diff
 
-
 ## 2.15.0 ##
 
 * Description is not ready yet

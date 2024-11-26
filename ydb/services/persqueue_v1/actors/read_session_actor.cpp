@@ -1222,7 +1222,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     const TPartitionId partitionId{converterIter->second, record.GetPartition(), assignId};
     auto [error, maxLag, readTimestampMs] = GetReadFrom(converter, ctx);
     if (error) {
-        return CloseSession(PersQueue::ErrorCode::ERROR, "internal error", ctx);
+        return CloseSession(PersQueue::ErrorCode::ERROR, error, ctx);
     }
 
     const TActorId actorId = ctx.Register(new TPartitionActor(
@@ -2080,7 +2080,7 @@ ui32 TReadSessionActor<UseMigrationProtocol>::NormalizeMaxReadSize(ui32 sourceVa
 }
 
 template <bool UseMigrationProtocol>
-std::tuple<bool, ui32, ui64> TReadSessionActor<UseMigrationProtocol>::GetReadFrom(const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) const {
+std::tuple<TString, ui32, ui64> TReadSessionActor<UseMigrationProtocol>::GetReadFrom(const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) const {
     auto jt = ReadFromTimestamp.find(topic->GetInternalName());
     if (jt == ReadFromTimestamp.end()) {
         LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " error searching for topic"
@@ -2092,7 +2092,7 @@ std::tuple<bool, ui32, ui64> TReadSessionActor<UseMigrationProtocol>::GetReadFro
                 << ": topic# " << kv.first);
         }
 
-        return {true, 0, 0};
+        return {"internal error", 0, 0};
     }
 
     ui64 readTimestampMs = Max(ReadTimestampMs, jt->second);
@@ -2101,7 +2101,7 @@ std::tuple<bool, ui32, ui64> TReadSessionActor<UseMigrationProtocol>::GetReadFro
     Y_ABORT_UNLESS(lagsIt != MaxLagByTopic.end());
     const ui32 maxLag = lagsIt->second;
 
-    return {false, maxLag, readTimestampMs};
+    return {TString{}, maxLag, readTimestampMs};
 }
 
 template <bool UseMigrationProtocol>
@@ -2152,7 +2152,7 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
 
             auto [error, maxLag, readTimestampMs] = GetReadFrom(it->second.Topic, ctx);
             if (error) {
-                return CloseSession(PersQueue::ErrorCode::ERROR, "internal error", ctx);
+                return CloseSession(PersQueue::ErrorCode::ERROR, error, ctx);
             }
 
             auto ev = MakeHolder<TEvPQProxy::TEvRead>(guid, ccount, csize, maxLag, readTimestampMs);

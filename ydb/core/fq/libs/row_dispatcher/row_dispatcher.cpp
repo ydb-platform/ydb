@@ -546,7 +546,7 @@ void TRowDispatcher::UpdateMetrics() {
             it = AggrStats.LastQueryStats.erase(it);
             continue;
         }
-        SetQueryMetrics(it->first, stats->UnreadBytes.Max, stats->UnreadBytes.Avg, stat.ReadLagMessages.Max);
+        SetQueryMetrics(it->first, stats->UnreadBytes.Max, stats->UnreadBytes.Avg, stats->ReadLagMessages.Max);
         ++it;
     }
     PrintStateToLog();

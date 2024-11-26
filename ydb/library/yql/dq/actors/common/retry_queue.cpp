@@ -64,22 +64,20 @@ void TRetryEventsQueue::HandleNodeConnected(ui32 nodeId) {
     }
 }
 
-bool TRetryEventsQueue::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-    if (ev->Sender == RecipientId && ev->Get()->Reason == NActors::TEvents::TEvUndelivered::Disconnected) {
+TRetryEventsQueue::ESessionState TRetryEventsQueue::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+    if (ev->Sender != RecipientId) {
+        return ESessionState::WrongSession;
+    }
+    if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::Disconnected) {
         Connected = false;
         ScheduleRetry();
-        return true;
+        return ESessionState::Disconnected;
     }
 
-    if (ev->Sender == RecipientId && ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
-        if (KeepAlive) {
-            NActors::TActivationContext::Send(
-                new NActors::IEventHandle(SelfId, SelfId, new TEvRetryQueuePrivate::TEvSessionClosed(EventQueueId), 0, 0));
-        }
-        return true;
+    if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
+        return ESessionState::SessionClosed;
     }
-
-    return false;
+    return ESessionState::Disconnected;
 }
 
 void TRetryEventsQueue::Retry() {

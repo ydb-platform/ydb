@@ -203,7 +203,7 @@ auto TClientRequestPerformanceProfiler::GetPerformanceCounters(
     using TCountersMap = NConcurrency::TSyncMap<std::pair<std::string, std::string>, TPerformanceCounters>;
 
     auto [counter, _] = LeakySingleton<TCountersMap>()->FindOrInsert(std::pair(service, method), [&] {
-        auto profiler = RpcClientProfiler
+        auto profiler = RpcClientProfiler()
             .WithHot()
             .WithTag("yt_service", service)
             .WithTag("method", method, -1);

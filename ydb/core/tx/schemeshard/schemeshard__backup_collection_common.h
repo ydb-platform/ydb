@@ -19,6 +19,7 @@ std::optional<TBackupCollectionPaths> ResolveBackupCollectionPaths(
     const TString& name,
     bool preValidateDst,
     TOperationContext& context,
-    THolder<TProposeResponse>& result);
+    THolder<TProposeResponse>& result,
+    bool enforceBackupCollectionsDirExists = true);
 
 }  // namespace NKikimr::NSchemeShard

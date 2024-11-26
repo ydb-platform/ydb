@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/auditlog_helpers.h>
@@ -14,9 +15,9 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/ydb_convert/table_description.h>
 
-#include <ydb/library/binary_json/write.h>
-#include <ydb/library/dynumber/dynumber.h>
-#include <ydb/library/uuid/uuid.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
+#include <yql/essentials/types/uuid/uuid.h>
 
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
@@ -1196,7 +1197,8 @@ value {
         const TString string = "test string";
         const TString json = R"({"key": "value"})";
         auto binaryJson = NBinaryJson::SerializeToBinaryJson(json);
-        Y_ABORT_UNLESS(binaryJson.IsSuccess());
+        Y_ABORT_UNLESS(std::holds_alternative<NBinaryJson::TBinaryJson>(binaryJson));
+        const auto& binaryJsonValue = std::get<NBinaryJson::TBinaryJson>(binaryJson);
 
         const std::pair<ui64, ui64> decimal = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("16.17", NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE));
         const std::pair<ui64, ui64> decimal35 = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("555555555555555.123456789", 35, 10));
@@ -1228,7 +1230,7 @@ value {
             TCell(string.data(), string.size()), // String
             TCell(string.data(), string.size()), // Utf8
             TCell(json.data(), json.size()), // Json
-            TCell(binaryJson->Data(), binaryJson->Size()), // JsonDocument
+            TCell(binaryJsonValue.Data(), binaryJsonValue.Size()), // JsonDocument
             TCell(uuid, sizeof(uuid)), // Uuid
         };
 

@@ -115,11 +115,11 @@ public:
     std::vector<TCommittedBlob> CommittedBlobs;
     std::shared_ptr<TReadStats> ReadStats;
 
-    TReadMetadata(const ui64 pathId, const std::shared_ptr<TVersionedIndex> info, const TSnapshot& snapshot, const ESorting sorting, const TProgramContainer& ssaProgram)
-        : TBase(info, sorting, ssaProgram, info->GetSchema(snapshot), snapshot)
+    TReadMetadata(const ui64 pathId, const std::shared_ptr<TVersionedIndex> info, const TSnapshot& snapshot, const ESorting sorting,
+        const TProgramContainer& ssaProgram, const std::shared_ptr<IScanCursor>& scanCursor)
+        : TBase(info, sorting, ssaProgram, info->GetSchemaVerified(snapshot), snapshot, scanCursor)
         , PathId(pathId)
-        , ReadStats(std::make_shared<TReadStats>())
-    {
+        , ReadStats(std::make_shared<TReadStats>()) {
     }
 
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {

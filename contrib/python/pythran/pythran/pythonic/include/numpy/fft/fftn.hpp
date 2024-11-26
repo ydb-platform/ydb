@@ -15,7 +15,7 @@ namespace numpy
               class Norm = types::none_type>
     types::ndarray<typename std::enable_if<std::is_integral<T>::value,
                                            std::complex<double>>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     fftn(types::ndarray<T, pS> const &a, types::none_type s = {},
          Axes const &axes = {}, Norm const &norm = {});
 
@@ -23,7 +23,7 @@ namespace numpy
               class Norm = types::none_type>
     types::ndarray<typename std::enable_if<std::is_floating_point<T>::value,
                                            std::complex<T>>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     fftn(types::ndarray<T, pS> const &a, types::none_type s = {},
          Axes const &axes = {}, Norm const &norm = {});
 
@@ -31,7 +31,7 @@ namespace numpy
               class Norm = types::none_type>
     types::ndarray<
         typename std::enable_if<types::is_complex<T>::value, T>::type,
-        types::array<long, std::tuple_size<pS>::value>>
+        types::array_tuple<long, std::tuple_size<pS>::value>>
     fftn(types::ndarray<T, pS> const &a, types::none_type s = {},
          Axes const &axes = {}, Norm const &norm = {});
 
@@ -40,7 +40,7 @@ namespace numpy
               class Axes = types::none_type, class Norm = types::none_type>
     types::ndarray<typename std::enable_if<std::is_integral<T>::value,
                                            std::complex<double>>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     fftn(types::ndarray<T, pS> const &a, types::array_base<I, N, V> const &s,
          Axes const &axes = {}, Norm const &norm = {});
 
@@ -48,7 +48,7 @@ namespace numpy
               class Axes = types::none_type, class Norm = types::none_type>
     types::ndarray<typename std::enable_if<std::is_floating_point<T>::value,
                                            std::complex<T>>::type,
-                   types::array<long, std::tuple_size<pS>::value>>
+                   types::array_tuple<long, std::tuple_size<pS>::value>>
     fftn(types::ndarray<T, pS> const &a, types::array_base<I, N, V> const &s,
          Axes const &axes = {}, Norm const &norm = {});
 
@@ -56,7 +56,7 @@ namespace numpy
               class Axes = types::none_type, class Norm = types::none_type>
     types::ndarray<
         typename std::enable_if<types::is_complex<T>::value, T>::type,
-        types::array<long, std::tuple_size<pS>::value>>
+        types::array_tuple<long, std::tuple_size<pS>::value>>
     fftn(types::ndarray<T, pS> const &a, types::array_base<I, N, V> const &s,
          Axes const &axes = {}, Norm const &norm = {});
 

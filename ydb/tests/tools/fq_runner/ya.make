@@ -13,7 +13,7 @@ PEERDIR(
     contrib/python/requests
     library/python/retry
     library/python/testing/yatest_common
-    ydb/library/yql/providers/common/proto
+    yql/essentials/providers/common/proto
     ydb/public/api/grpc/draft
     ydb/tests/library
 )

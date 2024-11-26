@@ -606,7 +606,7 @@ bool IsCompatibleKeyTypes(
             }
         }
 
-        if (!NSchemeShard::IsAllowedKeyType(typeInfo)) {
+        if (!NKikimr::IsAllowedKeyType(typeInfo)) {
             explain += TStringBuilder() << "Column '" << keyName << "' has wrong key type " << NScheme::TypeName(typeInfo) << " for being key";
             return false;
         }

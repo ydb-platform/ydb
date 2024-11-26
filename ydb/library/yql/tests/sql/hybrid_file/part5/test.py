@@ -2,7 +2,7 @@ import pytest
 import yatest
 
 from hybrid_file import run_test
-from utils import pytest_generate_tests_for_part
+from test_utils import pytest_generate_tests_for_part
 from yql_utils import pytest_get_current_part
 
 
@@ -11,6 +11,6 @@ def pytest_generate_tests(metafunc):
     return pytest_generate_tests_for_part(metafunc, current_part, part_count)
 
 
-@pytest.mark.parametrize('what', ['Results', "Plan", "Debug"])
+@pytest.mark.parametrize('what', ['Results'])
 def test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     return run_test(suite, case, cfg, tmpdir, what, yql_http_file_server)

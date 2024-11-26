@@ -34,6 +34,7 @@ SRCS(
     log_ut.cpp
     mon_ut.cpp
     scheduler_actor_ut.cpp
+    mailbox_lockfree_ut.cpp
 )
 
 END()

@@ -336,12 +336,12 @@ void Serialize(
             .Item("attributes").DoMap([&] (auto fluent) {
                 if (error.HasOriginAttributes()) {
                     fluent
-                        .Item("host").Value(GetHost(error))
                         .Item("pid").Value(error.GetPid())
                         .Item("tid").Value(error.GetTid())
                         .Item("thread").Value(error.GetThreadName())
                         .Item("fid").Value(GetFid(error));
-                } else if (IsErrorSanitizerEnabled() && HasHost(error)) {
+                }
+                if (HasHost(error)) {
                     fluent
                         .Item("host").Value(GetHost(error));
                 }
@@ -455,9 +455,6 @@ void ToProto(NYT::NProto::TError* protoError, const TError& error)
     };
 
     if (error.HasOriginAttributes()) {
-        static const TString HostKey("host");
-        addAttribute(HostKey, GetHost(error));
-
         static const TString PidKey("pid");
         addAttribute(PidKey, error.GetPid());
 
@@ -469,7 +466,9 @@ void ToProto(NYT::NProto::TError* protoError, const TError& error)
 
         static const TString FidKey("fid");
         addAttribute(FidKey, GetFid(error));
-    } else if (IsErrorSanitizerEnabled() && HasHost(error)) {
+    }
+
+    if (HasHost(error)) {
         static const TString HostKey("host");
         addAttribute(HostKey, GetHost(error));
     }
@@ -549,8 +548,11 @@ void TErrorSerializer::Save(TStreamSaveContext& context, const TError& error)
     // Cf. TAttributeDictionaryValueSerializer.
     auto attributePairs = error.Attributes().ListPairs();
     size_t attributeCount = attributePairs.size();
+    if (HasHost(error)) {
+        attributeCount += 1;
+    }
     if (error.HasOriginAttributes()) {
-        attributeCount += 5;
+        attributeCount += 4;
     }
     if (error.HasDatetime()) {
         attributeCount += 1;
@@ -570,10 +572,12 @@ void TErrorSerializer::Save(TStreamSaveContext& context, const TError& error)
             Save(context, ConvertToYsonString(value));
         };
 
-        if (error.HasOriginAttributes()) {
+        if (HasHost(error)) {
             static const TString HostKey("host");
             saveAttribute(HostKey, GetHost(error));
+        }
 
+        if (error.HasOriginAttributes()) {
             static const TString PidKey("pid");
             saveAttribute(PidKey, error.GetPid());
 

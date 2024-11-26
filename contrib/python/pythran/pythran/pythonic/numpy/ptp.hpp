@@ -3,16 +3,16 @@
 
 #include "pythonic/include/numpy/ptp.hpp"
 
-#include "pythonic/numpy/min.hpp"
 #include "pythonic/numpy/max.hpp"
+#include "pythonic/numpy/min.hpp"
 
 PYTHONIC_NS_BEGIN
 
 namespace numpy
 {
   template <class E>
-  auto ptp(E const &expr, long axis)
-      -> decltype(max(expr, axis) - min(expr, axis))
+  auto ptp(E const &expr,
+           long axis) -> decltype(max(expr, axis) - min(expr, axis))
   {
     return max(expr, axis) - min(expr, axis);
   }
@@ -22,7 +22,7 @@ namespace numpy
   {
     return max(expr) - min(expr);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

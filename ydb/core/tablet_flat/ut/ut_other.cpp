@@ -17,7 +17,8 @@ Y_UNIT_TEST_SUITE(NOther) {
         conf.Groups[0].MaxBlobSize = 128;       /* Page collection blob size */
         conf.Slots = { { 1, 11 }, { 3, 13 }, { 5, 17 } };
         conf.Groups[0].Channel = 3;     /* Put data to channel 3 grp 13 */
-        conf.BlobsChannel = 5;    /* Put blobs to channel 5 grp 17 */
+        conf.BlobsChannels = {5};    /* Put blobs to channel 5 grp 17 */
+        conf.ChannelsShares = NUtil::TChannelsShares({{5, 1.0f}});
 
         const TLogoBlobID mask(1, 3, 7, 0, 0, 0);
 

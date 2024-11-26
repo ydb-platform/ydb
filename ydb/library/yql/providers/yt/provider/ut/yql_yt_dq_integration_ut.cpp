@@ -1,6 +1,6 @@
 #include <ydb/library/yql/providers/yt/provider/yql_yt_dq_integration.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NYql;

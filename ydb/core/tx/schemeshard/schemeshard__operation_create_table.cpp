@@ -5,7 +5,10 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 
+#include <ydb/core/scheme/scheme_tabledefs.h>  // for IsAllowedKeyType
+
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
 
 namespace {
 
@@ -118,7 +121,7 @@ bool DoInitPartitioning(TTableInfo::TPtr tableInfo,
     for (ui32 ki : keyColIds) {
         auto type = tableInfo->Columns[ki].PType;
 
-        if (!IsAllowedKeyType(type)) {
+        if (!NKikimr::IsAllowedKeyType(type)) {
             errStr = Sprintf("Column %s has wrong key type %s",
                 tableInfo->Columns[ki].Name.c_str(), NScheme::TypeName(type).c_str());
             return false;

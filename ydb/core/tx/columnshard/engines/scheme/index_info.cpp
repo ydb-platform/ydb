@@ -124,6 +124,7 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, 
     if (!Schema) {
         AFL_VERIFY(!SchemaWithSpecials);
         InitializeCaches(operators, columns, nullptr);
+        Precalculate();
     }
 }
 
@@ -187,6 +188,13 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
         CompactionPlannerConstructor = container.DetachResult().GetObjectPtrVerified();
     } else {
         CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
+    }
+    if (optionsProto.HasMetadataManagerConstructor()) {
+        auto container =
+            NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(optionsProto.GetMetadataManagerConstructor());
+        MetadataManagerConstructor = container.DetachResult().GetObjectPtrVerified();
+    } else {
+        MetadataManagerConstructor = NDataAccessorControl::IManagerConstructor::BuildDefault();
     }
 }
 
@@ -282,6 +290,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     }
 
     Version = schema.GetVersion();
+    Precalculate();
     Validate();
     return true;
 }
@@ -386,7 +395,7 @@ NSplitter::TEntityGroups TIndexInfo::GetEntityGroupsByStorageId(const TString& s
     return groups;
 }
 
-std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> TIndexInfo::GetCompactionPlannerConstructor() const {
+const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& TIndexInfo::GetCompactionPlannerConstructor() const {
     AFL_VERIFY(!!CompactionPlannerConstructor);
     return CompactionPlannerConstructor;
 }
@@ -550,10 +559,19 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
     if (diff.GetCompressionOptions()) {
         DeserializeDefaultCompressionFromProto(*diff.GetCompressionOptions());
     }
+    Precalculate();
     Validate();
 }
 
+void TIndexInfo::Precalculate() {
+    UsedStorageIds = std::make_shared<std::set<TString>>();
+    for (auto&& i : ColumnFeatures) {
+        UsedStorageIds->emplace(i->GetOperator()->GetStorageId());
+    }
+}
+
 void TIndexInfo::Validate() const {
+    AFL_VERIFY(!!UsedStorageIds);
     AFL_VERIFY(ColumnFeatures.size() == SchemaColumnIdsWithSpecials.size());
     AFL_VERIFY(ColumnFeatures.size() == (ui32)SchemaWithSpecials->num_fields());
     AFL_VERIFY(ColumnFeatures.size() == (ui32)Schema->num_fields() + IIndexInfo::SpecialColumnsCount);
@@ -587,6 +605,7 @@ void TIndexInfo::Validate() const {
 TIndexInfo TIndexInfo::BuildDefault() {
     TIndexInfo result;
     result.CompactionPlannerConstructor = NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault();
+    result.MetadataManagerConstructor = NDataAccessorControl::IManagerConstructor::BuildDefault();
     return result;
 }
 

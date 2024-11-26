@@ -900,7 +900,7 @@ void TReadSessionActor<UseMigrationProtocol>::SetupBytesReadByUserAgentCounter()
         ->GetSubgroup("protocol", protocol)
         ->GetSubgroup("consumer", ClientPath)
         ->GetSubgroup("sdk_build_info", CleanupCounterValueString(SdkBuildInfo))
-        ->GetSubgroup("user_agent", CleanupCounterValueString(UserAgent))
+        ->GetSubgroup("user_agent", DropUserAgentSuffix(CleanupCounterValueString(UserAgent)))
         ->GetExpiringNamedCounter("sensor", "BytesReadByUserAgent", true);
 }
 

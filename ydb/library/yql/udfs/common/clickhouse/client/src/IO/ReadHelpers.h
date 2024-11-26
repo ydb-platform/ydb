@@ -647,6 +647,7 @@ inline ReturnType readDateTextImpl(ExtendedDayNum & date, ReadBuffer & buf)
     return ReturnType(true);
 }
 
+void readDateTextFormatImpl(LocalDate & date, ReadBuffer & buf, const String& format);
 
 inline void readDateText(LocalDate & date, ReadBuffer & buf)
 {
@@ -676,6 +677,21 @@ inline bool tryReadDateText(DayNum & date, ReadBuffer & buf)
 inline bool tryReadDateText(ExtendedDayNum & date, ReadBuffer & buf)
 {
     return readDateTextImpl<bool>(date, buf);
+}
+
+inline void readDateTextFormat(DayNum & date, ReadBuffer & buf, const String& format)
+{
+    LocalDate local_date;
+    readDateTextFormatImpl(local_date, buf, format);
+    date = DateLUT::instance().makeDayNum(local_date.year(), local_date.month(), local_date.day());
+}
+
+inline void readDateTextFormat(ExtendedDayNum & date, ReadBuffer & buf, const String& format)
+{
+    LocalDate local_date;
+    readDateTextFormatImpl(local_date, buf, format);
+    /// When the parameter is out of rule or out of range, Date32 uses 1925-01-01 as the default value (-DateLUT::instance().getDayNumOffsetEpoch(), -16436) and Date uses 1970-01-01.
+    date = DateLUT::instance().makeDayNum(local_date.year(), local_date.month(), local_date.day(), -static_cast<Int32>(DateLUT::instance().getDayNumOffsetEpoch()));
 }
 
 template <typename ReturnType = void>

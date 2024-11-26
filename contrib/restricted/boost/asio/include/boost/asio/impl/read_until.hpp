@@ -2,7 +2,7 @@
 // impl/read_until.hpp
 // ~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -1060,10 +1060,20 @@ struct associator<Associator,
     DefaultCandidate>
   : Associator<ReadHandler, DefaultCandidate>
 {
-  static typename Associator<ReadHandler, DefaultCandidate>::type get(
-      const detail::read_until_delim_op_v1<AsyncReadStream,
+  static typename Associator<ReadHandler, DefaultCandidate>::type
+  get(const detail::read_until_delim_op_v1<AsyncReadStream,
+        DynamicBuffer_v1, ReadHandler>& h) BOOST_ASIO_NOEXCEPT
+  {
+    return Associator<ReadHandler, DefaultCandidate>::get(h.handler_);
+  }
+
+  static BOOST_ASIO_AUTO_RETURN_TYPE_PREFIX2(
+      typename Associator<ReadHandler, DefaultCandidate>::type)
+  get(const detail::read_until_delim_op_v1<AsyncReadStream,
         DynamicBuffer_v1, ReadHandler>& h,
-      const DefaultCandidate& c = DefaultCandidate()) BOOST_ASIO_NOEXCEPT
+      const DefaultCandidate& c) BOOST_ASIO_NOEXCEPT
+    BOOST_ASIO_AUTO_RETURN_TYPE_SUFFIX((
+      Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c)))
   {
     return Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c);
   }
@@ -1073,23 +1083,28 @@ struct associator<Associator,
 
 template <typename AsyncReadStream, typename DynamicBuffer_v1,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      std::size_t)) ReadHandler>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(ReadHandler,
+      std::size_t)) ReadToken>
+BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(ReadToken,
     void (boost::system::error_code, std::size_t))
 async_read_until(AsyncReadStream& s,
     BOOST_ASIO_MOVE_ARG(DynamicBuffer_v1) buffers,
-    char delim, BOOST_ASIO_MOVE_ARG(ReadHandler) handler,
+    char delim, BOOST_ASIO_MOVE_ARG(ReadToken) token,
     typename constraint<
       is_dynamic_buffer_v1<typename decay<DynamicBuffer_v1>::type>::value
     >::type,
     typename constraint<
       !is_dynamic_buffer_v2<typename decay<DynamicBuffer_v1>::type>::value
     >::type)
+  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
+    async_initiate<ReadToken,
+      void (boost::system::error_code, std::size_t)>(
+        declval<detail::initiate_async_read_until_delim_v1<AsyncReadStream> >(),
+        token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v1)(buffers), delim)))
 {
-  return async_initiate<ReadHandler,
+  return async_initiate<ReadToken,
     void (boost::system::error_code, std::size_t)>(
       detail::initiate_async_read_until_delim_v1<AsyncReadStream>(s),
-      handler, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v1)(buffers), delim);
+      token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v1)(buffers), delim);
 }
 
 namespace detail
@@ -1362,10 +1377,20 @@ struct associator<Associator,
     DefaultCandidate>
   : Associator<ReadHandler, DefaultCandidate>
 {
-  static typename Associator<ReadHandler, DefaultCandidate>::type get(
-      const detail::read_until_delim_string_op_v1<AsyncReadStream,
+  static typename Associator<ReadHandler, DefaultCandidate>::type
+  get(const detail::read_until_delim_string_op_v1<AsyncReadStream,
+        DynamicBuffer_v1, ReadHandler>& h) BOOST_ASIO_NOEXCEPT
+  {
+    return Associator<ReadHandler, DefaultCandidate>::get(h.handler_);
+  }
+
+  static BOOST_ASIO_AUTO_RETURN_TYPE_PREFIX2(
+      typename Associator<ReadHandler, DefaultCandidate>::type)
+  get(const detail::read_until_delim_string_op_v1<AsyncReadStream,
         DynamicBuffer_v1, ReadHandler>& h,
-      const DefaultCandidate& c = DefaultCandidate()) BOOST_ASIO_NOEXCEPT
+      const DefaultCandidate& c) BOOST_ASIO_NOEXCEPT
+    BOOST_ASIO_AUTO_RETURN_TYPE_SUFFIX((
+      Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c)))
   {
     return Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c);
   }
@@ -1375,24 +1400,31 @@ struct associator<Associator,
 
 template <typename AsyncReadStream, typename DynamicBuffer_v1,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      std::size_t)) ReadHandler>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(ReadHandler,
+      std::size_t)) ReadToken>
+BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(ReadToken,
     void (boost::system::error_code, std::size_t))
 async_read_until(AsyncReadStream& s,
     BOOST_ASIO_MOVE_ARG(DynamicBuffer_v1) buffers,
     BOOST_ASIO_STRING_VIEW_PARAM delim,
-    BOOST_ASIO_MOVE_ARG(ReadHandler) handler,
+    BOOST_ASIO_MOVE_ARG(ReadToken) token,
     typename constraint<
       is_dynamic_buffer_v1<typename decay<DynamicBuffer_v1>::type>::value
     >::type,
     typename constraint<
       !is_dynamic_buffer_v2<typename decay<DynamicBuffer_v1>::type>::value
     >::type)
+  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
+    async_initiate<ReadToken,
+      void (boost::system::error_code, std::size_t)>(
+        declval<detail::initiate_async_read_until_delim_string_v1<
+          AsyncReadStream> >(),
+        token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v1)(buffers),
+        static_cast<std::string>(delim))))
 {
-  return async_initiate<ReadHandler,
+  return async_initiate<ReadToken,
     void (boost::system::error_code, std::size_t)>(
       detail::initiate_async_read_until_delim_string_v1<AsyncReadStream>(s),
-      handler, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v1)(buffers),
+      token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v1)(buffers),
       static_cast<std::string>(delim));
 }
 
@@ -1671,10 +1703,20 @@ struct associator<Associator,
     DefaultCandidate>
   : Associator<ReadHandler, DefaultCandidate>
 {
-  static typename Associator<ReadHandler, DefaultCandidate>::type get(
-      const detail::read_until_expr_op_v1<AsyncReadStream,
+  static typename Associator<ReadHandler, DefaultCandidate>::type
+  get(const detail::read_until_expr_op_v1<AsyncReadStream,
+        DynamicBuffer_v1, RegEx, ReadHandler>& h) BOOST_ASIO_NOEXCEPT
+  {
+    return Associator<ReadHandler, DefaultCandidate>::get(h.handler_);
+  }
+
+  static BOOST_ASIO_AUTO_RETURN_TYPE_PREFIX2(
+      typename Associator<ReadHandler, DefaultCandidate>::type)
+  get(const detail::read_until_expr_op_v1<AsyncReadStream,
         DynamicBuffer_v1, RegEx, ReadHandler>& h,
-      const DefaultCandidate& c = DefaultCandidate()) BOOST_ASIO_NOEXCEPT
+      const DefaultCandidate& c) BOOST_ASIO_NOEXCEPT
+    BOOST_ASIO_AUTO_RETURN_TYPE_SUFFIX((
+      Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c)))
   {
     return Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c);
   }
@@ -1684,24 +1726,29 @@ struct associator<Associator,
 
 template <typename AsyncReadStream, typename DynamicBuffer_v1,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      std::size_t)) ReadHandler>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(ReadHandler,
+      std::size_t)) ReadToken>
+BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(ReadToken,
     void (boost::system::error_code, std::size_t))
 async_read_until(AsyncReadStream& s,
     BOOST_ASIO_MOVE_ARG(DynamicBuffer_v1) buffers,
     const boost::regex& expr,
-    BOOST_ASIO_MOVE_ARG(ReadHandler) handler,
+    BOOST_ASIO_MOVE_ARG(ReadToken) token,
     typename constraint<
       is_dynamic_buffer_v1<typename decay<DynamicBuffer_v1>::type>::value
     >::type,
     typename constraint<
       !is_dynamic_buffer_v2<typename decay<DynamicBuffer_v1>::type>::value
     >::type)
+  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
+    async_initiate<ReadToken,
+      void (boost::system::error_code, std::size_t)>(
+        declval<detail::initiate_async_read_until_expr_v1<AsyncReadStream> >(),
+        token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v1)(buffers), expr)))
 {
-  return async_initiate<ReadHandler,
+  return async_initiate<ReadToken,
     void (boost::system::error_code, std::size_t)>(
       detail::initiate_async_read_until_expr_v1<AsyncReadStream>(s),
-      handler, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v1)(buffers), expr);
+      token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v1)(buffers), expr);
 }
 
 #endif // defined(BOOST_ASIO_HAS_BOOST_REGEX)
@@ -1978,10 +2025,20 @@ struct associator<Associator,
     DefaultCandidate>
   : Associator<ReadHandler, DefaultCandidate>
 {
-  static typename Associator<ReadHandler, DefaultCandidate>::type get(
-      const detail::read_until_match_op_v1<AsyncReadStream,
+  static typename Associator<ReadHandler, DefaultCandidate>::type
+  get(const detail::read_until_match_op_v1<AsyncReadStream,
+        DynamicBuffer_v1, MatchCondition, ReadHandler>& h) BOOST_ASIO_NOEXCEPT
+  {
+    return Associator<ReadHandler, DefaultCandidate>::get(h.handler_);
+  }
+
+  static BOOST_ASIO_AUTO_RETURN_TYPE_PREFIX2(
+      typename Associator<ReadHandler, DefaultCandidate>::type)
+  get(const detail::read_until_match_op_v1<AsyncReadStream,
         DynamicBuffer_v1, MatchCondition, ReadHandler>& h,
-      const DefaultCandidate& c = DefaultCandidate()) BOOST_ASIO_NOEXCEPT
+      const DefaultCandidate& c) BOOST_ASIO_NOEXCEPT
+    BOOST_ASIO_AUTO_RETURN_TYPE_SUFFIX((
+      Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c)))
   {
     return Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c);
   }
@@ -1992,12 +2049,12 @@ struct associator<Associator,
 template <typename AsyncReadStream,
     typename DynamicBuffer_v1, typename MatchCondition,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      std::size_t)) ReadHandler>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(ReadHandler,
+      std::size_t)) ReadToken>
+BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(ReadToken,
     void (boost::system::error_code, std::size_t))
 async_read_until(AsyncReadStream& s,
     BOOST_ASIO_MOVE_ARG(DynamicBuffer_v1) buffers,
-    MatchCondition match_condition, BOOST_ASIO_MOVE_ARG(ReadHandler) handler,
+    MatchCondition match_condition, BOOST_ASIO_MOVE_ARG(ReadToken) token,
     typename constraint<
       is_match_condition<MatchCondition>::value
     >::type,
@@ -2007,71 +2064,90 @@ async_read_until(AsyncReadStream& s,
     typename constraint<
       !is_dynamic_buffer_v2<typename decay<DynamicBuffer_v1>::type>::value
     >::type)
+  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
+    async_initiate<ReadToken,
+      void (boost::system::error_code, std::size_t)>(
+        declval<detail::initiate_async_read_until_match_v1<AsyncReadStream> >(),
+        token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v1)(buffers),
+        match_condition)))
 {
-  return async_initiate<ReadHandler,
+  return async_initiate<ReadToken,
     void (boost::system::error_code, std::size_t)>(
-      detail::initiate_async_read_until_match_v1<AsyncReadStream>(s), handler,
-      BOOST_ASIO_MOVE_CAST(DynamicBuffer_v1)(buffers), match_condition);
+      detail::initiate_async_read_until_match_v1<AsyncReadStream>(s),
+      token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v1)(buffers),
+      match_condition);
 }
 
 #if !defined(BOOST_ASIO_NO_IOSTREAM)
 
 template <typename AsyncReadStream, typename Allocator,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      std::size_t)) ReadHandler>
-inline BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(ReadHandler,
+      std::size_t)) ReadToken>
+inline BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(ReadToken,
     void (boost::system::error_code, std::size_t))
 async_read_until(AsyncReadStream& s,
     boost::asio::basic_streambuf<Allocator>& b,
-    char delim, BOOST_ASIO_MOVE_ARG(ReadHandler) handler)
+    char delim, BOOST_ASIO_MOVE_ARG(ReadToken) token)
+  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
+    async_read_until(s, basic_streambuf_ref<Allocator>(b),
+        delim, BOOST_ASIO_MOVE_CAST(ReadToken)(token))))
 {
   return async_read_until(s, basic_streambuf_ref<Allocator>(b),
-      delim, BOOST_ASIO_MOVE_CAST(ReadHandler)(handler));
+      delim, BOOST_ASIO_MOVE_CAST(ReadToken)(token));
 }
 
 template <typename AsyncReadStream, typename Allocator,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      std::size_t)) ReadHandler>
-inline BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(ReadHandler,
+      std::size_t)) ReadToken>
+inline BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(ReadToken,
     void (boost::system::error_code, std::size_t))
 async_read_until(AsyncReadStream& s,
     boost::asio::basic_streambuf<Allocator>& b,
     BOOST_ASIO_STRING_VIEW_PARAM delim,
-    BOOST_ASIO_MOVE_ARG(ReadHandler) handler)
+    BOOST_ASIO_MOVE_ARG(ReadToken) token)
+  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
+    async_read_until(s, basic_streambuf_ref<Allocator>(b),
+        delim, BOOST_ASIO_MOVE_CAST(ReadToken)(token))))
 {
   return async_read_until(s, basic_streambuf_ref<Allocator>(b),
-      delim, BOOST_ASIO_MOVE_CAST(ReadHandler)(handler));
+      delim, BOOST_ASIO_MOVE_CAST(ReadToken)(token));
 }
 
 #if defined(BOOST_ASIO_HAS_BOOST_REGEX)
 
 template <typename AsyncReadStream, typename Allocator,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      std::size_t)) ReadHandler>
-inline BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(ReadHandler,
+      std::size_t)) ReadToken>
+inline BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(ReadToken,
     void (boost::system::error_code, std::size_t))
 async_read_until(AsyncReadStream& s,
     boost::asio::basic_streambuf<Allocator>& b, const boost::regex& expr,
-    BOOST_ASIO_MOVE_ARG(ReadHandler) handler)
+    BOOST_ASIO_MOVE_ARG(ReadToken) token)
+  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
+    async_read_until(s, basic_streambuf_ref<Allocator>(b),
+        expr, BOOST_ASIO_MOVE_CAST(ReadToken)(token))))
 {
   return async_read_until(s, basic_streambuf_ref<Allocator>(b),
-      expr, BOOST_ASIO_MOVE_CAST(ReadHandler)(handler));
+      expr, BOOST_ASIO_MOVE_CAST(ReadToken)(token));
 }
 
 #endif // defined(BOOST_ASIO_HAS_BOOST_REGEX)
 
 template <typename AsyncReadStream, typename Allocator, typename MatchCondition,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      std::size_t)) ReadHandler>
-inline BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(ReadHandler,
+      std::size_t)) ReadToken>
+inline BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(ReadToken,
     void (boost::system::error_code, std::size_t))
 async_read_until(AsyncReadStream& s,
     boost::asio::basic_streambuf<Allocator>& b,
-    MatchCondition match_condition, BOOST_ASIO_MOVE_ARG(ReadHandler) handler,
+    MatchCondition match_condition, BOOST_ASIO_MOVE_ARG(ReadToken) token,
     typename constraint<is_match_condition<MatchCondition>::value>::type)
+  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
+    async_read_until(s, basic_streambuf_ref<Allocator>(b),
+        match_condition, BOOST_ASIO_MOVE_CAST(ReadToken)(token))))
 {
   return async_read_until(s, basic_streambuf_ref<Allocator>(b),
-      match_condition, BOOST_ASIO_MOVE_CAST(ReadHandler)(handler));
+      match_condition, BOOST_ASIO_MOVE_CAST(ReadToken)(token));
 }
 
 #endif // !defined(BOOST_ASIO_NO_IOSTREAM)
@@ -2344,10 +2420,20 @@ struct associator<Associator,
     DefaultCandidate>
   : Associator<ReadHandler, DefaultCandidate>
 {
-  static typename Associator<ReadHandler, DefaultCandidate>::type get(
-      const detail::read_until_delim_op_v2<AsyncReadStream,
+  static typename Associator<ReadHandler, DefaultCandidate>::type
+  get(const detail::read_until_delim_op_v2<AsyncReadStream,
+        DynamicBuffer_v2, ReadHandler>& h) BOOST_ASIO_NOEXCEPT
+  {
+    return Associator<ReadHandler, DefaultCandidate>::get(h.handler_);
+  }
+
+  static BOOST_ASIO_AUTO_RETURN_TYPE_PREFIX2(
+      typename Associator<ReadHandler, DefaultCandidate>::type)
+  get(const detail::read_until_delim_op_v2<AsyncReadStream,
         DynamicBuffer_v2, ReadHandler>& h,
-      const DefaultCandidate& c = DefaultCandidate()) BOOST_ASIO_NOEXCEPT
+      const DefaultCandidate& c) BOOST_ASIO_NOEXCEPT
+    BOOST_ASIO_AUTO_RETURN_TYPE_SUFFIX((
+      Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c)))
   {
     return Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c);
   }
@@ -2357,19 +2443,24 @@ struct associator<Associator,
 
 template <typename AsyncReadStream, typename DynamicBuffer_v2,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      std::size_t)) ReadHandler>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(ReadHandler,
+      std::size_t)) ReadToken>
+BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(ReadToken,
     void (boost::system::error_code, std::size_t))
 async_read_until(AsyncReadStream& s, DynamicBuffer_v2 buffers,
-    char delim, BOOST_ASIO_MOVE_ARG(ReadHandler) handler,
+    char delim, BOOST_ASIO_MOVE_ARG(ReadToken) token,
     typename constraint<
       is_dynamic_buffer_v2<DynamicBuffer_v2>::value
     >::type)
+  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
+    async_initiate<ReadToken,
+      void (boost::system::error_code, std::size_t)>(
+        declval<detail::initiate_async_read_until_delim_v2<AsyncReadStream> >(),
+        token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v2)(buffers), delim)))
 {
-  return async_initiate<ReadHandler,
+  return async_initiate<ReadToken,
     void (boost::system::error_code, std::size_t)>(
       detail::initiate_async_read_until_delim_v2<AsyncReadStream>(s),
-      handler, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v2)(buffers), delim);
+      token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v2)(buffers), delim);
 }
 
 namespace detail
@@ -2650,10 +2741,20 @@ struct associator<Associator,
     DefaultCandidate>
   : Associator<ReadHandler, DefaultCandidate>
 {
-  static typename Associator<ReadHandler, DefaultCandidate>::type get(
-      const detail::read_until_delim_string_op_v2<AsyncReadStream,
+  static typename Associator<ReadHandler, DefaultCandidate>::type
+  get(const detail::read_until_delim_string_op_v2<AsyncReadStream,
+        DynamicBuffer_v2, ReadHandler>& h) BOOST_ASIO_NOEXCEPT
+  {
+    return Associator<ReadHandler, DefaultCandidate>::get(h.handler_);
+  }
+
+  static BOOST_ASIO_AUTO_RETURN_TYPE_PREFIX2(
+      typename Associator<ReadHandler, DefaultCandidate>::type)
+  get(const detail::read_until_delim_string_op_v2<AsyncReadStream,
         DynamicBuffer_v2, ReadHandler>& h,
-      const DefaultCandidate& c = DefaultCandidate()) BOOST_ASIO_NOEXCEPT
+      const DefaultCandidate& c) BOOST_ASIO_NOEXCEPT
+    BOOST_ASIO_AUTO_RETURN_TYPE_SUFFIX((
+      Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c)))
   {
     return Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c);
   }
@@ -2664,20 +2765,27 @@ struct associator<Associator,
 template <typename AsyncReadStream,
     typename DynamicBuffer_v2,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      std::size_t)) ReadHandler>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(ReadHandler,
+      std::size_t)) ReadToken>
+BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(ReadToken,
     void (boost::system::error_code, std::size_t))
 async_read_until(AsyncReadStream& s,
     DynamicBuffer_v2 buffers, BOOST_ASIO_STRING_VIEW_PARAM delim,
-    BOOST_ASIO_MOVE_ARG(ReadHandler) handler,
+    BOOST_ASIO_MOVE_ARG(ReadToken) token,
     typename constraint<
       is_dynamic_buffer_v2<DynamicBuffer_v2>::value
     >::type)
+  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
+    async_initiate<ReadToken,
+      void (boost::system::error_code, std::size_t)>(
+        declval<detail::initiate_async_read_until_delim_string_v2<
+          AsyncReadStream> >(),
+        token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v2)(buffers),
+        static_cast<std::string>(delim))))
 {
-  return async_initiate<ReadHandler,
+  return async_initiate<ReadToken,
     void (boost::system::error_code, std::size_t)>(
       detail::initiate_async_read_until_delim_string_v2<AsyncReadStream>(s),
-      handler, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v2)(buffers),
+      token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v2)(buffers),
       static_cast<std::string>(delim));
 }
 
@@ -2965,10 +3073,20 @@ struct associator<Associator,
     DefaultCandidate>
   : Associator<ReadHandler, DefaultCandidate>
 {
-  static typename Associator<ReadHandler, DefaultCandidate>::type get(
-      const detail::read_until_expr_op_v2<AsyncReadStream,
+  static typename Associator<ReadHandler, DefaultCandidate>::type
+  get(const detail::read_until_expr_op_v2<AsyncReadStream,
+        DynamicBuffer_v2, RegEx, ReadHandler>& h) BOOST_ASIO_NOEXCEPT
+  {
+    return Associator<ReadHandler, DefaultCandidate>::get(h.handler_);
+  }
+
+  static BOOST_ASIO_AUTO_RETURN_TYPE_PREFIX2(
+      typename Associator<ReadHandler, DefaultCandidate>::type)
+  get(const detail::read_until_expr_op_v2<AsyncReadStream,
         DynamicBuffer_v2, RegEx, ReadHandler>& h,
-      const DefaultCandidate& c = DefaultCandidate()) BOOST_ASIO_NOEXCEPT
+      const DefaultCandidate& c) BOOST_ASIO_NOEXCEPT
+    BOOST_ASIO_AUTO_RETURN_TYPE_SUFFIX((
+      Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c)))
   {
     return Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c);
   }
@@ -2978,19 +3096,24 @@ struct associator<Associator,
 
 template <typename AsyncReadStream, typename DynamicBuffer_v2,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      std::size_t)) ReadHandler>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(ReadHandler,
+      std::size_t)) ReadToken>
+BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(ReadToken,
     void (boost::system::error_code, std::size_t))
 async_read_until(AsyncReadStream& s, DynamicBuffer_v2 buffers,
-    const boost::regex& expr, BOOST_ASIO_MOVE_ARG(ReadHandler) handler,
+    const boost::regex& expr, BOOST_ASIO_MOVE_ARG(ReadToken) token,
     typename constraint<
       is_dynamic_buffer_v2<DynamicBuffer_v2>::value
     >::type)
+  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
+    async_initiate<ReadToken,
+      void (boost::system::error_code, std::size_t)>(
+        declval<detail::initiate_async_read_until_expr_v2<AsyncReadStream> >(),
+        token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v2)(buffers), expr)))
 {
-  return async_initiate<ReadHandler,
+  return async_initiate<ReadToken,
     void (boost::system::error_code, std::size_t)>(
       detail::initiate_async_read_until_expr_v2<AsyncReadStream>(s),
-      handler, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v2)(buffers), expr);
+      token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v2)(buffers), expr);
 }
 
 #endif // defined(BOOST_ASIO_HAS_BOOST_REGEX)
@@ -3275,10 +3398,20 @@ struct associator<Associator,
     DefaultCandidate>
   : Associator<ReadHandler, DefaultCandidate>
 {
-  static typename Associator<ReadHandler, DefaultCandidate>::type get(
-      const detail::read_until_match_op_v2<AsyncReadStream,
+  static typename Associator<ReadHandler, DefaultCandidate>::type
+  get(const detail::read_until_match_op_v2<AsyncReadStream,
+        DynamicBuffer_v2, MatchCondition, ReadHandler>& h) BOOST_ASIO_NOEXCEPT
+  {
+    return Associator<ReadHandler, DefaultCandidate>::get(h.handler_);
+  }
+
+  static BOOST_ASIO_AUTO_RETURN_TYPE_PREFIX2(
+      typename Associator<ReadHandler, DefaultCandidate>::type)
+  get(const detail::read_until_match_op_v2<AsyncReadStream,
         DynamicBuffer_v2, MatchCondition, ReadHandler>& h,
-      const DefaultCandidate& c = DefaultCandidate()) BOOST_ASIO_NOEXCEPT
+      const DefaultCandidate& c) BOOST_ASIO_NOEXCEPT
+    BOOST_ASIO_AUTO_RETURN_TYPE_SUFFIX((
+      Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c)))
   {
     return Associator<ReadHandler, DefaultCandidate>::get(h.handler_, c);
   }
@@ -3289,22 +3422,29 @@ struct associator<Associator,
 template <typename AsyncReadStream,
     typename DynamicBuffer_v2, typename MatchCondition,
     BOOST_ASIO_COMPLETION_TOKEN_FOR(void (boost::system::error_code,
-      std::size_t)) ReadHandler>
-BOOST_ASIO_INITFN_AUTO_RESULT_TYPE(ReadHandler,
+      std::size_t)) ReadToken>
+BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_PREFIX(ReadToken,
     void (boost::system::error_code, std::size_t))
 async_read_until(AsyncReadStream& s, DynamicBuffer_v2 buffers,
-    MatchCondition match_condition, BOOST_ASIO_MOVE_ARG(ReadHandler) handler,
+    MatchCondition match_condition, BOOST_ASIO_MOVE_ARG(ReadToken) token,
     typename constraint<
       is_match_condition<MatchCondition>::value
     >::type,
     typename constraint<
       is_dynamic_buffer_v2<DynamicBuffer_v2>::value
     >::type)
+  BOOST_ASIO_INITFN_AUTO_RESULT_TYPE_SUFFIX((
+    async_initiate<ReadToken,
+      void (boost::system::error_code, std::size_t)>(
+        declval<detail::initiate_async_read_until_match_v2<AsyncReadStream> >(),
+        token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v2)(buffers),
+        match_condition)))
 {
-  return async_initiate<ReadHandler,
+  return async_initiate<ReadToken,
     void (boost::system::error_code, std::size_t)>(
-      detail::initiate_async_read_until_match_v2<AsyncReadStream>(s), handler,
-      BOOST_ASIO_MOVE_CAST(DynamicBuffer_v2)(buffers), match_condition);
+      detail::initiate_async_read_until_match_v2<AsyncReadStream>(s),
+      token, BOOST_ASIO_MOVE_CAST(DynamicBuffer_v2)(buffers),
+      match_condition);
 }
 
 #endif // !defined(BOOST_ASIO_NO_EXTENSIONS)

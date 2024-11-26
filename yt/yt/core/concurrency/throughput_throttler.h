@@ -104,6 +104,8 @@ struct IReconfigurableThroughputThrottler
     //! See TThroughputThrottlerConfig::Limit.
     virtual void SetLimit(std::optional<double> limit) = 0;
 
+    virtual std::optional<double> GetLimit() const = 0;
+
     //! Returns a future that is set when throttler has become available.
     virtual TFuture<void> GetAvailableFuture() = 0;
 
@@ -139,7 +141,7 @@ IReconfigurableThroughputThrottlerPtr CreateReconfigurableThroughputThrottler(
 IReconfigurableThroughputThrottlerPtr CreateNamedReconfigurableThroughputThrottler(
     TThroughputThrottlerConfigPtr config,
     const TString& name,
-    NLogging::TLogger logger,
+    NLogging::TLogger logger = NLogging::TLogger(),
     NProfiling::TProfiler profiler = {});
 
 //! Returns a throttler that imposes no throughput limit.

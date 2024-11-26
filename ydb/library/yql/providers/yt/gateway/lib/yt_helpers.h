@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/providers/common/gateway/yql_provider_gateway.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/providers/common/gateway/yql_provider_gateway.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_op_settings.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_gateway.h>
 

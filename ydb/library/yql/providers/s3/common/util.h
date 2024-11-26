@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/string/builder.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NYql::NS3Util {
 

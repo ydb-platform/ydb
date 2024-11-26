@@ -77,6 +77,7 @@ struct TMetric {
 
     void Fill(TString& d, TSum* embedding, ui64& c)
     {
+        Y_ASSERT(c > 0);
         const auto count = static_cast<TSum>(std::exchange(c, 0));
         auto data = GetData(d.MutRef().data());
         for (auto& coord : data) {
@@ -184,19 +185,12 @@ struct TCalculation: TMetric {
     }
 };
 
-struct TStats {
-    ui64 Rows = 0;
-    ui64 Bytes = 0;
-};
-
 template <typename TMetric>
 ui32 FeedEmbedding(const TCalculation<TMetric>& calculation, std::span<const TString> clusters,
-                   const NTable::TRowState& row, NTable::TPos embeddingPos, TStats& stats)
+                   const NTable::TRowState& row, NTable::TPos embeddingPos)
 {
     Y_ASSERT(embeddingPos < row.Size());
     const auto embedding = row.Get(embeddingPos).AsRef();
-    stats.Rows += 1;
-    stats.Bytes += embedding.size(); // TODO(mbkkt) add some constant overhead?
     if (!calculation.IsExpectedSize(embedding)) {
         return std::numeric_limits<ui32>::max();
     }

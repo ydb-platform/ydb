@@ -2,7 +2,7 @@
 // experimental/basic_concurrent_channel.hpp
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 //
-// Copyright (c) 2003-2021 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+// Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -33,6 +33,67 @@ namespace detail {
 } // namespace detail
 
 /// A channel for messages.
+/**
+ * The basic_concurrent_channel class template is used for sending messages
+ * between different parts of the same application. A <em>message</em> is
+ * defined as a collection of arguments to be passed to a completion handler,
+ * and the set of messages supported by a channel is specified by its @c Traits
+ * and <tt>Signatures...</tt> template parameters. Messages may be sent and
+ * received using asynchronous or non-blocking synchronous operations.
+ *
+ * Unless customising the traits, applications will typically use the @c
+ * experimental::concurrent_channel alias template. For example:
+ * @code void send_loop(int i, steady_timer& timer,
+ *     concurrent_channel<void(error_code, int)>& ch)
+ * {
+ *   if (i < 10)
+ *   {
+ *     timer.expires_after(chrono::seconds(1));
+ *     timer.async_wait(
+ *         [i, &timer, &ch](error_code error)
+ *         {
+ *           if (!error)
+ *           {
+ *             ch.async_send(error_code(), i,
+ *                 [i, &timer, &ch](error_code error)
+ *                 {
+ *                   if (!error)
+ *                   {
+ *                     send_loop(i + 1, timer, ch);
+ *                   }
+ *                 });
+ *           }
+ *         });
+ *   }
+ *   else
+ *   {
+ *     ch.close();
+ *   }
+ * }
+ *
+ * void receive_loop(concurent_channel<void(error_code, int)>& ch)
+ * {
+ *   ch.async_receive(
+ *       [&ch](error_code error, int i)
+ *       {
+ *         if (!error)
+ *         {
+ *           std::cout << "Received " << i << "\n";
+ *           receive_loop(ch);
+ *         }
+ *       });
+ * } @endcode
+ *
+ * @par Thread Safety
+ * @e Distinct @e objects: Safe.@n
+ * @e Shared @e objects: Safe.
+ *
+ * The basic_concurrent_channel class template is thread-safe, and would
+ * typically be used for passing messages between application code that run on
+ * different threads. Consider using @ref basic_channel, and its alias template
+ * @c experimental::channel, to pass messages between code running in a single
+ * thread or on the same strand.
+ */
 template <typename Executor, typename Traits, typename... Signatures>
 class basic_concurrent_channel
 #if !defined(GENERATING_DOCUMENTATION)
@@ -188,7 +249,7 @@ public:
     : service_(other.service_),
       executor_(other.executor_)
   {
-    service_->move_construct(impl_, *other.service_, other.impl_);
+    service_->move_construct(impl_, other.impl_);
   }
 
   /// Move-assign a basic_concurrent_channel from another.
@@ -229,7 +290,7 @@ public:
   }
 
   /// Get the executor associated with the object.
-  executor_type get_executor() BOOST_ASIO_NOEXCEPT
+  const executor_type& get_executor() BOOST_ASIO_NOEXCEPT
   {
     return executor_;
   }
@@ -261,7 +322,7 @@ public:
   /// Cancel all asynchronous operations waiting on the channel.
   /**
    * All outstanding send operations will complete with the error
-   * @c boost::asio::experimental::error::channel_canceld. Outstanding receive
+   * @c boost::asio::experimental::error::channel_cancelled. Outstanding receive
    * operations complete with the result as determined by the channel traits.
    */
   void cancel()
@@ -366,7 +427,7 @@ private:
     {
     }
 
-    executor_type get_executor() const BOOST_ASIO_NOEXCEPT
+    const executor_type& get_executor() const BOOST_ASIO_NOEXCEPT
     {
       return self_->get_executor();
     }
@@ -395,7 +456,7 @@ private:
     {
     }
 
-    executor_type get_executor() const BOOST_ASIO_NOEXCEPT
+    const executor_type& get_executor() const BOOST_ASIO_NOEXCEPT
     {
       return self_->get_executor();
     }

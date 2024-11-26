@@ -18,8 +18,8 @@ PEERDIR(
 END()
 
 RECURSE_ROOT_RELATIVE(
-    ydb/library/yql/udfs/common/url_base
-    ydb/library/yql/udfs/common/ip_base
+    yql/essentials/udfs/common/url_base
+    yql/essentials/udfs/common/ip_base
 )
 
 RECURSE_FOR_TESTS(

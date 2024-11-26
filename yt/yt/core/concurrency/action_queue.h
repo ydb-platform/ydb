@@ -84,21 +84,13 @@ IInvokerPtr CreateFixedPriorityInvoker(
 //! Creates an invoker that executes all callbacks in the
 //! context of #underlyingInvoker allowing up to #maxConcurrentInvocations
 //! outstanding requests to the latter.
-IInvokerPtr CreateBoundedConcurrencyInvoker(
+IBoundedConcurrencyInvokerPtr CreateBoundedConcurrencyInvoker(
     IInvokerPtr underlyingInvoker,
     int maxConcurrentInvocations);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 ISuspendableInvokerPtr CreateSuspendableInvoker(IInvokerPtr underlyingInvoker);
-
-////////////////////////////////////////////////////////////////////////////////
-
-//! Creates an invoker that creates a codicil guard with a given string before each
-//! callback invocation.
-IInvokerPtr CreateCodicilGuardedInvoker(
-    IInvokerPtr underlyingInvoker,
-    TString codicil);
 
 ////////////////////////////////////////////////////////////////////////////////
 

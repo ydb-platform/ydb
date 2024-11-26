@@ -105,7 +105,7 @@ sudo usermod -aG disk ydb
   sudo chown -R root:bin /opt/ydb
   ```
 
-## Prepare and format disks on each server {#prepare-disks}
+## Prepare and clear disks on each server {#prepare-disks}
 
 {% include [_includes/storage-device-requirements.md](../../_includes/storage-device-requirements.md) %}
 
@@ -131,7 +131,13 @@ sudo usermod -aG disk ydb
 
   To streamline the next setup step, it makes sense to use the same disk labels on cluster servers having the same disk configuration.
 
-2. Format the disk by this command built-in the `ydbd` executable:
+2. Clear the disk by this command built-in the `ydbd` executable:
+
+{% note warning %}
+
+After executing this command, data on the disk will be erased.
+
+{% endnote %}
 
   ```bash
   sudo LD_LIBRARY_PATH=/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01

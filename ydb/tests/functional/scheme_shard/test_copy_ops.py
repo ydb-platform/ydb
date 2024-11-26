@@ -4,14 +4,14 @@ import os
 from hamcrest import assert_that, has_length, has_property, equal_to
 
 from ydb.tests.library.common.protobuf_ss import SchemeDescribeRequest
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
 class TestSchemeShardCopyOps(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = kikimr_cluster_factory()
+        cls.cluster = KiKiMR()
         cls.cluster.start()
 
         host = cls.cluster.nodes[1].host

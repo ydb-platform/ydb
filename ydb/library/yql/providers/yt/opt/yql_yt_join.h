@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_join.h>
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/ast/yql_expr_builder.h>
+#include <yql/essentials/core/yql_join.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr_builder.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/hash_set.h>

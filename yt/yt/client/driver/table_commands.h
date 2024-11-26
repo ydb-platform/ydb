@@ -46,8 +46,8 @@ private:
     NYPath::TRichYPath Path;
     NYTree::INodePtr TableReader;
 
-    std::optional<TString> PartIndexColumnName;
-    std::optional<TString> DataColumnName;
+    std::optional<std::string> PartIndexColumnName;
+    std::optional<std::string> DataColumnName;
 
     i64 StartPartIndex;
     i64 Offset;
@@ -375,7 +375,7 @@ public:
 private:
     NYTree::INodePtr TableWriter;
     NYPath::TRichYPath Path;
-    std::optional<std::vector<TString>> ColumnNames;
+    std::optional<std::vector<std::string>> ColumnNames;
     bool Versioned;
     NTableClient::TRetentionConfigPtr RetentionConfig;
 
@@ -400,7 +400,7 @@ public:
 private:
     NYPath::TRichYPath Path;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
     bool HasResponseParameters() const override;
 };
 
@@ -451,7 +451,7 @@ public:
 private:
     NYTree::INodePtr TableWriter;
     NYPath::TRichYPath Path;
-    std::vector<TString> Locks;
+    std::vector<std::string> Locks;
     NTableClient::ELockType LockType;
 
     void DoExecute(ICommandContextPtr context) override;
@@ -585,7 +585,7 @@ public:
 private:
     NApi::TBackupManifestPtr Manifest;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -601,7 +601,26 @@ public:
 private:
     NApi::TBackupManifestPtr Manifest;
 
-    virtual void DoExecute(ICommandContextPtr context) override;
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TGetTableMountInfoCommandOptions
+{ };
+
+class TGetTableMountInfoCommand
+    : public TTypedCommand<TGetTableMountInfoCommandOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetTableMountInfoCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    NYTree::TYPath Path_;
+
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

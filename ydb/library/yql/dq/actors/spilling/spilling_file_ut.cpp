@@ -106,12 +106,12 @@ TBuffer CreateBlob(ui32 size, char symbol) {
     return blob;
 }
 
-TRope CreateRope(ui32 size, char symbol, ui32 chunkSize = 7) {
-    TRope result;
+TChunkedBuffer CreateRope(ui32 size, char symbol, ui32 chunkSize = 7) {
+    TChunkedBuffer result;
     while (size) {
         size_t count = std::min(size, chunkSize);
-        TString str(count, symbol);
-        result.Insert(result.End(), TRope{str});
+        auto str = std::make_shared<TString>(count, symbol);
+        result.Append(*str, str);
         size -= count;
     }
     return result;

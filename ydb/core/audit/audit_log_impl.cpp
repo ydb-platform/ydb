@@ -73,7 +73,7 @@ void WriteLog(const TString& log, const TVector<THolder<TLogBackend>>& logBacken
                 log.length()
             ));
         } catch (const yexception& e) {
-            LOG_W("WriteLog: unable to write audit log (error: " << e.what() << ")");
+            LOG_E("WriteLog: unable to write audit log (error: " << e.what() << ")");
         }
     }
 }
@@ -93,7 +93,8 @@ TString GetJsonLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
 
 TString GetJsonLogCompatibleLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
     const auto* msg = ev->Get();
-    NJsonWriter::TBuf json;
+    TStringStream ss;
+    NJsonWriter::TBuf json(NJsonWriter::HEM_DONT_ESCAPE_HTML, &ss);
     {
         auto obj = json.BeginObject();
         obj
@@ -107,7 +108,8 @@ TString GetJsonLogCompatibleLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {
         }
         json.EndObject();
     }
-    return json.Str();
+    ss << Endl;
+    return ss.Str();
 }
 
 TString GetTxtLog(const TEvAuditLog::TEvWriteAuditLog::TPtr& ev) {

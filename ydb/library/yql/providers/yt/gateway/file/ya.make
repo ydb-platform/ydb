@@ -13,24 +13,24 @@ PEERDIR(
     library/cpp/yson/node
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface
-    ydb/library/yql/core/file_storage
-    ydb/library/yql/core/file_storage/proto
-    ydb/library/yql/core/file_storage/http_download
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/public/udf
-    ydb/library/yql/utils
-    ydb/library/yql/utils/threading
-    ydb/library/yql/core
-    ydb/library/yql/core/expr_nodes
-    ydb/library/yql/core/type_ann
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/comp_nodes
-    ydb/library/yql/providers/common/gateway
-    ydb/library/yql/providers/common/mkql
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/providers/common/schema/expr
-    ydb/library/yql/providers/common/schema/mkql
-    ydb/library/yql/providers/result/expr_nodes
+    yql/essentials/core/file_storage
+    yql/essentials/core/file_storage/proto
+    yql/essentials/core/file_storage/http_download
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/public/udf
+    yql/essentials/utils
+    yql/essentials/utils/threading
+    yql/essentials/core
+    yql/essentials/core/expr_nodes
+    yql/essentials/core/type_ann
+    yql/essentials/providers/common/codec
+    yql/essentials/providers/common/comp_nodes
+    yql/essentials/providers/common/gateway
+    yql/essentials/providers/common/mkql
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/common/schema/expr
+    yql/essentials/providers/common/schema/mkql
+    yql/essentials/providers/result/expr_nodes
     ydb/library/yql/providers/yt/common
     ydb/library/yql/providers/yt/comp_nodes
     ydb/library/yql/providers/yt/expr_nodes
@@ -42,7 +42,7 @@ PEERDIR(
     ydb/library/yql/providers/yt/lib/schema
     ydb/library/yql/providers/yt/lib/yson_helpers
     ydb/library/yql/providers/yt/provider
-    ydb/library/yql/parser/pg_wrapper
+    yql/essentials/parser/pg_wrapper
 )
 
 YQL_LAST_ABI_VERSION()

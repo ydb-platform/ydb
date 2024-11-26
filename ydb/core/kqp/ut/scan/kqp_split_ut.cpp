@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 
@@ -326,9 +327,8 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                     collectedKeys->push_back(row.items(0).uint64_value());
                 }
 
-                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                 resp->Record.SetEnough(false);
-                resp->Record.SetSeqNo(record.GetSeqNo());
                 runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                 return true;
             }
@@ -401,7 +401,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             } else if (testActorType == ETestActorType::StreamLookup) {
                 InterceptStreamLookupActorPipeCache(MakePipePerNodeCacheID(false));
             }
-            
+
             if (providedServer) {
                 Server = providedServer;
             } else {
@@ -890,7 +890,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         );
 
         shim->ReadsReceived.WaitI();
-        
+
         UNIT_ASSERT_EQUAL(shards.size(), 1);
         auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 
@@ -937,7 +937,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         );
 
         shim->ReadsReceived.WaitI();
-        
+
         UNIT_ASSERT_EQUAL(shards.size(), 1);
         auto undelivery = MakeHolder<TEvPipeCache::TEvDeliveryProblem>(shards[0], true);
 

@@ -593,6 +593,29 @@ inline void ResetOnLoad(TMap& parameter)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Any T.
+template <class T>
+bool CompareValue(const T& lhs, const T& rhs);
+
+// TIntrusivePtr.
+template <class T>
+bool CompareValues(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs);
+
+// std::optional.
+template <class T>
+bool CompareValues(const std::optional<T>& lhs, const std::optional<T>& rhs);
+
+// std::vector.
+template <CStdVector T>
+bool CompareValues(const T& lhs, const T& rhs);
+
+// any map.
+template <CAnyMap T>
+bool CompareValues(const T& lhs, const T& rhs);
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Any T.
 template <class T>
 bool CompareValues(const T& lhs, const T& rhs)
 {
@@ -603,6 +626,7 @@ bool CompareValues(const T& lhs, const T& rhs)
     }
 }
 
+// TIntrusivePtr.
 template <class T>
 bool CompareValues(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs)
 {
@@ -611,10 +635,68 @@ bool CompareValues(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs)
             return rhs == lhs;
         }
 
-        return *lhs == *rhs;
+        return CompareValues(*lhs, *rhs);
     } else {
         return false;
     }
+}
+
+// std::optional.
+template <class T>
+bool CompareValues(const std::optional<T>& lhs, const std::optional<T>& rhs)
+{
+    if (lhs.has_value() != rhs.has_value()) {
+        return false;
+    }
+
+    if (!lhs.has_value()) {
+        return true;
+    }
+
+    return CompareValues(*lhs, *rhs);
+}
+
+// std::vector.
+template <CStdVector T>
+bool CompareValues(const T& lhs, const T& rhs)
+{
+    if (std::ssize(lhs) != std::ssize(rhs)) {
+        return false;
+    }
+
+    for (int idx = 0; idx < std::ssize(lhs); ++idx) {
+        if (!CompareValues(lhs[idx], rhs[idx])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// any map.
+template <CAnyMap T>
+bool CompareValues(const T& lhs, const T& rhs)
+{
+    if (std::ssize(lhs) != std::ssize(rhs)) {
+        return false;
+    }
+
+    for (const auto& [key, value] : lhs) {
+        auto rhsIt = rhs.find(key);
+        if (rhsIt == std::end(rhs)) {
+            return false;
+        }
+
+        if (!CompareValues(key, rhsIt->first)) {
+            return false;
+        }
+
+        if (!CompareValues(value, rhsIt->second)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 } // namespace NPrivate

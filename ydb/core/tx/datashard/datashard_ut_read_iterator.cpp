@@ -2274,7 +2274,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // now allow to continue read
         shouldDrop = false;
         TAutoPtr<TEvDataShard::TEvReadContinue> request = IEventHandle::Release<TEvDataShard::TEvReadContinue>(continueEvent);
-        UNIT_ASSERT_VALUES_EQUAL(request->ReadId, 1UL);
 
         const auto& table = helper.Tables["table-1"];
         runtime.SendToPipe(
@@ -2368,7 +2367,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // now allow to continue read and check we don't get extra read result with error
         shouldDrop = false;
         TAutoPtr<TEvDataShard::TEvReadContinue> request = IEventHandle::Release<TEvDataShard::TEvReadContinue>(continueEvent);
-        UNIT_ASSERT_VALUES_EQUAL(request->ReadId, 1UL);
 
         const auto& table = helper.Tables["table-1"];
         runtime.SendToPipe(
@@ -3145,8 +3143,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         // Read in a transaction.
         auto readRequest1 = helper.GetBaseReadRequest(tableName, 1);
         readRequest1->Record.SetLockTxId(lockTxId);
-        readRequest1->Record.MutableSnapshot()->SetStep(snapshot.Step);
-        readRequest1->Record.MutableSnapshot()->SetTxId(snapshot.TxId);
+        snapshot.Serialize(*readRequest1->Record.MutableSnapshot());
         AddKeyQuery(*readRequest1, {1, 1, 1});
 
         auto readResult1 = helper.SendRead(tableName, readRequest1.release());
@@ -3594,7 +3591,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             if (Commit)
                  expectedRowCount += writeCount * rowCount;
 
-            ui64 statRowCount = WaitTableStats(*runtime, tabletId, 0, expectedRowCount).GetTableStats().GetRowCount();
+            ui64 statRowCount = WaitTableStats(*runtime, tabletId, [expectedRowCount](const NKikimrTableStats::TTableStats& stats) {
+                return stats.GetRowCount() >= expectedRowCount;
+            }).GetTableStats().GetRowCount();
             UNIT_ASSERT_VALUES_EQUAL(statRowCount, expectedRowCount);
         }
     }
@@ -4022,7 +4021,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorSysTables) {
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorState) {
     Y_UNIT_TEST(ShouldCalculateQuota) {
-        NDataShard::TReadIteratorState state(TReadIteratorId({}, 0), TPathId(0, 0), {}, TRowVersion::Max(), true, {});
+        NDataShard::TReadIteratorState state(TReadIteratorId({}, 0), 0, TPathId(0, 0), {}, TRowVersion::Max(), true, {});
         state.Quota.Rows = 100;
         state.Quota.Bytes = 1000;
         state.ConsumeSeqNo(10, 100); // seqno1
@@ -4074,12 +4073,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorState) {
 Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
     Y_UNIT_TEST(CancelPageFaultedReadThenDropTable) {
         TPortManager pm;
-        NFake::TCaches caches;
-        caches.Shared = 1 /* bytes */;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetCacheParams(caches);
+            .SetUseRealThreads(false);
+        serverSettings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(0);
         TServer::TPtr server = new TServer(serverSettings);
 
         auto& runtime = *server->GetRuntime();
@@ -4164,18 +4161,17 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorPageFaults) {
 
     Y_UNIT_TEST(LocksNotLostOnPageFault) {
         TPortManager pm;
-        NFake::TCaches caches;
-        caches.Shared = 1 /* bytes */;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetCacheParams(caches);
+            .SetUseRealThreads(false);
+        serverSettings.AppConfig->MutableSharedCacheConfig()->SetMemoryLimit(0);
         TServer::TPtr server = new TServer(serverSettings);
 
         auto& runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NLog::PRI_INFO);
 
         InitRoot(server, sender);
 
@@ -4598,8 +4594,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
                 auto* msg = ev->Get();
                 if (!msg->Record.HasSnapshot()) {
                     Cerr << "... forcing read snapshot " << txVersion << Endl;
-                    msg->Record.MutableSnapshot()->SetStep(txVersion.Step);
-                    msg->Record.MutableSnapshot()->SetTxId(txVersion.TxId);
+                    txVersion.Serialize(*msg->Record.MutableSnapshot());
                 }
             }
         });
@@ -4781,6 +4776,189 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorLatency) {
         Cerr << "... read latency was " << readLatency << Endl;
         UNIT_ASSERT_C(readLatency < TDuration::MilliSeconds(100),
             "unexpected read latency " << readLatency);
+    }
+
+}
+
+Y_UNIT_TEST_SUITE(DataShardReadIteratorBatchMode) {
+
+    Y_UNIT_TEST(RangeFull) {
+        TTestHelper helper;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetHints(TEvDataShard::TEvRead::HINT_BATCH);
+        AddRangeQuery<ui32>(*request1, { }, true, { }, true);
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+            {1, 1, 1, 100},
+            {3, 3, 3, 300},
+            {5, 5, 5, 500},
+            {8, 0, 0, 800},
+            {8, 0, 1, 801},
+            {8, 1, 0, 802},
+            {8, 1, 1, 803},
+            {11, 11, 11, 1111},
+        });
+        UNIT_ASSERT(readResult1->Record.GetFinished());
+    }
+
+    Y_UNIT_TEST(RangeFromInclusive) {
+        TTestHelper helper;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetHints(TEvDataShard::TEvRead::HINT_BATCH);
+        AddRangeQuery<ui32>(*request1, { 8 }, true, { }, true);
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+            {8, 0, 0, 800},
+            {8, 0, 1, 801},
+            {8, 1, 0, 802},
+            {8, 1, 1, 803},
+            {11, 11, 11, 1111},
+        });
+        UNIT_ASSERT(readResult1->Record.GetFinished());
+    }
+
+    Y_UNIT_TEST(RangeFromNonInclusive) {
+        TTestHelper helper;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetHints(TEvDataShard::TEvRead::HINT_BATCH);
+        AddRangeQuery<ui32>(*request1, { 8 }, false, { }, true);
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+            {11, 11, 11, 1111},
+        });
+        UNIT_ASSERT(readResult1->Record.GetFinished());
+    }
+
+    Y_UNIT_TEST(RangeToInclusive) {
+        TTestHelper helper;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetHints(TEvDataShard::TEvRead::HINT_BATCH);
+        AddRangeQuery<ui32>(*request1, { }, true, { 8 }, true);
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+            {1, 1, 1, 100},
+            {3, 3, 3, 300},
+            {5, 5, 5, 500},
+            {8, 0, 0, 800},
+            {8, 0, 1, 801},
+            {8, 1, 0, 802},
+            {8, 1, 1, 803},
+        });
+        UNIT_ASSERT(readResult1->Record.GetFinished());
+    }
+
+    Y_UNIT_TEST(RangeToNonInclusive) {
+        TTestHelper helper;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetHints(TEvDataShard::TEvRead::HINT_BATCH);
+        AddRangeQuery<ui32>(*request1, { }, true, { 8 }, false);
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+            {1, 1, 1, 100},
+            {3, 3, 3, 300},
+            {5, 5, 5, 500},
+        });
+        UNIT_ASSERT(readResult1->Record.GetFinished());
+    }
+
+    Y_UNIT_TEST(MultipleRanges) {
+        TTestHelper helper;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetHints(TEvDataShard::TEvRead::HINT_BATCH);
+        AddRangeQuery<ui32>(*request1, { 1 }, true, { 1 }, true);
+        AddRangeQuery<ui32>(*request1, { 5 }, true, { 5 }, true);
+        AddRangeQuery<ui32>(*request1, { 3 }, true, { 3 }, true);
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+            {1, 1, 1, 100},
+            {5, 5, 5, 500},
+            {3, 3, 3, 300},
+        });
+        UNIT_ASSERT(readResult1->Record.GetFinished());
+    }
+
+    Y_UNIT_TEST(SelectingColumns) {
+        TTestHelper helper;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetHints(TEvDataShard::TEvRead::HINT_BATCH);
+        AddRangeQuery<ui32>(*request1, { }, true, { }, true);
+
+        std::vector<ui32> columns{ 4, 3 };
+        request1->Record.ClearColumns();
+        for (ui32 column : columns) {
+            request1->Record.AddColumns(column);
+        }
+
+        request1->Record.SetMaxRows(5);
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+            {100, 1},
+            {300, 3},
+            {500, 5},
+            {800, 0},
+            {801, 1},
+        }, columns);
+        UNIT_ASSERT(!readResult1->Record.GetFinished());
+        UNIT_ASSERT(readResult1->Record.GetLimitReached());
+
+        UNIT_ASSERT(readResult1->Record.HasContinuationToken());
+        NKikimrTxDataShard::TReadContinuationToken token;
+        UNIT_ASSERT(token.ParseFromString(readResult1->Record.GetContinuationToken()));
+        UNIT_ASSERT_VALUES_EQUAL(token.GetFirstUnprocessedQuery(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(token.GetLastProcessedKey(), TSerializedCellVec::Serialize(ToCells<ui32>({ 8, 0, 1 })));
+    }
+
+    Y_UNIT_TEST(ShouldHandleReadAck) {
+        TTestHelper helper;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetHints(TEvDataShard::TEvRead::HINT_BATCH);
+        AddRangeQuery<ui32>(*request1, { 1 }, true, { 8 }, true);
+
+        // limit quota
+        request1->Record.SetMaxRows(1);
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+            {1, 1, 1, 100},
+        });
+        UNIT_ASSERT(readResult1->Record.GetLimitReached());
+
+        helper.SendReadAck("table-1", readResult1->Record, 2, 10000);
+
+        auto readResult2 = helper.WaitReadResult();
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult2, {
+            {3, 3, 3, 300},
+            {5, 5, 5, 500},
+        });
+        UNIT_ASSERT(readResult2->Record.GetLimitReached());
+
+        helper.SendReadAck("table-1", readResult2->Record, 100, 10000);
+
+        auto readResult3 = helper.WaitReadResult();
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult3, {
+            {8, 0, 0, 800},
+            {8, 0, 1, 801},
+            {8, 1, 0, 802},
+            {8, 1, 1, 803},
+        });
+        UNIT_ASSERT(readResult3->Record.GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(readResult3->Record.GetReadId(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(readResult3->Record.GetSeqNo(), 3UL);
     }
 
 }

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "schemeshard.h"
 #include "schemeshard_types.h"
 #include "schemeshard_info_types.h"
 
@@ -11,7 +10,7 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 
 #include <ydb/library/actors/core/actorid.h>
 
@@ -23,21 +22,6 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 inline constexpr TStringBuf SYSTEM_COLUMN_PREFIX = "__ydb_";
-
-inline bool IsAllowedKeyType(NScheme::TTypeInfo typeInfo) {
-    switch (typeInfo.GetTypeId()) {
-        case NScheme::NTypeIds::Json:
-        case NScheme::NTypeIds::Yson:
-        case NScheme::NTypeIds::Float:
-        case NScheme::NTypeIds::Double:
-        case NScheme::NTypeIds::JsonDocument:
-            return false;
-        case NScheme::NTypeIds::Pg:
-            return NPg::TypeDescIsComparable(typeInfo.GetPgTypeDesc());
-        default:
-            return true;
-    }
-}
 
 inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames = false) {
     if (!allowSystemColumnNames && name.StartsWith(SYSTEM_COLUMN_PREFIX)) {
@@ -229,7 +213,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
 
         if (typeInfo.GetTypeId() != NScheme::NTypeIds::String) {
             status = NKikimrScheme::EStatus::StatusInvalidParameter;
-            error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo); 
+            error = TStringBuilder() << "Index column '" << indexColumnName << "' expected type 'String' but got " << NScheme::TypeName(typeInfo);
             return false;
         }
     } else if (!IsCompatibleKeyTypes(baseColumnTypes, implTableColumns, uniformTable, error)) {

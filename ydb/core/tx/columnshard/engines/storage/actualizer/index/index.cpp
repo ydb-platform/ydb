@@ -51,4 +51,16 @@ void TGranuleActualizationIndex::Start() {
     Actualizers.emplace_back(SchemeActualizer);
 }
 
+std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataRequests(
+    const THashMap<ui64, TPortionInfo::TPtr>& portions) {
+    if (!TieringActualizer) {
+        return {};
+    }
+    auto req = TieringActualizer->BuildMetadataRequest(PathId, portions, TieringActualizer);
+    if (!req) {
+        return {};
+    }
+    return { *req };
+}
+
 }

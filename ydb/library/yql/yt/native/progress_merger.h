@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_execution.h>
-#include <ydb/library/yql/core/progress_merger/progress_merger.h>
+#include <yql/essentials/core/yql_execution.h>
+#include <yql/essentials/core/progress_merger/progress_merger.h>
 
 #include <library/cpp/yson/writer.h>
 

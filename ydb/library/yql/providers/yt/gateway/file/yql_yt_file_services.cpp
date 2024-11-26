@@ -1,6 +1,6 @@
 #include "yql_yt_file_services.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 #include <util/system/guard.h>
 #include <util/system/fs.h>
@@ -45,7 +45,7 @@ TString TYtFileServices::GetTablePath(TStringBuf cluster, TStringBuf table, bool
     if (auto dirPtr = TablesDirMapping.FindPtr(tablePrefix)) {
         return TFsPath(*dirPtr) / TString(table).append(".txt");
     }
-    ythrow yexception() << "Table not found: " << cluster << '.' << table;
+    ythrow yexception() << "Table \"" << table << "\" does not exist";
 }
 
 void TYtFileServices::LockPath(const TString& path, const TString& fullTableName) {

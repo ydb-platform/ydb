@@ -70,9 +70,8 @@ TEST(TFramingTest, FramingSimple)
 {
     auto server = CreateFramingEchoServer();
 
-    THttpRequest request;
-    request.Connect(server->GetAddress());
-    auto requestStream = request.StartRequest(THttpHeader("POST", "concatenate"));
+    THttpRequest request("0-0-0-0", server->GetAddress(), THttpHeader("POST", "concatenate"), TDuration::Zero());
+    auto requestStream = request.StartRequest();
     *requestStream << "Some funny data";
     request.FinishRequest();
     auto response = request.GetResponseStream()->ReadAll();
@@ -83,9 +82,8 @@ TEST(TFramingTest, FramingLarge)
 {
     auto server = CreateFramingEchoServer();
 
-    THttpRequest request;
-    request.Connect(server->GetAddress());
-    auto requestStream = request.StartRequest(THttpHeader("POST", "concatenate"));
+    THttpRequest request("0-0-0-0", server->GetAddress(), THttpHeader("POST", "concatenate"), TDuration::Zero());
+    auto requestStream = request.StartRequest();
     auto data = TString(100000, 'x');
     *requestStream << data;
     request.FinishRequest();

@@ -4,6 +4,7 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <library/cpp/resource/resource.h>
+#include <library/cpp/streams/factory/open_by_signature/factory.h>
 #include <util/stream/file.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
@@ -28,7 +29,7 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
     if (type) {
         return result;
     }
-    auto resourcePrefix = Params.GetWorkloadName() + "/";
+    auto resourcePrefix = "resfs/file/" + Params.GetWorkloadName() + "/";
     SubstGlobal(resourcePrefix, "-", "");
     resourcePrefix.to_lower();
     TVector<TString> queries;
@@ -56,7 +57,7 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
         }
     } else {
         NResource::TResources qresources;
-        const auto prefix = resourcePrefix + ToString(Params.GetSyntax()) + "/q";
+        const auto prefix = resourcePrefix + "queries/" + ToString(Params.GetSyntax()) + "/q";
         NResource::FindMatch(prefix, &qresources);
         for (const auto& r: qresources) {
             ui32 num;
@@ -75,9 +76,13 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
         result.emplace_back();
         result.back().Query = query;
         if (Params.GetCheckCanonical()) {
-            const auto key = "resfs/file/" + resourcePrefix + "s" + ToString(Params.GetScale()) + "_canonical/q" + ToString(&query - queries.data()) + ".result";
+            const auto key = resourcePrefix + "s" + ToString(Params.GetScale()) + "_canonical/q" + ToString(&query - queries.data()) + ".result";
             if (NResource::Has(key)) {
                 result.back().ExpectedResult = NResource::Find(key);
+            } else if (NResource::Has(key + ".gz")) {
+                const auto data = NResource::Find(key + ".gz");
+                auto input = OpenOwnedMaybeCompressedInput(MakeHolder<TStringInput>(data));
+                result.back().ExpectedResult = input->ReadAll();
             }
         }
     }
@@ -87,10 +92,12 @@ TQueryInfoList TTpcBaseWorkloadGenerator::GetWorkload(int type) {
 void TTpcBaseWorkloadGenerator::PatchQuery(TString& query) const {
     SubstGlobal(query, "{% include 'header.sql.jinja' %}", GetHeader(query));
     SubstGlobal(query, "{path}", Params.GetFullTableName(nullptr) + "/");
-    for (const auto& table: GetTablesList()) {
+    const auto tableJson = GetTablesJson();
+    for (const auto& table: tableJson["tables"].GetArray()) {
+        const auto& tableName = table["name"].GetString();
         SubstGlobal(query, 
-            TStringBuilder() << "{{" << table << "}}", 
-            TStringBuilder() << Params.GetTablePathQuote(Params.GetSyntax()) << Params.GetPath() << "/" << table << Params.GetTablePathQuote(Params.GetSyntax())
+            TStringBuilder() << "{{" << tableName << "}}", 
+            TStringBuilder() << Params.GetTablePathQuote(Params.GetSyntax()) << Params.GetPath() << "/" << tableName << Params.GetTablePathQuote(Params.GetSyntax())
         );
     }
 }
@@ -164,6 +171,8 @@ void TTpcBaseWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComm
             .DefaultValue(Scale).StoreResult(&Scale);
         opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9) because YDB supports only this type.")
             .StoreResult(&FloatMode).DefaultValue(FloatMode);
+        opts.AddLongOption('c', "check-canonical", "Use deterministic queries and check results with canonical ones.")
+            .NoArgument().StoreTrue(&CheckCanonical);
         break;
     case TWorkloadParams::ECommandType::Init:
         opts.AddLongOption("float-mode", "Float mode. Can be float, decimal or decimal_ydb. If set to 'float' - float will be used, 'decimal' means that decimal will be used with canonical size and 'decimal_ydb' means that all floats will be converted to decimal(22,9) because YDB supports only this type.")

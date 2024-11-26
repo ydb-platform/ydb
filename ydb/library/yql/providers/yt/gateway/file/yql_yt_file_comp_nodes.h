@@ -2,9 +2,9 @@
 
 #include "yql_yt_file_services.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/public/udf/udf_value.h>
 
 #include <library/cpp/yson/node/node.h>
 

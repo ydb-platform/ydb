@@ -14,6 +14,9 @@ protected:
 
     virtual NModifications::TOperationParsingResult DoBuildPatchFromSettings(
         const NYql::TObjectSettingsImpl& settings, TInternalModificationContext& context) const override;
+
+    virtual std::vector<NModifications::TModificationStage::TPtr> GetPreconditions(
+        const std::vector<TSecret>& objects, const IOperationsManager::TInternalModificationContext& context) const override;
 };
 
 class TAccessManager: public NModifications::TGenericOperationsManager<TAccess> {

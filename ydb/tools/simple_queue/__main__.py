@@ -377,18 +377,17 @@ class YdbQueue(object):
         )
 
     def move_iterator(self, it, callback):
-        try:
-            next_f = next(it)
-            next_f.add_done_callback(lambda x: callback(it, x))
-        except StopIteration:
-            return
+        next_f = next(it)
+        next_f.add_done_callback(lambda x: callback(it, x))
 
     def on_read_table_chunk(self, it, f):
         try:
             f.result()
             self.stats.save_event(EventKind.READ_TABLE_CHUNK)
         except ydb.Error as e:
-            self.stats.save_event(EventKind.READ_TABLE_CHUNK, e)
+            self.stats.save_event(EventKind.READ_TABLE_CHUNK, e.status)
+        except StopIteration:
+            return
         self.move_iterator(it, self.on_read_table_chunk)
 
     def on_scan_query_chunk(self, it, f):
@@ -396,7 +395,9 @@ class YdbQueue(object):
             f.result()
             self.stats.save_event(EventKind.SCAN_QUERY_CHUNK)
         except ydb.Error as e:
-            self.stats.save_event(EventKind.SCAN_QUERY_CHUNK, e)
+            self.stats.save_event(EventKind.SCAN_QUERY_CHUNK, e.status)
+        except StopIteration:
+            return
 
         self.move_iterator(it, self.on_scan_query_chunk)
 

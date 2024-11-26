@@ -1,10 +1,10 @@
 #pragma once
 
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/public/udf/udf_data_type.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 

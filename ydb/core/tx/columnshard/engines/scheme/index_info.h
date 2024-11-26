@@ -15,6 +15,7 @@
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/data_accessor/abstract/constructor.h>
 
 #include <ydb/library/formats/arrow/transformer/abstract.h>
 
@@ -98,9 +99,11 @@ private:
 
     std::vector<std::shared_ptr<TColumnFeatures>> ColumnFeatures;
     THashMap<ui32, NIndexes::TIndexMetaContainer> Indexes;
+    std::shared_ptr<std::set<TString>> UsedStorageIds;
 
     bool SchemeNeedActualization = false;
     std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> CompactionPlannerConstructor;
+    std::shared_ptr<NDataAccessorControl::IManagerConstructor> MetadataManagerConstructor;
     bool ExternalGuaranteeExclusivePK = false;
 
     ui64 Version = 0;
@@ -149,6 +152,7 @@ private:
         const std::shared_ptr<TSchemaObjectsCache>& cache) const;
 
     void Validate() const;
+    void Precalculate();
 
     bool DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema& schema, const std::shared_ptr<IStoragesManager>& operators,
         const std::shared_ptr<TSchemaObjectsCache>& cache);
@@ -193,7 +197,11 @@ public:
     static std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(
         const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache);
 
-    std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor> GetCompactionPlannerConstructor() const;
+    const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& GetCompactionPlannerConstructor() const;
+    const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& GetMetadataManagerConstructor() const {
+        AFL_VERIFY(MetadataManagerConstructor);
+        return MetadataManagerConstructor;
+    }
     bool IsNullableVerifiedByIndex(const ui32 colIndex) const {
         AFL_VERIFY(colIndex < ColumnFeatures.size());
         return ColumnFeatures[colIndex]->GetIsNullable();
@@ -228,15 +236,11 @@ public:
     }
 
     std::set<TString> GetUsedStorageIds(const TString& portionTierName) const {
-        std::set<TString> result;
         if (portionTierName && portionTierName != IStoragesManager::DefaultStorageId) {
-            result.emplace(portionTierName);
+            return { portionTierName };
         } else {
-            for (auto&& i : ColumnFeatures) {
-                result.emplace(i->GetOperator()->GetStorageId());
-            }
+            return *UsedStorageIds;
         }
-        return result;
     }
 
     const THashMap<ui32, NIndexes::TIndexMetaContainer>& GetIndexes() const {
@@ -288,6 +292,15 @@ public:
 
     bool HasIndexId(const ui32 indexId) const {
         return Indexes.contains(indexId);
+    }
+
+    bool HasIndexes(const std::set<ui32>& indexIds) const {
+        for (auto&& i : indexIds) {
+            if (!Indexes.contains(i)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     std::optional<ui32> GetColumnIndexOptional(const ui32 id) const;

@@ -9,6 +9,8 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
+using namespace NSharedCache;
+
 struct TPrivatePageCachePinPad : public TAtomicRefCount<TPrivatePageCachePinPad> {
     // no internal state
 };

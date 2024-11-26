@@ -34,6 +34,7 @@ namespace NKikimr {
             // then, scan all the blobs
             struct TMerger {
                 TRes& Res;
+                ui64 SstId;
                 ui32 Level;
 
                 static constexpr bool HaveToMergeData() { return true; }
@@ -43,7 +44,7 @@ namespace NKikimr {
                 void Clear() {}
 
                 void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key,
-                        ui64 circaLsn) {
+                        ui64 /*circaLsn*/) {
                     TDiskDataExtractor extr;
                     memRec.GetDiskData(&extr, outbound);
                     const TRes::ERecordType recordType = extr.BlobType == TBlobType::DiskBlob
@@ -52,7 +53,7 @@ namespace NKikimr {
                     for (const TDiskPart *location = extr.Begin; location != extr.End; ++location) {
                         if (location->ChunkIdx && location->Size) {
                             Res.Layout.push_back({*location, TRes::EDatabase::LogoBlobs, recordType, key.LogoBlobID(),
-                                circaLsn, Level});
+                                SstId, Level});
                         }
                     }
                 }
@@ -66,7 +67,7 @@ namespace NKikimr {
             };
 
             auto logoBlobsCallback = [&](const auto& sst, ui32 level) {
-                TMerger merger{*res, level};
+                TMerger merger{*res, sst->AssignedSstId, level};
                 TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>::TMemIterator iter(sst.Get());
                 for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
                     iter.PutToMerger(&merger);
@@ -79,7 +80,7 @@ namespace NKikimr {
             traverse(Snap.BlocksSnap.SliceSnap, ignoreCallback, TRes::EDatabase::Blocks);
             traverse(Snap.BarriersSnap.SliceSnap, ignoreCallback, TRes::EDatabase::Barriers);
 
-            TMerger merger{*res, Max<ui32>()};
+            TMerger merger{*res, 0, Max<ui32>()};
             TFreshDataSnapshot<TKeyLogoBlob, TMemRecLogoBlob>::TForwardIterator iter(Snap.HullCtx, &Snap.LogoBlobsSnap.FreshSnap);
             THeapIterator<TKeyLogoBlob, TMemRecLogoBlob, true> heapIt(&iter);
             heapIt.Walk(TKeyLogoBlob::First(), &merger, [] (TKeyLogoBlob /*key*/, auto* /*merger*/) { return true; });

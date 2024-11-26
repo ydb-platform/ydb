@@ -8,7 +8,7 @@ namespace NKikimr::NColumnShard {
 
 class TInsertedPortion {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<NOlap::TPortionInfoConstructor>, PortionInfoConstructor);
+    YDB_READONLY_DEF(std::shared_ptr<NOlap::TPortionAccessorConstructor>, PortionInfoConstructor);
     std::optional<NOlap::TPortionDataAccessor> PortionInfo;
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, PKBatch);
 
@@ -34,6 +34,14 @@ private:
     YDB_READONLY_DEF(std::vector<NOlap::TInsertWriteId>, InsertWriteIds);
 
 public:
+    ui64 GetRecordsCount() const {
+        ui64 result = 0;
+        for (auto&& i : Portions) {
+            result += i.GetPKBatch()->num_rows();
+        }
+        return result;
+    }
+
     const NEvWrite::TWriteMeta& GetWriteMeta() const {
         return WriteMeta;
     }

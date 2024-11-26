@@ -1,7 +1,7 @@
 import decimal
 from typing import Union, Type, Sequence, MutableSequence
 
-from math import nan
+from math import nan, isnan, isinf
 
 from clickhouse_connect.datatypes.base import TypeDef, ArrayType, ClickHouseType
 from clickhouse_connect.driver.common import array_type, write_array, decimal_size, decimal_prec, first_value
@@ -12,42 +12,61 @@ from clickhouse_connect.driver.query import QueryContext
 from clickhouse_connect.driver.types import ByteSource
 
 
-class Int8(ArrayType):
+class IntBase(ArrayType, registered=False):
+    def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
+        if len(column) == 0:
+            return
+        if self.nullable:
+            first = next((x for x in column if x is not None), None)
+            if isinstance(first, int):
+                column = [0 if x is None else x for x in column]
+            elif isinstance(first, float):
+                column = [0 if x is None or isnan(x) or isinf(x) else int(x) for x in column]
+            else:
+                column = [int(x) if x else 0 for x in column]
+        elif isinstance(column[0], float):
+            column = [0 if x is None or isnan(x) or isinf(x) else int(x) for x in column]
+        elif not isinstance(column[0], int):
+            column = [int(x) for x in column]
+        write_array(self._array_type, column, dest)
+
+
+class Int8(IntBase):
     _array_type = 'b'
     np_type = 'b'
 
 
-class UInt8(ArrayType):
+class UInt8(IntBase):
     _array_type = 'B'
     np_type = 'B'
 
 
-class Int16(ArrayType):
+class Int16(IntBase):
     _array_type = 'h'
     np_type = '<i2'
 
 
-class UInt16(ArrayType):
+class UInt16(IntBase):
     _array_type = 'H'
     np_type = '<u2'
 
 
-class Int32(ArrayType):
+class Int32(IntBase):
     _array_type = 'i'
     np_type = '<i4'
 
 
-class UInt32(ArrayType):
+class UInt32(IntBase):
     _array_type = 'I'
     np_type = '<u4'
 
 
-class Int64(ArrayType):
+class Int64(IntBase):
     _array_type = 'q'
     np_type = '<i8'
 
 
-class UInt64(ArrayType):
+class UInt64(IntBase):
     valid_formats = 'signed', 'native'
     _array_type = 'Q'
     np_type = '<u8'
@@ -164,6 +183,19 @@ class Float(ArrayType, registered=False):
         if ctx.use_numpy:
             return nan
         return 0.0
+
+    def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
+        if len(column) == 0:
+            return
+        if self.nullable:
+            first = next((x for x in column if x is not None), None)
+            if not isinstance(first, float):
+                column = [0 if x is None else float(x) for x in column]
+            else:
+                column = [0 if x is None else x for x in column]
+        elif not isinstance(column[0], float):
+            column = [float(x) for x in column]
+        write_array(self._array_type, column, dest)
 
 
 class Float32(Float):

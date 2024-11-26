@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 #include <util/generic/flags.h>
 #include <util/generic/strbuf.h>
@@ -74,6 +74,7 @@ enum class EYtSettingType: ui64 {
     MemUsage                 /* "memUsage" */,
     ItemsCount               /* "itemsCount" */,
     RowFactor                /* "rowFactor" */,
+    Small                    /* "small" */,
     // Operations
     Ordered                  /* "ordered" */,                  // hybrid supported
     KeyFilter                /* "keyFilter" */,

@@ -8,7 +8,7 @@
 
 #include <atomic>
 
-namespace NKikimr {
+namespace NKikimr::NSharedCache {
 
 class TSharedPageGCList;
 

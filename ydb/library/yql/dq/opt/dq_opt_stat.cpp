@@ -360,6 +360,69 @@ void InferStatisticsForGraceJoin(const TExprNode::TPtr& input, TTypeAnnotationCo
 }
 
 /**
+ * Infer statistics for DqJoin
+ * DqJoin is an intermediary join representantation in Dq
+ */
+void InferStatisticsForDqJoin(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, const IProviderContext& ctx, TCardinalityHints hints) {
+    auto inputNode = TExprBase(input);
+    auto join = inputNode.Cast<TDqJoin>();
+
+    auto leftArg = join.LeftInput();
+    auto rightArg = join.RightInput();
+
+    auto leftStats = typeCtx->GetStats(leftArg.Raw());
+    auto rightStats = typeCtx->GetStats(rightArg.Raw());
+
+    if (!leftStats || !rightStats) {
+        return;
+    }
+
+    auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
+    if (joinAlgo == EJoinAlgoType::Undefined) {
+        return;
+    }
+
+    auto leftLabels = InferLabels(leftStats, join.LeftJoinKeyNames());
+    auto rightLabels = InferLabels(rightStats, join.RightJoinKeyNames());
+
+    leftStats = ApplyCardinalityHints(leftStats, leftLabels, hints);
+    rightStats = ApplyCardinalityHints(rightStats, rightLabels, hints);
+
+    TVector<TJoinColumn> leftJoinKeys;
+    TVector<TJoinColumn> rightJoinKeys;
+
+    for (size_t i=0; i<join.LeftJoinKeyNames().Size(); i++) {
+        auto alias = ExtractAlias(join.LeftJoinKeyNames().Item(i).StringValue());
+        auto attrName = RemoveAliases(join.LeftJoinKeyNames().Item(i).StringValue());
+        leftJoinKeys.push_back(TJoinColumn(alias, attrName));
+    }
+    for (size_t i=0; i<join.RightJoinKeyNames().Size(); i++) {
+        auto alias = ExtractAlias(join.RightJoinKeyNames().Item(i).StringValue());
+        auto attrName = RemoveAliases(join.RightJoinKeyNames().Item(i).StringValue());
+        rightJoinKeys.push_back(TJoinColumn(alias, attrName));
+    }
+
+    auto unionOfLabels = UnionLabels(leftLabels, rightLabels);
+
+    auto resStats = std::make_shared<TOptimizerStatistics>(
+            ctx.ComputeJoinStats(
+                *leftStats,
+                *rightStats,
+                leftJoinKeys,
+                rightJoinKeys, 
+                joinAlgo,
+                ConvertToJoinKind(join.JoinType().StringValue()),
+                FindCardHint(unionOfLabels, hints)
+            )
+        );
+
+    resStats->Labels = std::make_shared<TVector<TString>>();
+    resStats->Labels->insert(resStats->Labels->begin(), unionOfLabels.begin(), unionOfLabels.end());
+    typeCtx->SetStats(join.Raw(), resStats);
+    YQL_CLOG(TRACE, CoreDq) << "Infer statistics for DqJoin: " << resStats->ToString();
+}
+
+/**
  * Infer statistics for DqSource
  *
  * We just pass up the statistics from the Settings of the DqSource

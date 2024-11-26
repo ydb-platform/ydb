@@ -1,5 +1,5 @@
 {
-  "op_name":"InnerJoin (Grace)",
+  "op_name":"InnerJoin (MapJoin)",
   "args":
     [
       {
@@ -11,22 +11,12 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (Grace)",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"test\/ds\/catalog_sales"
-                        },
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"test\/ds\/catalog_returns"
-                        }
-                      ]
+                    "op_name":"TableFullScan",
+                    "table":"test\/ds\/catalog_sales"
                   },
                   {
                     "op_name":"TableFullScan",
-                    "table":"test\/ds\/store_returns"
+                    "table":"test\/ds\/catalog_returns"
                   }
                 ]
             },
@@ -55,38 +45,55 @@
                                             "args":
                                               [
                                                 {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"test\/ds\/customer_address"
+                                                },
+                                                {
                                                   "op_name":"InnerJoin (Grace)",
                                                   "args":
                                                     [
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"test\/ds\/customer_demographics"
+                                                      },
                                                       {
                                                         "op_name":"InnerJoin (MapJoin)",
                                                         "args":
                                                           [
                                                             {
-                                                              "op_name":"InnerJoin (Grace)",
+                                                              "op_name":"InnerJoin (MapJoin)",
                                                               "args":
                                                                 [
                                                                   {
-                                                                    "op_name":"InnerJoin (MapJoin)",
+                                                                    "op_name":"InnerJoin (Grace)",
                                                                     "args":
                                                                       [
+                                                                        {
+                                                                          "op_name":"TableFullScan",
+                                                                          "table":"test\/ds\/customer"
+                                                                        },
                                                                         {
                                                                           "op_name":"InnerJoin (Grace)",
                                                                           "args":
                                                                             [
                                                                               {
                                                                                 "op_name":"TableFullScan",
-                                                                                "table":"test\/ds\/customer"
+                                                                                "table":"test\/ds\/customer_demographics"
                                                                               },
                                                                               {
                                                                                 "op_name":"InnerJoin (Grace)",
                                                                                 "args":
                                                                                   [
                                                                                     {
-                                                                                      "op_name":"InnerJoin (MapJoin)",
+                                                                                      "op_name":"TableFullScan",
+                                                                                      "table":"test\/ds\/customer_address"
+                                                                                    },
+                                                                                    {
+                                                                                      "op_name":"InnerJoin (Grace)",
                                                                                       "args":
                                                                                         [
                                                                                           {
+<<<<<<< HEAD
                                                                                             "op_name":"TableRangeScan",
                                                                                             "args":
                                                                                               [
@@ -101,30 +108,36 @@
                                                                                                     ]
                                                                                                 }
                                                                                               ]
+=======
+                                                                                            "op_name":"TableFullScan",
+                                                                                            "table":"test\/ds\/store_returns"
+>>>>>>> 806d77103e5... Added statistics inference for DqJoins (#11994)
                                                                                           },
                                                                                           {
-                                                                                            "op_name":"TableFullScan",
-                                                                                            "table":"test\/ds\/item"
+                                                                                            "op_name":"InnerJoin (MapJoin)",
+                                                                                            "args":
+                                                                                              [
+                                                                                                {
+                                                                                                  "op_name":"TableLookup",
+                                                                                                  "table":"test\/ds\/store_sales"
+                                                                                                },
+                                                                                                {
+                                                                                                  "op_name":"TableFullScan",
+                                                                                                  "table":"test\/ds\/item"
+                                                                                                }
+                                                                                              ]
                                                                                           }
                                                                                         ]
-                                                                                    },
-                                                                                    {
-                                                                                      "op_name":"TableFullScan",
-                                                                                      "table":"test\/ds\/customer_address"
                                                                                     }
                                                                                   ]
                                                                               }
                                                                             ]
-                                                                        },
-                                                                        {
-                                                                          "op_name":"TableFullScan",
-                                                                          "table":"test\/ds\/date_dim"
                                                                         }
                                                                       ]
                                                                   },
                                                                   {
                                                                     "op_name":"TableFullScan",
-                                                                    "table":"test\/ds\/customer_demographics"
+                                                                    "table":"test\/ds\/date_dim"
                                                                   }
                                                                 ]
                                                             },
@@ -133,16 +146,8 @@
                                                               "table":"test\/ds\/store"
                                                             }
                                                           ]
-                                                      },
-                                                      {
-                                                        "op_name":"TableFullScan",
-                                                        "table":"test\/ds\/customer_demographics"
                                                       }
                                                     ]
-                                                },
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/customer_address"
                                                 }
                                               ]
                                           },
@@ -207,22 +212,12 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (Grace)",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"test\/ds\/catalog_sales"
-                        },
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"test\/ds\/catalog_returns"
-                        }
-                      ]
+                    "op_name":"TableFullScan",
+                    "table":"test\/ds\/catalog_sales"
                   },
                   {
                     "op_name":"TableFullScan",
-                    "table":"test\/ds\/store_returns"
+                    "table":"test\/ds\/catalog_returns"
                   }
                 ]
             },
@@ -251,38 +246,55 @@
                                             "args":
                                               [
                                                 {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"test\/ds\/customer_address"
+                                                },
+                                                {
                                                   "op_name":"InnerJoin (Grace)",
                                                   "args":
                                                     [
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"test\/ds\/customer_demographics"
+                                                      },
                                                       {
                                                         "op_name":"InnerJoin (MapJoin)",
                                                         "args":
                                                           [
                                                             {
-                                                              "op_name":"InnerJoin (Grace)",
+                                                              "op_name":"InnerJoin (MapJoin)",
                                                               "args":
                                                                 [
                                                                   {
-                                                                    "op_name":"InnerJoin (MapJoin)",
+                                                                    "op_name":"InnerJoin (Grace)",
                                                                     "args":
                                                                       [
+                                                                        {
+                                                                          "op_name":"TableFullScan",
+                                                                          "table":"test\/ds\/customer"
+                                                                        },
                                                                         {
                                                                           "op_name":"InnerJoin (Grace)",
                                                                           "args":
                                                                             [
                                                                               {
                                                                                 "op_name":"TableFullScan",
-                                                                                "table":"test\/ds\/customer"
+                                                                                "table":"test\/ds\/customer_demographics"
                                                                               },
                                                                               {
                                                                                 "op_name":"InnerJoin (Grace)",
                                                                                 "args":
                                                                                   [
                                                                                     {
-                                                                                      "op_name":"InnerJoin (MapJoin)",
+                                                                                      "op_name":"TableFullScan",
+                                                                                      "table":"test\/ds\/customer_address"
+                                                                                    },
+                                                                                    {
+                                                                                      "op_name":"InnerJoin (Grace)",
                                                                                       "args":
                                                                                         [
                                                                                           {
+<<<<<<< HEAD
                                                                                             "op_name":"TableRangeScan",
                                                                                             "args":
                                                                                               [
@@ -297,30 +309,36 @@
                                                                                                     ]
                                                                                                 }
                                                                                               ]
+=======
+                                                                                            "op_name":"TableFullScan",
+                                                                                            "table":"test\/ds\/store_returns"
+>>>>>>> 806d77103e5... Added statistics inference for DqJoins (#11994)
                                                                                           },
                                                                                           {
-                                                                                            "op_name":"TableFullScan",
-                                                                                            "table":"test\/ds\/item"
+                                                                                            "op_name":"InnerJoin (MapJoin)",
+                                                                                            "args":
+                                                                                              [
+                                                                                                {
+                                                                                                  "op_name":"TableLookup",
+                                                                                                  "table":"test\/ds\/store_sales"
+                                                                                                },
+                                                                                                {
+                                                                                                  "op_name":"TableFullScan",
+                                                                                                  "table":"test\/ds\/item"
+                                                                                                }
+                                                                                              ]
                                                                                           }
                                                                                         ]
-                                                                                    },
-                                                                                    {
-                                                                                      "op_name":"TableFullScan",
-                                                                                      "table":"test\/ds\/customer_address"
                                                                                     }
                                                                                   ]
                                                                               }
                                                                             ]
-                                                                        },
-                                                                        {
-                                                                          "op_name":"TableFullScan",
-                                                                          "table":"test\/ds\/date_dim"
                                                                         }
                                                                       ]
                                                                   },
                                                                   {
                                                                     "op_name":"TableFullScan",
-                                                                    "table":"test\/ds\/customer_demographics"
+                                                                    "table":"test\/ds\/date_dim"
                                                                   }
                                                                 ]
                                                             },
@@ -329,16 +347,8 @@
                                                               "table":"test\/ds\/store"
                                                             }
                                                           ]
-                                                      },
-                                                      {
-                                                        "op_name":"TableFullScan",
-                                                        "table":"test\/ds\/customer_demographics"
                                                       }
                                                     ]
-                                                },
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/customer_address"
                                                 }
                                               ]
                                           },

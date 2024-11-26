@@ -116,23 +116,8 @@
                                                                         "PlanNodeId": 16,
                                                                         "Plans": [
                                                                             {
-<<<<<<< HEAD
                                                                                 "Node Type": "UnionAll",
                                                                                 "PlanNodeId": 15,
-=======
-                                                                                "Columns": [
-                                                                                    "y1",
-                                                                                    "y2"
-                                                                                ],
-                                                                                "E-Cost": "0",
-                                                                                "E-Rows": "0",
-                                                                                "E-Size": "0",
-                                                                                "LookupKeyColumns": [
-                                                                                    "y1"
-                                                                                ],
-                                                                                "Node Type": "TableLookupJoin",
-                                                                                "PlanNodeId": 8,
->>>>>>> 19346460a80... Eliminate redunant sorting if the inputs are sorted (#11872)
                                                                                 "PlanNodeType": "Connection",
                                                                                 "Plans": [
                                                                                     {

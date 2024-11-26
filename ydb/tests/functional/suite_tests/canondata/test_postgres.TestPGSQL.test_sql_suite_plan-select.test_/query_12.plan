@@ -41,11 +41,7 @@
                                                 "Name": "Limit"
                                             },
                                             {
-<<<<<<< HEAD
                                                 "Condition": "onek.unique1,onek.stringu1 = v.i,v.j",
-=======
-                                                "Condition": "onek.stringu1,onek.unique1 = v.j,v.i",
->>>>>>> 19346460a80... Eliminate redunant sorting if the inputs are sorted (#11872)
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 2

@@ -7,6 +7,61 @@
         "args":
           [
             {
+              "op_name":"TableFullScan",
+              "table":"partsupp"
+            },
+            {
+              "op_name":"InnerJoin (MapJoin)",
+              "args":
+                [
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"supplier"
+                  },
+                  {
+                    "op_name":"InnerJoin (MapJoin)",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableLookup",
+                          "table":"region"
+                        },
+                        {
+<<<<<<< HEAD
+                          "op_name":"InnerJoin (MapJoin)",
+                          "args":
+                            [
+                              {
+                                "op_name":"TablePointLookup",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"nation"
+                                    }
+                                  ]
+                              },
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"nation"
+                              }
+                            ]
+=======
+                          "op_name":"TableFullScan",
+                          "table":"nation"
+>>>>>>> 806d77103e5... Added statistics inference for DqJoins (#11994)
+                        }
+                      ]
+                  }
+                ]
+            }
+          ]
+      },
+      {
+        "op_name":"InnerJoin (Grace)",
+        "args":
+          [
+            {
               "op_name":"InnerJoin (Grace)",
               "args":
                 [
@@ -47,50 +102,10 @@
                 ]
             },
             {
-              "op_name":"InnerJoin (Grace)",
-              "args":
-                [
-                  {
-                    "op_name":"TableFullScan",
-                    "table":"partsupp"
-                  },
-                  {
-                    "op_name":"InnerJoin (MapJoin)",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"supplier"
-                        },
-                        {
-                          "op_name":"InnerJoin (MapJoin)",
-                          "args":
-                            [
-                              {
-                                "op_name":"TablePointLookup",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"TableFullScan",
-                                      "table":"nation"
-                                    }
-                                  ]
-                              },
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"nation"
-                              }
-                            ]
-                        }
-                      ]
-                  }
-                ]
+              "op_name":"TableFullScan",
+              "table":"part"
             }
           ]
-      },
-      {
-        "op_name":"TableFullScan",
-        "table":"part"
       }
     ]
 }

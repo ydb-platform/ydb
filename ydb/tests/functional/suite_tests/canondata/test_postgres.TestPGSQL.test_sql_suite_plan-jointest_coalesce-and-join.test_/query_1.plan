@@ -87,17 +87,6 @@
                                                             {
                                                                 "Node Type": "UnionAll",
                                                                 "PlanNodeId": 24,
-                                                                "Columns": [
-                                                                    "x"
-                                                                ],
-                                                                "E-Cost": "0",
-                                                                "E-Rows": "0",
-                                                                "E-Size": "0",
-                                                                "LookupKeyColumns": [
-                                                                    "x"
-                                                                ],
-                                                                "Node Type": "TableLookupJoin",
-                                                                "PlanNodeId": 7,
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
@@ -107,61 +96,7 @@
                                                                             {
                                                                                 "Inputs": [
                                                                                     {
-<<<<<<< HEAD
                                                                                         "InternalOperatorId": 1
-=======
-                                                                                        "Node Type": "Collect",
-                                                                                        "PlanNodeId": 4,
-                                                                                        "Plans": [
-                                                                                            {
-                                                                                                "Columns": [
-                                                                                                    "x"
-                                                                                                ],
-                                                                                                "E-Cost": "0",
-                                                                                                "E-Rows": "0",
-                                                                                                "E-Size": "0",
-                                                                                                "LookupKeyColumns": [
-                                                                                                    "x"
-                                                                                                ],
-                                                                                                "Node Type": "TableLookupJoin",
-                                                                                                "PlanNodeId": 3,
-                                                                                                "PlanNodeType": "Connection",
-                                                                                                "Plans": [
-                                                                                                    {
-                                                                                                        "Node Type": "Stage",
-                                                                                                        "PlanNodeId": 2,
-                                                                                                        "Plans": [
-                                                                                                            {
-                                                                                                                "Node Type": "TableFullScan",
-                                                                                                                "Operators": [
-                                                                                                                    {
-                                                                                                                        "Inputs": [],
-                                                                                                                        "Name": "TableFullScan",
-                                                                                                                        "ReadColumns": [
-                                                                                                                            "x",
-                                                                                                                            "y"
-                                                                                                                        ],
-                                                                                                                        "ReadRanges": [
-                                                                                                                            "x (-\u221e, +\u221e)",
-                                                                                                                            "y (-\u221e, +\u221e)"
-                                                                                                                        ],
-                                                                                                                        "ReadRangesPointPrefixLen": "0",
-                                                                                                                        "Scan": "Parallel",
-                                                                                                                        "Table": "postgres_jointest/coalesce-and-join.test_plan/a"
-                                                                                                                    }
-                                                                                                                ],
-                                                                                                                "PlanNodeId": 1,
-                                                                                                                "Tables": [
-                                                                                                                    "postgres_jointest/coalesce-and-join.test_plan/a"
-                                                                                                                ]
-                                                                                                            }
-                                                                                                        ]
-                                                                                                    }
-                                                                                                ],
-                                                                                                "Table": "postgres_jointest/coalesce-and-join.test_plan/b"
-                                                                                            }
-                                                                                        ]
->>>>>>> 19346460a80... Eliminate redunant sorting if the inputs are sorted (#11872)
                                                                                     }
                                                                                 ],
                                                                                 "Name": "Filter",

@@ -1,7 +1,7 @@
 #include "schemeshard_info_types.h"
 
 #include "common/validation.h"
-#include "olap/columns/schema.h"
+#include "common/ttl.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -58,20 +58,14 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
             return false;
         }
 
-        ui32 expireInSeconds;
-        if (enabled.TiersSize()) {
-            if (enabled.TiersSize() > 1 || !enabled.GetTiers(0).HasDelete()) {
-                errStr = Sprintf("Only DELETE via TTL is allowed for row-oriented tables");
-                return false;            
-            }
-            expireInSeconds = enabled.GetTiers(0).GetApplyAfterSeconds();
-        } else {
-            // legacy format
-            expireInSeconds = enabled.GetExpireAfterSeconds();
+        if (enabled.TiersSize() > 1 && enabled.GetTiers(0).HasDelete()) {
+            errStr = Sprintf("Only DELETE via TTL is allowed for row-oriented tables");
+            return false;
         }
+        const auto expireAfter = GetExpireAfter(enabled).DetachResult();
 
         const TInstant now = TInstant::Now();
-        if (expireInSeconds > now.Seconds()) {
+        if (expireAfter.Seconds() > now.Seconds()) {
             errStr = Sprintf("TTL should be less than %" PRIu64 " seconds (%" PRIu64 " days, %" PRIu64 " years). The ttl behaviour is undefined before 1970.", now.Seconds(), now.Days(), now.Days() / 365);
             return false;            
         }

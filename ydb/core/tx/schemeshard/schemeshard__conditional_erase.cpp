@@ -1,5 +1,7 @@
 #include "schemeshard_impl.h"
 
+#include "common/ttl.h"
+
 #include <util/string/join.h>
 
 namespace NKikimr {
@@ -142,21 +144,15 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
 
         const auto& settings = tableInfo->TTLSettings().GetEnabled();
 
-        TDuration expireAfter;
-         if (settings.TiersSize()) {
-            if (settings.TiersSize() > 1 || !settings.GetTiers(0).HasDelete()) {
-                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Invalid ttl setting: external storage tiers"
-                    << ": shardIdx: " << tableShardInfo.ShardIdx
-                    << ": pathId: " << shardInfo.PathId
+        auto expireAfter = GetExpireAfter(settings);
+        if (expireAfter.IsFail()) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Invalid ttl setting: " << expireAfter.GetErrorMessage()
+                    << ": shardIdx: " << tableShardInfo.ShardIdx << ": pathId: " << shardInfo.PathId
                     << ", at schemeshard: " << Self->TabletID());
-                return false;
-            }
-            expireAfter = TDuration::Seconds(settings.GetTiers(0).GetApplyAfterSeconds());
-         } else {
-            // legacy format
-            expireAfter = TDuration::Seconds(settings.GetExpireAfterSeconds());
-         }
-        const TInstant wallClock = ctx.Now() - expireAfter;
+            return false;
+        }
+        const TInstant wallClock = ctx.Now() - *expireAfter;
 
         NKikimrTxDataShard::TEvConditionalEraseRowsRequest request;
         request.SetTableId(shardInfo.PathId.LocalPathId);

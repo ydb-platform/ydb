@@ -797,14 +797,16 @@ public:
     }
 
     void ScheduleWakeup() {
-        TInstant deadline = TActivationContext::Now() + TDuration::MilliSeconds(DsPutWakeupMs);
-    
-        auto it = PutDeadlines.begin();
-        if (it != PutDeadlines.end() && *it <= deadline) {
-            deadline = *it;
-            PutDeadlines.erase(it);
+        TInstant now = TActivationContext::Now();
+        while (!PutDeadlines.empty()) {
+            TInstant deadline = *PutDeadlines.begin();
+            PutDeadlines.erase(PutDeadlines.begin());
+            if (deadline > now) {
+                Schedule(deadline, new TKikimrEvents::TEvWakeup);
+                return;
+            }
         }
-        Schedule(deadline, new TKikimrEvents::TEvWakeup);
+        Schedule(TDuration::MilliSeconds(DsPutWakeupMs), new TKikimrEvents::TEvWakeup);
     }
 
     STATEFN(StateWait) {

@@ -18,7 +18,7 @@ private:
 
     // This 1-row batch contains the last key that was read while producing the ResultBatch.
     // NOTE: it might be different from the Key of last row in ResulBatch in case of filtering/aggregation/limit
-    std::shared_ptr<arrow::RecordBatch> LastReadKey;
+    std::shared_ptr<IScanCursor> ScanCursor;
     YDB_READONLY_DEF(std::optional<ui32>, NotFinishedIntervalIdx);
 
 public:
@@ -50,26 +50,25 @@ public:
         return ResultBatch;
     }
 
-    const std::shared_ptr<arrow::RecordBatch>& GetLastReadKey() const {
-        return LastReadKey;
+    const std::shared_ptr<IScanCursor>& GetScanCursor() const {
+        return ScanCursor;
     }
 
     explicit TPartialReadResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& resourcesGuard,
         std::shared_ptr<NGroupedMemoryManager::TGroupGuard>&& gGuard, const NArrow::TShardedRecordBatch& batch,
-        std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
+        const std::shared_ptr<IScanCursor>& scanCursor, const std::optional<ui32> notFinishedIntervalIdx)
         : ResourcesGuard(std::move(resourcesGuard))
         , GroupGuard(std::move(gGuard))
         , ResultBatch(batch)
-        , LastReadKey(lastKey)
+        , ScanCursor(scanCursor)
         , NotFinishedIntervalIdx(notFinishedIntervalIdx) {
         Y_ABORT_UNLESS(ResultBatch.GetRecordsCount());
-        Y_ABORT_UNLESS(LastReadKey);
-        Y_ABORT_UNLESS(LastReadKey->num_rows() == 1);
+        Y_ABORT_UNLESS(ScanCursor);
     }
 
-    explicit TPartialReadResult(
-        const NArrow::TShardedRecordBatch& batch, std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
-        : TPartialReadResult(nullptr, nullptr, batch, lastKey, notFinishedIntervalIdx) {
+    explicit TPartialReadResult(const NArrow::TShardedRecordBatch& batch, const std::shared_ptr<IScanCursor>& scanCursor,
+        const std::optional<ui32> notFinishedIntervalIdx)
+        : TPartialReadResult(nullptr, nullptr, batch, scanCursor, notFinishedIntervalIdx) {
     }
 };
 

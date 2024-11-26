@@ -3054,7 +3054,7 @@ bool TDataShard::CheckDataTxRejectAndReply(const NEvents::TDataEvents::TEvWrite:
                 status = NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
                 break;
             case NKikimrTxDataShard::TEvProposeTransactionResult::ERROR:
-                if (rejectReasons == ERejectReasons::WrongState) {
+                if ((rejectReasons & ERejectReasons::WrongState) != ERejectReasons::None) {
                     status = NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE;
                 } else {
                     status = NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR;

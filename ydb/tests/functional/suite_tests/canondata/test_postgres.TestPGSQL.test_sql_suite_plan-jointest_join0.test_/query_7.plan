@@ -66,7 +66,7 @@
                                                     }
                                                 ],
                                                 "Name": "Filter",
-                                                "Predicate": "Exist(item.t2.hundred) And Exist(item.t3.ten)"
+                                                "Predicate": "Exist(item.t2.hundred) AND Exist(item.t3.ten)"
                                             }
                                         ],
                                         "PlanNodeId": 16,

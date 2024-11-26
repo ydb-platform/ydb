@@ -39,7 +39,6 @@ struct TRowDispatcherMetrics {
         ErrorsCount = Counters->GetCounter("ErrorsCount", true);
         ClientsCount = Counters->GetCounter("ClientsCount");
         RowsSent = Counters->GetCounter("RowsSent", true);
-        NewClients = Counters->GetCounter("NewClients", true);
         NodesReconnect = Counters->GetCounter("NodesReconnect", true);
     }
 
@@ -47,10 +46,8 @@ struct TRowDispatcherMetrics {
     ::NMonitoring::TDynamicCounters::TCounterPtr ErrorsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr ClientsCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr RowsSent;
-    ::NMonitoring::TDynamicCounters::TCounterPtr NewClients;
     ::NMonitoring::TDynamicCounters::TCounterPtr NodesReconnect;
 };
-
 
 struct TEvPrivate {
     // Event ids
@@ -74,16 +71,22 @@ struct TEvPrivate {
     };
 };
 
+using TQueryStatKey = std::pair<TString, TString>;  // QueryId / Topic
+
 struct TAggQueryStat {
     NYql::TCounters::TEntry ReadBytes;
     NYql::TCounters::TEntry UnreadBytes;
-};
-
-struct TQueryState {
     NYql::TCounters::TEntry UnreadRows;
-    NYql::TCounters::TEntry UnreadBytes;
     NYql::TCounters::TEntry ReadLagMessages;
     bool IsWaiting = false;
+
+    void Add(const TopicSessionClientStatistic& stat) {
+        ReadBytes.Add(NYql::TCounters::TEntry(stat.ReadBytes));
+        UnreadBytes.Add(NYql::TCounters::TEntry(stat.UnreadBytes));
+        UnreadRows.Add(NYql::TCounters::TEntry(stat.UnreadRows));
+        ReadLagMessages.Add(NYql::TCounters::TEntry(stat.ReadLagMessages));
+        IsWaiting = IsWaiting || stat.IsWaiting;
+    }        
 };
 
 ui64 UpdateMetricsPeriodSec = 60;
@@ -239,7 +242,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
     struct TAggregatedStats{
         NYql::TCounters::TEntry AllSessionsReadBytes;
-        TMap<TString, TAggQueryStat> LastQueryStats;
+        TMap<TQueryStatKey, TAggQueryStat> LastQueryStats;
         TDuration LastUpdateMetricsPeriod;
     };
 
@@ -352,7 +355,6 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev);
     void Handle(const TEvPrivate::TEvTryConnect::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr&);
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr&);
     void Handle(NFq::TEvPrivate::TEvUpdateMetrics::TPtr&);
     void Handle(NFq::TEvPrivate::TEvPrintStateToLog::TPtr&);
     void Handle(const NMon::TEvHttpInfo::TPtr&);
@@ -382,7 +384,6 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvSessionStatistic, Handle);
         hFunc(TEvPrivate::TEvTryConnect, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
-        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvHeartbeat, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, Handle);
         hFunc(NFq::TEvPrivate::TEvUpdateMetrics, Handle);
@@ -469,9 +470,15 @@ void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TP
 }
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, ev: " << ev->Get()->ToString() << ", reason " << ev->Get()->Reason);
-    for (auto& [actorId, consumer] : Consumers) {
-        consumer->EventsQueue.HandleUndelivered(ev);
+    LOG_ROW_DISPATCHER_DEBUG("TEvUndelivered, from " << ev->Sender << ", reason " << ev->Get()->Reason);
+    for (auto& [key, consumer] : Consumers) {
+        if (ev->Cookie != consumer->Generation) {       // Several partitions in one read_actor have different Generation.
+            continue;
+        }
+        if (consumer->EventsQueue.HandleUndelivered(ev) == NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
+            DeleteConsumer(key);
+            break;
+        }
     }
 }
 
@@ -512,6 +519,7 @@ void TRowDispatcher::UpdateMetrics() {
     AggrStats.LastQueryStats.clear();
 
     for (auto& [key, sessionsInfo] : TopicSessions) {
+        const auto& topic = key.TopicPath;
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
             auto read = NYql::TCounters::TEntry(sessionInfo.Stat.ReadBytes);
             AggrStats.AllSessionsReadBytes.Add(read);
@@ -519,17 +527,17 @@ void TRowDispatcher::UpdateMetrics() {
             sessionInfo.Stat.Clear();
 
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
-                auto& stat = AggrStats.LastQueryStats[consumer->QueryId];
-                stat.UnreadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadBytes));
-                stat.ReadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.ReadBytes));
+                AggrStats.LastQueryStats[TQueryStatKey{consumer->QueryId, topic}].Add(consumer->Stat);
                 consumer->Stat.Clear();
             }
         }
     }
-    for (const auto& [queryId, stat] : AggrStats.LastQueryStats) {
-        auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryId);
-        queryGroup->GetCounter("MaxUnreadBytes")->Set(stat.UnreadBytes.Max);
-        queryGroup->GetCounter("AvgUnreadBytes")->Set(stat.UnreadBytes.Avg);
+    for (const auto& [queryStatKey, stat] : AggrStats.LastQueryStats) {
+        auto queryGroup = Metrics.Counters->GetSubgroup("queryId", queryStatKey.first);
+        auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(queryStatKey.second));
+        topicGroup->GetCounter("MaxUnreadBytes")->Set(stat.UnreadBytes.Max);
+        topicGroup->GetCounter("AvgUnreadBytes")->Set(stat.UnreadBytes.Avg);
+        topicGroup->GetCounter("MaxReadLag")->Set(stat.ReadLagMessages.Max);
     }
 }
 
@@ -563,20 +571,18 @@ TString TRowDispatcher::GetInternalState() {
     printDataRate(AggrStats.AllSessionsReadBytes);
     str << "\n";
 
-    TMap<TString, TQueryState> queryState;
-    TMap<TString, ui64> sessionCountByQuery;
+    TMap<TQueryStatKey, TAggQueryStat> queryState;
+    TMap<TQueryStatKey, ui64> sessionCountByQuery;
     ui64 unreadBytesSum = 0;
 
     for (auto& [key, sessionsInfo] : TopicSessions) {
         for (auto& [actorId, sessionInfo] : sessionsInfo.Sessions) {
+            const auto& topic = key.TopicPath;
             unreadBytesSum += sessionInfo.Stat.UnreadBytes;
             for (auto& [readActorId, consumer] : sessionInfo.Consumers) {
-                ++sessionCountByQuery[consumer->QueryId];
-                auto& stat = queryState[consumer->QueryId];
-                stat.UnreadRows.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadRows));
-                stat.UnreadBytes.Add(NYql::TCounters::TEntry(consumer->Stat.UnreadBytes));
-                stat.ReadLagMessages.Add(NYql::TCounters::TEntry(consumer->Stat.ReadLagMessages));
-                stat.IsWaiting = stat.IsWaiting || consumer->Stat.IsWaiting;
+                auto key = TQueryStatKey{consumer->QueryId, topic};
+                ++sessionCountByQuery[key];
+                queryState[key].Add(consumer->Stat);
             }
         }
     }
@@ -586,11 +592,12 @@ TString TRowDispatcher::GetInternalState() {
     }
 
     str << "Queries:\n";
-    for (const auto& [queryId, stat]: queryState) {
-        const auto& aggStat = AggrStats.LastQueryStats[queryId];
-        auto sessionsBufferSumSize = sessionCountByQuery[queryId] * MaxSessionBufferSizeBytes;
+    for (const auto& [queryStatKey, stat]: queryState) {
+        auto [queryId, topic] = queryStatKey;
+        const auto& aggStat = AggrStats.LastQueryStats[queryStatKey];
+        auto sessionsBufferSumSize = sessionCountByQuery[queryStatKey] * MaxSessionBufferSizeBytes;
         auto used = sessionsBufferSumSize ? (stat.UnreadBytes.Sum * 100.0 / sessionsBufferSumSize) : 0.0;
-        str << "  " << queryId << " buffer used (all partitions) " << LeftPad(Prec(used, 4), 10) << "% (" << toHuman(stat.UnreadBytes.Sum) <<  ") unread max (one partition) " << toHuman(stat.UnreadBytes.Max) << " data rate";
+        str << "  " << queryId << " / " << topic << ": buffer used (all partitions) " << LeftPad(Prec(used, 4), 10) << "% (" << toHuman(stat.UnreadBytes.Sum) <<  ") unread max (one partition) " << toHuman(stat.UnreadBytes.Max) << " data rate";
         printDataRate(aggStat.ReadBytes);
         str << " waiting " << stat.IsWaiting << " max read lag " << stat.ReadLagMessages.Max;
         str << "\n";
@@ -629,7 +636,9 @@ TString TRowDispatcher::GetInternalState() {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("Received TEvStartSession from " << ev->Sender << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " part id " << ev->Get()->Record.GetPartitionId() << " query id " << ev->Get()->Record.GetQueryId() << " cookie " << ev->Cookie);
-    ++*Metrics.NewClients;
+    auto queryGroup = Metrics.Counters->GetSubgroup("queryId", ev->Get()->Record.GetQueryId());
+    auto topicGroup = queryGroup->GetSubgroup("topic", CleanupCounterValueString(ev->Get()->Record.GetSource().GetTopicPath()));
+    topicGroup->GetCounter("StartSession", true)->Inc();
 
     NodesTracker.AddNode(ev->Sender.NodeId());
     TMaybe<ui64> readOffset;
@@ -756,7 +765,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
 void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     auto consumerIt = Consumers.find(key);
     if (consumerIt == Consumers.end()) {
-        LOG_ROW_DISPATCHER_ERROR("Ignore (no consumer )DeleteConsumer, " << " read actor id " << key.ReadActorId << " part id " << key.PartitionId);
+        LOG_ROW_DISPATCHER_ERROR("Ignore (no consumer) DeleteConsumer, " << " read actor id " << key.ReadActorId << " part id " << key.PartitionId);
         return;
     }
 
@@ -777,7 +786,7 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     Y_ENSURE(sessionInfo.Consumers.count(consumer->ReadActorId));
     sessionInfo.Consumers.erase(consumer->ReadActorId);
     if (sessionInfo.Consumers.empty()) {
-        LOG_ROW_DISPATCHER_DEBUG("Session is not used, sent TEvPoisonPill");
+        LOG_ROW_DISPATCHER_DEBUG("Session is not used, sent TEvPoisonPill to " << consumerIt->second->TopicSessionId);
         topicSessionInfo.Sessions.erase(consumerIt->second->TopicSessionId);
         Send(consumerIt->second->TopicSessionId, new NActors::TEvents::TEvPoisonPill());
         if (topicSessionInfo.Sessions.empty()) {
@@ -787,17 +796,6 @@ void TRowDispatcher::DeleteConsumer(const ConsumerSessionKey& key) {
     ConsumersByEventQueueId.erase(consumerIt->second->EventQueueId);
     Consumers.erase(consumerIt);
     Metrics.ClientsCount->Set(Consumers.size());
-}
-
-void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr& ev) {
-    LOG_ROW_DISPATCHER_WARN("Session closed, event queue id " << ev->Get()->EventQueueId);
-    for (auto& [consumerKey, consumer] : Consumers) {
-        if (consumer->EventQueueId != ev->Get()->EventQueueId) {
-            continue;
-        }
-        DeleteConsumer(consumerKey);
-        break;
-    }
 }
 
 void TRowDispatcher::Handle(const TEvPrivate::TEvTryConnect::TPtr& ev) {

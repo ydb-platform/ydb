@@ -1,5 +1,7 @@
 #include "yql_embedded.h"
 
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
+
 #include <ydb/library/yql/providers/yt/lib/log/yt_logger.h>
 #include <ydb/library/yql/providers/yt/lib/yt_download/yt_download.h>
 #include <ydb/library/yql/providers/yt/lib/yt_url_lister/yt_url_lister.h>
@@ -343,7 +345,7 @@ namespace NYql {
                 ytServices.FileStorage = FileStorage_;
                 ytServices.Config = std::make_shared<TYtGatewayConfig>(*ytConfig);
                 auto ytNativeGateway = CreateYtNativeGateway(ytServices);
-                dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+                dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory()));
 
                 ProgramFactory_ = MakeHolder<TProgramFactory>(
                     false, FuncRegistry_.Get(), ExprContext_.NextUniqueId, dataProvidersInit, "embedded");

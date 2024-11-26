@@ -181,7 +181,7 @@ void CommonInitialize(int, const char**)
     if (logPath.empty()) {
         logger = CreateStdErrLogger(logLevel);
     } else {
-        logger = CreateFileLogger(logLevel, logPath);
+        logger = CreateFileLogger(logLevel, logPath, /*append*/ true);
 
         auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateLogFile(logPath, ToCoreLogLevel(logLevel));
         NLogging::TLogManager::Get()->Configure(coreLoggingConfig);

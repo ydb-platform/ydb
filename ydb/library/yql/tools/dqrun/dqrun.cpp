@@ -23,6 +23,7 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h>
 #include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
@@ -963,7 +964,7 @@ int RunMain(int argc, const char* argv[])
         factories.push_back(GetYtFileFactory(ytFileServices));
         clusters["plato"] = YtProviderName;
         auto ytNativeGateway = CreateYtFileGateway(ytFileServices, &emulateOutputForMultirun);
-        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory()));
     } else if (gatewaysConfig.HasYt()) {
         TYtNativeServices ytServices;
         ytServices.FunctionRegistry = funcRegistry.Get();
@@ -974,7 +975,7 @@ int RunMain(int argc, const char* argv[])
         for (auto& cluster: gatewaysConfig.GetYt().GetClusterMapping()) {
             clusters.emplace(to_lower(cluster.GetName()), TString{YtProviderName});
         }
-        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway));
+        dataProvidersInit.push_back(GetYtNativeDataProviderInitializer(ytNativeGateway, NDq::MakeCBOOptimizerFactory()));
     }
 
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;

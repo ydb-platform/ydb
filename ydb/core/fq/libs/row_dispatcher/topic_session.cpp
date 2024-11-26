@@ -16,7 +16,7 @@
 
 #include <ydb/core/fq/libs/row_dispatcher/json_parser.h>
 #include <ydb/core/fq/libs/row_dispatcher/json_filter.h>
-#include <ydb/library/yql/public/purecalc/purecalc.h>
+#include <yql/essentials/public/purecalc/purecalc.h>
 
 namespace NFq {
 

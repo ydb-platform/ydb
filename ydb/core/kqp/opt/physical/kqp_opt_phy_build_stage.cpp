@@ -786,8 +786,11 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes
 
     auto rightStruct = tupleType.Arg(1).Cast<TCoStructType>();
 
+    TVector<TString> allLookupColumns;
+
     for (auto structContent : rightStruct ) {
         auto attrName = structContent.Ptr()->Child(0);
+        allLookupColumns.push_back(TString(attrName->Content()));
         auto field = Build<TCoNameValueTuple>(ctx, node.Pos())
                 .Name(attrName)
                 .Value<TCoMember>()
@@ -825,6 +828,10 @@ NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes
         auto columnName = inputStats->SortColumns->Columns[i];
         if (inputStats->SortColumns->Aliases[i] != "") {
             columnName = inputStats->SortColumns->Aliases[i] + "." + columnName;
+        }
+        if (std::find(allLookupColumns.begin(), allLookupColumns.end(), columnName) == allLookupColumns.end()) {
+            YQL_CLOG(TRACE, ProviderKqp) << "Aborting sorted lookup stage: column " << columnName << " not found in merge inputs!";
+            return node;
         }
         builder.Add<TDqSortColumn>()
             .Column<TCoAtom>().Build(columnName)

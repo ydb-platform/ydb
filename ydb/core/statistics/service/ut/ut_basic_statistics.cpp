@@ -54,8 +54,6 @@ void CreateTableWithGlobalIndex(TTestEnv& env, const TString& databaseName, cons
 }
 
 void ValidateRowCount(TTestActorRuntime& runtime, ui32 nodeIndex, TPathId pathId, size_t expectedRowCount) {
-    Y_UNUSED(expectedRowCount);
-
     auto statServiceId = NStat::MakeStatServiceID(runtime.GetNodeId(nodeIndex));
     ui64 rowCount = 0;
     while (rowCount == 0) {

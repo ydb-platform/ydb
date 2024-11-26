@@ -62,5 +62,6 @@ END()
 
 RECURSE_FOR_TESTS(
     ut_dst_creator
+    ut_stream_creator
     ut_target_discoverer
 )

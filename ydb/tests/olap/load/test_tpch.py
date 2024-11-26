@@ -75,7 +75,7 @@ class TestTpch1000(TpchSuiteBase):
         'lineitem': 5999989709,
     }
     scale: int = 1000
-    check_canonical: bool = False
+    check_canonical: bool = True
     timeout = max(TpchSuiteBase.timeout, 3600.)
 
 
@@ -85,5 +85,5 @@ class TestTpch10000(TpchSuiteBase):
     }
     scale: int = 10000
     iterations: int = 2
-    check_canonical: bool = False
+    check_canonical: bool = True
     timeout = max(TpchSuiteBase.timeout, 3600.)

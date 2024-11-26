@@ -379,6 +379,12 @@ public:
                 break;
             }
 
+            case NKqpProto::TKqpSchemeOperation::kBackupIncremental: {
+                const auto& modifyScheme = schemeOp.GetBackupIncremental();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
             default:
                 InternalError(TStringBuilder() << "Unexpected scheme operation: "
                     << (ui32) schemeOp.GetOperationCase());

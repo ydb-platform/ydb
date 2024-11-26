@@ -235,7 +235,7 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
 
 class TOptimizerNativeNew: public IOptimizerNew {
 public:
-    TOptimizerNativeNew(IProviderContext& ctx, ui32 maxDPhypDPTableSize, TExprContext* exprCtx = nullptr)
+    TOptimizerNativeNew(IProviderContext& ctx, ui32 maxDPhypDPTableSize, TExprContext* exprCtx)
         : IOptimizerNew(ctx)
         , MaxDPHypTableSize_(maxDPhypDPTableSize)
         , ExprCtx(exprCtx)
@@ -318,8 +318,8 @@ private:
     TExprContext* ExprCtx;
 };
 
-IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& ctx, const ui32 maxDPhypDPTableSize, TExprContext* exprCtx) {
-    return new TOptimizerNativeNew(ctx, maxDPhypDPTableSize, exprCtx);
+IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& pctx, const ui32 maxDPhypDPTableSize, TExprContext* ectx) {
+    return new TOptimizerNativeNew(pctx, maxDPhypDPTableSize, ectx);
 }
 
 TExprBase DqOptimizeEquiJoinWithCosts(

@@ -345,22 +345,19 @@ public:
         RequestContext.ResponseBadRequest(Ydb::StatusIds::BAD_REQUEST, error);
     }
 
-    #define CheckTypedResponse(typedResponse, ResultType)                                                   \
-    if (!typedResponse->operation().result().template Is<ResultType>()) {                                   \
-            TStringStream json;                                                                             \
-            auto* httpResult = google::protobuf::Arena::CreateMessage<FQHttp::Error>(resp->GetArena());     \
-            FqConvert(typedResponse->operation(), *httpResult);                                             \
-            FqPackToJson(json, *httpResult, jsonSettings);                                                  \
-            requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());         \
-            return;                                                                                         \
-    }
-
     static void SendReply(const THttpRequestContext& requestContext, const TJsonSettings& jsonSettings, NProtoBuf::Message* resp, ui32 status) {
         Y_ABORT_UNLESS(resp);
         Y_ABORT_UNLESS(resp->GetArena());
         Y_UNUSED(status);
         auto* typedResponse = static_cast<TGrpcProtoResponseType*>(resp);
-        CheckTypedResponse(typedResponse, TGrpcProtoResultType);
+        if (!typedResponse->operation().result().template Is<TGrpcProtoResultType>()) {                                   
+            TStringStream json;                                                                             
+            auto* httpResult = google::protobuf::Arena::CreateMessage<FQHttp::Error>(resp->GetArena());     
+            FqConvert(typedResponse->operation(), *httpResult);                                             
+            FqPackToJson(json, *httpResult, jsonSettings);                                                  
+            requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());         
+            return;                                                                                         
+        }
 
         auto* grpcResult = google::protobuf::Arena::CreateMessage<TGrpcProtoResultType>(resp->GetArena());
         typedResponse->operation().result().UnpackTo(grpcResult);
@@ -422,7 +419,15 @@ public:
             Y_ABORT_UNLESS(resp->GetArena());
 
             auto* typedResponse = static_cast<FederatedQuery::DescribeQueryResponse*>(resp);
-            CheckTypedResponse(typedResponse, FederatedQuery::DescribeQueryResult);
+            if (!typedResponse->operation().result().template Is<FederatedQuery::DescribeQueryResult>()) {                                   
+                TStringStream json;                                                                             
+                auto* httpResult = google::protobuf::Arena::CreateMessage<FQHttp::Error>(resp->GetArena());     
+                FqConvert(typedResponse->operation(), *httpResult);                                             
+                FqPackToJson(json, *httpResult, jsonSettings);                                                  
+                requestContext.ResponseBadRequestJson(typedResponse->operation().status(), json.Str());
+                this->Die(ctx);       
+                return;                                                                                         
+            }
 
             FederatedQuery::DescribeQueryResult* describeResult = google::protobuf::Arena::CreateMessage<FederatedQuery::DescribeQueryResult>(resp->GetArena());
             typedResponse->operation().result().UnpackTo(describeResult);
@@ -436,7 +441,7 @@ public:
             modifyRequest->set_allocated_content(&content);
             modifyRequest->set_execute_mode(::FederatedQuery::ExecuteMode::RUN);
             modifyRequest->set_allocated_disposition(nullptr);
-            modifyRequest->set_state_load_mode(::FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT);
+            modifyRequest->set_state_load_mode(::FederatedQuery::StateLoadMode::STATE_LOAD_MODE_UNSPECIFIED);
             modifyRequest->set_previous_revision(describeResult->Getquery().meta().Getlast_job_query_revision());
             modifyRequest->set_idempotency_key(requestContext.GetIdempotencyKey());
 

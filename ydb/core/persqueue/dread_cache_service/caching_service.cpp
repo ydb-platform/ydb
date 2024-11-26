@@ -266,6 +266,7 @@ private:
     [[nodiscard]] bool DestroyServerSession(TSessionsMap::iterator sessionIter, ui64 generation) {
         if (sessionIter.IsEnd() || sessionIter->second.Generation > generation)
             return false;
+        Cerr << "CahceProxy: DestroyServerSession with generation: " << generation << Endl;
         DestroyPartitionSession(sessionIter, Ydb::PersQueue::ErrorCode::READ_ERROR_NO_SESSION, "Closed by server");
         ServerSessions.erase(sessionIter);
         ChangeCounterValue("ActiveServerSessions", ServerSessions.size(), true);

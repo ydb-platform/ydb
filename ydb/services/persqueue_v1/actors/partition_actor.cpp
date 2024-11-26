@@ -627,7 +627,6 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         }
         return;
     }
-    TStringBuilder msg;
     switch (DirectReadRestoreStage) {
         case EDirectReadRestoreStage::None:
             break;
@@ -1104,8 +1103,9 @@ bool TPartitionActor::SendNextRestorePrepareOrForget() {
         DirectReadRestoreStage = EDirectReadRestoreStage::Prepare;
         Y_ABORT_UNLESS(dr.GetReadOffset() <= dr.GetLastOffset());
 
-        auto request = MakeReadRequest(dr.GetReadOffset(), dr.GetLastOffset() + 1, std::numeric_limits<i32>::max(),
+        auto request = MakeReadRequest(dr.GetReadOffset(), dr.GetLastOffset(), std::numeric_limits<i32>::max(),
                                     std::numeric_limits<i32>::max(), 0, 0, dr.GetDirectReadId());
+        Cerr << "Send restore request: " << request.DebugString() << Endl;
 
         if (!PipeClient) //Pipe will be recreated soon
             return true;

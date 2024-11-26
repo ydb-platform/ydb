@@ -524,6 +524,7 @@ TReadAnswer TReadInfo::FormAnswer(
                     Destination != 0, ctx.Now()
                 );
             }
+
             AddResultBlob(readResult, writeBlob, Offset);
             if (writeBlob.IsLastPart()) {
                 ++Offset;
@@ -600,7 +601,7 @@ TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(
         }
         while (it != DataKeysBody.end()
                && (size < maxSize && count < maxCount || count == 0) //count== 0 grants that blob with offset from ReadFromTimestamp will be readed
-               && (lastOffset == 0 || it->Key.GetOffset() < lastOffset)
+               && (lastOffset == 0 || it->Key.GetOffset() <= lastOffset)
         ) {
             size += sz;
             count += cnt;
@@ -646,14 +647,15 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
             Y_ABORT_UNLESS(pno == blobs[i].GetPartNo());
             bool skip = offset < startOffset || offset == startOffset &&
                 blobs[i].GetPartNo() < partNo;
+            if (lastOffset > 0 && offset > lastOffset) {
+                break;
+            }
             if (blobs[i].IsLastPart()) {
                 ++offset;
                 pno = 0;
             } else {
                 ++pno;
             }
-            if (lastOffset > 0 && offset >= lastOffset)
-                break;
 
             if (skip) continue;
 
@@ -667,10 +669,12 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
                 }
                 lastBlobSize = 0;
 
-                if (count > maxCount) // blob is counted already
+                if (count > maxCount) {// blob is counted already
                     break;
-                if (size > maxSize)
+                }
+                if (size > maxSize) {
                     break;
+                }
             }
             size += blobs[i].GetBlobSize();
             lastBlobSize += blobs[i].GetBlobSize();
@@ -988,7 +992,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     info.Blobs = blobs;
     ui64 lastOffset = info.Offset + Min(count, info.Count);
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "read cookie " << cookie << " added " << info.Blobs.size()
-                << " blobs, size " << size << " count " << count << " last offset " << lastOffset);
+                << " blobs, size " << size << " count " << count << " last offset " << lastOffset << ", current partition end offset: " << EndOffset);
 
     if (blobs.empty() || blobs.back().Key == DataKeysBody.back().Key) { // read from head only when all blobs from body processed
         ui64 insideHeadOffset{0};

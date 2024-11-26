@@ -171,7 +171,6 @@ public:
 
     void Bootstrap(const TActorContext& ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Read proxy: bootstrap for direct read id: " << DirectReadKey.ReadId);
         Become(&TThis::StateFunc);
     }
 
@@ -180,10 +179,10 @@ private:
     {
         Y_ABORT_UNLESS(Response);
         const auto& record = ev->Get()->Record;
-        TStringBuilder log; log << "ReadProxy: " << SelfId().ToString() << " handle response\n";
         if (!record.HasPartitionResponse() || !record.GetPartitionResponse().HasCmdReadResult() ||
             record.GetStatus() != NMsgBusProxy::MSTATUS_OK || record.GetErrorCode() != NPersQueue::NErrorCode::OK ||
             record.GetPartitionResponse().GetCmdReadResult().ResultSize() == 0) {
+
             Response->Record.CopyFrom(record);
             ctx.Send(Sender, Response.Release());
             Die(ctx);
@@ -191,7 +190,7 @@ private:
         }
         Y_ABORT_UNLESS(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult());
         const auto& readResult = record.GetPartitionResponse().GetCmdReadResult();
-        auto isDirectRead = IsDirectReadCmd(Request.GetPartitionRequest().GetCmdRead());
+        auto isDirectRead = DirectReadKey.ReadId != 0;
         if (isDirectRead) {
             if (!PreparedResponse) {
                 PreparedResponse = std::make_shared<NKikimrClient::TResponse>();
@@ -271,6 +270,8 @@ private:
             if (lastRes.HasPartNo() && lastRes.GetPartNo() + 1 < lastRes.GetTotalParts()) { //last res is not full
                 Request.SetRequestId(TMP_REQUEST_MARKER);
 
+
+                //ToDo: remove
                 auto read = Request.MutablePartitionRequest()->MutableCmdRead();
                 read->SetOffset(lastRes.GetOffset());
                 read->SetPartNo(lastRes.GetPartNo() + 1);
@@ -282,8 +283,8 @@ private:
 
                 THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
                 req->Record = Request;
-                ctx.Send(Tablet, req.Release());
 
+                ctx.Send(Tablet, req.Release());
                 return;
             }
         }
@@ -409,7 +410,7 @@ public:
 
         if (!Waiting) {
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Answer ok topic: '" << TopicName << "' partition: " << Partition
-                        << " messageNo: " << MessageNo << "  requestId: " << ReqId << " cookie: " << (Cookie ? *Cookie : 0));
+                        << " messageNo: " << MessageNo << "  requestId: " << ReqId << " cookie: " << (Cookie ? *Cookie : 0) << ", respond to: " << Sender.ToString());
 
             if (ResourceMetrics) {
                 ResourceMetrics->Network.Increment(Response->Record.ByteSizeLong());
@@ -2079,6 +2080,8 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TAc
                 responseCookie, cmd.GetClientId(), 0, cmd.GetSessionId(), cmd.GetPartitionSessionId(), cmd.GetGeneration(), cmd.GetStep(),
                 pipeClient, TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION, 0, false
         );
+
+        // TActorId prevPipe{};
         if (isDirectRead) {
             auto pipeIter = PipesInfo.find(pipeClient);
             if (pipeIter.IsEnd()) {
@@ -2086,6 +2089,12 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TAc
                         TStringBuilder() << "Internal error - server pipe " << pipeClient.ToString() << " not found");
                 return;
             }
+            // auto sessionIter = SessionToPipe.find(cmd.GetSessionId());
+            // if (!sessionIter.IsEnd()) {
+            //     prevPipe = std::move(sessionIter->second);
+            // }
+            // SessionToPipe[cmd.GetSessionId()] = pipeIter->first;
+
             pipeIter->second.ClientId = cmd.GetClientId();
             pipeIter->second.SessionId = cmd.GetSessionId();
             pipeIter->second.PartitionSessionId = cmd.GetPartitionSessionId();
@@ -2105,6 +2114,13 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TAc
             record.SetStatus(NMsgBusProxy::MSTATUS_OK);
             auto& partResponse = *record.MutablePartitionResponse();
             partResponse.MutableCmdRestoreDirectReadResult();
+            // if (prevPipe) {
+            //     // Clear session data for old pipe in case
+            //     auto pipeIter = PipesInfo.find(prevPipe);
+            //     if (!pipeIter.IsEnd()) {
+            //         pipeIter->second.SessionId = {};
+            //     }
+            // }
             Send(SelfId(), fakeResponse.Release());
         } else {
             ctx.Send(partActor, event.Release());

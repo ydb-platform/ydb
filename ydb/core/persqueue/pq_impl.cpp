@@ -169,7 +169,7 @@ public:
         }
     }
 
-    void Bootstrap(const TActorContext& ctx)
+    void Bootstrap(const TActorContext&)
     {
         Become(&TThis::StateFunc);
     }
@@ -283,7 +283,6 @@ private:
 
                 THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
                 req->Record = Request;
-
                 ctx.Send(Tablet, req.Release());
                 return;
             }

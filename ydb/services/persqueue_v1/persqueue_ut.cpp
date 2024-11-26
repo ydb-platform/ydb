@@ -1350,6 +1350,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.Server->AnnoyingClient->KillTablet(*(server.Server->CleverServer), tabletId);
         setup.SendDirectReadAck(assignId, 2);
         setup.ExpectDestroyPartitionSession(assignId);
+        setup.SendDirectReadAck(assignId, 3);
         Cerr << "Get next assing\n";
         auto nextAssignRes = setup.GetNextAssign("acc/topic3", assignRes.Generation);
         assignId = nextAssignRes.AssignId;
@@ -1358,21 +1359,21 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         bool checked = false;
         for (auto i = 0u; i < 50 && !checked; ++i) {
-            checked = checkCachedData(nextAssignRes.AssignId, 3, 2, nextAssignRes.Generation, false);
+            checked = checkCachedData(nextAssignRes.AssignId, 4, 1, nextAssignRes.Generation, false);
             Sleep(TDuration::MilliSeconds(200));
         }
         if (!checked)
-            checkCachedData(nextAssignRes.AssignId, 3, 2, nextAssignRes.Generation);
+            checkCachedData(nextAssignRes.AssignId, 4, 1, nextAssignRes.Generation);
 
         setup.DoWrite(pqClient->GetDriver(), "acc/topic3", 10_MB, 1); // 5
         setup.ReadDataNoAck(assignId, 4);
+        Cerr << "Ack direct read 4\n";
         setup.SendDirectReadAck(assignId, 4);
 
+        Cerr << "Wait direct read 5\n";
+        checkCachedData(nextAssignRes.AssignId, 5, 1, nextAssignRes.Generation);
         setup.ReadDataNoAck(assignId, 5);
-        //checkCachedData(nextAssignRes.AssignId, 3, 2, nextAssignRes.Generation);
-        checkCachedData(nextAssignRes.AssignId, 3, 2, nextAssignRes.Generation);
-        //setup.SendDirectReadAck(assignId, 4);
-        checkCachedData(nextAssignRes.AssignId, 4, 1, nextAssignRes.Generation);
+        checkCachedData(nextAssignRes.AssignId, 5, 1, nextAssignRes.Generation);
     }
 
     Y_UNIT_TEST(StreamReadManyUpdateTokenAndRead) {

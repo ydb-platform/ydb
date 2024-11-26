@@ -238,6 +238,9 @@ void TPartitionActor::RestartPipe(const TActorContext& ctx, const TString& reaso
     Counters.Errors.Inc();
 
     NTabletPipe::CloseClient(ctx, PipeClient);
+
+    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
+                                                                  << " schedule pipe restart attempt " << PipeGeneration << " reason: " << reason << ", current pipe: " << PipeClient.ToString());
     PipeClient = TActorId{};
     if (errorCode != NPersQueue::NErrorCode::OVERLOAD)
         ++PipeGeneration;
@@ -249,9 +252,6 @@ void TPartitionActor::RestartPipe(const TActorContext& ctx, const TString& reaso
     }
 
     ctx.Schedule(TDuration::MilliSeconds(RESTART_PIPE_DELAY_MS), new TEvPQProxy::TEvRestartPipe());
-
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                                                                  << " schedule pipe restart attempt " << PipeGeneration << " reason: " << reason);
 }
 
 
@@ -308,7 +308,7 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                             << " pipe restart attempt " << PipeGeneration << " RequestInfly " << RequestInfly << " ReadOffset " << ReadOffset << " EndOffset " << EndOffset
-                            << " InitDone " << InitDone << " WaitForData " << WaitForData);
+                            << " InitDone " << InitDone << " WaitForData " << WaitForData << ", pipe: " << PipeClient);
 
     if (InitDone && DirectRead) {
         DirectReadsToRestore = DirectReadResults;
@@ -886,7 +886,7 @@ void TPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const 
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                             << " pipe restart attempt " << PipeGeneration << " pipe creation result: " << msg->Status
-                            << " TabletId: " << msg->TabletId << " Generation: " << msg->Generation);
+                            << " TabletId: " << msg->TabletId << " Generation: " << msg->Generation << ", pipe: " << PipeClient.ToString());
 
     if (msg->Status != NKikimrProto::OK) {
         RestartPipe(ctx, TStringBuilder() << "pipe to tablet is dead " << msg->TabletId, NPersQueue::NErrorCode::TABLET_PIPE_DISCONNECTED);

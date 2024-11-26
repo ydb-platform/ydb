@@ -126,6 +126,10 @@ def extract_keys(response):
 def status_code_to_label(status=None):
     if status is None:
         return 'Success'
+    # sometimes status is ydb.StatusCode, sometimes ydb.Error
+    # bug in sdk? 
+    if isinstance(status, ydb.Error):
+        status = status.status
     return status.name.lower().capitalize()
 
 
@@ -377,11 +381,8 @@ class YdbQueue(object):
         )
 
     def move_iterator(self, it, callback):
-        try:
-            next_f = next(it)
-            next_f.add_done_callback(lambda x: callback(it, x))
-        except StopIteration:
-            return
+        next_f = next(it)
+        next_f.add_done_callback(lambda x: callback(it, x))
 
     def on_read_table_chunk(self, it, f):
         try:
@@ -389,6 +390,8 @@ class YdbQueue(object):
             self.stats.save_event(EventKind.READ_TABLE_CHUNK)
         except ydb.Error as e:
             self.stats.save_event(EventKind.READ_TABLE_CHUNK, e)
+        except StopIteration:
+            return
         self.move_iterator(it, self.on_read_table_chunk)
 
     def on_scan_query_chunk(self, it, f):
@@ -397,6 +400,8 @@ class YdbQueue(object):
             self.stats.save_event(EventKind.SCAN_QUERY_CHUNK)
         except ydb.Error as e:
             self.stats.save_event(EventKind.SCAN_QUERY_CHUNK, e)
+        except StopIteration:
+            return
 
         self.move_iterator(it, self.on_scan_query_chunk)
 

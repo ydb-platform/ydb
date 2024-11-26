@@ -295,11 +295,17 @@ private:
     std::shared_ptr<TAtomicCounter> AssembleTasksCount;
     std::shared_ptr<TAtomicCounter> ReadTasksCount;
     std::shared_ptr<TAtomicCounter> ResourcesAllocationTasksCount;
+    std::shared_ptr<TAtomicCounter> ResultsForSourceCount;
+
 public:
     TScanAggregations Aggregations;
 
     TCounterGuard GetFetcherAcessorsGuard() const {
         return TCounterGuard(FetchAccessorsCount);
+    }
+
+    TCounterGuard GetResultsForSourceGuard() const {
+        return TCounterGuard(ResultsForSourceCount);
     }
 
     TCounterGuard GetMergeTasksGuard() const {
@@ -320,7 +326,7 @@ public:
 
     bool InWaiting() const {
         return MergeTasksCount->Val() || AssembleTasksCount->Val() || ReadTasksCount->Val() || ResourcesAllocationTasksCount->Val() ||
-               FetchAccessorsCount->Val();
+               FetchAccessorsCount->Val() || ResultsForSourceCount->Val();
     }
 
     void OnBlobsWaitDuration(const TDuration d, const TDuration fullScanDuration) const {
@@ -335,6 +341,7 @@ public:
         , AssembleTasksCount(std::make_shared<TAtomicCounter>())
         , ReadTasksCount(std::make_shared<TAtomicCounter>())
         , ResourcesAllocationTasksCount(std::make_shared<TAtomicCounter>())
+        , ResultsForSourceCount(std::make_shared<TAtomicCounter>())
         , Aggregations(TBase::BuildAggregations())
     {
 

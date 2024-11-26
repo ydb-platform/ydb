@@ -94,7 +94,9 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
     AFL_VERIFY(ev->Get()->GetWriteStatus() == NKikimrProto::OK);
     std::vector<TInsertedPortions> writtenPacks = ev->Get()->DetachInsertedPacks();
     std::vector<TFailedWrite> fails = ev->Get()->DetachFails();
+    const TMonotonic now = TMonotonic::Now();
     for (auto&& i : writtenPacks) {
+        Counters.OnWritePutBlobsSuccess(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
         Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
     }
     for (auto&& i : fails) {
@@ -556,12 +558,15 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
+    Counters.GetColumnTablesCounters()->GetPathIdCounter(pathId)->OnWriteEvent();
+
     auto arrowData = std::make_shared<TArrowData>(schema);
     if (!arrowData->Parse(operation, NEvWrite::TPayloadReader<NEvents::TDataEvents::TEvWrite>(*ev->Get()))) {
         Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
         auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "parsing data error");
         ctx.Send(source, result.release(), 0, cookie);
+        return;
     }
 
     auto overloadStatus = CheckOverloaded(pathId);

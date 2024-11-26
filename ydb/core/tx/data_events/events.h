@@ -62,7 +62,8 @@ struct TDataEvents {
             return *this;
         }
 
-        void AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType, const TTableId& tableId, const std::vector<ui32>& columnIds,
+        NKikimrDataEvents::TEvWrite::TOperation& AddOperation(NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType,
+            const TTableId& tableId, const std::vector<ui32>& columnIds,
             ui64 payloadIndex, NKikimrDataEvents::EDataFormat payloadFormat) {
             Y_ABORT_UNLESS(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
             Y_ABORT_UNLESS(payloadFormat != NKikimrDataEvents::FORMAT_UNSPECIFIED);
@@ -75,6 +76,7 @@ struct TDataEvents {
             operation->MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
             operation->MutableTableId()->SetSchemaVersion(tableId.SchemaVersion);
             operation->MutableColumnIds()->Assign(columnIds.begin(), columnIds.end());
+            return *operation;
         }
 
         ui64 GetTxId() const {

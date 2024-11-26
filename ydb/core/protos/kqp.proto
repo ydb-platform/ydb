@@ -680,6 +680,19 @@ message TEvScanError {
     optional uint64 TabletId = 4;
 }
 
+message TEvKqpScanCursor {
+    message TColumnShardScanPlain {
+    }
+    message TColumnShardScanSimple {
+        optional uint64 SourceId = 1;
+        optional uint32 StartRecordIndex = 2;
+    }
+    oneof Implementation {
+        TColumnShardScanPlain ColumnShardPlain = 10;
+        TColumnShardScanSimple ColumnShardSimple = 11;
+    }
+}
+
 message TEvRemoteScanData {
     optional uint32 ScanId = 1;
     optional uint64 CpuTimeUs = 2;
@@ -703,6 +716,7 @@ message TEvRemoteScanData {
 
     optional bool RequestedBytesLimitReached = 11 [default = false];
     optional uint32 AvailablePacks = 12;
+    optional TEvKqpScanCursor LastCursor = 13;
 }
 
 message TEvRemoteScanDataAck {

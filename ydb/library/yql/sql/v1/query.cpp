@@ -949,7 +949,7 @@ public:
             auto options = tr.Options ? Q(tr.Options) : Q(Y());
             Add(Y("let", "x", keys->Y(TString(ReadName), "world", source, keys, fields, options)));
 
-            if (tr.Service != YtProviderName && InSubquery) {
+            if (IsIn({KikimrProviderName, YdbProviderName}, tr.Service) && InSubquery) {
                 ctx.Error() << "Using of system '" << tr.Service << "' is not allowed in SUBQUERY";
                 return false;
             }

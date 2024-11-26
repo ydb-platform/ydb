@@ -1,9 +1,16 @@
-## 2.16.0 ##
-
-* Improved `ydb import file csv` command processing speed, approximately x3
+* Improved `ydb import file csv` command processing speed. It is now approximately x3 times faster
 * Allow running stock bench for Olap shards
 * Specify more clearly what concrete type of timestamp is in options in `ydb topic` commands
-* Support different timestamp formats in `ydb topic` commands
+* Added support different timestamp formats in `ydb topic` commands
+* Added `--explain-ast` option to `ydb sql` command that prints query AST
+* Highlighting in interactive mode switched to common lexer using ANSI SQL syntax so ANSI queries can be highlighted correctly
+* Added location printing for errors in `ydb tools restore` command
+* Diffs in `ydb workload` benchmarks are now printed prettier
+* Fixed progress bar in `ydb workload import` command
+* Added pg syntax to tpch and tpcds benchmarks
+* Fixed a bug where restoring from a backup using --import-data could fail if the partitioning of the table was changed
+* In the `ydb topic write` command the `--codec` option now has default value `RAW`.
+
 
 ## 2.15.0 ##
 

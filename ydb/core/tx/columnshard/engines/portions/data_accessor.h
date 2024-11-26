@@ -20,7 +20,7 @@ private:
     std::optional<std::vector<TIndexChunk>> Indexes;
 
     template <class TChunkInfo>
-    static bool CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
+    static void CheckChunksOrder(const std::vector<TChunkInfo>& chunks) {
         ui32 entityId = 0;
         ui32 chunkIdx = 0;
         for (auto&& i : chunks) {

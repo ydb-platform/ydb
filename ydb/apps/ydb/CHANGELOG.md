@@ -13,6 +13,7 @@
 * Fixed a bug where restoring from a backup using --import-data could fail if the partitioning of the table was changed
 * In the `ydb topic write` command the `--codec` option now has default value `RAW`.
 * Added log events for `ydb tools dump` and `ydb tools restore` commands
+* Added `-c` option for `ydb workload tpcds run` command to compare the result with expected value and show the diff
 
 
 ## 2.15.0 ##

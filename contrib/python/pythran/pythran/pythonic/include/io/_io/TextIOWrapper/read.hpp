@@ -13,7 +13,7 @@ namespace io
     {
       USING_FUNCTOR(read, builtins::file::functor::read);
     }
-  }
-}
+  } // namespace _io
+} // namespace io
 PYTHONIC_NS_END
 #endif

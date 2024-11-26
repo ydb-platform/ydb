@@ -1278,7 +1278,7 @@ class TNodeSetter
     private: \
         I##name##Node* const Node_; \
         \
-        virtual ENodeType GetExpectedType() override \
+        ENodeType GetExpectedType() override \
         { \
             return ENodeType::name; \
         }

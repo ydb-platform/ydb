@@ -436,6 +436,23 @@ public:
 
     std::vector<TPage> BuildPages() const;
     ui64 GetMinMemoryForReadColumns(const std::optional<std::set<ui32>>& columnIds) const;
+
+    class TReadPage {
+    private:
+        YDB_READONLY(ui32, IndexStart, 0);
+        YDB_READONLY(ui32, RecordsCount, 0);
+        YDB_READONLY(ui64, MemoryUsage, 0);
+
+    public:
+        TReadPage(const ui32 indexStart, const ui32 recordsCount, const ui64 memoryUsage)
+            : IndexStart(indexStart)
+            , RecordsCount(recordsCount)
+            , MemoryUsage(memoryUsage) {
+            AFL_VERIFY(RecordsCount);
+        }
+    };
+
+    std::vector<TReadPage> BuildReadPages(const ui64 memoryLimit, const std::set<ui32>& entityIds) const;
 };
 
 }   // namespace NKikimr::NOlap

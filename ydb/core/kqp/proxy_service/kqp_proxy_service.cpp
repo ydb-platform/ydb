@@ -919,7 +919,7 @@ public:
             LocalSessions->StartIdleCheck(info, GetSessionIdleDuration());
         }
 
-        Send(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
+        Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
 
         if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest) {
             LocalSessions->DetachQueryText(info);

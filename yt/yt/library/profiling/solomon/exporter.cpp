@@ -79,6 +79,8 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("rename_converted_counters", &TThis::RenameConvertedCounters)
         .Default(true);
+    registrar.Parameter("convert_counters_to_delta_gauge", &TThis::ConvertCountersToDeltaGauge)
+        .Default(false);
 
     registrar.Parameter("export_summary", &TThis::ExportSummary)
         .Default(false);
@@ -130,6 +132,12 @@ void TSolomonExporterConfig::Register(TRegistrar registrar)
     registrar.Postprocessor([] (TThis* config) {
         if (config->LingerTimeout.GetValue() % config->GridStep.GetValue() != 0) {
             THROW_ERROR_EXCEPTION("\"linger_timeout\" must be multiple of \"grid_step\"");
+        }
+    });
+
+    registrar.Postprocessor([] (TThis* config) {
+        if (config->ConvertCountersToRateForSolomon && config->ConvertCountersToDeltaGauge) {
+            THROW_ERROR_EXCEPTION("\"convert_counters_to_rate_for_solomon\" and \"convert_counters_to_delta_gauge\" both set to true");
         }
     });
 
@@ -779,6 +787,9 @@ void TSolomonExporter::DoHandleShard(
             if (readGridStep) {
                 options.RateDenominator = readGridStep->SecondsFloat();
             }
+        }
+        if (Config_->ConvertCountersToDeltaGauge && outputEncodingContext.IsSolomonPull) {
+            options.ConvertCountersToDeltaGauge = true;
         }
 
         options.EnableSolomonAggregationWorkaround = outputEncodingContext.IsSolomonPull;

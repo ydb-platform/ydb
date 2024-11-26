@@ -443,7 +443,12 @@ public:
 
 std::shared_ptr<TDataForIndexesCheckers> TDataForIndexesCheckers::Build(const TProgramContainer& program) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("program", program.DebugString());
-    auto fStep = program.GetSteps().front();
+    auto& steps = program.GetStepsVerified();
+    if (!steps.size()) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "no_steps_in_program");
+        return nullptr;
+    }
+    auto fStep = steps.front();
     TNormalForm nForm;
     for (auto&& s : fStep->GetAssignes()) {
         if (!nForm.Add(s, program)) {

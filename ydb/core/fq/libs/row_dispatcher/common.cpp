@@ -21,6 +21,10 @@ public:
         return it->second;
     }
 
+    TGuard<TMutex> LockFactory() const override {
+        return Guard(FactoryMutex);
+    }
+
 private:
     void CreateFactory(const TSettings& settings) {
         ProgramFactories.insert({settings, NYql::NPureCalc::MakeProgramFactory(
@@ -31,12 +35,37 @@ private:
 
 private:
     std::map<TSettings, NYql::NPureCalc::IProgramFactoryPtr> ProgramFactories;
+    TMutex FactoryMutex;
 };
 
 } // anonymous namespace
 
 IPureCalcProgramFactory::TPtr CreatePureCalcProgramFactory() {
     return MakeIntrusive<TPureCalcProgramFactory>();
+}
+
+TString CleanupCounterValueString(const TString& value) {
+    TString clean;
+    constexpr auto valueLenghtLimit = 200;
+
+    for (auto c : value) {
+        switch (c) {
+        case '|':
+        case '*':
+        case '?':
+        case '"':
+        case '\'':
+        case '`':
+        case '\\':
+            continue;
+        default:
+            clean.push_back(c);
+            if (clean.size() == valueLenghtLimit) {
+                break;
+            }
+        }
+    }
+    return clean;
 }
 
 } // namespace NFq

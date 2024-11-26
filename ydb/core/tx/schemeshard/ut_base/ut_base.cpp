@@ -11509,5 +11509,66 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // TODO: validate no index created
         // TODO: validate no stream created
+
+        if (WithIncremental) {
+            TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot", R"(
+                Name: ".backups/collections/MyCollection1"
+            )");
+
+            env.TestWaitNotification(runtime, txId);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/MyCollection1"), {
+                NLs::PathExist,
+                NLs::IsBackupCollection,
+                NLs::ChildrenCount(2),
+                NLs::Finished,
+            });
+
+            auto descr = DescribePath(runtime, "/MyRoot/.backups/collections/MyCollection1").GetPathDescription();
+            UNIT_ASSERT_VALUES_EQUAL(descr.GetChildren().size(), 2);
+
+            const char* incrBackupDirName = nullptr;
+            for (auto& dir : descr.GetChildren()) {
+                if (dir.GetName().EndsWith("_incremental")) {
+                    incrBackupDirName = dir.GetName().c_str();
+                }
+            }
+
+            TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s", incrBackupDirName)), {
+                NLs::PathExist,
+                NLs::ChildrenCount(2),
+                NLs::Finished,
+            });
+
+            TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s/Table1", incrBackupDirName)), {
+                NLs::PathExist,
+                NLs::IsTable,
+                NLs::Finished,
+            });
+
+            TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s/DirA", incrBackupDirName)), {
+                NLs::PathExist,
+                NLs::ChildrenCount(2),
+                NLs::Finished,
+            });
+
+            TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s/DirA/Table2", incrBackupDirName)), {
+                NLs::PathExist,
+                NLs::IsTable,
+                NLs::Finished,
+            });
+
+            TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s/DirA/DirB", incrBackupDirName)), {
+                NLs::PathExist,
+                NLs::ChildrenCount(1),
+                NLs::Finished,
+            });
+
+            TestDescribeResult(DescribePath(runtime, Sprintf("/MyRoot/.backups/collections/MyCollection1/%s/DirA/DirB/Table3", incrBackupDirName)), {
+                NLs::PathExist,
+                NLs::IsTable,
+                NLs::Finished,
+            });
+        }
     }
 }

@@ -141,20 +141,20 @@ struct TSelectRowsOptionsBase
     , public TSuppressableAccessTrackingOptions
 {
     //! Limits range expanding.
-    ui64 RangeExpansionLimit = 200000;
-    //! Limits maximum parallel subqueries.
-    int MaxSubqueries = std::numeric_limits<int>::max();
+    ui64 RangeExpansionLimit = 200'000;
     //! Limits parallel subqueries by row count.
-    ui64 MinRowCountPerSubquery = 100'000;
+    i64 MinRowCountPerSubquery = 100'000;
     //! Path in Cypress with UDFs.
     std::optional<TString> UdfRegistryPath;
+    //! Limits maximum parallel subqueries.
+    int MaxSubqueries = std::numeric_limits<int>::max();
+    //! Query language syntax version.
+    int SyntaxVersion = 1;
     //! If |true| then logging is more verbose.
     bool VerboseLogging = false;
     // COMPAT(lukyan)
     //! Use fixed and rewritten range inference.
     bool NewRangeInference = true;
-    //! Query language syntax version.
-    int SyntaxVersion = 1;
 };
 
 DEFINE_ENUM(EExecutionBackend,
@@ -169,16 +169,8 @@ struct TSelectRowsOptions
     std::optional<i64> InputRowLimit;
     //! If null then connection defaults are used.
     std::optional<i64> OutputRowLimit;
-    //! Allow queries without any condition on key columns.
-    bool AllowFullScan = true;
-    //! Allow queries with join condition which implies foreign query with IN operator.
-    bool AllowJoinWithoutIndex = false;
     //! Execution pool.
     std::optional<TString> ExecutionPool;
-    //! If |true| then incomplete result would lead to a failure.
-    bool FailOnIncompleteResult = true;
-    //! Enables generated code caching.
-    bool EnableCodeCache = true;
     //! Used to prioritize requests.
     TUserWorkloadDescriptor WorkloadDescriptor;
     //! Memory limit per execution node.
@@ -189,10 +181,6 @@ struct TSelectRowsOptions
     NYson::TYsonString PlaceholderValues;
     //! Native or WebAssembly execution backend.
     std::optional<EExecutionBackend> ExecutionBackend;
-    //! Enables canonical SQL behaviour for relational operators, i.e. null </=/> value -> null.
-    bool UseCanonicalNullRelations = false;
-    //! Merge versioned rows from different stores when reading.
-    bool MergeVersionedRows = true;
     //! Expected schemas for tables in a query (used for replica fallback in replicated tables).
     using TExpectedTableSchemas = THashMap<NYPath::TYPath, NTableClient::TTableSchemaPtr>;
     TExpectedTableSchemas ExpectedTableSchemas;
@@ -200,6 +188,18 @@ struct TSelectRowsOptions
     NTableClient::TVersionedReadOptions VersionedReadOptions;
     //! Explicitly allow or forbid the usage of row cache.
     std::optional<bool> UseLookupCache;
+    //! Allow queries without any condition on key columns.
+    bool AllowFullScan = true;
+    //! Allow queries with join condition which implies foreign query with IN operator.
+    bool AllowJoinWithoutIndex = false;
+    //! If |true| then incomplete result would lead to a failure.
+    bool FailOnIncompleteResult = true;
+    //! Enables generated code caching.
+    bool EnableCodeCache = true;
+    //! Enables canonical SQL behaviour for relational operators, i.e. null </=/> value -> null.
+    bool UseCanonicalNullRelations = false;
+    //! Merge versioned rows from different stores when reading.
+    bool MergeVersionedRows = true;
 };
 
 struct TFallbackReplicaOptions

@@ -13,7 +13,7 @@ namespace numpy
   {
     return expr[indices];
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

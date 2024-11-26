@@ -68,7 +68,8 @@
                                                                             }
                                                                         ],
                                                                         "Name": "Filter",
-                                                                        "Predicate": "AdvEngineID != 0"
+                                                                        "Predicate": "AdvEngineID != 0",
+                                                                        "Pushdown": "True"
                                                                     },
                                                                     {
                                                                         "Inputs": [],

@@ -609,7 +609,7 @@ void TClientResponse::Deserialize(TSharedRefArray responseMessage)
     std::optional<NCompression::ECodec> bodyCodecId;
     NCompression::ECodec attachmentCodecId;
     if (Header_.has_codec()) {
-        bodyCodecId = attachmentCodecId = CheckedEnumCast<NCompression::ECodec>(Header_.codec());
+        bodyCodecId = attachmentCodecId = FromProto<NCompression::ECodec>(Header_.codec());
     } else {
         bodyCodecId = std::nullopt;
         attachmentCodecId = NCompression::ECodec::None;

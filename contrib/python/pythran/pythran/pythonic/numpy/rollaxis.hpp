@@ -3,15 +3,15 @@
 
 #include "pythonic/include/numpy/rollaxis.hpp"
 
-#include "pythonic/numpy/transpose.hpp"
 #include "pythonic/numpy/copy.hpp"
+#include "pythonic/numpy/transpose.hpp"
 
 PYTHONIC_NS_BEGIN
 
 namespace numpy
 {
   template <class T, class pS>
-  types::ndarray<T, types::array<long, std::tuple_size<pS>::value>>
+  types::ndarray<T, types::array_tuple<long, std::tuple_size<pS>::value>>
   rollaxis(types::ndarray<T, pS> const &a, long axis, long start)
   {
     long constexpr N = std::tuple_size<pS>::value;
@@ -37,7 +37,7 @@ namespace numpy
   }
 
   NUMPY_EXPR_TO_NDARRAY0_IMPL(rollaxis);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

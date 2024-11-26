@@ -231,4 +231,21 @@ void TLenvalProtoSingleTableWriter::AddRow(const Message& row, size_t tableIndex
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void LenvalEncodeProto(IZeroCopyOutput* output, const ::google::protobuf::Message& message)
+{
+    i32 size = message.ByteSizeLong();
+    output->Write(&size, sizeof(size));
+
+    TProtobufZeroCopyOutputStream adapter(output);
+    auto result = message.SerializeToZeroCopyStream(&adapter);
+
+    adapter.ThrowOnError();
+
+    if (!result) {
+        ythrow yexception() << "Failed to serialize protobuf message";
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT

@@ -29,9 +29,9 @@ namespace numpy
     }
 
     inline auto geometric(double p, long size)
-        -> decltype(geometric(p, types::array<long, 1>{{size}}))
+        -> decltype(geometric(p, types::array_tuple<long, 1>{{size}}))
     {
-      return geometric(p, types::array<long, 1>{{size}});
+      return geometric(p, types::array_tuple<long, 1>{{size}});
     }
 
     inline double geometric(double p, types::none_type d)

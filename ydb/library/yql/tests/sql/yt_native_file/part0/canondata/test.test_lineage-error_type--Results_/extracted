@@ -1,5 +1,0 @@
-<tmp_path>/program.sql:<main>: Error: Optimization
-
-    <tmp_path>/program.sql:<main>:4:1: Error: Uncompatible member foo types: Int32 and String
-    	SELECT
-	^

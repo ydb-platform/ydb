@@ -300,6 +300,7 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropBackupCollection);
     DROP_BY_PATH_ID_HELPERS(DropBackupCollection);
     GENERIC_HELPERS(BackupBackupCollection);
+    GENERIC_HELPERS(BackupIncrementalBackupCollection);
 
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS

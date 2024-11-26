@@ -3,6 +3,7 @@
 
 #include <ydb/core/tx/schemeshard/schemeshard_user_attr_limits.h>
 #include <ydb/core/protos/bind_channel_storage_pool.pb.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
 

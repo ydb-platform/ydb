@@ -2671,6 +2671,7 @@ void TExecutor::Handle(TEvents::TEvFlushLog::TPtr &ev) {
 }
 
 void TExecutor::Handle(NSharedCache::TEvRequest::TPtr &ev) {
+    Y_ABORT("How this is possible?");
     const auto priority = ev->Get()->Priority;
     TAutoPtr<NPageCollection::TFetch> msg = ev->Get()->Fetch;
 

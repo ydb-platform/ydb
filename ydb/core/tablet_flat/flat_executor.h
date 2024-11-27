@@ -599,7 +599,6 @@ class TExecutor
     const NTable::TRowVersionRanges& TableRemovedRowVersions(ui32 table) override;
     ui64 BeginCompaction(THolder<NTable::TCompactionParams> params) override;
     bool CancelCompaction(ui64 compactionId) override;
-    bool CancelRead(ui64 readId) override;
     void RequestChanges(ui32 table) override;
 
     // Compaction read support

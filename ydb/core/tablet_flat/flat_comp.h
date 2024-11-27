@@ -205,11 +205,6 @@ namespace NTable {
         virtual bool CancelCompaction(ui64 compactionId) = 0;
 
         /**
-         * Cancels a previously started BeginRead call
-         */
-        virtual bool CancelRead(ui64 readId) = 0;
-
-        /**
          * Requests backend to call ApplyChanges for the specified table
          *
          * Backend may schedule and call ApplyChanges at any later time, even

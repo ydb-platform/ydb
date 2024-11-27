@@ -4496,19 +4496,6 @@ bool TExecutor::CancelCompaction(ui64 compactionId)
     return Scans->CancelSystem(compactionId);
 }
 
-bool TExecutor::CancelRead(ui64 readId)
-{
-    if (auto it = CompactionReads.find(readId); it != CompactionReads.end()) {
-        auto* state = &it->second;
-        UnpinCompactionReadPages(state);
-        CompactionReads.erase(it);
-        Counters->Simple()[TExecutorCounters::COMPACTION_READ_IN_FLY] = CompactionReads.size();
-        return true;
-    }
-
-    return false;
-}
-
 void TExecutor::RequestChanges(ui32 table)
 {
     Y_ABORT_UNLESS(CompactionLogic);

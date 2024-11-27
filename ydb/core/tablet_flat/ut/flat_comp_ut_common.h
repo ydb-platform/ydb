@@ -90,10 +90,6 @@ public:
         return StartedCompactions.erase(compactionId) > 0;
     }
 
-    bool CancelRead(ui64 readId) override {
-        return PendingReads.erase(readId) > 0;
-    }
-
     void RequestChanges(ui32 table) override {
         Y_ABORT_UNLESS(table == 1, "Unexpected table");
         ChangesRequested_ = true;

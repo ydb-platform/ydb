@@ -205,16 +205,6 @@ namespace NTable {
         virtual bool CancelCompaction(ui64 compactionId) = 0;
 
         /**
-         * Request backend to perform some page reads
-         *
-         * Note that the first Execute call may be performed before the return
-         * from BeginRead. The returned id may be used for cancelling a pending
-         * read, where a value of 0 is used to indicate the read has finished
-         * before the return from BeginRead.
-         */
-        virtual ui64 BeginRead(THolder<ICompactionRead> read) = 0;
-
-        /**
          * Cancels a previously started BeginRead call
          */
         virtual bool CancelRead(ui64 readId) = 0;

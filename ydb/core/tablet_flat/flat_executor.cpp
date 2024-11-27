@@ -4496,40 +4496,6 @@ bool TExecutor::CancelCompaction(ui64 compactionId)
     return Scans->CancelSystem(compactionId);
 }
 
-ui64 TExecutor::BeginRead(THolder<NTable::ICompactionRead> read)
-{
-    Counters->Simple()[TExecutorCounters::COMPACTION_READ_IN_FLY] = CompactionReads.size() + 1;
-
-    PrivatePageCache->ResetTouchesAndToLoad(true);
-    TPageCollectionReadEnv env(*PrivatePageCache);
-    bool finished = read->Execute(&env);
-
-    if (PrivatePageCache->GetStats().CurrentCacheHits) {
-        // Cache hits are only counted when read is first executed
-        Counters->Cumulative()[TExecutorCounters::COMPACTION_READ_CACHE_HITS].Increment(PrivatePageCache->GetStats().CurrentCacheHits);
-    }
-
-    if (finished) {
-        // Optimize for successful read completion
-        PrivatePageCache->ResetTouchesAndToLoad(false);
-        Counters->Simple()[TExecutorCounters::COMPACTION_READ_IN_FLY] = CompactionReads.size();
-        return 0;
-    }
-
-    ui64 readId = ++CompactionReadUniqCounter;
-    auto r = CompactionReads.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(readId),
-            std::forward_as_tuple(readId, std::move(read)));
-    Y_ABORT_UNLESS(r.second, "Cannot register a new read %" PRIu64, readId);
-
-    auto* state = &r.first->second;
-    PostponeCompactionRead(state);
-    PrivatePageCache->ResetTouchesAndToLoad(false);
-
-    return readId;
-}
-
 bool TExecutor::CancelRead(ui64 readId)
 {
     if (auto it = CompactionReads.find(readId); it != CompactionReads.end()) {

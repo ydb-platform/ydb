@@ -90,13 +90,6 @@ public:
         return StartedCompactions.erase(compactionId) > 0;
     }
 
-    ui64 BeginRead(THolder<ICompactionRead> read) override {
-        Y_ABORT_UNLESS(read);
-        ui64 readId = NextReadId_++;
-        PendingReads[readId] = std::move(read);
-        return readId;
-    }
-
     bool CancelRead(ui64 readId) override {
         return PendingReads.erase(readId) > 0;
     }
@@ -332,7 +325,6 @@ private:
     ui32 Gen = 0;
     ui32 Step = 0;
 
-    ui64 NextReadId_ = 1;
     ui64 NextCompactionId_ = 1;
     ui64 NextForcedCompactionId_ = 1001;
 

@@ -3073,6 +3073,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableseqmode") {
             Ctx.SeqMode = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableSeqMode");
+        } else if (normalizedPragma == "emitunionmerge") {
+            Ctx.EmitUnionMerge = true;
+            Ctx.IncrementMonCounter("sql_pragma", "EmitUnionMerge");
+        } else if (normalizedPragma == "disableemitunionmerge") {
+            Ctx.EmitUnionMerge = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableEmitUnionMerge");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

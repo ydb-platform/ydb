@@ -1385,12 +1385,21 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(UnionAllTest) {
-        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input UNION ALL select subkey FROM plato.Input;");
+        NYql::TAstParseResult res = SqlToYql("PRAGMA DisableEmitUnionMerge; SELECT key FROM plato.Input UNION ALL select subkey FROM plato.Input;");
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("UnionAll"), 0}};
         VerifyProgram(res, elementStat, {});
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["UnionAll"]);
+    }
+
+    Y_UNIT_TEST(UnionAllMergeTest) {
+        NYql::TAstParseResult res = SqlToYql("PRAGMA EmitUnionMerge; SELECT key FROM plato.Input UNION ALL select subkey FROM plato.Input;");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("UnionMerge"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["UnionMerge"]);
     }
 
     Y_UNIT_TEST(UnionTest) {
@@ -1404,6 +1413,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(UnionAggregationTest) {
         NYql::TAstParseResult res = SqlToYql(R"(
+            PRAGMA DisableEmitUnionMerge;
             SELECT 1
             UNION ALL
                 SELECT 1 UNION ALL SELECT 1 UNION ALL SELECT 1
@@ -1417,6 +1427,25 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TWordCountHive elementStat = {{TString("Union"), 0}, {TString("UnionAll"), 0}};
         VerifyProgram(res, elementStat, {});
         UNIT_ASSERT_VALUES_EQUAL(2, elementStat["UnionAll"]);
+        UNIT_ASSERT_VALUES_EQUAL(3, elementStat["Union"]);
+    }
+
+    Y_UNIT_TEST(UnionMergeAggregationTest) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            PRAGMA EmitUnionMerge;
+            SELECT 1
+            UNION ALL
+                SELECT 1 UNION ALL SELECT 1 UNION ALL SELECT 1
+            UNION
+                SELECT 1 UNION SELECT 1 UNION SELECT 1 UNION SELECT 1
+            UNION ALL
+                SELECT 1 UNION ALL SELECT 1 UNION ALL SELECT 1;
+        )");
+        UNIT_ASSERT(res.Root);
+
+        TWordCountHive elementStat = {{TString("Union"), 0}, {TString("UnionMerge"), 0}};
+        VerifyProgram(res, elementStat, {});
+        UNIT_ASSERT_VALUES_EQUAL(2, elementStat["UnionMerge"]);
         UNIT_ASSERT_VALUES_EQUAL(3, elementStat["Union"]);
     }
 

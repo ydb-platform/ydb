@@ -3047,6 +3047,9 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             Ctx.CompactNamedExprs = true;
             Ctx.IncrementMonCounter("sql_pragma", "CompactNamedExprs");
         } else if (normalizedPragma == "disablecompactnamedexprs") {
+            Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
+                << "Deprecated pragma DisableCompactNamedExprs - it will be removed soon. "
+                   "Consider submitting bug report if CompactNamedExprs doesn't work for you";
             Ctx.CompactNamedExprs = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableCompactNamedExprs");
         } else if (normalizedPragma == "validateunusedexprs") {

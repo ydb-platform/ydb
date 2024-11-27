@@ -23,8 +23,8 @@ namespace scipy
 #define NUMPY_NARY_FUNC_NAME i0e
 #define NUMPY_NARY_FUNC_SYM details::i0e
 #include "pythonic/include/types/numpy_nary_expr.hpp"
-  }
-}
+  } // namespace special
+} // namespace scipy
 PYTHONIC_NS_END
 
 #endif

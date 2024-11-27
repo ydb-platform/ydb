@@ -492,9 +492,12 @@ public:
         }
 
         // register actor in mailbox
-        const auto& it = Mailboxes.try_emplace(TMailboxId(nodeId, poolId, mboxId)).first;
+        auto [it, mboxInserted] = Mailboxes.try_emplace(TMailboxId(nodeId, poolId, mboxId));
         TMailboxInfo& mbox = it->second;
         mbox.Hint = mboxId;
+        if (mboxInserted) {
+            mbox.LockFromFree();
+        }
         mbox.AttachActor(ActorLocalId, actor);
 
         // generate actor id

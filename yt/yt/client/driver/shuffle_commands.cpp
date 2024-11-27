@@ -60,6 +60,7 @@ void TReadShuffleDataCommand::DoExecute(ICommandContextPtr context)
         format,
         reader->GetNameTable(),
         /*tableSchemas*/ {New<TTableSchema>()},
+        /*columns*/ {std::nullopt},
         context->Request().OutputStream,
         /*enableContextSaving*/ false,
         New<TControlAttributesConfig>(),

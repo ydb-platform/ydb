@@ -104,7 +104,7 @@
                                                                                     }
                                                                                 ],
                                                                                 "Name": "Filter",
-                                                                                "Predicate": "Exist(item.thousand) And item.fivethous % 10 < 10"
+                                                                                "Predicate": "Exist(item.thousand) AND item.fivethous % 10 < 10"
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 2,

@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_RANDOM_RANDOM_INTEGERS_HPP
 #define PYTHONIC_INCLUDE_NUMPY_RANDOM_RANDOM_INTEGERS_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/numpy/random/randint.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 #include <utility>
 
@@ -20,8 +20,8 @@ namespace numpy
     long random_integers(long min, long max);
 
     DEFINE_FUNCTOR(pythonic::numpy::random, random_integers);
-  }
-}
+  } // namespace random
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

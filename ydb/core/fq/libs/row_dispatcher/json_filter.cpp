@@ -1,7 +1,6 @@
 #include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
 #include <yql/essentials/public/udf/udf_version.h>
-#include <ydb/library/yql/public/purecalc/purecalc.h>
-#include <ydb/library/yql/public/purecalc/io_specs/mkql/spec.h>
+#include <yql/essentials/public/purecalc/purecalc.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_terminator.h>
@@ -279,8 +278,12 @@ public:
         TCallback callback,
         IPureCalcProgramFactory::TPtr pureCalcProgramFactory,
         const IPureCalcProgramFactory::TSettings& factorySettings)
-        : Sql(GenerateSql(whereFilter, factorySettings)) {
+        : PureCalcProgramFactory(pureCalcProgramFactory)
+        , Sql(GenerateSql(whereFilter, factorySettings)) {
         Y_ENSURE(columns.size() == types.size(), "Number of columns and types should by equal");
+
+        // Shared factory may change during compilation, so it should be locked
+        auto guard = pureCalcProgramFactory->LockFactory();
 
         // Program should be stateless because input values
         // allocated on another allocator and should be released
@@ -304,6 +307,12 @@ public:
         return Sql;
     }
 
+    ~TImpl() {
+        auto guard = PureCalcProgramFactory->LockFactory();
+        InputConsumer.Reset();
+        Program.Reset();
+    }
+
 private:
     TString GenerateSql(const TString& whereFilter, const IPureCalcProgramFactory::TSettings& factorySettings) {
         TStringStream str;
@@ -317,6 +326,7 @@ private:
     }
 
 private:
+    const IPureCalcProgramFactory::TPtr PureCalcProgramFactory;
     THolder<NYql::NPureCalc::TPushStreamProgram<TFilterInputSpec, TFilterOutputSpec>> Program;
     THolder<NYql::NPureCalc::IConsumer<TInputType>> InputConsumer;
     const TString Sql;

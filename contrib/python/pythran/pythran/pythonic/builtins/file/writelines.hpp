@@ -19,7 +19,7 @@ namespace builtins
     {
       f.writelines(sequence);
     }
-  }
-}
+  } // namespace file
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

@@ -29,10 +29,10 @@ namespace numpy
     }
 
     inline auto exponential(double scale, long size)
-        -> decltype(exponential(scale, types::array<long, 1>{{size}}))
+        -> decltype(exponential(scale, types::array_tuple<long, 1>{{size}}))
     {
 
-      return exponential(scale, types::array<long, 1>{{size}});
+      return exponential(scale, types::array_tuple<long, 1>{{size}});
     }
 
     inline double exponential(double scale, types::none_type d)

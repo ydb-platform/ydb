@@ -13,8 +13,8 @@ namespace NYT::NRpc {
 YT_DEFINE_GLOBAL(const NLogging::TLogger, RpcServerLogger, "RpcServer");
 YT_DEFINE_GLOBAL(const NLogging::TLogger, RpcClientLogger, "RpcClient");
 
-inline const NProfiling::TProfiler RpcServerProfiler("/rpc/server");
-inline const NProfiling::TProfiler RpcClientProfiler("/rpc/client");
+YT_DEFINE_GLOBAL(const NProfiling::TProfiler, RpcServerProfiler, "/rpc/server");
+YT_DEFINE_GLOBAL(const NProfiling::TProfiler, RpcClientProfiler, "/rpc/client");
 
 ////////////////////////////////////////////////////////////////////////////////
 

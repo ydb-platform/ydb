@@ -2855,6 +2855,18 @@ struct TListJobsOptions
     /// @brief Return only jobs with monitoring descriptor.
     FLUENT_FIELD_OPTION(bool, WithMonitoringDescriptor);
 
+    ///
+    /// @brief Search for jobs with start time >= `FromTime`.
+    FLUENT_FIELD_OPTION(TInstant, FromTime);
+
+    ///
+    /// @brief Search for jobs with start time <= `ToTime`.
+    FLUENT_FIELD_OPTION(TInstant, ToTime);
+
+    ///
+    /// @brief Search for jobs with filters encoded in token.
+    FLUENT_FIELD_OPTION(TString, ContinuationToken);
+
     /// @}
 
     ///

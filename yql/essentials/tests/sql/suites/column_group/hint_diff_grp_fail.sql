@@ -1,3 +1,4 @@
+/* custom error:All appends within the same commit should have the equal "column_groups" value*/
 USE plato;
 
 insert into Output

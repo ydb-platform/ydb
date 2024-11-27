@@ -213,6 +213,7 @@ public:
 
     using TProfilingTagValue = std::variant<std::string, i64>;
     std::vector<std::pair<std::string, TProfilingTagValue>> GetProfilingTags();
+    void SetProfilingTags(std::vector<std::pair<std::string, TProfilingTagValue>> profilingTags);
 
     friend void ToProto(NProto::TTracingExt* ext, const TTraceContextPtr& context);
 

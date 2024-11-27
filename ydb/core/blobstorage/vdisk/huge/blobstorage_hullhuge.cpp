@@ -890,7 +890,7 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
             for (const auto &x : msg->HugeBlobs) {
                 slotSizes.insert(State.Pers->Heap->SlotSizeOfThisSize(x.Size));
-                NHuge::TFreeRes freeRes = State.Pers->Heap->Free(x);
+                State.Pers->Heap->Free(x);
                 State.Pers->DeleteChunkSize(State.Pers->Heap->ConvertDiskPartToHugeSlot(x));
                 LOG_DEBUG(ctx, BS_HULLHUGE,
                           VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,

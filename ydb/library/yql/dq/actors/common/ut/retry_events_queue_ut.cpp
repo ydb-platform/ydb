@@ -57,10 +57,6 @@ public:
         }
     }
 
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed::TPtr& ) {
-        Send(ClientEdgeActorId, new TEvPrivate::TEvDisconnect());
-    }    
-
     void Handle(const TEvPrivate::TEvSend::TPtr& ) {
         EventsQueue.Send(new TEvDqCompute::TEvInjectCheckpoint());
     }
@@ -74,13 +70,14 @@ public:
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        EventsQueue.HandleUndelivered(ev);
+        if (EventsQueue.HandleUndelivered(ev) == NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
+            Send(ClientEdgeActorId, new TEvPrivate::TEvDisconnect());
+        }
     }
 
     STRICT_STFUNC(StateFunc,
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
-        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvSessionClosed, Handle);
         hFunc(TEvPrivate::TEvSend, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);

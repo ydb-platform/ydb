@@ -12,13 +12,13 @@ namespace NKikimr::NOlap::NReader {
 // Represents a batch of rows produced by ASC or DESC scan with applied filters and partial aggregation
 class TPartialReadResult: public TNonCopyable {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>, ResourcesGuard);
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>, ResourceGuards);
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TGroupGuard>, GroupGuard);
     NArrow::TShardedRecordBatch ResultBatch;
 
     // This 1-row batch contains the last key that was read while producing the ResultBatch.
     // NOTE: it might be different from the Key of last row in ResulBatch in case of filtering/aggregation/limit
-    std::shared_ptr<arrow::RecordBatch> LastReadKey;
+    std::shared_ptr<IScanCursor> ScanCursor;
     YDB_READONLY_DEF(std::optional<ui32>, NotFinishedIntervalIdx);
 
 public:
@@ -50,26 +50,25 @@ public:
         return ResultBatch;
     }
 
-    const std::shared_ptr<arrow::RecordBatch>& GetLastReadKey() const {
-        return LastReadKey;
+    const std::shared_ptr<IScanCursor>& GetScanCursor() const {
+        return ScanCursor;
     }
 
-    explicit TPartialReadResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& resourcesGuard,
-        std::shared_ptr<NGroupedMemoryManager::TGroupGuard>&& gGuard, const NArrow::TShardedRecordBatch& batch,
-        std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
-        : ResourcesGuard(std::move(resourcesGuard))
-        , GroupGuard(std::move(gGuard))
+    explicit TPartialReadResult(const std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>& resourceGuards,
+        const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& gGuard, const NArrow::TShardedRecordBatch& batch,
+        const std::shared_ptr<IScanCursor>& scanCursor, const std::optional<ui32> notFinishedIntervalIdx)
+        : ResourceGuards(resourceGuards)
+        , GroupGuard(gGuard)
         , ResultBatch(batch)
-        , LastReadKey(lastKey)
+        , ScanCursor(scanCursor)
         , NotFinishedIntervalIdx(notFinishedIntervalIdx) {
         Y_ABORT_UNLESS(ResultBatch.GetRecordsCount());
-        Y_ABORT_UNLESS(LastReadKey);
-        Y_ABORT_UNLESS(LastReadKey->num_rows() == 1);
+        Y_ABORT_UNLESS(ScanCursor);
     }
 
-    explicit TPartialReadResult(
-        const NArrow::TShardedRecordBatch& batch, std::shared_ptr<arrow::RecordBatch> lastKey, const std::optional<ui32> notFinishedIntervalIdx)
-        : TPartialReadResult(nullptr, nullptr, batch, lastKey, notFinishedIntervalIdx) {
+    explicit TPartialReadResult(const NArrow::TShardedRecordBatch& batch, const std::shared_ptr<IScanCursor>& scanCursor,
+        const std::optional<ui32> notFinishedIntervalIdx)
+        : TPartialReadResult({}, nullptr, batch, scanCursor, notFinishedIntervalIdx) {
     }
 };
 

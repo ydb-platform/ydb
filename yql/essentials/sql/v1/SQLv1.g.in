@@ -16,7 +16,7 @@ lambda_stmt:
   | import_stmt
 ;
 
-sql_stmt: (EXPLAIN (Q U E R Y PLAN)?)? sql_stmt_core;
+sql_stmt: (EXPLAIN (QUERY PLAN)?)? sql_stmt_core;
 
 sql_stmt_core:
     pragma_stmt
@@ -75,6 +75,7 @@ sql_stmt_core:
   | drop_resource_pool_classifier_stmt
   | backup_stmt
   | restore_stmt
+  | alter_sequence_stmt
 ;
 
 expr:
@@ -791,8 +792,14 @@ table_setting_value:
     | STRING_VALUE
     | integer
     | split_boundaries
-    | expr ON an_id (AS (SECONDS | MILLISECONDS | MICROSECONDS | NANOSECONDS))?
+    | ttl_tier_list ON an_id (AS (SECONDS | MILLISECONDS | MICROSECONDS | NANOSECONDS))?
     | bool_value
+;
+
+ttl_tier_list: expr (ttl_tier_action (COMMA expr ttl_tier_action)*)?;
+ttl_tier_action:
+      TO EXTERNAL DATA SOURCE an_id
+    | DELETE
 ;
 
 family_entry: FAMILY an_id family_settings;
@@ -1047,6 +1054,14 @@ rollback_stmt: ROLLBACK;
 analyze_table: simple_table_ref (LPAREN column_list RPAREN)?;
 analyze_table_list: analyze_table (COMMA analyze_table)* COMMA?;
 analyze_stmt: ANALYZE analyze_table_list;
+
+alter_sequence_stmt: ALTER SEQUENCE (IF EXISTS)? object_ref alter_sequence_action+;
+alter_sequence_action:
+  START WITH? integer
+  | RESTART WITH? integer
+  | RESTART
+  | INCREMENT BY? integer
+;
 
 // Special rules that allow to use certain keywords as identifiers.
 identifier: ID_PLAIN | ID_QUOTED;
@@ -1333,6 +1348,7 @@ keyword_as_compat:
   | IMMEDIATE
   | IMPORT
   | IN
+  | INCREMENT
   | INCREMENTAL
   | INDEX
   | INDEXED
@@ -1393,7 +1409,7 @@ keyword_as_compat:
   // | PRESORT
   | PRIMARY
   | PRIVILEGES
-//  | QUERY
+  | QUERY
   | QUEUE
   | RAISE
 //  | READ
@@ -1407,6 +1423,7 @@ keyword_as_compat:
   | REPLICATION
   | RESET
   | RESPECT
+  | RESTART
   | RESTORE
   | RESTRICT
   // | RESULT
@@ -1424,7 +1441,9 @@ keyword_as_compat:
   | SETS
   | SHOW
   | SKIP
+  | SEQUENCE
   | SOURCE
+  | START
   | SUBQUERY
   | SUBSET
   | SYMBOLS
@@ -1551,6 +1570,7 @@ keyword_compat: (
   | IMMEDIATE
   | IMPORT
   | IN
+  | INCREMENT
   | INCREMENTAL
   | INDEX
   | INDEXED
@@ -1611,7 +1631,7 @@ keyword_compat: (
   | PRESORT
   | PRIMARY
   | PRIVILEGES
-//  | QUERY
+  | QUERY
   | QUEUE
   | RAISE
 //  | READ
@@ -1625,6 +1645,7 @@ keyword_compat: (
   | REPLICATION
   | RESET
   | RESPECT
+  | RESTART
   | RESTORE
   | RESTRICT
   | RESULT
@@ -1642,7 +1663,9 @@ keyword_compat: (
   | SETS
   | SHOW
   | SKIP
+  | SEQUENCE
   | SOURCE
+  | START
   | SUBQUERY
   | SUBSET
   | SYMBOLS
@@ -1733,7 +1756,6 @@ RPAREN:        ')';
 QUESTION:      '?';
 COLON:         ':';
 COMMAT:        '@';
-DOUBLE_COMMAT: '@@';
 DOLLAR:        '$';
 LBRACE_CURLY:  '{';
 RBRACE_CURLY:  '}';
@@ -1747,6 +1769,7 @@ fragment BACKSLASH:     '\\';
 fragment QUOTE_DOUBLE:  '"';
 fragment QUOTE_SINGLE:  '\'';
 fragment BACKTICK:      '`';
+fragment DOUBLE_COMMAT: '@@';
 
 // http://www.antlr.org/wiki/pages/viewpage.action?pageId=1782
 fragment A:('a'|'A');
@@ -1897,6 +1920,7 @@ ILIKE: I L I K E;
 IMMEDIATE: I M M E D I A T E;
 IMPORT: I M P O R T;
 IN: I N;
+INCREMENT: I N C R E M E N T;
 INCREMENTAL: I N C R E M E N T A L;
 INDEX: I N D E X;
 INDEXED: I N D E X E D;
@@ -1968,7 +1992,7 @@ PRESORT: P R E S O R T;
 PRIMARY: P R I M A R Y;
 PRIVILEGES: P R I V I L E G E S;
 PROCESS: P R O C E S S;
-//QUERY: Q U E R Y;
+QUERY: Q U E R Y;
 QUEUE: Q U E U E;
 RAISE: R A I S E;
 RANGE: R A N G E;
@@ -1986,6 +2010,7 @@ REPLICATION: R E P L I C A T I O N;
 RESET: R E S E T;
 RESOURCE: R E S O U R C E;
 RESPECT: R E S P E C T;
+RESTART: R E S T A R T;
 RESTORE: R E S T O R E;
 RESTRICT: R E S T R I C T;
 RESULT: R E S U L T;
@@ -2010,7 +2035,9 @@ SET: S E T;
 SETS: S E T S;
 SHOW: S H O W;
 SKIP: S K I P;
+SEQUENCE: S E Q U E N C E;
 SOURCE: S O U R C E;
+START: S T A R T;
 STREAM: S T R E A M;
 STRUCT: S T R U C T;
 SUBQUERY: S U B Q U E R Y;

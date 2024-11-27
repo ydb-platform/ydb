@@ -36,6 +36,7 @@ public:
             return;
         }
         AFL_VERIFY(!DataAdded);
+        UseFilter = value;
     }
 
     bool HasPortionAccessor() const {

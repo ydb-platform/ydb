@@ -20,7 +20,6 @@
 
 #if defined(BOOST_ASIO_HAS_WINDOWS_OBJECT_HANDLE)
 
-#include <boost/asio/detail/handler_alloc_helpers.hpp>
 #include <boost/asio/detail/memory.hpp>
 #include <boost/asio/detail/wait_handler.hpp>
 #include <boost/asio/error.hpp>

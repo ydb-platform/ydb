@@ -78,7 +78,7 @@ public:
 
   // Move-construct a new socket implementation.
   BOOST_ASIO_DECL void base_move_construct(base_implementation_type& impl,
-      base_implementation_type& other_impl) BOOST_ASIO_NOEXCEPT;
+      base_implementation_type& other_impl) noexcept;
 
   // Move-assign from another socket implementation.
   BOOST_ASIO_DECL void base_move_assign(base_implementation_type& impl,

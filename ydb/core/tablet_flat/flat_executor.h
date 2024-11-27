@@ -596,7 +596,6 @@ class TExecutor
 
     // Compaction read support
 
-    size_t UnpinCompactionReadPages(TCompactionReadState* state);
     void PlanCompactionChangesActivation();
     void Handle(TEvPrivate::TEvActivateCompactionChanges::TPtr& ev, const TActorContext& ctx);
     void CommitCompactionChanges(

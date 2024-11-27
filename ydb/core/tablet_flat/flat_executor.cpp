@@ -4479,19 +4479,6 @@ bool TExecutor::CancelCompaction(ui64 compactionId)
     return Scans->CancelSystem(compactionId);
 }
 
-size_t TExecutor::UnpinCompactionReadPages(TCompactionReadState* state)
-{
-    size_t unpinnedPages = 0;
-    PrivatePageCache->UnpinPages(state->Pinned, unpinnedPages);
-
-    state->Pinned.clear();
-
-    Counters->Simple()[TExecutorCounters::CACHE_PINNED_SET] = PrivatePageCache->GetStats().PinnedSetSize;
-    Counters->Simple()[TExecutorCounters::CACHE_PINNED_LOAD] = PrivatePageCache->GetStats().PinnedLoadSize;
-
-    return unpinnedPages;
-}
-
 void TExecutor::PlanCompactionChangesActivation()
 {
     if (!CompactionChangesActivating) {

@@ -113,7 +113,7 @@ void TTxBlobsWritingFinished::DoComplete(const TActorContext& ctx) {
     Self->SetupCompaction(pathIds);
 }
 
-TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus,
+TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKikimrProto::EReplyStatus /* writeStatus */,
     const std::shared_ptr<NOlap::IBlobsWritingAction>& writingActions, std::vector<TInsertedPortions>&& packs,
     const std::vector<TNoDataWrite>& noDataWrites)
     : TBase(self, "TTxBlobsWritingFinished")
@@ -126,7 +126,7 @@ TTxBlobsWritingFinished::TTxBlobsWritingFinished(TColumnShard* self, const NKiki
     }
 }
 
-bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorContext& ctx) {
+bool TTxBlobsWritingFailed::DoExecute(TTransactionContext& txc, const TActorContext& /* ctx */) {
     for (auto&& pack : Packs) {
         const auto& writeMeta = pack.GetWriteMeta();
         AFL_VERIFY(!writeMeta.HasLongTxId());

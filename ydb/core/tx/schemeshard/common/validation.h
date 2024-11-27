@@ -9,5 +9,6 @@ namespace NKikimr::NSchemeShard::NValidation {
 class TTTLValidator {
 public:
     static bool ValidateUnit(const NScheme::TTypeId columnType, NKikimrSchemeOp::TTTLSettings::EUnit unit, TString& errStr);
+    static bool ValidateTiers(const NKikimrSchemeOp::TTTLSettings::TEnabled ttlSettings, TString& errStr);
 };
 }

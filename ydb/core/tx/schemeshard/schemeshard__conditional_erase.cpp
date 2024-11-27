@@ -141,8 +141,16 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
         }
 
         const auto& settings = tableInfo->TTLSettings().GetEnabled();
-        const TDuration expireAfter = TDuration::Seconds(settings.GetExpireAfterSeconds());
-        const TInstant wallClock = ctx.Now() - expireAfter;
+
+        auto expireAfter = GetExpireAfter(settings, true);
+        if (expireAfter.IsFail()) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Invalid TTL settings: " << expireAfter.GetErrorMessage()
+                    << ": shardIdx: " << tableShardInfo.ShardIdx << ": pathId: " << shardInfo.PathId
+                    << ", at schemeshard: " << Self->TabletID());
+            return false;
+        }
+        const TInstant wallClock = ctx.Now() - *expireAfter;
 
         NKikimrTxDataShard::TEvConditionalEraseRowsRequest request;
         request.SetTableId(shardInfo.PathId.LocalPathId);

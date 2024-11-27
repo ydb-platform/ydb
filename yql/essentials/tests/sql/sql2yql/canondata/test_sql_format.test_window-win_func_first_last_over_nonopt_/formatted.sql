@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 SELECT
     key,
     FIRST_VALUE(key) RESPECT NULLS OVER w1,

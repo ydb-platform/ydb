@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not *//* dq file can not */
+/* syntax version 1 */
+/* postgres can not */
+/* dq file can not */
 $udfScript = @@
 def MyFunc(stream):
     return stream

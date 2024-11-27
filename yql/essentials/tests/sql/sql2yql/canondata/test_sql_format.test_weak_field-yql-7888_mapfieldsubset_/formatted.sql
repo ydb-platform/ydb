@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 
 DEFINE SUBQUERY $input() AS
@@ -9,8 +10,8 @@ DEFINE SUBQUERY $input() AS
         key,
         subkey
     FROM concat(Input, Input)
-    WHERE key IN ("heartbeat", "show", "click") AND
-        subkey IN ("native", "gif");
+    WHERE key IN ("heartbeat", "show", "click")
+    AND subkey IN ("native", "gif");
 END DEFINE;
 
 -- Native:
@@ -20,8 +21,8 @@ DEFINE SUBQUERY $native_show_and_clicks($input) AS
         strongest_id,
         key
     FROM $input()
-    WHERE subkey == "native" AND
-        key IN ("click", "show");
+    WHERE subkey == "native"
+    AND key IN ("click", "show");
 END DEFINE;
 
 SELECT

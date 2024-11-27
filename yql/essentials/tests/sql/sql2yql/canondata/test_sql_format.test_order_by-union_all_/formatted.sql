@@ -5,7 +5,7 @@ DEFINE SUBQUERY $sample($product_type) AS
     SELECT
         *
     FROM Input
-    WHERE subkey = $product_type
+    WHERE subkey == $product_type
     ORDER BY
         key
     LIMIT 10;

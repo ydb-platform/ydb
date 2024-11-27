@@ -548,12 +548,17 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         return false;
     }
 
-    inline bool ValidateDatetime(ui32 datetime) {
-        return datetime < MAX_DATETIME;
+    template<typename TType>
+    inline bool Validate(typename TDataType<TType>::TLayout arg);
+
+    template<>
+    inline bool Validate<TTimestamp>(ui64 timestamp) {
+        return timestamp < MAX_TIMESTAMP;
     }
 
-    inline bool ValidateTimestamp(ui64 timestamp) {
-        return timestamp < MAX_TIMESTAMP;
+    template<>
+    inline bool Validate<TTimestamp64>(i64 timestamp) {
+        return timestamp >= MIN_TIMESTAMP64 && timestamp <= MAX_TIMESTAMP64;
     }
 
     inline bool ValidateInterval(i64 interval) {
@@ -1268,44 +1273,39 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
 
     // From*
 
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TFromSeconds, TOptional<TTimestamp>(TAutoMap<ui32>)) {
-        Y_UNUSED(valueBuilder);
-        auto res = args[0].Get<ui32>();
-        if (!ValidateDatetime(res)) {
-            return TUnboxedValuePod();
-        }
-        return TUnboxedValuePod((ui64)(res * 1000000ull));
+    template<typename TInput, typename TOutput, i64 UsecMultiplier>
+    inline TUnboxedValuePod TFromConverter(TInput arg) {
+        using TLayout = TDataType<TOutput>::TLayout;
+        const TLayout usec = TLayout(arg) * UsecMultiplier;
+        return Validate<TOutput>(usec) ? TUnboxedValuePod(usec) : TUnboxedValuePod();
     }
 
-    using TFromSecondsKernel = TUnaryUnsafeFixedSizeFilterKernel<ui32, ui64,
-        [] (ui32 seconds) { return std::make_pair(ui64(seconds * 1000000ull), ValidateDatetime(seconds)); }>;
-    END_SIMPLE_ARROW_UDF(TFromSeconds, TFromSecondsKernel::Do);
 
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TFromMilliseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) {
-        Y_UNUSED(valueBuilder);
-        auto res = args[0].Get<ui64>();
-        if (res >= MAX_TIMESTAMP / 1000u) {
-            return TUnboxedValuePod();
-        }
-        return TUnboxedValuePod(res * 1000u);
-    }
+    template<typename TInput, typename TOutput, i64 UsecMultiplier>
+    using TFromConverterKernel = TUnaryUnsafeFixedSizeFilterKernel<TInput,
+        typename TDataType<TOutput>::TLayout, [] (TInput arg) {
+            using TLayout = TDataType<TOutput>::TLayout;
+            const TLayout usec = TLayout(arg) * UsecMultiplier;
+            return std::make_pair(usec, Validate<TOutput>(usec));
+        }>;
 
-    using TFromMillisecondsKernel = TUnaryUnsafeFixedSizeFilterKernel<ui64, ui64,
-        [] (ui64 milliseconds) { return std::make_pair(ui64(milliseconds * 1000u), milliseconds < MAX_TIMESTAMP / 1000u); }>;
-    END_SIMPLE_ARROW_UDF(TFromMilliseconds, TFromMillisecondsKernel::Do);
 
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TFromMicroseconds, TOptional<TTimestamp>(TAutoMap<ui64>)) {
-        Y_UNUSED(valueBuilder);
-        auto res = args[0].Get<ui64>();
-        if (!ValidateTimestamp(res)) {
-            return TUnboxedValuePod();
-        }
-        return TUnboxedValuePod(res);
-    }
+#define DATETIME_FROM_CONVERTER_UDF(name, retType, argType, usecMultiplier)              \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(T##name, TOptional<retType>(TAutoMap<argType>)) {      \
+        Y_UNUSED(valueBuilder);                                                          \
+        return TFromConverter<argType, retType, usecMultiplier>(args[0].Get<argType>()); \
+    }                                                                                    \
+                                                                                         \
+    END_SIMPLE_ARROW_UDF(T##name, (TFromConverterKernel<argType, retType, usecMultiplier>::Do))
 
-    using TFromMicrosecondsKernel = TUnaryUnsafeFixedSizeFilterKernel<ui64, ui64,
-        [] (ui64 timestamp) { return std::make_pair(timestamp, ValidateTimestamp(timestamp)); }>;
-    END_SIMPLE_ARROW_UDF(TFromMicroseconds, TFromMicrosecondsKernel::Do);
+    DATETIME_FROM_CONVERTER_UDF(FromSeconds, TTimestamp, ui32, UsecondsInSecond);
+    DATETIME_FROM_CONVERTER_UDF(FromMilliseconds, TTimestamp, ui64, UsecondsInMilliseconds);
+    DATETIME_FROM_CONVERTER_UDF(FromMicroseconds, TTimestamp, ui64, 1);
+
+    DATETIME_FROM_CONVERTER_UDF(FromSeconds64, TTimestamp64, i64, UsecondsInSecond);
+    DATETIME_FROM_CONVERTER_UDF(FromMilliseconds64, TTimestamp64, i64, UsecondsInMilliseconds);
+    DATETIME_FROM_CONVERTER_UDF(FromMicroseconds64, TTimestamp64, i64, 1);
+
 
     template <typename TInput, i64 Multiplier>
     using TIntervalFromKernel = TUnaryUnsafeFixedSizeFilterKernel<TInput, i64,
@@ -1596,7 +1596,25 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         return storage;
     }
 
-    struct TStartOfBinaryKernelExec : TBinaryKernelExec<TStartOfBinaryKernelExec> {
+    TMaybe<TTMStorage> EndOf(TTMStorage storage, ui64 interval, const IValueBuilder& valueBuilder) {
+        if (interval >= 86400000000ull) {
+            // treat as EndOfDay
+            SetEndOfDay(storage);
+        } else {
+            auto current = storage.ToTimeOfDay();
+            auto rounded = current / interval * (interval + 1) - 1;
+            storage.FromTimeOfDay(rounded);
+        }
+
+        auto& builder = valueBuilder.GetDateBuilder();
+        if (!storage.Validate(builder)) {
+            return {};
+        }
+        return storage;
+    }
+
+    template<bool UseEnd>
+    struct TStartEndOfBinaryKernelExec : TBinaryKernelExec<TStartEndOfBinaryKernelExec<UseEnd>> {
         template<typename TSink>
         static void Process(const IValueBuilder* valueBuilder, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
             auto& storage = Reference(arg1);
@@ -1606,7 +1624,7 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
                 return;
             }
 
-            if (auto res = StartOf(storage, interval, *valueBuilder)) {
+            if (auto res = (UseEnd ? EndOf : StartOf)(storage, interval, *valueBuilder)) {
                 storage = res.GetRef();
                 sink(arg1);
             } else {
@@ -1627,7 +1645,21 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         }
         return TUnboxedValuePod{};
     }
-    END_SIMPLE_ARROW_UDF(TStartOf, TStartOfBinaryKernelExec::Do);
+    END_SIMPLE_ARROW_UDF(TStartOf, TStartEndOfBinaryKernelExec<false>::Do);
+
+    BEGIN_SIMPLE_STRICT_ARROW_UDF(TEndOf, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, TAutoMap<TInterval>)) {
+        auto result = args[0];
+        ui64 interval = std::abs(args[1].Get<i64>());
+        if (interval == 0) {
+            return result;
+        }
+        if (auto res = EndOf(Reference(result), interval, *valueBuilder)) {
+            Reference(result) = res.GetRef();
+            return result;
+        }
+        return TUnboxedValuePod{};
+    }
+    END_SIMPLE_ARROW_UDF(TEndOf, TStartEndOfBinaryKernelExec<true>::Do);
 
     struct TTimeOfDayKernelExec : TUnaryKernelExec<TTimeOfDayKernelExec, TReaderTraits::TResource<false>, TFixedSizeArrayBuilder<TDataType<TInterval>::TLayout, false>> {
         template<typename TSink>
@@ -2393,6 +2425,10 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         TFromSeconds,
         TFromMilliseconds,
         TFromMicroseconds,
+
+        TFromSeconds64,
+        TFromMilliseconds64,
+        TFromMicroseconds64,
 
         TIntervalFromDays,
         TIntervalFromHours,

@@ -23,7 +23,7 @@ FROM (
         WHERE subkey != "foo"
     )
         AS b
-    ON a.key = b.key AND a.subkey = b.subkey
+    ON a.key == b.key AND a.subkey == b.subkey
 )
 GROUP COMPACT BY
     subkey1,

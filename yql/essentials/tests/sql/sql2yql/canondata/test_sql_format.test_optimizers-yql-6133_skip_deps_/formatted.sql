@@ -1,4 +1,5 @@
-/* postgres can not *//* multirun can not */
+/* postgres can not */
+/* multirun can not */
 USE plato;
 
 $out = (
@@ -15,8 +16,7 @@ $row_count = (
 );
 $needed_row = COALESCE(CAST(CAST($row_count AS float) * 0.5 AS Uint64), 1);
 
-INSERT INTO Output
-    WITH TRUNCATE
+INSERT INTO Output WITH TRUNCATE
 SELECT
     *
 FROM $out

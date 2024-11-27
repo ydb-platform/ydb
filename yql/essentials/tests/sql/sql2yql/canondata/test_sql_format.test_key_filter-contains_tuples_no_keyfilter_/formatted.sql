@@ -1,4 +1,5 @@
-/* postgres can not */-- right side depends on row
+/* postgres can not */
+-- right side depends on row
 SELECT
     *
 FROM plato.Input

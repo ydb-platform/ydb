@@ -1,4 +1,5 @@
-/* postgres can not *//* custom check: len(yt_res_yson[0]['Write'][0]['Data']) == 1 */
+/* postgres can not */
+/* custom check: len(yt_res_yson[0]['Write'][0]['Data']) == 1 */
 USE plato;
 
 $key = (
@@ -11,4 +12,4 @@ $key = (
 SELECT
     *
 FROM Input
-WHERE key = $key;
+WHERE key == $key;

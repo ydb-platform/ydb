@@ -1,4 +1,6 @@
-/* postgres can not *//* multirun can not *//* kikimr can not - table truncate */
+/* postgres can not */
+/* multirun can not */
+/* kikimr can not - table truncate */
 USE plato;
 
 INSERT INTO @a

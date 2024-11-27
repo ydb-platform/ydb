@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $data = (
     SELECT
         CAST(key AS Uint32) ?? 0 AS key,

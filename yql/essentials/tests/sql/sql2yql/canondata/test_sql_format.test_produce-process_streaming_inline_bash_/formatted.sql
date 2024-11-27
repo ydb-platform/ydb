@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not */-- not supported on windows
+/* syntax version 1 */
+/* postgres can not */
+-- not supported on windows
 $script = @@
 #!/bin/bash
 cat - | grep $1 | head -n 3 | grep [234]

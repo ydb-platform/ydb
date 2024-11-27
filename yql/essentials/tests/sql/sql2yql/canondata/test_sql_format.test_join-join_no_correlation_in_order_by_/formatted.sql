@@ -17,7 +17,7 @@ SELECT
 FROM Input
 JOIN $data
     AS d
-ON Input.subkey = d.kk
+ON Input.subkey == d.kk
 ORDER BY
     key,
     val;

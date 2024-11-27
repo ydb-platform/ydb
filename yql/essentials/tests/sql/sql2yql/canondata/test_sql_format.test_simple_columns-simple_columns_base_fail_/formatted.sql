@@ -13,8 +13,7 @@ $req = (
 --INSERT INTO Output
 SELECT
     ff.*,
-    subkey AS magic,
-    -- 'magic' is exist from ff.magic
+    subkey AS magic, -- 'magic' is exist from ff.magic
     value AS val
 FROM $req
     AS ff

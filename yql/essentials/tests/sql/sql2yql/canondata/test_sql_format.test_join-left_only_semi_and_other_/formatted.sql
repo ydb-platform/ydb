@@ -25,12 +25,12 @@ FROM $data1
     AS i1
 LEFT ONLY JOIN $data2
     AS i2
-ON i1.key = i2.key
+ON i1.key == i2.key
 LEFT SEMI JOIN $data1
     AS i3
-ON i1.key = i3.key
+ON i1.key == i3.key
 LEFT OUTER JOIN $data1
     AS i4
-ON i1.key = i4.key
+ON i1.key == i4.key
 ORDER BY
     i1.key;

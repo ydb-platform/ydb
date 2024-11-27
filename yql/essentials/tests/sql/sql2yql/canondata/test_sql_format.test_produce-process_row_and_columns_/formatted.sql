@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 $udfScript = @@
 def processRow(row, tag, separator):
 	return {"value":row.Name + separator + row.Value + separator + tag};

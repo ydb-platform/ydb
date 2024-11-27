@@ -1,5 +1,4 @@
-INSERT INTO plato.Output
-    WITH TRUNCATE
+INSERT INTO plato.Output WITH TRUNCATE
 SELECT
     *
 FROM (

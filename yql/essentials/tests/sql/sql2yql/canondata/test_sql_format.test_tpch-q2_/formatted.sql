@@ -4,7 +4,7 @@ $r = (
     SELECT
         r_regionkey
     FROM plato.region
-    WHERE r_name = 'AMERICA'
+    WHERE r_name == 'AMERICA'
 );
 
 $j1 = (
@@ -15,7 +15,7 @@ $j1 = (
         AS n
     JOIN $r
         AS r
-    ON n.n_regionkey = r.r_regionkey
+    ON n.n_regionkey == r.r_regionkey
 );
 
 $j2 = (
@@ -31,7 +31,7 @@ $j2 = (
         AS s
     JOIN $j1
         AS j
-    ON s.s_nationkey = j.n_nationkey
+    ON s.s_nationkey == j.n_nationkey
 );
 
 $j3 = (
@@ -48,7 +48,7 @@ $j3 = (
         AS ps
     JOIN $j2
         AS j
-    ON ps.ps_suppkey = j.s_suppkey
+    ON ps.ps_suppkey == j.s_suppkey
 );
 
 $min_ps_supplycost = (
@@ -65,8 +65,8 @@ $p = (
         p_partkey,
         p_mfgr
     FROM plato.part
-    WHERE p_size = 10 AND
-        p_type LIKE '%COPPER'
+    WHERE p_size == 10
+    AND p_type LIKE '%COPPER'
 );
 
 $j4 = (
@@ -83,11 +83,11 @@ $j4 = (
         AS p
     JOIN $j3
         AS j
-    ON p.p_partkey = j.ps_partkey
+    ON p.p_partkey == j.ps_partkey
     JOIN $min_ps_supplycost
         AS m
-    ON p.p_partkey = m.ps_partkey
-    WHERE min_ps_supplycost = ps_supplycost
+    ON p.p_partkey == m.ps_partkey
+    WHERE min_ps_supplycost == ps_supplycost
 );
 
 SELECT

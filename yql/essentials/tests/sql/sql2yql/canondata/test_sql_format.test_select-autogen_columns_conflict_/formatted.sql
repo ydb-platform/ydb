@@ -1,4 +1,7 @@
-/* dq can not *//* dqfile can not *//* yt can not *//* postgres can not */
+/* dq can not */
+/* dqfile can not */
+/* yt can not */
+/* postgres can not */
 $src =
     SELECT
         <|column0: 1|> AS x;
@@ -44,6 +47,5 @@ USING (column0);
 SELECT
     1 AS a,
     2 AS b,
-    3,
-    -- should be column2
+    3, -- should be column2
     4 AS column1;

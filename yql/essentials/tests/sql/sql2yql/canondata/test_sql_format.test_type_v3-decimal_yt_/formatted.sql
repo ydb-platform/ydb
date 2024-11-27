@@ -1,7 +1,6 @@
 PRAGMA yt.UseNativeYtTypes = "true";
 
-INSERT INTO plato.Output
-    WITH truncate
+INSERT INTO plato.Output WITH truncate
 SELECT
     Decimal("3.1415", 5, 4),
     Decimal("2.9999999999", 12, 10),

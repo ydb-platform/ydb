@@ -42,7 +42,7 @@ FROM @lottery
     AS lottery
 JOIN @campaigns
     AS campaigns
-ON lottery.campaign_id = campaigns.id
+ON lottery.campaign_id == campaigns.id
 JOIN @strategies
     AS strategies
-ON lottery.strategy_id = strategies.id;
+ON lottery.strategy_id == strategies.id;

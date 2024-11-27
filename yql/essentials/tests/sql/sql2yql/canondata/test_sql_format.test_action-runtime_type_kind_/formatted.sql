@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     TypeKind(TypeHandle(TypeOf(1))),
     TypeKind(TypeHandle(TypeOf(AsList(1)))),

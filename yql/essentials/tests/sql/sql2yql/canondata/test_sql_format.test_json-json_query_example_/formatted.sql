@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 
 -- These examples are taken from [ISO/IEC TR 19075-6:2017] standard (https://www.iso.org/standard/67367.html)

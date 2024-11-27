@@ -19,8 +19,8 @@ FROM $input
     AS diff
 INNER JOIN $input
     AS taskSuite
-ON diff.previousId = taskSuite.id
+ON diff.previousId == taskSuite.id
 LEFT JOIN $input
     AS pedestrian
-ON diff.taskId = pedestrian.id
-WHERE diff.id = 1;
+ON diff.taskId == pedestrian.id
+WHERE diff.id == 1;

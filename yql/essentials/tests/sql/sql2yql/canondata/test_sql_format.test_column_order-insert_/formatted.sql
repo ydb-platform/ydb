@@ -1,4 +1,5 @@
-/* postgres can not *//* syntax version 1 */
+/* postgres can not */
+/* syntax version 1 */
 USE plato;
 PRAGMA OrderedColumns;
 
@@ -33,8 +34,7 @@ ORDER BY
     subkey,
     key;
 
-INSERT INTO Output
-    WITH truncate
+INSERT INTO Output WITH truncate
 SELECT
     key,
     value,

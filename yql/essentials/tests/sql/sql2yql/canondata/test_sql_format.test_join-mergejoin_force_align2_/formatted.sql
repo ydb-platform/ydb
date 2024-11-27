@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 PRAGMA yt.JoinMergeTablesLimit = "100";
 
@@ -22,9 +23,9 @@ SELECT
     *
 FROM @t2
     AS b
-LEFT JOIN/*+ merge() */ @t3
+LEFT JOIN /*+ merge() */ @t3
     AS c
-ON b.k2 = c.k3
+ON b.k2 == c.k3
 LEFT JOIN @t1
     AS a
-ON a.k1 = b.k2 AND a.k1 = c.k3;
+ON a.k1 == b.k2 AND a.k1 == c.k3;

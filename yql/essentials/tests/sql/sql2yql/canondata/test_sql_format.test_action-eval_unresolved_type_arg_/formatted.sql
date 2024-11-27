@@ -1,7 +1,9 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 USE plato;
 $myAddSuffix = ($row, $value) -> {
     $type = TypeOf($row);
+
     --$type=Struct<key:String,subkey:String,value:String>;
     $lambda = EvaluateCode(
         LambdaCode(

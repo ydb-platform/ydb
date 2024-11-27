@@ -1,4 +1,5 @@
-/* syntax version 1 *//* postgres can not */
+/* syntax version 1 */
+/* postgres can not */
 SELECT
     sum(CAST(key AS uint32)) AS keysum
 FROM plato.Input

@@ -1,4 +1,6 @@
-/* syntax version 1 *//* postgres can not *//* kikimr can not - range not supported */
+/* syntax version 1 */
+/* postgres can not */
+/* kikimr can not - range not supported */
 $a = "";
 $b = "Input";
 $c = "Input";

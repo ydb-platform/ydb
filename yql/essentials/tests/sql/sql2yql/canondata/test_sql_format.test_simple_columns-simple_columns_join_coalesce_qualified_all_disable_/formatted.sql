@@ -19,6 +19,6 @@ FROM $foo
     AS foo
 JOIN $bar
     AS bar
-ON foo.key = bar.key;
+ON foo.key == bar.key;
 -- output key has type Int32
 

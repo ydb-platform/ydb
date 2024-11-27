@@ -203,14 +203,6 @@ namespace NTable {
          * Cancels compaction previously started with BeginCompaction
          */
         virtual bool CancelCompaction(ui64 compactionId) = 0;
-
-        /**
-         * Requests backend to call ApplyChanges for the specified table
-         *
-         * Backend may schedule and call ApplyChanges at any later time, even
-         * after the strategy has been stopped and recreated.
-         */
-        virtual void RequestChanges(ui32 table) = 0;
     };
 
     /**

@@ -4496,14 +4496,6 @@ bool TExecutor::CancelCompaction(ui64 compactionId)
     return Scans->CancelSystem(compactionId);
 }
 
-void TExecutor::RequestChanges(ui32 table)
-{
-    Y_ABORT_UNLESS(CompactionLogic);
-
-    CompactionLogic->RequestChanges(table);
-    PlanCompactionChangesActivation();
-}
-
 void TExecutor::PostponeCompactionRead(TCompactionReadState* state)
 {
     Y_ABORT_UNLESS(PrivatePageCache->GetStats().CurrentCacheMisses, "Compaction read postponed with nothing to load");

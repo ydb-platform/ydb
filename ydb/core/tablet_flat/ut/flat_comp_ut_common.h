@@ -90,11 +90,6 @@ public:
         return StartedCompactions.erase(compactionId) > 0;
     }
 
-    void RequestChanges(ui32 table) override {
-        Y_ABORT_UNLESS(table == 1, "Unexpected table");
-        ChangesRequested_ = true;
-    }
-
     bool CheckChangesFlag() {
         return std::exchange(ChangesRequested_, false);
     }

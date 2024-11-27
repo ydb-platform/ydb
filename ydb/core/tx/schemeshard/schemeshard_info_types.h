@@ -2371,11 +2371,16 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
     using EType = NKikimrSchemeOp::EIndexType;
     using EState = NKikimrSchemeOp::EIndexState;
 
-    TTableIndexInfo(ui64 version, EType type, EState state)
+    TTableIndexInfo(ui64 version, EType type, EState state, std::string_view description)
         : AlterVersion(version)
         , Type(type)
         , State(state)
-    {}
+    {
+        if (type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+            Y_ABORT_UNLESS(SpecializedIndexDescription.emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>()
+                               .ParseFromString(description));
+        }
+    }
 
     TTableIndexInfo(const TTableIndexInfo&) = default;
 
@@ -2391,8 +2396,20 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         return result;
     }
 
+    TString SerializeDescription() const {
+        return std::visit([]<typename T>(const T& v) {
+            if constexpr (std::is_same_v<std::monostate, T>) {
+                return TString{};
+            } else {
+                TString str{v.SerializeAsString()};
+                Y_ABORT_UNLESS(!str.empty());
+                return str;
+            }
+        }, SpecializedIndexDescription);
+    }
+
     static TPtr NotExistedYet(EType type) {
-        return new TTableIndexInfo(0, type, EState::EIndexStateInvalid);
+        return new TTableIndexInfo(0, type, EState::EIndexStateInvalid, {});
     }
 
     static TPtr Create(const NKikimrSchemeOp::TIndexCreationConfig& config, TString& errMsg) {
@@ -2405,7 +2422,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
 
         TPtr alterData = result->CreateNextVersion();
         alterData->IndexKeys.assign(config.GetKeyColumnNames().begin(), config.GetKeyColumnNames().end());
-        Y_ABORT_UNLESS(alterData->IndexKeys.size());
+        Y_ABORT_UNLESS(!alterData->IndexKeys.empty());
         alterData->IndexDataColumns.assign(config.GetDataColumnNames().begin(), config.GetDataColumnNames().end());
 
         alterData->State = config.HasState() ? config.GetState() : EState::EIndexStateReady;

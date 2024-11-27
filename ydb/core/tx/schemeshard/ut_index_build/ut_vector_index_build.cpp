@@ -266,16 +266,20 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             globalIndexSettings = NYdb::NTable::TGlobalIndexSettings::FromProto(proto);
         }
 
-        std::unique_ptr<NYdb::NTable::TVectorIndexSettings> vectorIndexSettings;
+        std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> kmeansTreeSettings;
         {
-            Ydb::Table::VectorIndexSettings proto;
+            Ydb::Table::KMeansTreeSettings proto;
             UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
-                metric: DISTANCE_COSINE,
-                vector_type: VECTOR_TYPE_FLOAT,
-                vector_dimension: 1024
+                settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                }
+                levels: 5
+                clusters: 4
             )", &proto));
-            using T = NYdb::NTable::TVectorIndexSettings;
-            vectorIndexSettings = std::make_unique<T>(T::FromProto(proto));
+            using T = NYdb::NTable::TKMeansTreeSettings;
+            kmeansTreeSettings = std::make_unique<T>(T::FromProto(proto));
         }
 
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> indexCreationBlocker(runtime, [](const auto& ev) {
@@ -286,7 +290,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         const ui64 buildIndexTx = ++txId;
         TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", TBuildIndexConfig{
             "by_embedding", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, { "embedding" }, { "covered" },
-            { globalIndexSettings, globalIndexSettings }, std::move(vectorIndexSettings)
+            { globalIndexSettings, globalIndexSettings }, std::move(kmeansTreeSettings)
         });
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
@@ -299,19 +303,6 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
             buildIndexOperation.DebugString()
         );
-
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/by_embedding"), {
-            NLs::PathExist,
-            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
-            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
-            NLs::IndexKeys({"embedding"}),
-            NLs::IndexDataColumns({"covered"}),
-            NLs::VectorIndexDescription(
-                Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
-                Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
-                1024
-            )
-        });
 
         using namespace NKikimr::NTableIndex::NTableVectorKmeansTreeIndex;
         TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", LevelTable), true, true), {
@@ -328,5 +319,26 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             NLs::MaxPartitionsCountEqual(3),
             NLs::SplitBoundaries<ui32>({12345, 54321})
         });
+
+        for (size_t i = 0; i != 3; ++i) {
+            if (i != 0) {
+                // check that specialized index description persisted even after reboot
+                RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            }
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/vectors/by_embedding"), {
+                NLs::PathExist,
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
+                NLs::IndexKeys({"embedding"}),
+                NLs::IndexDataColumns({"covered"}),
+                NLs::KMeansTreeDescription(
+                    Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                    Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+                    1024,
+                    4,
+                    5
+                )
+            });
+        }
     }
 }

@@ -336,7 +336,6 @@ class TExecutor
             EvUpdateCounters,
             EvCheckYellow,
             EvUpdateCompactions,
-            EvActivateCompactionChanges,
             EvBrokenTransaction,
             EvLeaseExtend,
 
@@ -349,7 +348,6 @@ class TExecutor
         struct TEvUpdateCounters : public TEventLocal<TEvUpdateCounters, EvUpdateCounters> {};
         struct TEvCheckYellow : public TEventLocal<TEvCheckYellow, EvCheckYellow> {};
         struct TEvUpdateCompactions : public TEventLocal<TEvUpdateCompactions, EvUpdateCompactions> {};
-        struct TEvActivateCompactionChanges : public TEventLocal<TEvActivateCompactionChanges, EvActivateCompactionChanges> {};
         struct TEvBrokenTransaction : public TEventLocal<TEvBrokenTransaction, EvBrokenTransaction> {};
         struct TEvLeaseExtend : public TEventLocal<TEvLeaseExtend, EvLeaseExtend> {};
     };
@@ -596,7 +594,6 @@ class TExecutor
 
     // Compaction read support
 
-    void Handle(TEvPrivate::TEvActivateCompactionChanges::TPtr& ev, const TActorContext& ctx);
     void CommitCompactionChanges(
             ui32 tableId,
             const NTable::TCompactionChanges& changes,

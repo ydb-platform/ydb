@@ -3874,7 +3874,6 @@ STFUNC(TExecutor::StateWork) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
         HFunc(TEvPrivate::TEvBrokenTransaction, Handle);
-        HFunc(TEvPrivate::TEvActivateCompactionChanges, Handle);
         CFunc(TEvPrivate::EvUpdateCounters, UpdateCounters);
         cFunc(TEvPrivate::EvCheckYellow, UpdateYellow);
         cFunc(TEvPrivate::EvUpdateCompactions, UpdateCompactions);
@@ -4477,22 +4476,6 @@ bool TExecutor::CancelCompaction(ui64 compactionId)
         logl << NFmt::Do(*this) << " cancelling compaction " << compactionId;
 
     return Scans->CancelSystem(compactionId);
-}
-
-void TExecutor::Handle(TEvPrivate::TEvActivateCompactionChanges::TPtr& ev, const TActorContext& ctx)
-{
-    Y_UNUSED(ev);
-    Y_UNUSED(ctx);
-
-    CompactionChangesActivating = false;
-
-    for (auto& logicResult : CompactionLogic->ApplyChanges()) {
-        CommitCompactionChanges(logicResult.Table, logicResult.Changes, logicResult.Strategy);
-    }
-
-    if (LogicSnap->MayFlush(false)) {
-        MakeLogSnapshot();
-    }
 }
 
 void TExecutor::CommitCompactionChanges(

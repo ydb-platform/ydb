@@ -95,14 +95,14 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
       If the container starts successfully, you'll see the container ID. The container might take a few minutes to initialize. The database will not be available until container initialization is complete.
 
       {% note warning %}
- 
-      Data persistence is currently supported only on x86_64 processors. To disable data persistence and make all data volatile, stored only in RAM, add the `YDB_USE_IN_MEMORY_PDISKS=true` parameter in the command to run the Docker container. 
- 
-      If you do not want to disable data persistence on a Mac with an Apple Silicon processor, emulate the x86_64 instruction set with one of the following tools: 
+
+      Data persistence is currently supported only on x86_64 processors. To disable data persistence and make all data volatile, stored only in RAM, add the `YDB_USE_IN_MEMORY_PDISKS=true` parameter to the command that runs the Docker container.
+
+      If you do not want to disable data persistence on a Mac with an Apple Silicon processor, emulate the x86_64 instruction set with one of the following tools:
 
       - [colima](https://github.com/abiosoft/colima) with the `colima start --arch aarch64 --vm-type=vz --vz-rosetta` options.
       - [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/) with installed and enabled Rosetta 2.
-     
+
       {% endnote %}
 
 - Minikube

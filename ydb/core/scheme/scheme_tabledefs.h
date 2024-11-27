@@ -333,19 +333,19 @@ int CompareBorders(TConstArrayRef<TCell> first, TConstArrayRef<TCell> second, bo
     if (FirstLeft && SecondLeft) {
         if (inclusiveFirst == inclusiveSecond)
             return 0;
-        return (inclusiveFirst ? -1 : 1);
+        return (inclusiveFirst ? 1 : -1);
     } else if (FirstLeft && !SecondLeft) {
         if (inclusiveFirst && inclusiveSecond)
             return 0;
-        return 1;
+        return -1;
     } else if (!FirstLeft && SecondLeft) {
         if (inclusiveFirst && inclusiveSecond)
             return 0;
-        return -1;
+        return 1;
     } else { // !FirstLeft && !SecondLeft
         if (inclusiveFirst == inclusiveSecond)
             return 0;
-        return (inclusiveFirst ? 1 : -1);
+        return (inclusiveFirst ? -1 : 1);
     }
 }
 
@@ -356,12 +356,12 @@ inline int CompareRanges(const TTableRange& rangeX, const TTableRange& rangeY,
     Y_ABORT_UNLESS(!rangeX.Point);
     Y_ABORT_UNLESS(!rangeY.Point);
 
-    int xStart_yEnd = CompareBorders<true, false>(
+    int xStart_yEnd = CompareBorders<false, true>(
         rangeX.From, rangeY.To, rangeX.InclusiveFrom, rangeY.InclusiveTo, types);
     if (xStart_yEnd > 0)
         return 1;
 
-    int xEnd_yStart = CompareBorders<false, true>(
+    int xEnd_yStart = CompareBorders<true, false>(
         rangeX.To, rangeY.From, rangeX.InclusiveTo, rangeY.InclusiveFrom, types);
     if (xEnd_yStart < 0)
         return -1;

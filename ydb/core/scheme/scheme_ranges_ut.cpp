@@ -115,24 +115,24 @@ Y_UNIT_TEST_SUITE(SchemeRanges) {
         }
 
         UNIT_ASSERT_EQUAL((CompareBorders<true, true>(b10, b10, true, true, types)), 0);
-        UNIT_ASSERT_EQUAL((CompareBorders<true, true>(b10, b10, false, true, types)), 1);
-        UNIT_ASSERT_EQUAL((CompareBorders<true, true>(b10, b10, true, false, types)), -1);
+        UNIT_ASSERT_EQUAL((CompareBorders<true, true>(b10, b10, false, true, types)), -1);
+        UNIT_ASSERT_EQUAL((CompareBorders<true, true>(b10, b10, true, false, types)), 1);
         UNIT_ASSERT_EQUAL((CompareBorders<true, true>(b10, b10, false, false, types)), 0);
 
         UNIT_ASSERT_EQUAL((CompareBorders<false, false>(b10, b10, true, true, types)), 0);
-        UNIT_ASSERT_EQUAL((CompareBorders<false, false>(b10, b10, false, true, types)), -1);
-        UNIT_ASSERT_EQUAL((CompareBorders<false, false>(b10, b10, true, false, types)), 1);
+        UNIT_ASSERT_EQUAL((CompareBorders<false, false>(b10, b10, false, true, types)), 1);
+        UNIT_ASSERT_EQUAL((CompareBorders<false, false>(b10, b10, true, false, types)), -1);
         UNIT_ASSERT_EQUAL((CompareBorders<false, false>(b10, b10, false, false, types)), 0);
 
         UNIT_ASSERT_EQUAL((CompareBorders<true, false>(b10, b10, true, true, types)), 0);
-        UNIT_ASSERT_EQUAL((CompareBorders<true, false>(b10, b10, false, true, types)), 1);
-        UNIT_ASSERT_EQUAL((CompareBorders<true, false>(b10, b10, true, false, types)), 1);
-        UNIT_ASSERT_EQUAL((CompareBorders<true, false>(b10, b10, false, false, types)), 1);
+        UNIT_ASSERT_EQUAL((CompareBorders<true, false>(b10, b10, false, true, types)), -1);
+        UNIT_ASSERT_EQUAL((CompareBorders<true, false>(b10, b10, true, false, types)), -1);
+        UNIT_ASSERT_EQUAL((CompareBorders<true, false>(b10, b10, false, false, types)), -1);
 
         UNIT_ASSERT_EQUAL((CompareBorders<false, true>(b10, b10, true, true, types)), 0);
-        UNIT_ASSERT_EQUAL((CompareBorders<false, true>(b10, b10, false, true, types)), -1);
-        UNIT_ASSERT_EQUAL((CompareBorders<false, true>(b10, b10, true, false, types)), -1);
-        UNIT_ASSERT_EQUAL((CompareBorders<false, true>(b10, b10, false, false, types)), -1);
+        UNIT_ASSERT_EQUAL((CompareBorders<false, true>(b10, b10, false, true, types)), 1);
+        UNIT_ASSERT_EQUAL((CompareBorders<false, true>(b10, b10, true, false, types)), 1);
+        UNIT_ASSERT_EQUAL((CompareBorders<false, true>(b10, b10, false, false, types)), 1);
     }
 }
 

@@ -18,6 +18,11 @@ namespace NKikimr::NPQ {
 class TInitializerStep;
 class TPartition;
 
+struct TInitializionContext {
+    std::optional<ui64> StartOffset;
+    std::optional<ui64> EndOffset;
+};
+
 
 /**
  * This class execute independent steps of parttition actor initialization.
@@ -46,7 +51,7 @@ private:
 
     TVector<THolder<TInitializerStep>> Steps;
     std::vector<THolder<TInitializerStep>>::iterator CurrentStep;
-
+    TInitializionContext Ctx;
 };
 
 /**
@@ -63,7 +68,8 @@ public:
 
     TPartition* Partition() const;
     const TPartitionId& PartitionId() const;
-    TString TopicName() const;
+    const TString& TopicName() const;
+    TInitializionContext& GetContext();
 
     const TString Name;
     const bool SkipNewPartition;

@@ -113,8 +113,12 @@ void TInitializerStep::PoisonPill(const TActorContext& ctx) {
     ctx.Send(Partition()->Tablet, new TEvents::TEvPoisonPill());
 }
 
-TString TInitializerStep::TopicName() const {
+const TString& TInitializerStep::TopicName() const {
     return Partition()->TopicName();
+}
+
+TInitializionContext& TInitializerStep::GetContext() {
+    return Initializer->Ctx;
 }
 
 
@@ -314,6 +318,13 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
         if (Partition()->StartOffset == Partition()->EndOffset) {
            Partition()->NewHead.Offset = Partition()->Head.Offset = Partition()->EndOffset;
         }
+        if (meta.HasStartOffset()) {
+            GetContext().StartOffset = meta.GetStartOffset();
+        }
+        if (meta.HasEndOffset()) {
+            GetContext().EndOffset = meta.GetEndOffset();
+        }
+
         Partition()->SubDomainOutOfSpace = meta.GetSubDomainOutOfSpace();
         Partition()->EndWriteTimestamp = TInstant::MilliSeconds(meta.GetEndWriteTimestamp());
         Partition()->PendingWriteTimestamp = Partition()->EndWriteTimestamp;
@@ -466,6 +477,11 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
                 return;
             }
             FormHeadAndProceed();
+
+            Y_ABORT_UNLESS(!GetContext().StartOffset || *GetContext().StartOffset ==  Partition()->StartOffset,
+                "StartOffset from meta and blobs are different: %" PRIu64 " != %" PRIu64 "", *GetContext().StartOffset, Partition()->StartOffset);
+            Y_ABORT_UNLESS(!GetContext().EndOffset || *GetContext().EndOffset ==  Partition()->EndOffset,
+                "EndOffset from meta and blobs are different: %" PRIu64 " != %" PRIu64 "", *GetContext().EndOffset, Partition()->EndOffset);
 
             Done(ctx);
             break;

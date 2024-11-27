@@ -45,6 +45,8 @@ protected:
 private:
     void DoNext(const TActorContext& ctx);
 
+    TString LogPrefix() const;
+
     TPartition* Partition;
 
     bool InProgress;
@@ -77,6 +79,8 @@ public:
 protected:
     void Done(const TActorContext& ctx);
     void PoisonPill(const TActorContext& ctx);
+
+    TString LogPrefix() const;
 
 private:
     TInitializer* Initializer;

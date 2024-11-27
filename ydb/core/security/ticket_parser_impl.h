@@ -142,6 +142,7 @@ protected:
         TStackVec<TString> AdditionalSIDs;
         bool RefreshRetryableErrorImmediately = false;
         TExternalAuthInfo ExternalAuthInfo;
+        bool IsLowAccessServiceRequestPriority = false;
 
         TTokenRecordBase(const TStringBuf ticket)
             : Ticket(ticket)
@@ -414,6 +415,11 @@ private:
             } else {
                 request->Request.set_iam_token(record.Ticket);
             }
+        }
+
+        if (record.IsLowAccessServiceRequestPriority) {
+            auto& headers = request->Headers;
+            headers["x-ya-priority"] = "low";
         }
 
         return request;
@@ -1727,6 +1733,7 @@ protected:
         CounterTicketsBuildTime->Collect((now - record.InitTime).MilliSeconds());
         BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
                     << record.PeerName << ") has now valid token of " << record.Subject);
+        record.IsLowAccessServiceRequestPriority = true;
         RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
     }
 
@@ -1755,6 +1762,7 @@ protected:
                         << record.PeerName << ") has now permanent error message '" << error.Message << "'");
         }
         CounterTicketsErrors->Inc();
+        record.IsLowAccessServiceRequestPriority = true;
         RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
     }
 

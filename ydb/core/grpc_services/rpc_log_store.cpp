@@ -514,29 +514,8 @@ private:
                 }
 
                 if (tableDescription.HasTtlSettings() && tableDescription.GetTtlSettings().HasEnabled()) {
-                    const auto& inTTL = tableDescription.GetTtlSettings().GetEnabled();
-
-                    switch (inTTL.GetColumnUnit()) {
-                    case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {
-                        auto& outTTL = *describeLogTableResult.mutable_ttl_settings()->mutable_date_type_column();
-                        outTTL.set_column_name(inTTL.GetColumnName());
-                        outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
-                        break;
-                    }
-
-                    case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
-                    case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
-                    case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
-                    case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: {
-                        auto& outTTL = *describeLogTableResult.mutable_ttl_settings()->mutable_value_since_unix_epoch();
-                        outTTL.set_column_name(inTTL.GetColumnName());
-                        outTTL.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(inTTL.GetColumnUnit()));
-                        outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
-                        break;
-                    }
-
-                    default:
-                        break;
+                    if (!FillTtlSettings(*describeLogTableResult.mutable_ttl_settings(), tableDescription.GetTtlSettings().GetEnabled(), status, error)) {
+                        return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                     }
                 }
 

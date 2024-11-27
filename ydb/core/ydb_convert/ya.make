@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/util
     ydb/library/binary_json
     ydb/library/dynumber
+    ydb/library/conclusion
     ydb/library/mkql_proto/protos
     ydb/library/yql/minikql/dom
     ydb/library/yql/public/udf

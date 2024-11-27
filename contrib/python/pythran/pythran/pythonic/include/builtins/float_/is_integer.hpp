@@ -14,8 +14,8 @@ namespace builtins
     bool is_integer(double d);
 
     DEFINE_FUNCTOR(pythonic::builtins::float_, is_integer);
-  }
-}
+  } // namespace float_
+} // namespace builtins
 PYTHONIC_NS_END
 
 #endif

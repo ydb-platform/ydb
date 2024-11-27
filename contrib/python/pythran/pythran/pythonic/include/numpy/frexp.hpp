@@ -1,10 +1,10 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_FREXP_HPP
 #define PYTHONIC_INCLUDE_NUMPY_FREXP_HPP
 
+#include "pythonic/include/types/ndarray.hpp"
+#include "pythonic/include/types/traits.hpp"
 #include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/utils/numpy_conversion.hpp"
-#include "pythonic/include/types/traits.hpp"
-#include "pythonic/include/types/ndarray.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -22,7 +22,7 @@ namespace numpy
   frexp(E const &arr);
 
   DEFINE_FUNCTOR(pythonic::numpy, frexp);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

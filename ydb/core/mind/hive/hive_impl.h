@@ -583,6 +583,7 @@ protected:
     void Handle(TEvHive::TEvRequestScaleRecommendation::TPtr& ev);
     void Handle(TEvPrivate::TEvGenerateTestData::TPtr& ev);
     void Handle(TEvPrivate::TEvRefreshScaleRecommendation::TPtr& ev);
+    void Handle(TEvHive::TEvConfigureScaleRecommender::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);

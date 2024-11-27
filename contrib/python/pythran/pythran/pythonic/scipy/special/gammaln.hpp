@@ -17,8 +17,8 @@ namespace scipy
 #define NUMPY_NARY_FUNC_NAME gammaln
 #define NUMPY_NARY_FUNC_SYM xsimd::lgamma
 #include "pythonic/types/numpy_nary_expr.hpp"
-  }
-}
+  } // namespace special
+} // namespace scipy
 PYTHONIC_NS_END
 
 #endif

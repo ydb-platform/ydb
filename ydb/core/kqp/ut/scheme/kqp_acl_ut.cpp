@@ -90,6 +90,34 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         driver.Stop(true);
     }
 
+    Y_UNIT_TEST(FailedReadAccessDenied) {
+        TKikimrRunner kikimr;
+        {
+            NYdb::NScheme::TPermissions permissions("user0@builtin",{});
+            auto schemeClient = kikimr.GetSchemeClient();
+            auto result = schemeClient.ModifyPermissions("/Root/TwoShard",
+                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken("user0@builtin");
+        auto driver = TDriver(driverConfig);
+        auto db = NYdb::NTable::TTableClient(driver);
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            SELECT * FROM `/Root/TwoShard`;
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        Cerr << result.GetIssues().ToString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+        const auto expectedIssueMessage = "Cannot find table 'db.[/Root/TwoShard]' because it does not exist or you do not have access permissions.";
+        UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().ToString().Contains(expectedIssueMessage), true);
+        driver.Stop(true);
+    }
+
     Y_UNIT_TEST(WriteSuccess) {
         TKikimrRunner kikimr;
         {
@@ -116,6 +144,36 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
                 (10u, "One", -10);
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST(FailedWriteAccessDenied) {
+        TKikimrRunner kikimr;
+        {
+            NYdb::NScheme::TPermissions permissions("user0@builtin",
+                {"ydb.deprecated.describe_schema", "ydb.deprecated.select_row"}
+            );
+            auto schemeClient = kikimr.GetSchemeClient();
+            auto result = schemeClient.ModifyPermissions("/Root/TwoShard",
+                NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
+            ).ExtractValueSync();
+            AssertSuccessResult(result);
+        }
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken("user0@builtin");
+        auto driver = TDriver(driverConfig);
+        auto db = NYdb::NTable::TTableClient(driver);
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/TwoShard` (Key, Value1, Value2) VALUES
+                (10u, "One", -10);
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);
+        const auto expectedIssueMessage = "Failed to resolve table `/Root/TwoShard` status: AccessDenied.";
+        UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().ToString().Contains(expectedIssueMessage), true);
         driver.Stop(true);
     }
 

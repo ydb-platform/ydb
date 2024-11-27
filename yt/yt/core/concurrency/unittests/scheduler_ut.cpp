@@ -1075,6 +1075,8 @@ public:
         : TInvokerWrapper(std::move(underlyingInvoker))
     { }
 
+    using TInvokerWrapper::Invoke;
+
     void Invoke(TClosure callback) override
     {
         UnderlyingInvoker_->Invoke(BIND(

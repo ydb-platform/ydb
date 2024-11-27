@@ -140,22 +140,22 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore17: // do
         case TRule_sql_stmt_core::kAltSqlStmtCore19: // if
         case TRule_sql_stmt_core::kAltSqlStmtCore20: // for
-        case TRule_sql_stmt_core::kAltSqlStmtCore21: // values 
+        case TRule_sql_stmt_core::kAltSqlStmtCore21: // values
         case TRule_sql_stmt_core::kAltSqlStmtCore22: // create user
         case TRule_sql_stmt_core::kAltSqlStmtCore23: // alter user
         case TRule_sql_stmt_core::kAltSqlStmtCore24: // create group
-        case TRule_sql_stmt_core::kAltSqlStmtCore25: // alter group 
-        case TRule_sql_stmt_core::kAltSqlStmtCore26: // drop role 
-        case TRule_sql_stmt_core::kAltSqlStmtCore27: // create object 
-        case TRule_sql_stmt_core::kAltSqlStmtCore28: // alter object 
-        case TRule_sql_stmt_core::kAltSqlStmtCore29: // drop object 
-        case TRule_sql_stmt_core::kAltSqlStmtCore30: // create external data source 
-        case TRule_sql_stmt_core::kAltSqlStmtCore31: // alter external data source 
-        case TRule_sql_stmt_core::kAltSqlStmtCore32: // drop external data source 
-        case TRule_sql_stmt_core::kAltSqlStmtCore33: // create replication 
-        case TRule_sql_stmt_core::kAltSqlStmtCore34: // drop replication 
-        case TRule_sql_stmt_core::kAltSqlStmtCore35: // create topic 
-        case TRule_sql_stmt_core::kAltSqlStmtCore36: // alter topic 
+        case TRule_sql_stmt_core::kAltSqlStmtCore25: // alter group
+        case TRule_sql_stmt_core::kAltSqlStmtCore26: // drop role
+        case TRule_sql_stmt_core::kAltSqlStmtCore27: // create object
+        case TRule_sql_stmt_core::kAltSqlStmtCore28: // alter object
+        case TRule_sql_stmt_core::kAltSqlStmtCore29: // drop object
+        case TRule_sql_stmt_core::kAltSqlStmtCore30: // create external data source
+        case TRule_sql_stmt_core::kAltSqlStmtCore31: // alter external data source
+        case TRule_sql_stmt_core::kAltSqlStmtCore32: // drop external data source
+        case TRule_sql_stmt_core::kAltSqlStmtCore33: // create replication
+        case TRule_sql_stmt_core::kAltSqlStmtCore34: // drop replication
+        case TRule_sql_stmt_core::kAltSqlStmtCore35: // create topic
+        case TRule_sql_stmt_core::kAltSqlStmtCore36: // alter topic
         case TRule_sql_stmt_core::kAltSqlStmtCore37: // drop topic
         case TRule_sql_stmt_core::kAltSqlStmtCore38: // grant permissions
         case TRule_sql_stmt_core::kAltSqlStmtCore39: // revoke permissions
@@ -176,6 +176,7 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore54: // drop resource pool classifier
         case TRule_sql_stmt_core::kAltSqlStmtCore55: // backup
         case TRule_sql_stmt_core::kAltSqlStmtCore56: // restore
+        case TRule_sql_stmt_core::kAltSqlStmtCore57: // alter sequence
             return false;
     }
 }

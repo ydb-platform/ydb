@@ -1,10 +1,10 @@
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/getopt/last_getopt.h>
 
-#include <contrib/ydb/library/yql/public/purecalc/purecalc.h>
-#include <contrib/ydb/library/yql/public/purecalc/io_specs/mkql/spec.h>
-#include <contrib/ydb/library/yql/public/purecalc/io_specs/arrow/spec.h>
-#include <contrib/ydb/library/yql/public/purecalc/helpers/stream/stream_from_vector.h>
+#include <yql/essentials/public/purecalc/purecalc.h>
+#include <yt/yql/purecalc/io_specs/mkql/spec.h>
+#include <yql/essentials/public/purecalc/io_specs/arrow/spec.h>
+#include <yql/essentials/public/purecalc/helpers/stream/stream_from_vector.h>
 
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.16.1)
+VERSION(0.17.0)
 
 LICENSE(BSD-3-Clause)
 
@@ -86,6 +86,7 @@ PY_SRCS(
     pythran/optimizations/constant_folding.py
     pythran/optimizations/copyto.py
     pythran/optimizations/dead_code_elimination.py
+    pythran/optimizations/fast_gexpr.py
     pythran/optimizations/forward_substitution.py
     pythran/optimizations/inline_builtins.py
     pythran/optimizations/inlining.py

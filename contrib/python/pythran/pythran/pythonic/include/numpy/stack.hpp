@@ -9,7 +9,7 @@ namespace numpy
 {
   template <class ArraySequence>
   types::ndarray<typename ArraySequence::value_type::dtype,
-                 types::array<long, ArraySequence::value_type::value + 1>>
+                 types::array_tuple<long, ArraySequence::value_type::value + 1>>
   stack(ArraySequence const &args, long axis = 0);
 
   namespace details
@@ -20,12 +20,13 @@ namespace numpy
   }
 
   template <class... Tys>
-  types::ndarray<typename details::stack_helper_t<Tys...>::dtype,
-                 types::array<long, details::stack_helper_t<Tys...>::value + 1>>
+  types::ndarray<
+      typename details::stack_helper_t<Tys...>::dtype,
+      types::array_tuple<long, details::stack_helper_t<Tys...>::value + 1>>
   stack(std::tuple<Tys...> const &args, long axis = 0);
 
   DEFINE_FUNCTOR(pythonic::numpy, stack);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

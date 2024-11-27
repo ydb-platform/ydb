@@ -16,7 +16,7 @@ namespace operator_
   {
     return builtins::id(std::forward<A>(a)) != builtins::id(std::forward<B>(b));
   }
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

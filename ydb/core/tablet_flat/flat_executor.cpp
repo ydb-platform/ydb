@@ -214,7 +214,9 @@ void TExecutor::RecreatePageCollectionsCache() noexcept
     for (const auto &it : Database->GetScheme().Tables) {
         auto subset = Database->Subset(it.first, NTable::TEpoch::Max(), { }, { });
 
-        for (auto &partView : subset->Flatten) AddCachesOfBundle(partView);
+        for (auto &partView : subset->Flatten) {
+            AddCachesOfBundle(partView);
+        }
     }
 
     if (TransactionWaitPads) {
@@ -2360,7 +2362,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
                 auto *bySwitchAux = aux.AddBySwitchAux();
 
                 TPageCollectionProtoHelper::Snap(snap, loaned->PartComponents, partSwitch.TableId, CompactionLogic->BorrowedPartLevel());
-                TPageCollectionProtoHelper(true, false).Do(bySwitchAux->AddHotBundles(), loaned->PartComponents);
+                TPageCollectionProtoHelper(true).Do(bySwitchAux->AddHotBundles(), loaned->PartComponents);
 
                 auto body = proto.SerializeAsString();
                 auto glob = CommitManager->Turns.One(commit->Refs, std::move(body), true);
@@ -2666,58 +2668,6 @@ void TExecutor::Handle(TEvents::TEvFlushLog::TPtr &ev) {
     LogBatchFlushScheduled = false;
     LogicRedo->FlushBatchedLog();
     CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
-}
-
-void TExecutor::Handle(NSharedCache::TEvRequest::TPtr &ev) {
-    const auto priority = ev->Get()->Priority;
-    TAutoPtr<NPageCollection::TFetch> msg = ev->Get()->Fetch;
-
-    Y_ABORT_UNLESS(msg->Pages, "empty page collection request, do not do it");
-
-    const TLogoBlobID &metaId = msg->PageCollection->Label();
-    TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(metaId);
-    if (!collectionInfo) {
-        auto *reply = new NSharedCache::TEvResult(std::move(msg->PageCollection), msg->Cookie, NKikimrProto::RACE);
-        Send(ev->Sender, reply, 0, ev->Cookie);
-        return;
-    }
-
-    TVector<NSharedCache::TEvResult::TLoaded> cached;
-    TVector<NTable::TPageId> left;
-
-    for (auto &x : msg->Pages) {
-        if (TSharedPageRef body = PrivatePageCache->LookupShared(x, collectionInfo)) {
-            cached.emplace_back(x, body);
-        } else {
-            left.push_back(x);
-        }
-    }
-
-    if (cached) {
-        if (auto logl = Logger->Log(ELnLev::Debug)) {
-            logl
-                << NFmt::Do(*this) << " cache hit for data request from: "
-                << ev->Sender << ", pageCollection " << msg->PageCollection->Label();
-        }
-
-        auto *reply = new NSharedCache::TEvResult(msg->PageCollection, msg->Cookie, NKikimrProto::OK);
-        reply->Loaded.swap(cached);
-        Send(ev->Sender, reply, 0, ev->Cookie);
-    }
-
-    if (left) {
-        DoSwap(msg->Pages, left);
-
-        if (auto logl = Logger->Log(ELnLev::Debug)) {
-            logl
-                << NFmt::Do(*this) << " cache miss for data request from: "
-                << ev->Sender << ", pageCollection " << msg->PageCollection->Label();
-        }
-
-        auto *req = new NSharedCache::TEvRequest(priority, msg, SelfId());
-
-        TActorIdentity(ev->Sender).Send(MakeSharedPageCacheId(), req, 0, ev->Cookie);
-    }
 }
 
 void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
@@ -3472,7 +3422,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
             const auto &newPart = result.Part;
 
             TPageCollectionProtoHelper::Snap(snap, newPart, tableId, logicResult.Changes.NewPartsLevel);
-            TPageCollectionProtoHelper(true, false).Do(bySwitchAux->AddHotBundles(), newPart);
+            TPageCollectionProtoHelper(true).Do(bySwitchAux->AddHotBundles(), newPart);
         }
     }
 
@@ -3770,14 +3720,14 @@ TString TExecutor::BorrowSnapshot(ui32 table, const TTableSnapshotContext &snap,
     for (const auto &partView : subset->Flatten) {
         auto *x = proto.AddParts();
 
-        TPageCollectionProtoHelper(false, false).Do(x->MutableBundle(), partView);
+        TPageCollectionProtoHelper(false).Do(x->MutableBundle(), partView);
         snap.Impl->Borrowed(Step(), table, partView->Label, loaner);
     }
 
     for (const auto &part : subset->ColdParts) {
         auto *x = proto.AddParts();
 
-        TPageCollectionProtoHelper(false, false).Do(x->MutableBundle(), part);
+        TPageCollectionProtoHelper(false).Do(x->MutableBundle(), part);
         snap.Impl->Borrowed(Step(), table, part->Label, loaner);
     }
 
@@ -3948,7 +3898,6 @@ STFUNC(TExecutor::StateWork) {
         HFunc(TEvPrivate::TEvLeaseExtend, Handle);
         HFunc(TEvents::TEvWakeup, Wakeup);
         hFunc(TEvents::TEvFlushLog, Handle);
-        hFunc(NSharedCache::TEvRequest, Handle);
         hFunc(NSharedCache::TEvResult, Handle);
         hFunc(NSharedCache::TEvUpdated, Handle);
         HFunc(TEvTablet::TEvDropLease, Handle);

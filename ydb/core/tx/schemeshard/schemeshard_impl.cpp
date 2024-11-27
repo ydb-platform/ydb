@@ -11,6 +11,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/statistics/events.h>
@@ -1695,7 +1696,8 @@ void TSchemeShard::PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId)
     db.Table<Schema::TableIndex>().Key(element->PathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::TableIndex::AlterVersion>(alterData->AlterVersion),
                 NIceDb::TUpdate<Schema::TableIndex::IndexType>(alterData->Type),
-                NIceDb::TUpdate<Schema::TableIndex::State>(alterData->State));
+                NIceDb::TUpdate<Schema::TableIndex::State>(alterData->State),
+                NIceDb::TUpdate<Schema::TableIndex::Description>(alterData->SerializeDescription()));
 
     db.Table<Schema::TableIndexAlterData>().Key(element->PathId.LocalPathId).Delete();
 
@@ -1730,7 +1732,8 @@ void TSchemeShard::PersistTableIndexAlterData(NIceDb::TNiceDb& db, const TPathId
     db.Table<Schema::TableIndexAlterData>().Key(elem->PathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::TableIndexAlterData::AlterVersion>(alterData->AlterVersion),
                 NIceDb::TUpdate<Schema::TableIndexAlterData::IndexType>(alterData->Type),
-                NIceDb::TUpdate<Schema::TableIndexAlterData::State>(alterData->State));
+                NIceDb::TUpdate<Schema::TableIndexAlterData::State>(alterData->State),
+                NIceDb::TUpdate<Schema::TableIndexAlterData::Description>(alterData->SerializeDescription()));
 
     for (ui32 keyIdx = 0; keyIdx < alterData->IndexKeys.size(); ++keyIdx) {
         db.Table<Schema::TableIndexKeysAlterData>().Key(elem->PathId.LocalPathId, keyIdx).Update(
@@ -7477,7 +7480,7 @@ void TSchemeShard::ResolveSA() {
         StatisticsAggregatorId = subDomainInfo->GetTenantStatisticsAggregatorID();
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "ResolveSA(), StatisticsAggregatorId=" << StatisticsAggregatorId
-            << ", at schemeshard: " << TabletID());         
+            << ", at schemeshard: " << TabletID());
         ConnectToSA();
     }
 }
@@ -7485,11 +7488,11 @@ void TSchemeShard::ResolveSA() {
 void TSchemeShard::ConnectToSA() {
     if (!EnableStatistics)
         return;
-    
+
     if (!StatisticsAggregatorId) {
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
             "ConnectToSA(), no StatisticsAggregatorId"
-            << ", at schemeshard: " << TabletID());        
+            << ", at schemeshard: " << TabletID());
         return;
     }
     auto policy = NTabletPipe::TClientRetryPolicy::WithRetries();
@@ -7606,8 +7609,8 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         << ", path count: " << count
         << ", at schemeshard: " << TabletID());
 
-    return TDuration::Seconds(SendStatsIntervalMinSeconds 
-        + RandomNumber<ui64>(SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds));   
+    return TDuration::Seconds(SendStatsIntervalMinSeconds
+        + RandomNumber<ui64>(SendStatsIntervalMaxSeconds - SendStatsIntervalMinSeconds));
 }
 
 } // namespace NSchemeShard

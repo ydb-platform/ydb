@@ -3,8 +3,8 @@
 
 #include "pythonic/include/numpy/full.hpp"
 
-#include "pythonic/utils/functor.hpp"
 #include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -55,7 +55,7 @@ namespace numpy
     return full(types::pshape<std::integral_constant<long, N>>({}), fill_value,
                 nt);
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

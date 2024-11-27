@@ -912,7 +912,7 @@ TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& service
 }
 
 static bool IsComparableExpression(TContext& ctx, const TNodePtr& expr, bool assume, const char* sqlConstruction) {
-    if (assume && !expr->GetColumnName()) {
+    if (assume && !expr->IsPlainColumn()) {
         ctx.Error(expr->GetPos()) << "Only column names can be used in " << sqlConstruction;
         return false;
     }
@@ -925,7 +925,7 @@ static bool IsComparableExpression(TContext& ctx, const TNodePtr& expr, bool ass
         ctx.Error(expr->GetPos()) << "Unable to " << sqlConstruction << " aggregated values";
         return false;
     }
-    if (expr->GetColumnName()) {
+    if (expr->IsPlainColumn()) {
         return true;
     }
     if (expr->GetOpName().empty()) {

@@ -17,7 +17,7 @@ namespace builtins
     types::str read(types::file &&f, long size = -1);
 
     DEFINE_FUNCTOR(pythonic::builtins::file, read);
-  }
-}
+  } // namespace file
+} // namespace builtins
 PYTHONIC_NS_END
 #endif

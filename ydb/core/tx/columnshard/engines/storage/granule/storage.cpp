@@ -63,7 +63,7 @@ std::optional<NStorageOptimizer::TOptimizationPriority> TGranulesStorage::GetCom
             maxPriorityGranule = granulesSorted.front().GetGranule();
             break;
         }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "granule_locked")("path_id", granulesSorted.front().GetGranule()->GetPathId());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "granule_locked")("path_id", granulesSorted.front().GetGranule()->GetPathId());
         std::pop_heap(granulesSorted.begin(), granulesSorted.end());
         granulesSorted.pop_back();
     }

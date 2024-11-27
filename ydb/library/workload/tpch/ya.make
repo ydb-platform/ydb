@@ -19,7 +19,7 @@ ELSEIF (OS_LINUX)
 ENDIF()
 
 RESOURCE(
-    tpch_schema.sql tpch_schema.sql
+    tpch_schema.yaml tpch_schema.yaml
     ydb/library/benchmarks/gen/tpch-dbgen/dists.dss dists.dss
 )
 
@@ -34,8 +34,8 @@ ALL_RESOURCE_FILES_FROM_DIRS(
 
 PEERDIR(
     contrib/libs/fmt
-    ydb/library/accessor
     library/cpp/resource
+    ydb/library/accessor
     ydb/library/benchmarks/gen/tpch-dbgen
     ydb/library/benchmarks/queries/tpch
     ydb/library/workload/tpc_base

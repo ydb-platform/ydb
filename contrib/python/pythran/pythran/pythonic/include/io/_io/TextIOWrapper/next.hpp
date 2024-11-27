@@ -13,7 +13,7 @@ namespace io
     {
       USING_FUNCTOR(next, builtins::file::functor::next);
     }
-  }
-}
+  } // namespace _io
+} // namespace io
 PYTHONIC_NS_END
 #endif

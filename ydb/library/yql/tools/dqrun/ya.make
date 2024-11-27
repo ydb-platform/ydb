@@ -36,7 +36,7 @@ ENDIF()
         yql/essentials/core/services/mounts
         ydb/library/yql/dq/actors/input_transforms
         ydb/library/yql/dq/comp_nodes
-        ydb/library/yql/dq/actors/input_transforms
+        ydb/library/yql/dq/opt
         yql/essentials/core/dq_integration/transform
         ydb/library/yql/dq/transform
         yql/essentials/minikql/comp_nodes/llvm14
@@ -66,7 +66,7 @@ ENDIF()
         ydb/library/yql/providers/ydb/provider
         yql/essentials/providers/pg/provider
 
-        yql/essentials/public/udf/service/terminate_policy
+        yql/essentials/public/udf/service/exception_policy
         yql/essentials/utils/backtrace
         ydb/library/yql/utils/bindings
         yql/essentials/utils/log

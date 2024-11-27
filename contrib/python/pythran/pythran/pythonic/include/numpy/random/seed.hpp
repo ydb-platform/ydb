@@ -13,8 +13,8 @@ namespace numpy
     types::none_type seed(types::none_type _ = {});
 
     DEFINE_FUNCTOR(pythonic::numpy::random, seed);
-  }
-}
+  } // namespace random
+} // namespace numpy
 
 PYTHONIC_NS_END
 

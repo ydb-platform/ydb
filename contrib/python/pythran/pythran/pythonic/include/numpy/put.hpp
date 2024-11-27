@@ -1,8 +1,8 @@
 #ifndef PYTHONIC_INCLUDE_NUMPY_PUT_HPP
 #define PYTHONIC_INCLUDE_NUMPY_PUT_HPP
 
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/types/ndarray.hpp"
+#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/utils/numpy_conversion.hpp"
 
 PYTHONIC_NS_BEGIN
@@ -21,7 +21,7 @@ namespace numpy
   types::none_type put(E &, M const &, V const &);
 
   DEFINE_FUNCTOR(pythonic::numpy, put);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

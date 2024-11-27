@@ -30,9 +30,9 @@ namespace numpy
     }
 
     inline auto uniform(double low, double high, long size)
-        -> decltype(uniform(low, high, types::array<long, 1>{{size}}))
+        -> decltype(uniform(low, high, types::array_tuple<long, 1>{{size}}))
     {
-      return uniform(low, high, types::array<long, 1>{{size}});
+      return uniform(low, high, types::array_tuple<long, 1>{{size}});
     }
 
     inline double uniform(double low, double high, types::none_type d)

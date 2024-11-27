@@ -99,6 +99,7 @@ struct TestReadSessionSettings {
     std::set<ui32> Partitions = {};
     bool AutoPartitioningSupport = true;
     std::vector<TString> Topics = {TEST_TOPIC};
+    TMaybe<TDuration> ReadLag;
 };
 
 struct ITestReadSession {

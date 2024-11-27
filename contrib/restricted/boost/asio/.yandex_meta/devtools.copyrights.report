@@ -36,7 +36,7 @@
 KEEP     COPYRIGHT_SERVICE_LABEL 09b747b5492c0054ccb0805469599656
 BELONGS ya.make
     License text:
-        // Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+        // Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
         // Copyright (c) 2008 Roelof Naude (roelof.naude at gmail dot com)
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -46,86 +46,10 @@ BELONGS ya.make
         include/boost/asio/detail/eventfd_select_interrupter.hpp [5:6]
         include/boost/asio/detail/impl/eventfd_select_interrupter.ipp [5:6]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 1c595f63ea7712179f9a8b6862388b47
+KEEP     COPYRIGHT_SERVICE_LABEL 12ad79d2498da6784ac2af33bef3dca5
 BELONGS ya.make
     License text:
-        // Copyright (c) 2003-2011 Christopher M. Kohlhoff (chris at kohlhoff dot com)
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/asio/detail/limits.hpp [5:5]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 266d0bf761289539d88d2d0c479f3e6c
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2005 Voipster / Indrek dot Juhani at voipster dot com
-        // Copyright (c) 2005-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/asio/ssl/detail/impl/openssl_init.ipp [5:6]
-        include/boost/asio/ssl/impl/context.hpp [5:6]
-        include/boost/asio/ssl/impl/context.ipp [5:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 4ce9f73bd1dfbd027a7bc5d78910d662
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2005 Voipster / Indrek dot Juhani at voipster dot com
-        // Copyright (c) 2005-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/asio/ssl/detail/impl/openssl_init.ipp [5:6]
-        include/boost/asio/ssl/impl/context.hpp [5:6]
-        include/boost/asio/ssl/impl/context.ipp [5:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 529d2406b1955604206f10bc3d44afc8
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2021-2023 Klemens D. Morgenstern
-        //                         (klemens dot morgenstern at gmx dot net)
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/asio/experimental/co_spawn.hpp [5:6]
-        include/boost/asio/experimental/coro.hpp [5:6]
-        include/boost/asio/experimental/coro_traits.hpp [5:6]
-        include/boost/asio/experimental/detail/coro_completion_handler.hpp [5:6]
-        include/boost/asio/experimental/detail/coro_promise_allocator.hpp [5:6]
-        include/boost/asio/experimental/detail/partial_promise.hpp [5:6]
-        include/boost/asio/experimental/impl/coro.hpp [5:6]
-        include/boost/asio/experimental/impl/promise.hpp [5:6]
-        include/boost/asio/experimental/impl/use_coro.hpp [5:6]
-        include/boost/asio/experimental/impl/use_promise.hpp [5:6]
-        include/boost/asio/experimental/promise.hpp [5:6]
-        include/boost/asio/experimental/use_coro.hpp [5:6]
-        include/boost/asio/experimental/use_promise.hpp [5:6]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 6495f2e3736232dcde6616b6b4fc2659
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
-        // Copyright (c) 2021 Klemens D. Morgenstern
-        //                    (klemens dot morgenstern at gmx dot net)
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/asio/impl/connect_pipe.ipp [5:7]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 65af04607a789316553d621025ea64f3
-BELONGS ya.make
-    License text:
-        // Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+        // Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
@@ -732,10 +656,86 @@ BELONGS ya.make
         include/boost/asio/write_at.hpp [5:5]
         include/boost/asio/yield.hpp [5:5]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 1c595f63ea7712179f9a8b6862388b47
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2003-2011 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/asio/detail/limits.hpp [5:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 266d0bf761289539d88d2d0c479f3e6c
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2005 Voipster / Indrek dot Juhani at voipster dot com
+        // Copyright (c) 2005-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/asio/ssl/detail/impl/openssl_init.ipp [5:6]
+        include/boost/asio/ssl/impl/context.hpp [5:6]
+        include/boost/asio/ssl/impl/context.ipp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 529d2406b1955604206f10bc3d44afc8
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2021-2023 Klemens D. Morgenstern
+        //                         (klemens dot morgenstern at gmx dot net)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/asio/experimental/co_spawn.hpp [5:6]
+        include/boost/asio/experimental/coro.hpp [5:6]
+        include/boost/asio/experimental/coro_traits.hpp [5:6]
+        include/boost/asio/experimental/detail/coro_completion_handler.hpp [5:6]
+        include/boost/asio/experimental/detail/coro_promise_allocator.hpp [5:6]
+        include/boost/asio/experimental/detail/partial_promise.hpp [5:6]
+        include/boost/asio/experimental/impl/coro.hpp [5:6]
+        include/boost/asio/experimental/impl/promise.hpp [5:6]
+        include/boost/asio/experimental/impl/use_coro.hpp [5:6]
+        include/boost/asio/experimental/impl/use_promise.hpp [5:6]
+        include/boost/asio/experimental/promise.hpp [5:6]
+        include/boost/asio/experimental/use_coro.hpp [5:6]
+        include/boost/asio/experimental/use_promise.hpp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5a6828962cedc8b6b328de21b7c73256
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2005 Voipster / Indrek dot Juhani at voipster dot com
+        // Copyright (c) 2005-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/asio/ssl/detail/impl/openssl_init.ipp [5:6]
+        include/boost/asio/ssl/impl/context.hpp [5:6]
+        include/boost/asio/ssl/impl/context.ipp [5:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6495f2e3736232dcde6616b6b4fc2659
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+        // Copyright (c) 2021 Klemens D. Morgenstern
+        //                    (klemens dot morgenstern at gmx dot net)
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/asio/impl/connect_pipe.ipp [5:7]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 77248a96a79940a9fa1d82b59477d791
 BELONGS ya.make
     License text:
-        // Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+        // Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
         // Copyright (c) 2005 Stefan Arentz (stefan at soze dot com)
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -749,7 +749,7 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 77f9dd6047adac3aadfc4e429a97736b
 BELONGS ya.make
     License text:
-        // Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+        // Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
         // Copyright (c) 2008 Rep Invariant Systems, Inc. (info@repinvariant.com)
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -773,7 +773,7 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL cec519351b68fb385bc916223bd0753a
 BELONGS ya.make
     License text:
-        // Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+        // Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
         // Copyright (c) 2011 Boris Schaeling (boris@highscore.de)
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
@@ -788,7 +788,7 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL f5e28497f7d46b75936cac4feeb981f4
 BELONGS ya.make
     License text:
-        // Copyright (c) 2003-2023 Christopher M. Kohlhoff (chris at kohlhoff dot com)
+        // Copyright (c) 2003-2024 Christopher M. Kohlhoff (chris at kohlhoff dot com)
         // Copyright (c) 2014 Oliver Kowalke (oliver dot kowalke at gmail dot com)
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL

@@ -1257,8 +1257,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     }
 
     // Empty partition may will be filling from offset great than zero from mirror actor if source partition old and was clean by retantion time
-    if (!Head.GetCount() && !NewHead.GetCount() && DataKeysBody.empty() && HeadKeys.empty()) {
-        StartOffset = curOffset;
+    if (!Head.GetCount() && !NewHead.GetCount() && DataKeysBody.empty() && HeadKeys.empty() && p.Offset) {
+        StartOffset = *p.Offset;
     }
 
     TMaybe<TPartData> partData;

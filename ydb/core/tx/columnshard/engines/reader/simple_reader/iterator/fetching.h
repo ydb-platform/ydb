@@ -163,7 +163,7 @@ private:
     std::shared_ptr<IDataSource> Source;
     TFetchingScriptCursor Cursor;
     bool FinishedFlag = false;
-    NColumnShard::TCounterGuard CountersGuard;
+    const NColumnShard::TCounterGuard CountersGuard;
 
 protected:
     virtual bool DoApply(IDataReader& owner) const override;

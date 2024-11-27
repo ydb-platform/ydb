@@ -175,9 +175,7 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
 
         // Don't expect any tasks or change requests
         UNIT_ASSERT(!broker.HasPending());
-        UNIT_ASSERT(!backend.PendingReads);
         UNIT_ASSERT(!backend.StartedCompactions);
-        UNIT_ASSERT(!backend.CheckChangesFlag());
     }
 
     Y_UNIT_TEST(ForcedCompactionWithGenerations) {
@@ -205,9 +203,7 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
 
         // Don't expect any tasks or change requests
         UNIT_ASSERT(!broker.HasPending());
-        UNIT_ASSERT(!backend.PendingReads);
         UNIT_ASSERT(!backend.StartedCompactions);
-        UNIT_ASSERT(!backend.CheckChangesFlag());
 
         // Insert some rows
         {
@@ -241,9 +237,7 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
 
         // Don't expect any tasks or change requests
         UNIT_ASSERT(!broker.HasPending());
-        UNIT_ASSERT(!backend.PendingReads);
         UNIT_ASSERT(!backend.StartedCompactions);
-        UNIT_ASSERT(!backend.CheckChangesFlag());
 
         // Insert some more rows
         {

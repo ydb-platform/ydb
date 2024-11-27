@@ -12,7 +12,6 @@
 #include "flat_scan_events.h"
 #include "flat_scan_eggs.h"
 #include "flat_exec_commit.h"
-#include "flat_exec_read.h"
 #include "flat_executor_misc.h"
 #include "flat_executor_compaction_logic.h"
 #include "flat_executor_gclogic.h"
@@ -302,14 +301,6 @@ struct TTransactionWaitPad : public TPrivatePageCacheWaitPad {
     NWilson::TTraceId GetWaitingTraceId() const noexcept;
 };
 
-struct TCompactionReadWaitPad : public TPrivatePageCacheWaitPad {
-    const ui64 ReadId;
-
-    TCompactionReadWaitPad(ui64 readId)
-        : ReadId(readId)
-    { }
-};
-
 struct TCompactionChangesCtx;
 
 struct TExecutorCaches {
@@ -400,9 +391,6 @@ class TExecutor
     using TActivationQueue = TOneOneQueueInplace<TSeat *, 64>;
     THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> ActivationQueue;
     THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> PendingQueue;
-
-    bool CompactionReadActivating = false;
-    bool CompactionChangesActivating = false;
 
     TMap<TSeat*, TAutoPtr<TSeat>> PostponedTransactions;
     THashMap<ui64, THolder<TScanSnapshot>> ScanSnapshots;
@@ -591,9 +579,6 @@ class TExecutor
     const NTable::TRowVersionRanges& TableRemovedRowVersions(ui32 table) override;
     ui64 BeginCompaction(THolder<NTable::TCompactionParams> params) override;
     bool CancelCompaction(ui64 compactionId) override;
-
-    // Compaction read support
-
     void ApplyCompactionChanges(
             TCompactionChangesCtx& ctx,
             const NTable::TCompactionChanges& changes,

@@ -12,23 +12,6 @@ namespace NKikimr {
 namespace NTable {
 
     /**
-     * Allows performing reads in the context of a compaction strategy.
-     */
-    class ICompactionRead {
-    public:
-        virtual ~ICompactionRead() = default;
-
-        /**
-         * Execute is called with the environment that may be used to load
-         * pages from currently valid parts. Method may return false indicating
-         * it needs to wait for some missing pages, in which case it will
-         * be restarted at a later time. Method must return true when there
-         * is actually nothing for the backend to load.
-         */
-        virtual bool Execute(IPages* env) = 0;
-    };
-
-    /**
      * Compaction params specify which parts of the table to compact
      */
     class TCompactionParams {

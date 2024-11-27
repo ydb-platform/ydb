@@ -31,5 +31,6 @@ target_link_libraries(ut-federated_query-common PUBLIC
 
 target_sources(ut-federated_query-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/common/common.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/common/common.h
 )
 

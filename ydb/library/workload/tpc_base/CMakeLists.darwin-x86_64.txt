@@ -33,6 +33,7 @@ target_link_libraries(library-workload-tpc_base PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-resource
+  streams-factory-open_by_signature
   ydb-library-accessor
   library-workload-benchmark_base
   public-lib-scheme_types
@@ -58,6 +59,7 @@ target_link_libraries(library-workload-tpc_base.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-resource
+  streams-factory-open_by_signature
   ydb-library-accessor
   library-workload-benchmark_base
   public-lib-scheme_types

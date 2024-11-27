@@ -19,8 +19,8 @@ get_built_tool_path(
   enum_parser
 )
 
-add_subdirectory(scheme)
 add_subdirectory(protos)
+add_subdirectory(scheme)
 add_subdirectory(storage)
 add_subdirectory(changes)
 add_subdirectory(portions)

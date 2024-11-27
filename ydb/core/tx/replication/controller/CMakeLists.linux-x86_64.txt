@@ -20,6 +20,7 @@ get_built_tool_path(
 )
 
 add_subdirectory(ut_dst_creator)
+add_subdirectory(ut_stream_creator)
 add_subdirectory(ut_target_discoverer)
 
 add_library(tx-replication-controller)

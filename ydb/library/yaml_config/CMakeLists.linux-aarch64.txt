@@ -29,7 +29,6 @@ target_link_libraries(ydb-library-yaml_config PUBLIC
   yutil
   contrib-libs-openssl
   contrib-libs-protobuf
-  contrib-libs-yaml-cpp
   cpp-protobuf-json
   ydb-core-base
   cms-console-util
@@ -40,6 +39,7 @@ target_link_libraries(ydb-library-yaml_config PUBLIC
   ydb-library-fyamlcpp
   yaml-config-protos
   library-yaml_config-public
+  ydb-library-yaml_json
 )
 
 target_sources(ydb-library-yaml_config PRIVATE

@@ -57,6 +57,7 @@ target_link_libraries(yql-yt-native PUBLIC
   yql-essentials-core
   essentials-core-url_preprocessing
   yql-dq-comp_nodes
+  yql-dq-opt
   dq-actors-yt
   providers-dq-global_worker_manager
   providers-dq-provider
@@ -134,6 +135,7 @@ target_link_libraries(yql-yt-native.global PUBLIC
   yql-essentials-core
   essentials-core-url_preprocessing
   yql-dq-comp_nodes
+  yql-dq-opt
   dq-actors-yt
   providers-dq-global_worker_manager
   providers-dq-provider

@@ -19,8 +19,8 @@ get_built_tool_path(
   enum_parser
 )
 
-add_subdirectory(engines)
 add_subdirectory(common)
+add_subdirectory(engines)
 add_subdirectory(bg_tasks)
 add_subdirectory(data_sharing)
 add_subdirectory(blobs_action)

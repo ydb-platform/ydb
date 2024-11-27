@@ -79,18 +79,18 @@ target_link_libraries(library-workload-tpch.global PUBLIC
 target_sources(library-workload-tpch.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/data_generator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/registrar.cpp
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/dabc745937b147347e5aa4d84981978d.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/c2efb1f1061b4f91b0a9c589f3b2968c.cpp
   ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/0f121843c88d7d93b86a4d8cd8bebb4f.cpp
 )
 
 
 resources(library-workload-tpch.global
-  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/dabc745937b147347e5aa4d84981978d.cpp
+  ${PROJECT_BINARY_DIR}/ydb/library/workload/tpch/c2efb1f1061b4f91b0a9c589f3b2968c.cpp
   INPUTS
-  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/tpch_schema.sql
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpch/tpch_schema.yaml
   ${PROJECT_SOURCE_DIR}/ydb/library/benchmarks/gen/tpch-dbgen/dists.dss
   KEYS
-  tpch_schema.sql
+  tpch_schema.yaml
   dists.dss
   OPTS
 )

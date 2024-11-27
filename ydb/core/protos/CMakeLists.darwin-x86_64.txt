@@ -47,6 +47,7 @@ get_built_tool_path(
   enum_parser
 )
 
+add_subdirectory(schemeshard)
 add_subdirectory(out)
 
 add_library(ydb-core-protos)
@@ -63,26 +64,27 @@ target_link_libraries(ydb-core-protos PUBLIC
   yutil
   contrib-libs-grpc
   tools-enum_parser-enum_serialization_runtime
-  library-actors-protos
   core-config-protos
   libs-config-protos
+  core-protos-schemeshard
   core-scheme-protos
+  columnshard-common-protos
+  columnshard-engines-protos
+  scheme-defaults-protos
+  library-actors-protos
+  library-formats-arrow-protos
   library-login-protos
   library-mkql_proto-protos
+  ydb-library-services
+  library-ydb_issue-proto
+  dq-actors-protos
+  yql-dq-proto
   api-protos
   core-file_storage-proto
   core-issue-protos
-  dq-actors-protos
-  yql-dq-proto
   providers-common-proto
   public-issue-protos
   essentials-public-types
-  ydb-library-services
-  library-ydb_issue-proto
-  scheme-defaults-protos
-  columnshard-engines-protos
-  library-formats-arrow-protos
-  columnshard-common-protos
   contrib-libs-protobuf
 )
 

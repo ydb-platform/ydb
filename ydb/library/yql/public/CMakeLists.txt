@@ -13,6 +13,3 @@
 # changes in this file.
 
 add_subdirectory(ydb_issue)
-add_subdirectory(embedded)
-add_subdirectory(fastcheck)
-add_subdirectory(purecalc)

@@ -29,6 +29,7 @@ target_sources(formats-arrow-serializer PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/serializer/abstract.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/serializer/stream.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/serializer/parsing.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/serializer/utils.cpp
 )
 
 

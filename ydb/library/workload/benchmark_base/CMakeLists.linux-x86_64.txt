@@ -30,6 +30,7 @@ target_link_libraries(library-workload-benchmark_base PUBLIC
   yutil
   ydb-library-accessor
   library-workload-abstract
+  ydb-library-yaml_json
   api-protos
   tools-enum_parser-enum_serialization_runtime
 )

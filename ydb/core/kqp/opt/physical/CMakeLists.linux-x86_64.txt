@@ -25,6 +25,7 @@ target_link_libraries(kqp-opt-physical PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  ydb-core-scheme
   core-kqp-common
   opt-physical-effects
   yql-dq-common

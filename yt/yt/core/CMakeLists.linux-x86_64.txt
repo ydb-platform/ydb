@@ -77,6 +77,7 @@ target_link_libraries(yt-yt-core PUBLIC
 target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/actions/cancelation_token.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/actions/cancelable_context.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/actions/codicil_guarded_invoker.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/actions/current_invoker.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/actions/future.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/actions/invoker_detail.cpp
@@ -171,6 +172,7 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/blob_output.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/bloom_filter.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/checksum.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/codicil.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/config.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/coro_pipe.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/crash_handler.cpp

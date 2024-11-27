@@ -25,6 +25,7 @@ target_link_libraries(services-ext_index-metadata PUBLIC
   core-grpc_services-local_rpc
   core-grpc_services-base
   ydb-core-grpc_services
+  ydb-core-ydb_convert
   services-metadata-request
   ext_index-metadata-extractor
 )
@@ -50,6 +51,7 @@ target_link_libraries(services-ext_index-metadata.global PUBLIC
   core-grpc_services-local_rpc
   core-grpc_services-base
   ydb-core-grpc_services
+  ydb-core-ydb_convert
   services-metadata-request
   ext_index-metadata-extractor
 )

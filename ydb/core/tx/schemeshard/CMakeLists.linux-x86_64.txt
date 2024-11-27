@@ -180,6 +180,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_apply_build_index.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_assign_bsv.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_backup_backup_collection.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_backup_incremental_backup_collection.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_blob_depot.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_cancel_tx.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_cansel_build_index.cpp
@@ -303,6 +304,8 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path_describer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path_element.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_self_pinger.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_shard_deleter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_svp_migration.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_types.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_utils.cpp
@@ -313,6 +316,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/defs.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/operation_queue_timer.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__op_traits.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_common.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_common_subdomain.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_part.h
@@ -324,6 +328,8 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_path_element.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_schema.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_self_pinger.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_shard_deleter.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_svp_migration.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_tx_infly.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_types.h

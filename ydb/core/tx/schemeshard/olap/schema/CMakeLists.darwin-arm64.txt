@@ -18,6 +18,7 @@ add_library(schemeshard-olap-schema)
 target_link_libraries(schemeshard-olap-schema PUBLIC
   contrib-libs-cxxsupp
   yutil
+  schemeshard-olap-column_families
   schemeshard-olap-columns
   schemeshard-olap-indexes
   schemeshard-olap-options

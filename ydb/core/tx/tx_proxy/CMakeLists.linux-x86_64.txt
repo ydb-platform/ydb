@@ -77,6 +77,7 @@ target_sources(core-tx-tx_proxy PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/rpc_long_tx.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/snapshotreq.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/commitreq.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/upload_rows_counters.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/upload_rows_common_impl.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/upload_rows.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/global.cpp
@@ -87,4 +88,10 @@ generate_enum_serilization(core-tx-tx_proxy
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/read_table_impl.h
   INCLUDE_HEADERS
   ydb/core/tx/tx_proxy/read_table_impl.h
+)
+
+generate_enum_serilization(core-tx-tx_proxy
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/tx_proxy/upload_rows_counters.h
+  INCLUDE_HEADERS
+  ydb/core/tx/tx_proxy/upload_rows_counters.h
 )

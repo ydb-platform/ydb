@@ -66,11 +66,8 @@ public:
 class IDataAccessorRequestsSubscriber: public NColumnShard::TMonitoringObjectsCounter<IDataAccessorRequestsSubscriber> {
 private:
     THashSet<ui64> RequestIds;
-
-protected:
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> DataAccessorsResources;
 
-private:
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) = 0;
 
     void OnRequestsFinished(TDataAccessorsResult&& result) {
@@ -101,7 +98,10 @@ public:
     }
 
     std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& ExtractResourcesGuard() {
-        AFL_VERIFY(DataAccessorsResources);
+        return TValidator::CheckNotNull(ExtractResourcesGuardOptional());
+    }
+
+    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& ExtractResourcesGuardOptional() {
         return std::move(DataAccessorsResources);
     }
 

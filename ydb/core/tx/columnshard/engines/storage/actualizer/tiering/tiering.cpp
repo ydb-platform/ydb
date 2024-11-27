@@ -224,7 +224,7 @@ class TActualizationReply: public IMetadataAccessorResultProcessor {
 private:
     std::weak_ptr<TTieringActualizer> TieringActualizer;
     virtual void DoApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& /*engine*/,
-        const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resultResources) override {
+        const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resultResources*/) override {
         auto locked = TieringActualizer.lock();
         if (!locked) {
             return;

@@ -243,6 +243,15 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         transactions.emplace_back(tx);
     }
 
+    auto isLess = [](const TTransactionSnapshot& lhs, const TTransactionSnapshot& rhs) {
+        auto makeValue = [](const TTransactionSnapshot& v) {
+            return std::make_tuple(v.Step, v.TxId);
+        };
+
+        return makeValue(lhs) < makeValue(rhs);
+    };
+    std::sort(transactions.begin(), transactions.end(), isLess);
+
     ctx.Register(new TMonitoringProxy(ev->Sender, ev->Get()->Query, std::move(res), CacheActor, TopicName,
         TabletID(), ResponseProxy.size(), std::move(config), std::move(transactions)));
 

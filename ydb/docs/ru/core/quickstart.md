@@ -99,7 +99,7 @@
 
       Если вы не хотите отключать сохранение данных на диск при запуске контейнера Docker на Mac с процессором Apple Silicon, необходимо эмулировать набор инструкций x86_64 с помощью одной из следующих программ:
 
-      - [colima](https://github.com/abiosoft/colima) используйте параметры `colima start --arch aarch64 --vm-type=vz --vz-rosetta`;
+      - [colima](https://github.com/abiosoft/colima) c параметрами `colima start --arch aarch64 --vm-type=vz --vz-rosetta`;
       - [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/) установите и включите Rosetta 2.
 - Minikube
 

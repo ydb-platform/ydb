@@ -47,7 +47,7 @@ std::shared_ptr<TColumnEngineChanges> TOptimizerPlanner::DoGetOptimizationTask(
         result->SetPortionExpectedSize(levelPortions->GetExpectedPortionSize());
     }
     auto positions = data.GetCheckPositions(PrimaryKeysSchema, level->GetLevelId() > 1);
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("task_id", result->GetTaskIdentifier())("positions", positions.DebugString())(
         "level", level->GetLevelId())("target", data.GetTargetCompactionLevel())("data", data.DebugString());
     result->SetCheckPoints(std::move(positions));
     for (auto&& i : result->GetSwitchedPortions()) {

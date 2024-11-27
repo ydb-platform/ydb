@@ -16,9 +16,13 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
     while (FetchingSources.size()) {
         auto frontSource = *FetchingSources.begin();
         if (!frontSource->HasStageResult()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_no_result")("source_id", frontSource->GetSourceId())(
+                "source_idx", frontSource->GetSourceIdx());
             break;
         }
         if (!frontSource->GetStageResult().HasResultChunk()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_no_result_chunk")("source_id", frontSource->GetSourceId())(
+                "source_idx", frontSource->GetSourceIdx());
             break;
         }
         auto table = frontSource->MutableStageResult().ExtractResultChunk();
@@ -28,24 +32,32 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
             sourceIdxToContinue = frontSource->GetSourceIdx();
         }
         if (table && table->num_rows()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "has_result")("source_id", frontSource->GetSourceId())(
+                "source_idx", frontSource->GetSourceIdx())("table", table->num_rows());
             auto cursor =
                 std::make_shared<TSimpleScanCursor>(frontSource->GetStartPKRecordBatch(), frontSource->GetSourceId(), startIndex + recordsCount);
-            reader.OnIntervalResult(std::make_shared<TPartialReadResult>(nullptr, nullptr, table, cursor, sourceIdxToContinue));
+            reader.OnIntervalResult(
+                std::make_shared<TPartialReadResult>(frontSource->GetResourceGuards(), frontSource->GetGroupGuard(), table, cursor, sourceIdxToContinue));
         } else if (sourceIdxToContinue) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "continue_source")("source_id", frontSource->GetSourceId())(
+                "source_idx", frontSource->GetSourceIdx());
             ContinueSource(*sourceIdxToContinue);
             break;
         }
         if (!isFinished) {
             break;
         }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "source_finished")("source_id", frontSource->GetSourceId())(
+            "source_idx", frontSource->GetSourceIdx());
         AFL_VERIFY(FetchingSourcesByIdx.erase(frontSource->GetSourceIdx()));
         if (Context->GetCommonContext()->GetReadMetadata()->Limit) {
-            FinishedSources.emplace(*FetchingSources.begin());
+            frontSource->ClearResult();
+            FinishedSources.emplace(frontSource);
         }
         FetchingSources.erase(FetchingSources.begin());
         while (FetchingSources.size() && FinishedSources.size()) {
-            auto finishedSource = *FinishedSources.begin();
             auto fetchingSource = *FetchingSources.begin();
+            auto finishedSource = *FinishedSources.begin();
             if (finishedSource->GetFinish() < fetchingSource->GetStart()) {
                 FetchedCount += finishedSource->GetRecordsCount();
             }

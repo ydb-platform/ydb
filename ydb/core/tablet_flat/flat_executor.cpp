@@ -3890,7 +3890,6 @@ STFUNC(TExecutor::StateWork) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvActivateExecution, Handle);
         HFunc(TEvPrivate::TEvBrokenTransaction, Handle);
-        HFunc(TEvPrivate::TEvActivateCompactionRead, Handle);
         HFunc(TEvPrivate::TEvActivateCompactionChanges, Handle);
         CFunc(TEvPrivate::EvUpdateCounters, UpdateCounters);
         cFunc(TEvPrivate::EvCheckYellow, UpdateYellow);
@@ -4573,35 +4572,6 @@ void TExecutor::PlanCompactionReadActivation()
 {
     if (CompactionReadQueue && !CompactionReadActivating) {
         CompactionReadActivating = true;
-        Send(SelfId(), new TEvPrivate::TEvActivateCompactionRead());
-    }
-}
-
-void TExecutor::Handle(TEvPrivate::TEvActivateCompactionRead::TPtr& ev, const TActorContext& ctx)
-{
-    Y_UNUSED(ev);
-    Y_UNUSED(ctx);
-
-    CompactionReadActivating = false;
-    while (CompactionReadQueue) {
-        ui64 readId = CompactionReadQueue.front();
-        CompactionReadQueue.pop_front();
-        if (auto* state = CompactionReads.FindPtr(readId)) {
-            state->Retries++;
-            PrivatePageCache->ResetTouchesAndToLoad(true);
-            TPageCollectionReadEnv env(*PrivatePageCache);
-            if (state->Read->Execute(&env)) {
-                // Optimize for successful read completion
-                UnpinCompactionReadPages(state);
-                PrivatePageCache->ResetTouchesAndToLoad(false);
-                CompactionReads.erase(readId);
-                Counters->Simple()[TExecutorCounters::COMPACTION_READ_IN_FLY] = CompactionReads.size();
-                continue;
-            }
-
-            PostponeCompactionRead(state);
-            PrivatePageCache->ResetTouchesAndToLoad(false);
-        }
     }
 }
 

@@ -336,7 +336,6 @@ class TExecutor
             EvUpdateCounters,
             EvCheckYellow,
             EvUpdateCompactions,
-            EvActivateCompactionRead,
             EvActivateCompactionChanges,
             EvBrokenTransaction,
             EvLeaseExtend,
@@ -350,7 +349,6 @@ class TExecutor
         struct TEvUpdateCounters : public TEventLocal<TEvUpdateCounters, EvUpdateCounters> {};
         struct TEvCheckYellow : public TEventLocal<TEvCheckYellow, EvCheckYellow> {};
         struct TEvUpdateCompactions : public TEventLocal<TEvUpdateCompactions, EvUpdateCompactions> {};
-        struct TEvActivateCompactionRead : public TEventLocal<TEvActivateCompactionRead, EvActivateCompactionRead> {};
         struct TEvActivateCompactionChanges : public TEventLocal<TEvActivateCompactionChanges, EvActivateCompactionChanges> {};
         struct TEvBrokenTransaction : public TEventLocal<TEvBrokenTransaction, EvBrokenTransaction> {};
         struct TEvLeaseExtend : public TEventLocal<TEvLeaseExtend, EvLeaseExtend> {};
@@ -405,7 +403,6 @@ class TExecutor
     THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> ActivationQueue;
     THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> PendingQueue;
 
-    THashMap<ui64, TCompactionReadState> CompactionReads;
     TDeque<ui64> CompactionReadQueue;
     bool CompactionReadActivating = false;
     bool CompactionChangesActivating = false;
@@ -462,7 +459,6 @@ class TExecutor
     THashMap<TPrivatePageCacheWaitPad*, THolder<TCompactionReadWaitPad>> CompactionReadWaitPads;
 
     ui64 TransactionUniqCounter = 0;
-    ui64 CompactionReadUniqCounter = 0;
 
     bool LogBatchFlushScheduled = false;
     bool NeedFollowerSnapshot = false;
@@ -605,7 +601,6 @@ class TExecutor
     void PostponeCompactionRead(TCompactionReadState* state);
     size_t UnpinCompactionReadPages(TCompactionReadState* state);
     void PlanCompactionReadActivation();
-    void Handle(TEvPrivate::TEvActivateCompactionRead::TPtr& ev, const TActorContext& ctx);
     void PlanCompactionChangesActivation();
     void Handle(TEvPrivate::TEvActivateCompactionChanges::TPtr& ev, const TActorContext& ctx);
     void CommitCompactionChanges(

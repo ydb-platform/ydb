@@ -230,10 +230,15 @@ SELECT ListTake(list_column, 3) FROM my_table;
 
 ## ListSample and ListSampleN {#listsample}
 
-Returns a sample without replacement from the list. `ListSample` chooses elements independently with the given probability,
-`ListSampleN` chooses a sample of the given size (if the length of the list is less than the sample size, returns the original list). If the probability/sample size is NULL, returns the original list.
+Returns a sample without replacement from the list.
 
-Optional extra argument is used to manipulate randomness, see [documentation for `Random`](./basic/random.md).
+- `ListSample` chooses elements independently with the specified probability.
+
+- `ListSampleN` chooses a sample of the specified size (if the length of the list is less than the sample size, returns the original list).
+
+If the probability/sample size is NULL, returns the original list.
+
+An optional argument is used to control randomness, see [documentation for `Random`](./basic/random.md).
 
 ### Examples
 
@@ -254,7 +259,7 @@ SELECT ListSampleN($list, 2);  -- [4, 2]
 
 ## ListShuffle {#listshuffle}
 
-Returns a shuffled copy of the list. Optional extra argument is used to manipulate randomness, see [documentation for `Random`](./basic/random.md).
+Returns a shuffled copy of the list. An optional argument is used to control randomness, see [documentation for `Random`](./basic/random.md).
 
 ### Examples
 

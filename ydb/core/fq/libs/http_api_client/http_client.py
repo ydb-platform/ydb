@@ -11,7 +11,7 @@ from urllib3.util.retry import Retry
 
 from .query_results import YQResults
 
-MAX_RETRY_FOR_SESSION = 4
+MAX_RETRY_FOR_SESSION = 100
 BACK_OFF_FACTOR = 0.3
 TIME_BETWEEN_RETRIES = 1000
 ERROR_CODES = (500, 502, 504)

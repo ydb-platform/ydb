@@ -434,7 +434,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvCommitRange:
 
     for (const auto& [b, e] : ev->Get()->CommitInfo.Ranges) {
         if (!RangesMode) {
-            return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "commits ranges in cookies commit mode is prohibited", ctx);
+            return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "commits ranges in cookies commit mode is prohibited", ctx); // savnik есть другой мод? Надо там тоже чет поддержать?
         }
 
         if (b >= e || it->second.NextRanges.Intersects(b, e) || b < it->second.Offset) {
@@ -1196,28 +1196,26 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
     auto& converter = converterIter->second;
     const auto name = converter->GetInternalName();
 
-    {
-        auto it = Topics.find(name);
-        if (it == Topics.end() || (!ReadWithoutConsumer && it->second.PipeClient != ActorIdFromProto(record.GetPipeClient()))) {
-            LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " ignored ev lock"
-                << ": path# " << name
-                << ", reason# " << "topic is unknown");
-            return;
-        }
-
-        auto& topic = it->second;
-
-        // TODO: counters
-        if (NumPartitionsFromTopic[name]++ == 0) {
-            if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-                SetupTopicCounters(converter, topic.CloudId, topic.DbId, topic.DbPath, topic.IsServerless, topic.FolderId);
-            } else {
-                SetupTopicCounters(converter);
-            }
-        }
-
-        topic.Partitions.emplace(record.GetPartition(), NGRpcProxy::TPartitionInfo{record.GetTabletId()});
+    auto topicIt = Topics.find(name);
+    if (topicIt == Topics.end() || (!ReadWithoutConsumer && topicIt->second.PipeClient != ActorIdFromProto(record.GetPipeClient()))) {
+        LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " ignored ev lock"
+            << ": path# " << name
+            << ", reason# " << "topic is unknown");
+        return;
     }
+
+    auto& topic = topicIt->second;
+
+    // TODO: counters
+    if (NumPartitionsFromTopic[name]++ == 0) {
+        if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+            SetupTopicCounters(converter, topic.CloudId, topic.DbId, topic.DbPath, topic.IsServerless, topic.FolderId);
+        } else {
+            SetupTopicCounters(converter);
+        }
+    }
+
+    topic.Partitions.emplace(record.GetPartition(), NGRpcProxy::TPartitionInfo{record.GetTabletId()});
 
     // TODO: counters
     auto it = TopicCounters.find(name);
@@ -1234,10 +1232,10 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
         return CloseSession(PersQueue::ErrorCode::ERROR, error, ctx);
     }
 
-    const TActorId actorId = ctx.Register(new TPartitionActor(
+    const TActorId actorId = ctx.Register(new TPartitionActor( // savnik empty topic
         ctx.SelfID, ClientId, ClientPath, Cookie, Session, partitionId, record.GetGeneration(),
         record.GetStep(), record.GetTabletId(), it->second, CommitsDisabled, ClientDC, RangesMode,
-        converterIter->second, DirectRead, UseMigrationProtocol, maxLag, readTimestampMs));
+        converterIter->second, DirectRead, UseMigrationProtocol, maxLag, readTimestampMs, topic.PartitionGraph->GetPartition(partitionId.Partition)->HierarhicalParents));
 
     if (SessionsActive) {
         PartsPerSession.DecFor(Partitions.size(), 1);
@@ -1286,6 +1284,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvPartitionSta
 
         it->second.LockSent = true;
         it->second.Offset = ev->Get()->Offset;
+        it->second.ConsumerHasAnyCommits = ev->Get()->ClientHasAnyCommits;
 
         if constexpr (UseMigrationProtocol) {
             result.mutable_assigned()->mutable_topic()->set_path(it->second.Topic->GetFederationPath());

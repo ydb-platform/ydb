@@ -239,7 +239,7 @@ enum class ELockRangeFlags : ui8 {
 using ELockRangeFlagsRaw = std::underlying_type<ELockRangeFlags>::type;
 
 inline ELockRangeFlags operator|(ELockRangeFlags a, ELockRangeFlags b) { return ELockRangeFlags(ELockRangeFlagsRaw(a) | ELockRangeFlagsRaw(b)); }
-inline ELockRangeFlags operator&(ELockRangeFlags a, ELockRangeFlags b) { return ELockRangeFlags(ELockRangeFlagsRaw(a) | ELockRangeFlagsRaw(b)); }
+inline ELockRangeFlags operator&(ELockRangeFlags a, ELockRangeFlags b) { return ELockRangeFlags(ELockRangeFlagsRaw(a) & ELockRangeFlagsRaw(b)); }
 inline ELockRangeFlags& operator|=(ELockRangeFlags& a, ELockRangeFlags b) { return a = a | b; }
 inline ELockRangeFlags& operator&=(ELockRangeFlags& a, ELockRangeFlags b) { return a = a & b; }
 inline bool operator!(ELockRangeFlags c) { return ELockRangeFlagsRaw(c) == 0; }

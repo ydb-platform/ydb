@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"
             DropColumns { Name: "modified_at" }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {{NKikimrScheme::StatusInvalidParameter, "Can't drop TTL column: 'modified_at', disable TTL first"}});
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"
@@ -362,7 +362,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 ColumnName: "modified_at"
               }
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )", {{NKikimrScheme::StatusInvalidParameter, "Cannot enable TTL on dropped column: 'modified_at'"}});
     }
 
     void AlterTableOnIndexedTable(NKikimrSchemeOp::EIndexType indexType) {

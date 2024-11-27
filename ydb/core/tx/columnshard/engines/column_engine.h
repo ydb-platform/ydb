@@ -253,13 +253,15 @@ public:
 class TColumnEngineForLogs;
 class IMetadataAccessorResultProcessor {
 private:
-    virtual void DoApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& engine) = 0;
+    virtual void DoApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& engine,
+        const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resultResources) = 0;
 
 public:
     virtual ~IMetadataAccessorResultProcessor() = default;
 
-    void ApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& engine) {
-        return DoApplyResult(std::move(result), engine);
+    void ApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& engine,
+        const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resultResources) {
+        return DoApplyResult(std::move(result), engine, resultResources);
     }
 
     IMetadataAccessorResultProcessor() = default;

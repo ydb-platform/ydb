@@ -142,7 +142,7 @@ private:
     virtual void DoExtractTasks(TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) override;
 public:
     void ActualizePortionInfo(const TPortionDataAccessor& accessor, const TActualizationContext& context);
-    std::optional<TCSMetadataRequest> BuildMetadataRequest(
+    std::vector<TCSMetadataRequest> BuildMetadataRequests(
         const ui64 pathId, const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TTieringActualizer>& index);
 
     void Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext);

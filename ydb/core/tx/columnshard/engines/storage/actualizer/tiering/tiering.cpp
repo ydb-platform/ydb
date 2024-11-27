@@ -201,15 +201,18 @@ void TTieringActualizer::DoExtractTasks(
 
 void TTieringActualizer::Refresh(const std::optional<TTiering>& info, const TAddExternalContext& externalContext) {
     Tiering = info;
+    std::optional<ui32> newTieringColumnId;
     if (Tiering) {
-        TieringColumnId = VersionedIndex.GetLastSchema()->GetColumnId(Tiering->GetEvictColumnName());
-    } else {
-        TieringColumnId = {};
+        newTieringColumnId = VersionedIndex.GetLastSchema()->GetColumnId(Tiering->GetEvictColumnName());
     }
     TargetCriticalSchema = VersionedIndex.GetLastCriticalSchema();
     PortionsInfo.clear();
     NewPortionIds.clear();
     PortionIdByWaitDuration.clear();
+    if (newTieringColumnId != TieringColumnId) {
+        MaxByPortionId.clear();
+    }
+    TieringColumnId = newTieringColumnId;
 
     for (auto&& i : externalContext.GetPortions()) {
         AddPortion(i.second, externalContext);
@@ -220,7 +223,8 @@ namespace {
 class TActualizationReply: public IMetadataAccessorResultProcessor {
 private:
     std::weak_ptr<TTieringActualizer> TieringActualizer;
-    virtual void DoApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& /*engine*/) override {
+    virtual void DoApplyResult(TDataAccessorsResult&& result, TColumnEngineForLogs& /*engine*/,
+        const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resultResources) override {
         auto locked = TieringActualizer.lock();
         if (!locked) {
             return;
@@ -240,18 +244,27 @@ public:
 
 }   // namespace
 
-std::optional<TCSMetadataRequest> TTieringActualizer::BuildMetadataRequest(
+std::vector<TCSMetadataRequest> TTieringActualizer::BuildMetadataRequests(
     const ui64 /*pathId*/, const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TTieringActualizer>& index) {
-    if (NewPortionIds.empty()) {
-        return std::nullopt;
-    }
-    std::shared_ptr<TDataAccessorsRequest> result = std::make_shared<TDataAccessorsRequest>();
+    static constexpr ui64 batchMemorySoftLimit = 100 * (1 << 20);
+    std::vector<TCSMetadataRequest> requests;
+    std::shared_ptr<TDataAccessorsRequest> currentRequest;
     for (auto&& i : NewPortionIds) {
+        if (!currentRequest) {
+            currentRequest = std::make_shared<TDataAccessorsRequest>();
+        }
         auto it = portions.find(i);
         AFL_VERIFY(it != portions.end());
-        result->AddPortion(it->second);
+        currentRequest->AddPortion(it->second);
+        if (currentRequest->PredictAccessorsMemory(it->second->GetSchema(VersionedIndex)) >= batchMemorySoftLimit) {
+            requests.emplace_back(currentRequest, std::make_shared<TActualizationReply>(index));
+            currentRequest.reset();
+        }
     }
-    return TCSMetadataRequest(result, std::make_shared<TActualizationReply>(index));
+    if (currentRequest) {
+        requests.emplace_back(std::move(currentRequest), std::make_shared<TActualizationReply>(index));
+    }
+    return requests;
 }
 
 }   // namespace NKikimr::NOlap::NActualizer

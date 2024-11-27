@@ -621,7 +621,6 @@ protected:
     const NActors::TActorId ShardActorId;
     std::shared_ptr<NOlap::TColumnEngineChanges> Changes;
     std::shared_ptr<NOlap::TVersionedIndex> VersionedIndex;
-    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
 
     virtual void DoOnRequestsFinishedImpl() = 0;
 
@@ -631,16 +630,6 @@ protected:
     }
 
 public:
-    void SetResourcesGuard(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
-        AFL_VERIFY(!ResourcesGuard);
-        ResourcesGuard = guard;
-    }
-
-    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& ExtractResourcesGuard() {
-        AFL_VERIFY(ResourcesGuard);
-        return std::move(ResourcesGuard);
-    }
-
     TDataAccessorsSubscriber(const NActors::TActorId& shardActorId, const std::shared_ptr<NOlap::TColumnEngineChanges>& changes,
         const std::shared_ptr<NOlap::TVersionedIndex>& versionedIndex)
         : ShardActorId(shardActorId)
@@ -822,7 +811,7 @@ class TAccessorsMemorySubscriber: public NOlap::NResourceBroker::NSubscribe::ITa
 private:
     using TBase = NOlap::NResourceBroker::NSubscribe::ITask;
     std::shared_ptr<NOlap::TDataAccessorsRequest> Request;
-    std::shared_ptr<TDataAccessorsSubscriber> Subscriber;
+    std::shared_ptr<NOlap::IDataAccessorRequestsSubscriber> Subscriber;
     std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
 
     virtual void DoOnAllocationSuccess(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& guard) override {
@@ -927,7 +916,7 @@ private:
     const ui64 Generation;
     virtual void DoOnRequestsFinished(NOlap::TDataAccessorsResult&& result) override {
         NActors::TActivationContext::Send(
-            TabletActorId, std::make_unique<TEvPrivate::TEvMetadataAccessorsInfo>(Processor, Generation, std::move(result)));
+            TabletActorId, std::make_unique<TEvPrivate::TEvMetadataAccessorsInfo>(Processor, Generation, std::move(result), ExtractResourcesGuard()));
     }
 
 public:
@@ -947,8 +936,12 @@ void TColumnShard::SetupMetadata() {
     }
     std::vector<NOlap::TCSMetadataRequest> requests = TablesManager.MutablePrimaryIndex().CollectMetadataRequests();
     for (auto&& i : requests) {
-        i.GetRequest()->RegisterSubscriber(std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation()));
-        DataAccessorsManager->AskData(i.GetRequest());
+        const ui64 accessorsMemory =
+            i.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
+        NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor,
+            std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, TGUID::CreateTimebased().AsGuidString(), TTLTaskSubscription,
+                i.GetRequest(), std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation()),
+                DataAccessorsManager.GetObjectPtrVerified()));
     }
 }
 

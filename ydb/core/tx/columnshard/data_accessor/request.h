@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 
 namespace NKikimr::NOlap {
 
@@ -66,6 +67,10 @@ class IDataAccessorRequestsSubscriber: public NColumnShard::TMonitoringObjectsCo
 private:
     THashSet<ui64> RequestIds;
 
+protected:
+    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard> DataAccessorsResources;
+
+private:
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) = 0;
 
     void OnRequestsFinished(TDataAccessorsResult&& result) {
@@ -88,6 +93,16 @@ public:
         if (RequestIds.empty()) {
             OnRequestsFinished(std::move(*Result));
         }
+    }
+
+    void SetResourcesGuard(const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>& guard) {
+        AFL_VERIFY(!DataAccessorsResources);
+        DataAccessorsResources = guard;
+    }
+
+    std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TResourcesGuard>&& ExtractResourcesGuard() {
+        AFL_VERIFY(DataAccessorsResources);
+        return std::move(DataAccessorsResources);
     }
 
     virtual ~IDataAccessorRequestsSubscriber() = default;

@@ -30,4 +30,14 @@ bool TTTLValidator::ValidateUnit(const NScheme::TTypeId columnType, NKikimrSchem
     return true;
 }
 
+bool TTTLValidator::ValidateTiers(const NKikimrSchemeOp::TTTLSettings::TEnabled ttlSettings, TString& errStr) {
+    for (ui64 i = 0; i < ttlSettings.TiersSize(); ++i) {
+        if (ttlSettings.GetTiers(i).HasDelete() && i + 1 != ttlSettings.TiersSize()) {
+            errStr = "Only the last tier in TTL settings can have Delete action";
+            return false;
+        }
+    }
+    return true;
+}
+
 }

@@ -230,13 +230,6 @@ void TExecutor::RecreatePageCollectionsCache() noexcept
         }
         TransactionWaitPads.clear();
     }
-
-    if (CompactionReadWaitPads) {
-        for (auto &xpair : CompactionReadWaitPads) {
-            CompactionReadQueue.push_back(xpair.second->ReadId);
-        }
-        CompactionReadWaitPads.clear();
-    }
 }
 
 void TExecutor::ReflectSchemeSettings() noexcept
@@ -506,7 +499,6 @@ void TExecutor::Active(const TActorContext &ctx) {
     }
 
     PlanTransactionActivation();
-    PlanCompactionReadActivation();
 
     Owner->ActivateExecutor(OwnerCtx());
 
@@ -575,7 +567,6 @@ void TExecutor::PlanTransactionActivation() {
 void TExecutor::ActivateWaitingTransactions(TPrivatePageCache::TPage::TWaitQueuePtr waitPadsQueue) {
     if (waitPadsQueue) {
         bool haveTransactions = false;
-        bool haveCompactionReads = false;
         while (TPrivatePageCacheWaitPad *waitPad = waitPadsQueue->Pop()) {
             if (auto it = TransactionWaitPads.find(waitPad); it != TransactionWaitPads.end()) {
                 it->second->WaitingSpan.EndOk();
@@ -586,19 +577,12 @@ void TExecutor::ActivateWaitingTransactions(TPrivatePageCache::TPage::TWaitQueue
                 ActivateTransactionWaiting++;
                 TransactionWaitPads.erase(waitPad);
                 haveTransactions = true;
-            } else if (auto it = CompactionReadWaitPads.find(waitPad); it != CompactionReadWaitPads.end()) {
-                CompactionReadQueue.push_back(it->second->ReadId);
-                CompactionReadWaitPads.erase(waitPad);
-                haveCompactionReads = true;
             } else {
                 Y_Fail("Unexpected wait pad triggered");
             }
         }
         if (haveTransactions) {
             PlanTransactionActivation();
-        }
-        if (haveCompactionReads) {
-            PlanCompactionReadActivation();
         }
     }
 }
@@ -4495,66 +4479,6 @@ bool TExecutor::CancelCompaction(ui64 compactionId)
     return Scans->CancelSystem(compactionId);
 }
 
-void TExecutor::PostponeCompactionRead(TCompactionReadState* state)
-{
-    Y_ABORT_UNLESS(PrivatePageCache->GetStats().CurrentCacheMisses, "Compaction read postponed with nothing to load");
-
-    size_t newPinnedPages = 0;
-    TCompactionReadState::TPinned pinned;
-
-    PrivatePageCache->RepinPages(pinned, state->Pinned, newPinnedPages);
-
-    // Everything not touched during this read iteration must be unpinned
-    size_t unpinnedPages = UnpinCompactionReadPages(state);
-
-    // Replace old pinned mapping with the new one
-    state->Pinned = std::move(pinned);
-
-    auto padHolder = MakeHolder<TCompactionReadWaitPad>(state->ReadId);
-    auto *const pad = padHolder.Get();
-    CompactionReadWaitPads[pad] = std::move(padHolder);
-
-    size_t waitPages = 0;
-    ui32 loadPages = 0;
-    ui64 loadBytes = 0;
-
-    auto toLoad = PrivatePageCache->GetToLoad();
-    for (auto& load : toLoad) {
-        auto* pageCollectionInfo = load.first;
-        TVector<NTable::TPageId> &pages = load.second;
-        waitPages += pages.size();
-
-        const std::pair<ui32, ui64> toLoad = PrivatePageCache->Request(pages, pad, pageCollectionInfo);
-        if (toLoad.first) {
-            auto* req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages));
-
-            loadPages += toLoad.first;
-            loadBytes += toLoad.second;
-            RequestFromSharedCache(req, NBlockIO::EPriority::Bkgr, EPageCollectionRequest::Cache);
-        }
-    }
-
-    if (auto logl = Logger->Log(ELnLev::Debug)) {
-        logl
-                << NFmt::Do(*this) << " " << NFmt::Do(*state) << " postponed"
-                << ", " << loadBytes << " bytes, pages "
-                << "{" << waitPages << " wait, " << loadPages << " load}"
-                << ", pinned " << newPinnedPages << " new pages";
-
-        if (unpinnedPages) {
-            logl << ", unpinned " << unpinnedPages << " pages";
-        }
-    }
-
-    Counters->Cumulative()[TExecutorCounters::COMPACTION_READ_POSTPONED].Increment(1);
-    Counters->Cumulative()[TExecutorCounters::COMPACTION_READ_LOAD_BYTES].Increment(loadBytes);
-    Counters->Cumulative()[TExecutorCounters::COMPACTION_READ_LOAD_PAGES].Increment(loadPages);
-    Counters->Cumulative()[TExecutorCounters::COMPACTION_READ_CACHE_MISSES].Increment(PrivatePageCache->GetStats().CurrentCacheMisses);
-
-    Counters->Simple()[TExecutorCounters::CACHE_PINNED_SET] = PrivatePageCache->GetStats().PinnedSetSize;
-    Counters->Simple()[TExecutorCounters::CACHE_PINNED_LOAD] = PrivatePageCache->GetStats().PinnedLoadSize;
-}
-
 size_t TExecutor::UnpinCompactionReadPages(TCompactionReadState* state)
 {
     size_t unpinnedPages = 0;
@@ -4566,13 +4490,6 @@ size_t TExecutor::UnpinCompactionReadPages(TCompactionReadState* state)
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_LOAD] = PrivatePageCache->GetStats().PinnedLoadSize;
 
     return unpinnedPages;
-}
-
-void TExecutor::PlanCompactionReadActivation()
-{
-    if (CompactionReadQueue && !CompactionReadActivating) {
-        CompactionReadActivating = true;
-    }
 }
 
 void TExecutor::PlanCompactionChangesActivation()

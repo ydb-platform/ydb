@@ -403,7 +403,6 @@ class TExecutor
     THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> ActivationQueue;
     THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> PendingQueue;
 
-    TDeque<ui64> CompactionReadQueue;
     bool CompactionReadActivating = false;
     bool CompactionChangesActivating = false;
 
@@ -456,7 +455,6 @@ class TExecutor
     TActorId Launcher;
 
     THashMap<TPrivatePageCacheWaitPad*, THolder<TTransactionWaitPad>> TransactionWaitPads;
-    THashMap<TPrivatePageCacheWaitPad*, THolder<TCompactionReadWaitPad>> CompactionReadWaitPads;
 
     ui64 TransactionUniqCounter = 0;
 
@@ -598,9 +596,7 @@ class TExecutor
 
     // Compaction read support
 
-    void PostponeCompactionRead(TCompactionReadState* state);
     size_t UnpinCompactionReadPages(TCompactionReadState* state);
-    void PlanCompactionReadActivation();
     void PlanCompactionChangesActivation();
     void Handle(TEvPrivate::TEvActivateCompactionChanges::TPtr& ev, const TActorContext& ctx);
     void CommitCompactionChanges(

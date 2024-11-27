@@ -479,9 +479,9 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             FormHeadAndProceed();
 
             Y_ABORT_UNLESS(!GetContext().StartOffset || *GetContext().StartOffset ==  Partition()->StartOffset,
-                "StartOffset from meta and blobs are different: %" PRIu64 " != %" PRIu64 "", *GetContext().StartOffset, Partition()->StartOffset);
+                "StartOffset from meta and blobs are different: %s %" PRIu64 " != %" PRIu64 "", TopicName().c_str(), *GetContext().StartOffset, Partition()->StartOffset);
             Y_ABORT_UNLESS(!GetContext().EndOffset || *GetContext().EndOffset ==  Partition()->EndOffset,
-                "EndOffset from meta and blobs are different: %" PRIu64 " != %" PRIu64 "", *GetContext().EndOffset, Partition()->EndOffset);
+                "EndOffset from meta and blobs are different: %s %" PRIu64 " != %" PRIu64 "", TopicName().c_str(), *GetContext().EndOffset, Partition()->EndOffset);
 
             Done(ctx);
             break;

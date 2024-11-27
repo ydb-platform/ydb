@@ -378,8 +378,6 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
         }
     }
 
-    PQ_LOG_I(">>>>> WRITE " << meta.DebugString());
-
     TString out;
     Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out);
 

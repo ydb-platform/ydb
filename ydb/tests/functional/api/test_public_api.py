@@ -1288,6 +1288,11 @@ class TestSessionNotFoundOperations(Base):
                     )
                 )
 
+        assert_that(
+            resp.table_stats
+            is None
+        )
+
     def test_native_datetime_types(self):
         tc_settings = ydb.TableClientSettings().with_native_datetime_in_result_sets(enabled=True)
         table_client = ydb.TableClient(self.driver, tc_settings)

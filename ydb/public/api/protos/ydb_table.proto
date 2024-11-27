@@ -287,6 +287,8 @@ message PartitionStats {
     uint64 rows_estimate = 1;
     // Approximate size of shard (bytes)
     uint64 store_size = 2;
+    // id of node that serve shard key range
+    uint32 leader_node_id = 3;
 }
 
 message TableStats {
@@ -739,6 +741,8 @@ message DescribeTableRequest {
     bool include_partition_stats = 7;
     // Includes set_val settings for sequences
     bool include_set_val = 8;
+    // Includes shard -> node id maping (required include_partition_stats)
+    bool include_shard_nodes_info = 9;
 }
 
 message DescribeTableResponse {

@@ -59,6 +59,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         PROPERTY("StartOffset", StartOffset);
                         PROPERTY("EndOffset", EndOffset);
                         PROPERTY("LastOffset", Head.GetNextOffset());
+                        PROPERTY("Last message WriteTimestamp", EndWriteTimestamp.ToRfc822String());
                         PROPERTY("HeadOffset", Head.Offset << ", count: " << Head.GetCount());
                     }
                 }

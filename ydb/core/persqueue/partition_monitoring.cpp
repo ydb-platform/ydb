@@ -49,8 +49,8 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                     }
 
                     PROPERTIES("Status") {
-                        PROPERTY("Disk", DiskIsFull ? "Full" : "Normal");
-                        PROPERTY("Quota", WaitingForSubDomainQuota(ctx) ? "Out of space" : "Normal");
+                        PROPERTY("Disk", (DiskIsFull ? "Full" : "Normal"));
+                        PROPERTY("Quota", (WaitingForSubDomainQuota(ctx) ? "Out of space" : "Normal"));
                     }
 
                     PROPERTIES("Information") {

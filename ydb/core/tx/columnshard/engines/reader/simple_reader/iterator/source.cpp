@@ -16,7 +16,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching) {
     AFL_VERIFY(fetching);
-//    AFL_VERIFY(!FetchingPlan);
+    //    AFL_VERIFY(!FetchingPlan);
     FetchingPlan = fetching;
 }
 
@@ -204,6 +204,7 @@ class TPortionAccessorFetchingSubscriber: public IDataAccessorRequestsSubscriber
 private:
     TFetchingScriptCursor Step;
     std::shared_ptr<IDataSource> Source;
+    const NColumnShard::TCounterGuard Guard;
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         AFL_VERIFY(!result.HasErrors());
         AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
@@ -216,7 +217,8 @@ private:
 public:
     TPortionAccessorFetchingSubscriber(const TFetchingScriptCursor& step, const std::shared_ptr<IDataSource>& source)
         : Step(step)
-        , Source(source) {
+        , Source(source)
+        , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetcherAcessorsGuard()) {
     }
 };
 

@@ -1,6 +1,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
+#include "schemeshard__op_traits.h"
 
 #include <library/cpp/int128/int128.h>
 
@@ -584,6 +585,30 @@ public:
 }
 
 namespace NKikimr::NSchemeShard {
+
+using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TTag>(
+    TTag,
+    const TTxTransaction& tx)
+{
+    return tx.GetCreatePersQueueGroup().GetName();
+}
+
+template <>
+bool SetName<TTag>(
+    TTag,
+    TTxTransaction& tx,
+    const TString& name)
+{
+    tx.MutableCreatePersQueueGroup()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewPQ(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreatePQ>(id, tx);

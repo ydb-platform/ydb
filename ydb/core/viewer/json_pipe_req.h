@@ -303,7 +303,6 @@ protected:
     TString MakeForward(const std::vector<ui32>& nodes);
 
     void RequestDone(ui32 requests = 1);
-    void ResetAndBootstrap();
     void AddEvent(const TString& name);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
     void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);

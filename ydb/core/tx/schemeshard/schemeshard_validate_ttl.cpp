@@ -57,6 +57,10 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
             return false;
         }
 
+        if (!NValidation::TTTLValidator::ValidateTiers(enabled, errStr)) {
+            return false;
+        }
+
         const auto expireAfter = GetExpireAfter(enabled, false);
         if (expireAfter.IsFail()) {
             errStr = expireAfter.GetErrorMessage();

@@ -941,15 +941,13 @@ void TPartition::Handle(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActor
 
 void TPartition::HandleOnInit(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext&)
 {
+    PQ_LOG_D("HandleOnInit TEvPQ::TEvTxCalcPredicate");
+
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
 
 void TPartition::HandleOnInit(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext&)
 {
-    PQ_LOG_D("HandleOnInit TEvPQ::TEvTxCommit" <<
-             " Step " << ev->Get()->Step <<
-             ", TxId " << ev->Get()->TxId);
-
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
 
@@ -960,9 +958,32 @@ void TPartition::HandleOnInit(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContex
 
 void TPartition::HandleOnInit(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActorContext&)
 {
-    PQ_LOG_D("HandleOnInit TEvPQ::TEvProposePartitionConfig" <<
-             " Step " << ev->Get()->Step <<
-             ", TxId " << ev->Get()->TxId);
+    PendingEvents.emplace_back(ev->ReleaseBase().Release());
+}
+
+void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx)
+{
+    PQ_LOG_D("HandleOnInit TEvPQ::TEvGetWriteInfoRequest");
+
+    Y_ABORT_UNLESS(IsSupportive());
+
+    PendingEvents.emplace_back(ev->ReleaseBase().Release());
+}
+
+void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& ctx)
+{
+    PQ_LOG_D("HandleOnInit TEvPQ::TEvGetWriteInfoResponse");
+
+    Y_ABORT_UNLESS(!IsSupportive());
+
+    PendingEvents.emplace_back(ev->ReleaseBase().Release());
+}
+
+void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx)
+{
+    PQ_LOG_D("HandleOnInit TEvPQ::TEvGetWriteInfoError");
+
+    Y_ABORT_UNLESS(!IsSupportive());
 
     PendingEvents.emplace_back(ev->ReleaseBase().Release());
 }
@@ -1062,7 +1083,9 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
 }
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx) {
+    PQ_LOG_D("Handle TEvPQ::TEvGetWriteInfoRequest");
     if (ClosedInternalPartition || WaitingForPreviousBlobQuota() || (CurrentStateFunc() != &TThis::StateIdle)) {
+        PQ_LOG_D("Send TEvPQ::TEvGetWriteInfoError");
         auto* response = new TEvPQ::TEvGetWriteInfoError(Partition.InternalPartitionId,
                                                          "Write info requested while writes are not complete");
         ctx.Send(ev->Sender, response);
@@ -1088,6 +1111,7 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
     response->MessagesSizes = std::move(MessageSize.GetValues());
     response->InputLags = std::move(SupportivePartitionTimeLag);
 
+    PQ_LOG_D("Send TEvPQ::TEvGetWriteInfoResponse");
     ctx.Send(ev->Sender, response);
 }
 
@@ -1182,7 +1206,9 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorCo
 
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx) {
-    PQ_LOG_D("Handle TEvPQ::TEvGetWriteInfoError");
+    PQ_LOG_D("Handle TEvPQ::TEvGetWriteInfoError " <<
+             "Cookie " << ev->Get()->Cookie <<
+             ", Message " << ev->Get()->Message);
     WriteInfoResponseHandler(ev->Sender, ev->Release(), ctx);
 }
 
@@ -2541,6 +2567,8 @@ void TPartition::ChangePlanStepAndTxId(ui64 step, ui64 txId)
 
 void TPartition::ResendPendingEvents(const TActorContext& ctx)
 {
+    PQ_LOG_D("Resend pending events. Count " << PendingEvents.size());
+
     while (!PendingEvents.empty()) {
         ctx.Schedule(TDuration::Zero(), PendingEvents.front().release());
         PendingEvents.pop_front();
@@ -3392,8 +3420,6 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
 
 void TPartition::HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext&)
 {
-    PQ_LOG_D("HandleOnInit TEvPQ::TEvDeletePartition");
-
     Y_ABORT_UNLESS(IsSupportive());
 
     PendingEvents.emplace_back(ev->ReleaseBase().Release());

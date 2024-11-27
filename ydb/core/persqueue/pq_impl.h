@@ -547,6 +547,11 @@ private:
     void DeleteWriteId(const TMaybe<TWriteId>& writeId);
 
     void UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const;
+
+    void ResendEvReadSetToReceivers(const TActorContext& ctx);
+    void ResendEvReadSetToReceiversForState(const TActorContext& ctx, NKikimrPQ::TTransaction::EState state);
+
+    void DeleteSupportivePartitions(const TActorContext& ctx);
 };
 
 

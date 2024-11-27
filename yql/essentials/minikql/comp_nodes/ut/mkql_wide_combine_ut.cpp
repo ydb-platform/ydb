@@ -1396,6 +1396,63 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerTest) {
         const auto fetchStatus = streamVal.Fetch(item);
         UNIT_ASSERT_EQUAL(fetchStatus, NUdf::EFetchStatus::Finish);
     }
+
+    Y_UNIT_TEST_LLVM(TestSpillingBucketsDistribution) {
+        const size_t expectedBucketsCount = 128;
+        const size_t sampleSize = 8 * 128;
+
+        TSetup<LLVM, true> setup;
+
+        std::vector<std::pair<ui64, ui64>> samples(sampleSize);
+        std::generate(samples.begin(), samples.end(), [key = (ui64)1] () mutable -> std::pair<ui64, ui64> {
+            key += 64;
+            return {key, 1};
+        });
+
+        TProgramBuilder& pb = *setup.PgmBuilder;
+
+        const auto listType = pb.NewListType(pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui64>::Id), pb.NewDataType(NUdf::TDataType<ui64>::Id)}));
+        const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
+
+        const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideLastCombinerWithSpilling(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+            [&](TRuntimeNode item) -> TRuntimeNode::TList { return { pb.Nth(item, 0U), pb.Nth(item, 1U) }; }),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.front()}; },
+            [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items.back()}; },
+            [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {pb.AggrAdd(state.front(), items.back())}; },
+            [&](TRuntimeNode::TList keys, TRuntimeNode::TList state) -> TRuntimeNode::TList { return {keys.front(), state.front()}; }),
+            [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }
+        ));
+
+        const auto spillerFactory = std::make_shared<TMockSpillerFactory>();
+        const auto graph = setup.BuildGraph(pgmReturn, {list});
+        graph->GetContext().SpillerFactory = spillerFactory;
+
+        NUdf::TUnboxedValue* items = nullptr;
+        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(samples.size(), items));
+        for (const auto& sample : samples) {
+            NUdf::TUnboxedValue* pair = nullptr;
+            *items++ = graph->GetHolderFactory().CreateDirectArrayHolder(2U, pair);
+            pair[0] = NUdf::TUnboxedValuePod(sample.first);
+            pair[1] = NUdf::TUnboxedValuePod(sample.second);
+        }
+
+        const auto& value = graph->GetValue();
+
+        NUdf::TUnboxedValue item;
+        while (value.Fetch(item) != NUdf::EFetchStatus::Finish) {
+            ;
+        }
+
+        UNIT_ASSERT_EQUAL_C(spillerFactory->GetCreatedSpillers().size(), 1, "WideLastCombiner expected to create one spiller ");
+        const auto wideCombinerSpiller = std::dynamic_pointer_cast<TMockSpiller>(spillerFactory->GetCreatedSpillers()[0]);
+        UNIT_ASSERT_C(wideCombinerSpiller != nullptr, "MockSpillerFactory expected to create only MockSpillers");
+
+        auto flushedBucketsSizes = wideCombinerSpiller->GetPutSizes();
+        UNIT_ASSERT_EQUAL_C(flushedBucketsSizes.size(), expectedBucketsCount, "Spiller doesn't Put expected number of buckets");
+
+        auto anyEmpty = std::any_of(flushedBucketsSizes.begin(), flushedBucketsSizes.end(), [](size_t size) { return size == 0; });
+        UNIT_ASSERT_C(!anyEmpty, "Spiller flushed empty bucket");
+    }
 }
 
 Y_UNIT_TEST_SUITE(TMiniKQLWideLastCombinerPerfTest) {

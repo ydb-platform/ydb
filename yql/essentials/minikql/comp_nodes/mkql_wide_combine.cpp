@@ -16,6 +16,9 @@
 
 #include <util/string/cast.h>
 
+
+#include <contrib/libs/xxhash/xxhash.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -487,8 +490,7 @@ public:
             return isNew ? ETasteResult::Init : ETasteResult::Update;
         }
 
-        auto hash = Hasher(ViewForKeyAndState.data());
-        auto bucketId = hash % SpilledBucketCount;
+        auto bucketId = ChooseBucket(ViewForKeyAndState.data());
         auto& bucket = SpilledBuckets[bucketId];
 
         if (bucket.BucketState == TSpilledBucket::EBucketState::InMemory) {
@@ -532,7 +534,14 @@ public:
 
         return value;
     }
+
 private:
+    ui64 ChooseBucket(const NUdf::TUnboxedValuePod *const key) {
+        auto provided_hash = Hasher(key);
+        XXH64_hash_t bucket = XXH64(&provided_hash, sizeof(provided_hash), 0) % SpilledBucketCount;
+        return bucket;
+    }
+
     EUpdateResult FlushSpillingBuffersAndWait() {
         UpdateSpillingBuckets();
 
@@ -595,14 +604,17 @@ private:
             SplitStateSpillingBucket = -1;
         }
         while (const auto keyAndState = static_cast<NUdf::TUnboxedValue *>(InMemoryProcessingState.Extract())) {
-            auto hash = Hasher(keyAndState); //Hasher uses only key for hashing
-            auto bucketId = hash % SpilledBucketCount;
+            auto bucketId = ChooseBucket(keyAndState);  // This uses only key for hashing
             auto& bucket = SpilledBuckets[bucketId];
 
             bucket.LineCount++;
 
             if (bucket.BucketState != TSpilledBucket::EBucketState::InMemory) {
-                bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
+                if (bucket.BucketState != TSpilledBucket::EBucketState::SpillingState) {
+                    bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
+                    SpillingBucketsCount++;
+                }
+
                 bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
                 for (size_t i = 0; i < KeyAndStateType->GetElementsCount(); ++i) {
                     //releasing values stored in unsafe TUnboxedValue buffer
@@ -631,10 +643,11 @@ private:
                 ui32 bucketNumToSpill = GetLargestInMemoryBucketNumber();
 
                 SplitStateSpillingBucket = bucketNumToSpill;
-                InMemoryBucketsCount--;
 
                 auto& bucket = SpilledBuckets[bucketNumToSpill];
                 bucket.BucketState = TSpilledBucket::EBucketState::SpillingState;
+                SpillingBucketsCount++;
+                InMemoryBucketsCount--;
 
                 while (const auto keyAndState = static_cast<NUdf::TUnboxedValue*>(bucket.InMemoryProcessingState->Extract())) {
                     bucket.AsyncWriteOperation = bucket.SpilledState->WriteWideItem({keyAndState, KeyAndStateType->GetElementsCount()});
@@ -664,6 +677,7 @@ private:
                 bucket.InMemoryProcessingState->ReadMore<false>();
 
                 bucket.BucketState = TSpilledBucket::EBucketState::SpillingData;
+                SpillingBucketsCount--;
             }
         }
 
@@ -848,6 +862,12 @@ private:
                 YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
+
+                std::sort(SpilledBuckets.begin(), SpilledBuckets.end(), [](const TSpilledBucket& lhs, const TSpilledBucket& rhs) {
+                    bool lhs_in_memory = lhs.BucketState == TSpilledBucket::EBucketState::InMemory;
+                    bool rhs_in_memory = rhs.BucketState == TSpilledBucket::EBucketState::InMemory;
+                    return lhs_in_memory > rhs_in_memory;
+                });
                 break;
             }
 

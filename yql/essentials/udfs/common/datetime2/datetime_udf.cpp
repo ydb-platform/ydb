@@ -561,8 +561,14 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         return timestamp >= MIN_TIMESTAMP64 && timestamp <= MAX_TIMESTAMP64;
     }
 
-    inline bool ValidateInterval(i64 interval) {
+    template<>
+    inline bool Validate<TInterval>(i64 interval) {
         return interval > -i64(MAX_TIMESTAMP) && interval < i64(MAX_TIMESTAMP);
+    }
+
+    template<>
+    inline bool Validate<TInterval64>(i64 interval) {
+        return interval >= -MAX_INTERVAL64 && interval <= MAX_INTERVAL64;
     }
 
     // Split
@@ -1306,52 +1312,19 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
     DATETIME_FROM_CONVERTER_UDF(FromMilliseconds64, TTimestamp64, i64, UsecondsInMilliseconds);
     DATETIME_FROM_CONVERTER_UDF(FromMicroseconds64, TTimestamp64, i64, 1);
 
+    DATETIME_FROM_CONVERTER_UDF(IntervalFromDays, TInterval, i32, UsecondsInDay);
+    DATETIME_FROM_CONVERTER_UDF(IntervalFromHours, TInterval, i32, UsecondsInHour);
+    DATETIME_FROM_CONVERTER_UDF(IntervalFromMinutes, TInterval, i32, UsecondsInMinute);
+    DATETIME_FROM_CONVERTER_UDF(IntervalFromSeconds, TInterval, i32, UsecondsInSecond);
+    DATETIME_FROM_CONVERTER_UDF(IntervalFromMilliseconds, TInterval, i64, UsecondsInMilliseconds);
+    DATETIME_FROM_CONVERTER_UDF(IntervalFromMicroseconds, TInterval, i64, 1);
 
-    template <typename TInput, i64 Multiplier>
-    using TIntervalFromKernel = TUnaryUnsafeFixedSizeFilterKernel<TInput, i64,
-        [] (TInput interval) { return std::make_pair(i64(interval * Multiplier), ValidateInterval(interval)); }>;
-
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TIntervalFromDays, TOptional<TInterval>(TAutoMap<i32>)) {
-        Y_UNUSED(valueBuilder);
-        const i64 res = i64(args[0].Get<i32>()) * UsecondsInDay;
-        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
-    }
-    END_SIMPLE_ARROW_UDF(TIntervalFromDays, (TIntervalFromKernel<i32, UsecondsInDay>::Do));
-
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TIntervalFromHours, TOptional<TInterval>(TAutoMap<i32>)) {
-        Y_UNUSED(valueBuilder);
-        const i64 res = i64(args[0].Get<i32>()) * UsecondsInHour;
-        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
-    }
-    END_SIMPLE_ARROW_UDF(TIntervalFromHours, (TIntervalFromKernel<i32, UsecondsInHour>::Do));
-
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TIntervalFromMinutes, TOptional<TInterval>(TAutoMap<i32>)) {
-        Y_UNUSED(valueBuilder);
-        const i64 res = i64(args[0].Get<i32>()) * UsecondsInMinute;
-        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
-    }
-    END_SIMPLE_ARROW_UDF(TIntervalFromMinutes, (TIntervalFromKernel<i32, UsecondsInMinute>::Do));
-
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TIntervalFromSeconds, TOptional<TInterval>(TAutoMap<i32>)) {
-        Y_UNUSED(valueBuilder);
-        const i64 res = i64(args[0].Get<i32>()) * UsecondsInSecond;
-        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
-    }
-    END_SIMPLE_ARROW_UDF(TIntervalFromSeconds, (TIntervalFromKernel<i32, UsecondsInSecond>::Do));
-
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TIntervalFromMilliseconds, TOptional<TInterval>(TAutoMap<i64>)) {
-        Y_UNUSED(valueBuilder);
-        const i64 res = i64(args[0].Get<i64>()) * UsecondsInMilliseconds;
-        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
-    }
-    END_SIMPLE_ARROW_UDF(TIntervalFromMilliseconds, (TIntervalFromKernel<i64, UsecondsInMilliseconds>::Do));
-
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TIntervalFromMicroseconds, TOptional<TInterval>(TAutoMap<i64>)) {
-        Y_UNUSED(valueBuilder);
-        const i64 res = args[0].Get<i64>();
-        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
-    }
-    END_SIMPLE_ARROW_UDF(TIntervalFromMicroseconds, (TIntervalFromKernel<i64, 1>::Do));
+    DATETIME_FROM_CONVERTER_UDF(Interval64FromDays, TInterval64, i32, UsecondsInDay);
+    DATETIME_FROM_CONVERTER_UDF(Interval64FromHours, TInterval64, i64, UsecondsInHour);
+    DATETIME_FROM_CONVERTER_UDF(Interval64FromMinutes, TInterval64, i64, UsecondsInMinute);
+    DATETIME_FROM_CONVERTER_UDF(Interval64FromSeconds, TInterval64, i64, UsecondsInSecond);
+    DATETIME_FROM_CONVERTER_UDF(Interval64FromMilliseconds, TInterval64, i64, UsecondsInMilliseconds);
+    DATETIME_FROM_CONVERTER_UDF(Interval64FromMicroseconds, TInterval64, i64, 1);
 
     // To*
 
@@ -2436,6 +2409,13 @@ TValue DoAddYears(const TValue& date, i64 years, const NUdf::IDateBuilder& build
         TIntervalFromSeconds,
         TIntervalFromMilliseconds,
         TIntervalFromMicroseconds,
+
+        TInterval64FromDays,
+        TInterval64FromHours,
+        TInterval64FromMinutes,
+        TInterval64FromSeconds,
+        TInterval64FromMilliseconds,
+        TInterval64FromMicroseconds,
 
         TToDays,
         TToHours,

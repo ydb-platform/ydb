@@ -28,12 +28,7 @@ subprojects {
 {%-     set required_jdk = '17' -%}
 {%- else -%}
 {%-     set has_required_jdk = true -%}
-{#-     Use JDK 23 instead 22 -#}
-{%-     if target.required_jdk == '22' -%}
-{%-         set required_jdk = '23' -%}
-{%-     else -%}
-{%-         set required_jdk = target.required_jdk -%}
-{%-     endif -%}
+{%-     set required_jdk = target.required_jdk -%}
 {%- endif %}
 
 plugins {

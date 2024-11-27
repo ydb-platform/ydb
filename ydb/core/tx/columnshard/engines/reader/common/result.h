@@ -12,7 +12,7 @@ namespace NKikimr::NOlap::NReader {
 // Represents a batch of rows produced by ASC or DESC scan with applied filters and partial aggregation
 class TPartialReadResult: public TNonCopyable {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>, ResourcesGuard);
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>, ResourceGuards);
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TGroupGuard>, GroupGuard);
     NArrow::TShardedRecordBatch ResultBatch;
 
@@ -54,11 +54,11 @@ public:
         return ScanCursor;
     }
 
-    explicit TPartialReadResult(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& resourcesGuard,
-        std::shared_ptr<NGroupedMemoryManager::TGroupGuard>&& gGuard, const NArrow::TShardedRecordBatch& batch,
+    explicit TPartialReadResult(const std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>>& resourceGuards,
+        const std::shared_ptr<NGroupedMemoryManager::TGroupGuard>& gGuard, const NArrow::TShardedRecordBatch& batch,
         const std::shared_ptr<IScanCursor>& scanCursor, const std::optional<ui32> notFinishedIntervalIdx)
-        : ResourcesGuard(std::move(resourcesGuard))
-        , GroupGuard(std::move(gGuard))
+        : ResourceGuards(resourceGuards)
+        , GroupGuard(gGuard)
         , ResultBatch(batch)
         , ScanCursor(scanCursor)
         , NotFinishedIntervalIdx(notFinishedIntervalIdx) {
@@ -68,7 +68,7 @@ public:
 
     explicit TPartialReadResult(const NArrow::TShardedRecordBatch& batch, const std::shared_ptr<IScanCursor>& scanCursor,
         const std::optional<ui32> notFinishedIntervalIdx)
-        : TPartialReadResult(nullptr, nullptr, batch, scanCursor, notFinishedIntervalIdx) {
+        : TPartialReadResult({}, nullptr, batch, scanCursor, notFinishedIntervalIdx) {
     }
 };
 

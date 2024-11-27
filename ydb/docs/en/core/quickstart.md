@@ -89,18 +89,21 @@ Normally, {{ ydb-short-name }} stores data on multiple SSD/NVMe or HDD raw disk 
         -p 2135:2135 -p 2136:2136 -p 8765:8765 \
         -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
         -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
-        -e YDB_USE_IN_MEMORY_PDISKS=true \
         {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
       ```
 
-      If the container starts successfully, you'll see the container's ID. The container might take a few minutes to initialize. The database will not be available until container initialization is complete.
+      If the container starts successfully, you'll see the container ID. The container might take a few minutes to initialize. The database will not be available until container initialization is complete.
 
-      The `YDB_USE_IN_MEMORY_PDISKS` setting makes all data volatile, stored only in RAM. Currently, data persistence by turning it off is supported only on x86_64 processors.
+      {% note warning %}
+ 
+      Data persistence is currently supported only on x86_64 processors. To disable data persistence and make all data volatile, stored only in RAM, add the `YDB_USE_IN_MEMORY_PDISKS=true` parameter in the command to run the Docker container. 
+ 
+      If you do not want to disable data persistence on a Mac with an Apple Silicon processor, emulate the x86_64 instruction set with one of the following tools: 
 
-      To disable the `YDB_USE_IN_MEMORY_PDISKS` option when running a Docker container on a Mac with an Apple Silicon processor, it must emulate the x86_64 instruction set:
-
-      - With [colima](https://github.com/abiosoft/colima), use the `colima start --arch aarch64 --vm-type=vz --vz-rosetta` options.
-      - With [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/), install and enable Rosetta 2.
+      - [colima](https://github.com/abiosoft/colima) with the `colima start --arch aarch64 --vm-type=vz --vz-rosetta` options.
+      - [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/) with installed and enabled Rosetta 2.
+     
+      {% endnote %}
 
 - Minikube
 

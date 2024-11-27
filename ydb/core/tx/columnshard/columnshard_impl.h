@@ -99,8 +99,8 @@ class TTxRemoveSharedBlobs;
 class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
 class TTxBlobsWritingFinished;
-сlass TTxSetCompatibleSchemaVersions;
-сlass TTxBlobsWritingFailed;
+class TTxSetCompatibleSchemaVersions;
+class TTxBlobsWritingFailed;
 
 namespace NLoading {
 class TInsertTableInitializer;

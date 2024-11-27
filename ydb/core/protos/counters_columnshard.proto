@@ -206,4 +206,4 @@ enum ETxTypes {
     TXTYPE_WRITE_PORTIONS_FINISHED = 39                     [(TxTypeOpts) = {Name: "TxWritePortionsFinished"}];
     TXTYPE_WRITE_PORTIONS_FAILED = 40                       [(TxTypeOpts) = {Name: "TxWritePortionsFailed"}];
     TXTYPE_SET_COMPATIBLE_SCHEMA_VERSIONS = 41              [(TxTypeOpts) = {Name: "TxSetCompatibleSchemaVersions"}];
-
+}

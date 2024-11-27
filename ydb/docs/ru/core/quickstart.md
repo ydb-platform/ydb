@@ -94,16 +94,17 @@
       Если контейнер успешно запустился, вы увидите его идентификатор. Контейнеру может потребоваться несколько минут для инициализации. База данных будет недоступна до окончания инициализации.
 
       {% note warning %}
- 
+
       В настоящее время сохранение данных на диск поддерживается только на x86_64 процессорах. Чтобы отключить сохранение данных на диск и сделать все данные волатильными, хранящимися только в оперативной памяти, добавьте в команду запуска Docker-контейнера параметр `YDB_USE_IN_MEMORY_PDISKS=true`.
 
       Если вы не хотите отключать сохранение данных на диск при запуске контейнера Docker на Mac с процессором Apple Silicon, необходимо эмулировать набор инструкций x86_64 с помощью одной из следующих программ:
 
       - [colima](https://github.com/abiosoft/colima) c параметрами `colima start --arch aarch64 --vm-type=vz --vz-rosetta`;
       - [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/) с установленной и включённой Rosetta 2.
-- Minikube
 
       {% endnote %}
+
+- Minikube
 
    1. Установите интерфейс командной строки Kubernetes [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl) и менеджер пакетов [Helm 3](https://helm.sh/docs/intro/install/).
 

@@ -80,13 +80,6 @@ void TCompactionLogic::UpdateCompactions()
     }
 }
 
-void TCompactionLogic::RequestChanges(ui32 table)
-{
-    auto *tableInfo = State->Tables.FindPtr(table);
-    Y_ABORT_UNLESS(tableInfo);
-    tableInfo->ChangesRequested = true;
-}
-
 TVector<TTableCompactionChanges> TCompactionLogic::ApplyChanges()
 {
     TVector<TTableCompactionChanges> results;

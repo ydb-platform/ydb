@@ -210,7 +210,6 @@ public:
     void UpdateCompactions();
 
     // Strategy of this table wants to apply some changes
-    void RequestChanges(ui32 tableId);
     TVector<TTableCompactionChanges> ApplyChanges();
 
     //

@@ -594,10 +594,6 @@ class TExecutor
 
     // Compaction read support
 
-    void CommitCompactionChanges(
-            ui32 tableId,
-            const NTable::TCompactionChanges& changes,
-            NKikimrCompaction::ECompactionStrategy strategy);
     void ApplyCompactionChanges(
             TCompactionChangesCtx& ctx,
             const NTable::TCompactionChanges& changes,

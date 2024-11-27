@@ -4478,37 +4478,6 @@ bool TExecutor::CancelCompaction(ui64 compactionId)
     return Scans->CancelSystem(compactionId);
 }
 
-void TExecutor::CommitCompactionChanges(
-        ui32 tableId,
-        const NTable::TCompactionChanges& changes,
-        NKikimrCompaction::ECompactionStrategy strategy)
-{
-    if (!changes.SliceChanges && !changes.StateChanges) {
-        // Don't bother unless there's something to do
-        return;
-    }
-
-    LogicRedo->FlushBatchedLog();
-
-    auto commit = CommitManager->Begin(true, ECommit::Misc, {});
-
-    NKikimrExecutorFlat::TTablePartSwitch proto;
-    proto.SetTableId(tableId);
-
-    TCompactionChangesCtx ctx(proto);
-    ApplyCompactionChanges(ctx, changes, strategy);
-
-    { /*_ Finalize switch (turn) blob and attach it to commit */
-        auto body = proto.SerializeAsString();
-        auto glob = CommitManager->Turns.One(commit->Refs, std::move(body), true);
-
-        Y_UNUSED(glob);
-    }
-
-    AttachLeaseCommit(commit.Get());
-    CommitManager->Commit(commit);
-}
-
 void TExecutor::ApplyCompactionChanges(
         TCompactionChangesCtx& ctx,
         const NTable::TCompactionChanges& changes,

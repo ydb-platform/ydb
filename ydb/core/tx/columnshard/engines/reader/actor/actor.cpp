@@ -304,8 +304,9 @@ void TColumnShardScan::ContinueProcessing() {
             }
         }
     }
-//    AFL_VERIFY(!ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting())("scan_actor_id", ScanActorId)("tx_id", TxId)("scan_id", ScanId)(
-//                                        "gen", ScanGen)("tablet", TabletId)("debug", ScanIterator->DebugString());
+    AFL_VERIFY(!ScanIterator || !ChunksLimiter.HasMore() || ScanCountersPool.InWaiting())("scan_actor_id", ScanActorId)("tx_id", TxId)(
+                                                            "scan_id", ScanId)("gen", ScanGen)("tablet", TabletId)("debug",
+                                                            ScanIterator->DebugString())("counters", ScanCountersPool.DebugString());
 }
 
 void TColumnShardScan::MakeResult(size_t reserveRows /*= 0*/) {

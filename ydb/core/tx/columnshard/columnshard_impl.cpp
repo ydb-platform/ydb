@@ -822,7 +822,7 @@ private:
 
 public:
     TAccessorsMemorySubscriber(const ui64 memory, const TString& externalTaskId, const NOlap::NResourceBroker::NSubscribe::TTaskContext& context,
-        std::shared_ptr<NOlap::TDataAccessorsRequest>&& request, const std::shared_ptr<TDataAccessorsSubscriber>& subscriber,
+        std::shared_ptr<NOlap::TDataAccessorsRequest>&& request, const std::shared_ptr<NOlap::IDataAccessorRequestsSubscriber>& subscriber,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager)
         : TBase(0, memory, externalTaskId, context)
         , Request(std::move(request))
@@ -940,7 +940,7 @@ void TColumnShard::SetupMetadata() {
             i.GetRequest()->PredictAccessorsMemory(TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetLastSchema());
         NOlap::NResourceBroker::NSubscribe::ITask::StartResourceSubscription(ResourceSubscribeActor,
             std::make_shared<TAccessorsMemorySubscriber>(accessorsMemory, TGUID::CreateTimebased().AsGuidString(), TTLTaskSubscription,
-                i.GetRequest(), std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation()),
+                std::shared_ptr<NOlap::TDataAccessorsRequest>(i.GetRequest()), std::make_shared<TCSMetadataSubscriber>(SelfId(), i.GetProcessor(), Generation()),
                 DataAccessorsManager.GetObjectPtrVerified()));
     }
 }
@@ -1086,7 +1086,8 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActor
 
 void TColumnShard::Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& /*ctx*/) {
     AFL_VERIFY(ev->Get()->GetGeneration() == Generation())("ev", ev->Get()->GetGeneration())("tablet", Generation());
-    ev->Get()->GetProcessor()->ApplyResult(ev->Get()->ExtractResult(), TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>());
+    ev->Get()->GetProcessor()->ApplyResult(ev->Get()->ExtractResult(),
+        TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>(), ev->Get()->ExtractResourcesGuard());
     SetupMetadata();
 }
 

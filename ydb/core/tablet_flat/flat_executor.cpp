@@ -2670,58 +2670,6 @@ void TExecutor::Handle(TEvents::TEvFlushLog::TPtr &ev) {
     CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
 }
 
-void TExecutor::Handle(NSharedCache::TEvRequest::TPtr &ev) {
-    const auto priority = ev->Get()->Priority;
-    TAutoPtr<NPageCollection::TFetch> msg = ev->Get()->Fetch;
-
-    Y_ABORT_UNLESS(msg->Pages, "empty page collection request, do not do it");
-
-    const TLogoBlobID &metaId = msg->PageCollection->Label();
-    TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(metaId);
-    if (!collectionInfo) {
-        auto *reply = new NSharedCache::TEvResult(std::move(msg->PageCollection), msg->Cookie, NKikimrProto::RACE);
-        Send(ev->Sender, reply, 0, ev->Cookie);
-        return;
-    }
-
-    TVector<NSharedCache::TEvResult::TLoaded> cached;
-    TVector<NTable::TPageId> left;
-
-    for (auto &x : msg->Pages) {
-        if (TSharedPageRef body = PrivatePageCache->LookupShared(x, collectionInfo)) {
-            cached.emplace_back(x, body);
-        } else {
-            left.push_back(x);
-        }
-    }
-
-    if (cached) {
-        if (auto logl = Logger->Log(ELnLev::Debug)) {
-            logl
-                << NFmt::Do(*this) << " cache hit for data request from: "
-                << ev->Sender << ", pageCollection " << msg->PageCollection->Label();
-        }
-
-        auto *reply = new NSharedCache::TEvResult(msg->PageCollection, msg->Cookie, NKikimrProto::OK);
-        reply->Loaded.swap(cached);
-        Send(ev->Sender, reply, 0, ev->Cookie);
-    }
-
-    if (left) {
-        DoSwap(msg->Pages, left);
-
-        if (auto logl = Logger->Log(ELnLev::Debug)) {
-            logl
-                << NFmt::Do(*this) << " cache miss for data request from: "
-                << ev->Sender << ", pageCollection " << msg->PageCollection->Label();
-        }
-
-        auto *req = new NSharedCache::TEvRequest(priority, msg, SelfId());
-
-        TActorIdentity(ev->Sender).Send(MakeSharedPageCacheId(), req, 0, ev->Cookie);
-    }
-}
-
 void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
     const bool failed = (ev->Get()->Status != NKikimrProto::OK);
 
@@ -3950,7 +3898,6 @@ STFUNC(TExecutor::StateWork) {
         HFunc(TEvPrivate::TEvLeaseExtend, Handle);
         HFunc(TEvents::TEvWakeup, Wakeup);
         hFunc(TEvents::TEvFlushLog, Handle);
-        hFunc(NSharedCache::TEvRequest, Handle);
         hFunc(NSharedCache::TEvResult, Handle);
         hFunc(NSharedCache::TEvUpdated, Handle);
         HFunc(TEvTablet::TEvDropLease, Handle);

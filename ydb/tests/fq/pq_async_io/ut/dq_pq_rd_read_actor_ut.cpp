@@ -162,6 +162,15 @@ struct TFixture : public TPqIoTestFixture {
         });
     }
 
+    void MockStatistics(NActors::TActorId rowDispatcherId, ui64 nextOffset, ui64 generation, ui64 partitionId) {
+        CaSetup->Execute([&](TFakeActor& actor) {
+            auto event = new NFq::TEvRowDispatcher::TEvStatistics();
+            event->Record.SetPartitionId(partitionId);
+            event->Record.SetNextMessageOffset(nextOffset);
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
+        });
+    }
+
     template<typename T>
     void AssertDataWithWatermarks(
         const std::vector<std::variant<T, TInstant>>& actual,
@@ -225,14 +234,15 @@ struct TFixture : public TPqIoTestFixture {
 
     void ProcessSomeJsons(ui64 offset, const std::vector<TString>& jsons, NActors::TActorId rowDispatcherId,
         std::function<std::vector<TString>(const NUdf::TUnboxedValue&)> uvParser = UVParser, ui64 generation = 1,
-        ui64 partitionId = PartitionId1) {
+        ui64 partitionId = PartitionId1, bool readedByCA = true) {
         MockNewDataArrived(rowDispatcherId, generation, partitionId);
         ExpectGetNextBatch(rowDispatcherId, partitionId);
 
         MockMessageBatch(offset, jsons, rowDispatcherId, generation, partitionId);
-
-        auto result = SourceReadDataUntil<TString>(uvParser, jsons.size());
-        AssertDataWithWatermarks(result, jsons, {});
+        if (readedByCA) {
+            auto result = SourceReadDataUntil<TString>(uvParser, jsons.size());
+            AssertDataWithWatermarks(result, jsons, {});
+        }
     } 
 
     const TString Json1 = "{\"dt\":100,\"value\":\"value1\"}";
@@ -307,7 +317,6 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         {
             TFixture f;
             f.InitRdSource(f.Source1);
-            f.SourceRead<TString>(UVParser);
             f.LoadSource(state);
             f.SourceRead<TString>(UVParser);
             f.ExpectCoordinatorChangesSubscribe();
@@ -327,7 +336,6 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         {
             TFixture f;
             f.InitRdSource(f.Source1);
-            f.SourceRead<TString>(UVParser);
             f.LoadSource(state);
             f.SourceRead<TString>(UVParser);
             f.ExpectCoordinatorChangesSubscribe();
@@ -375,7 +383,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
 
         MockNewDataArrived(RowDispatcher1);
         ExpectGetNextBatch(RowDispatcher1);
-        MockMessageBatch(0, {json, json, json}, RowDispatcher1);
+        MockMessageBatch(1, {json, json, json}, RowDispatcher1);
 
         MockNewDataArrived(RowDispatcher1);
         ASSERT_THROW(
@@ -386,7 +394,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         AssertDataWithWatermarks(result, {json, json, json}, {});
         ExpectGetNextBatch(RowDispatcher1);
 
-        MockMessageBatch(3, {Json1}, RowDispatcher1);
+        MockMessageBatch(4, {Json1}, RowDispatcher1);
         result = SourceReadDataUntil<TString>(UVParser, 1);
         AssertDataWithWatermarks(result, {Json1}, {});
     }
@@ -419,23 +427,29 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockAck(RowDispatcher2, 2, PartitionId2);
         
         ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1, UVParser, 1, PartitionId1);
-        ProcessSomeJsons(0, {Json3}, RowDispatcher2, UVParser, 2, PartitionId2);
+        ProcessSomeJsons(0, {Json3}, RowDispatcher2, UVParser, 2, PartitionId2, false);     // not read by CA
+        MockStatistics(RowDispatcher2, 10,  2, PartitionId2);
 
         // Restart node 2 (RowDispatcher2)
         MockDisconnected();
         MockConnected();
         MockUndelivered(RowDispatcher2);
 
-        ProcessSomeJsons(2, {Json4}, RowDispatcher1, UVParser, 1, PartitionId1);
+        // session1 is still working
+        ProcessSomeJsons(2, {Json4}, RowDispatcher1, UVParser, 1, PartitionId1, false);
         
         // Reinit session to RowDispatcher2
         auto req2 = ExpectCoordinatorRequest(Coordinator1Id);
         MockCoordinatorResult({{RowDispatcher1, PartitionId1}, {RowDispatcher2, PartitionId2}}, req2->Cookie);
-        ExpectStartSession(1, RowDispatcher2, 3);
+        ExpectStartSession(10, RowDispatcher2, 3);
         MockAck(RowDispatcher2, 3, PartitionId2);
 
-        ProcessSomeJsons(1, {Json4}, RowDispatcher2, UVParser, 3, PartitionId2);
-        ProcessSomeJsons(3, {Json4}, RowDispatcher1, UVParser, 1, PartitionId1);
+        ProcessSomeJsons(3, {Json4}, RowDispatcher1, UVParser, 1, PartitionId1, false);
+        ProcessSomeJsons(10, {Json4}, RowDispatcher2, UVParser, 3, PartitionId2, false);
+
+        std::vector<TString> expectedJson{Json3, Json4, Json4, Json4};
+        auto result = SourceReadDataUntil<TString>(UVParser, expectedJson.size());
+        AssertDataWithWatermarks(result, expectedJson, {});
     }
 
     Y_UNIT_TEST_F(IgnoreMessageIfNoSessions, TFixture) {

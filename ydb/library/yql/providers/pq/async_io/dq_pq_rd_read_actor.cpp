@@ -109,8 +109,6 @@ class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::
     const ui64 PrintStatePeriodSec = 300;
     const ui64 ProcessStatePeriodSec = 2;
 
-    using TDebugOffsets = TMaybe<std::pair<ui64, ui64>>;
-
     struct TReadyBatch {
     public:
         TReadyBatch(ui64 partitionId, ui32 dataCapacity) 
@@ -172,16 +170,17 @@ private:
         TSession(
             const TTxId& txId,
             const NActors::TActorId selfId,
+            const TMaybe<ui64>& offset,
             ui64 partitionId,
             ui64 eventQueueId)
             : TxId(txId)
             , SelfId(selfId)
             , EventQueueId(eventQueueId)
+            , NextOffset(offset)
             , PartitionId(partitionId)
         {}
 
         void UpdateRecipient(TActorId rowDispatcherActorId, ui64 generation) {
-            //Status = ESessionStatus::WAIT_COORDINATOR_ID;
             Generation = generation;
             EventsQueue = NYql::NDq::TRetryEventsQueue{};
             EventsQueue.Init(TxId, SelfId, SelfId, EventQueueId, /* KeepAlive */ true);
@@ -199,7 +198,7 @@ private:
         TTxId TxId;
         NActors::TActorId SelfId;
         ui64 EventQueueId;
-        ui64 NextOffset = 0;
+        TMaybe<ui64> NextOffset;
         bool IsWaitingStartSessionAck = false;
         NYql::NDq::TRetryEventsQueue EventsQueue;
         bool HasPendingData = false;
@@ -327,9 +326,6 @@ void TDqPqRdReadActor::Init() {
     }
     LogPrefix = (TStringBuilder() << "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". PQ source. ");
 
-    if (!ReadyBuffer.empty()) {
-        return;      // TODO
-    }
     if (!ProcessStateScheduled) {
         ProcessStateScheduled = true;
         Schedule(TDuration::Seconds(ProcessStatePeriodSec), new TEvPrivate::TEvProcessState());
@@ -337,10 +333,17 @@ void TDqPqRdReadActor::Init() {
 
     auto partitionToRead = GetPartitionsToRead();
     for (auto partitionId : partitionToRead) {
+        TMaybe<ui64> readOffset;
+        TPartitionKey partitionKey{TString{}, partitionId};
+        const auto offsetIt = PartitionToOffset.find(partitionKey);
+        if (offsetIt != PartitionToOffset.end()) {
+            SRC_LOG_D("ReadOffset found" );
+            readOffset = offsetIt->second;
+        }        
         Sessions.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(partitionId),
-            std::forward_as_tuple(TxId, SelfId(), partitionId, partitionId));
+            std::forward_as_tuple(TxId, SelfId(), readOffset, partitionId, partitionId));
     }
     SRC_LOG_I("Send TEvCoordinatorChangesSubscribe to local RD (" << LocalRowDispatcherActorId << ")");
     Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
@@ -348,7 +351,6 @@ void TDqPqRdReadActor::Init() {
         SchedulePrintStatePeriod = true;
         Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     }
-
     Inited = true;
 }
 
@@ -400,16 +402,8 @@ void TDqPqRdReadActor::ProcessState() {
 }
 
 void TDqPqRdReadActor::SendStartSession(TSession& sessionInfo) {
-    TMaybe<ui64> readOffset;
-    TPartitionKey partitionKey{TString{}, sessionInfo.PartitionId};
-    const auto offsetIt = PartitionToOffset.find(partitionKey);
-    if (offsetIt != PartitionToOffset.end()) {
-        SRC_LOG_D("ReadOffset found" );
-        readOffset = offsetIt->second;
-    }
-
     SRC_LOG_I("Send TEvStartSession to " << sessionInfo.RowDispatcherActorId 
-            << ", offset " << readOffset 
+            << ", offset " << sessionInfo.NextOffset 
             << ", partitionId " << sessionInfo.PartitionId
             << ", connection id " << sessionInfo.Generation);
 
@@ -417,7 +411,7 @@ void TDqPqRdReadActor::SendStartSession(TSession& sessionInfo) {
         SourceParams,
         sessionInfo.PartitionId,
         Token,
-        readOffset,
+        sessionInfo.NextOffset,
         StartingMessageTimestamp.MilliSeconds(),
         std::visit([](auto arg) { return ToString(arg); }, TxId));
     sessionInfo.EventsQueue.Send(event, sessionInfo.Generation);
@@ -427,13 +421,11 @@ void TDqPqRdReadActor::CommitState(const NDqProto::TCheckpoint& /*checkpoint*/) 
 }
 
 void TDqPqRdReadActor::StopSession(TSession& sessionInfo) {
-    SRC_LOG_I("Stop session with partitionId " << sessionInfo.PartitionId);
+    SRC_LOG_I("Send StopSession to " << sessionInfo.RowDispatcherActorId << " partitionId " << sessionInfo.PartitionId << " generation " << sessionInfo.Generation);
     auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
     *event->Record.MutableSource() = SourceParams;
     event->Record.SetPartitionId(sessionInfo.PartitionId);
-    SRC_LOG_I("Send StopSession to " << sessionInfo.RowDispatcherActorId);
     sessionInfo.EventsQueue.Send(event.release(), sessionInfo.Generation);
-    
 }
 
 // IActor & IDqComputeActorAsyncInput
@@ -499,7 +491,7 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr& ev) {
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
-    SRC_LOG_I("TEvStartSessionAck from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << ", cookie " << ev->Cookie << ", partId " << ev->Get()->Record.GetConsumer().GetPartitionId() );
+    SRC_LOG_I("Received TEvStartSessionAck from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() <<  ", generation " << ev->Cookie << ", partId " << ev->Get()->Record.GetConsumer().GetPartitionId() );
     Counters.StartSessionAck++;
 
     ui64 partitionId = ev->Get()->Record.GetConsumer().GetPartitionId();
@@ -514,7 +506,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr& e
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
-    SRC_LOG_I("TEvSessionError from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
+    SRC_LOG_I("Received TEvSessionError from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
     Counters.SessionError++;
 
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
@@ -528,7 +520,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) 
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
-    SRC_LOG_T("TEvStatistics from " << ev->Sender << ", offset " << ev->Get()->Record.GetNextMessageOffset() << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
+    SRC_LOG_T("Received TEvStatistics from " << ev->Sender << ", offset " << ev->Get()->Record.GetNextMessageOffset() << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.Statistics++;
 
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
@@ -538,16 +530,13 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
         return;
     }
     IngressStats.Bytes += ev->Get()->Record.GetReadBytes();
-
-    if (ReadyBuffer.empty()) {
-        TPartitionKey partitionKey{TString{}, partitionId};
-        PartitionToOffset[partitionKey] = ev->Get()->Record.GetNextMessageOffset();
-    }
+    YQL_ENSURE(!sessionInfo.NextOffset || sessionInfo.NextOffset < ev->Get()->Record.GetNextMessageOffset(), "Wrong NextMessageOffset in TEvStatistics, current " << sessionInfo.NextOffset << " received " << ev->Get()->Record.GetNextMessageOffset());
+    sessionInfo.NextOffset = ev->Get()->Record.GetNextMessageOffset();
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
-    SRC_LOG_T("TEvNewDataArrived from " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId() << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
+    SRC_LOG_T("Received TEvNewDataArrived from " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId() << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.NewDataArrived++;
 
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
@@ -664,7 +653,6 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr&
             it->second.RowDispatcherActorId = rowDispatcherActorId;
         }
     }
-    SRC_LOG_W("Handle 7");
     ProcessState();
 }
 
@@ -715,7 +703,7 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
-    SRC_LOG_T("TEvMessageBatch from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo());
+    SRC_LOG_T("Received TEvMessageBatch from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.MessageBatch++;
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
     YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition id " << partitionId);
@@ -731,11 +719,11 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
 
     ui64 bytes = 0;
     for (const auto& message : ev->Get()->Record.GetMessages()) {
-        SRC_LOG_T("Json: " << message.GetJson());    
+        SRC_LOG_T("Json: " << message.GetJson() << ", offset " << message.GetOffset());
         activeBatch.Data.emplace_back(message.GetJson());
+        YQL_ENSURE(!sessionInfo.NextOffset || sessionInfo.NextOffset < message.GetOffset() + 1, "Wrong message offset in TEvMessageBatch, current " << sessionInfo.NextOffset << " received " << message.GetOffset());
         sessionInfo.NextOffset = message.GetOffset() + 1;
         bytes += message.GetJson().size();
-        SRC_LOG_T("TEvMessageBatch NextOffset " << sessionInfo.NextOffset);
     }
     activeBatch.UsedSpace = bytes;
     ReadyBufferSizeBytes += bytes;

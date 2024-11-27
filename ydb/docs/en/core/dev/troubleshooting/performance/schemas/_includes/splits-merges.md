@@ -1,4 +1,4 @@
-1. See if the **Split / Merge partitions** chart in the **DB status** Grafana dashboard shows any spikes.
+1. See if the **Split / Merge partitions** chart in the **[DB status](../../../../../reference/observability/metrics/grafana-dashboards.md#dbstatus)** Grafana dashboard shows any spikes.
 
     ![](../_assets/splits-merges.png)
 

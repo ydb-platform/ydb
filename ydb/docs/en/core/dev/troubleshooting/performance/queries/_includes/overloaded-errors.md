@@ -18,6 +18,6 @@
 
 1. To check if the spikes in overloaded errors were caused by tablet splits and merges, see [{#T}](../../schemas/splits-merges.md).
 
-1. To check if the spikes in overloaded errors were caused by exceeding the 1000 limit of open sessions, in the Grafana **DB status** dashboard, see the **Session count by host** chart.
+1. To check if the spikes in overloaded errors were caused by exceeding the 1000 limit of open sessions, in the Grafana **[DB status](../../../../../reference/observability/metrics/grafana-dashboards.md#dbstatus)** dashboard, see the **Session count by host** chart.
 
 1. See the [overloaded shards](../../schemas/overloaded-shards.md) issue.

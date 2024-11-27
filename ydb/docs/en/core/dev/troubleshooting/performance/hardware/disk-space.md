@@ -4,7 +4,7 @@ A lack of available disk space can prevent the database from storing new data, r
 
 ## Diagnostics
 
-1. See if the **DB overview > Storage** charts in Grafana show any spikes.
+1. See if the **[DB overview > Storage](../../../../reference/observability/metrics/grafana-dashboards.md#dboverview)** charts in Grafana show any spikes.
 
 1. In [Embedded UI](../../../../reference/embedded-ui/index.md), on the **Storage** tab, analyze the list of available storage groups and nodes and their disk usage.
 

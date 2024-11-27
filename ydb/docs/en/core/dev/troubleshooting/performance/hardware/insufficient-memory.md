@@ -34,11 +34,11 @@ Additionally, which components within the  {{ ydb-short-name }} process consume 
 
 1. Determine whether memory usage reached 100% of capacity.
 
-    1. Open the **DB overview** dashboard in Grafana.
+    1. Open the **[DB overview](../../../../reference/observability/metrics/grafana-dashboards.md#dboverview)** dashboard in Grafana.
 
     1. Analyze the charts in the **Memory** section.
 
-1. Determine whether the user load on {{ ydb-short-name }} has increased. Analyze the following charts on the **DB overview** dashboard in Grafana:
+1. Determine whether the user load on {{ ydb-short-name }} has increased. Analyze the following charts on the **[DB overview](../../../../reference/observability/metrics/grafana-dashboards.md#dboverview)** dashboard in Grafana:
 
     - **Requests** chart
     - **Request size** chart

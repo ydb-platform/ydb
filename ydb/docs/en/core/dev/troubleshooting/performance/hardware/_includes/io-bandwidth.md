@@ -1,4 +1,4 @@
-1. Open the **Distributed Storage Overview** dashboard in Grafana.
+1. Open the **[Distributed Storage Overview](../../../../../reference/observability/metrics/grafana-dashboards.md)** dashboard in Grafana.
 
 1. On the **DiskTimeAvailable and total Cost relation** chart, see if the **Total Cost** spikes cross the **DiskTimeAvailable** level.
 

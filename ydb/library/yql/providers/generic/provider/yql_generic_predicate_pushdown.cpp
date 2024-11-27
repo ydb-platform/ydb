@@ -2,6 +2,7 @@
 
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/core/fq/libs/common/util.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <util/string/cast.h>
 
 namespace NYql {
@@ -26,13 +27,27 @@ namespace NYql {
     TString FormatIfExpression(const TExpression::TIf& sqlIf);
 
     namespace {
+        struct TSerializationContext {
+            const TCoArgument& Arg;
+            TStringBuilder& Err;
+            std::unordered_map<const TExprNode*, TExpression> LambdaArgs = {};
+        };
 
-        bool SerializeMember(const TCoMember& member, TExpression* proto, const TCoArgument& arg, TStringBuilder& err) {
-            if (member.Struct().Raw() != arg.Raw()) { // member callable called not for lambda argument
-                err << "member callable called not for lambda argument";
+        bool SerializeMember(const TCoMember& member, TExpression* proto, TSerializationContext& ctx) {
+            if (member.Struct().Raw() != ctx.Arg.Raw()) { // member callable called not for lambda argument
+                ctx.Err << "member callable called not for lambda argument";
                 return false;
             }
             proto->set_column(member.Name().StringValue());
+            return true;
+        }
+
+        bool SerializeLambdaArgument(const TExprBase& node, TExpression* proto, TSerializationContext& ctx) {
+            const auto it = ctx.LambdaArgs.find(node.Raw());
+            if (it == ctx.LambdaArgs.end()) { // node is not lambda argument
+                return false;
+            }
+            *proto = it->second;
             return true;
         }
 
@@ -47,6 +62,71 @@ namespace NYql {
             return TString(from);
         }
 
+        bool SerializeExpression(const TExprBase& expression, TExpression* proto, TSerializationContext& ctx, ui64 depth);
+
+        bool SerializeCastExpression(const TCoSafeCast& safeCast, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
+            const auto typeAnnotation = safeCast.Type().Ref().GetTypeAnn();
+            if (!typeAnnotation) {
+                ctx.Err << "expected non empty type annotation for safe cast";
+                return false;
+            }
+
+            auto* dstProto = proto->mutable_cast();
+            dstProto->set_type(FormatType(typeAnnotation->Cast<TTypeExprType>()->GetType()));
+            return SerializeExpression(TExprBase(safeCast.Value()), dstProto->mutable_value(), ctx, depth + 1);
+        }
+
+        bool SerializeToBytesExpression(const TExprBase& toBytes, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
+            if (toBytes.Ref().ChildrenSize() != 1) {
+                ctx.Err << "invalid ToBytes expression, expected 1 child but got " << toBytes.Ref().ChildrenSize();
+                return false;
+            }
+
+            const auto toBytexExpr = TExprBase(toBytes.Ref().Child(0));
+            auto typeAnnotation = toBytexExpr.Ref().GetTypeAnn();
+            if (!typeAnnotation) {
+                ctx.Err << "expected non empty type annotation for ToBytes";
+                return false;
+            }
+            if (typeAnnotation->GetKind() == ETypeAnnotationKind::Optional) {
+                typeAnnotation = typeAnnotation->Cast<TOptionalExprType>()->GetItemType();
+            }
+            if (typeAnnotation->GetKind() != ETypeAnnotationKind::Data) {
+                ctx.Err << "expected data type or optional from data type in ToBytes";
+                return false;
+            }
+
+            const auto dataSlot = typeAnnotation->Cast<TDataExprType>()->GetSlot();
+            if (!IsDataTypeString(dataSlot) && dataSlot != NUdf::EDataSlot::JsonDocument) {
+                ctx.Err << "expected only string like input type for ToBytes";
+                return false;
+            }
+
+            auto* dstProto = proto->mutable_cast();
+            dstProto->set_type("String");
+            return SerializeExpression(toBytexExpr, dstProto->mutable_value(), ctx, depth + 1);
+        }
+
+        bool SerializeFlatMap(const TCoFlatMap& flatMap, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
+            const auto lambda = flatMap.Lambda();
+            const auto lambdaArgs = lambda.Args();
+            if (lambdaArgs.Size() != 1) {
+                ctx.Err << "expected only one argument for flat map lambda";
+                return false;
+            }
+
+            auto* dstProto = proto->mutable_if_();
+            dstProto->mutable_else_expression()->mutable_null();
+            auto* dstInput = dstProto->mutable_predicate()->mutable_is_not_null()->mutable_value();
+            if (!SerializeExpression(flatMap.Input(), dstInput, ctx, depth + 1)) {
+                return false;
+            }
+
+            // Duplicated arguments is ok, maybe one lambda was used twice
+            ctx.LambdaArgs.insert({lambdaArgs.Ref().Child(0), *dstInput});
+            return SerializeExpression(lambda.Body(), dstProto->mutable_then_expression(), ctx, depth + 1);
+        }
+        
 #define MATCH_ATOM(AtomType, ATOM_ENUM, proto_name, cpp_type)                             \
     if (auto atom = expression.Maybe<Y_CAT(TCo, AtomType)>()) {                           \
         auto* value = proto->mutable_typed_value();                                       \
@@ -62,25 +142,34 @@ namespace NYql {
         auto expr = maybeExpr.Cast();                                                                                                                                        \
         auto* exprProto = proto->mutable_arithmetical_expression();                                                                                                          \
         exprProto->set_operation(TExpression::TArithmeticalExpression::OP_ENUM);                                                                                             \
-        return SerializeExpression(expr.Left(), exprProto->mutable_left_value(), arg, err, depth + 1) && SerializeExpression(expr.Right(), exprProto->mutable_right_value(), arg, err, depth + 1); \
+        return SerializeExpression(expr.Left(), exprProto->mutable_left_value(), ctx, depth + 1) && SerializeExpression(expr.Right(), exprProto->mutable_right_value(), ctx, depth + 1); \
     }
 
-        bool SerializeSqlIfExpression(const TCoIf& sqlIf, TExpression* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth);
+        bool SerializeSqlIfExpression(const TCoIf& sqlIf, TExpression* proto, TSerializationContext& ctx, ui64 depth);
 
-        bool SerializeCoalesceExpression(const TCoCoalesce& coalesce, TExpression* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth);
+        bool SerializeCoalesceExpression(const TCoCoalesce& coalesce, TExpression* proto, TSerializationContext& ctx, ui64 depth);
 
-        bool SerializeExpression(const TExprBase& expression, TExpression* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
+        bool SerializeExpression(const TExprBase& expression, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
             if (auto member = expression.Maybe<TCoMember>()) {
-                return SerializeMember(member.Cast(), proto, arg, err);
+                return SerializeMember(member.Cast(), proto, ctx);
             }
             if (auto coalesce = expression.Maybe<TCoCoalesce>()) {
-                return SerializeCoalesceExpression(coalesce.Cast(), proto, arg, err, depth);
+                return SerializeCoalesceExpression(coalesce.Cast(), proto, ctx, depth);
             }
             if (auto sqlIf = expression.Maybe<TCoIf>()) {
-                return SerializeSqlIfExpression(sqlIf.Cast(), proto, arg, err, depth);
+                return SerializeSqlIfExpression(sqlIf.Cast(), proto, ctx, depth);
             }
             if (auto just = expression.Maybe<TCoJust>()) {
-                return SerializeExpression(TExprBase(just.Cast().Input()), proto, arg, err, depth + 1);
+                return SerializeExpression(TExprBase(just.Cast().Input()), proto, ctx, depth + 1);
+            }
+            if (auto safeCast = expression.Maybe<TCoSafeCast>()) {
+                return SerializeCastExpression(safeCast.Cast(), proto, ctx, depth);
+            }
+            if (expression.Ref().IsCallable("ToBytes")) {
+                return SerializeToBytesExpression(expression, proto, ctx, depth);
+            }
+            if (auto flatMap = expression.Maybe<TCoFlatMap>()) {
+                return SerializeFlatMap(flatMap.Cast(), proto, ctx, depth);
             }
 
             // data
@@ -109,7 +198,12 @@ namespace NYql {
                 return true;
             }
 
-            err << "unknown expression: " << expression.Raw()->Content();
+            // Try to serialize as lambda argument
+            if (SerializeLambdaArgument(expression, proto, ctx)) {
+                return true;
+            }
+
+            ctx.Err << "unknown expression: " << expression.Raw()->Content();
             return false;
         }
 
@@ -122,7 +216,7 @@ namespace NYql {
         proto->set_operation(TPredicate::TComparison::COMPARE_TYPE); \
     }
 
-        bool SerializeCompare(const TCoCompare& compare, TPredicate* predicateProto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
+        bool SerializeCompare(const TCoCompare& compare, TPredicate* predicateProto, TSerializationContext& ctx, ui64 depth) {
             TPredicate::TComparison* proto = predicateProto->mutable_comparison();
             bool opMatched = false;
 
@@ -136,28 +230,28 @@ namespace NYql {
             EXPR_NODE_TO_COMPARE_TYPE(TCoAggrNotEqual, ID);
 
             if (proto->operation() == TPredicate::TComparison::COMPARISON_OPERATION_UNSPECIFIED) {
-                err << "unknown compare operation: " << compare.Raw()->Content();
+                ctx.Err << "unknown compare operation: " << compare.Raw()->Content();
                 return false;
             }
-            return SerializeExpression(compare.Left(), proto->mutable_left_value(), arg, err, depth + 1) && SerializeExpression(compare.Right(), proto->mutable_right_value(), arg, err, depth + 1);
+            return SerializeExpression(compare.Left(), proto->mutable_left_value(), ctx, depth + 1) && SerializeExpression(compare.Right(), proto->mutable_right_value(), ctx, depth + 1);
         }
 
 #undef EXPR_NODE_TO_COMPARE_TYPE
 
-        bool SerializePredicate(const TExprBase& predicate, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth);
+        bool SerializePredicate(const TExprBase& predicate, TPredicate* proto, TSerializationContext& ctx, ui64 depth);
 
-        bool SerializeSqlIfExpression(const TCoIf& sqlIf, TExpression* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
+        bool SerializeSqlIfExpression(const TCoIf& sqlIf, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
             auto* dstProto = proto->mutable_if_();
-            return SerializePredicate(TExprBase(sqlIf.Predicate()), dstProto->mutable_predicate(), arg, err, depth + 1)
-                && SerializeExpression(TExprBase(sqlIf.ThenValue()), dstProto->mutable_then_expression(), arg, err, depth + 1)
-                && SerializeExpression(TExprBase(sqlIf.ElseValue()), dstProto->mutable_else_expression(), arg, err, depth + 1);
+            return SerializePredicate(TExprBase(sqlIf.Predicate()), dstProto->mutable_predicate(), ctx, depth + 1)
+                && SerializeExpression(TExprBase(sqlIf.ThenValue()), dstProto->mutable_then_expression(), ctx, depth + 1)
+                && SerializeExpression(TExprBase(sqlIf.ElseValue()), dstProto->mutable_else_expression(), ctx, depth + 1);
         }
 
-        bool SerializeSqlIfPredicate(const TCoIf& sqlIf, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
+        bool SerializeSqlIfPredicate(const TCoIf& sqlIf, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
             auto* dstProto = proto->mutable_if_();
-            return SerializePredicate(TExprBase(sqlIf.Predicate()), dstProto->mutable_predicate(), arg, err, depth + 1)
-                && SerializePredicate(TExprBase(sqlIf.ThenValue()), dstProto->mutable_then_predicate(), arg, err, depth + 1)
-                && SerializePredicate(TExprBase(sqlIf.ElseValue()), dstProto->mutable_else_predicate(), arg, err, depth + 1);
+            return SerializePredicate(TExprBase(sqlIf.Predicate()), dstProto->mutable_predicate(), ctx, depth + 1)
+                && SerializePredicate(TExprBase(sqlIf.ThenValue()), dstProto->mutable_then_predicate(), ctx, depth + 1)
+                && SerializePredicate(TExprBase(sqlIf.ElseValue()), dstProto->mutable_else_predicate(), ctx, depth + 1);
         }
 
         template <typename TProto>
@@ -171,10 +265,10 @@ namespace NYql {
             }
         }
 
-        bool SerializeCoalesceExpression(const TCoCoalesce& coalesce, TExpression* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
+        bool SerializeCoalesceExpression(const TCoCoalesce& coalesce, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
             auto* dstProto = proto->mutable_coalesce();
             for (const auto& child : coalesce.Ptr()->Children()) {
-                if (!SerializeExpression(TExprBase(child), dstProto->add_operands(), arg, err, depth + 1)) {
+                if (!SerializeExpression(TExprBase(child), dstProto->add_operands(), ctx, depth + 1)) {
                     return false;
                 }
                 UnwrapNestedCoalesce(dstProto);
@@ -182,19 +276,19 @@ namespace NYql {
             return true;
         }
 
-        bool SerializeCoalescePredicate(const TCoCoalesce& coalesce, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
+        bool SerializeCoalescePredicate(const TCoCoalesce& coalesce, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
             // Special case for top level COALESCE: COALESCE(Predicat, FALSE)
             // We can assume NULL as FALSE and skip COALESCE
             if (depth == 0) {
                 auto value = coalesce.Value().Maybe<TCoBool>();
                 if (value && TStringBuf(value.Cast().Literal()) == "false"sv) {
-                    return SerializePredicate(TExprBase(coalesce.Predicate()), proto, arg, err, 0);
+                    return SerializePredicate(TExprBase(coalesce.Predicate()), proto, ctx, 0);
                 }
             }
 
             auto* dstProto = proto->mutable_coalesce();
             for (const auto& child : coalesce.Ptr()->Children()) {
-                if (!SerializePredicate(TExprBase(child), dstProto->add_operands(), arg, err, depth + 1)) {
+                if (!SerializePredicate(TExprBase(child), dstProto->add_operands(), ctx, depth + 1)) {
                     return false;
                 }
                 UnwrapNestedCoalesce(dstProto);
@@ -202,18 +296,18 @@ namespace NYql {
             return true;
         }
 
-        bool SerializeExists(const TCoExists& exists, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, bool withNot, ui64 depth) {
+        bool SerializeExists(const TCoExists& exists, TPredicate* proto, TSerializationContext& ctx, bool withNot, ui64 depth) {
             auto* expressionProto = withNot ? proto->mutable_is_null()->mutable_value() : proto->mutable_is_not_null()->mutable_value();
-            return SerializeExpression(exists.Optional(), expressionProto, arg, err, depth + 1);
+            return SerializeExpression(exists.Optional(), expressionProto, ctx, depth + 1);
         }
 
-        bool SerializeSqlIn(const TCoSqlIn& sqlIn, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
+        bool SerializeSqlIn(const TCoSqlIn& sqlIn, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
             auto* dstProto = proto->mutable_in();
             const TExprBase& expr = sqlIn.Collection();
             const TExprBase& lookup = sqlIn.Lookup();
 
             auto* expressionProto = dstProto->mutable_value();
-            SerializeExpression(lookup, expressionProto, arg, err, depth + 1);
+            SerializeExpression(lookup, expressionProto, ctx, depth + 1);
 
             TExprNode::TPtr collection;
             if (expr.Ref().IsList()) {
@@ -221,145 +315,145 @@ namespace NYql {
             } else if (auto maybeAsList = expr.Maybe<TCoAsList>()) {
                 collection = maybeAsList.Cast().Ptr();
             } else {
-                err << "unknown source for in: " << expr.Ref().Content();
+                ctx.Err << "unknown source for in: " << expr.Ref().Content();
                 return false;
             }
 
             for (auto& child : collection->Children()) {
-                if (!SerializeExpression(TExprBase(child), dstProto->add_set(), arg, err, depth + 1)) {
+                if (!SerializeExpression(TExprBase(child), dstProto->add_set(), ctx, depth + 1)) {
                     return false;
                 }
             }
             return true;
         }
 
-        bool SerializeIsNotDistinctFrom(const TExprBase& predicate, TPredicate* predicateProto, const TCoArgument& arg, TStringBuilder& err, bool invert, ui64 depth) {
+        bool SerializeIsNotDistinctFrom(const TExprBase& predicate, TPredicate* predicateProto, TSerializationContext& ctx, bool invert, ui64 depth) {
             if (predicate.Ref().ChildrenSize() != 2) {
-                err << "invalid IsNotDistinctFrom predicate, expected 2 children but got " << predicate.Ref().ChildrenSize();
+                ctx.Err << "invalid IsNotDistinctFrom predicate, expected 2 children but got " << predicate.Ref().ChildrenSize();
                 return false;
             }
             TPredicate::TComparison* proto = predicateProto->mutable_comparison();
             proto->set_operation(!invert ? TPredicate::TComparison::IND : TPredicate::TComparison::ID);
-            return SerializeExpression(TExprBase(predicate.Ref().Child(0)), proto->mutable_left_value(), arg, err, depth + 1)
-                && SerializeExpression(TExprBase(predicate.Ref().Child(1)), proto->mutable_right_value(), arg, err, depth + 1);
+            return SerializeExpression(TExprBase(predicate.Ref().Child(0)), proto->mutable_left_value(), ctx, depth + 1)
+                && SerializeExpression(TExprBase(predicate.Ref().Child(1)), proto->mutable_right_value(), ctx, depth + 1);
         }
 
-        bool SerializeAnd(const TCoAnd& andExpr, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
+        bool SerializeAnd(const TCoAnd& andExpr, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
             auto* dstProto = proto->mutable_conjunction();
             for (const auto& child : andExpr.Ptr()->Children()) {
-                if (!SerializePredicate(TExprBase(child), dstProto->add_operands(), arg, err, depth + 1)) {
+                if (!SerializePredicate(TExprBase(child), dstProto->add_operands(), ctx, depth + 1)) {
                     return false;
                 }
             }
             return true;
         }
 
-        bool SerializeOr(const TCoOr& orExpr, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
+        bool SerializeOr(const TCoOr& orExpr, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
             auto* dstProto = proto->mutable_disjunction();
             for (const auto& child : orExpr.Ptr()->Children()) {
-                if (!SerializePredicate(TExprBase(child), dstProto->add_operands(), arg, err, depth + 1)) {
+                if (!SerializePredicate(TExprBase(child), dstProto->add_operands(), ctx, depth + 1)) {
                     return false;
                 }
             }
             return true;
         }
 
-        bool SerializeNot(const TCoNot& notExpr, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
+        bool SerializeNot(const TCoNot& notExpr, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
             // Special case: (Not (Exists ...))
             if (auto exists = notExpr.Value().Maybe<TCoExists>()) {
-                return SerializeExists(exists.Cast(), proto, arg, err, true, depth + 1);
+                return SerializeExists(exists.Cast(), proto, ctx, true, depth + 1);
             }
             auto* dstProto = proto->mutable_negation();
-            return SerializePredicate(notExpr.Value(), dstProto->mutable_operand(), arg, err, depth + 1);
+            return SerializePredicate(notExpr.Value(), dstProto->mutable_operand(), ctx, depth + 1);
         }
 
-        bool SerializeMember(const TCoMember& member, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err) {
-            return SerializeMember(member, proto->mutable_bool_expression()->mutable_value(), arg, err);
+        bool SerializeMember(const TCoMember& member, TPredicate* proto, TSerializationContext& ctx) {
+            return SerializeMember(member, proto->mutable_bool_expression()->mutable_value(), ctx);
         }
 
-        bool SerializeRegexp(const TCoUdf& regexp, const TExprNode::TListType& children, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
+        bool SerializeRegexp(const TCoUdf& regexp, const TExprNode::TListType& children, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
             if (children.size() != 2) {
-                err << "expected exactly one argument for UDF Re2.Grep, but got: " << children.size() - 1;
+                ctx.Err << "expected exactly one argument for UDF function Re2.Grep, but got: " << children.size() - 1;
                 return false;
             }
 
             const auto& maybeRunConfig = regexp.RunConfigValue();
             if (!maybeRunConfig) {
-                err << "predicate for REGEXP can't be empty";
+                ctx.Err << "predicate for REGEXP can't be empty";
                 return false;
             }
             const auto& runConfig = maybeRunConfig.Cast().Ref();
 
             if (runConfig.ChildrenSize() != 2) {
-                err << "expected exactly two run config options for UDF Re2.Grep, but got: " << runConfig.ChildrenSize();
+                ctx.Err << "expected exactly two run config options for UDF Re2.Grep, but got: " << runConfig.ChildrenSize();
                 return false;
             }
 
             auto* dstProto = proto->mutable_regexp();
-            return SerializeExpression(TExprBase(runConfig.ChildPtr(0)), dstProto->mutable_pattern(), arg, err, depth + 1)
-                && SerializeExpression(TExprBase(children[1]), dstProto->mutable_value(), arg, err, depth + 1);
+            return SerializeExpression(TExprBase(runConfig.ChildPtr(0)), dstProto->mutable_pattern(), ctx, depth + 1)
+                && SerializeExpression(TExprBase(children[1]), dstProto->mutable_value(), ctx, depth + 1);
         }
 
-        bool SerializeApply(const TCoApply& apply, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
+        bool SerializeApply(const TCoApply& apply, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
             const auto& maybeUdf = apply.Callable().Maybe<TCoUdf>();
             if (!maybeUdf) {
-                err << "expected only UDF apply, but got: " << apply.Callable().Ref().Content();
+                ctx.Err << "expected only UDF apply, but got: " << apply.Callable().Ref().Content();
                 return false;
             }
             const auto& udf = maybeUdf.Cast();
 
             if (TStringBuf(udf.MethodName()) == "Re2.Grep"sv) {
-                return SerializeRegexp(udf, apply.Ref().ChildrenList(), proto, arg, err, depth);
+                return SerializeRegexp(udf, apply.Ref().ChildrenList(), proto, ctx, depth);
             }
 
-            err << "unknown UDF in apply: " << TStringBuf(udf.MethodName());
+            ctx.Err << "unknown UDF in apply: " << TStringBuf(udf.MethodName());
             return false;
         }
 
-        bool SerializePredicate(const TExprBase& predicate, TPredicate* proto, const TCoArgument& arg, TStringBuilder& err, ui64 depth) {
+        bool SerializePredicate(const TExprBase& predicate, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
             if (auto compare = predicate.Maybe<TCoCompare>()) {
-                return SerializeCompare(compare.Cast(), proto, arg, err, depth);
+                return SerializeCompare(compare.Cast(), proto, ctx, depth);
             }
             if (auto coalesce = predicate.Maybe<TCoCoalesce>()) {
-                return SerializeCoalescePredicate(coalesce.Cast(), proto, arg, err, depth);
+                return SerializeCoalescePredicate(coalesce.Cast(), proto, ctx, depth);
             }
             if (auto andExpr = predicate.Maybe<TCoAnd>()) {
-                return SerializeAnd(andExpr.Cast(), proto, arg, err, depth);
+                return SerializeAnd(andExpr.Cast(), proto, ctx, depth);
             }
             if (auto orExpr = predicate.Maybe<TCoOr>()) {
-                return SerializeOr(orExpr.Cast(), proto, arg, err, depth);
+                return SerializeOr(orExpr.Cast(), proto, ctx, depth);
             }
             if (auto notExpr = predicate.Maybe<TCoNot>()) {
-                return SerializeNot(notExpr.Cast(), proto, arg, err, depth);
+                return SerializeNot(notExpr.Cast(), proto, ctx, depth);
             }
             if (auto member = predicate.Maybe<TCoMember>()) {
-                return SerializeMember(member.Cast(), proto, arg, err);
+                return SerializeMember(member.Cast(), proto, ctx);
             }
             if (auto exists = predicate.Maybe<TCoExists>()) {
-                return SerializeExists(exists.Cast(), proto, arg, err, false, depth);
+                return SerializeExists(exists.Cast(), proto, ctx, false, depth);
             }
             if (auto sqlIn = predicate.Maybe<TCoSqlIn>()) {
-                return SerializeSqlIn(sqlIn.Cast(), proto, arg, err, depth);
+                return SerializeSqlIn(sqlIn.Cast(), proto, ctx, depth);
             }
             if (predicate.Ref().IsCallable("IsNotDistinctFrom")) {
-                return SerializeIsNotDistinctFrom(predicate, proto, arg, err, false, depth);
+                return SerializeIsNotDistinctFrom(predicate, proto, ctx, false, depth);
             }
             if (predicate.Ref().IsCallable("IsDistinctFrom")) {
-                return SerializeIsNotDistinctFrom(predicate, proto, arg, err, true, depth);
+                return SerializeIsNotDistinctFrom(predicate, proto, ctx, true, depth);
             }
             if (auto sqlIf = predicate.Maybe<TCoIf>()) {
-                return SerializeSqlIfPredicate(sqlIf.Cast(), proto, arg, err, depth);
+                return SerializeSqlIfPredicate(sqlIf.Cast(), proto, ctx, depth);
             }
             if (auto just = predicate.Maybe<TCoJust>()) {
-                return SerializePredicate(TExprBase(just.Cast().Input()), proto, arg, err, depth + 1);
+                return SerializePredicate(TExprBase(just.Cast().Input()), proto, ctx, depth + 1);
             }
             if (auto apply = predicate.Maybe<TCoApply>()) {
-                return SerializeApply(apply.Cast(), proto, arg, err, depth);
+                return SerializeApply(apply.Cast(), proto, ctx, depth);
             }
 
             // Try to serialize predicate as boolean expression
             // For example single bool value TRUE in COALESCE or IF
-            return SerializeExpression(predicate, proto->mutable_bool_expression()->mutable_value(), arg, err, depth);
+            return SerializeExpression(predicate, proto->mutable_bool_expression()->mutable_value(), ctx, depth);
         }
     }
 
@@ -396,6 +490,11 @@ namespace NYql {
         return "NULL";
     }
 
+    TString FormatCast(const TExpression::TCast& cast) {
+        auto value = FormatExpression(cast.value());
+        return TStringBuilder() << "CAST(" << value << " AS " << cast.type() << ")";
+    }
+
     TString FormatExpression(const TExpression& expression) {
         switch (expression.payload_case()) {
             case TExpression::kColumn:
@@ -410,8 +509,10 @@ namespace NYql {
                 return FormatCoalesce(expression.coalesce());
             case TExpression::kIf:
                 return FormatIfExpression(expression.if_());
+            case TExpression::kCast:
+                return FormatCast(expression.cast());
             default:
-                throw yexception() << "UnimplementedExpression, payload_case " << static_cast<ui64>(expression.payload_case());
+                throw yexception() << "Failed to format expression, unimplemented payload_case " << static_cast<ui64>(expression.payload_case());
         }
     }
 
@@ -697,8 +798,13 @@ namespace NYql {
         return TStringBuf(maybeBool.Cast().Literal()) == "true"sv;
     }
 
+    bool SerializeFilterPredicate(const TExprBase& predicateBody, const TCoArgument& predicateArgument, NConnector::NApi::TPredicate* proto, TStringBuilder& err) {
+        TSerializationContext ctx = {.Arg = predicateArgument, .Err = err};
+        return SerializePredicate(predicateBody, proto, ctx, 0);
+    }
+
     bool SerializeFilterPredicate(const TCoLambda& predicate, TPredicate* proto, TStringBuilder& err) {
-        return SerializePredicate(predicate.Body(), proto, predicate.Args().Arg(0), err, 0);
+        return SerializeFilterPredicate(predicate.Body(), predicate.Args().Arg(0), proto, err);
     }
 
     TString FormatWhere(const TPredicate& predicate) {

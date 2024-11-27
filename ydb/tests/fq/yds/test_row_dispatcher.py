@@ -308,10 +308,10 @@ class TestPqRowDispatcher(TestYdsBase):
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String NOT NULL, event String NOT NULL)) WHERE '''
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String NOT NULL, event String NOT NULL, nested Json NOT NULL)) WHERE '''
         data = [
-            '{"time": 101, "data": "hello1", "event": "event1"}',
-            '{"time": 102, "data": "hello2", "event": "event2"}']
+            '{"time": 101, "data": "hello1", "event": "event1", "nested": {"xyz": "key"}}',
+            '{"time": 102, "data": "hello2", "event": "event2", "nested": ["abc", "key"]}']
         filter = "time > 101;"
         expected = ['102']
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`time` > 101)')
@@ -331,6 +331,10 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((`event` IS DISTINCT FROM `data`) AND (`event` IN (\\"1\\"')
         filter = ' IF(event = "event2", event IS DISTINCT FROM data, FALSE)'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE IF((`event` = \\"event2\\"), (`event` IS DISTINCT FROM `data`), FALSE)')
+        filter = ' nested REGEXP ".*abc.*"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP ".*abc.*")')
+        filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP ".*abc.*")')
 
     @yq_v1
     def test_filters_optional_field(self, kikimr, client):
@@ -342,10 +346,10 @@ class TestPqRowDispatcher(TestYdsBase):
         sql = Rf'''
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
             SELECT Cast(time as String) FROM {YDS_CONNECTION}.`{self.input_topic}`
-                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String, event String, flag Bool, field1 UInt8, field2 Int64)) WHERE '''
+                WITH (format=json_each_row, SCHEMA (time UInt64 NOT NULL, data String, event String, flag Bool, field1 UInt8, field2 Int64, nested Json)) WHERE '''
         data = [
-            '{"time": 101, "data": "hello1", "event": "event1", "flag": false, "field1": 5, "field2": 5}',
-            '{"time": 102, "data": "hello2", "event": "event2", "flag": true, "field1": 5, "field2": 1005}']
+            '{"time": 101, "data": "hello1", "event": "event1", "flag": false, "field1": 5, "field2": 5, "nested": {"xyz": "key"}}',
+            '{"time": 102, "data": "hello2", "event": "event2", "flag": true, "field1": 5, "field2": 1005, "nested": ["abc", "key"]}']
         expected = ['102']
         filter = 'data = "hello2"'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (`data` = \\"hello2\\")')
@@ -381,6 +385,10 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (NOT (COALESCE(`event`, \\"\\") REGEXP \\"e.*e.*t1\\"))')
         filter = " event ?? '' REGEXP data ?? '' OR time = 102"
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((COALESCE(`event`, \\"\\") REGEXP COALESCE(`data`, \\"\\")) OR (`time` = 102))')
+        filter = ' nested REGEXP ".*abc.*"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (IF((`nested` IS NOT NULL), CAST(`nested` AS String), NULL) REGEXP ".*abc.*")')
+        filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS Optional<String>) REGEXP ".*abc.*")')
 
     @yq_v1
     def test_filter_missing_fields(self, kikimr, client):

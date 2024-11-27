@@ -4,148 +4,93 @@
 
 namespace NLogin {
 
-TPasswordCheckParameters::TPasswordCheckParameters()
-    : SpecialSymbols(VALID_SPECIAL_SYMBOLS)
+TPasswordComplexitySettings::TPasswordComplexitySettings()
+    : SpecialChars(VALID_SPECIAL_CHARS.cbegin(), VALID_SPECIAL_CHARS.cend())
 {}
 
-TPasswordCheckParameters::TPasswordCheckParameters(const TInitializer& initializer)
-    : MinPasswordLength(initializer.MinPasswordLength)
-    , MaxPasswordLength(initializer.MaxPasswordLength)
-    , NeedLowerCase(initializer.NeedLowerCase)
-    , NeedUpperCase(initializer.NeedUpperCase)
-    , NeedNumbers(initializer.NeedNumbers)
-    , NeedSpecialSymbols(initializer.NeedSpecialSymbols)
+TPasswordComplexitySettings::TPasswordComplexitySettings(const TInitializer& initializer)
+    : MinLength(initializer.MinLength)
+    , MinLowerCaseCount(initializer.MinLowerCaseCount)
+    , MinUpperCaseCount(initializer.MinUpperCaseCount)
+    , MinNumbersCount(initializer.MinNumbersCount)
+    , MinSpecialCharsCount(initializer.MinSpecialCharsCount)
+    , CanContainUsername(initializer.CanContainUsername)
 {
-    for (const char symbol : initializer.SpecialSymbols) {
-        if (VALID_SPECIAL_SYMBOLS.contains(symbol)) {
-            SpecialSymbols.insert(symbol);
+    static const std::unordered_set<char> validSpecialChars(VALID_SPECIAL_CHARS.cbegin(), VALID_SPECIAL_CHARS.cend());
+    for (const char ch : initializer.SpecialChars) {
+        if (validSpecialChars.contains(ch)) {
+            SpecialChars.insert(ch);
         }
     }
 }
 
-ui32 TPasswordCheckParameters::GetMinPasswordLength() const {
-    return MinPasswordLength;
+bool TPasswordComplexitySettings::IsSpecialCharValid(char ch) const {
+    return SpecialChars.contains(ch);
 }
 
-ui32 TPasswordCheckParameters::GetMaxPasswordLength() const {
-    return MaxPasswordLength;
+const TString TPasswordComplexitySettings::VALID_SPECIAL_CHARS = "!@#$%^&*()_+{}|<>?=";
+
+TPasswordChecker::TComplexityState::TComplexityState(const TPasswordComplexitySettings& complexitySettings)
+    : ComplexitySettings(complexitySettings)
+{}
+
+void TPasswordChecker::TComplexityState::IncLowerCaseCount() {
+    ++LowerCaseCount;
 }
 
-bool TPasswordCheckParameters::NeedLowerCaseUse() const {
-    return NeedLowerCase;
+void TPasswordChecker::TComplexityState::IncUpperCaseCount() {
+    ++UpperCaseCount;
 }
 
-bool TPasswordCheckParameters::NeedUpperCaseUse() const {
-    return NeedUpperCase;
+void TPasswordChecker::TComplexityState::IncNumbersCount() {
+    ++NumbersCount;
 }
 
-bool TPasswordCheckParameters::NeedNumbersUse() const {
-    return NeedNumbers;
+void TPasswordChecker::TComplexityState::IncSpecialCharsCount() {
+    ++SpecialCharsCount;
 }
 
-bool TPasswordCheckParameters::NeedSpecialSymbolsUse() const {
-    return NeedSpecialSymbols;
+bool TPasswordChecker::TComplexityState::CheckLowerCaseCount() const {
+    return LowerCaseCount >= ComplexitySettings.MinLowerCaseCount;
 }
 
-bool TPasswordCheckParameters::IsSpecialSymbolValid(char symbol) const {
-    return SpecialSymbols.contains(symbol);
+bool TPasswordChecker::TComplexityState::CheckUpperCaseCount() const {
+    return UpperCaseCount >= ComplexitySettings.MinUpperCaseCount;
 }
 
-void TPasswordCheckParameters::SetMinPasswordLength(ui32 length) {
-    MinPasswordLength = length;
+bool TPasswordChecker::TComplexityState::CheckNumbersCount() const {
+    return NumbersCount >= ComplexitySettings.MinNumbersCount;
 }
 
-void TPasswordCheckParameters::SetMaxPasswordLength(ui32 length) {
-    MaxPasswordLength = length;
+bool TPasswordChecker::TComplexityState::CheckSpecialCharsCount() const {
+    return SpecialCharsCount >= ComplexitySettings.MinSpecialCharsCount;
 }
 
-void TPasswordCheckParameters::SetLowerCaseUse(bool flag) {
-    NeedLowerCase = flag;
-}
-
-void TPasswordCheckParameters::SetUpperCaseUse(bool flag) {
-    NeedUpperCase = flag;
-}
-
-void TPasswordCheckParameters::SetNumbersUse(bool flag) {
-    NeedNumbers = flag;
-}
-
-void TPasswordCheckParameters::SetSpecialSymbolsUse(bool flag) {
-    NeedSpecialSymbols = flag;
-}
-
-void TPasswordCheckParameters::SetSpecialSymbols(const TString& specialSymbols) {
-    SpecialSymbols.clear();
-    for (const char symbol : specialSymbols) {
-        if (VALID_SPECIAL_SYMBOLS.contains(symbol)) {
-            SpecialSymbols.insert(symbol);
-        }
-    }
-}
-
-const std::unordered_set<char> TPasswordCheckParameters::VALID_SPECIAL_SYMBOLS = {'!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', '{', '}', '|', '<', '>', '?', '='};
-
-void TPasswordChecker::TFlagsStore::SetLowerCase(bool flag) {
-    LowerCase = flag;
-}
-
-void TPasswordChecker::TFlagsStore::SetUpperCase(bool flag) {
-    UpperCase = flag;
-}
-
-void TPasswordChecker::TFlagsStore::SetNumber(bool flag) {
-    Number = flag;
-}
-
-void TPasswordChecker::TFlagsStore::SetSpecialSymbol(bool flag) {
-    SpecialSymbol = flag;
-}
-
-bool TPasswordChecker::TFlagsStore::HasLowerCase() const {
-    return LowerCase;
-}
-
-bool TPasswordChecker::TFlagsStore::HasUpperCase() const {
-    return UpperCase;
-}
-
-bool TPasswordChecker::TFlagsStore::HasNumber() const {
-    return Number;
-}
-
-bool TPasswordChecker::TFlagsStore::HasSpecialSymbol() const {
-    return SpecialSymbol;
-}
-
-TPasswordChecker::TPasswordChecker(const TPasswordCheckParameters& checkParameters)
-    : CheckParameters(checkParameters)
+TPasswordChecker::TPasswordChecker(const TPasswordComplexitySettings& complexitySettings)
+    : ComplexitySettings(complexitySettings)
 {}
 
 TPasswordChecker::TResult TPasswordChecker::Check(const TString& username, const TString& password) const {
-    if (password.empty() && CheckParameters.GetMinPasswordLength() == 0) {
+    if (password.empty() && ComplexitySettings.MinLength == 0) {
         return {.Success = true};
     }
-    if (password.length() < CheckParameters.GetMinPasswordLength()) {
+    if (password.length() < ComplexitySettings.MinLength) {
         return {.Success = false, .Error = "Password is too short"};
     }
-    if (password.length() > CheckParameters.GetMaxPasswordLength()) {
-        return {.Success = false, .Error = "Password is too long"};
-    }
-    if (password.Contains(username)) {
+    if (!ComplexitySettings.CanContainUsername && password.Contains(username)) {
         return {.Success = false, .Error = "Password must not contain user name"};
     }
 
-    TFlagsStore passwordFlags;
-    for (const char& symbol : password) {
-        if (std::islower(static_cast<unsigned char>(symbol))) {
-            passwordFlags.SetLowerCase(true);
-        } else if (std::isupper(static_cast<unsigned char>(symbol))) {
-            passwordFlags.SetUpperCase(true);
-        } else if (std::isdigit(static_cast<unsigned char>(symbol))) {
-            passwordFlags.SetNumber(true);
-        } else if (CheckParameters.IsSpecialSymbolValid(symbol)) {
-            passwordFlags.SetSpecialSymbol(true);
+    TComplexityState complexityState(ComplexitySettings);
+    for (const char& ch : password) {
+        if (std::islower(static_cast<unsigned char>(ch))) {
+            complexityState.IncLowerCaseCount();
+        } else if (std::isupper(static_cast<unsigned char>(ch))) {
+            complexityState.IncUpperCaseCount();
+        } else if (std::isdigit(static_cast<unsigned char>(ch))) {
+            complexityState.IncNumbersCount();
+        } else if (ComplexitySettings.IsSpecialCharValid(ch)) {
+            complexityState.IncSpecialCharsCount();
         } else {
             return {.Success = false, .Error = "Password contains unacceptable characters"};
         }
@@ -154,29 +99,29 @@ TPasswordChecker::TResult TPasswordChecker::Check(const TString& username, const
     TStringBuilder errorMessage;
     errorMessage << "Incorrect password format: ";
     bool hasError = false;
-    if (!passwordFlags.HasLowerCase() && CheckParameters.NeedLowerCaseUse()) {
-        errorMessage << "lower case character is missing";
+    if (!complexityState.CheckLowerCaseCount()) {
+        errorMessage << "should contain at least " << ComplexitySettings.MinLowerCaseCount << " lower case character";
         hasError = true;
     }
-    if (!passwordFlags.HasUpperCase() && CheckParameters.NeedUpperCaseUse()) {
+    if (!complexityState.CheckUpperCaseCount()) {
         if (hasError) {
             errorMessage << ", ";
         }
-        errorMessage << "upper case character is missing";
+        errorMessage << "should contain at least " << ComplexitySettings.MinUpperCaseCount << " upper case character";
         hasError = true;
     }
-    if (!passwordFlags.HasNumber() && CheckParameters.NeedNumbersUse()) {
+    if (!complexityState.CheckNumbersCount()) {
         if (hasError) {
             errorMessage << ", ";
         }
-        errorMessage << "number is missing";
+        errorMessage << "should contain at least " << ComplexitySettings.MinNumbersCount << " number";
         hasError = true;
     }
-    if (!passwordFlags.HasSpecialSymbol() && CheckParameters.NeedSpecialSymbolsUse()) {
+    if (!complexityState.CheckSpecialCharsCount()) {
         if (hasError) {
             errorMessage << ", ";
         }
-        errorMessage << "special character is missing";
+        errorMessage << "should contain at least " << ComplexitySettings.MinSpecialCharsCount << " special character";
         hasError = true;
     }
 
@@ -186,8 +131,8 @@ TPasswordChecker::TResult TPasswordChecker::Check(const TString& username, const
     return {.Success = true};
 }
 
-void TPasswordChecker::Update(const TPasswordCheckParameters& checkParameters) {
-    CheckParameters = checkParameters;
+void TPasswordChecker::Update(const TPasswordComplexitySettings& complexitySettings) {
+    ComplexitySettings = complexitySettings;
 }
 
 } // NLogin

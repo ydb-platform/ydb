@@ -2,53 +2,36 @@
 
 #include <util/system/types.h>
 #include <util/generic/string.h>
-#include <limits>
 #include <unordered_set>
 
 namespace NLogin {
 
-class TPasswordCheckParameters {
+class TPasswordComplexitySettings {
 public:
     struct TInitializer {
-        ui32 MinPasswordLength = 0;
-        ui32 MaxPasswordLength = std::numeric_limits<ui32>::max();
-        bool NeedLowerCase = false;
-        bool NeedUpperCase = false;
-        bool NeedNumbers = false;
-        bool NeedSpecialSymbols = false;
-        TString SpecialSymbols;
+        size_t MinLength = 0;
+        size_t MinLowerCaseCount = 0;
+        size_t MinUpperCaseCount = 0;
+        size_t MinNumbersCount = 0;
+        size_t MinSpecialCharsCount = 0;
+        TString SpecialChars = VALID_SPECIAL_CHARS;
+        bool CanContainUsername = false;
     };
 
-    static const std::unordered_set<char> VALID_SPECIAL_SYMBOLS;
+    static const TString VALID_SPECIAL_CHARS;
 
-private:
-    ui32 MinPasswordLength = 0;
-    ui32 MaxPasswordLength = std::numeric_limits<ui32>::max();
-    bool NeedLowerCase = false;
-    bool NeedUpperCase = false;
-    bool NeedNumbers = false;
-    bool NeedSpecialSymbols = false;
-    std::unordered_set<char> SpecialSymbols;
+    size_t MinLength = 0;
+    size_t MinLowerCaseCount = 0;
+    size_t MinUpperCaseCount = 0;
+    size_t MinNumbersCount = 0;
+    size_t MinSpecialCharsCount = 0;
+    std::unordered_set<char> SpecialChars;
+    bool CanContainUsername = false;
 
-public:
-    TPasswordCheckParameters();
-    TPasswordCheckParameters(const TInitializer& initializer);
+    TPasswordComplexitySettings();
+    TPasswordComplexitySettings(const TInitializer& initializer);
 
-    ui32 GetMinPasswordLength() const;
-    ui32 GetMaxPasswordLength() const;
-    bool NeedLowerCaseUse() const;
-    bool NeedUpperCaseUse() const;
-    bool NeedNumbersUse() const;
-    bool NeedSpecialSymbolsUse() const;
-    bool IsSpecialSymbolValid(char symbol) const;
-
-    void SetMinPasswordLength(ui32 length);
-    void SetMaxPasswordLength(ui32 length);
-    void SetLowerCaseUse(bool flag);
-    void SetUpperCaseUse(bool flag);
-    void SetNumbersUse(bool flag);
-    void SetSpecialSymbolsUse(bool flag);
-    void SetSpecialSymbols(const TString& specialSymbols);
+    bool IsSpecialCharValid(char ch) const;
 };
 
 class TPasswordChecker {
@@ -59,32 +42,36 @@ public:
     };
 
 private:
-    class TFlagsStore {
+    class TComplexityState {
     private:
-        bool LowerCase = false;
-        bool UpperCase = false;
-        bool Number = false;
-        bool SpecialSymbol = false;
+        size_t LowerCaseCount = 0;
+        size_t UpperCaseCount = 0;
+        size_t NumbersCount = 0;
+        size_t SpecialCharsCount = 0;
+
+        const TPasswordComplexitySettings& ComplexitySettings;
 
     public:
-        void SetLowerCase(bool flag);
-        void SetUpperCase(bool flag);
-        void SetNumber(bool flag);
-        void SetSpecialSymbol(bool flag);
+        TComplexityState(const TPasswordComplexitySettings& complexitySettings);
 
-        bool HasLowerCase() const;
-        bool HasUpperCase() const;
-        bool HasNumber() const;
-        bool HasSpecialSymbol() const;
+        void IncLowerCaseCount();
+        void IncUpperCaseCount();
+        void IncNumbersCount();
+        void IncSpecialCharsCount();
+
+        bool CheckLowerCaseCount() const;
+        bool CheckUpperCaseCount() const;
+        bool CheckNumbersCount() const;
+        bool CheckSpecialCharsCount() const;
     };
 
 private:
-    TPasswordCheckParameters CheckParameters;
+    TPasswordComplexitySettings ComplexitySettings;
 
 public:
-    TPasswordChecker(const TPasswordCheckParameters& checkParameters);
+    TPasswordChecker(const TPasswordComplexitySettings& complexitySettings);
     TResult Check(const TString& username, const TString& password) const;
-    void Update(const TPasswordCheckParameters& checkParameters);
+    void Update(const TPasswordComplexitySettings& checkParameters);
 };
 
 } // NLogin

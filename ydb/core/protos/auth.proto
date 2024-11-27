@@ -56,7 +56,7 @@ message TAuthConfig {
     optional string CertificateAuthenticationDomain = 80 [default = "cert"];
     optional bool EnableLoginAuthentication = 81 [default = true];
     optional string NodeRegistrationToken = 82 [default = "root@builtin", (Ydb.sensitive) = true];
-    optional TPasswordCheckerParameters PasswordCheckerParameters = 83;
+    optional TPasswordComplexitySettings PasswordComplexitySettings = 83;
 }
 
 message TUserRegistryConfig {
@@ -124,12 +124,12 @@ message TLdapAuthentication {
     optional TExtendedSettings ExtendedSettings = 12;
 }
 
-message TPasswordCheckerParameters {
-    optional uint32 MinimumLength = 1 [default = 0];
-    optional uint32 MaximumLength = 2 [default = 4294967295];
-    optional bool RestrictLower = 3;
-    optional bool RestrictUpper = 4;
-    optional bool RestrictNumbers = 5;
-    optional bool RestrictSpecial = 6;
-    optional string SpecialChars = 7 [default = "!@#$%^&*()_+{}|<>?="];
+message TPasswordComplexitySettings {
+    optional uint32 MinLength = 1;
+    optional uint32 MinLowerCaseCount = 2;
+    optional uint32 MinUpperCaseCount = 3;
+    optional uint32 MinNumbersCount = 4;
+    optional uint32 MinSpecialCharsCount = 5;
+    optional string SpecialChars = 6 [default = "!@#$%^&*()_+{}|<>?="];
+    optional bool CanContainUsername = 7;
 }

@@ -4437,16 +4437,15 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
             COUNTER_PQ_STATS_WRITTEN,
             COUNTER_PQ_STATS_BATCH_LATENCY)
     , AllowDataColumnForIndexTable(0, 0, 1)
-    , PasswordCheckParameters({
-        .MinPasswordLength = AppData()->AuthConfig.GetPasswordCheckerParameters().GetMinimumLength(),
-        .MaxPasswordLength = AppData()->AuthConfig.GetPasswordCheckerParameters().GetMaximumLength(),
-        .NeedLowerCase = AppData()->AuthConfig.GetPasswordCheckerParameters().GetRestrictLower(),
-        .NeedUpperCase = AppData()->AuthConfig.GetPasswordCheckerParameters().GetRestrictUpper(),
-        .NeedNumbers = AppData()->AuthConfig.GetPasswordCheckerParameters().GetRestrictNumbers(),
-        .NeedSpecialSymbols = AppData()->AuthConfig.GetPasswordCheckerParameters().GetRestrictSpecial(),
-        .SpecialSymbols = AppData()->AuthConfig.GetPasswordCheckerParameters().GetSpecialChars()
-    })
-    , LoginProvider(PasswordCheckParameters)
+    , LoginProvider(NLogin::TPasswordComplexitySettings({
+        .MinLength = AppData()->AuthConfig.GetPasswordComplexitySettings().GetMinLength(),
+        .MinLowerCaseCount = AppData()->AuthConfig.GetPasswordComplexitySettings().GetMinLowerCaseCount(),
+        .MinUpperCaseCount = AppData()->AuthConfig.GetPasswordComplexitySettings().GetMinUpperCaseCount(),
+        .MinNumbersCount = AppData()->AuthConfig.GetPasswordComplexitySettings().GetMinNumbersCount(),
+        .MinSpecialCharsCount = AppData()->AuthConfig.GetPasswordComplexitySettings().GetMinSpecialCharsCount(),
+        .SpecialChars = AppData()->AuthConfig.GetPasswordComplexitySettings().GetSpecialChars(),
+        .CanContainUsername = AppData()->AuthConfig.GetPasswordComplexitySettings().GetCanContainUsername()
+    }))
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
@@ -7333,29 +7332,26 @@ void TSchemeShard::ConfigureLoginProvider(
         const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx)
 {
-    const auto& passwordCheckParameters = config.GetPasswordCheckerParameters();
-    PasswordCheckParameters.SetMinPasswordLength(passwordCheckParameters.GetMinimumLength());
-    PasswordCheckParameters.SetMaxPasswordLength(passwordCheckParameters.GetMaximumLength());
-    PasswordCheckParameters.SetLowerCaseUse(passwordCheckParameters.GetRestrictLower());
-    PasswordCheckParameters.SetUpperCaseUse(passwordCheckParameters.GetRestrictUpper());
-    PasswordCheckParameters.SetNumbersUse(passwordCheckParameters.GetRestrictNumbers());
-    PasswordCheckParameters.SetSpecialSymbolsUse(passwordCheckParameters.GetRestrictSpecial());
-    PasswordCheckParameters.SetSpecialSymbols(passwordCheckParameters.GetSpecialChars());
-
-    LoginProvider.UpdatePasswordCheckParameters(PasswordCheckParameters);
-
-    auto printBool = [] (bool flag) -> TString {
-        return (flag ? "true" : "false");
-    };
+    const auto& complexitySettings = config.GetPasswordComplexitySettings();
+    NLogin::TPasswordComplexitySettings passwordComplexitySettings({
+        .MinLength = complexitySettings.GetMinLength(),
+        .MinLowerCaseCount = complexitySettings.GetMinLowerCaseCount(),
+        .MinUpperCaseCount = complexitySettings.GetMinUpperCaseCount(),
+        .MinNumbersCount = complexitySettings.GetMinNumbersCount(),
+        .MinSpecialCharsCount = complexitySettings.GetMinSpecialCharsCount(),
+        .SpecialChars = complexitySettings.GetSpecialChars(),
+        .CanContainUsername = complexitySettings.GetCanContainUsername()
+    });
+    LoginProvider.UpdatePasswordCheckParameters(passwordComplexitySettings);
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "LoginProvider configured: MinPasswordLength# " << PasswordCheckParameters.GetMinPasswordLength()
-                 << ", MaxPasswordLength# " << PasswordCheckParameters.GetMaxPasswordLength()
-                 << ", NeedLowerCase# " << printBool(PasswordCheckParameters.NeedLowerCaseUse())
-                 << ", NeedUpperCase# " << printBool(PasswordCheckParameters.NeedUpperCaseUse())
-                 << ", NeedNumbers# " << printBool(PasswordCheckParameters.NeedNumbersUse())
-                 << ", NeedSpecialSymbols# " << printBool(PasswordCheckParameters.NeedSpecialSymbolsUse())
-                 << ", SpecialSymbols# " << passwordCheckParameters.GetSpecialChars());
+                 "LoginProvider configured: MinLength# " << passwordComplexitySettings.MinLength
+                 << ", MinLowerCaseCount# " << passwordComplexitySettings.MinLowerCaseCount
+                 << ", MinUpperCaseCount# " << passwordComplexitySettings.MinUpperCaseCount
+                 << ", MinNumbersCount# " << passwordComplexitySettings.MinNumbersCount
+                 << ", MinSpecialCharsCount# " << passwordComplexitySettings.MinSpecialCharsCount
+                 << ", SpecialChars# " << complexitySettings.GetSpecialChars()
+                 << ", CanContainUsername# " << (passwordComplexitySettings.CanContainUsername ? "true" : "false"));
 }
 
 void TSchemeShard::StartStopCompactionQueues() {

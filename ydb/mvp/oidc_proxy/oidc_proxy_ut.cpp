@@ -1,11 +1,3 @@
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/testlib/actors/test_runtime.h>
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/testing/unittest/registar.h>
-#include <util/generic/map.h>
-#include <ydb/library/testlib/service_mocks/session_service_mock.h>
-#include <ydb/mvp/core/protos/mvp.pb.h>
-#include <ydb/mvp/core/mvp_test_runtime.h>
 #include "oidc_protected_page_handler.h"
 #include "oidc_session_create_handler.h"
 #include "oidc_impersonate_start_page_nebius.h"
@@ -13,6 +5,14 @@
 #include "oidc_settings.h"
 #include "openid_connect.h"
 #include "context.h"
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/library/testlib/service_mocks/session_service_mock.h>
+#include <ydb/mvp/core/protos/mvp.pb.h>
+#include <ydb/mvp/core/mvp_test_runtime.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/map.h>
 
 using namespace NMVP::NOIDC;
 
@@ -633,7 +633,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
         incomingRequest = new NHttp::THttpIncomingRequest();
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template&state=" << state << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template#&state=" << state << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
         request << "Cookie: " << setCookie.NextTok(";") << "\r\n";
         EatWholeString(incomingRequest, redirectStrategy.CreateRequest(request));
@@ -641,8 +641,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
         const TStringBuf& body = outgoingRequestEv->Request->Body;
-        UNIT_ASSERT_STRING_CONTAINS(body, "code%3Dcode_template");
-        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type%3Dauthorization_code");
+        UNIT_ASSERT_STRING_CONTAINS(body, "code=code_template%23");
+        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type=authorization_code");
 
         const TString authorizationServerResponse = R"___({"access_token":"access_token_value","token_type":"bearer","expires_in":43199,"scope":"openid","id_token":"id_token_value"})___";
         NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
@@ -724,7 +724,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         }
         const TString hostProxy = "oidcproxy.net";
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template&state=" << wrongState << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template#&state=" << wrongState << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
         TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
         TStringBuf cookieBuf(cookie);
@@ -778,7 +778,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
         TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
         TStringBuf cookieBuf(cookie);
@@ -793,8 +793,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TAutoPtr<IEventHandle> handle;
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
         const TStringBuf& body = outgoingRequestEv->Request->Body;
-        UNIT_ASSERT_STRING_CONTAINS(body, "code%3Dcode_template");
-        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type%3Dauthorization_code");
+        UNIT_ASSERT_STRING_CONTAINS(body, "code=code_template%23");
+        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type=authorization_code");
 
         const TString authorizationServerResponse = R"___({"access_token":"access_token_value","token_type":"bearer","expires_in":43199,"scope":"openid","id_token":"id_token_value"})___";
         NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
@@ -832,7 +832,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         const NActors::TActorId sessionCreator = runtime.Register(new TSessionCreateHandler(edge, settings));
         TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .AjaxRequest = redirectStrategy.IsAjaxRequest()});
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
         TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
         TStringBuf cookieBuf(cookie);
@@ -848,8 +848,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TAutoPtr<IEventHandle> handle;
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
         const TStringBuf& body = outgoingRequestEv->Request->Body;
-        UNIT_ASSERT_STRING_CONTAINS(body, "code%3Dcode_template");
-        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type%3Dauthorization_code");
+        UNIT_ASSERT_STRING_CONTAINS(body, "code=code_template%23");
+        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type=authorization_code");
 
         const TString authorizationServerResponse = R"___({"access_token":"invalid_access_token","token_type":"bearer","expires_in":43199,"scope":"openid","id_token":"id_token_value"})___";
         NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
@@ -899,7 +899,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
 
         TContext context({.State = "test_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
         TStringBuilder request;
-        request << "GET /callback?code=code_template&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
+        request << "GET /callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: oidcproxy.net\r\n";
         TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
         TStringBuf cookieBuf(cookie);
@@ -915,8 +915,8 @@ Y_UNIT_TEST_SUITE(Mvp) {
         auto outgoingRequestEv = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
         const TStringBuf& body = outgoingRequestEv->Request->Body;
 
-        UNIT_ASSERT_STRING_CONTAINS(body, "code%3Dcode_template");
-        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type%3Dauthorization_code");
+        UNIT_ASSERT_STRING_CONTAINS(body, "code=code_template%23");
+        UNIT_ASSERT_STRING_CONTAINS(body, "grant_type=authorization_code");
 
         const TString authorizationServerResponse = R"___({"access_token":"access_token_value","token_type":"bearer","expires_in":43199,"scope":"openid","id_token":"id_token_value"})___";
         NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
@@ -1062,7 +1062,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         TContext context({.State = "good_state", .RequestedAddress = "/requested/page", .AjaxRequest = false});
         const TString hostProxy = "oidcproxy.net";
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template#&state=" << context.GetState(settings.ClientSecret) << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
         NHttp::THttpIncomingRequestPtr incomingRequest = new NHttp::THttpIncomingRequest();
         EatWholeString(incomingRequest, request);
@@ -1106,7 +1106,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
         }
         const TString hostProxy = "oidcproxy.net";
         TStringBuilder request;
-        request << "GET /auth/callback?code=code_template&state=" << wrongState << " HTTP/1.1\r\n";
+        request << "GET /auth/callback?code=code_template#&state=" << wrongState << " HTTP/1.1\r\n";
         request << "Host: " + hostProxy + "\r\n";
         TString cookie = context.CreateYdbOidcCookie(settings.ClientSecret);
         TStringBuf cookieBuf(cookie);

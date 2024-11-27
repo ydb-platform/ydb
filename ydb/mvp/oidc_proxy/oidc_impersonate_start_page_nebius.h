@@ -23,15 +23,15 @@ public:
                              const NActors::TActorId& httpProxyId,
                              const TOpenIdConnectSettings& settings);
     void Bootstrap(const NActors::TActorContext& ctx);
-    void RequestImpersonatedToken(const TString&, const TString&, const NActors::TActorContext&);
-    void ProcessImpersonatedToken(const TString& impersonatedToken, const NActors::TActorContext& ctx);
-    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
-    void ReplyAndDie(NHttp::THttpOutgoingResponsePtr httpResponse, const NActors::TActorContext& ctx);
-    void ReplyBadRequestAndDie(const TString& errorMessage, const NActors::TActorContext& ctx);
+    void RequestImpersonatedToken(TString&, TString&, const NActors::TActorContext&);
+    void ProcessImpersonatedToken(const TString& impersonatedToken);
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
+    void ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse);
+    void ReplyBadRequestAndPassAway(const TString& errorMessage);
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }

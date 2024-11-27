@@ -17,13 +17,17 @@ THandlerSessionCreateYandex::THandlerSessionCreateYandex(const NActors::TActorId
     : THandlerSessionCreate(sender, request, httpProxyId, settings)
 {}
 
-void THandlerSessionCreateYandex::RequestSessionToken(const TString& code, const NActors::TActorContext& ctx) {
+void THandlerSessionCreateYandex::RequestSessionToken(TString& code, const NActors::TActorContext& ctx) {
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetTokenEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
     httpRequest->Set("Authorization", Settings.GetAuthorizationString());
-    TString body = "grant_type=authorization_code&code=" + code;
-    CGIEscape(body);
+
+    CGIEscape(code);
+    TStringBuilder body;
+    body << "grant_type=authorization_code"
+         << "&code=" << code;
     httpRequest->Set<&NHttp::THttpRequest::Body>(body);
+
     ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     Become(&THandlerSessionCreateYandex::StateWork);
 }
@@ -56,26 +60,26 @@ void THandlerSessionCreateYandex::ProcessSessionToken(const TString& sessionToke
     connection->DoRequest(requestCreate, std::move(responseCb), &yandex::cloud::priv::oauth::v1::SessionService::Stub::AsyncCreate, meta);
 }
 
-void THandlerSessionCreateYandex::HandleCreateSession(TEvPrivate::TEvCreateSessionResponse::TPtr event, const NActors::TActorContext& ctx) {
+void THandlerSessionCreateYandex::HandleCreateSession(TEvPrivate::TEvCreateSessionResponse::TPtr event) {
     BLOG_D("SessionService.Create(): OK");
     auto response = event->Get()->Response;
     NHttp::THeadersBuilder responseHeaders;
     for (const auto& cookie : response.Getset_cookie_header()) {
         responseHeaders.Set("Set-Cookie", ChangeSameSiteFieldInSessionCookie(cookie));
     }
-    RetryRequestToProtectedResourceAndDie(&responseHeaders, ctx);
+    RetryRequestToProtectedResourceAndDie(&responseHeaders);
 }
 
-void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx) {
+void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr event) {
     BLOG_D("SessionService.Create(): " << event->Get()->Status);
     if (event->Get()->Status == "400") {
-        RetryRequestToProtectedResourceAndDie(ctx);
+        RetryRequestToProtectedResourceAndDie();
     } else {
         NHttp::THeadersBuilder responseHeaders;
         responseHeaders.Set("Content-Type", "text/plain");
         SetCORS(Request, &responseHeaders);
         NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details);
-        ReplyAndDie(httpResponse, ctx);
+        ReplyAndPassAway(httpResponse);
     }
 }
 

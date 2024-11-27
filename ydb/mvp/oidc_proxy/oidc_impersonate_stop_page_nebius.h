@@ -23,8 +23,8 @@ public:
                             const NActors::TActorId& httpProxyId,
                             const TOpenIdConnectSettings& settings);
 
-    void Bootstrap(const NActors::TActorContext& ctx);
-    void ReplyAndDie(NHttp::THttpOutgoingResponsePtr httpResponse, const NActors::TActorContext& ctx);
+    void Bootstrap();
+    void ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse);
 };
 
 class TImpersonateStopPageHandler : public NActors::TActor<TImpersonateStopPageHandler> {

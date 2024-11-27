@@ -24,29 +24,29 @@ public:
                                       const NActors::TActorId& httpProxyId,
                                       const TOpenIdConnectSettings& settings);
     void StartOidcProcess(const NActors::TActorContext& ctx) override;
-    void HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
+    void HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleProxy);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleProxy);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 
     STFUNC(StateExchange) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleExchange);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleExchange);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 
 private:
     void SendTokenExchangeRequest(const TStringBuilder& body, const ETokenExchangeType exchangeType, const NActors::TActorContext& ctx);
-    void ExchangeSessionToken(const TString& sessionToken, const NActors::TActorContext& ctx);
-    void ExchangeImpersonatedToken(const TString& sessionToken, const TString& impersonatedToken, const NActors::TActorContext& ctx);
-    void ClearImpersonatedCookie(const NActors::TActorContext& ctx);
-    void RequestAuthorizationCode(const NActors::TActorContext& ctx);
-    void ForwardUserRequest(TStringBuf authHeader, const NActors::TActorContext& ctx, bool secure = false) override;
+    void ExchangeSessionToken(TString& sessionToken, const NActors::TActorContext& ctx);
+    void ExchangeImpersonatedToken(TString& sessionToken, TString& impersonatedToken, const NActors::TActorContext& ctx);
+    void ClearImpersonatedCookie();
+    void RequestAuthorizationCode();
+    void ForwardUserRequest(TStringBuf authHeader, bool secure = false) override;
     bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const override;
 };
 

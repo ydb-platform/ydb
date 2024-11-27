@@ -14,11 +14,13 @@ THandlerSessionCreateNebius::THandlerSessionCreateNebius(const NActors::TActorId
     : THandlerSessionCreate(sender, request, httpProxyId, settings)
 {}
 
-void THandlerSessionCreateNebius::RequestSessionToken(const TString& code, const NActors::TActorContext& ctx) {
-    TStringBuilder body;
+void THandlerSessionCreateNebius::RequestSessionToken(TString& code, const NActors::TActorContext& ctx) {
     TStringBuf host = Request->Host;
+    CGIEscape(code);
+
+    TStringBuilder body;
     body << "code=" << code
-         << "&client_id=" << Settings.ClientId
+         << "&client_id=" << code
          << "&grant_type=authorization_code"
          << "&redirect_uri="
          << (Request->Endpoint->Secure ? "https://" : "http://")
@@ -28,16 +30,13 @@ void THandlerSessionCreateNebius::RequestSessionToken(const TString& code, const
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetTokenEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
     httpRequest->Set("Authorization", Settings.GetAuthorizationString());
-
-    TString bodyStr = body;
-    CGIEscape(bodyStr);
-    httpRequest->Set<&NHttp::THttpRequest::Body>(bodyStr);
+    httpRequest->Set<&NHttp::THttpRequest::Body>(body);
 
     ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     Become(&THandlerSessionCreateNebius::StateWork);
 }
 
-void THandlerSessionCreateNebius::ProcessSessionToken(const TString& sessionToken, const NActors::TActorContext& ctx) {
+void THandlerSessionCreateNebius::ProcessSessionToken(const TString& sessionToken, const NActors::TActorContext& ) {
     TString sessionCookieName = CreateNameSessionCookie(Settings.ClientId);
     TString sessionCookieValue = Base64Encode(sessionToken);
     BLOG_D("Set session cookie: (" << sessionCookieName << ": " << NKikimr::MaskTicket(sessionCookieValue) << ")");
@@ -47,7 +46,7 @@ void THandlerSessionCreateNebius::ProcessSessionToken(const TString& sessionToke
     responseHeaders.Set("Location", Context.GetRequestedAddress());
     NHttp::THttpOutgoingResponsePtr httpResponse;
     httpResponse = Request->CreateResponse("302", "Cookie set", responseHeaders);
-    ReplyAndDie(httpResponse, ctx);
+    ReplyAndPassAway(httpResponse);
 }
 
 } // NMVP::NOIDC

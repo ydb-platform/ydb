@@ -15,7 +15,7 @@ THandlerImpersonateStop::THandlerImpersonateStop(const NActors::TActorId& sender
     , Settings(settings)
 {}
 
-void THandlerImpersonateStop::Bootstrap(const NActors::TActorContext& ctx) {
+void THandlerImpersonateStop::Bootstrap() {
     TString impersonatedCookieName = CreateNameImpersonatedCookie(Settings.ClientId);
     BLOG_D("Clear impersonated cookie: (" << impersonatedCookieName << ")");
 
@@ -25,12 +25,12 @@ void THandlerImpersonateStop::Bootstrap(const NActors::TActorContext& ctx) {
 
     NHttp::THttpOutgoingResponsePtr httpResponse;
     httpResponse = Request->CreateResponse("200", "OK", responseHeaders);
-    ReplyAndDie(httpResponse, ctx);
+    ReplyAndPassAway(httpResponse);
 }
 
-void THandlerImpersonateStop::ReplyAndDie(NHttp::THttpOutgoingResponsePtr httpResponse, const NActors::TActorContext& ctx) {
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-    Die(ctx);
+void THandlerImpersonateStop::ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse) {
+    Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
+    PassAway();
 }
 
 TImpersonateStopPageHandler::TImpersonateStopPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings)

@@ -35,17 +35,17 @@ void THandlerSessionServiceCheckNebius::StartOidcProcess(const NActors::TActorCo
             ExchangeSessionToken(sessionToken, ctx);
         }
     } else{
-        RequestAuthorizationCode(ctx);
+        RequestAuthorizationCode();
     }
 }
 
-void THandlerSessionServiceCheckNebius:: HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
+void THandlerSessionServiceCheckNebius:: HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     if (!event->Get()->Response) {
         BLOG_D("Getting access token: Bad Request");
         NHttp::THeadersBuilder responseHeaders;
         responseHeaders.Set("Content-Type", "text/plain");
         NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error);
-        return ReplyAndDie(httpResponse, ctx);
+        return ReplyAndPassAway(httpResponse);
     }
 
     NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
@@ -58,14 +58,14 @@ void THandlerSessionServiceCheckNebius:: HandleExchange(NHttp::TEvHttpProxy::TEv
         if (success) {
             iamToken = requestData["access_token"].GetStringSafe({});
             const TString authHeader = IAM_TOKEN_SCHEME + iamToken;
-            return ForwardUserRequest(authHeader, ctx);
+            return ForwardUserRequest(authHeader);
         }
     } else if (response->Status == "400" || response->Status == "401") {
         BLOG_D("Getting access token: " << response->Body);
         if (tokenExchangeType == ETokenExchangeType::ImpersonatedToken) {
-            return ClearImpersonatedCookie(ctx);
+            return ClearImpersonatedCookie();
         } else {
-            return RequestAuthorizationCode(ctx);
+            return RequestAuthorizationCode();
         }
     }
     // don't know what to do, just forward response
@@ -73,7 +73,7 @@ void THandlerSessionServiceCheckNebius:: HandleExchange(NHttp::TEvHttpProxy::TEv
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Parse(response->Headers);
     httpResponse = Request->CreateResponse(response->Status, response->Message, responseHeaders, response->Body);
-    ReplyAndDie(httpResponse, ctx);
+    ReplyAndPassAway(httpResponse);
 }
 
 void THandlerSessionServiceCheckNebius::SendTokenExchangeRequest(const TStringBuilder& body, const ETokenExchangeType exchangeType, const NActors::TActorContext& ctx) {
@@ -87,17 +87,15 @@ void THandlerSessionServiceCheckNebius::SendTokenExchangeRequest(const TStringBu
         token = tokenator->GetToken(Settings.SessionServiceTokenName);
     }
     httpRequest->Set("Authorization", token); // Bearer included
-
-    TString bodyStr = body;
-    CGIEscape(bodyStr);
-    httpRequest->Set<&NHttp::THttpRequest::Body>(bodyStr);
+    httpRequest->Set<&NHttp::THttpRequest::Body>(body);
 
     ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     Become(&THandlerSessionServiceCheckNebius::StateExchange);
 }
 
-void THandlerSessionServiceCheckNebius::ExchangeSessionToken(const TString& sessionToken, const NActors::TActorContext& ctx) {
+void THandlerSessionServiceCheckNebius::ExchangeSessionToken(TString& sessionToken, const NActors::TActorContext& ctx) {
     BLOG_D("Exchange session token");
+    CGIEscape(sessionToken);
     TStringBuilder body;
     body << "grant_type=urn:ietf:params:oauth:grant-type:token-exchange"
             << "&requested_token_type=urn:ietf:params:oauth:token-type:access_token"
@@ -107,8 +105,10 @@ void THandlerSessionServiceCheckNebius::ExchangeSessionToken(const TString& sess
     SendTokenExchangeRequest(body, ETokenExchangeType::SessionToken, ctx);
 }
 
-void THandlerSessionServiceCheckNebius::ExchangeImpersonatedToken(const TString& sessionToken, const TString& impersonatedToken, const NActors::TActorContext& ctx) {
+void THandlerSessionServiceCheckNebius::ExchangeImpersonatedToken(TString& sessionToken, TString& impersonatedToken, const NActors::TActorContext& ctx) {
     BLOG_D("Exchange impersonated token");
+    CGIEscape(sessionToken);
+    CGIEscape(impersonatedToken);
     TStringBuilder body;
     body << "grant_type=urn:ietf:params:oauth:grant-type:token-exchange"
             << "&requested_token_type=urn:ietf:params:oauth:token-type:access_token"
@@ -120,7 +120,7 @@ void THandlerSessionServiceCheckNebius::ExchangeImpersonatedToken(const TString&
     SendTokenExchangeRequest(body, ETokenExchangeType::ImpersonatedToken, ctx);
 }
 
-void THandlerSessionServiceCheckNebius::ClearImpersonatedCookie(const NActors::TActorContext& ctx) {
+void THandlerSessionServiceCheckNebius::ClearImpersonatedCookie() {
     TString impersonatedCookieName = CreateNameImpersonatedCookie(Settings.ClientId);
     BLOG_D("Clear impersonated cookie (" << impersonatedCookieName << ") and retry");
     NHttp::THeadersBuilder responseHeaders;
@@ -129,17 +129,17 @@ void THandlerSessionServiceCheckNebius::ClearImpersonatedCookie(const NActors::T
     responseHeaders.Set("Location", Request->URL);
 
     NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("307", "Temporary Redirect", responseHeaders);
-    ReplyAndDie(httpResponse, ctx);
+    ReplyAndPassAway(httpResponse);
 }
 
-void THandlerSessionServiceCheckNebius::RequestAuthorizationCode(const NActors::TActorContext& ctx) {
+void THandlerSessionServiceCheckNebius::RequestAuthorizationCode() {
     BLOG_D("Request authorization code");
     NHttp::THttpOutgoingResponsePtr httpResponse = GetHttpOutgoingResponsePtr(Request, Settings);
-    ReplyAndDie(httpResponse, ctx);
+    ReplyAndPassAway(httpResponse);
 }
 
-void THandlerSessionServiceCheckNebius::ForwardUserRequest(TStringBuf authHeader, const NActors::TActorContext& ctx, bool secure) {
-    THandlerSessionServiceCheck::ForwardUserRequest(authHeader, ctx, secure);
+void THandlerSessionServiceCheckNebius::ForwardUserRequest(TStringBuf authHeader, bool secure) {
+    THandlerSessionServiceCheck::ForwardUserRequest(authHeader, secure);
     Become(&THandlerSessionServiceCheckNebius::StateWork);
 }
 

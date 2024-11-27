@@ -35,7 +35,7 @@ void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
         if (restoreContextResult.IsSuccess()) {
             if (code.empty()) {
                 LOG_DEBUG_S(ctx, NMVP::EService::MVP, "Restore oidc session failed: receive empty 'code' parameter");
-                RetryRequestToProtectedResourceAndDie(ctx);
+                RetryRequestToProtectedResourceAndDie();
             } else {
                 RequestSessionToken(code, ctx);
             }
@@ -43,17 +43,17 @@ void THandlerSessionCreate::Bootstrap(const NActors::TActorContext& ctx) {
             const auto& restoreSessionStatus = restoreContextResult.Status;
             LOG_DEBUG_S(ctx, NMVP::EService::MVP, restoreSessionStatus.ErrorMessage);
             if (restoreSessionStatus.IsErrorRetryable) {
-                RetryRequestToProtectedResourceAndDie(ctx);
+                RetryRequestToProtectedResourceAndDie();
             } else {
-                SendUnknownErrorResponseAndDie(ctx);
+                SendUnknownErrorResponseAndDie();
             }
         }
     } else {
         LOG_DEBUG_S(ctx, NMVP::EService::MVP, checkStateResult.ErrorMessage);
         if (restoreContextResult.IsSuccess() || restoreContextResult.Status.IsErrorRetryable) {
-            RetryRequestToProtectedResourceAndDie(ctx);
+            RetryRequestToProtectedResourceAndDie();
         } else {
-            SendUnknownErrorResponseAndDie(ctx);
+            SendUnknownErrorResponseAndDie();
         }
     }
 
@@ -93,7 +93,7 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
         responseHeaders.Set("Content-Type", "text/plain");
         httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error);
     }
-    ReplyAndDie(httpResponse, ctx);
+    ReplyAndPassAway(httpResponse);
 }
 
 TString THandlerSessionCreate::ChangeSameSiteFieldInSessionCookie(const TString& cookie) {
@@ -109,18 +109,18 @@ TString THandlerSessionCreate::ChangeSameSiteFieldInSessionCookie(const TString&
     return cookieBuilder;
 }
 
-void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx) {
+void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie() {
     NHttp::THeadersBuilder responseHeaders;
-    RetryRequestToProtectedResourceAndDie(&responseHeaders, ctx);
+    RetryRequestToProtectedResourceAndDie(&responseHeaders);
 }
 
-void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx) {
+void THandlerSessionCreate::RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders) {
     SetCORS(Request, responseHeaders);
     responseHeaders->Set("Location", Context.GetRequestedAddress());
-    ReplyAndDie(Request->CreateResponse("302", "Found", *responseHeaders), ctx);
+    ReplyAndPassAway(Request->CreateResponse("302", "Found", *responseHeaders));
 }
 
-void THandlerSessionCreate::SendUnknownErrorResponseAndDie(const NActors::TActorContext& ctx) {
+void THandlerSessionCreate::SendUnknownErrorResponseAndDie() {
     NHttp::THeadersBuilder responseHeaders;
     responseHeaders.Set("Content-Type", "text/html");
     SetCORS(Request, &responseHeaders);
@@ -138,12 +138,12 @@ void THandlerSessionCreate::SendUnknownErrorResponseAndDie(const NActors::TActor
                                                             "</center>"
                                                         "</body>"
                                                     "</html>";
-    ReplyAndDie(Request->CreateResponse("400", "Bad Request", responseHeaders, BAD_REQUEST_HTML_PAGE), ctx);
+    ReplyAndPassAway(Request->CreateResponse("400", "Bad Request", responseHeaders, BAD_REQUEST_HTML_PAGE));
 }
 
-void THandlerSessionCreate::ReplyAndDie(NHttp::THttpOutgoingResponsePtr httpResponse, const NActors::TActorContext& ctx) {
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-    Die(ctx);
+void THandlerSessionCreate::ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse) {
+    Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
+    PassAway();
 }
 
 } // NMVP::NOIDC

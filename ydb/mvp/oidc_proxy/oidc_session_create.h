@@ -28,7 +28,7 @@ public:
                           const NActors::TActorId& httpProxyId,
                           const TOpenIdConnectSettings& settings);
 
-    virtual void RequestSessionToken(const TString&, const NActors::TActorContext&) = 0;
+    virtual void RequestSessionToken(TString&, const NActors::TActorContext&) = 0;
     virtual void ProcessSessionToken(const TString& accessToken, const NActors::TActorContext&) = 0;
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -36,12 +36,12 @@ public:
 
 protected:
     TString ChangeSameSiteFieldInSessionCookie(const TString& cookie);
-    void RetryRequestToProtectedResourceAndDie(const NActors::TActorContext& ctx);
-    void RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders, const NActors::TActorContext& ctx);
-    void ReplyAndDie(NHttp::THttpOutgoingResponsePtr httpResponse, const NActors::TActorContext& ctx);
+    void RetryRequestToProtectedResourceAndDie();
+    void RetryRequestToProtectedResourceAndDie(NHttp::THeadersBuilder* responseHeaders);
+    void ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse);
 
 private:
-    void SendUnknownErrorResponseAndDie(const NActors::TActorContext& ctx);
+    void SendUnknownErrorResponseAndDie();
 };
 
 } // NMVP::NOIDC

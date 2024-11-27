@@ -32,16 +32,16 @@ public:
                                 const TOpenIdConnectSettings& settings);
 
     virtual void Bootstrap(const NActors::TActorContext& ctx);
-    void HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx);
+    void HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
 
 protected:
     virtual void StartOidcProcess(const NActors::TActorContext& ctx) = 0;
-    virtual void ForwardUserRequest(TStringBuf authHeader, const NActors::TActorContext& ctx, bool secure = false);
+    virtual void ForwardUserRequest(TStringBuf authHeader, bool secure = false);
     virtual bool NeedSendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) const = 0;
 
     bool CheckRequestedHost();
     void ForwardRequestHeaders(NHttp::THttpOutgoingRequestPtr& request) const;
-    void ReplyAndDie(NHttp::THttpOutgoingResponsePtr httpResponse, const NActors::TActorContext& ctx);
+    void ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse);
 
     static bool IsAuthorizedRequest(TStringBuf authHeader);
     static TString FixReferenceInHtml(TStringBuf html, TStringBuf host, TStringBuf findStr);
@@ -49,7 +49,7 @@ protected:
 
 private:
     NHttp::THeadersBuilder GetResponseHeaders(const NHttp::THttpIncomingResponsePtr& response);
-    void SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response, const NActors::TActorContext& ctx);
+    void SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response);
     TString GetFixedLocationHeader(TStringBuf location);
     NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost();
     NHttp::THttpOutgoingResponsePtr CreateResponseForNotExistingResponseFromProtectedResource(const TString& errorMessage);

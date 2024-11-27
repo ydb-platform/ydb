@@ -20,14 +20,14 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx) override;
 
-    void Handle(TEvPrivate::TEvCheckSessionResponse::TPtr event, const NActors::TActorContext& ctx);
-    void Handle(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCheckSessionResponse::TPtr event);
+    void Handle(TEvPrivate::TEvErrorResponse::TPtr event);
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleProxy);
-            HFunc(TEvPrivate::TEvCheckSessionResponse, Handle);
-            HFunc(TEvPrivate::TEvErrorResponse, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleProxy);
+            hFunc(TEvPrivate::TEvCheckSessionResponse, Handle);
+            hFunc(TEvPrivate::TEvErrorResponse, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }

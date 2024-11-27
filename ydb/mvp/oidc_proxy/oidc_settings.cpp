@@ -1,6 +1,6 @@
-#include <util/generic/string.h>
-#include <library/cpp/string_utils/base64/base64.h>
 #include "oidc_settings.h"
+#include <library/cpp/string_utils/base64/base64.h>
+#include <util/generic/string.h>
 
 namespace NMVP::NOIDC {
 

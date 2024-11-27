@@ -1,15 +1,15 @@
-#include <util/random/random.h>
-#include <util/string/builder.h>
-#include <util/string/hex.h>
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/string_utils/base64/base64.h>
-#include <ydb/library/security/util.h>
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
-#include <openssl/sha.h>
 #include "context.h"
 #include "openid_connect.h"
 #include "oidc_settings.h"
+#include <ydb/library/security/util.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/string_utils/base64/base64.h>
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
+#include <openssl/sha.h>
+#include <util/random/random.h>
+#include <util/string/builder.h>
+#include <util/string/hex.h>
 
 namespace NMVP::NOIDC {
 
@@ -242,7 +242,7 @@ TString DecodeToken(const TStringBuf& cookie) {
     try {
         Base64StrictDecode(cookie, token);
     } catch (std::exception& e) {
-        BLOG_D("Base64Decode " << cookie << " cookie: " << e.what());
+        BLOG_D("Base64Decode " << NKikimr::MaskTicket(cookie) << " cookie: " << e.what());
         token.clear();
     }
     return token;

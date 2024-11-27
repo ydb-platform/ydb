@@ -21,21 +21,21 @@ void THandlerSessionServiceCheckYandex::Bootstrap(const NActors::TActorContext& 
     Become(&THandlerSessionServiceCheckYandex::StateWork);
 }
 
-void THandlerSessionServiceCheckYandex::Handle(TEvPrivate::TEvCheckSessionResponse::TPtr event, const NActors::TActorContext& ctx) {
+void THandlerSessionServiceCheckYandex::Handle(TEvPrivate::TEvCheckSessionResponse::TPtr event) {
     BLOG_D("SessionService.Check(): OK");
     auto response = event->Get()->Response;
     const auto& iamToken = response.iam_token();
     const TString authHeader = IAM_TOKEN_SCHEME + iamToken.iam_token();
-    ForwardUserRequest(authHeader, ctx);
+    ForwardUserRequest(authHeader);
 }
 
-void THandlerSessionServiceCheckYandex::Handle(TEvPrivate::TEvErrorResponse::TPtr event, const NActors::TActorContext& ctx) {
+void THandlerSessionServiceCheckYandex::Handle(TEvPrivate::TEvErrorResponse::TPtr event) {
     BLOG_D("SessionService.Check(): " << event->Get()->Status);
     NHttp::THttpOutgoingResponsePtr httpResponse;
     if (event->Get()->Status == "400") {
-        return ReplyAndDie(GetHttpOutgoingResponsePtr(Request, Settings), ctx);
+        return ReplyAndPassAway(GetHttpOutgoingResponsePtr(Request, Settings));
     } else {
-        return ReplyAndDie(Request->CreateResponse( event->Get()->Status, event->Get()->Message, "text/plain", event->Get()->Details), ctx);
+        return ReplyAndPassAway(Request->CreateResponse( event->Get()->Status, event->Get()->Message, "text/plain", event->Get()->Details));
     }
 }
 

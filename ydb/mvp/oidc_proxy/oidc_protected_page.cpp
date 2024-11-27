@@ -20,36 +20,36 @@ THandlerSessionServiceCheck::THandlerSessionServiceCheck(const NActors::TActorId
 
 void THandlerSessionServiceCheck::Bootstrap(const NActors::TActorContext& ctx) {
     if (!CheckRequestedHost()) {
-        return ReplyAndDie(CreateResponseForbiddenHost(), ctx);
+        return ReplyAndPassAway(CreateResponseForbiddenHost());
     }
     NHttp::THeaders headers(Request->Headers);
     TStringBuf authHeader = headers.Get(AUTH_HEADER_NAME);
     if (Request->Method == "OPTIONS" || IsAuthorizedRequest(authHeader)) {
-        ForwardUserRequest(TString(authHeader), ctx);
+        ForwardUserRequest(TString(authHeader));
     } else {
         StartOidcProcess(ctx);
     }
 }
 
-void THandlerSessionServiceCheck::HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event, const NActors::TActorContext& ctx) {
+void THandlerSessionServiceCheck::HandleProxy(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     if (event->Get()->Response != nullptr) {
         NHttp::THttpIncomingResponsePtr response = event->Get()->Response;
         BLOG_D("Incoming response for protected resource: " << response->Status);
         if (NeedSendSecureHttpRequest(response)) {
-            return SendSecureHttpRequest(response, ctx);
+            return SendSecureHttpRequest(response);
         }
         NHttp::THeadersBuilder headers = GetResponseHeaders(response);
         TStringBuf contentType = headers.Get("Content-Type").NextTok(';');
         if (contentType == "text/html") {
             TString newBody = FixReferenceInHtml(response->Body, response->GetRequest()->Host);
-            return ReplyAndDie(Request->CreateResponse(response->Status, response->Message, headers, newBody), ctx);
+            return ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, headers, newBody));
         } else {
-            return ReplyAndDie(Request->CreateResponse(response->Status, response->Message, headers, response->Body), ctx);
+            return ReplyAndPassAway(Request->CreateResponse(response->Status, response->Message, headers, response->Body));
         }
     } else {
         static constexpr size_t MAX_LOGGED_SIZE = 1024;
         BLOG_D("Can not process request to protected resource:\n" << event->Get()->Request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
-        return ReplyAndDie(CreateResponseForNotExistingResponseFromProtectedResource(event->Get()->GetError()), ctx);
+        return ReplyAndPassAway(CreateResponseForNotExistingResponseFromProtectedResource(event->Get()->GetError()));
     }
 }
 
@@ -79,7 +79,7 @@ bool THandlerSessionServiceCheck::IsAuthorizedRequest(TStringBuf authHeader) {
     return to_lower(ToString(authHeader)).StartsWith(IAM_TOKEN_SCHEME_LOWER);
 }
 
-void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, const NActors::TActorContext& ctx, bool secure) {
+void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, bool secure) {
     BLOG_D("Forward user request bypass OIDC");
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequest(Request->Method, ProtectedPageUrl);
     ForwardRequestHeaders(httpRequest);
@@ -92,7 +92,7 @@ void THandlerSessionServiceCheck::ForwardUserRequest(TStringBuf authHeader, cons
     if (RequestedPageScheme.empty()) {
         httpRequest->Secure = secure;
     }
-    ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
+    Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
 }
 
 TString THandlerSessionServiceCheck::FixReferenceInHtml(TStringBuf html, TStringBuf host, TStringBuf findStr) {
@@ -173,11 +173,11 @@ NHttp::THeadersBuilder THandlerSessionServiceCheck::GetResponseHeaders(const NHt
     return resultHeaders;
 }
 
-void THandlerSessionServiceCheck::SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response, const NActors::TActorContext& ctx) {
+void THandlerSessionServiceCheck::SendSecureHttpRequest(const NHttp::THttpIncomingResponsePtr& response) {
     NHttp::THttpOutgoingRequestPtr request = response->GetRequest();
     BLOG_D("Try to send request to HTTPS port");
     NHttp::THeadersBuilder headers {request->Headers};
-    ForwardUserRequest(headers.Get(AUTH_HEADER_NAME), ctx, true);
+    ForwardUserRequest(headers.Get(AUTH_HEADER_NAME), true);
 }
 
 TString THandlerSessionServiceCheck::GetFixedLocationHeader(TStringBuf location) {
@@ -226,9 +226,9 @@ NHttp::THttpOutgoingResponsePtr THandlerSessionServiceCheck::CreateResponseForNo
     return Request->CreateResponse("400", "Bad Request", headers, html);
 }
 
-void THandlerSessionServiceCheck::ReplyAndDie(NHttp::THttpOutgoingResponsePtr httpResponse, const NActors::TActorContext& ctx) {
-    ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
-    Die(ctx);
+void THandlerSessionServiceCheck::ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse) {
+    Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
+    PassAway();
 }
 
 } // NMVP::NOIDC

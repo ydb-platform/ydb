@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/generic/string.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
+#include <util/generic/string.h>
 
 namespace NMVP::NOIDC {
 

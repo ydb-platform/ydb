@@ -80,7 +80,7 @@
       mkdir ydb_certs
       ```
 
-   2. Запустите Docker контейнер:
+   2. Запустите Docker-контейнер:
 
       ```bash
       docker run -d --rm --name ydb-local -h localhost \
@@ -88,19 +88,22 @@
         -p 2135:2135 -p 2136:2136 -p 8765:8765 \
         -v $(pwd)/ydb_certs:/ydb_certs -v $(pwd)/ydb_data:/ydb_data \
         -e GRPC_TLS_PORT=2135 -e GRPC_PORT=2136 -e MON_PORT=8765 \
-        -e YDB_USE_IN_MEMORY_PDISKS=true \
         {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
       ```
 
       Если контейнер успешно запустился, вы увидите его идентификатор. Контейнеру может потребоваться несколько минут для инициализации. База данных будет недоступна до окончания инициализации.
 
-      Настройка `YDB_USE_IN_MEMORY_PDISKS` делает все данные волатильными, хранящимися только в оперативной памяти. В настоящее время сохранение данных путем её отключения поддерживается только на x86_64 процессорах.
+      {% note warning %}
+ 
+      В настоящее время сохранение данных на диск поддерживается только на x86_64 процессорах. Чтобы отключить сохранение данных на диск и сделать все данные волатильными, хранящимися только в оперативной памяти, добавьте в команду запуска Docker-контейнера параметр `YDB_USE_IN_MEMORY_PDISKS=true`.
 
-      Чтобы отключить опцию `YDB_USE_IN_MEMORY_PDISKS` при запуске контейнера Docker на Mac с процессором Apple Silicon, он должен эмулировать набор инструкций x86_64:
+      Если вы не хотите отключать сохранение данных на диск при запуске контейнера Docker на Mac с процессором Apple Silicon, необходимо эмулировать набор инструкций x86_64 с помощью одной из следующих программ:
 
-      - С помощью [colima](https://github.com/abiosoft/colima) используйте параметры `colima start --arch aarch64 --vm-type=vz --vz-rosetta`.
-      - С помощью [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/) установите и включите Rosetta 2.
+      - [colima](https://github.com/abiosoft/colima) используйте параметры `colima start --arch aarch64 --vm-type=vz --vz-rosetta`;
+      - [Docker Desktop](https://docs.docker.com/desktop/setup/install/mac-install/) установите и включите Rosetta 2.
 - Minikube
+
+      {% endnote %}
 
    1. Установите интерфейс командной строки Kubernetes [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl) и менеджер пакетов [Helm 3](https://helm.sh/docs/intro/install/).
 

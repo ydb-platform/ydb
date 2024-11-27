@@ -5,8 +5,6 @@
 
 namespace NMVP::NOIDC {
 
-using namespace NActors;
-
 class THandlerSessionServiceCheckYandex : public THandlerSessionServiceCheck {
 private:
     using TBase = THandlerSessionServiceCheck;
@@ -28,7 +26,6 @@ public:
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleProxy);
             hFunc(TEvPrivate::TEvCheckSessionResponse, Handle);
             hFunc(TEvPrivate::TEvErrorResponse, Handle);
-            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 

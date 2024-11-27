@@ -16,21 +16,19 @@ THandlerSessionCreateNebius::THandlerSessionCreateNebius(const NActors::TActorId
 
 void THandlerSessionCreateNebius::RequestSessionToken(TString& code, const NActors::TActorContext& ctx) {
     TStringBuf host = Request->Host;
-    CGIEscape(code);
 
-    TStringBuilder body;
-    body << "code=" << code
-         << "&client_id=" << code
-         << "&grant_type=authorization_code"
-         << "&redirect_uri="
-         << (Request->Endpoint->Secure ? "https://" : "http://")
-         << host
-         << GetAuthCallbackUrl();
+    TCgiParameters params;
+    params.InsertEscaped("code", code);
+    params.InsertEscaped("client_id", code);
+    params.InsertEscaped("grant_type", "authorization_code");
+    params.InsertEscaped("redirect_uri", TStringBuilder() << (Request->Endpoint->Secure ? "https://" : "http://")
+                                                          << host
+                                                          << GetAuthCallbackUrl());
 
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Settings.GetTokenEndpointURL());
     httpRequest->Set<&NHttp::THttpRequest::ContentType>("application/x-www-form-urlencoded");
     httpRequest->Set("Authorization", Settings.GetAuthorizationString());
-    httpRequest->Set<&NHttp::THttpRequest::Body>(body);
+    httpRequest->Set<&NHttp::THttpRequest::Body>(params());
 
     ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     Become(&THandlerSessionCreateNebius::StateWork);
@@ -46,7 +44,7 @@ void THandlerSessionCreateNebius::ProcessSessionToken(const TString& sessionToke
     responseHeaders.Set("Location", Context.GetRequestedAddress());
     NHttp::THttpOutgoingResponsePtr httpResponse;
     httpResponse = Request->CreateResponse("302", "Cookie set", responseHeaders);
-    ReplyAndPassAway(httpResponse);
+    ReplyAndPassAway(std::move(httpResponse));
 }
 
 } // NMVP::NOIDC

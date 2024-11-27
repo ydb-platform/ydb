@@ -93,7 +93,7 @@ void THandlerSessionCreate::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse:
         responseHeaders.Set("Content-Type", "text/plain");
         httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, event->Get()->Error);
     }
-    ReplyAndPassAway(httpResponse);
+    ReplyAndPassAway(std::move(httpResponse));
 }
 
 TString THandlerSessionCreate::ChangeSameSiteFieldInSessionCookie(const TString& cookie) {
@@ -142,7 +142,7 @@ void THandlerSessionCreate::SendUnknownErrorResponseAndDie() {
 }
 
 void THandlerSessionCreate::ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse) {
-    Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
+    Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(std::move(httpResponse)));
     PassAway();
 }
 

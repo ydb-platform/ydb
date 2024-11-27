@@ -6,8 +6,6 @@
 
 namespace NMVP::NOIDC {
 
-using namespace NActors;
-
 void InitOIDC(NActors::TActorSystem& actorSystem,
               const NActors::TActorId& httpProxyId,
               const TOpenIdConnectSettings& settings) {

@@ -5,8 +5,6 @@
 
 namespace NMVP::NOIDC {
 
-using namespace NActors;
-
 class THandlerSessionCreateYandex : public THandlerSessionCreate {
 private:
     using TBase = THandlerSessionCreate;
@@ -29,7 +27,6 @@ private:
             HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
             hFunc(TEvPrivate::TEvCreateSessionResponse, HandleCreateSession);
             hFunc(TEvPrivate::TEvErrorResponse, HandleError);
-            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 };

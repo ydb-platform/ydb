@@ -4,8 +4,6 @@
 
 namespace NMVP::NOIDC {
 
-using namespace NActors;
-
 class THandlerSessionCreateNebius : public THandlerSessionCreate {
 private:
     using TBase = THandlerSessionCreate;
@@ -23,7 +21,6 @@ private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
-            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 };

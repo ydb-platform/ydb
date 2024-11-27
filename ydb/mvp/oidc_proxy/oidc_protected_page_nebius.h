@@ -4,8 +4,6 @@
 
 namespace NMVP::NOIDC {
 
-using namespace NActors;
-
 class THandlerSessionServiceCheckNebius : public THandlerSessionServiceCheck {
 private:
     using TBase = THandlerSessionServiceCheck;
@@ -29,19 +27,17 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleProxy);
-            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 
     STFUNC(StateExchange) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleExchange);
-            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 
 private:
-    void SendTokenExchangeRequest(const TStringBuilder& body, const ETokenExchangeType exchangeType, const NActors::TActorContext& ctx);
+    void SendTokenExchangeRequest(const TCgiParameters& body, const ETokenExchangeType exchangeType, const NActors::TActorContext& ctx);
     void ExchangeSessionToken(TString& sessionToken, const NActors::TActorContext& ctx);
     void ExchangeImpersonatedToken(TString& sessionToken, TString& impersonatedToken, const NActors::TActorContext& ctx);
     void ClearImpersonatedCookie();

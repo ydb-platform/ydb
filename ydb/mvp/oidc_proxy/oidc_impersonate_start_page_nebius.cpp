@@ -62,12 +62,10 @@ void THandlerImpersonateStart::RequestImpersonatedToken(TString& sessionToken, T
     }
     httpRequest->Set("Authorization", token); // Bearer included
 
-    CGIEscape(sessionToken);
-    CGIEscape(serviceAccountId);
-    TStringBuilder body;
-    body << "session=" << sessionToken
-         << "&service_account_id=" << serviceAccountId;
-    httpRequest->Set<&NHttp::THttpRequest::Body>(body);
+    TCgiParameters params;
+    params.InsertEscaped("session", sessionToken);
+    params.InsertEscaped("service_account_id", serviceAccountId);
+    httpRequest->Set<&NHttp::THttpRequest::Body>(params());
 
     ctx.Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest));
     Become(&THandlerImpersonateStart::StateWork);
@@ -82,7 +80,7 @@ void THandlerImpersonateStart::ProcessImpersonatedToken(const TString& impersona
     responseHeaders.Set("Set-Cookie", CreateSecureCookie(impersonatedCookieName, impersonatedCookieValue));
     SetCORS(Request, &responseHeaders);
     NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("200", "OK", responseHeaders);
-    ReplyAndPassAway(httpResponse);
+    ReplyAndPassAway(std::move(httpResponse));
 }
 
 void THandlerImpersonateStart::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
@@ -128,7 +126,7 @@ void THandlerImpersonateStart::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRespon
 }
 
 void THandlerImpersonateStart::ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse) {
-    Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
+    Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(std::move(httpResponse)));
     PassAway();
 }
 
@@ -137,7 +135,7 @@ void THandlerImpersonateStart::ReplyBadRequestAndPassAway(const TString& errorMe
     responseHeaders.Set("Content-Type", "text/plain");
     SetCORS(Request, &responseHeaders);
     NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse("400", "Bad Request", responseHeaders, errorMessage);
-    ReplyAndPassAway(httpResponse);
+    ReplyAndPassAway(std::move(httpResponse));
 }
 
 TImpersonateStartPageHandler::TImpersonateStartPageHandler(const NActors::TActorId& httpProxyId, const TOpenIdConnectSettings& settings)

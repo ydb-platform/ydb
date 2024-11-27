@@ -1,13 +1,12 @@
 #pragma once
 
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include "oidc_settings.h"
 
 namespace NMVP::NOIDC {
-
-using namespace NActors;
 
 class TSessionCreateHandler : public NActors::TActor<TSessionCreateHandler> {
     using TBase = NActors::TActor<TSessionCreateHandler>;
@@ -22,7 +21,7 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
-            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 };

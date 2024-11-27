@@ -79,7 +79,7 @@ void THandlerSessionCreateYandex::HandleError(TEvPrivate::TEvErrorResponse::TPtr
         responseHeaders.Set("Content-Type", "text/plain");
         SetCORS(Request, &responseHeaders);
         NHttp::THttpOutgoingResponsePtr httpResponse = Request->CreateResponse( event->Get()->Status, event->Get()->Message, responseHeaders, event->Get()->Details);
-        ReplyAndPassAway(httpResponse);
+        ReplyAndPassAway(std::move(httpResponse));
     }
 }
 

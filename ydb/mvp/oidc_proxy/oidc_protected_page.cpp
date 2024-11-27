@@ -227,7 +227,7 @@ NHttp::THttpOutgoingResponsePtr THandlerSessionServiceCheck::CreateResponseForNo
 }
 
 void THandlerSessionServiceCheck::ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse) {
-    Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
+    Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(std::move(httpResponse)));
     PassAway();
 }
 

@@ -2,10 +2,9 @@
 
 #include "oidc_settings.h"
 #include "context.h"
+#include <ydb/library/actors/core/events.h>
 
 namespace NMVP::NOIDC {
-
-using namespace NActors;
 
 class THandlerImpersonateStop : public NActors::TActorBootstrapped<THandlerImpersonateStop> {
 private:
@@ -40,7 +39,7 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
-            cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+            cFunc(NActors::TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
 };

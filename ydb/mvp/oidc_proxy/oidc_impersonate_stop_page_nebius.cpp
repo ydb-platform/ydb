@@ -1,7 +1,6 @@
 #include "openid_connect.h"
 #include "oidc_session_create.h"
 #include "oidc_impersonate_stop_page_nebius.h"
-#include <ydb/library/actors/core/events.h>
 
 namespace NMVP::NOIDC {
 
@@ -25,11 +24,11 @@ void THandlerImpersonateStop::Bootstrap() {
 
     NHttp::THttpOutgoingResponsePtr httpResponse;
     httpResponse = Request->CreateResponse("200", "OK", responseHeaders);
-    ReplyAndPassAway(httpResponse);
+    ReplyAndPassAway(std::move(httpResponse));
 }
 
 void THandlerImpersonateStop::ReplyAndPassAway(NHttp::THttpOutgoingResponsePtr httpResponse) {
-    Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse));
+    Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(std::move(httpResponse)));
     PassAway();
 }
 

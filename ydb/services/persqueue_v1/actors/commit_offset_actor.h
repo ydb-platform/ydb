@@ -72,11 +72,9 @@ private:
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx);
-
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
 
     void SendCommit(const TTopicInitInfo& topicInitInfo, const Ydb::Topic::CommitOffsetRequest* commitRequest, const TActorContext& ctx);
-    void SendDistributedTxOffsets(const TActorContext& ctx);
 
     void AnswerError(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
     void ProcessAnswers(const TActorContext& ctx);

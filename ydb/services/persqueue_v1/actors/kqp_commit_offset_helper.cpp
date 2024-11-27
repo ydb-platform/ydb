@@ -3,12 +3,13 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-TKqpHelper::TKqpHelper(TString database, TString consumer, TString path, std::vector<TCommitInfo> commits)
+TKqpHelper::TKqpHelper(TString database, TString consumer, TString path, std::vector<TCommitInfo> commits, ui64 cookie)
     : DataBase(database)
     , Consumer(consumer)
     , Path(path)
     , Commits(std::move(commits)) // savnik move
     , Step(BEGIN_TRANSACTION_SENDED)
+    , Cookie(cookie)
 {}
 
 TKqpHelper::ECurrentStep TKqpHelper::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
@@ -33,7 +34,7 @@ TKqpHelper::ECurrentStep TKqpHelper::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr
 
 void TKqpHelper::SendCreateSessionRequest(const TActorContext& ctx) {
     auto ev = MakeCreateSessionRequest();
-    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, Cookie);
 }
 
 void TKqpHelper::BeginTransaction(const NActors::TActorContext& ctx) {
@@ -44,10 +45,10 @@ void TKqpHelper::BeginTransaction(const NActors::TActorContext& ctx) {
     begin->Record.MutableRequest()->SetSessionId(KqpSessionId);
     begin->Record.MutableRequest()->SetDatabase(DataBase);
 
-    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), begin.Release());
+    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), begin.Release(), 0, Cookie);
 }
 
-bool TKqpHelper::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& /*ctx*/) {
+bool TKqpHelper::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
@@ -56,14 +57,14 @@ bool TKqpHelper::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const 
 
     KqpSessionId = record.GetResponse().GetSessionId();
     Y_ABORT_UNLESS(!KqpSessionId.empty());
-
+    BeginTransaction(ctx);
     return true;
 }
 
 void TKqpHelper::CloseKqpSession(const TActorContext& ctx) {
     if (KqpSessionId) {
         auto ev = MakeCloseSessionRequest();
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, Cookie);
         KqpSessionId = "";
     }
 }
@@ -81,13 +82,6 @@ THolder<NKqp::TEvKqp::TEvCloseSessionRequest> TKqpHelper::MakeCloseSessionReques
 }
 
 void TKqpHelper::SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
-    // if (!AppData(ctx)->FeatureFlags.GetEnableTopicServiceTx()) { // savnik need this check?
-    //     return Reply(Ydb::StatusIds::UNSUPPORTED,
-    //                 "Disabled transaction support for TopicService.",
-    //                 NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-    //                 ctx);
-    // }
-
     auto& record = ev->Get()->Record;
     TxId = record.GetResponse().GetTxMeta().id();
     Y_ABORT_UNLESS(!TxId.empty());
@@ -105,16 +99,17 @@ void TKqpHelper::SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NAc
     auto* topic = offsets->Record.MutableRequest()->MutableTopicOperations()->AddTopics();
     topic->set_path(Path);
 
-    for(auto &c: Commits) {
+    for(auto &commit: Commits) {
         auto* partition = topic->add_partitions();
-        partition->set_partition_id(c.PartitionId);
+        partition->set_partition_id(commit.PartitionId);
         partition->set_force_commit(true);
-        partition->set_kill_read_session(true);
+        partition->set_kill_read_session(commit.KillReadSession);
+        partition->set_only_check_commited_to_finish(commit.OnlyCheckCommitedToFinish);
         auto* offset = partition->add_partition_offsets();
-        offset->set_end(c.Offset);
+        offset->set_end(commit.Offset);
     }
 
-    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), offsets.Release());
+    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), offsets.Release(), 0, Cookie);
 }
 
 void TKqpHelper::CommitTx(const NActors::TActorContext& ctx) {
@@ -126,7 +121,7 @@ void TKqpHelper::CommitTx(const NActors::TActorContext& ctx) {
     commit->Record.MutableRequest()->SetSessionId(KqpSessionId);
     commit->Record.MutableRequest()->SetDatabase(DataBase);
 
-    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), commit.Release());
+    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), commit.Release(), 0, Cookie);
 }
 
 }  // namespace NKikimr::NGRpcProxy::V1

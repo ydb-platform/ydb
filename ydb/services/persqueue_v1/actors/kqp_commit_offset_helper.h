@@ -21,9 +21,11 @@ public:
     struct TCommitInfo {
         ui64 PartitionId;
         i64 Offset;
+        bool KillReadSession;
+        bool OnlyCheckCommitedToFinish;
     };
 
-    TKqpHelper(TString database, TString consumer, TString path, std::vector<TCommitInfo> commits);
+    TKqpHelper(TString database, TString consumer, TString path, std::vector<TCommitInfo> commits, ui64 cookie = 0);
 
     ECurrentStep Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
     void SendCreateSessionRequest(const TActorContext& ctx);
@@ -43,6 +45,7 @@ private:
     TString Path;
     std::vector<TCommitInfo> Commits;
     ECurrentStep Step;
+    ui64 Cookie;
 
     TString TxId;
     TString KqpSessionId;

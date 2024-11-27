@@ -111,7 +111,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
         std::vector<TKqpHelper::TCommitInfo> commits;
 
         for (auto& parent: partitionNode->HierarhicalParents) {
-            TKqpHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>()};
+            TKqpHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
             commits.push_back(commit);
         }
 
@@ -120,13 +120,13 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
             commits.push_back(commit);
         }
 
-        TKqpHelper::TCommitInfo commit {.PartitionId = partitionNode->Id, .Offset = commitRequest->Getoffset()};
+        TKqpHelper::TCommitInfo commit {.PartitionId = partitionNode->Id, .Offset = Max<i64>(), .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
         commits.push_back(commit);
 
         // savnik if empty database?
-        Kqp = std::make_unique<TKqpHelper>(Request().GetDatabaseName().GetOrElse(TString()), ClientId, topic, commits);
+        Kqp = std::make_unique<TKqpHelper>(Request().GetDatabaseName().GetOrElse(TString()), ClientId, topic, commits); // savnik add cookie?
 
-        SendDistributedTxOffsets(ctx);
+        Kqp->SendCreateSessionRequest(ctx);
     }
 }
 
@@ -134,46 +134,6 @@ void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev
     if (!Kqp->Handle(ev, ctx)) {
         AnswerError("empty list of topics", PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx); // savnik
     }
-    Kqp->BeginTransaction(ctx);
-}
-
-void TCommitOffsetActor::SendDistributedTxOffsets(const TActorContext& ctx) {
-    Kqp->SendCreateSessionRequest(ctx);
-}
-
-void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topic::CommitOffsetRequest* commitRequest, const TActorContext& ctx) {
-    ui64 tabletId = topic.Partitions.at(PartitionId).TabletId;
-
-    NTabletPipe::TClientConfig clientConfig;
-    clientConfig.RetryPolicy = {
-        .RetryLimitCount = 6,
-        .MinRetryTime = TDuration::MilliSeconds(10),
-        .MaxRetryTime = TDuration::MilliSeconds(100),
-        .BackoffMultiplier = 2,
-        .DoFirstRetryInstantly = true
-    };
-
-    PipeClient = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)); // savnik close only in that case
-
-    NKikimrClient::TPersQueueRequest request;
-    request.MutablePartitionRequest()->SetTopic(topic.TopicNameConverter->GetPrimaryPath());
-    request.MutablePartitionRequest()->SetPartition(commitRequest->partition_id());
-
-    Y_ABORT_UNLESS(PipeClient);
-
-    auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
-    commit->SetClientId(ClientId);
-    commit->SetOffset(commitRequest->offset());
-    commit->SetStrict(true);
-
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "strict CommitOffset, partition " << commitRequest->partition_id()
-                        << " committing to position " << commitRequest->offset() /*<< " prev " << CommittedOffset
-                        << " end " << EndOffset << " by cookie " << readId*/);
-
-    TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
-    req->Record.Swap(&request);
-
-    NTabletPipe::SendData(ctx, PipeClient, req.Release());
 }
 
 void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
@@ -211,6 +171,40 @@ void TCommitOffsetActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActo
     Die(ctx);
 }
 
+void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topic::CommitOffsetRequest* commitRequest, const TActorContext& ctx) {
+    ui64 tabletId = topic.Partitions.at(PartitionId).TabletId;
+
+    NTabletPipe::TClientConfig clientConfig;
+    clientConfig.RetryPolicy = {
+        .RetryLimitCount = 6,
+        .MinRetryTime = TDuration::MilliSeconds(10),
+        .MaxRetryTime = TDuration::MilliSeconds(100),
+        .BackoffMultiplier = 2,
+        .DoFirstRetryInstantly = true
+    };
+
+    PipeClient = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig)); // savnik close only in that case
+
+    NKikimrClient::TPersQueueRequest request;
+    request.MutablePartitionRequest()->SetTopic(topic.TopicNameConverter->GetPrimaryPath());
+    request.MutablePartitionRequest()->SetPartition(commitRequest->partition_id());
+
+    Y_ABORT_UNLESS(PipeClient);
+
+    auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
+    commit->SetClientId(ClientId);
+    commit->SetOffset(commitRequest->offset());
+    commit->SetStrict(true);
+
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "strict CommitOffset, partition " << commitRequest->partition_id()
+                        << " committing to position " << commitRequest->offset() /*<< " prev " << CommittedOffset
+                        << " end " << EndOffset << " by cookie " << readId*/);
+
+    TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+    req->Record.Swap(&request);
+
+    NTabletPipe::SendData(ctx, PipeClient, req.Release());
+}
 
 void TCommitOffsetActor::AnswerError(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx) {
     Ydb::Topic::CommitOffsetResponse response;

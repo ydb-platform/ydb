@@ -124,7 +124,7 @@ private:
                                                 }
                                             }
                                             TABLED() {str << tx.Step;}
-                                            TABLED() {str << (int)tx.State;}
+                                            TABLED() {str << NKikimrPQ::TTransaction_EState_Name(tx.State);}
                                             TABLED() {str << tx.MinStep;}
                                             TABLED() {str << tx.MaxStep;}
                                         }

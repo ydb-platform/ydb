@@ -29,6 +29,7 @@ target_link_libraries(ydb-core-mon_alloc PUBLIC
   library-actors-core
   library-actors-prof
   ydb-library-services
+  essentials-utils-memory_profiling
 )
 
 target_sources(ydb-core-mon_alloc PRIVATE

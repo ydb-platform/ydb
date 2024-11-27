@@ -1165,6 +1165,23 @@ private:
                 fillColumnProto(columnName, columnMeta, columnProto);
             }
 
+            {
+                THashMap<TStringBuf, ui32> columnToOrder;
+                ui32 number = 0;
+                for (const auto& columnName : tableMeta->KeyColumnNames) {
+                    columnToOrder[columnName] = number++;
+                }
+                for (const auto& columnName : tableMeta->ColumnOrder) {
+                    if (!columnToOrder.contains(columnName)) {
+                        columnToOrder[columnName] = number++;
+                    }
+                }
+
+                for (const auto& columnName : columns) {
+                    settingsProto.AddWriteIndexes(columnToOrder[columnName]);
+                }
+            }
+
             if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
                 settingsProto.SetInconsistentTx(true);
             }

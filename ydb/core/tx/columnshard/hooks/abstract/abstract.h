@@ -149,6 +149,10 @@ public:
         const std::set<NOlap::TSnapshot>& /*snapshotsToSave*/, const std::set<NOlap::TSnapshot>& /*snapshotsToRemove*/) {
     }
 
+    virtual NKikimrProto::EReplyStatus OverrideBlobPutResultOnWrite(const NKikimrProto::EReplyStatus originalStatus) const {
+        return originalStatus;
+    }
+
     ui64 GetMemoryLimitScanPortion() const {
         return DoGetMemoryLimitScanPortion(GetConfig().GetMemoryLimitScanPortion());
     }

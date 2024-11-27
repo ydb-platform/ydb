@@ -633,9 +633,9 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         case EDirectReadRestoreStage::Session:
             Y_ABORT_UNLESS(result.HasCmdRestoreDirectReadResult());
             if (!SendNextRestorePrepareOrForget()) {
-                return OnDirectReadsRestored();
+                OnDirectReadsRestored();
             }
-            break;
+            return;
         case EDirectReadRestoreStage::Prepare:
             Y_ABORT_UNLESS(RestoredDirectReadId != 0);
 
@@ -647,7 +647,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
                 if (!sent) // Nothing to publish
                     sent = SendNextRestorePrepareOrForget();
                 if (!sent)
-                    return OnDirectReadsRestored();
+                    OnDirectReadsRestored();
             }
             return;
         case EDirectReadRestoreStage::Publish:
@@ -656,7 +656,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
             Y_ABORT_UNLESS(*DirectReadsToPublish.begin() == result.GetCmdPublishReadResult().GetDirectReadId());
             DirectReadsToPublish.erase(DirectReadsToPublish.begin());
             if (!SendNextRestorePrepareOrForget()) {
-                return OnDirectReadsRestored();
+                OnDirectReadsRestored();
             }
             return;
         case EDirectReadRestoreStage::Forget:
@@ -1105,7 +1105,6 @@ bool TPartitionActor::SendNextRestorePrepareOrForget() {
 
         auto request = MakeReadRequest(dr.GetReadOffset(), dr.GetLastOffset(), std::numeric_limits<i32>::max(),
                                     std::numeric_limits<i32>::max(), 0, 0, dr.GetDirectReadId());
-        Cerr << "Send restore request: " << request.DebugString() << Endl;
 
         if (!PipeClient) //Pipe will be recreated soon
             return true;

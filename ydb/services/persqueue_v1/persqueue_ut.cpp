@@ -867,12 +867,11 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             Cerr << "Get next assign id\n";
             Topic::StreamReadMessage::FromServer resp;
-
-            //lock partition
             UNIT_ASSERT(ControlStream->Read(&resp));
 
-            TStringBuilder log; log << "GOT SERVER MESSAGE (expect start partition session): " << resp.DebugString() << "\n";
-            Cerr << log;
+            TStringBuilder msg;
+            msg << "GOT SERVER MESSAGE (expect start partition session): " << resp.DebugString() << "\n";
+            Cerr << msg;
             TAssignInfo result;
             if (!prevGeneration) {
                 UNIT_ASSERT(resp.server_message_case() == Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
@@ -901,11 +900,34 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             //lock partition
             UNIT_ASSERT(DirectStream->Read(&resp));
-            TStringBuilder log;
-            log  << "GOT SERVER MESSAGE (expect stop partition session): " << resp.ShortDebugString() << "\n";
-            Cerr << log;
+            TStringBuilder msg;
+            if (resp.server_message_case() != Topic::StreamDirectReadMessage::FromServer::kDirectReadResponse) {
+                msg  << "GOT SERVER MESSAGE (expect stop partition session): " << resp.ShortDebugString() << "\n";
+            } else {
+                msg  << "GOT SERVER MESSAGE with data while (expecting stop partition session). ReadId: " << resp.direct_read_response().direct_read_id() << Endl;
+
+            }
+            Cerr << msg;
             UNIT_ASSERT(resp.server_message_case() == Topic::StreamDirectReadMessage::FromServer::kStopDirectReadPartitionSession);
             UNIT_ASSERT_VALUES_EQUAL(resp.stop_direct_read_partition_session().partition_session_id(), assignId);
+        }
+
+        void ExpectPartitionRelease(ui64 assignId) {
+            Cerr << "Get next assign id\n";
+            Topic::StreamReadMessage::FromServer resp;
+            UNIT_ASSERT(ControlStream->Read(&resp));
+
+            TStringBuilder msg;
+            msg << "Got message from control session (expect partition release): " << resp.DebugString() << "\n";
+
+            Cerr << msg;
+            UNIT_ASSERT(resp.server_message_case() == Topic::StreamReadMessage::FromServer::kStopPartitionSessionRequest);
+            UNIT_ASSERT_VALUES_EQUAL(resp.stop_partition_session_request().partition_session_id(), assignId);
+            Topic::StreamReadMessage::FromClient req;
+            req.mutable_stop_partition_session_response()->set_partition_session_id(assignId);
+            if (!ControlStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
         }
 
         void DoWrite(NYdb::TDriver* driver, const TString& topic, ui64 size, ui32 count,
@@ -931,7 +953,33 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(resp.direct_read_response().direct_read_id(), directReadId);
             i64 id = resp.direct_read_response().partition_session_id();
             UNIT_ASSERT_VALUES_EQUAL(id, assignId);
+            const auto& data = resp.direct_read_response().partition_data();
+            const auto& firstBatch = data.batches(0);
+            const auto& lastBatch = data.batches(data.batches_size() - 1);
+            Cerr << "First offset: " << firstBatch.message_data(0).offset() << ", last offset: " << lastBatch.message_data(lastBatch.message_data_size() - 1).offset() << Endl;
+            return std::make_pair(firstBatch.message_data(0).offset(),
+                                  lastBatch.message_data(lastBatch.message_data_size() - 1).offset());
         };
+
+        auto Commit(std::pair<ui64, ui64> offsets, ui64 assignId) {
+            Cerr << "Commit offsets: " << offsets.first << " - " << offsets.second << Endl;
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            auto* commit = req.mutable_commit_offset_request()->add_commit_offsets();
+            commit->set_partition_session_id(assignId);
+            auto* range = commit->add_offsets();
+            range->set_start(offsets.first);
+            range->set_end(offsets.second + 1);
+            if (!ControlStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+        }
+
+        void WaitCommitAck() {
+            Topic::StreamReadMessage::FromServer resp;
+            Cerr << "Got message from control session (expect commit ack): " << resp.DebugString() << "\n";
+            UNIT_ASSERT(ControlStream->Read(&resp));
+            UNIT_ASSERT(resp.server_message_case() == Topic::StreamReadMessage::FromServer::kCommitOffsetResponse);
+        }
 
         void DoRead(ui64 assignId, ui64& nextReadId, ui32& currTotalMessages, ui32 messageLimit) {
             // Get DirectReadResponse messages, send DirectReadAck messages.
@@ -944,8 +992,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 Cerr << "Got direct read response: " << resp.direct_read_response().direct_read_id() << Endl;
                 UNIT_ASSERT_C(resp.status() == Ydb::StatusIds::SUCCESS, resp.DebugString());
                 if (resp.server_message_case() != Ydb::Topic::StreamDirectReadMessage::FromServer::kDirectReadResponse) {
-                    TStringBuilder log; log << "Unexpected server message (expect direct read response): " << resp.DebugString() << "\n";
-                    Cerr << log;
+                    TStringBuilder msg;
+                    msg << "Unexpected server message (expect direct read response): " << resp.DebugString() << "\n";
+                    Cerr << msg;
                     UNIT_FAIL("Unexpected server message");
                 }
                 UNIT_ASSERT_VALUES_EQUAL(resp.direct_read_response().direct_read_id(), nextReadId);
@@ -1286,6 +1335,42 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         Cerr << "Check caching service data empty\n";
         cachedData = RequestCacheData(runtime, new TEvPQ::TEvGetFullDirectReadData());
         UNIT_ASSERT_VALUES_EQUAL(cachedData->Data.size(), 0);
+    }
+
+    Y_UNIT_TEST(DirectReadRestartPQRB) {
+        TPersQueueV1TestServer server{{.NodeCount=1}};
+        SET_LOCALS;
+        TString topicPath{"/Root/PQ/rt3.dc1--acc--topic3"};
+        server.Server->AnnoyingClient->CreateTopicNoLegacy(topicPath, 1);
+        auto pathDescr = server.Server->AnnoyingClient->Ls(topicPath)->Record.GetPathDescription().GetPersQueueGroup();
+        auto tabletId = pathDescr.GetBalancerTabletID();
+
+        TDirectReadTestSetup setup{server};
+        setup.InitControlSession("acc/topic3");
+        setup.InitDirectSession("acc/topic3");
+        setup.DoWrite(pqClient->GetDriver(), "acc/topic3", 10_KB, 1);
+        auto assignRes = setup.GetNextAssign("acc/topic3");
+        UNIT_ASSERT_VALUES_EQUAL(assignRes.PartitionId, 0);
+        auto assignId = assignRes.AssignId;
+        setup.SendReadSessionAssign(assignId, assignRes.Generation);
+        Cerr << "Read data for id = 1\n";
+
+        auto range = setup.ReadDataNoAck(assignId, 1);
+        Y_UNUSED(range);
+        setup.Commit(range, assignId);
+        setup.WaitCommitAck();
+        Cerr << "Kill PQRB \n";
+        server.Server->AnnoyingClient->KillTablet(*(server.Server->CleverServer), tabletId);
+        setup.DoWrite(pqClient->GetDriver(), "acc/topic3", 10_MB, 1);
+        setup.SendDirectReadAck(assignId, 1);
+        range = setup.ReadDataNoAck(assignId, 2);
+        setup.ExpectPartitionRelease(assignId);
+        setup.ExpectDestroyPartitionSession(assignId);
+        assignRes = setup.GetNextAssign("acc/topic3");
+        setup.SendReadSessionAssign(assignRes.AssignId, assignRes.Generation);
+        setup.DoWrite(pqClient->GetDriver(), "acc/topic3", 10_KB, 1);
+        setup.Commit(range, assignRes.AssignId);
+        setup.SendDirectReadAck(assignId, 2);
     }
 
     Y_UNIT_TEST(DirectReadRestartTabletBad) {

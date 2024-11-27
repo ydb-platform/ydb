@@ -229,8 +229,6 @@ private:
             if (lastRes.HasPartNo() && lastRes.GetPartNo() + 1 < lastRes.GetTotalParts()) { //last res is not full
                 Request.SetRequestId(TMP_REQUEST_MARKER);
 
-
-                //ToDo: remove
                 auto read = Request.MutablePartitionRequest()->MutableCmdRead();
                 read->SetOffset(lastRes.GetOffset());
                 read->SetPartNo(lastRes.GetPartNo() + 1);
@@ -1896,7 +1894,6 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TAc
                 pipeClient, TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION, 0, false
         );
 
-        // TActorId prevPipe{};
         if (isDirectRead) {
             auto pipeIter = PipesInfo.find(pipeClient);
             if (pipeIter.IsEnd()) {
@@ -1904,11 +1901,6 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TAc
                         TStringBuilder() << "Internal error - server pipe " << pipeClient.ToString() << " not found");
                 return;
             }
-            // auto sessionIter = SessionToPipe.find(cmd.GetSessionId());
-            // if (!sessionIter.IsEnd()) {
-            //     prevPipe = std::move(sessionIter->second);
-            // }
-            // SessionToPipe[cmd.GetSessionId()] = pipeIter->first;
 
             pipeIter->second.ClientId = cmd.GetClientId();
             pipeIter->second.SessionId = cmd.GetSessionId();
@@ -1929,14 +1921,8 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TAc
             record.SetStatus(NMsgBusProxy::MSTATUS_OK);
             auto& partResponse = *record.MutablePartitionResponse();
             partResponse.MutableCmdRestoreDirectReadResult();
-            // if (prevPipe) {
-            //     // Clear session data for old pipe in case
-            //     auto pipeIter = PipesInfo.find(prevPipe);
-            //     if (!pipeIter.IsEnd()) {
-            //         pipeIter->second.SessionId = {};
-            //     }
-            // }
-            Send(SelfId(), fakeResponse.Release());
+
+	    Send(SelfId(), fakeResponse.Release());
         } else {
             ctx.Send(partActor, event.Release());
         }

@@ -99,6 +99,7 @@ class TTxRemoveSharedBlobs;
 class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
 class TTxBlobsWritingFinished;
+class TTxBlobsWritingFailed;
 
 namespace NLoading {
 class TInsertTableInitializer;
@@ -165,6 +166,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxPlanStep;
     friend class TTxWrite;
     friend class TTxBlobsWritingFinished;
+    friend class TTxBlobsWritingFailed;
     friend class TTxReadBase;
     friend class TTxRead;
     friend class TTxWriteIndex;

@@ -37,7 +37,6 @@ public:
     virtual void OnPartitioningChanged(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) = 0;
     virtual void OnPartitioningChanged(
-        const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         NSchemeCache::TSchemeCacheRequest::TEntry&& partitionsEntry) = 0;
 
     using TWriteToken = ui64;
@@ -49,6 +48,7 @@ public:
     virtual TWriteToken Open(
         const TTableId TableId,
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
+        TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
         std::vector<ui32>&& writeIndexes,
         const i64 priority) = 0;

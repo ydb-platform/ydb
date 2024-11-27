@@ -250,6 +250,7 @@ public:
 
     TWriteToken Open(
         NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
+        TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumnsMetadata,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& columnsMetadata,
         std::vector<ui32>&& writeIndexes,
         i64 priority) {
@@ -257,6 +258,7 @@ public:
         auto token = ShardedWriteController->Open(
             TableId,
             operationType,
+            std::move(keyColumnsMetadata),
             std::move(columnsMetadata),
             std::move(writeIndexes),
             priority);
@@ -693,7 +695,6 @@ public:
     }
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
-        YQL_ENSURE(SchemeEntry);
         CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
             << ", Cookie=" << ev->Cookie
@@ -919,14 +920,15 @@ public:
 
     void Prepare() {
         TableWriteActorStateSpan.EndOk();
-        YQL_ENSURE(SchemeEntry);
         ResolveAttempts = 0;
 
         try {
-            if (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+            if (IsOlap()) {
+                YQL_ENSURE(SchemeEntry);
                 ShardedWriteController->OnPartitioningChanged(*SchemeEntry);
             } else {
-                ShardedWriteController->OnPartitioningChanged(*SchemeEntry, std::move(*SchemeRequest));
+                YQL_ENSURE(SchemeRequest);
+                ShardedWriteController->OnPartitioningChanged(std::move(*SchemeRequest));
                 SchemeRequest.reset();
             }
         } catch (...) {
@@ -1039,6 +1041,11 @@ public:
 
         WriteTableActorId = RegisterWithSameMailbox(WriteTableActor);
 
+        TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata;
+        keyColumnsMetadata.reserve(Settings.GetKeyColumns().size());
+        for (const auto & column : Settings.GetKeyColumns()) {
+            keyColumnsMetadata.push_back(column);
+        }
         TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata;
         columnsMetadata.reserve(Settings.GetColumns().size());
         for (const auto & column : Settings.GetColumns()) {
@@ -1048,6 +1055,7 @@ public:
         YQL_ENSURE(Settings.GetPriority() == 0);
         WriteToken = WriteTableActor->Open(
             GetOperation(Settings.GetType()),
+            std::move(keyColumnsMetadata),
             std::move(columnsMetadata),
             std::move(writeIndex),
             Settings.GetPriority());
@@ -1230,6 +1238,7 @@ struct TWriteSettings {
     TTableId TableId;
     TString TablePath; // for error messages
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
+    TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
     std::vector<ui32> WriteIndex;
     TTransactionSettings TransactionSettings;
@@ -1363,6 +1372,7 @@ public:
 
             auto cookie = writeInfo.WriteTableActor->Open(
                 settings.OperationType,
+                std::move(settings.KeyColumns),
                 std::move(settings.Columns),
                 std::move(settings.WriteIndex),
                 settings.Priority);
@@ -2176,6 +2186,11 @@ private:
         if (!WriteToken.IsEmpty()) {
             ev->Token = WriteToken;
         } else {
+            TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata;
+            keyColumnsMetadata.reserve(Settings.GetKeyColumns().size());
+            for (const auto & column : Settings.GetKeyColumns()) {
+                keyColumnsMetadata.push_back(column);
+            }
             TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata;
             columnsMetadata.reserve(Settings.GetColumns().size());
             for (const auto & column : Settings.GetColumns()) {
@@ -2187,6 +2202,7 @@ private:
                 .TableId = TableId,
                 .TablePath = Settings.GetTable().GetPath(),
                 .OperationType = GetOperation(Settings.GetType()),
+                .KeyColumns = std::move(keyColumnsMetadata),
                 .Columns = std::move(columnsMetadata),
                 .WriteIndex = std::move(writeIndex),
                 .TransactionSettings = TTransactionSettings{

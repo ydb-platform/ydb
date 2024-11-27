@@ -430,7 +430,6 @@ void TRowDispatcher::Bootstrap() {
     Schedule(TDuration::Seconds(CoordinatorPingPeriodSec), new TEvPrivate::TEvCoordinatorPing());
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
     Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
-
     if (Monitoring) {
         ::NMonitoring::TIndexMonPage* actorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors");
         Monitoring->RegisterActorPage(actorsMonPage, "row_dispatcher", "Row Dispatcher", false,

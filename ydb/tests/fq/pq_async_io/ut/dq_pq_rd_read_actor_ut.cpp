@@ -203,10 +203,10 @@ struct TFixture : public TPqIoTestFixture {
         });
     }
 
-    void MockUndelivered() {
+    void MockUndelivered(NActors::TActorId rowDispatcherId) {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NActors::TEvents::TEvUndelivered(0, NActors::TEvents::TEvUndelivered::ReasonActorUnknown);
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RowDispatcher1, event));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event));
         });
     }
 
@@ -396,7 +396,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1);
         MockDisconnected();
         MockConnected();
-        MockUndelivered();
+        MockUndelivered(RowDispatcher1);
 
         auto req = ExpectCoordinatorRequest(Coordinator1Id);
         MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req->Cookie);
@@ -407,7 +407,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
     }
 
     Y_UNIT_TEST_F(TwoPartitionsRowDispatcherIsRestarted, TFixture) {
-        InitRdSource(Source1, 1_MB, 2);
+        InitRdSource(Source1, 1_MB, PartitionId2 + 1);
         SourceRead<TString>(UVParser);
         ExpectCoordinatorChangesSubscribe();
         MockCoordinatorChanged(Coordinator1Id);
@@ -419,22 +419,23 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         MockAck(RowDispatcher2, 2, PartitionId2);
         
         ProcessSomeJsons(0, {Json1, Json2}, RowDispatcher1, UVParser, 1, PartitionId1);
-        ProcessSomeJsons(0, {Json3, Json4}, RowDispatcher2, UVParser, 2, PartitionId2);
+        ProcessSomeJsons(0, {Json3}, RowDispatcher2, UVParser, 2, PartitionId2);
 
+        // Restart node 2 (RowDispatcher2)
         MockDisconnected();
         MockConnected();
-        MockUndelivered();
+        MockUndelivered(RowDispatcher2);
 
-        ExpectStopSession(RowDispatcher1, 1);
+        ProcessSomeJsons(2, {Json4}, RowDispatcher1, UVParser, 1, PartitionId1);
+        
+        // Reinit session to RowDispatcher2
+        auto req2 = ExpectCoordinatorRequest(Coordinator1Id);
+        MockCoordinatorResult({{RowDispatcher1, PartitionId1}, {RowDispatcher2, PartitionId2}}, req2->Cookie);
+        ExpectStartSession(1, RowDispatcher2, 3);
+        MockAck(RowDispatcher2, 3, PartitionId2);
 
-        ProcessSomeJsons(2, {Json2}, RowDispatcher1, UVParser, 1, PartitionId1);
-
-        // auto req = ExpectCoordinatorRequest(Coordinator1Id);
-        // MockCoordinatorResult(RowDispatcher1, req->Cookie);
-        // ExpectStartSession(2, RowDispatcher1, 2);
-        // MockAck(RowDispatcher1, 2);
-
-        // ProcessSomeJsons(2, {Json3}, RowDispatcher1, UVParser, 2);
+        ProcessSomeJsons(1, {Json4}, RowDispatcher2, UVParser, 3, PartitionId2);
+        ProcessSomeJsons(3, {Json4}, RowDispatcher1, UVParser, 1, PartitionId1);
     }
 
     Y_UNIT_TEST_F(IgnoreMessageIfNoSessions, TFixture) {
@@ -456,7 +457,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
 
         MockCoordinatorChanged(Coordinator2Id);
         auto req = ExpectCoordinatorRequest(Coordinator2Id);
-        MockUndelivered();
+        MockUndelivered(RowDispatcher1);
 
         MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req->Cookie);
         MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req->Cookie);

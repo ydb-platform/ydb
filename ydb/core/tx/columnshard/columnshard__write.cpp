@@ -91,20 +91,34 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
     TMemoryProfileGuard mpg("TEvWritePortionResult");
     NActors::TLogContextGuard gLogging =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("event", "TEvWritePortionResult");
-    AFL_VERIFY(ev->Get()->GetWriteStatus() == NKikimrProto::OK);
-    std::vector<TInsertedPortions> writtenPacks = ev->Get()->DetachInsertedPacks();
-    std::vector<TFailedWrite> fails = ev->Get()->DetachFails();
-    const TMonotonic now = TMonotonic::Now();
-    for (auto&& i : writtenPacks) {
-        Counters.OnWritePutBlobsSuccess(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
+    std::vector<TNoDataWrite> noDataWrites = ev->Get()->DetachNoDataWrites();
+    for (auto&& i : noDataWrites) {
         Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
     }
-    for (auto&& i : fails) {
-        Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
+    if (ev->Get()->GetWriteStatus() == NKikimrProto::OK) {
+        std::vector<TInsertedPortions> writtenPacks = ev->Get()->DetachInsertedPacks();
+        const TMonotonic now = TMonotonic::Now();
+        for (auto&& i : writtenPacks) {
+            Counters.OnWritePutBlobsSuccess(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
+            Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
+        }
+        Execute(new TTxBlobsWritingFinished(
+                    this, ev->Get()->GetWriteStatus(), ev->Get()->GetWriteAction(), std::move(writtenPacks), std::move(noDataWrites)),
+            ctx);
+    } else {
+        if (noDataWrites.size()) {
+            Execute(new TTxBlobsWritingFinished(this, NKikimrProto::OK, ev->Get()->GetWriteAction(), {}, std::move(noDataWrites)), ctx);
+        }
+
+        std::vector<TInsertedPortions> writtenPacks = ev->Get()->DetachInsertedPacks();
+        const TMonotonic now = TMonotonic::Now();
+        for (auto&& i : writtenPacks) {
+            Counters.OnWritePutBlobsFailed(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
+            Counters.GetCSCounters().OnWritePutBlobsFail(now - i.GetWriteMeta().GetWriteStartInstant());
+            Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
+        }
+        Execute(new TTxBlobsWritingFailed(this, ev->Get()->GetWriteStatus(), std::move(writtenPacks)), ctx);
     }
-    Execute(
-        new TTxBlobsWritingFinished(this, ev->Get()->GetWriteStatus(), ev->Get()->GetWriteAction(), std::move(writtenPacks), std::move(fails)),
-        ctx);
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx) {

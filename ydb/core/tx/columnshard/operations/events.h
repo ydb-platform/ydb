@@ -63,7 +63,7 @@ public:
     }
 };
 
-class TFailedWrite {
+class TNoDataWrite {
 private:
     NEvWrite::TWriteMeta WriteMeta;
     YDB_READONLY(ui64, DataSize, 0);
@@ -73,7 +73,7 @@ public:
         return WriteMeta;
     }
 
-    TFailedWrite(const NEvWrite::TWriteMeta& writeMeta, const ui64 dataSize)
+    TNoDataWrite(const NEvWrite::TWriteMeta& writeMeta, const ui64 dataSize)
         : WriteMeta(writeMeta)
         , DataSize(dataSize) {
         AFL_VERIFY(!WriteMeta.HasLongTxId());
@@ -89,22 +89,22 @@ private:
     YDB_READONLY_DEF(NKikimrProto::EReplyStatus, WriteStatus);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, WriteAction);
     std::vector<TInsertedPortions> InsertedPacks;
-    std::vector<TFailedWrite> Fails;
+    std::vector<TNoDataWrite> NoData;
 
 public:
     std::vector<TInsertedPortions>&& DetachInsertedPacks() {
         return std::move(InsertedPacks);
     }
-    std::vector<TFailedWrite>&& DetachFails() {
-        return std::move(Fails);
+    std::vector<TNoDataWrite>&& DetachNoDataWrites() {
+        return std::move(NoData);
     }
 
     TEvWritePortionResult(const NKikimrProto::EReplyStatus writeStatus, const std::shared_ptr<NOlap::IBlobsWritingAction>& writeAction,
-        std::vector<TInsertedPortions>&& portions, std::vector<TFailedWrite>&& fails)
+        std::vector<TInsertedPortions>&& portions, std::vector<TNoDataWrite>&& noData)
         : WriteStatus(writeStatus)
         , WriteAction(writeAction)
         , InsertedPacks(portions)
-        , Fails(fails) {
+        , NoData(noData) {
     }
 };
 

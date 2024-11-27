@@ -14,11 +14,11 @@ using EState = NKikimrPQ::TTransaction::EState;
 
 namespace {
     struct TTransactionSnapshot {
-        TTransactionSnapshot(const TDistributedTransaction& tx)
+        explicit TTransactionSnapshot(const TDistributedTransaction& tx)
             : TxId(tx.TxId)
             , Step(tx.Step)
             , State(tx.State)
-            , MinStep(tx.MaxStep)
+            , MinStep(tx.MinStep)
             , MaxStep(tx.MaxStep) {
         }
 

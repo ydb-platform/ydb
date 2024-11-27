@@ -2447,7 +2447,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 //            Cout << "Wait indexation..." << Endl;
 //            Sleep(TDuration::Seconds(2));
 //        }
-        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[2;\"test_res_2\";#;[\"val1\"]]]");
+        testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=2", "[[2;\"test_res_2\";#;[\"val2\"]]]");
     }
 
     Y_UNIT_TEST(BulkUpsertUpdate) {

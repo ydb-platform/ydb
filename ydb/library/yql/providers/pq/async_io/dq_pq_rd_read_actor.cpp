@@ -628,12 +628,6 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr&
         return;
     }
 
-    // TODO
-    // if (State != EState::WAIT_PARTITIONS_ADDRES) {
-    //     SRC_LOG_W("Ignore TEvCoordinatorResult. wrong state " << static_cast<ui64>(EState::WAIT_PARTITIONS_ADDRES));
-    //     return;
-    // }
-
     for (auto& p : ev->Get()->Record.GetPartitions()) {
         TActorId rowDispatcherActorId = ActorIdFromProto(p.GetActorId());
         for (auto partitionId : p.GetPartitionId()) {

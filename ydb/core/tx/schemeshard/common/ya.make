@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     validation.cpp
-    ttl.cpp
 )
 
 PEERDIR(

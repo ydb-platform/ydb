@@ -1,7 +1,5 @@
 #include "schemeshard_impl.h"
 
-#include "common/ttl.h"
-
 #include <util/string/join.h>
 
 namespace NKikimr {
@@ -144,10 +142,10 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
 
         const auto& settings = tableInfo->TTLSettings().GetEnabled();
 
-        auto expireAfter = GetExpireAfter(settings);
+        auto expireAfter = GetExpireAfter(settings, true);
         if (expireAfter.IsFail()) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Invalid ttl setting: " << expireAfter.GetErrorMessage()
+                "Invalid TTL settings: " << expireAfter.GetErrorMessage()
                     << ": shardIdx: " << tableShardInfo.ShardIdx << ": pathId: " << shardInfo.PathId
                     << ", at schemeshard: " << Self->TabletID());
             return false;

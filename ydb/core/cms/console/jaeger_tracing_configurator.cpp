@@ -17,7 +17,7 @@ public:
         return NKikimrServices::TActivity::JAEGER_TRACING_CONFIGURATOR;
     }
 
-    TJaegerTracingConfigurator(TSamplingThrottlingConfigurator tracingConfigurator,
+    TJaegerTracingConfigurator(TIntrusivePtr<TSamplingThrottlingConfigurator> tracingConfigurator,
                                NKikimrConfig::TTracingConfig cfg);
 
     void Bootstrap(const TActorContext& ctx);
@@ -35,12 +35,12 @@ private:
     static TMaybe<TString> GetDatabase(const NKikimrConfig::TTracingConfig::TSelectors& selectors);
     static TSettings<double, TWithTag<TThrottlingSettings>> GetSettings(const NKikimrConfig::TTracingConfig& cfg);
 
-    TSamplingThrottlingConfigurator TracingConfigurator;
+    TIntrusivePtr<TSamplingThrottlingConfigurator> TracingConfigurator;
     NKikimrConfig::TTracingConfig initialConfig;
 };
 
 TJaegerTracingConfigurator::TJaegerTracingConfigurator(
-    TSamplingThrottlingConfigurator tracingConfigurator,
+    TIntrusivePtr<TSamplingThrottlingConfigurator> tracingConfigurator,
     NKikimrConfig::TTracingConfig cfg)
     : TracingConfigurator(std::move(tracingConfigurator))
     , initialConfig(std::move(cfg))
@@ -73,7 +73,7 @@ void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest
 
 void TJaegerTracingConfigurator::ApplyConfigs(const NKikimrConfig::TTracingConfig& cfg) {
     auto settings = GetSettings(cfg);
-    return TracingConfigurator.UpdateSettings(std::move(settings));
+    return TracingConfigurator->UpdateSettings(std::move(settings));
 }
 
 TVector<ERequestType> TJaegerTracingConfigurator::GetRequestTypes(const NKikimrConfig::TTracingConfig::TSelectors& selectors) {
@@ -213,7 +213,7 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
     return settings;
 }
 
-IActor* CreateJaegerTracingConfigurator(TSamplingThrottlingConfigurator tracingConfigurator,
+IActor* CreateJaegerTracingConfigurator(TIntrusivePtr<TSamplingThrottlingConfigurator> tracingConfigurator,
                                         NKikimrConfig::TTracingConfig cfg) {
     return new TJaegerTracingConfigurator(std::move(tracingConfigurator), std::move(cfg));
 }

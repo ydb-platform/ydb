@@ -11,6 +11,7 @@ SRCS(
     board_replica.cpp
     blobstorage.h
     blobstorage.cpp
+    blobstorage_grouptype.cpp
     channel_profiles.h
     counters.cpp
     counters.h
@@ -72,7 +73,7 @@ SRCS(
     tx_processing.h
     tx_processing.cpp
     user_registry.h
-    blobstorage_grouptype.cpp
+    wilson_tracing_control.cpp
 )
 
 PEERDIR(
@@ -92,6 +93,7 @@ PEERDIR(
     ydb/core/debug
     ydb/core/erasure
     ydb/core/graph/api
+    ydb/core/jaeger_tracing
     ydb/core/protos
     ydb/core/protos/out
     ydb/library/aclib

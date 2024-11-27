@@ -469,38 +469,6 @@ Ydb::Type* AddColumn<NKikimrSchemeOp::TColumnDescription>(Ydb::Table::ColumnMeta
     return columnType;
 }
 
-template <typename TYdbProto, typename TTtl>
-static void AddTtl(TYdbProto& out, const TTtl& inTTL) {
-    switch (inTTL.GetColumnUnit()) {
-    case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO: {
-        auto& outTTL = *out.mutable_ttl_settings()->mutable_date_type_column();
-        outTTL.set_column_name(inTTL.GetColumnName());
-        outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
-        break;
-    }
-
-    case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
-    case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
-    case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
-    case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: {
-        auto& outTTL = *out.mutable_ttl_settings()->mutable_value_since_unix_epoch();
-        outTTL.set_column_name(inTTL.GetColumnName());
-        outTTL.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(inTTL.GetColumnUnit()));
-        outTTL.set_expire_after_seconds(inTTL.GetExpireAfterSeconds());
-        break;
-    }
-
-    default:
-        break;
-    }
-
-    if constexpr (std::is_same_v<TTtl, NKikimrSchemeOp::TTTLSettings::TEnabled>) {
-        if (inTTL.HasSysSettings() && inTTL.GetSysSettings().HasRunInterval()) {
-            out.mutable_ttl_settings()->set_run_interval_seconds(TDuration::FromValue(inTTL.GetSysSettings().GetRunInterval()).Seconds());
-        }
-    }
-}
-
 template <typename TYdbProto>
 void FillColumnDescriptionImpl(TYdbProto& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
@@ -532,7 +500,11 @@ void FillColumnDescriptionImpl(TYdbProto& out,
 
     if (in.HasTTLSettings()) {
         if (in.GetTTLSettings().HasEnabled()) {
-            AddTtl(out, in.GetTTLSettings().GetEnabled());
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!FillTtlSettings(*out.mutable_ttl_settings(), in.GetTTLSettings().GetEnabled(), code, error)) {
+                ythrow yexception() << "invalid TTL settings: " << error;
+            }
         }
 
         if (in.GetTTLSettings().HasUseTiering()) {
@@ -572,7 +544,11 @@ void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSc
 
     if (in.HasTtlSettings()) {
         if (in.GetTtlSettings().HasEnabled()) {
-            AddTtl(out, in.GetTtlSettings().GetEnabled());
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            if (!FillTtlSettings(*out.mutable_ttl_settings(), in.GetTtlSettings().GetEnabled(), status, error)) {
+                ythrow yexception() << "invalid TTL settings: " << error;
+            }
         }
 
         if (in.GetTtlSettings().HasUseTiering()) {

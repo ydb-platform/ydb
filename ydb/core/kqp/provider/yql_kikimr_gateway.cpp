@@ -328,15 +328,16 @@ bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::Read
 
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto) {
     if (!settings.ColumnUnit) {
-        auto& opts = *proto.mutable_date_type_column();
+        auto& opts = *proto.mutable_date_type_column_v1();
         opts.set_column_name(settings.ColumnName);
-        opts.set_expire_after_seconds(settings.ExpireAfter.Seconds());
     } else {
-        auto& opts = *proto.mutable_value_since_unix_epoch();
+        auto& opts = *proto.mutable_value_since_unix_epoch_v1();
         opts.set_column_name(settings.ColumnName);
         opts.set_column_unit(static_cast<Ydb::Table::ValueSinceUnixEpochModeSettings::Unit>(*settings.ColumnUnit));
-        opts.set_expire_after_seconds(settings.ExpireAfter.Seconds());
     }
+    auto* deleteTier = proto.add_tiers();
+    deleteTier->set_apply_after_seconds(settings.ExpireAfter.Seconds());
+    deleteTier->mutable_delete_();
 }
 
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value) {

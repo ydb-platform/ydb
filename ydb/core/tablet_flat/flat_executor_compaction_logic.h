@@ -209,9 +209,6 @@ public:
     // Update priorities for background compaction tasks.
     void UpdateCompactions();
 
-    // Strategy of this table wants to apply some changes
-    TVector<TTableCompactionChanges> ApplyChanges();
-
     //
     void PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, TTableSnapshotContext *snapContext);
 

@@ -80,25 +80,6 @@ void TCompactionLogic::UpdateCompactions()
     }
 }
 
-TVector<TTableCompactionChanges> TCompactionLogic::ApplyChanges()
-{
-    TVector<TTableCompactionChanges> results;
-
-    for (auto& kv : State->Tables) {
-        ui32 tableId = kv.first;
-        auto *tableInfo = &kv.second;
-        if (tableInfo->ChangesRequested) {
-            tableInfo->ChangesRequested = false;
-            auto& result = results.emplace_back();
-            result.Table = tableId;
-            result.Changes = tableInfo->Strategy->ApplyChanges();
-            result.Strategy = tableInfo->StrategyType;
-        }
-    }
-
-    return results;
-}
-
 void TCompactionLogic::PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, TTableSnapshotContext *snapContext) {
     TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(table);
     Y_DEBUG_ABORT_UNLESS(tableInfo);

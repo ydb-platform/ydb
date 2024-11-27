@@ -3,7 +3,7 @@
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"
+#include "schemeshard_utils.h"  // for NTableIndex::CommonCheck
 
 #include <ydb/core/ydb_convert/table_settings.h>
 

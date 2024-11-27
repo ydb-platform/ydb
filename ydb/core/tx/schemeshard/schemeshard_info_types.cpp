@@ -1,6 +1,6 @@
 #include "schemeshard_info_types.h"
 #include "schemeshard_path.h"
-#include "schemeshard_utils.h"
+#include "schemeshard_utils.h"  // for IsValidColumnName
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>

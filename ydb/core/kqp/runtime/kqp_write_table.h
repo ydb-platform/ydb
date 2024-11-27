@@ -50,6 +50,7 @@ public:
         const TTableId TableId,
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
+        std::vector<ui32>&& writeIndexes,
         const i64 priority) = 0;
     virtual void Write(TWriteToken token, const NMiniKQL::TUnboxedValueBatch& data) = 0;
     virtual void Close(TWriteToken token) = 0;

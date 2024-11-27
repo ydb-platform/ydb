@@ -251,12 +251,14 @@ public:
     TWriteToken Open(
         NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& columnsMetadata,
+        std::vector<ui32>&& writeIndexes,
         i64 priority) {
         YQL_ENSURE(!Closed);
         auto token = ShardedWriteController->Open(
             TableId,
             operationType,
             std::move(columnsMetadata),
+            std::move(writeIndexes),
             priority);
         CA_LOG_D("Open: token=" << token);
         return token;
@@ -1042,8 +1044,13 @@ public:
         for (const auto & column : Settings.GetColumns()) {
             columnsMetadata.push_back(column);
         }
+        std::vector<ui32> writeIndex(Settings.GetWriteIndexes().begin(), Settings.GetWriteIndexes().end());
         YQL_ENSURE(Settings.GetPriority() == 0);
-        WriteToken = WriteTableActor->Open(GetOperation(Settings.GetType()), std::move(columnsMetadata), Settings.GetPriority());
+        WriteToken = WriteTableActor->Open(
+            GetOperation(Settings.GetType()),
+            std::move(columnsMetadata),
+            std::move(writeIndex),
+            Settings.GetPriority());
         WaitingForTableActor = true;
     }
 
@@ -1224,6 +1231,7 @@ struct TWriteSettings {
     TString TablePath; // for error messages
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
     TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
+    std::vector<ui32> WriteIndex;
     TTransactionSettings TransactionSettings;
     i64 Priority;
 };
@@ -1353,7 +1361,11 @@ public:
                 CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.WriteTableActorId);
             }
 
-            auto cookie = writeInfo.WriteTableActor->Open(settings.OperationType, std::move(settings.Columns), settings.Priority);
+            auto cookie = writeInfo.WriteTableActor->Open(
+                settings.OperationType,
+                std::move(settings.Columns),
+                std::move(settings.WriteIndex),
+                settings.Priority);
             token = TWriteToken{settings.TableId, cookie};
         } else {
             token = *ev->Get()->Token;
@@ -2169,12 +2181,14 @@ private:
             for (const auto & column : Settings.GetColumns()) {
                 columnsMetadata.push_back(column);
             }
+            std::vector<ui32> writeIndex(Settings.GetWriteIndexes().begin(), Settings.GetWriteIndexes().end());
 
             ev->Settings = TWriteSettings{
                 .TableId = TableId,
                 .TablePath = Settings.GetTable().GetPath(),
                 .OperationType = GetOperation(Settings.GetType()),
                 .Columns = std::move(columnsMetadata),
+                .WriteIndex = std::move(writeIndex),
                 .TransactionSettings = TTransactionSettings{
                     .TxId = TxId,
                     .LockTxId = Settings.GetLockTxId(),

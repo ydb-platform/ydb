@@ -1166,19 +1166,28 @@ private:
             }
 
             {
+                // TODO: move to function
+                THashSet<TStringBuf> usedColumns;
+                for (const auto& columnName : columns) {
+                    usedColumns.insert(columnName);
+                }
+
                 THashMap<TStringBuf, ui32> columnToOrder;
                 ui32 number = 0;
-                for (const auto& columnName : tableMeta->KeyColumnNames) {
-                    columnToOrder[columnName] = number++;
+                if (settings.TableType().Cast().StringValue() == "oltp") {
+                    for (const auto& columnName : tableMeta->KeyColumnNames) {
+                        YQL_ENSURE(usedColumns.contains(columnName));
+                        columnToOrder[columnName] = number++;
+                    }
                 }
                 for (const auto& columnName : tableMeta->ColumnOrder) {
-                    if (!columnToOrder.contains(columnName)) {
+                    if (usedColumns.contains(columnName) && !columnToOrder.contains(columnName)) {
                         columnToOrder[columnName] = number++;
                     }
                 }
 
                 for (const auto& columnName : columns) {
-                    settingsProto.AddWriteIndexes(columnToOrder[columnName]);
+                    settingsProto.AddWriteIndexes(columnToOrder.at(columnName));
                 }
             }
 

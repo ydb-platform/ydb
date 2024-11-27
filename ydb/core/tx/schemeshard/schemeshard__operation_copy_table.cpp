@@ -4,6 +4,7 @@
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_cdc_stream_common.h"
 
+#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/base/subdomain.h>
 
 namespace {
@@ -401,9 +402,12 @@ public:
                         .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of copying base table
                 } else {
                     checks
-                        .NotUnderOperation()
                         .IsCommonSensePath()
                         .IsLikeDirectory();
+
+                    if (!Transaction.GetCreateTable().GetAllowUnderSameOperation()) {
+                        checks.NotUnderOperation();
+                    }
                 }
             }
 
@@ -775,8 +779,11 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             .NotDeleted()
             .NotUnderDeleting()
             .IsTable()
-            .NotUnderOperation()
             .IsCommonSensePath(); //forbid copy impl index tables directly
+
+        if (!copying.GetAllowUnderSameOperation()) {
+            checks.NotUnderOperation();
+        }
 
         if (!checks) {
             return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
@@ -855,6 +862,10 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             auto operation = schema.MutableCreateTableIndex();
             operation->SetName(name);
             operation->SetType(indexInfo->Type);
+            if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
+                                     "Copy table doesn't support table with vector index")};
+            }
             for (const auto& keyName: indexInfo->IndexKeys) {
                 *operation->MutableKeyColumnNames()->Add() = keyName;
             }

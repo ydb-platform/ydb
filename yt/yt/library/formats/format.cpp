@@ -254,6 +254,7 @@ ISchemalessFormatWriterPtr CreateStaticTableWriterForFormat(
     const TFormat& format,
     TNameTablePtr nameTable,
     const std::vector<TTableSchemaPtr>& tableSchemas,
+    const std::vector<std::optional<std::vector<std::string>>>& columns,
     NConcurrency::IAsyncOutputStreamPtr output,
     bool enableContextSaving,
     TControlAttributesConfigPtr controlAttributesConfig,
@@ -320,6 +321,7 @@ ISchemalessFormatWriterPtr CreateStaticTableWriterForFormat(
             return CreateWriterForArrow(
                 nameTable,
                 tableSchemas,
+                columns,
                 std::move(output),
                 enableContextSaving,
                 controlAttributesConfig,

@@ -9,6 +9,8 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
+using namespace NSharedCache;
+
 struct TPrivatePageCachePinPad : public TAtomicRefCount<TPrivatePageCachePinPad> {
     // no internal state
 };
@@ -134,6 +136,10 @@ public:
 
         void Fill(NSharedCache::TEvResult::TLoaded&& loaded, bool sticky = false) noexcept {
             EnsurePage(loaded.PageId)->Fill(std::move(loaded.Page), sticky);
+        }
+
+        void Fill(ui32 pageId, TSharedPageRef page, bool sticky) noexcept {
+            EnsurePage(pageId)->Fill(std::move(page), sticky);
         }
 
         const TLogoBlobID Id;

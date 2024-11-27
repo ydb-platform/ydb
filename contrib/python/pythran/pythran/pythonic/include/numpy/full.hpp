@@ -2,8 +2,8 @@
 #define PYTHONIC_INCLUDE_NUMPY_FULL_HPP
 
 #include "pythonic/include/numpy/float64.hpp"
-#include "pythonic/include/utils/functor.hpp"
 #include "pythonic/include/types/ndarray.hpp"
+#include "pythonic/include/utils/functor.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -36,7 +36,7 @@ namespace numpy
   full(std::integral_constant<long, N>, F fill_value, types::none_type _ = {});
 
   DEFINE_FUNCTOR(pythonic::numpy, full);
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

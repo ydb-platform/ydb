@@ -14,6 +14,7 @@
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -159,9 +160,9 @@ void SetupServices(TTestActorRuntime &runtime,
         SetupNodeWhiteboard(runtime, nodeIndex);
         SetupTabletResolver(runtime, nodeIndex);
         SetupResourceBroker(runtime, nodeIndex, {});
-        SetupSharedPageCache(runtime, nodeIndex, NFake::TCaches{
-            .Shared = 1,
-        });
+        NSharedCache::TSharedCacheConfig sharedCacheConfig;
+        sharedCacheConfig.SetMemoryLimit(0);
+        SetupSharedPageCache(runtime, nodeIndex, sharedCacheConfig);
         SetupSchemeCache(runtime, nodeIndex, DOMAIN_NAME);
     }
 

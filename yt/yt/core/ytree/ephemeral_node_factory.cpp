@@ -451,7 +451,7 @@ public:
         : ShouldHideAttributes_(shouldHideAttributes)
     { }
 
-    virtual ~TEphemeralNodeFactory() override
+    ~TEphemeralNodeFactory() override
     {
         RollbackIfNeeded();
     }

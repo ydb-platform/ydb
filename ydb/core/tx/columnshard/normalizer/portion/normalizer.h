@@ -81,16 +81,19 @@ public:
 };
 
 class TPortionsNormalizerBase: public TNormalizationController::INormalizerComponent {
+private:
+    using TBase = TNormalizationController::INormalizerComponent;
 public:
     TPortionsNormalizerBase(const TNormalizationController::TInitContext& info)
-        : DsGroupSelector(info.GetStorageInfo()) {
+        : TBase(info)
+        , DsGroupSelector(info.GetStorageInfo()) {
     }
 
     TConclusionStatus InitPortions(
-        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
+        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionAccessorConstructor>& portions);
     TConclusionStatus InitColumns(
-        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
-    TConclusionStatus InitIndexes(NIceDb::TNiceDb& db, THashMap<ui64, TPortionInfoConstructor>& portions);
+        const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashMap<ui64, TPortionAccessorConstructor>& portions);
+    TConclusionStatus InitIndexes(NIceDb::TNiceDb& db, THashMap<ui64, TPortionAccessorConstructor>& portions);
 
     virtual TConclusion<std::vector<INormalizerTask::TPtr>> DoInit(
         const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) override final;

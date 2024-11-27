@@ -302,6 +302,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     settings.NewlineDelimited(NewlineDelimited);
     settings.HeaderRow(HeaderRow);
     settings.NullValue(NullValue);
+    settings.Verbose(config.IsVerbose());
 
     if (Delimiter.size() != 1) {
         throw TMisuseException()
@@ -310,8 +311,8 @@ int TCommandImportFromCsv::Run(TConfig& config) {
         settings.Delimiter(Delimiter);
     }
 
-    TImportFileClient client(CreateDriver(config), config);
-    ThrowOnError(client.Import(FilePaths, Path, settings));
+    TImportFileClient client(CreateDriver(config), config, settings);
+    ThrowOnError(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
 }
@@ -340,8 +341,8 @@ int TCommandImportFromJson::Run(TConfig& config) {
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
     settings.Threads(Threads);
 
-    TImportFileClient client(CreateDriver(config), config);
-    ThrowOnError(client.Import(FilePaths, Path, settings));
+    TImportFileClient client(CreateDriver(config), config, settings);
+    ThrowOnError(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
 }
@@ -359,8 +360,8 @@ int TCommandImportFromParquet::Run(TConfig& config) {
     settings.BytesPerRequest(NYdb::SizeFromString(BytesPerRequest));
     settings.Threads(Threads);
 
-    TImportFileClient client(CreateDriver(config), config);
-    ThrowOnError(client.Import(FilePaths, Path, settings));
+    TImportFileClient client(CreateDriver(config), config, settings);
+    ThrowOnError(client.Import(FilePaths, Path));
 
     return EXIT_SUCCESS;
 }

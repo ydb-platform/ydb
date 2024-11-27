@@ -5,7 +5,7 @@ import os
 
 from ydb.core.protos import blobstorage_config_pb2 as bs_config
 from ydb.core.protos import blobstorage_pdisk_config_pb2 as pdisk_config
-from ydb.core.protos import flat_scheme_op_pb2 as flat_scheme_op
+from ydb.core.protos.schemeshard import operations_pb2 as schemeshard_pb2
 from ydb.core.protos import msgbus_pb2 as msgbus
 from ydb.core.protos import tx_proxy_pb2 as tx_proxy
 from ydb.tools.cfg import base, static, utils
@@ -251,7 +251,7 @@ class DynamicConfigGenerator(object):
         scheme_transaction = tx_proxy.TTransaction()
         scheme_operation = scheme_transaction.ModifyScheme
         scheme_operation.WorkingDir = '/'
-        scheme_operation.OperationType = flat_scheme_op.ESchemeOpAlterSubDomain
+        scheme_operation.OperationType = schemeshard_pb2.ESchemeOpAlterSubDomain
 
         domain_description = scheme_operation.SubDomain
         domain_description.Name = domain.domain_name

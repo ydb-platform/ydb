@@ -3,14 +3,13 @@
 #include "yql_yt_join_impl.h"
 #include "yql_yt_helpers.h"
 
-#include <ydb/library/yql/core/cbo/cbo_optimizer_new.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/dq/opt/dq_opt_log.h>
-#include <ydb/library/yql/parser/pg_wrapper/interface/optimizer.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/parser/pg_wrapper/interface/optimizer.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/yt/opt/yql_yt_join.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider_context.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 
@@ -86,7 +85,7 @@ public:
             YQL_CLOG(INFO, ProviderYt) << str;
         };
 
-        std::unique_ptr<IOptimizerNew> opt;
+        IOptimizerNew::TPtr opt;
 
         switch (State->Types->CostBasedOptimizer) {
         case ECostBasedOptimizerType::PG:
@@ -94,17 +93,17 @@ public:
                 YQL_CLOG(ERROR, ProviderYt) << "PG CBO does not support link settings";
                 return Root;
             }
-            opt = std::unique_ptr<IOptimizerNew>(MakePgOptimizerNew(*providerCtx, Ctx, log));
+            opt = State->OptimizerFactory_->MakeJoinCostBasedOptimizerPG(*providerCtx, Ctx, {.Logger = log});
             break;
         case ECostBasedOptimizerType::Native:
             if (linkSettings.HasHints) {
                 YQL_CLOG(ERROR, ProviderYt) << "Native CBO does not suppor link hints";
                 return Root;
             }
-            opt = std::unique_ptr<IOptimizerNew>(NDq::MakeNativeOptimizerNew(*providerCtx, 100000));
+            opt = State->OptimizerFactory_->MakeJoinCostBasedOptimizerNative(*providerCtx, Ctx, {.MaxDPhypDPTableSize = 100000});
             break;
-        default:
-            YQL_CLOG(ERROR, ProviderYt) << "Unknown optimizer type " << ToString(State->Types->CostBasedOptimizer);
+        case ECostBasedOptimizerType::Disable:
+            YQL_CLOG(DEBUG, ProviderYt) << "CBO disabled";
             return Root;
         }
 

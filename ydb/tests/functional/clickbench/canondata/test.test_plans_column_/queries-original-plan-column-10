@@ -103,7 +103,8 @@
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
-                                                                                        "Predicate": "MobilePhoneModel != "
+                                                                                        "Predicate": "MobilePhoneModel != \"\"",
+                                                                                        "Pushdown": "True"
                                                                                     },
                                                                                     {
                                                                                         "Inputs": [],

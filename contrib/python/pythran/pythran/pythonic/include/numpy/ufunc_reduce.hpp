@@ -27,16 +27,17 @@ namespace numpy
           std::forward<Arg>(arg), 0L);
     }
     template <class... Args>
-    auto reduce(Args &&... args) -> typename std::enable_if<
-        sizeof...(Args) != 1,
-        decltype(numpy::reduce<operator_::functor::UFUNC_INAME>(
-            std::forward<Args>(args)...))>::type
+    auto reduce(Args &&...args) ->
+        typename std::enable_if<
+            sizeof...(Args) != 1,
+            decltype(numpy::reduce<operator_::functor::UFUNC_INAME>(
+                std::forward<Args>(args)...))>::type
     {
       return numpy::reduce<operator_::functor::UFUNC_INAME>(
           std::forward<Args>(args)...);
     }
 
     DEFINE_FUNCTOR(pythonic::numpy::UFUNC_NAME, reduce);
-  }
-}
+  } // namespace UFUNC_NAME
+} // namespace numpy
 PYTHONIC_NS_END

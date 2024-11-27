@@ -12,6 +12,7 @@ private:
     using TBase = TChangesWithAppend;
     bool NeedGranuleStatusProvide = false;
 protected:
+    std::vector<TPortionInfo::TConstPtr> SwitchedPortions;   // Portions that would be replaced by new ones
     std::shared_ptr<TGranuleMeta> GranuleMeta;
 
     virtual void DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) override;
@@ -29,11 +30,33 @@ protected:
         return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), pathIds);
     }
 
-public:
-    std::vector<TPortionDataAccessor> SwitchedPortions; // Portions that would be replaced by new ones
+    virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) override {
+        TBase::OnDataAccessorsInitialized(context);
+        THashMap<TString, THashSet<TBlobRange>> blobRanges;
+        for (const auto& p : SwitchedPortions) {
+            GetPortionDataAccessor(p->GetPortionId()).FillBlobRangesByStorage(blobRanges, *context.GetVersionedIndex());
+        }
 
-    TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionDataAccessor>& portions, const TSaverContext& saverContext);
+        for (const auto& p : blobRanges) {
+            auto action = BlobsAction.GetReading(p.first);
+            for (auto&& b : p.second) {
+                action->AddRange(b);
+            }
+        }
+    }
+
+public:
+    TCompactColumnEngineChanges(std::shared_ptr<TGranuleMeta> granule, const std::vector<TPortionInfo::TConstPtr>& portions, const TSaverContext& saverContext);
     ~TCompactColumnEngineChanges();
+
+    const std::vector<TPortionInfo::TConstPtr>& GetSwitchedPortions() const {
+        return SwitchedPortions;
+    }
+
+    void AddSwitchedPortion(const TPortionInfo::TConstPtr& portion) {
+        SwitchedPortions.emplace_back(portion);
+        PortionsToAccess->AddPortion(portion);
+    }
 
     static TString StaticTypeName() {
         return "CS::GENERAL";

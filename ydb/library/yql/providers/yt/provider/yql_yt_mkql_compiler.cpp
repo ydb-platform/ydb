@@ -7,13 +7,14 @@
 #include <ydb/library/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
 #include <ydb/library/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/defs.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/utils/log/context.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/defs.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/log/context.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
@@ -452,17 +453,21 @@ void RegisterYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             TYtTableContent tableContent(&node);
             TMaybe<ui64> itemsCount;
+            TString name = ToString(TYtTableContent::CallableName());
             if (auto setting = NYql::GetSetting(tableContent.Settings().Ref(), EYtSettingType::ItemsCount)) {
                 itemsCount = FromString<ui64>(setting->Child(1)->Content());
             }
+            if (NYql::HasSetting(tableContent.Settings().Ref(), EYtSettingType::Small)) {
+                name.prepend("Small");
+            }
             if (auto maybeRead = tableContent.Input().Maybe<TYtReadTable>()) {
                 auto read = maybeRead.Cast();
-                return BuildTableContentCall(
+                return BuildTableContentCall(name,
                     NCommon::BuildType(node, *node.GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder),
                     read.DataSource().Cluster().Value(), read.Input().Ref(), itemsCount, ctx, true);
             } else {
                 auto output = tableContent.Input().Cast<TYtOutput>();
-                return BuildTableContentCall(
+                return BuildTableContentCall(name,
                     NCommon::BuildType(node, *node.GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx.ProgramBuilder),
                     GetOutputOp(output).DataSink().Cluster().Value(), output.Ref(), itemsCount, ctx, true);
             }

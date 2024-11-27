@@ -29,9 +29,9 @@ namespace numpy
     }
 
     inline auto power(double a, long size)
-        -> decltype(power(a, types::array<long, 1>{{size}}))
+        -> decltype(power(a, types::array_tuple<long, 1>{{size}}))
     {
-      return power(a, types::array<long, 1>{{size}});
+      return power(a, types::array_tuple<long, 1>{{size}});
     }
 
     inline double power(double a, types::none_type d)

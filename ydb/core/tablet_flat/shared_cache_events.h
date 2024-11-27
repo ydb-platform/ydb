@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "flat_bio_events.h"
 #include "shared_handle.h"
+#include "shared_page.h"
 #include <ydb/core/protos/shared_cache.pb.h>
 
 #include <util/generic/map.h>
@@ -10,9 +11,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
-namespace NKikimr {
-namespace NSharedCache {
-
+namespace NKikimr::NSharedCache {
     using EPriority = NTabletFlatExecutor::NBlockIO::EPriority;
 
     enum EEv {
@@ -22,6 +21,7 @@ namespace NSharedCache {
         EvUnregister,
         EvInvalidate,
         EvAttach,
+        EvSaveCompactedPages,
         EvRequest,
         EvResult,
         EvUpdated,
@@ -61,6 +61,19 @@ namespace NSharedCache {
             , Owner(owner)
         {
             Y_ABORT_UNLESS(Owner, "Cannot send request with empty owner");
+        }
+    };
+
+    // Note: compacted pages do not have an owner yet
+    // at first they should be accepted by an executor
+    // and it will send TEvAttach itself when it have happened
+    struct TEvSaveCompactedPages : public TEventLocal<TEvSaveCompactedPages, EvSaveCompactedPages> {
+        TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+        TVector<TIntrusivePtr<TPage>> Pages;
+
+        TEvSaveCompactedPages(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
+            : PageCollection(std::move(pageCollection))
+        {
         }
     };
 
@@ -128,7 +141,6 @@ namespace NSharedCache {
 
         THashMap<TLogoBlobID, TActions> Actions;
     };
-}
 }
 
 template<> inline

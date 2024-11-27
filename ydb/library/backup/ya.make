@@ -5,7 +5,7 @@ PEERDIR(
     library/cpp/logger
     library/cpp/regex/pcre
     library/cpp/string_utils/quote
-    ydb/library/dynumber
+    yql/essentials/types/dynumber
     ydb/public/api/protos
     ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump/util

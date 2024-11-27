@@ -18,27 +18,6 @@ using namespace NYql;
 using namespace NYql::NDq;
 
 
-namespace {
-
-ui32 CalcDrops(const NDqProto::TDqExecutionStats& profile) {
-    ui32 count = 0;
-    for (auto& stage : profile.GetStages()) {
-        for (auto& ca : stage.GetComputeActors()) {
-            for (auto& task: ca.GetTasks()) {
-                for (auto& inputChannels: task.GetInputChannels()) {
-                    count += inputChannels.GetResentMessages();
-                }
-                for (auto& outputChannels: task.GetOutputChannels()) {
-                    count += outputChannels.GetResentMessages();
-                }
-            }
-        }
-    }
-    return count;
-}
-
-} // namespace
-
 class KqpStabilityTests : public TTestBase {
 public:
     void SetUp() override;
@@ -143,8 +122,6 @@ private:
     void DoRun(TDropInfo& dropInfo, TMaybe<TString> error) {
         dropInfo.Attach(Server->GetRuntime());
 
-        TMaybe<NDqProto::TDqExecutionStats> profile;
-
         auto client = Server->GetRuntime()->AllocateEdgeActor();
         SendRequest(*Server->GetRuntime(), client, MakeStreamRequest(client, Query, true));
 
@@ -155,7 +132,7 @@ private:
         while (true) {
             TAutoPtr<IEventHandle> handle;
             auto replies = Server->GetRuntime()->GrabEdgeEventsRethrow<TEvKqp::TEvQueryResponse, TEvKqp::TEvAbortExecution,
-                TEvKqpExecuter::TEvStreamData, TEvKqpExecuter::TEvStreamProfile>(handle);
+                TEvKqpExecuter::TEvStreamData>(handle);
 
             if (auto* ev = std::get<TEvKqp::TEvQueryResponse*>(replies)) {
                 auto& response = ev->Record;
@@ -176,10 +153,7 @@ private:
                         [[4000001001u];[1u]]]
                     )"), ReformatYson(out.Str()));
 
-                    UNIT_ASSERT(profile.Defined());
                     UNIT_ASSERT(dropInfo.DroppedEvents > 0);
-                    UNIT_ASSERT(CalcDrops(*profile) > 0);
-                    //UNIT_ASSERT_C(dropInfo.DroppedEvents >= CalcDrops(*profile), dropCount << " !>= " << CalcDrops(*profile));
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::GENERIC_ERROR);
                     UNIT_ASSERT_STRINGS_EQUAL(response.GetResponse().GetQueryIssues()[0].issues()[0].message(), *error);
@@ -206,11 +180,6 @@ private:
                     writer.OnEndList();
                 }
 
-                continue;
-            }
-
-            if (auto* ev = std::get<TEvKqpExecuter::TEvStreamProfile*>(replies)) {
-                profile = ev->Record.profile();
                 continue;
             }
         }
@@ -447,7 +416,7 @@ void KqpStabilityTests::AbortOnDisconnect() {
     while (true) {
         TAutoPtr<IEventHandle> handle;
         auto replies = Server->GetRuntime()->GrabEdgeEventsRethrow<TEvKqp::TEvQueryResponse, TEvKqp::TEvAbortExecution,
-            TEvKqpExecuter::TEvStreamData, TEvKqpExecuter::TEvStreamProfile>(handle);
+            TEvKqpExecuter::TEvStreamData>(handle);
 
         if (auto* ev = std::get<TEvKqp::TEvQueryResponse*>(replies)) {
             auto& response = ev->Record;
@@ -462,10 +431,6 @@ void KqpStabilityTests::AbortOnDisconnect() {
         }
 
         if (std::get<TEvKqpExecuter::TEvStreamData*>(replies)) {
-            UNIT_FAIL("unexpected");
-        }
-
-        if (std::get<TEvKqpExecuter::TEvStreamProfile*>(replies)) {
             UNIT_FAIL("unexpected");
         }
     }

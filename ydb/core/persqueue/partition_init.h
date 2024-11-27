@@ -152,4 +152,11 @@ public:
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) override;
 };
 
+class TInitEndWriteTimestampStep: public TInitializerStep {
+public:
+    TInitEndWriteTimestampStep(TInitializer* initializer);
+
+    void Execute(const TActorContext& ctx) override;
+};
+
 } // NKikimr::NPQ

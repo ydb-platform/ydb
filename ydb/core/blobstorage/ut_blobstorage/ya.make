@@ -20,6 +20,7 @@ SRCS(
     assimilation.cpp
     block_race.cpp
     counting_events.cpp
+    deadlines.cpp
     decommit_3dc.cpp
     defrag.cpp
     discover.cpp
@@ -64,6 +65,7 @@ RECURSE_FOR_TESTS(
     ut_blob_depot_fat
     ut_donor
     ut_group_reconfiguration
+    ut_huge
     ut_read_only_vdisk
     ut_osiris
     ut_replication

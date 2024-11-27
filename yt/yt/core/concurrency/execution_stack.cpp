@@ -89,8 +89,9 @@ TExecutionStack::TExecutionStack(size_t size)
 
     auto checkOom = [] {
         if (LastSystemError() == ENOMEM) {
-            fprintf(stderr, "Out-of-memory condition detected while allocating execution stack; terminating\n");
-            AbortProcess(ToUnderlying(EProcessExitCode::OutOfMemory));
+            AbortProcessDramatically(
+                EProcessExitCode::OutOfMemory,
+                "Out-of-memory on execution stack allocation");
         }
     };
 

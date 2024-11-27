@@ -12,7 +12,7 @@ namespace operator_
   long countOf(A &&a, B &&b);
 
   DEFINE_FUNCTOR(pythonic::operator_, countOf);
-}
+} // namespace operator_
 PYTHONIC_NS_END
 
 #endif

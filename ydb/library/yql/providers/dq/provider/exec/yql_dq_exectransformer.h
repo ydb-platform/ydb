@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <yql/essentials/core/yql_data_provider.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 
 #include <util/generic/ptr.h>
 

@@ -124,7 +124,7 @@ message TFeatureFlags {
     optional bool EnableGetNodeLabels = 99 [default = false];
     optional bool EnableTopicMessageMeta = 100 [default = true];
     optional bool EnableIcNodeCache = 101 [default = true, (RequireRestart) = true];
-    optional bool EnableTempTables = 102 [default = false];
+    optional bool EnableTempTables = 102 [default = true];
     optional bool SuppressCompatibilityCheck = 103 [default = false, (RequireRestart) = true];
     optional bool EnableUniqConstraint = 104 [default = true];
     optional bool EnableChangefeedDebeziumJsonFormat = 105 [default = false];
@@ -172,8 +172,10 @@ message TFeatureFlags {
     optional bool EnableInsertWriteIdSpecialColumnCompatibility = 147 [default = false];
     optional bool EnableTopicAutopartitioningForCDC = 148 [default = false];
     optional bool EnableWritePortionsOnInsert = 149 [default = false];
-    optional bool EnableFollowerStats = 150 [default = false];
+    optional bool EnableFollowerStats = 150 [default = true];
     optional bool EnableTopicAutopartitioningForReplication = 151 [default = false];
     optional bool EnableDriveSerialsDiscovery = 152 [default = false];
-    optional bool EnableReleaseNodeNameOnGracefulShutdown = 153 [default = false];
+    optional bool EnableSeparateDiskSpaceQuotas = 153 [default = false];
+    optional bool EnableAntlr4Parser = 154 [default = false];
+    optional bool EnableReleaseNodeNameOnGracefulShutdown = 155 [default = false];
 }

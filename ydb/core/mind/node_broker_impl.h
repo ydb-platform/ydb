@@ -293,7 +293,8 @@ private:
                               TTransactionContext &txc);
     void DbReleaseSlotIndex(const TNodeInfo &node,
                                        TTransactionContext &txc);
-
+    void DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
+                              TTransactionContext &txc);
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,

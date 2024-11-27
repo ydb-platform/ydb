@@ -7,10 +7,10 @@
 #include "local_rate_limiter.h"
 #include "service_table.h"
 
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>
@@ -67,49 +67,6 @@ static void NullSerializeReadTableResponse(const google::protobuf::RepeatedPtrFi
         readTableResponse.mutable_issues()->CopyFrom(message);
     }
     Y_PROTOBUF_SUPPRESS_NODISCARD readTableResponse.SerializeToString(output);
-}
-
-static NKikimrMiniKQL::TParams ConvertKey(const Ydb::TypedValue& key) {
-    NKikimrMiniKQL::TParams protobuf;
-    ConvertYdbTypeToMiniKQLType(key.type(), *protobuf.MutableType());
-    ConvertYdbValueToMiniKQLValue(key.type(), key.value(), *protobuf.MutableValue());
-    return protobuf;
-}
-
-template<class TGetOutput>
-static void ConvertKeyRange(const Ydb::Table::KeyRange& keyRange, const TGetOutput& getOutput) {
-    switch (keyRange.from_bound_case()) {
-        case Ydb::Table::KeyRange::kGreaterOrEqual: {
-            auto* output = getOutput();
-            output->SetFromInclusive(true);
-            output->MutableFrom()->CopyFrom(ConvertKey(keyRange.greater_or_equal()));
-            break;
-        }
-        case Ydb::Table::KeyRange::kGreater: {
-            auto* output = getOutput();
-            output->SetFromInclusive(false);
-            output->MutableFrom()->CopyFrom(ConvertKey(keyRange.greater()));
-            break;
-        }
-        default:
-            break;
-    }
-    switch (keyRange.to_bound_case()) {
-        case Ydb::Table::KeyRange::kLessOrEqual: {
-            auto* output = getOutput();
-            output->SetToInclusive(true);
-            output->MutableTo()->CopyFrom(ConvertKey(keyRange.less_or_equal()));
-            break;
-        }
-        case Ydb::Table::KeyRange::kLess: {
-            auto* output = getOutput();
-            output->SetToInclusive(false);
-            output->MutableTo()->CopyFrom(ConvertKey(keyRange.less()));
-            break;
-        }
-        default:
-            break;
-    }
 }
 
 class TReadTableRPC : public TActorBootstrapped<TReadTableRPC> {
@@ -555,15 +512,7 @@ private:
             settings.Columns.push_back(col);
         }
 
-        try {
-            ConvertKeyRange(req->key_range(), [&]{ return &settings.KeyRange; });
-        } catch (const std::exception& ex) {
-            const NYql::TIssue& issue = NYql::ExceptionToIssue(ex);
-            google::protobuf::RepeatedPtrField<TYdbIssueMessageType> message;
-            auto item = message.Add();
-            NYql::IssueToMessage(issue, item);
-            return ReplyFinishStream(StatusIds::BAD_REQUEST, message, ctx);
-        }
+        settings.KeyRange.CopyFrom(req->key_range());
 
         ReadTableActor = ctx.RegisterWithSameMailbox(NKikimr::NTxProxy::CreateReadTableSnapshotWorker(settings));
     }

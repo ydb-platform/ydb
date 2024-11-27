@@ -1,8 +1,8 @@
 #include "kqp_constant_folding_transformer.h"
 
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 using namespace NYql;
 using namespace NYql::NNodes;

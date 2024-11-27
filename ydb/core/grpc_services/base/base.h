@@ -16,9 +16,9 @@
 
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue_manager.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue_manager.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include <ydb/core/jaeger_tracing/request_discriminator.h>

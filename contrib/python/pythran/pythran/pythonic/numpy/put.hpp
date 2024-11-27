@@ -3,11 +3,11 @@
 
 #include "pythonic/include/numpy/put.hpp"
 
-#include "pythonic/utils/functor.hpp"
-#include "pythonic/types/ndarray.hpp"
-#include "pythonic/numpy/asarray.hpp"
-#include "pythonic/utils/numpy_conversion.hpp"
 #include "pythonic/builtins/ValueError.hpp"
+#include "pythonic/numpy/asarray.hpp"
+#include "pythonic/types/ndarray.hpp"
+#include "pythonic/utils/functor.hpp"
+#include "pythonic/utils/numpy_conversion.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -43,7 +43,7 @@ namespace numpy
   {
     throw std::runtime_error("put only partially implemented");
   }
-}
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

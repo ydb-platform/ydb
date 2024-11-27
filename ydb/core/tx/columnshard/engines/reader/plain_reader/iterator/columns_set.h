@@ -8,10 +8,17 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
+enum class EMemType {
+    Blob,
+    Raw,
+    RawSequential
+};
+
 enum class EStageFeaturesIndexes {
-    Filter = 0,
-    Fetching = 1,
-    Merge = 2
+    Accessors = 0,
+    Filter = 1,
+    Fetching = 2,
+    Merge = 3
 };
 
 class TIndexesSet {

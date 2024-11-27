@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/public/udf/udf_value.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>

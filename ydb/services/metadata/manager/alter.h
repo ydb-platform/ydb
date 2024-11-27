@@ -15,8 +15,8 @@ private:
     using TBase = TModificationActor<TObject>;
 protected:
     virtual bool ProcessPreparedObjects(NInternal::TTableRecords&& records) const override {
-        TBase::Register(new TUpdateObjectsActor<TObject>(std::move(records), TBase::UserToken,
-            TBase::InternalController, TBase::SessionId, TBase::TransactionId, TBase::Context.GetExternalData().GetUserToken()));
+        TBase::Register(new TUpdateObjectsActor<TObject>(std::move(records), TBase::UserToken, TBase::InternalController, TBase::SessionId,
+            TBase::TransactionId, TBase::Context.GetExternalData().GetUserToken(), TBase::Preconditions));
         return true;
     }
 
@@ -33,9 +33,8 @@ private:
     using TBase = TModificationActor<TObject>;
 protected:
     virtual bool ProcessPreparedObjects(NInternal::TTableRecords&& records) const override {
-        TBase::Register(new TUpsertObjectsActor<TObject>(std::move(records), TBase::UserToken,
-            TBase::InternalController, TBase::SessionId, TBase::TransactionId,
-            TBase::Context.GetExternalData().GetUserToken()));
+        TBase::Register(new TUpsertObjectsActor<TObject>(std::move(records), TBase::UserToken, TBase::InternalController, TBase::SessionId,
+            TBase::TransactionId, TBase::Context.GetExternalData().GetUserToken(), TBase::Preconditions));
         return true;
     }
 
@@ -53,9 +52,8 @@ private:
     bool ExistingOk = false;
 protected:
     virtual bool ProcessPreparedObjects(NInternal::TTableRecords&& records) const override {
-        TBase::Register(new TInsertObjectsActor<TObject>(std::move(records), TBase::UserToken,
-            TBase::InternalController, TBase::SessionId, TBase::TransactionId,
-            TBase::Context.GetExternalData().GetUserToken(), ExistingOk));
+        TBase::Register(new TInsertObjectsActor<TObject>(std::move(records), TBase::UserToken, TBase::InternalController, TBase::SessionId,
+            TBase::TransactionId, TBase::Context.GetExternalData().GetUserToken(), TBase::Preconditions, ExistingOk));
         return true;
     }
 
@@ -103,8 +101,8 @@ public:
     using TBase::TBase;
 
     virtual bool ProcessPreparedObjects(NInternal::TTableRecords&& records) const override {
-        TBase::Register(new TDeleteObjectsActor<TObject>(std::move(records), TBase::UserToken,
-            TBase::InternalController, TBase::SessionId, TBase::TransactionId, TBase::Context.GetExternalData().GetUserToken()));
+        TBase::Register(new TDeleteObjectsActor<TObject>(std::move(records), TBase::UserToken, TBase::InternalController, TBase::SessionId,
+            TBase::TransactionId, TBase::Context.GetExternalData().GetUserToken(), TBase::Preconditions));
         return true;
     }
 

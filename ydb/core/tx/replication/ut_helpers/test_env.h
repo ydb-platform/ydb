@@ -179,6 +179,12 @@ public:
         return Server.GetRuntime()->GrabEdgeEvent<TEvResponse>(Sender);
     }
 
+    template <typename TEvResponse>
+    auto Send(const TActorId& recipient, THolder<IEventBase> ev) {
+        SendAsync(recipient, ev.Release());
+        return Server.GetRuntime()->GrabEdgeEvent<TEvResponse>(Sender);
+    }
+
     auto& GetRuntime() {
         return *Server.GetRuntime();
     }

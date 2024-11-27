@@ -828,7 +828,7 @@ void UnversionedValueToProtobufImpl(
         THROW_ERROR_EXCEPTION("Cannot parse a protobuf message from %Qlv",
             unversionedValue.Type);
     }
-    TString wireBytes;
+    TProtobufString wireBytes;
     StringOutputStream outputStream(&wireBytes);
     TProtobufWriterOptions options;
     options.UnknownYsonFieldModeResolver = TProtobufWriterOptions::CreateConstantUnknownYsonFieldModeResolver(EUnknownYsonFieldsMode::Keep);
@@ -992,7 +992,7 @@ void UnversionedValueToListImpl(
         std::unique_ptr<IYsonConsumer> Underlying_;
         int Depth_ = 0;
 
-        TString WireBytes_;
+        TProtobufString WireBytes_;
         StringOutputStream OutputStream_;
 
 
@@ -1301,7 +1301,7 @@ void UnversionedValueToMapImpl(
         std::unique_ptr<IYsonConsumer> Underlying_;
         int Depth_ = 0;
 
-        TString WireBytes_;
+        TProtobufString WireBytes_;
         StringOutputStream OutputStream_;
 
 

@@ -56,10 +56,13 @@ public:
     bool IsNetworkingDisabled();
 
     //! Returns the network name for a given #address.
-    const TString& GetNetworkNameForAddress(const NNet::TNetworkAddress& address);
+    const std::string& GetNetworkNameForAddress(const NNet::TNetworkAddress& address);
 
     //! Returns the TOS level configured for a band.
     TTosLevel GetTosLevelForBand(EMultiplexingBand band);
+
+    //! Returns adjusted multiplexing parallelism for a band.
+    int GetMultiplexingParallelism(EMultiplexingBand band, int multiplexingParallelism);
 
     //! Provides diagnostics for the whole TCP bus subsystem.
     NYTree::IYPathServicePtr GetOrchidService();

@@ -26,7 +26,7 @@ struct TTCMallocLimitHandlerOptions
 
     // Files structure would have the following form:
     // HeapDumpDirectory/<ActualName>_FilenameSuffix_Timestamp.ext.
-    TString FilenameSuffix = "";
+    std::optional<TString> FilenameSuffix;
     TDuration Timeout = TDuration::Minutes(5);
 };
 

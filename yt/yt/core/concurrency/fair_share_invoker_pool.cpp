@@ -533,7 +533,7 @@ private:
     };
 
     class TInvoker
-        : public TInvokerWrapper
+        : public TInvokerWrapper<false>
     {
     public:
         TInvoker(IInvokerPtr underlyingInvoker_, int index, TWeakPtr<TFairShareInvokerPool> parent)
@@ -546,6 +546,15 @@ private:
         {
             if (auto strongParent = Parent_.Lock()) {
                 strongParent->Enqueue(std::move(callback), Index_);
+            }
+        }
+
+        void Invoke(TMutableRange<TClosure> callbacks) override
+        {
+            if (auto strongParent = Parent_.Lock()) {
+                for (auto& callback : callbacks) {
+                    strongParent->Enqueue(std::move(callback), Index_);
+                }
             }
         }
 

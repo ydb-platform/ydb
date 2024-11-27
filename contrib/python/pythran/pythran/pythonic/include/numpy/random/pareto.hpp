@@ -16,13 +16,13 @@ namespace numpy
     types::ndarray<double, pS> pareto(double a, pS const &shape);
 
     auto pareto(double a, long size)
-        -> decltype(pareto(a, types::array<long, 1>{{size}}));
+        -> decltype(pareto(a, types::array_tuple<long, 1>{{size}}));
 
     double pareto(double a, types::none_type size = {});
 
     DEFINE_FUNCTOR(pythonic::numpy::random, pareto);
-  }
-}
+  } // namespace random
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

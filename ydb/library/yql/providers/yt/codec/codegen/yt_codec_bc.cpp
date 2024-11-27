@@ -1,13 +1,13 @@
 #define LLVM_BC
 #include "yt_codec_cg.h"
-#include <ydb/library/yql/utils/swap_bytes.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_buf.h>
-#include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
+#include <yql/essentials/utils/swap_bytes.h>
+#include <yql/essentials/providers/common/codec/yql_codec_buf.h>
+#include <yql/essentials/public/decimal/yql_decimal_serialize.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/udf/udf_value.h>
 
-#include <ydb/library/yql/public/decimal/yql_decimal_serialize.cpp>
-#include <ydb/library/yql/public/decimal/yql_decimal.cpp>
+#include <yql/essentials/public/decimal/yql_decimal_serialize.cpp>
+#include <yql/essentials/public/decimal/yql_decimal.cpp>
 
 using namespace NYql;
 

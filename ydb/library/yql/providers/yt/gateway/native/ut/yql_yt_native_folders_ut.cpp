@@ -1,11 +1,11 @@
 #include "library/cpp/testing/unittest/registar.h"
 #include <library/cpp/yson/node/node_io.h>
-#include <ydb/library/yql/core/ut_common/yql_ut_common.h>
+#include <yql/essentials/core/ut_common/yql_ut_common.h>
 #include <library/cpp/testing/common/network.h>
 #include <library/cpp/testing/mock_server/server.h>
 #include <ydb/library/yql/providers/yt/gateway/native/yql_yt_native.h>
-#include <ydb/library/yql/core/file_storage/proto/file_storage.pb.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/yt/provider/yql_yt_provider.h>
 
 namespace NYql {

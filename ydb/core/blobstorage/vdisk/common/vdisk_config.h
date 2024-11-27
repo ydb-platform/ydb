@@ -120,7 +120,6 @@ namespace NKikimr {
         ui32 HullSstSizeInChunksLevel;
         ui32 HugeBlobsFreeChunkReservation;
         ui32 MinHugeBlobInBytes;
-        ui32 OldMinHugeBlobInBytes;
         ui32 MilestoneHugeBlobInBytes;
         ui32 HugeBlobOverhead;
         ui32 HullCompLevel0MaxSstsAtOnce;
@@ -128,6 +127,7 @@ namespace NKikimr {
         double HullCompLevelRateThreshold;
         double HullCompFreeSpaceThreshold;
         ui32 FreshCompMaxInFlightWrites;
+        ui32 FreshCompMaxInFlightReads;
         ui32 HullCompMaxInFlightWrites;
         ui32 HullCompMaxInFlightReads;
         double HullCompReadBatchEfficiencyThreshold;
@@ -220,6 +220,7 @@ namespace NKikimr {
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
         TControlWrapper DefaultHugeGarbagePerMille;
+        TControlWrapper HugeDefragFreeSpaceBorderPerMille;
         bool UseActorSystemTimeInBSQueue = false;
 
         ///////////// BALANCING SETTINGS ////////////////////

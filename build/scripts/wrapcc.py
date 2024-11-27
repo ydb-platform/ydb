@@ -1,45 +1,27 @@
-from __future__ import print_function
-
-import os
-import sys
-import time
+import argparse
 import subprocess
+import sys, os
 
 
-def need_retry(text):
-    return 'Stack dump' in text
+WRAPCC_ARGS_END='--wrapcc-end'
 
+def fix(source_file: str, source_root: str):
+    flags = []
+    return flags
 
-def retry_inf(cmd):
-    while True:
-        try:
-            yield subprocess.check_output(cmd, stderr=subprocess.STDOUT), None
-        except subprocess.CalledProcessError as e:
-            yield e.output, e
+def parse_args():
+    delimer = -1
+    if WRAPCC_ARGS_END in sys.argv:
+        delimer = sys.argv.index(WRAPCC_ARGS_END)
+    assert delimer != -1, f"This wrapper should be called with {WRAPCC_ARGS_END} argument."
 
-
-def retry(cmd):
-    for n, (out, err) in enumerate(retry_inf(cmd)):
-        if out:
-            sys.stderr.write(out)
-
-        if n > 5:
-            raise Exception('all retries failed')
-        elif need_retry(out):
-            time.sleep(1 + n)
-        elif err:
-            raise err
-        else:
-            return
-
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--source-file', required=True)
+    parser.add_argument('--source-root', required=True)
+    cc_cmd = sys.argv[delimer+1:]
+    return parser.parse_args(sys.argv[1:delimer]), cc_cmd
 
 if __name__ == '__main__':
-    cmd = sys.argv[1:]
-
-    if '-c' in cmd:
-        try:
-            retry(cmd)
-        except subprocess.CalledProcessError as e:
-            sys.exit(e.returncode)
-    else:
-        os.execv(cmd[0], cmd)
+    args, cc_cmd = parse_args()
+    cmd = cc_cmd + fix(args.source_file, args.source_root)
+    os.execv(cmd[0], cmd)

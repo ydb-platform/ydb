@@ -199,7 +199,7 @@ void TNodeBroker::AddNode(const TNodeInfo &info)
     FreeIds.Reset(info.NodeId);
     if (info.SlotIndex.has_value()) {
         SlotIndexesPools[info.ServicedSubDomain].Acquire(info.SlotIndex.value());
-    }    
+    }
 
     if (info.Expire > Epoch.Start) {
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
@@ -564,7 +564,8 @@ void TNodeBroker::DbAddNode(const TNodeInfo &node,
                 << " lease=" << node.Lease
                 << " expire=" << node.ExpirationString()
                 << " servicedsubdomain=" << node.ServicedSubDomain
-                << " slotindex= " << node.SlotIndex);
+                << " slotindex=" << node.SlotIndex
+                << " authorizedbycertificate=" << (node.AuthorizedByCertificate ? "true" : "false"));
 
     NIceDb::TNiceDb db(txc.DB);
     using T = Schema::Nodes;
@@ -576,7 +577,8 @@ void TNodeBroker::DbAddNode(const TNodeInfo &node,
         .Update<T::Lease>(node.Lease)
         .Update<T::Expire>(node.Expire.GetValue())
         .Update<T::Location>(node.Location.GetSerializedLocation())
-        .Update<T::ServicedSubDomain>(node.ServicedSubDomain);
+        .Update<T::ServicedSubDomain>(node.ServicedSubDomain)
+        .Update<T::AuthorizedByCertificate>(node.AuthorizedByCertificate);
 
     if (node.SlotIndex.has_value()) {
         db.Table<T>().Key(node.NodeId)
@@ -729,7 +731,8 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
             info.ServicedSubDomain = TSubDomainKey(nodesRowset.GetValueOrDefault<T::ServicedSubDomain>());
             if (nodesRowset.HaveValue<T::SlotIndex>()) {
                 info.SlotIndex = nodesRowset.GetValue<T::SlotIndex>();
-            } 
+            }
+            info.AuthorizedByCertificate = nodesRowset.GetValue<T::AuthorizedByCertificate>();
             AddNode(info);
 
             LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
@@ -851,10 +854,22 @@ void TNodeBroker::DbReleaseSlotIndex(const TNodeInfo &node,
     db.Table<T>().Key(node.NodeId)
         .UpdateToNull<T::SlotIndex>();
 }
+  
+void TNodeBroker::DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
+                                       TTransactionContext &txc)
+{
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Update node " << node.IdString() << " authorizedbycertificate in database"
+                << " authorizedbycertificate=" << (node.AuthorizedByCertificate ? "true" : "false"));
+
+    NIceDb::TNiceDb db(txc.DB);
+    using T = Schema::Nodes;
+    db.Table<T>().Key(node.NodeId).Update<T::AuthorizedByCertificate>(node.AuthorizedByCertificate);
+}
 
 void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                          const TActorContext &ctx)
-{   
+{
     const auto& appConfig = ev->Get()->Record.GetConfig();
     if (appConfig.HasFeatureFlags()) {
         EnableStableNodeNames = appConfig.GetFeatureFlags().GetEnableStableNodeNames();

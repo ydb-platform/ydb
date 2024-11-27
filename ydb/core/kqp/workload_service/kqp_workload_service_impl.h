@@ -16,7 +16,7 @@ constexpr TDuration IDLE_DURATION = TDuration::Seconds(60);
 
 
 struct TDatabaseState {
-    NActors::TActorContext ActorContext;
+    TActorId SelfId;
     bool& EnabledResourcePoolsOnServerless;
 
     std::vector<TEvPlaceRequestIntoPool::TPtr> PendingRequersts = {};
@@ -33,7 +33,7 @@ struct TDatabaseState {
         const TString& poolId = ev->Get()->PoolId;
         auto& subscribers = PendingSubscriptions[poolId];
         if (subscribers.empty()) {
-            ActorContext.Register(CreatePoolFetcherActor(ActorContext.SelfID, ev->Get()->DatabaseId, poolId, nullptr));
+            TActivationContext::Register(CreatePoolFetcherActor(SelfId, ev->Get()->DatabaseId, poolId, nullptr));
         }
 
         subscribers.emplace(ev->Sender);
@@ -45,7 +45,7 @@ struct TDatabaseState {
         PendingRequersts.emplace_back(std::move(ev));
 
         if (!EnabledResourcePoolsOnServerless && (TInstant::Now() - LastUpdateTime) > IDLE_DURATION) {
-            ActorContext.Register(CreateDatabaseFetcherActor(ActorContext.SelfID, DatabaseIdToDatabase(databaseId)));
+            TActivationContext::Register(CreateDatabaseFetcherActor(SelfId, DatabaseIdToDatabase(databaseId)));
         } else if (!DatabaseUnsupported) {
             StartPendingRequests();
         } else {
@@ -61,11 +61,11 @@ struct TDatabaseState {
         }
 
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS && poolHandler) {
-            ActorContext.Send(poolHandler, new TEvPrivate::TEvUpdatePoolSubscription(ev->Get()->PathId, subscribers));
+            TActivationContext::Send(poolHandler, std::make_unique<TEvPrivate::TEvUpdatePoolSubscription>(ev->Get()->PathId, subscribers));
         } else {
             const TString& databaseId = ev->Get()->DatabaseId;
             for (const auto& subscriber : subscribers) {
-                ActorContext.Send(subscriber, new TEvUpdatePoolInfo(databaseId, poolId, std::nullopt, std::nullopt));
+                TActivationContext::Send(subscriber, std::make_unique<TEvUpdatePoolInfo>(databaseId, poolId, std::nullopt, std::nullopt));
             }
         }
         subscribers.clear();
@@ -79,7 +79,7 @@ struct TDatabaseState {
         }
 
         if (Serverless != ev->Get()->Serverless) {
-            ActorContext.Send(MakeKqpProxyID(ActorContext.SelfID.NodeId()), new TEvKqp::TEvUpdateDatabaseInfo(ev->Get()->Database, ev->Get()->DatabaseId, ev->Get()->Serverless));
+            TActivationContext::Send(MakeKqpProxyID(SelfId.NodeId()), std::make_unique<TEvKqp::TEvUpdateDatabaseInfo>(ev->Get()->Database, ev->Get()->DatabaseId, ev->Get()->Serverless));
         }
 
         LastUpdateTime = TInstant::Now();
@@ -103,17 +103,17 @@ private:
         }
 
         for (auto& ev : PendingRequersts) {
-            ActorContext.Register(CreatePoolResolverActor(std::move(ev), HasDefaultPool));
+            TActivationContext::Register(CreatePoolResolverActor(std::move(ev), HasDefaultPool));
         }
         PendingRequersts.clear();
     }
 
     void ReplyContinueError(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
         for (const auto& ev : PendingRequersts) {
-            RemovePendingSession(ev->Get()->SessionId, [this](TEvCleanupRequest::TPtr event) {
-                ActorContext.Send(event->Sender, new TEvCleanupResponse(Ydb::StatusIds::NOT_FOUND, {NYql::TIssue(TStringBuilder() << "Pool " << event->Get()->PoolId << " not found")}));
+            RemovePendingSession(ev->Get()->SessionId, [actorSystem = TActivationContext::ActorSystem()](TEvCleanupRequest::TPtr event) {
+                actorSystem->Send(event->Sender, new TEvCleanupResponse(Ydb::StatusIds::NOT_FOUND, NYql::TIssues{NYql::TIssue(TStringBuilder() << "Pool " << event->Get()->PoolId << " not found")}));
             });
-            ActorContext.Send(ev->Sender, new TEvContinueRequest(status, {}, {}, issues));
+            TActivationContext::Send(ev->Sender, std::make_unique<TEvContinueRequest>(status, TString{}, NResourcePool::TPoolSettings{}, issues));
         }
         PendingRequersts.clear();
     }
@@ -121,7 +121,6 @@ private:
 
 struct TPoolState {
     NActors::TActorId PoolHandler;
-    NActors::TActorContext ActorContext;
 
     std::queue<TEvPrivate::TEvResolvePoolResponse::TPtr> PendingRequests = {};
     bool WaitingInitialization = false;
@@ -137,7 +136,7 @@ struct TPoolState {
             return;
         }
 
-        ActorContext.Send(PoolHandler, new TEvPrivate::TEvStopPoolHandler(false));
+        TActivationContext::Send(PoolHandler, std::make_unique<TEvPrivate::TEvStopPoolHandler>(false));
         PreviousPoolHandlers.insert(PoolHandler);
         PoolHandler = *NewPoolHandler;
         NewPoolHandler = std::nullopt;
@@ -151,7 +150,7 @@ struct TPoolState {
 
         PlaceRequestRunning = true;
         InFlightRequests++;
-        ActorContext.Send(PendingRequests.front()->Forward(PoolHandler));
+        TActivationContext::Send(PendingRequests.front()->Forward(PoolHandler));
         PendingRequests.pop();
     }
 
@@ -163,31 +162,29 @@ struct TPoolState {
 
     void DoCleanupRequest(TEvCleanupRequest::TPtr event) {
         for (const auto& poolHandler : PreviousPoolHandlers) {
-            ActorContext.Send(poolHandler, new TEvCleanupRequest(
+            TActivationContext::Send(poolHandler, std::make_unique<TEvCleanupRequest>(
                 event->Get()->DatabaseId, event->Get()->SessionId,
                 event->Get()->PoolId, event->Get()->Duration, event->Get()->CpuConsumed
             ));
         }
-        ActorContext.Send(event->Forward(PoolHandler));
+        TActivationContext::Send(event->Forward(PoolHandler));
     }
 };
 
 struct TCpuQuotaManagerState {
     TCpuQuotaManager CpuQuotaManager;
-    NActors::TActorContext ActorContext;
     bool CpuLoadRequestRunning = false;
     TInstant CpuLoadRequestTime = TInstant::Zero();
 
-    TCpuQuotaManagerState(NActors::TActorContext actorContext, NMonitoring::TDynamicCounterPtr subComponent)
+    TCpuQuotaManagerState(NMonitoring::TDynamicCounterPtr subComponent)
         : CpuQuotaManager(TDuration::Seconds(1), TDuration::Seconds(10), IDLE_DURATION, 0.1, true, 0, subComponent)
-        , ActorContext(actorContext)
     {}
 
     void RequestCpuQuota(TActorId poolHandler, double maxClusterLoad, ui64 coockie) {
         auto response = CpuQuotaManager.RequestCpuQuota(0.0, maxClusterLoad);
 
         bool quotaAccepted = response.Status == NYdb::EStatus::SUCCESS;
-        ActorContext.Send(poolHandler, new TEvPrivate::TEvCpuQuotaResponse(quotaAccepted, maxClusterLoad, std::move(response.Issues)), 0, coockie);
+        TActivationContext::Send(poolHandler, std::make_unique<TEvPrivate::TEvCpuQuotaResponse>(quotaAccepted, maxClusterLoad, std::move(response.Issues)), 0, coockie);
 
         // Schedule notification
         if (!quotaAccepted) {
@@ -238,7 +235,7 @@ private:
             }
 
             for (const TActorId& poolHandler : poolHandlers) {
-                ActorContext.Send(poolHandler, new TEvPrivate::TEvRefreshPoolState());
+                TActivationContext::Send(poolHandler, std::make_unique<TEvPrivate::TEvRefreshPoolState>());
                 HandlersLimits.erase(poolHandler);
             }
             PendingHandlers.erase(PendingHandlers.begin());

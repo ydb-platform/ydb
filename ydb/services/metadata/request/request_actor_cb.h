@@ -8,11 +8,9 @@
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/conclusion/generic/result.h>
-#include <ydb/library/conclusion/status.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <ydb/library/conclusion/result.h>
 
 namespace NKikimr::NMetadata::NRequest {
 

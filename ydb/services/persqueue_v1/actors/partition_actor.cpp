@@ -25,7 +25,7 @@ TPartitionActor::TPartitionActor(
         const TString& session, const TPartitionId& partition, const ui32 generation, const ui32 step,
         const ui64 tabletID, const TTopicCounters& counters, bool commitsDisabled,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic,
-        bool directRead, bool useMigrationProtocol
+        bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs
 )
     : ParentId(parentId)
     , ClientId(clientId)
@@ -37,6 +37,8 @@ TPartitionActor::TPartitionActor(
     , Generation(generation)
     , Step(step)
     , TabletID(tabletID)
+    , MaxTimeLagMs(maxTimeLagMs)
+    , ReadTimestampMs(readTimestampMs)
     , ReadOffset(0)
     , ClientReadOffset(0)
     , ClientCommitOffset(0)
@@ -927,7 +929,7 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
         ClientCommitOffset = CommittedOffset;
     }
 
-    if (EndOffset > ReadOffset) {
+    if (EndOffset > ReadOffset && !MaxTimeLagMs && !ReadTimestampMs) {
         SendPartitionReady(ctx);
     } else {
         WaitForData = true;
@@ -1008,7 +1010,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
 
     Y_ABORT_UNLESS(InitDone);
     Y_ABORT_UNLESS(PipeClient);
-    Y_ABORT_UNLESS(ReadOffset >= EndOffset);
+    Y_ABORT_UNLESS(ReadOffset >= EndOffset || MaxTimeLagMs || ReadTimestampMs);
 
     TAutoPtr<TEvPersQueue::TEvHasDataInfo> event(new TEvPersQueue::TEvHasDataInfo());
     event->Record.SetPartition(Partition.Partition);
@@ -1017,6 +1019,13 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     ui64 deadline = (ctx.Now() + WAIT_DATA - WAIT_DELTA).MilliSeconds();
     event->Record.SetDeadline(deadline);
     event->Record.SetClientId(ClientId);
+    if (MaxTimeLagMs) {
+        event->Record.SetMaxTimeLagMs(MaxTimeLagMs);
+    }
+    if (ReadTimestampMs) {
+        event->Record.SetReadTimestampMs(ReadTimestampMs);
+    }
+
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY,
             PQ_LOG_PREFIX << " " << Partition << " wait data in partition inited, cookie " << WaitDataCookie << " from offset" << ReadOffset);
@@ -1049,7 +1058,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
     Y_ABORT_UNLESS(record.HasEndOffset());
     Y_ABORT_UNLESS(EndOffset <= record.GetEndOffset()); //end offset could not be changed if no data arrived, but signal will be sended anyway after timeout
-    Y_ABORT_UNLESS(ReadOffset >= EndOffset); //otherwise no WaitData were needed
+    Y_ABORT_UNLESS(ReadOffset >= EndOffset || MaxTimeLagMs || ReadTimestampMs); //otherwise no WaitData were needed
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                     << " wait for data done: " << " readOffset " << ReadOffset << " EndOffset " << EndOffset << " newEndOffset "
@@ -1059,7 +1068,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     EndOffset = record.GetEndOffset();
     SizeLag = record.GetSizeLag();
 
-    if (ReadOffset < EndOffset) {
+    if (ReadOffset < EndOffset && !record.GetReadingFinished()) {
         WaitForData = false;
         WaitDataInfly.clear();
         SendPartitionReady(ctx);

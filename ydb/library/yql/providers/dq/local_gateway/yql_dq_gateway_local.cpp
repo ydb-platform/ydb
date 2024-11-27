@@ -10,8 +10,8 @@
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 
-#include <ydb/library/yql/utils/range_walker.h>
-#include <ydb/library/yql/utils/bind_in_range.h>
+#include <yql/essentials/utils/range_walker.h>
+#include <yql/essentials/utils/network/bind_in_range.h>
 
 #include <library/cpp/messagebus/network.h>
 
@@ -63,7 +63,7 @@ public:
         auto lwmGroup = MetricsRegistry->GetSensors()->GetSubgroup("component", "lwm");
         auto patternCache = std::make_shared<NKikimr::NMiniKQL::TComputationPatternLRUCache>(NKikimr::NMiniKQL::TComputationPatternLRUCache::Config(200_MB, 200_MB));
         NDqs::TLocalWorkerManagerOptions lwmOptions;
-        lwmOptions.Factory = NTaskRunnerProxy::CreateFactory(functionRegistry, compFactory, taskTransformFactory, patternCache, true);
+        lwmOptions.Factory = NTaskRunnerProxy::CreateFactory(functionRegistry, compFactory, taskTransformFactory, patternCache, false);
         lwmOptions.AsyncIoFactory = std::move(asyncIoFactory);
         lwmOptions.FunctionRegistry = functionRegistry;
         lwmOptions.TaskRunnerInvokerFactory = new NDqs::TTaskRunnerInvokerFactory();

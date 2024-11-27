@@ -3,10 +3,10 @@
 
 #include "pythonic/include/numpy/ndarray/reshape.hpp"
 
+#include "pythonic/builtins/ValueError.hpp"
+#include "pythonic/types/ndarray.hpp"
 #include "pythonic/utils/functor.hpp"
 #include "pythonic/utils/numpy_conversion.hpp"
-#include "pythonic/types/ndarray.hpp"
-#include "pythonic/builtins/ValueError.hpp"
 
 PYTHONIC_NS_BEGIN
 
@@ -22,7 +22,7 @@ namespace numpy
         (void)std::initializer_list<bool>{
             (i == Is && (sutils::assign(std::get<Is>(p), v), true))...};
       }
-    }
+    } // namespace misc
     template <class T, class pS, class NpS>
     typename std::enable_if<!std::is_integral<NpS>::value,
                             types::ndarray<T, NpS>>::type
@@ -84,7 +84,7 @@ namespace numpy
 
     template <class T, class pS, class S0, class S1, class... S>
     auto reshape(types::ndarray<T, pS> const &expr, S0 i0, S1 i1,
-                 S const &... indices)
+                 S const &...indices)
         -> decltype(reshape(expr,
                             types::pshape<S0, S1, S...>{i0, i1, indices...}))
     {
@@ -92,8 +92,8 @@ namespace numpy
     }
 
     NUMPY_EXPR_TO_NDARRAY0_IMPL(reshape);
-  }
-}
+  } // namespace ndarray
+} // namespace numpy
 PYTHONIC_NS_END
 
 #endif

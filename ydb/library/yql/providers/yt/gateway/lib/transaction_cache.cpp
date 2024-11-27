@@ -4,7 +4,7 @@
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/interface/config.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <util/system/guard.h>
 #include <util/generic/yexception.h>
@@ -324,6 +324,40 @@ std::pair<TString, NYT::TTransactionId> TTransactionCache::TEntry::GetBinarySnap
         }
     }
 
+    return std::make_pair(snapshotPath, snapshotTx->GetId());
+}
+
+TMaybe<std::pair<TString, NYT::TTransactionId>> TTransactionCache::TEntry::GetBinarySnapshotFromCache(TString binaryCacheFolder, const TString& md5, const TString& fileName) {
+    if (binaryCacheFolder.StartsWith(NYT::TConfig::Get()->Prefix)) {
+        binaryCacheFolder = binaryCacheFolder.substr(NYT::TConfig::Get()->Prefix.size());
+    }
+    YQL_ENSURE(md5.size() > 4);
+    TString remotePath = TFsPath(binaryCacheFolder) / md5.substr(0, 2) / md5.substr(2, 2) / md5;
+
+    ITransactionPtr snapshotTx;
+    with_lock(Lock_) {
+        if (!BinarySnapshotTx) {
+            BinarySnapshotTx = Client->StartTransaction(TStartTransactionOptions().Attributes(TransactionSpec));
+        }
+        snapshotTx = BinarySnapshotTx;
+        if (auto p = BinarySnapshots.FindPtr(remotePath)) {
+            return std::make_pair(*p, snapshotTx->GetId());
+        }
+    }
+    TString snapshotPath;
+    try {
+        NYT::ILockPtr fileLock = snapshotTx->Lock(remotePath, NYT::ELockMode::LM_SNAPSHOT);
+        snapshotPath = TStringBuilder() << '#' << GetGuidAsString(fileLock->GetLockedNodeId());
+    } catch (const TErrorResponse& e) {
+        YQL_CLOG(WARN, ProviderYt) << "Can't load binary for \"" << fileName << "\" from BinaryCacheFolder: " << e.what();
+        return Nothing();
+    }
+    with_lock(Lock_) {
+        BinarySnapshots[remotePath] = snapshotPath;
+    }
+    YQL_CLOG(DEBUG, ProviderYt) << "Snapshot \""
+                                << fileName << "\" -> \"" << remotePath << "\" -> "
+                                << snapshotPath << ", tx=" << GetGuidAsString(snapshotTx->GetId());
     return std::make_pair(snapshotPath, snapshotTx->GetId());
 }
 

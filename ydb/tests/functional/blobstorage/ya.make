@@ -29,6 +29,7 @@ DEPENDS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/clients
     contrib/python/PyHamcrest
 )
 

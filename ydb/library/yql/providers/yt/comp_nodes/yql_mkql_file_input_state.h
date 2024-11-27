@@ -2,10 +2,10 @@
 
 #include "yql_mkql_input_stream.h"
 
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/providers/yt/codec/yt_codec_io.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>

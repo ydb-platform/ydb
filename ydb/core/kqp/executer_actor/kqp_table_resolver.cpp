@@ -80,7 +80,7 @@ private:
             if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                     YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
-                        << "Failed to resolve table " << entry.TableId << " keys: " << entry.Status << '.'));
+                        << "Failed to resolve table with tableId: " << entry.TableId << " status: " << entry.Status << '.'));
                 return;
             }
 
@@ -114,12 +114,16 @@ private:
                 LOG_E("Error resolving keys for entry: " << entry.ToString(*AppData()->TypeRegistry));
 
                 TStringBuilder path;
-                path << "unresolved `" << entry.KeyDescription->TableId << '`';
+                if (auto it = TablePathsById.find(entry.KeyDescription->TableId); it != TablePathsById.end()) {
+                    path << '`' << it->second << '`';
+                } else {
+                    path << "with unknown path, tableId: `" << entry.KeyDescription->TableId << '`';
+                }
 
                 timer.reset();
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                     YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder()
-                        << "Failed to resolve table " << path << " keys: " << entry.Status << '.'));
+                        << "Failed to resolve table " << path << " status: " << entry.Status << '.'));
                 return;
             }
 
@@ -164,6 +168,7 @@ private:
                 for (const auto& operation : stageInfo.Meta.ShardOperations) {
                     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
                     Y_ENSURE(tableInfo);
+                    TablePathsById.emplace(stageInfo.Meta.TableId, tableInfo->Path);
                     stageInfo.Meta.TableKind = tableInfo->TableKind;
 
                     stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, stageInfo.Meta.TableConstInfo, operation);
@@ -258,6 +263,7 @@ private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TVector<IKqpGateway::TPhysicalTxData>& Transactions;
     THashMap<TTableId, TVector<TStageId>> TableRequestIds;
+    THashMap<TTableId, TString> TablePathsById;
     bool NavigationFinished = false;
     bool ResolvingFinished = false;
 

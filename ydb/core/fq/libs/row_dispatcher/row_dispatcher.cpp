@@ -10,7 +10,6 @@
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
 
-#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/mon/mon.h>

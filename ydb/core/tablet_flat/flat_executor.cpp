@@ -4479,14 +4479,6 @@ bool TExecutor::CancelCompaction(ui64 compactionId)
     return Scans->CancelSystem(compactionId);
 }
 
-void TExecutor::PlanCompactionChangesActivation()
-{
-    if (!CompactionChangesActivating) {
-        CompactionChangesActivating = true;
-        Send(SelfId(), new TEvPrivate::TEvActivateCompactionChanges());
-    }
-}
-
 void TExecutor::Handle(TEvPrivate::TEvActivateCompactionChanges::TPtr& ev, const TActorContext& ctx)
 {
     Y_UNUSED(ev);

@@ -596,7 +596,6 @@ class TExecutor
 
     // Compaction read support
 
-    void PlanCompactionChangesActivation();
     void Handle(TEvPrivate::TEvActivateCompactionChanges::TPtr& ev, const TActorContext& ctx);
     void CommitCompactionChanges(
             ui32 tableId,

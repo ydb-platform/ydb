@@ -71,6 +71,7 @@ using namespace NActors;
 
 class TTestDataStreamsConnectionActor : public NActors::TActorBootstrapped<TTestDataStreamsConnectionActor> {
     inline static const TString SessionName = "test_connection_data_streams";
+    inline static const TString ConnectionId = "test_connection_id";
 
     NFq::NConfig::TCommonConfig CommonConfig;
     TActorId Sender;
@@ -117,7 +118,7 @@ public:
         , CmConnections(cmConnections)
         , FunctionRegistry(functionRegistry)
         , DbResolver(dbResolver)
-        , ClusterConfig(CreateClusterConfig(SessionName, CommonConfig, Token, signer, ds))
+        , ClusterConfig(CreateClusterConfig(SessionName, CommonConfig, Token, signer, ds, ConnectionId))
         , StructuredToken(NYql::ComposeStructuredTokenJsonForServiceAccount(ClusterConfig.GetServiceAccountId(), ClusterConfig.GetServiceAccountIdSignature(), ClusterConfig.GetToken()))
     {
         Counters->InFly->Inc();
@@ -248,10 +249,10 @@ private:
         DestroyActor();
     }
 
-    static NYql::TPqClusterConfig CreateClusterConfig(const TString& sessionName, const NFq::NConfig::TCommonConfig& commonConfig, const TString& token, const NFq::TSigner::TPtr& signer, const FederatedQuery::DataStreams& ds) {
+    static NYql::TPqClusterConfig CreateClusterConfig(const TString& sessionName, const NFq::NConfig::TCommonConfig& commonConfig, const TString& token, const NFq::TSigner::TPtr& signer, const FederatedQuery::DataStreams& ds, const TString& connectionId) {
         const auto& auth = ds.auth();
         const TString signedAccountId = signer && auth.has_service_account() ? signer->SignAccountId(auth.service_account().id()) : TString{};
-        return NFq::CreatePqClusterConfig(sessionName, commonConfig.GetUseBearerForYdb(), token, signedAccountId, ds);
+        return NFq::CreatePqClusterConfig(sessionName, commonConfig.GetUseBearerForYdb(), token, signedAccountId, ds, connectionId);
     }
 
     NYql::TPqGatewayServices CreateGatewayServices() {

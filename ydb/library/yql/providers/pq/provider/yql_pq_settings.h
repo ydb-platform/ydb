@@ -31,6 +31,7 @@ struct TPqClusterConfigurationSettings {
     bool AddBearerToToken = false;
     bool SharedReading = false;
     TString ReconnectPeriod;
+    TString ConnectionId;
 };
 
 struct TPqConfiguration : public TPqSettings, public NCommon::TSettingDispatcher {

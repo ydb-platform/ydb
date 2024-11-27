@@ -1,7 +1,8 @@
 name: Regression-run
+
 on:
   schedule:
-    - cron: "* */5 * * *"  # every 5 h
+    - cron: "0 */6 * * *"  # every 6 hours
   workflow_dispatch:
     inputs:
       build_preset:
@@ -15,32 +16,21 @@ on:
         type: string
         default: "auto-provisioned"
         description: "runner label"
-      commit_sha:
-        type: string
-        default: ""
 
 jobs:
   main:
     name: Build and test all ydb tests
     runs-on: [ self-hosted, "${{ inputs.runner_label || 'auto-provisioned' }}", "${{ format('build-preset-{0}', inputs.build_preset || 'relwithdebinfo') }}" ]
-    env:
-      ALLOWED_BRANCHES: "main stable-24-3"
-    steps:
-    - name: Check branch
-      id: check_branch
-      run: |
-        BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
-        echo "Running on branch: $BRANCH_NAME"
-        if [[ ! " $ALLOWED_BRANCHES " =~ .*\ $BRANCH_NAME\ .* ]]; then
-          echo "This workflow runs only on branches: $ALLOWED_BRANCHES"
-          exit 1
-        fi
+    strategy:
+      matrix:
+        branch: [main, stable-24-3]  # all branches to test
 
+    steps:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        ref: ${{ inputs.commit_sha }}
-
+        ref: ${{ matrix.branch }}
+    
     - name: Setup ssh key for slice 
       uses: webfactory/ssh-agent@v0.9.0
       with:
@@ -56,6 +46,7 @@ jobs:
       with:
         build_preset: ${{ inputs.build_preset }}
         increment: false
+        build_target: "ydb/"
         run_build: true
         run_tests: true
         test_retry_count: 3

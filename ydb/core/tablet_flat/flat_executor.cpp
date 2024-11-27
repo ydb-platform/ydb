@@ -214,7 +214,9 @@ void TExecutor::RecreatePageCollectionsCache() noexcept
     for (const auto &it : Database->GetScheme().Tables) {
         auto subset = Database->Subset(it.first, NTable::TEpoch::Max(), { }, { });
 
-        for (auto &partView : subset->Flatten) AddCachesOfBundle(partView);
+        for (auto &partView : subset->Flatten) {
+            AddCachesOfBundle(partView);
+        }
     }
 
     if (TransactionWaitPads) {

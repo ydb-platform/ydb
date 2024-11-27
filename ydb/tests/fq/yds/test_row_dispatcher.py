@@ -332,9 +332,9 @@ class TestPqRowDispatcher(TestYdsBase):
         filter = ' IF(event = "event2", event IS DISTINCT FROM data, FALSE)'
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE IF((`event` = \\"event2\\"), (`event` IS DISTINCT FROM `data`), FALSE)')
         filter = ' nested REGEXP ".*abc.*"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP ".*abc.*")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
         filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP ".*abc.*")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS String) REGEXP \\".*abc.*\\")')
 
     @yq_v1
     def test_filters_optional_field(self, kikimr, client):
@@ -386,9 +386,9 @@ class TestPqRowDispatcher(TestYdsBase):
         filter = " event ?? '' REGEXP data ?? '' OR time = 102"
         self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE ((COALESCE(`event`, \\"\\") REGEXP COALESCE(`data`, \\"\\")) OR (`time` = 102))')
         filter = ' nested REGEXP ".*abc.*"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (IF((`nested` IS NOT NULL), CAST(`nested` AS String), NULL) REGEXP ".*abc.*")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (IF((`nested` IS NOT NULL), CAST(`nested` AS String), NULL) REGEXP \\".*abc.*\\")')
         filter = ' CAST(nested AS String) REGEXP ".*abc.*"'
-        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS Optional<String>) REGEXP ".*abc.*")')
+        self.run_and_check(kikimr, client, sql + filter, data, expected, 'predicate: WHERE (CAST(`nested` AS Optional<String>) REGEXP \\".*abc.*\\")')
 
     @yq_v1
     def test_filter_missing_fields(self, kikimr, client):

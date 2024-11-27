@@ -157,6 +157,7 @@ Y_UNIT_TEST_SUITE(TWebLoginService) {
         UNIT_ASSERT_STRING_CONTAINS(last, "status=SUCCESS");
         UNIT_ASSERT(!last.contains("reason"));
         UNIT_ASSERT_STRING_CONTAINS(last, "login_user=user1");
+        UNIT_ASSERT_STRING_CONTAINS(last, "sanitized_token=");
     }
 
     Y_UNIT_TEST(AuditLogLoginBadPassword) {

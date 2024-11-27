@@ -497,7 +497,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatisticToReadActor::TPtr&) 
         event->Record.SetReadBytes(readBytes);
         info.LastSendedNextMessageOffset = *info.NextMessageOffset;
         event->ReadActorId = info.ReadActorId;
-        LOG_ROW_DISPATCHER_TRACE("Send status to " << info.ReadActorId << ", offset " << *info.NextMessageOffset);
+        LOG_ROW_DISPATCHER_TRACE("Send statistics to " << info.ReadActorId << ", offset " << *info.NextMessageOffset);
         Send(RowDispatcherActorId, event.release());
     }
     ClientsStats.Clear();

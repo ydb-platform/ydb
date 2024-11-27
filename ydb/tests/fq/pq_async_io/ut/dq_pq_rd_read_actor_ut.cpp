@@ -212,10 +212,10 @@ struct TFixture : public TPqIoTestFixture {
         });
     }
 
-    void MockUndelivered(NActors::TActorId rowDispatcherId) {
+    void MockUndelivered(NActors::TActorId rowDispatcherId, ui64 generation = 1) {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NActors::TEvents::TEvUndelivered(0, NActors::TEvents::TEvUndelivered::ReasonActorUnknown);
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event));
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
     }
 
@@ -433,7 +433,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         // Restart node 2 (RowDispatcher2)
         MockDisconnected();
         MockConnected();
-        MockUndelivered(RowDispatcher2);
+        MockUndelivered(RowDispatcher2, 2);
 
         // session1 is still working
         ProcessSomeJsons(2, {Json4}, RowDispatcher1, UVParser, 1, PartitionId1, false);

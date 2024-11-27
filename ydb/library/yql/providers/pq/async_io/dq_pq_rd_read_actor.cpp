@@ -154,8 +154,6 @@ private:
     bool Inited = false;
     ui64 CoordinatorRequestCookie = 0;
     TRowDispatcherReadActorMetrics Metrics;
-    bool SchedulePrintStatePeriod = false;
-    bool ProcessStateScheduled = false;
     bool InFlyAsyncInputData = false;
     TCounters Counters;
 
@@ -191,20 +189,22 @@ private:
             Status = ESessionStatus::WAIT_COORDINATOR_ID;
             RowDispatcherActorId = Nothing();
             Generation = std::numeric_limits<ui64>::max();
-            // others fields
+            IsWaitingStartSessionAck = false;
+            HasPendingData = false;
+            IsWaitingMessageBatch = false;
         }
 
         ESessionStatus Status = ESessionStatus::WAIT_COORDINATOR_ID;
-        TTxId TxId;
-        NActors::TActorId SelfId;
-        ui64 EventQueueId;
+        const TTxId TxId;
+        const NActors::TActorId SelfId;
+        const ui64 EventQueueId;
         TMaybe<ui64> NextOffset;
         bool IsWaitingStartSessionAck = false;
         NYql::NDq::TRetryEventsQueue EventsQueue;
         bool HasPendingData = false;
         bool IsWaitingMessageBatch = false;
         TMaybe<TActorId> RowDispatcherActorId;
-        ui64 PartitionId;
+        const ui64 PartitionId;
         ui64 Generation = std::numeric_limits<ui64>::max();
     };
     
@@ -282,7 +282,6 @@ public:
     void TrySendGetNextBatch(TSession& sessionInfo);
     template <class TEventPtr>
     bool CheckSession(TSession& session, const TEventPtr& ev, ui64 partitionId);
-    void SendStopSession(const NActors::TActorId& recipient, ui64 partitionId, ui64 cookie);
     void NotifyCA();
     void SendStartSession(TSession& sessionInfo);
     void Init();
@@ -326,11 +325,6 @@ void TDqPqRdReadActor::Init() {
     }
     LogPrefix = (TStringBuilder() << "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". PQ source. ");
 
-    if (!ProcessStateScheduled) {
-        ProcessStateScheduled = true;
-        Schedule(TDuration::Seconds(ProcessStatePeriodSec), new TEvPrivate::TEvProcessState());
-    }
-
     auto partitionToRead = GetPartitionsToRead();
     for (auto partitionId : partitionToRead) {
         TMaybe<ui64> readOffset;
@@ -347,10 +341,9 @@ void TDqPqRdReadActor::Init() {
     }
     SRC_LOG_I("Send TEvCoordinatorChangesSubscribe to local RD (" << LocalRowDispatcherActorId << ")");
     Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
-    if (!SchedulePrintStatePeriod) {
-        SchedulePrintStatePeriod = true;
-        Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
-    }
+
+    Schedule(TDuration::Seconds(ProcessStatePeriodSec), new TEvPrivate::TEvProcessState());
+    Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     Inited = true;
 }
 
@@ -367,7 +360,7 @@ void TDqPqRdReadActor::ProcessState() {
             }
             needSendCoordinatorRequest = true;
             sessionInfo.Status = TSession::ESessionStatus::WAIT_PARTITIONS_ADDRES;
-            break;
+            [[fallthrough]];
         case TSession::ESessionStatus::WAIT_PARTITIONS_ADDRES:
             if (!sessionInfo.RowDispatcherActorId) {
                 break;
@@ -376,15 +369,15 @@ void TDqPqRdReadActor::ProcessState() {
             SendStartSession(sessionInfo);
             sessionInfo.IsWaitingStartSessionAck = true;
             sessionInfo.Status = TSession::ESessionStatus::WAIT_START_SESSION_ACK;
-            break;
+            [[fallthrough]];
         case TSession::ESessionStatus::WAIT_START_SESSION_ACK:
             if (sessionInfo.IsWaitingStartSessionAck) {
                 break;
             }
             sessionInfo.Status = TSession::ESessionStatus::STARTED;
-            break;
+            [[fallthrough]];
         case TSession::ESessionStatus::STARTED:
-            break;            
+            break;
         }
     }
 
@@ -404,7 +397,7 @@ void TDqPqRdReadActor::ProcessState() {
 void TDqPqRdReadActor::SendStartSession(TSession& sessionInfo) {
     SRC_LOG_I("Send TEvStartSession to " << sessionInfo.RowDispatcherActorId 
             << ", offset " << sessionInfo.NextOffset 
-            << ", partitionId " << sessionInfo.PartitionId
+            << ", partition " << sessionInfo.PartitionId
             << ", connection id " << sessionInfo.Generation);
 
     auto event = new NFq::TEvRowDispatcher::TEvStartSession(
@@ -421,7 +414,7 @@ void TDqPqRdReadActor::CommitState(const NDqProto::TCheckpoint& /*checkpoint*/) 
 }
 
 void TDqPqRdReadActor::StopSession(TSession& sessionInfo) {
-    SRC_LOG_I("Send StopSession to " << sessionInfo.RowDispatcherActorId << " partitionId " << sessionInfo.PartitionId << " generation " << sessionInfo.Generation);
+    SRC_LOG_I("Send StopSession to " << sessionInfo.RowDispatcherActorId << " partition " << sessionInfo.PartitionId << " generation " << sessionInfo.Generation);
     auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
     *event->Record.MutableSource() = SourceParams;
     event->Record.SetPartitionId(sessionInfo.PartitionId);
@@ -495,7 +488,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStartSessionAck::TPtr& e
     Counters.StartSessionAck++;
 
     ui64 partitionId = ev->Get()->Record.GetConsumer().GetPartitionId();
-    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition id " << partitionId);
+    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition " << partitionId);
     auto& sessionInfo = Sessions.at(partitionId);
     if (!CheckSession(sessionInfo, ev, partitionId)) {
         return;
@@ -510,7 +503,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) 
     Counters.SessionError++;
 
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
-    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition id " << partitionId);
+    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition " << partitionId);
     auto& sessionInfo = Sessions.at(partitionId);
     if (!CheckSession(sessionInfo, ev, partitionId)) {
         return;
@@ -524,23 +517,27 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
     Counters.Statistics++;
 
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
-    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition id " << partitionId);
+    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition " << partitionId);
     auto& sessionInfo = Sessions.at(partitionId);
     if (!CheckSession(sessionInfo, ev, partitionId)) {
         return;
     }
     IngressStats.Bytes += ev->Get()->Record.GetReadBytes();
-    YQL_ENSURE(!sessionInfo.NextOffset || sessionInfo.NextOffset < ev->Get()->Record.GetNextMessageOffset(), "Wrong NextMessageOffset in TEvStatistics, current " << sessionInfo.NextOffset << " received " << ev->Get()->Record.GetNextMessageOffset());
+    YQL_ENSURE(!sessionInfo.NextOffset || sessionInfo.NextOffset <= ev->Get()->Record.GetNextMessageOffset(), "Wrong NextMessageOffset in TEvStatistics, current " << sessionInfo.NextOffset << " received " << ev->Get()->Record.GetNextMessageOffset());
     sessionInfo.NextOffset = ev->Get()->Record.GetNextMessageOffset();
+    if (ReadyBuffer.empty()) {
+        TPartitionKey partitionKey{TString{}, partitionId};
+        PartitionToOffset[partitionKey] = ev->Get()->Record.GetNextMessageOffset();
+    }
 }
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {
     const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
-    SRC_LOG_T("Received TEvNewDataArrived from " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId() << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
+    SRC_LOG_T("Received TEvNewDataArrived from " << ev->Sender << ", partition " << ev->Get()->Record.GetPartitionId() << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.NewDataArrived++;
 
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
-    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition id " << partitionId);
+    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition " << partitionId);
     auto& sessionInfo = Sessions.at(partitionId);
     if (!CheckSession(sessionInfo, ev, partitionId)) {
         return;
@@ -554,7 +551,7 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::T
     Counters.Retry++;
     ui64 partitionId = ev->Get()->EventQueueId;
 
-    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition id " << partitionId);
+    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition " << partitionId);
     auto& sessionInfo = Sessions.at(partitionId);
     sessionInfo.EventsQueue.Retry();
 }
@@ -564,7 +561,7 @@ void TDqPqRdReadActor::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartb
     Counters.PrivateHeartbeat++;
     ui64 partitionId = ev->Get()->EventQueueId;
 
-    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition id " << partitionId);
+    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition " << partitionId);
     auto& sessionInfo = Sessions.at(partitionId);
     bool needSend = sessionInfo.EventsQueue.Heartbeat();
     if (needSend) {
@@ -578,7 +575,7 @@ void TDqPqRdReadActor::Handle(const NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& e
     Counters.Heartbeat++;
 
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
-    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition id " << partitionId);
+    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition " << partitionId);
     auto& sessionInfo = Sessions.at(partitionId);
     CheckSession(sessionInfo, ev, partitionId);
 }
@@ -640,17 +637,23 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr&
     for (auto& p : ev->Get()->Record.GetPartitions()) {
         TActorId rowDispatcherActorId = ActorIdFromProto(p.GetActorId());
         for (auto partitionId : p.GetPartitionId()) {
-            SRC_LOG_I("partitionId (" << partitionId << "), partitionId " << partitionId);
-            auto it = Sessions.find(partitionId);
-            if (it == Sessions.end()) {
-                Stop("Internal error: session already exists");
-                return;
+            YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition " << partitionId);
+            auto& sessionInfo = Sessions.at(partitionId);
+            SRC_LOG_I("Update session RD " << rowDispatcherActorId << ", partition " << partitionId);
+
+            if (!sessionInfo.RowDispatcherActorId) {
+                if (sessionInfo.Status != TSession::ESessionStatus::WAIT_PARTITIONS_ADDRES) {
+                    SRC_LOG_E("Wrong session state on TEvCoordinatorResult, reset session state, partition " << partitionId);
+                    sessionInfo.ResetState();
+                    continue;
+                }
+                sessionInfo.RowDispatcherActorId = rowDispatcherActorId;
+                continue;
             }
-            SRC_LOG_I("Update session RD actor (" << rowDispatcherActorId << "), partitionId " << partitionId);
-            if (it->second.RowDispatcherActorId && it->second.RowDispatcherActorId != rowDispatcherActorId) {
-                // TODO
+            if (sessionInfo.RowDispatcherActorId != rowDispatcherActorId) {
+                SRC_LOG_W("Unexpected changed RD, partition " << partitionId << " old " << sessionInfo.RowDispatcherActorId << " new " << rowDispatcherActorId << ", reset session state" );
+                sessionInfo.ResetState();
             }
-            it->second.RowDispatcherActorId = rowDispatcherActorId;
         }
     }
     ProcessState();
@@ -680,18 +683,14 @@ void TDqPqRdReadActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     Counters.Undelivered++;
     for (auto& [partitionId, sessionInfo] : Sessions) {
         if (sessionInfo.EventsQueue.HandleUndelivered(ev) == NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
-            // TODO check generation
-            if (sessionInfo.Generation == ev->Cookie)
-            {
-                // TODO
+            if (sessionInfo.Generation != ev->Cookie) {
+                continue;
             }
-            
             if (sessionInfo.Status == TSession::ESessionStatus::WAIT_START_SESSION_ACK 
                 || sessionInfo.Status == TSession::ESessionStatus::STARTED) {
-                SRC_LOG_I("Reset session state, partitionId " << partitionId);
+                SRC_LOG_I("Reset session state, partition " << partitionId);
                 sessionInfo.ResetState();
             }
-            //break;
         }
     }
 
@@ -706,7 +705,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     SRC_LOG_T("Received TEvMessageBatch from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.MessageBatch++;
     ui64 partitionId = ev->Get()->Record.GetPartitionId();
-    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition id " << partitionId);
+    YQL_ENSURE(Sessions.contains(partitionId), "Unknown partition " << partitionId);
     auto& sessionInfo = Sessions.at(partitionId);
 
     if (!CheckSession(sessionInfo, ev, partitionId)) {
@@ -810,7 +809,10 @@ template <class TEventPtr>
 bool TDqPqRdReadActor::CheckSession(TSession& session, const TEventPtr& ev, ui64 partitionId) {
     if (ev->Cookie != session.Generation) {
         SRC_LOG_W("Wrong message generation (" << typeid(TEventPtr).name()  << "), sender " << ev->Sender << " cookie " << ev->Cookie << ", session generation " << session.Generation << ", send TEvStopSession");
-        SendStopSession(ev->Sender, partitionId, ev->Cookie);
+        auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
+        *event->Record.MutableSource() = SourceParams;
+        event->Record.SetPartitionId(partitionId);
+        Send(ev->Sender, event.release(), 0, ev->Cookie);
         return false;
     }
     if (!session.EventsQueue.OnEventReceived(ev)) {
@@ -825,19 +827,11 @@ bool TDqPqRdReadActor::CheckSession(TSession& session, const TEventPtr& ev, ui64
     }
 
     if (session.Status != expectedStatus) {
-        SRC_LOG_E("Wrong session status (" << typeid(TEventPtr).name() << ") from " << ev->Sender << ", PartitionId " 
+        SRC_LOG_E("Wrong session status (" << typeid(TEventPtr).name() << ") from " << ev->Sender << ", partition " 
             << partitionId << " session status " << static_cast<ui64>(session.Status) << " expected " << static_cast<ui64>(expectedStatus));
         return false;
     }
-
     return true;
-}
-
-void TDqPqRdReadActor::SendStopSession(const NActors::TActorId& recipient, ui64 partitionId, ui64 cookie) {
-    auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
-    *event->Record.MutableSource() = SourceParams;
-    event->Record.SetPartitionId(partitionId);
-    Send(recipient, event.release(), 0, cookie);
 }
 
 void TDqPqRdReadActor::NotifyCA() {

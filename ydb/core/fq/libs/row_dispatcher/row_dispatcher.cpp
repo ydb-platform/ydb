@@ -316,9 +316,16 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         TMap<TActorId, SessionInfo> Sessions;                         // key - TopicSession actor id
     };
 
+    struct ReadActorInfo {
+        TString InternalState;
+        TInstant RequestTime;
+        TInstant ResponseTime;
+    };
+
     THashMap<ConsumerSessionKey, TAtomicSharedPtr<ConsumerInfo>, ConsumerSessionKeyHash> Consumers;
     TMap<ui64, TAtomicSharedPtr<ConsumerInfo>> ConsumersByEventQueueId;
     THashMap<TopicSessionKey, TopicSessionInfo, TopicSessionKeyHash> TopicSessions;
+    TMap<TActorId, ReadActorInfo> ReadActorsInternalState;
 
 public:
     explicit TRowDispatcher(
@@ -351,6 +358,7 @@ public:
     void Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev);
     void Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev);
+    void Handle(NFq::TEvRowDispatcher::TEvGetInternalStateResponse::TPtr& ev);
 
     void Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev);
     void Handle(const TEvPrivate::TEvTryConnect::TPtr&);
@@ -362,6 +370,8 @@ public:
     void DeleteConsumer(const ConsumerSessionKey& key);
     void UpdateMetrics();
     TString GetInternalState();
+    TString GetReadActorsInternalState();
+    void UpdateReadActorsInternalState();
     template <class TEventPtr>
     bool CheckSession(TAtomicSharedPtr<ConsumerInfo>& consumer, const TEventPtr& ev);
     void SetQueryMetrics(const TQueryStatKey& queryKey, ui64 unreadBytesMax, ui64 unreadBytesAvg, i64 readLagMessagesMax);
@@ -383,6 +393,7 @@ public:
         hFunc(NFq::TEvRowDispatcher::TEvSessionError, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvStatistics, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvSessionStatistic, Handle);
+        hFunc(NFq::TEvRowDispatcher::TEvGetInternalStateResponse, Handle);
         hFunc(TEvPrivate::TEvTryConnect, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
         hFunc(NFq::TEvRowDispatcher::TEvHeartbeat, Handle);
@@ -654,6 +665,39 @@ TString TRowDispatcher::GetInternalState() {
     return str.Str();
 }
 
+TString TRowDispatcher::GetReadActorsInternalState() {
+    TStringStream str;
+    for (const auto& [_, internalState]: ReadActorsInternalState) {
+        str << "ResponseTime: " << internalState.ResponseTime << " " << internalState.InternalState << Endl;
+    }
+    return str.Str();
+}
+
+void TRowDispatcher::UpdateReadActorsInternalState() {
+    TSet<TActorId> ReadActors;
+    for (const auto& [key, _]: Consumers) {
+        ReadActors.insert(key.ReadActorId);
+    }
+
+    for(auto it = ReadActorsInternalState.begin(); it != ReadActorsInternalState.end();) {
+        if (!ReadActors.contains(it->first)) {
+            it = ReadActorsInternalState.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    auto now = TInstant::Now();
+    for (const auto& readActor: ReadActors) {
+        auto& internalStateInfo = ReadActorsInternalState[readActor];
+        if (now - internalStateInfo.RequestTime < TDuration::Seconds(30)) {
+            continue;
+        }
+        internalStateInfo.RequestTime = now;
+        Send(readActor, new NFq::TEvRowDispatcher::TEvGetInternalStateRequest{}, 0, 0);
+    }
+}
+
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     LOG_ROW_DISPATCHER_DEBUG("Received TEvStartSession from " << ev->Sender << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " part id " << ev->Get()->Record.GetPartitionId() << " query id " << ev->Get()->Record.GetQueryId() << " cookie " << ev->Cookie);
@@ -914,11 +958,15 @@ void TRowDispatcher::PrintStateToLog() {
 }
 
 void TRowDispatcher::Handle(const NMon::TEvHttpInfo::TPtr& ev) {
+    UpdateReadActorsInternalState();
     TStringStream str;
     HTML(str) {
         PRE() {
+            str << "Current Time: " << TInstant::Now() << Endl;
             str << "Current state:" << Endl;
             str << GetInternalState() << Endl;
+            str << "Read actors state: " << Endl;
+            str << GetReadActorsInternalState() << Endl;
             str << Endl;
         }
     }
@@ -950,6 +998,12 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev
         auto consumerInfoPtr = it->second; 
         consumerInfoPtr->Stat.Add(clientStat);
     }
+}
+
+void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetInternalStateResponse::TPtr& ev) {
+    auto& readActorInternalState = ReadActorsInternalState[ev->Sender];
+    readActorInternalState.InternalState = ev->Get()->Record.GetInternalState();
+    readActorInternalState.ResponseTime = TInstant::Now();
 }
 
 } // namespace

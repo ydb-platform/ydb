@@ -333,19 +333,19 @@ int CompareBorders(TConstArrayRef<TCell> first, TConstArrayRef<TCell> second, bo
     if (FirstLeft && SecondLeft) {
         if (inclusiveFirst == inclusiveSecond)
             return 0;
-        return (inclusiveFirst ? 1 : -1);
+        return (inclusiveFirst ? -1 : 1);
     } else if (FirstLeft && !SecondLeft) {
         if (inclusiveFirst && inclusiveSecond)
             return 0;
-        return -1;
+        return 1;
     } else if (!FirstLeft && SecondLeft) {
         if (inclusiveFirst && inclusiveSecond)
             return 0;
-        return 1;
+        return -1;
     } else { // !FirstLeft && !SecondLeft
         if (inclusiveFirst == inclusiveSecond)
             return 0;
-        return (inclusiveFirst ? -1 : 1);
+        return (inclusiveFirst ? 1 : -1);
     }
 }
 

@@ -575,23 +575,6 @@ public:
 
         ReadActorStateSpan.EndOk();
 
-        if (state->HasRanges()) {
-            TVector<TSerializedTableRange> ranges;
-            state->FillUnprocessedRanges(ranges, KeyColumnTypes, false);
-
-            const auto& tr = *AppData()->TypeRegistry;
-
-            for (ui64 i = 0; i < ranges.size(); ++i) {
-                CA_LOG_D("RANGE:: >> " << DebugPrintRange(KeyColumnTypes, ranges[i].ToTableRange(), tr));
-            }
-
-            for (ui64 i = 1; i < ranges.size(); ++i) {
-                auto comparison = CompareRanges(ranges[i - 1].ToTableRange(), ranges[i].ToTableRange(), KeyColumnTypes);
-                CA_LOG_D("TEST:: >> " << i << " RESULT: " << comparison);
-                YQL_ENSURE(comparison < 0);
-            }
-        }
-
         auto keyDesc = std::move(request->ResultSet[0].KeyDescription);
 
         if (keyDesc->GetPartitions().empty()) {

@@ -2362,7 +2362,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
                 auto *bySwitchAux = aux.AddBySwitchAux();
 
                 TPageCollectionProtoHelper::Snap(snap, loaned->PartComponents, partSwitch.TableId, CompactionLogic->BorrowedPartLevel());
-                TPageCollectionProtoHelper(true, false).Do(bySwitchAux->AddHotBundles(), loaned->PartComponents);
+                TPageCollectionProtoHelper(true).Do(bySwitchAux->AddHotBundles(), loaned->PartComponents);
 
                 auto body = proto.SerializeAsString();
                 auto glob = CommitManager->Turns.One(commit->Refs, std::move(body), true);
@@ -2671,6 +2671,7 @@ void TExecutor::Handle(TEvents::TEvFlushLog::TPtr &ev) {
 }
 
 void TExecutor::Handle(NSharedCache::TEvRequest::TPtr &ev) {
+    Y_ABORT("How this is possible?");
     const auto priority = ev->Get()->Priority;
     TAutoPtr<NPageCollection::TFetch> msg = ev->Get()->Fetch;
 
@@ -2823,9 +2824,6 @@ void TExecutor::Handle(NSharedCache::TEvUpdated::TPtr &ev) {
 
     for (auto &kv : msg->Actions) {
         if (auto *info = PrivatePageCache->Info(kv.first)) {
-            for (auto &kvCorrected : kv.second.Accepted) {
-                PrivatePageCache->UpdateSharedBody(info, kvCorrected.first, std::move(kvCorrected.second));
-            }
             for (ui32 pageId : kv.second.Dropped) {
                 PrivatePageCache->DropSharedBody(info, pageId);
             }
@@ -3474,7 +3472,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
             const auto &newPart = result.Part;
 
             TPageCollectionProtoHelper::Snap(snap, newPart, tableId, logicResult.Changes.NewPartsLevel);
-            TPageCollectionProtoHelper(true, false).Do(bySwitchAux->AddHotBundles(), newPart);
+            TPageCollectionProtoHelper(true).Do(bySwitchAux->AddHotBundles(), newPart);
         }
     }
 
@@ -3650,7 +3648,6 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_SHARED_BODY].Set(stats.TotalSharedBody);
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_PINNED_BODY].Set(stats.TotalPinnedBody);
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_EXCLUSIVE].Set(stats.TotalExclusive);
-                Counters->Simple()[TExecutorCounters::CACHE_TOTAL_SHARED_PENDING].Set(stats.TotalSharedPending);
                 Counters->Simple()[TExecutorCounters::CACHE_TOTAL_STICKY].Set(stats.TotalSticky);
             }
 
@@ -3772,14 +3769,14 @@ TString TExecutor::BorrowSnapshot(ui32 table, const TTableSnapshotContext &snap,
     for (const auto &partView : subset->Flatten) {
         auto *x = proto.AddParts();
 
-        TPageCollectionProtoHelper(false, false).Do(x->MutableBundle(), partView);
+        TPageCollectionProtoHelper(false).Do(x->MutableBundle(), partView);
         snap.Impl->Borrowed(Step(), table, partView->Label, loaner);
     }
 
     for (const auto &part : subset->ColdParts) {
         auto *x = proto.AddParts();
 
-        TPageCollectionProtoHelper(false, false).Do(x->MutableBundle(), part);
+        TPageCollectionProtoHelper(false).Do(x->MutableBundle(), part);
         snap.Impl->Borrowed(Step(), table, part->Label, loaner);
     }
 
@@ -4172,7 +4169,6 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
             DIV_CLASS("row") {str << "Total bytes in shared cache: " << PrivatePageCache->GetStats().TotalSharedBody; }
             DIV_CLASS("row") {str << "Total bytes in local cache: " << PrivatePageCache->GetStats().TotalPinnedBody; }
             DIV_CLASS("row") {str << "Total bytes exclusive to local cache: " << PrivatePageCache->GetStats().TotalExclusive; }
-            DIV_CLASS("row") {str << "Total bytes in transit to shared cache: " << PrivatePageCache->GetStats().TotalSharedPending; }
             DIV_CLASS("row") {str << "Total bytes marked as sticky: " << PrivatePageCache->GetStats().TotalSticky; }
 
             if (GcLogic) {

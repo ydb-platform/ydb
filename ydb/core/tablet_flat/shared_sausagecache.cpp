@@ -709,41 +709,17 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     void Handle(NSharedCache::TEvTouch::TPtr &ev) {
         NSharedCache::TEvTouch *msg = ev->Get();
-        THashMap<TLogoBlobID, NSharedCache::TEvUpdated::TActions> actions;
-        for (auto &xpair : msg->Touched) {
-            auto collectionIt = Collections.find(xpair.first);
-            if (collectionIt == Collections.end()) {
-                for (auto &x : xpair.second) {
-                    if (x.second) {
-                        actions[xpair.first].Dropped.insert(x.first);
-                        x.second = { };
-                    }
-                }
+
+        for (auto &[metaId, touchedPages] : msg->Touched) {
+            auto collection = Collections.FindPtr(metaId);
+            if (!collection) {
                 continue;
             }
-            auto &collection = collectionIt->second;
-            for (auto &x : xpair.second) {
-                const ui32 pageId = x.first;
-                Y_ABORT_UNLESS(pageId < collection.PageMap.size());
-                auto* page = collection.PageMap[pageId].Get();
+            for (auto pageId : touchedPages) {
+                Y_ABORT_UNLESS(pageId < collection->PageMap.size());
+                auto* page = collection->PageMap[pageId].Get();
                 if (!page) {
-                    if (x.second) {
-                        Y_ABORT_UNLESS(collection.PageMap.emplace(pageId, (page = new TPage(pageId, x.second.size(), &collection))));
-                    } else {
-                        continue;
-                    }
-                }
-                Y_ABORT_UNLESS(page);
-
-                if (auto body = std::move(x.second)) {
-                    if (page->HasMissingBody()) {
-                        page->Initialize(std::move(body));
-                        BodyProvided(collection, page);
-                    }
-
-                    auto ref = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
-                    Y_ABORT_UNLESS(ref.IsUsed(), "Unexpected failure to grab a cached page");
-                    actions[xpair.first].Accepted[pageId] = std::move(ref);
+                    continue;
                 }
 
                 switch (page->State) {
@@ -766,12 +742,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     Y_ABORT("unknown load state");
                 }
             }
-        }
-
-        if (actions) {
-            auto msg = MakeHolder<NSharedCache::TEvUpdated>();
-            msg->Actions = std::move(actions);
-            Send(ev->Sender, msg.Release());
         }
 
         DoGC();

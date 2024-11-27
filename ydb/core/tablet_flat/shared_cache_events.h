@@ -13,6 +13,7 @@
 
 namespace NKikimr::NSharedCache {
     using EPriority = NTabletFlatExecutor::NBlockIO::EPriority;
+    using TPageId = NTable::NPage::TPageId;
 
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR),
@@ -45,9 +46,9 @@ namespace NKikimr::NSharedCache {
     };
 
     struct TEvTouch : public TEventLocal<TEvTouch, EvTouch> {
-        THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> Touched;
+        THashMap<TLogoBlobID, THashSet<TPageId>> Touched;
 
-        TEvTouch(THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> &&touched)
+        TEvTouch(THashMap<TLogoBlobID, THashSet<TPageId>> &&touched)
             : Touched(std::move(touched))
         {}
     };
@@ -135,7 +136,6 @@ namespace NKikimr::NSharedCache {
 
     struct TEvUpdated : public TEventLocal<TEvUpdated, EvUpdated> {
         struct TActions {
-            THashMap<ui32, TSharedPageRef> Accepted;
             THashSet<ui32> Dropped;
         };
 

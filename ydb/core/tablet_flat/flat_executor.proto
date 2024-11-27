@@ -15,11 +15,6 @@ message TLargeGlobId {
 }
 
 message TPageCollection {
-    message TPage {
-        required uint32 Id = 1;
-        required bytes Body = 2;
-    }
-
     repeated NKikimrProto.TLogoBlobID MetaId = 1; // Replaced by TLargeGlobId
 
     optional TLargeGlobId LargeGlobId = 6;
@@ -30,7 +25,7 @@ message TPageCollection {
     // packed page collection is called HotBundle.
 
     optional bytes Meta = 2;
-    repeated TPage Pages = 5;
+    reserved 5; // Pages
 }
 
 message TBundle {

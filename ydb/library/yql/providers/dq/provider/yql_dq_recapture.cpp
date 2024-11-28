@@ -97,7 +97,13 @@ public:
 
         State_->TypeCtx->DqFallbackPolicy = State_->Settings->FallbackPolicy.Get().GetOrElse(EFallbackPolicy::Default);
 
-        IGraphTransformer::TStatus status = NDq::DqWrapIO(input, output, ctx, *State_->TypeCtx, *State_->Settings);
+        IDqIntegration::TWrapReadSettings wrSettings {
+            .WatermarksMode = State_->Settings->WatermarksMode.Get(),
+            .WatermarksGranularityMs = State_->Settings->WatermarksGranularityMs.Get(),
+            .WatermarksLateArrivalDelayMs = State_->Settings->WatermarksLateArrivalDelayMs.Get(),
+            .WatermarksEnableIdlePartitions = State_->Settings->WatermarksEnableIdlePartitions.Get()
+        };
+        IGraphTransformer::TStatus status = NDq::DqWrapIO(input, output, ctx, *State_->TypeCtx, wrSettings);
         if (input != output) {
             YQL_CLOG(INFO, ProviderDq) << "DqsRecapture";
             // TODO: Add before/after recapture transformers

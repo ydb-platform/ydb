@@ -63,7 +63,7 @@ namespace NYql {
                 return Nothing();
             }
 
-            TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
+            TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings&) override {
                 if (const auto maybeGenReadTable = TMaybeNode<TGenReadTable>(read)) {
                     const auto genReadTable = maybeGenReadTable.Cast();
                     YQL_ENSURE(genReadTable.Ref().GetTypeAnn(), "No type annotation for node " << genReadTable.Ref().Content());
@@ -106,8 +106,7 @@ namespace NYql {
                 return read;
             }
 
-            ui64 Partition(const TDqSettings&, size_t, const TExprNode&, TVector<TString>& partitions, TString*, TExprContext&,
-                           bool) override {
+            ui64 Partition(const TExprNode&, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings&) override {
                 partitions.clear();
                 Generic::TRange range;
                 partitions.emplace_back();

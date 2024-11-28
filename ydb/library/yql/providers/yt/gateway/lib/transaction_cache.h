@@ -3,6 +3,7 @@
 #include <ydb/library/yql/providers/yt/common/yql_yt_settings.h>
 
 #include <yql/essentials/core/file_storage/storage.h>
+#include <yql/essentials/providers/common/metrics/metrics_registry.h>
 
 #include <yt/cpp/mapreduce/interface/client.h>
 #include <yt/cpp/mapreduce/interface/fwd.h>
@@ -60,6 +61,7 @@ public:
         THashMap<TString, TFileLinkPtr> FolderFilePtrCache;
 
         TMutex Lock_;
+        IMetricsRegistryPtr Metrics;
 
         inline void DeleteAtFinalize(const TString& table) {
             with_lock(Lock_) {
@@ -121,6 +123,13 @@ public:
         std::pair<TString, NYT::TTransactionId> GetBinarySnapshot(TString remoteTmpFolder, const TString& md5, const TString& localPath, TDuration expirationInterval);
         TMaybe<std::pair<TString, NYT::TTransactionId>> GetBinarySnapshotFromCache(TString binaryCacheFolder, const TString& md5, const TString& fileName);
 
+        enum class ECacheStatus {
+            Hit,
+            Miss,
+            Other
+        };
+        void UpdateCacheMetrics(const TString& fileName, ECacheStatus status);
+
         void CreateDefaultTmpFolder();
 
         using TPtr = TIntrusivePtr<TEntry>;
@@ -143,7 +152,7 @@ public:
     TTransactionCache(const TString& userName);
 
     TEntry::TPtr GetEntry(const TString& server);
-    TEntry::TPtr GetOrCreateEntry(const TString& server, const TString& token, const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config);
+    TEntry::TPtr GetOrCreateEntry(const TString& server, const TString& token, const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics);
     TEntry::TPtr TryGetEntry(const TString& server);
 
     void Commit(const TString& server);

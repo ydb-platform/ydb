@@ -327,6 +327,29 @@ std::pair<TString, NYT::TTransactionId> TTransactionCache::TEntry::GetBinarySnap
     return std::make_pair(snapshotPath, snapshotTx->GetId());
 }
 
+void TTransactionCache::TEntry::UpdateCacheMetrics(const TString& fileName, ECacheStatus status) {
+    static const TString cacheHitMrjob   = "CacheHitMrjob";
+    static const TString cacheMissMrjob  = "CacheMissMrjob";
+    static const TString cacheOtherMrjob = "CacheOtherMrjob";
+    static const TString cacheHitUdf     = "CacheHitUdf";
+    static const TString cacheMissUdf    = "CacheMissUdf";
+    static const TString cacheOtherUdf   = "CacheOtherUdf";
+
+    if (Metrics) {
+        bool isMrJob = fileName == "mrjob";
+        switch(status) {
+            case ECacheStatus::Hit:
+                isMrJob ? Metrics->IncCounter(cacheHitMrjob, Server) : Metrics->IncCounter(cacheHitUdf, Server);
+                break;
+            case ECacheStatus::Miss:
+                isMrJob ? Metrics->IncCounter(cacheMissMrjob, Server) : Metrics->IncCounter(cacheMissUdf, Server);
+                break;
+            default:
+                isMrJob ? Metrics->IncCounter(cacheOtherMrjob, Server) : Metrics->IncCounter(cacheOtherUdf, Server);
+        }
+    }
+};
+
 TMaybe<std::pair<TString, NYT::TTransactionId>> TTransactionCache::TEntry::GetBinarySnapshotFromCache(TString binaryCacheFolder, const TString& md5, const TString& fileName) {
     if (binaryCacheFolder.StartsWith(NYT::TConfig::Get()->Prefix)) {
         binaryCacheFolder = binaryCacheFolder.substr(NYT::TConfig::Get()->Prefix.size());
@@ -341,6 +364,7 @@ TMaybe<std::pair<TString, NYT::TTransactionId>> TTransactionCache::TEntry::GetBi
         }
         snapshotTx = BinarySnapshotTx;
         if (auto p = BinarySnapshots.FindPtr(remotePath)) {
+            UpdateCacheMetrics(fileName, ECacheStatus::Hit);
             return std::make_pair(*p, snapshotTx->GetId());
         }
     }
@@ -350,6 +374,11 @@ TMaybe<std::pair<TString, NYT::TTransactionId>> TTransactionCache::TEntry::GetBi
         snapshotPath = TStringBuilder() << '#' << GetGuidAsString(fileLock->GetLockedNodeId());
     } catch (const TErrorResponse& e) {
         YQL_CLOG(WARN, ProviderYt) << "Can't load binary for \"" << fileName << "\" from BinaryCacheFolder: " << e.what();
+        if (e.IsResolveError()) {
+            UpdateCacheMetrics(fileName, ECacheStatus::Miss);
+        } else {
+            UpdateCacheMetrics(fileName, ECacheStatus::Other);
+        }
         return Nothing();
     }
     with_lock(Lock_) {
@@ -358,6 +387,8 @@ TMaybe<std::pair<TString, NYT::TTransactionId>> TTransactionCache::TEntry::GetBi
     YQL_CLOG(DEBUG, ProviderYt) << "Snapshot \""
                                 << fileName << "\" -> \"" << remotePath << "\" -> "
                                 << snapshotPath << ", tx=" << GetGuidAsString(snapshotTx->GetId());
+    UpdateCacheMetrics(fileName, ECacheStatus::Hit);
+
     return std::make_pair(snapshotPath, snapshotTx->GetId());
 }
 
@@ -389,7 +420,7 @@ TTransactionCache::TEntry::TPtr TTransactionCache::TryGetEntry(const TString& se
 }
 
 TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TString& server, const TString& token,
-    const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config)
+    const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics)
 {
     TEntry::TPtr createdEntry = nullptr;
     NYT::TTransactionId externalTx = config->ExternalTx.Get().GetOrElse(TGUID());
@@ -430,6 +461,7 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         }
         createdEntry->InflightTempTablesLimit = config->InflightTempTablesLimit.Get().GetOrElse(Max<ui32>());
         createdEntry->KeepTables = GetReleaseTempDataMode(*config) == EReleaseTempDataMode::Never;
+        createdEntry->Metrics = metrics;
 
         TxMap_.emplace(server, createdEntry);
     }

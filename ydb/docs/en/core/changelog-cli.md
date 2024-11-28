@@ -1,5 +1,27 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.16.0 {#2-16-0}
+
+Released on November 26, 2024. To update to version **2.16.0**, select the [Downloads](downloads/index.md#ydb-cli) section.
+
+### Features
+
+* Improved throughput of the `ydb import file csv` up to 3 times
+* Allow running stock benchmark for OLAP shards
+* Added support for ISO-8601 formatted timestamps in `ydb topic` commands
+* Added `--explain-ast` option to `ydb sql` command that prints query AST
+* Added ANSI SQL syntax highlighting in `ydb` interactive mode
+* Added support for PostgreSQL syntax in `ydb workload tpch` и `ydb workload tpcds` benchmarks
+* Added `-c` option for `ydb workload tpcds run` command to compare the result with expected value and show the diff
+* In the `ydb topic write` command the `--codec` option now has default value RAW
+* Added log events for `ydb tools dump` and `ydb tools restore` commands
+* The `ydb tools restore` command now displays error locations
+
+### Bug fixes
+
+* Fixed progress bar in `ydb workload import` command
+* Fixed a bug where restoring from a backup using --import-data could fail if the partitioning of the table was changed
+
 ## Version 2.10.0 {#2-10-0}
 
 Released on June 24, 2024. To update to version **2.10.0**, select the [Downloads](downloads/index.md#ydb-cli) section.

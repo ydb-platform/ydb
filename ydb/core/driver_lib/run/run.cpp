@@ -1771,7 +1771,6 @@ void TKikimrRunner::KikimrStart() {
 }
 
 void TKikimrRunner::KikimrStop(bool graceful) {
-
     Y_UNUSED(graceful);
 
     bool enableReleaseNodeNameOnGracefulShutdown = AppData->FeatureFlags.GetEnableReleaseNodeNameOnGracefulShutdown();
@@ -1788,7 +1787,6 @@ void TKikimrRunner::KikimrStop(bool graceful) {
             pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
             auto pipe = NTabletPipe::CreateClient({}, MakeNodeBrokerID(), pipeConfig);
             TActorId nodeBrokerPipe = ActorSystem->Register(pipe);
-    
             THolder<TEvent> event = MakeHolder<TEvent>();
             event->Record.SetNodeId(nodeId);
 

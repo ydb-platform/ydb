@@ -18,7 +18,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        const auto &rec = Event->Get()->Record;
+        const auto& rec = Event->Get()->Record;
         const auto nodeId = rec.GetNodeId();
 
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
@@ -28,9 +28,10 @@ public:
         const auto it = Self->Nodes.find(nodeId);
 
         if (it != Self->Nodes.end()) {
-            const auto &node = it->second;
+            auto& node = it->second;
             Self->SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
             Self->DbReleaseSlotIndex(node, txc);
+            node.SlotIndex.reset();
 
             Response->Record.MutableStatus()->SetCode(TStatus::OK);
 

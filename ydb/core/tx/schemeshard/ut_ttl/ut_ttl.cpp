@@ -1195,7 +1195,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 }
               }
             }
-        )", {{NKikimrScheme::StatusInvalidParameter, "Only the last tier in TTL settings can have Delete action"}});
+        )", {{NKikimrScheme::StatusInvalidParameter, "Tier 0: only the last tier in TTL settings can have Delete action"}});
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "TTLEnabledTable"

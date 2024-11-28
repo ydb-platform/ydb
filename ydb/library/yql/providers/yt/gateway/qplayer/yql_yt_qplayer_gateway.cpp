@@ -48,26 +48,16 @@ public:
     {}
 
     void OpenSession(TOpenSessionOptions&& options) final {
-        with_lock(SessionGenerationsLock_) {
-            SessionGenerations_[options.SessionId()] = 0;
-        }
-
+        SessionGenerations_[options.SessionId()] = 0;
         return Inner_->OpenSession(std::move(options));
     }
 
     NThreading::TFuture<void> CloseSession(TCloseSessionOptions&& options) final {
-        with_lock(SessionGenerationsLock_) {
-            SessionGenerations_.erase(options.SessionId());
-        }
-
         return Inner_->CloseSession(std::move(options));
     }
 
     NThreading::TFuture<void> CleanupSession(TCleanupSessionOptions&& options) final {
-        with_lock(SessionGenerationsLock_) {
-            ++SessionGenerations_[options.SessionId()];
-        }
-
+        ++SessionGenerations_[options.SessionId()];
         return Inner_->CleanupSession(std::move(options));
     }
 
@@ -212,11 +202,7 @@ public:
     }
 
     NThreading::TFuture<TTableInfoResult> GetTableInfo(TGetTableInfoOptions&& options) final {
-        ui64 generation;
-        with_lock(SessionGenerationsLock_) {
-            generation = SessionGenerations_[options.SessionId()];
-        }
-
+        ui64 generation = SessionGenerations_[options.SessionId()];
         if (QContext_.CanRead()) {
             TTableInfoResult res;
             res.SetSuccess();
@@ -336,11 +322,7 @@ public:
     }
 
     NThreading::TFuture<TTableRangeResult> GetTableRange(TTableRangeOptions&& options) final {
-        ui64 generation;
-        with_lock(SessionGenerationsLock_) {
-            generation = SessionGenerations_[options.SessionId()];
-        }
-
+        ui64 generation = SessionGenerations_[options.SessionId()];
         TString key;
         if (QContext_) {
             key = MakeGetTableRangeKey(options, generation);
@@ -517,11 +499,7 @@ public:
     }
 
     NThreading::TFuture<TFolderResult> GetFolder(TFolderOptions&& options) final {
-        ui64 generation;
-        with_lock(SessionGenerationsLock_) {
-            generation = SessionGenerations_[options.SessionId()];
-        }
-
+        ui64 generation = SessionGenerations_[options.SessionId()];
         if (QContext_.CanRead()) {
             const auto& key = MakeGetFolderKey(options, generation);
             auto item = QContext_.GetReader()->Get({YtGateway_GetFolder, key}).GetValueSync();
@@ -582,11 +560,7 @@ public:
     }
 
     NThreading::TFuture<TBatchFolderResult> ResolveLinks(TResolveOptions&& options) final {
-        ui64 generation;
-        with_lock(SessionGenerationsLock_) {
-            generation = SessionGenerations_[options.SessionId()];
-        }
-
+        ui64 generation = SessionGenerations_[options.SessionId()];
         if (QContext_.CanRead()) {
             TBatchFolderResult res;
             res.SetSuccess();
@@ -630,11 +604,7 @@ public:
     }
 
     NThreading::TFuture<TBatchFolderResult> GetFolders(TBatchFolderOptions&& options) final {
-        ui64 generation;
-        with_lock(SessionGenerationsLock_) {
-            generation = SessionGenerations_[options.SessionId()];
-        }
-
+        ui64 generation = SessionGenerations_[options.SessionId()];
         if (QContext_.CanRead()) {
             TBatchFolderResult res;
             res.SetSuccess();
@@ -809,11 +779,7 @@ public:
     }
 
     NThreading::TFuture<TPathStatResult> PathStat(TPathStatOptions&& options) final {
-        ui64 generation;
-        with_lock(SessionGenerationsLock_) {
-            generation = SessionGenerations_[options.SessionId()];
-        }
-
+        ui64 generation = SessionGenerations_[options.SessionId()];
         if (QContext_.CanRead()) {
             TPathStatResult res;
             res.DataSize.resize(options.Paths().size(), 0);
@@ -856,11 +822,7 @@ public:
     }
 
     TPathStatResult TryPathStat(TPathStatOptions&& options) final {
-        ui64 generation;
-        with_lock(SessionGenerationsLock_) {
-            generation = SessionGenerations_[options.SessionId()];
-        }
-
+        ui64 generation = SessionGenerations_[options.SessionId()];
         if (QContext_.CanRead()) {
             TPathStatResult res;
             res.DataSize.resize(options.Paths().size(), 0);
@@ -991,7 +953,6 @@ private:
     const TFileStoragePtr FileStorage_;
     THashSet<TString> PathStatKeys_;
     THashMap<TString, ui64> SessionGenerations_;
-    TMutex SessionGenerationsLock_;
 };
 
 }

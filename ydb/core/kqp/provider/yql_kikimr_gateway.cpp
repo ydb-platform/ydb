@@ -320,7 +320,7 @@ void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::T
         auto* tierProto = proto.add_tiers();
         tierProto->set_apply_after_seconds(tier.ApplyAfter.Seconds());
         if (tier.StorageName) {
-            tierProto->mutable_evict_to_external_storage()->set_storage_name(tier.StorageName);
+            tierProto->mutable_evict_to_external_storage()->set_storage_name(*tier.StorageName);
         } else {
             tierProto->mutable_delete_();
         }

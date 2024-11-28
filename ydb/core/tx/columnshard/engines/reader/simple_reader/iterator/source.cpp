@@ -16,7 +16,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching) {
     AFL_VERIFY(fetching);
-//    AFL_VERIFY(!FetchingPlan);
+    //    AFL_VERIFY(!FetchingPlan);
     FetchingPlan = fetching;
 }
 
@@ -25,6 +25,8 @@ void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr)
     AFL_VERIFY(FetchingPlan);
     AFL_VERIFY(!Context->IsAborted());
     ProcessingStarted = true;
+    SourceGroupGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(
+        GetContext()->GetProcessMemoryControlId(), GetContext()->GetCommonContext()->GetScanId());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("InitFetchingPlan", FetchingPlan->DebugString())("source_idx", SourceIdx);
     NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
     TFetchingScriptCursor cursor(FetchingPlan, 0);
@@ -202,6 +204,7 @@ class TPortionAccessorFetchingSubscriber: public IDataAccessorRequestsSubscriber
 private:
     TFetchingScriptCursor Step;
     std::shared_ptr<IDataSource> Source;
+    const NColumnShard::TCounterGuard Guard;
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         AFL_VERIFY(!result.HasErrors());
         AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
@@ -214,7 +217,8 @@ private:
 public:
     TPortionAccessorFetchingSubscriber(const TFetchingScriptCursor& step, const std::shared_ptr<IDataSource>& source)
         : Step(step)
-        , Source(source) {
+        , Source(source)
+        , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetcherAcessorsGuard()) {
     }
 };
 
@@ -237,9 +241,7 @@ TPortionDataSource::TPortionDataSource(
           portion->RecordSnapshotMin(TSnapshot::Zero()), portion->RecordSnapshotMax(TSnapshot::Zero()), portion->GetRecordsCount(),
           portion->GetShardingVersionOptional(), portion->GetMeta().GetDeletionsCount())
     , Portion(portion)
-    , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion))
-    , SourceGroupGuard(NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(
-          GetContext()->GetProcessMemoryControlId(), GetContext()->GetCommonContext()->GetScanId())) {
+    , Schema(GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*portion)) {
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

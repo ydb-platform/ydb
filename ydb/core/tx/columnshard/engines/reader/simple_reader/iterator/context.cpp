@@ -96,27 +96,27 @@ public:
         const bool sequential) {
         auto actualColumns = columns - AssemblerReadyColumns;
         AssemblerReadyColumns = AssemblerReadyColumns + columns;
-        if (!actualColumns.IsEmpty()) {
-            auto actualSet = std::make_shared<TColumnsSet>(actualColumns.GetColumnIds(), FullSchema);
-            if (sequential) {
-                const auto notSequentialColumnIds = GuaranteeNotOptional->Intersect(*actualSet);
-                if (notSequentialColumnIds.size()) {
-                    script.Allocation(notSequentialColumnIds, stage, EMemType::Raw);
-                    std::shared_ptr<TColumnsSet> cross = actualSet->BuildSamePtr(notSequentialColumnIds);
-                    script.AddStep<TAssemblerStep>(cross, purposeId);
-                    *actualSet = *actualSet - *cross;
-                }
-                if (!actualSet->IsEmpty()) {
-                    script.Allocation(notSequentialColumnIds, stage, EMemType::RawSequential);
-                    script.AddStep<TOptionalAssemblerStep>(actualSet, purposeId);
-                }
-            } else {
-                script.Allocation(actualColumns.GetColumnIds(), stage, EMemType::Raw);
-                script.AddStep<TAssemblerStep>(actualSet, purposeId);
-            }
-            return true;
+        if (actualColumns.IsEmpty()) {
+            return false;
         }
-        return false;
+        auto actualSet = std::make_shared<TColumnsSet>(actualColumns.GetColumnIds(), FullSchema);
+        if (sequential) {
+            const auto notSequentialColumnIds = GuaranteeNotOptional->Intersect(*actualSet);
+            if (notSequentialColumnIds.size()) {
+                script.Allocation(notSequentialColumnIds, stage, EMemType::Raw);
+                std::shared_ptr<TColumnsSet> cross = actualSet->BuildSamePtr(notSequentialColumnIds);
+                script.AddStep<TAssemblerStep>(cross, purposeId);
+                *actualSet = *actualSet - *cross;
+            }
+            if (!actualSet->IsEmpty()) {
+                script.Allocation(notSequentialColumnIds, stage, EMemType::RawSequential);
+                script.AddStep<TOptionalAssemblerStep>(actualSet, purposeId);
+            }
+        } else {
+            script.Allocation(actualColumns.GetColumnIds(), stage, EMemType::Raw);
+            script.AddStep<TAssemblerStep>(actualSet, purposeId);
+        }
+        return true;
     }
 };
 

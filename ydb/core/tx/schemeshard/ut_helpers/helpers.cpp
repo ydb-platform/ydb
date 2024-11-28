@@ -1703,14 +1703,16 @@ namespace NSchemeShardUT_Private {
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
             auto& settings = *index.mutable_global_vector_kmeans_tree_index();
 
-            auto& vectorIndexSettings = *settings.mutable_vector_settings()->mutable_settings();
-            if (cfg.VectorIndexSettings) {
-                cfg.VectorIndexSettings->SerializeTo(vectorIndexSettings);
+            auto& kmeansTreeSettings = *settings.mutable_vector_settings();
+            if (cfg.KMeansTreeSettings) {
+                cfg.KMeansTreeSettings->SerializeTo(kmeansTreeSettings);
             } else {
                 // some random valid settings
-                vectorIndexSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
-                vectorIndexSettings.set_vector_dimension(42);
-                vectorIndexSettings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+                kmeansTreeSettings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+                kmeansTreeSettings.mutable_settings()->set_vector_dimension(42);
+                kmeansTreeSettings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+                kmeansTreeSettings.set_clusters(4);
+                kmeansTreeSettings.set_levels(5);
             }
 
             if (cfg.GlobalIndexSettings) {

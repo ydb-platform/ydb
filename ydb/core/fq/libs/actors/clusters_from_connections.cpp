@@ -42,7 +42,7 @@ void FillPqClusterConfig(NYql::TPqClusterConfig& clusterConfig,
         const TString& name, bool useBearerForYdb,
         const TString& authToken, const THashMap<TString, TString>& accountIdSignatures,
         const FederatedQuery::DataStreams& ds,
-        const TString& connectionId) {
+        const TString& readGroup) {
     clusterConfig.SetName(name);
     if (ds.endpoint()) {
         clusterConfig.SetEndpoint(ds.endpoint());
@@ -53,7 +53,7 @@ void FillPqClusterConfig(NYql::TPqClusterConfig& clusterConfig,
     clusterConfig.SetAddBearerToToken(useBearerForYdb);
     clusterConfig.SetClusterType(TPqClusterConfig::CT_DATA_STREAMS);
     clusterConfig.SetSharedReading(ds.shared_reading());
-    clusterConfig.SetConnectionId(connectionId);
+    clusterConfig.SetReadGroup(readGroup);
     FillClusterAuth(clusterConfig, ds.auth(), authToken, accountIdSignatures);
 }
 
@@ -180,13 +180,13 @@ void FillGenericClusterConfig<FederatedQuery::PostgreSQLCluster>(
 NYql::TPqClusterConfig CreatePqClusterConfig(const TString& name,
         bool useBearerForYdb, const TString& authToken,
         const TString& accountSignature, const FederatedQuery::DataStreams& ds,
-        const TString& connectionId) {
+        const TString& readGroup) {
     NYql::TPqClusterConfig cluster;
     THashMap<TString, TString> accountIdSignatures;
     if (ds.auth().has_service_account()) {
         accountIdSignatures[ds.auth().service_account().id()] = accountSignature;
     }
-    FillPqClusterConfig(cluster, name, useBearerForYdb, authToken, accountIdSignatures, ds, connectionId);
+    FillPqClusterConfig(cluster, name, useBearerForYdb, authToken, accountIdSignatures, ds, readGroup);
     return cluster;
 }
 

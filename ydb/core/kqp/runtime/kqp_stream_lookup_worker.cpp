@@ -361,6 +361,7 @@ public:
                 auto row = HolderFactory.CreateDirectArrayHolder(Columns.size(), rowItems);
 
                 i64 rowSize = 0;
+                i64 storageRowSize = 0;
                 for (size_t colIndex = 0, resultColIndex = 0; colIndex < Columns.size(); ++colIndex) {
                     const auto& column = Columns[colIndex];
                     if (IsSystemColumn(column.Name)) {
@@ -368,6 +369,7 @@ public:
                         rowSize += sizeof(NUdf::TUnboxedValue);
                     } else {
                         YQL_ENSURE(resultColIndex < resultRow.size());
+                        storageRowSize += resultRow[resultColIndex].Size();
                         rowItems[colIndex] = NMiniKQL::GetCellValue(resultRow[resultColIndex], column.PType);
                         rowSize += NMiniKQL::GetUnboxedValueSize(rowItems[colIndex], column.PType).AllocatedBytes;
                         ++resultColIndex;
@@ -382,10 +384,12 @@ public:
 
                 batch.push_back(std::move(row));
 
+                storageRowSize = std::max(storageRowSize, (i64)8);
+
                 resultStats.ReadRowsCount += 1;
-                resultStats.ReadBytesCount += rowSize;
+                resultStats.ReadBytesCount += storageRowSize;
                 resultStats.ResultRowsCount += 1;
-                resultStats.ResultBytesCount += rowSize;
+                resultStats.ResultBytesCount += storageRowSize;
             }
 
             if (result.UnprocessedResultRow == result.ReadResult->Get()->GetRowsCount()) {
@@ -907,6 +911,8 @@ private:
         auto leftRowType = GetLeftRowType();
         YQL_ENSURE(leftRowType);
 
+        i64 storageReadBytes = 0;
+
         for (size_t i = 0; i < leftRowType->GetMembersCount(); ++i) {
             auto columnTypeInfo = UnpackTypeInfo(leftRowType->GetMemberType(i));
             leftRowSize += NMiniKQL::GetUnboxedValueSize(leftRowInfo.Row.GetElement(i), columnTypeInfo).AllocatedBytes;
@@ -928,6 +934,7 @@ private:
                     NMiniKQL::FillSystemColumn(rightRowItems[colIndex], *shardId, column.Id, column.PType);
                     rightRowSize += sizeof(NUdf::TUnboxedValue);
                 } else {
+                    storageReadBytes += rightRow[std::distance(ReadColumns.begin(), it)].Size();
                     rightRowItems[colIndex] = NMiniKQL::GetCellValue(rightRow[std::distance(ReadColumns.begin(), it)],
                         column.PType);
                     rightRowSize += NMiniKQL::GetUnboxedValueSize(rightRowItems[colIndex], column.PType).AllocatedBytes;
@@ -939,7 +946,7 @@ private:
 
         rowStats.ReadRowsCount += (leftRowInfo.RightRowExist ? 1 : 0);
         // TODO: use datashard statistics KIKIMR-16924
-        rowStats.ReadBytesCount += rightRowSize;
+        rowStats.ReadBytesCount += storageReadBytes;
         rowStats.ResultRowsCount += 1;
         rowStats.ResultBytesCount += leftRowSize + rightRowSize;
 
